@@ -26,4 +26,4 @@ Under the following terms:
 Source code in this repository (files ending in .go, .ts, .js, and similar
 source extensions) is licensed under the Apache License 2.0 — see LICENSE.
 
-Copyright © 2026 Identities AI. All rights reserved except as granted above.
+Copyright © 2026 Identities AI, Inc. All rights reserved except as granted above. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc. Patent pending.

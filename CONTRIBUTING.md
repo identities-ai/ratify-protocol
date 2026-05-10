@@ -34,7 +34,7 @@ npm install
 npm run test:conformance
 ```
 
-All 34 fixtures must pass in every SDK. If a change breaks the TS conformance but passes Go, or vice versa, the implementations have drifted — fix the divergence before the PR is merged.
+All 59 fixtures must pass in every SDK. If a change breaks the TS conformance but passes Go, or vice versa, the implementations have drifted — fix the divergence before the PR is merged.
 
 ## Canonical serialization
 

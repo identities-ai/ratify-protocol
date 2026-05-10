@@ -6,8 +6,6 @@
 
 Email: **security@identities.ai**
 
-PGP: *(fingerprint to be published with v1.0.0)*
-
 We commit to:
 
 - Acknowledging receipt within 48 hours.

@@ -1,3 +1,24 @@
+Copyright 2026 Identities AI, Inc.
+
+Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+Patent pending (U.S. patent application). The trademark and patent rights
+are not licensed under this Apache License. Spec text and other documentation
+are dual-licensed under CC-BY-4.0; see docs/LICENSES.md for the full
+per-asset breakdown.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may
+not use any source file in this repository except in compliance with the
+License. You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License below for the specific language governing permissions and
+limitations under the License.
+
+----
 
                                  Apache License
                            Version 2.0, January 2004

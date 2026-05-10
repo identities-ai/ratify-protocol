@@ -2,7 +2,7 @@
 
 **A cryptographic trust protocol for human-agent and agent-agent interactions as agents start to transact.**
 
-When a human authorizes an agent, when one agent transacts with another agent, or when a chain of delegation passes through intermediaries, Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, without trusting the agent or its vendor.
+When a human authorizes an agent, when one agent transacts with another agent, or when a chain of delegation passes through intermediaries, Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. This defends against classical cryptanalytic advances on either algorithm and against quantum attacks via ML-DSA-65's lattice-based security. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 

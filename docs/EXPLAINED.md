@@ -12,7 +12,7 @@ As agents cross this "transaction horizon," two structural problems emerge:
 1. **The Claim-of-Authorization Gap:** When an agent says, "I am Alice's agent," the receiving party (the verifier) has no cryptographic way to verify that claim. Today, trust reduces to "the AI says so."
 2. **Agent-to-Agent Dominance:** As multi-agent systems proliferate, the trust layer must work entirely without a human present at the moment of the transaction.
 
-Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long.*
+Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long* — across voice, video, API, and Physical AI.
 
 ---
 

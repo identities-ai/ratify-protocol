@@ -26,3 +26,4 @@ dist/
 /ratify-testvectors
 .DS_Store
 .git_backup
+.memory/

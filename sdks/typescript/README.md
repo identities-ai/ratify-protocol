@@ -4,10 +4,12 @@
 
 This package lets you:
 
-- Generate human and agent Ed25519 identities
+- Generate human and agent hybrid keypairs
 - Issue signed delegation certs (human side)
 - Build signed proof bundles (agent side)
 - Verify proof bundles (verifier side)
+
+See [`docs/EXPLAINED.md`](../../docs/EXPLAINED.md) and [`docs/AGENT_TO_AGENT.md`](../../docs/AGENT_TO_AGENT.md) in the repository for full protocol semantics.
 
 Byte-for-byte interoperable with the Go reference implementation. Tested against the canonical test vectors at `../../testvectors/v1/`.
 
@@ -160,7 +162,7 @@ Signed payloads follow Ratify's canonical JSON rules (see `RATIFY_PROTOCOL.md` Â
 import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identitiesai/ratify-protocol";
 ```
 
-These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 20 published test vectors through the TS code and asserts byte-for-byte equivalence.
+These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 59 published test vectors through the TS code and asserts byte-for-byte equivalence.
 
 ## Scope vocabulary
 

@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - name: go mod tidy (must be clean)
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  testvector-determinism:
+    name: Test vectors regenerate byte-identical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: regenerate fixtures
+        run: go run ./cmd/ratify-testvectors -out /tmp/regen
+
+      - name: diff against committed
+        run: diff -rq testvectors/v1/ /tmp/regen/
+
+  release-sync:
+    name: Release metadata stays in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: check release metadata
+        run: ./scripts/check-release-sync.sh
+
+  typescript:
+    name: TypeScript SDK conformance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: sdks/typescript/package-lock.json
+
+      - name: install
+        run: npm install --no-audit --no-fund
+
+      - name: typecheck
+        run: npx tsc --noEmit
+
+      - name: conformance tests (59 fixtures)
+        run: npm run test:conformance
+
+  python:
+    name: Python SDK conformance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: install in clean venv (proves pip install works from a cold checkout)
+        run: |
+          python -m pip install --upgrade pip
+          # `-e .[dev]` pulls in cryptography + pqcrypto + pytest via
+          # the pyproject.toml dev extras. If this step breaks in a
+          # clean runner, the "works from a fresh clone" claim is false.
+          pip install -e '.[dev]'
+
+      - name: import check (pqcrypto must be importable)
+        run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
+
+      - name: conformance tests (59 fixtures)
+        run: pytest -v
+
+  rust:
+    name: Rust SDK conformance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/rust
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/rust
+
+      - name: build
+        run: cargo build --all-targets
+
+      - name: conformance tests (59 fixtures)
+        run: cargo test
+
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: check sign-off
+        run: |
+          commits=$(git rev-list ${{ github.event.pull_request.base.sha }}..HEAD)
+          for c in $commits; do
+            msg=$(git log -1 --format=%B "$c")
+            if ! echo "$msg" | grep -qE '^Signed-off-by: '; then
+              echo "::error::Commit $c missing DCO sign-off (use git commit -s)"
+              echo "Commit message:"
+              echo "$msg"
+              exit 1
+            fi
+          done

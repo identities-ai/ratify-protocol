@@ -1,0 +1,14 @@
+{
+  "name": "reject_unknown_scope",
+  "description": "ValidateScopes rejects a scope that is not in the canonical vocabulary and not a custom: extension (see SPEC.md §9). ExpandScopes passes the unknown string through (no wildcard match), and ValidateScopes returns an error. Implementations must treat such scopes as invalid before issuing a delegation. For app-specific scopes, use the custom: prefix (e.g. custom:acme:inventory:read) — those are accepted.",
+  "protocol_version": 1,
+  "kind": "scope",
+  "scope_input": [
+    "pretend:unknown:scope"
+  ],
+  "expected": {
+    "expanded_scopes": [
+      "pretend:unknown:scope"
+    ]
+  }
+}

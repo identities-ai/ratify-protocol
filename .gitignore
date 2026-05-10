@@ -1,0 +1,28 @@
+# Go test artifacts
+*.test
+*.out
+coverage.out
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts at repo root
+/ratify
+/ratify-verifier
+/ratify-testvectors
+.DS_Store
+.git_backup

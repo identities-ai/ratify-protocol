@@ -1,0 +1,18 @@
+{
+  "name": "wildcard_expansion_meeting",
+  "description": "ExpandScopes([\"meeting:*\"]) produces all non-sensitive meeting scopes, deterministically, in sorted order. Sensitive scope meeting:record is NOT included — it must be granted explicitly.",
+  "protocol_version": 1,
+  "kind": "scope",
+  "scope_input": [
+    "meeting:*"
+  ],
+  "expected": {
+    "expanded_scopes": [
+      "meeting:attend",
+      "meeting:chat",
+      "meeting:share_screen",
+      "meeting:speak",
+      "meeting:video"
+    ]
+  }
+}

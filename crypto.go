@@ -1,0 +1,907 @@
+package ratify
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
+)
+
+// ============================================================================
+// Hybrid keypairs
+//
+// Every signed object in Ratify v1 carries a pair of signatures — one Ed25519
+// and one ML-DSA-65 (FIPS 204). Both MUST verify for the signature to be
+// accepted. This provides:
+//
+//   - Classical defense in depth: a compromise of Ed25519 alone (e.g. a new
+//     algebraic attack) does not forge valid hybrid signatures.
+//   - Quantum resistance: ML-DSA-65 is lattice-based (Module-LWE / Module-SIS
+//     assumptions) and believed secure against known quantum algorithms.
+//   - Forward security of today's records: "harvest now, decrypt later"
+//     attacks against archived bundles cannot forge new valid ones even
+//     after a cryptographically-relevant quantum computer arrives.
+//
+// Private keys never travel on the wire. They are kept on-device by the
+// principal or inside the agent's process memory.
+// ============================================================================
+
+// HybridPrivateKey holds both component private keys. Both are required to
+// sign. The public component is derived by Public() and matches what goes
+// into a HybridPublicKey.
+type HybridPrivateKey struct {
+	Ed25519 ed25519.PrivateKey  // 64 bytes (seed || pub)
+	MLDSA65 *mldsa65.PrivateKey // internal representation
+}
+
+// Public returns the HybridPublicKey component of this private keypair.
+func (k HybridPrivateKey) Public() HybridPublicKey {
+	edPub, _ := k.Ed25519.Public().(ed25519.PublicKey)
+	mlPubRaw, _ := k.MLDSA65.Public().(*mldsa65.PublicKey).MarshalBinary()
+	return HybridPublicKey{
+		Ed25519: edPub,
+		MLDSA65: mlPubRaw,
+	}
+}
+
+// GenerateHybridKeypair produces a fresh hybrid keypair from secure randomness.
+// The two component keys are drawn from independent entropy streams; knowledge
+// of one keypair's private material reveals nothing about the other's.
+func GenerateHybridKeypair() (HybridPublicKey, HybridPrivateKey, error) {
+	edPub, edPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return HybridPublicKey{}, HybridPrivateKey{}, fmt.Errorf("generating Ed25519 key: %w", err)
+	}
+	mlPub, mlPriv, err := mldsa65.GenerateKey(rand.Reader)
+	if err != nil {
+		return HybridPublicKey{}, HybridPrivateKey{}, fmt.Errorf("generating ML-DSA-65 key: %w", err)
+	}
+	mlPubRaw, err := mlPub.MarshalBinary()
+	if err != nil {
+		return HybridPublicKey{}, HybridPrivateKey{}, fmt.Errorf("marshaling ML-DSA-65 pubkey: %w", err)
+	}
+	return HybridPublicKey{
+			Ed25519: edPub,
+			MLDSA65: mlPubRaw,
+		}, HybridPrivateKey{
+			Ed25519: edPriv,
+			MLDSA65: mlPriv,
+		}, nil
+}
+
+// HybridKeypairFromSeeds derives a hybrid keypair deterministically from two
+// 32-byte seeds. For test vector generation. Production code SHOULD use
+// GenerateHybridKeypair (which reads from the OS RNG).
+func HybridKeypairFromSeeds(edSeed, mlSeed [32]byte) (HybridPublicKey, HybridPrivateKey, error) {
+	edPriv := ed25519.NewKeyFromSeed(edSeed[:])
+	edPub := edPriv.Public().(ed25519.PublicKey)
+
+	mlPub, mlPriv := mldsa65.NewKeyFromSeed(&mlSeed)
+	mlPubRaw, err := mlPub.MarshalBinary()
+	if err != nil {
+		return HybridPublicKey{}, HybridPrivateKey{}, fmt.Errorf("marshaling ML-DSA-65 pubkey: %w", err)
+	}
+	return HybridPublicKey{
+			Ed25519: edPub,
+			MLDSA65: mlPubRaw,
+		}, HybridPrivateKey{
+			Ed25519: edPriv,
+			MLDSA65: mlPriv,
+		}, nil
+}
+
+// GenerateHumanRootKeypair creates a fresh HumanRoot identity from secure
+// randomness, returning the public HumanRoot and the hybrid private key
+// (which must stay on-device).
+func GenerateHumanRootKeypair() (*HumanRoot, HybridPrivateKey, error) {
+	pub, priv, err := GenerateHybridKeypair()
+	if err != nil {
+		return nil, HybridPrivateKey{}, err
+	}
+	return &HumanRoot{
+		ID:        DeriveID(pub),
+		PublicKey: pub,
+		CreatedAt: time.Now().Unix(),
+	}, priv, nil
+}
+
+// GenerateAgentKeypair creates a fresh AgentIdentity with a hybrid keypair.
+func GenerateAgentKeypair(name, agentType string) (*AgentIdentity, HybridPrivateKey, error) {
+	pub, priv, err := GenerateHybridKeypair()
+	if err != nil {
+		return nil, HybridPrivateKey{}, err
+	}
+	return &AgentIdentity{
+		ID:        DeriveID(pub),
+		PublicKey: pub,
+		Name:      name,
+		AgentType: agentType,
+		CreatedAt: time.Now().Unix(),
+	}, priv, nil
+}
+
+// DeriveID computes the canonical ID for a hybrid public key as
+// hex(SHA-256(ed25519_pub || ml_dsa_65_pub)[:16]).
+//
+// 128-bit collision space is sufficient for agent/human identifiers at the
+// expected scale; birthday bound is 2^64.
+func DeriveID(pub HybridPublicKey) string {
+	h := sha256.New()
+	h.Write(pub.Ed25519)
+	h.Write(pub.MLDSA65)
+	sum := h.Sum(nil)
+	return fmt.Sprintf("%x", sum[:16])
+}
+
+// ============================================================================
+// Signing and verification
+//
+// Each sign operation produces a HybridSignature by signing the same canonical
+// byte sequence independently with both the Ed25519 and ML-DSA-65 private
+// components. Each verify operation checks BOTH component signatures against
+// the same canonical bytes and the corresponding public components; either
+// failure rejects the entire signature.
+//
+// ML-DSA signing in v1 uses the deterministic mode (FIPS 204 §3.4 without
+// additional randomness). This gives:
+//   - Reproducible test vectors: regeneration of fixtures produces byte-
+//     identical output.
+//   - Deterministic audit trails: a principal replaying the same cert
+//     parameters produces the same signature bytes.
+// Future versions may add a hedged-randomization option for side-channel
+// hardening in hostile environments.
+// ============================================================================
+
+// signBoth signs msg with both component private keys and returns a
+// HybridSignature. The msg bytes MUST be derived from canonical JSON (for
+// the cert and revocation paths) or the raw challenge concatenation (for
+// the challenge path) — nothing else.
+func signBoth(msg []byte, priv HybridPrivateKey) (HybridSignature, error) {
+	edSig := ed25519.Sign(priv.Ed25519, msg)
+
+	mlSig := make([]byte, mldsa65.SignatureSize)
+	// SignTo(sk, msg, ctx, randomized, sig): randomized=false for deterministic
+	// signing; ctx=nil for no domain separator in v1.
+	if err := mldsa65.SignTo(priv.MLDSA65, msg, nil, false, mlSig); err != nil {
+		return HybridSignature{}, fmt.Errorf("ML-DSA-65 sign: %w", err)
+	}
+	return HybridSignature{Ed25519: edSig, MLDSA65: mlSig}, nil
+}
+
+// verifyBoth checks a HybridSignature against a HybridPublicKey. Returns nil
+// iff both component signatures verify against their respective public
+// components over the same msg. Any failure of either component causes the
+// entire verification to fail (fail-closed).
+func verifyBoth(msg []byte, sig HybridSignature, pub HybridPublicKey) error {
+	if len(pub.Ed25519) != ed25519.PublicKeySize {
+		return fmt.Errorf("Ed25519 public key wrong length: %d", len(pub.Ed25519))
+	}
+	if len(pub.MLDSA65) != mldsa65.PublicKeySize {
+		return fmt.Errorf("ML-DSA-65 public key wrong length: %d", len(pub.MLDSA65))
+	}
+	if len(sig.Ed25519) != ed25519.SignatureSize {
+		return fmt.Errorf("Ed25519 signature wrong length: %d", len(sig.Ed25519))
+	}
+	if len(sig.MLDSA65) != mldsa65.SignatureSize {
+		return fmt.Errorf("ML-DSA-65 signature wrong length: %d", len(sig.MLDSA65))
+	}
+
+	if !ed25519.Verify(pub.Ed25519, msg, sig.Ed25519) {
+		return fmt.Errorf("Ed25519 signature invalid")
+	}
+
+	var mlPub mldsa65.PublicKey
+	if err := mlPub.UnmarshalBinary(pub.MLDSA65); err != nil {
+		return fmt.Errorf("ML-DSA-65 public key malformed: %w", err)
+	}
+	if !mldsa65.Verify(&mlPub, msg, nil, sig.MLDSA65) {
+		return fmt.Errorf("ML-DSA-65 signature invalid")
+	}
+	return nil
+}
+
+// IssueDelegation signs a DelegationCert with the issuer's hybrid private key.
+// The cert must have all fields set except Signature before calling.
+//
+// Normalizes Constraints from nil to []Constraint{} so the outer cert JSON
+// serializes as `"constraints":[]` rather than `"constraints":null`,
+// matching the canonical wire format and satisfying strict deserializers in
+// TypeScript/Python/Rust SDKs.
+func IssueDelegation(cert *DelegationCert, issuerPriv HybridPrivateKey) error {
+	if cert.Constraints == nil {
+		cert.Constraints = []Constraint{}
+	}
+	data, err := delegationSignBytes(cert)
+	if err != nil {
+		return fmt.Errorf("serializing delegation for signing: %w", err)
+	}
+	sig, err := signBoth(data, issuerPriv)
+	if err != nil {
+		return fmt.Errorf("signing delegation: %w", err)
+	}
+	cert.Signature = sig
+	return nil
+}
+
+// VerifyDelegationSignature verifies both component signatures on a
+// DelegationCert against the declared IssuerPubKey. Returns nil iff both
+// verify.
+func VerifyDelegationSignature(cert *DelegationCert) error {
+	data, err := delegationSignBytes(cert)
+	if err != nil {
+		return fmt.Errorf("serializing delegation for verification: %w", err)
+	}
+	return verifyBoth(data, cert.Signature, cert.IssuerPubKey)
+}
+
+// SignChallenge signs a challenge to prove agent liveness. sign_data =
+// challenge_bytes || big-endian uint64(unix_timestamp). Both component
+// signatures are produced. Use SignChallengeWithSessionContext for v1.1
+// verifier/session-bound challenges.
+func SignChallenge(challenge []byte, ts int64, agentPriv HybridPrivateKey) (HybridSignature, error) {
+	return signBoth(challengeSignBytes(challenge, ts, nil, nil, 0), agentPriv)
+}
+
+// SignChallengeWithSessionContext signs a v1.1 session-bound challenge.
+// sessionContext MUST be exactly 32 bytes and is appended to the v1 challenge
+// signable bytes: challenge || big-endian uint64(ts) || session_context.
+func SignChallengeWithSessionContext(challenge []byte, ts int64, sessionContext []byte, agentPriv HybridPrivateKey) (HybridSignature, error) {
+	if len(sessionContext) != 32 {
+		return HybridSignature{}, fmt.Errorf("session_context must be 32 bytes, got %d", len(sessionContext))
+	}
+	return signBoth(challengeSignBytes(challenge, ts, sessionContext, nil, 0), agentPriv)
+}
+
+// SignChallengeWithStream signs a v1.1 stream-bound challenge. sessionContext
+// may be nil (stream-only binding) or exactly 32 bytes (both session- and
+// stream-bound). streamID MUST be exactly 32 bytes; streamSeq MUST be ≥1. The
+// signable bytes append streamID and big-endian int64(streamSeq) after the
+// session_context position.
+func SignChallengeWithStream(challenge []byte, ts int64, sessionContext, streamID []byte, streamSeq int64, agentPriv HybridPrivateKey) (HybridSignature, error) {
+	if len(sessionContext) != 0 && len(sessionContext) != 32 {
+		return HybridSignature{}, fmt.Errorf("session_context must be 32 bytes, got %d", len(sessionContext))
+	}
+	if len(streamID) != 32 {
+		return HybridSignature{}, fmt.Errorf("stream_id must be 32 bytes, got %d", len(streamID))
+	}
+	if streamSeq < 1 {
+		return HybridSignature{}, fmt.Errorf("stream_seq must be >=1, got %d", streamSeq)
+	}
+	return signBoth(challengeSignBytes(challenge, ts, sessionContext, streamID, streamSeq), agentPriv)
+}
+
+// VerifyChallengeSignature checks the hybrid challenge signature.
+func VerifyChallengeSignature(challenge []byte, ts int64, sig HybridSignature, agentPub HybridPublicKey) error {
+	return verifyBoth(challengeSignBytes(challenge, ts, nil, nil, 0), sig, agentPub)
+}
+
+// VerifyChallengeSignatureWithSessionContext checks a v1.1 session-bound
+// challenge signature.
+func VerifyChallengeSignatureWithSessionContext(challenge []byte, ts int64, sessionContext []byte, sig HybridSignature, agentPub HybridPublicKey) error {
+	if len(sessionContext) != 32 {
+		return fmt.Errorf("session_context must be 32 bytes, got %d", len(sessionContext))
+	}
+	return verifyBoth(challengeSignBytes(challenge, ts, sessionContext, nil, 0), sig, agentPub)
+}
+
+// VerifyChallengeSignatureWithStream checks a v1.1 stream-bound challenge
+// signature. sessionContext may be nil or 32 bytes; streamID MUST be 32 bytes;
+// streamSeq MUST be ≥1.
+func VerifyChallengeSignatureWithStream(challenge []byte, ts int64, sessionContext, streamID []byte, streamSeq int64, sig HybridSignature, agentPub HybridPublicKey) error {
+	if len(sessionContext) != 0 && len(sessionContext) != 32 {
+		return fmt.Errorf("session_context must be 32 bytes, got %d", len(sessionContext))
+	}
+	if len(streamID) != 32 {
+		return fmt.Errorf("stream_id must be 32 bytes, got %d", len(streamID))
+	}
+	if streamSeq < 1 {
+		return fmt.Errorf("stream_seq must be >=1, got %d", streamSeq)
+	}
+	return verifyBoth(challengeSignBytes(challenge, ts, sessionContext, streamID, streamSeq), sig, agentPub)
+}
+
+// IssueRevocationList signs a RevocationList with the issuer's hybrid private
+// key. Both component signatures are produced.
+func IssueRevocationList(list *RevocationList, issuerPriv HybridPrivateKey) error {
+	data, err := revocationSignBytes(list)
+	if err != nil {
+		return fmt.Errorf("serializing revocation list for signing: %w", err)
+	}
+	sig, err := signBoth(data, issuerPriv)
+	if err != nil {
+		return fmt.Errorf("signing revocation list: %w", err)
+	}
+	list.Signature = sig
+	return nil
+}
+
+// VerifyRevocationList verifies both component signatures on a RevocationList
+// against the issuer's hybrid public key.
+func VerifyRevocationList(list *RevocationList, issuerPub HybridPublicKey) error {
+	data, err := revocationSignBytes(list)
+	if err != nil {
+		return fmt.Errorf("serializing revocation list for verification: %w", err)
+	}
+	return verifyBoth(data, list.Signature, issuerPub)
+}
+
+// IssueKeyRotationStatement signs a root-key rotation statement with both the
+// old and new private keys. The old signature endorses the new key; the new
+// signature proves possession. Both signatures cover identical canonical bytes.
+func IssueKeyRotationStatement(stmt *KeyRotationStatement, oldPriv, newPriv HybridPrivateKey) error {
+	data, err := keyRotationSignBytes(stmt)
+	if err != nil {
+		return fmt.Errorf("serializing key rotation for signing: %w", err)
+	}
+	oldSig, err := signBoth(data, oldPriv)
+	if err != nil {
+		return fmt.Errorf("signing key rotation with old key: %w", err)
+	}
+	newSig, err := signBoth(data, newPriv)
+	if err != nil {
+		return fmt.Errorf("signing key rotation with new key: %w", err)
+	}
+	stmt.SignatureOld = oldSig
+	stmt.SignatureNew = newSig
+	return nil
+}
+
+// VerifyKeyRotationStatement verifies key continuity, key possession, and
+// structural ID/pubkey consistency for a KeyRotationStatement.
+func VerifyKeyRotationStatement(stmt *KeyRotationStatement) error {
+	if stmt.Version != ProtocolVersion {
+		return fmt.Errorf("version_mismatch: unsupported version %d", stmt.Version)
+	}
+	if stmt.OldID != DeriveID(stmt.OldPubKey) {
+		return fmt.Errorf("old_id does not match old_pub_key")
+	}
+	if stmt.NewID != DeriveID(stmt.NewPubKey) {
+		return fmt.Errorf("new_id does not match new_pub_key")
+	}
+	if stmt.OldID == stmt.NewID {
+		return fmt.Errorf("old_id and new_id must differ")
+	}
+	if !isKeyRotationReasonKnown(stmt.Reason) {
+		return fmt.Errorf("unknown key rotation reason: %s", stmt.Reason)
+	}
+	data, err := keyRotationSignBytes(stmt)
+	if err != nil {
+		return fmt.Errorf("serializing key rotation for verification: %w", err)
+	}
+	if err := verifyBoth(data, stmt.SignatureOld, stmt.OldPubKey); err != nil {
+		return fmt.Errorf("old signature invalid: %w", err)
+	}
+	if err := verifyBoth(data, stmt.SignatureNew, stmt.NewPubKey); err != nil {
+		return fmt.Errorf("new signature invalid: %w", err)
+	}
+	return nil
+}
+
+// GenerateChallenge returns 32 cryptographically random bytes from the OS RNG.
+func GenerateChallenge() ([]byte, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("generating challenge: %w", err)
+	}
+	return b, nil
+}
+
+// DelegationSignBytes returns the canonical byte sequence that is signed to
+// produce DelegationCert.Signature (for both algorithm components). Other-
+// language implementations MUST produce identical bytes for any given cert,
+// or signatures will not verify across implementations.
+func DelegationSignBytes(cert *DelegationCert) ([]byte, error) {
+	return delegationSignBytes(cert)
+}
+
+// ChallengeSignBytes returns the canonical byte sequence that is signed to
+// produce ProofBundle.ChallengeSig (for both algorithm components). Format:
+// challenge || big-endian uint64(ts).
+func ChallengeSignBytes(challenge []byte, ts int64) []byte {
+	return challengeSignBytes(challenge, ts, nil, nil, 0)
+}
+
+// ChallengeSignBytesWithSessionContext returns the v1.1 session-bound
+// challenge signable bytes:
+// challenge || big-endian uint64(ts) || session_context.
+func ChallengeSignBytesWithSessionContext(challenge []byte, ts int64, sessionContext []byte) []byte {
+	return challengeSignBytes(challenge, ts, sessionContext, nil, 0)
+}
+
+// ChallengeSignBytesWithStream returns the v1.1 stream-bound challenge
+// signable bytes. sessionContext may be nil or 32 bytes; streamID is 32 bytes;
+// streamSeq is appended as big-endian int64. Layout:
+//
+//	challenge || big-endian uint64(ts) || [session_context] || stream_id || big-endian int64(stream_seq)
+func ChallengeSignBytesWithStream(challenge []byte, ts int64, sessionContext, streamID []byte, streamSeq int64) []byte {
+	return challengeSignBytes(challenge, ts, sessionContext, streamID, streamSeq)
+}
+
+// RevocationSignBytes returns the canonical byte sequence that is signed to
+// produce RevocationList.Signature.
+func RevocationSignBytes(list *RevocationList) ([]byte, error) {
+	return revocationSignBytes(list)
+}
+
+// KeyRotationSignBytes returns the canonical bytes signed by both old and new
+// keys in a KeyRotationStatement.
+func KeyRotationSignBytes(stmt *KeyRotationStatement) ([]byte, error) {
+	return keyRotationSignBytes(stmt)
+}
+
+// SessionTokenSignBytes returns the canonical byte sequence that the verifier
+// HMACs with session_secret to produce SessionToken.MAC. The signable excludes
+// MAC itself — signatures (or MACs) cannot cover themselves.
+func SessionTokenSignBytes(token *SessionToken) ([]byte, error) {
+	return sessionTokenSignBytes(token)
+}
+
+// ChainHash returns the canonical 32-byte hash of a delegation chain, defined
+// as SHA-256 of the concatenated delegationSignBytes of each cert in order.
+// Used as a stable identity for a verified chain inside SessionToken so a cert
+// rotation invalidates any token issued against the old chain.
+func ChainHash(chain []DelegationCert) ([]byte, error) {
+	h := sha256.New()
+	for i := range chain {
+		b, err := delegationSignBytes(&chain[i])
+		if err != nil {
+			return nil, fmt.Errorf("cert %d: %w", i, err)
+		}
+		h.Write(b)
+	}
+	return h.Sum(nil), nil
+}
+
+// IssueSessionToken constructs a SessionToken from a verified bundle and the
+// verifier's session parameters. The caller MUST only invoke this after
+// Verify(bundle, opts) returned Valid=true — nothing in this function re-
+// checks the chain. sessionSecret MUST be a cryptographically random secret
+// (≥32 bytes recommended) known only to the verifier.
+func IssueSessionToken(bundle *ProofBundle, result VerifyResult, sessionID string, issuedAt, validUntil int64, sessionSecret []byte) (*SessionToken, error) {
+	if len(sessionSecret) == 0 {
+		return nil, fmt.Errorf("session_secret must not be empty")
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session_id must not be empty")
+	}
+	if validUntil <= issuedAt {
+		return nil, fmt.Errorf("valid_until must be strictly after issued_at")
+	}
+	chainHash, err := ChainHash(bundle.Delegations)
+	if err != nil {
+		return nil, fmt.Errorf("computing chain hash: %w", err)
+	}
+	// Granted scope is captured in sorted order so the token's canonical
+	// bytes are deterministic regardless of how the verifier returned the
+	// intersection.
+	scope := append([]string(nil), result.GrantedScope...)
+	sort.Strings(scope)
+	token := &SessionToken{
+		Version:      ProtocolVersion,
+		SessionID:    sessionID,
+		AgentID:      result.AgentID,
+		AgentPubKey:  bundle.AgentPubKey,
+		HumanID:      result.HumanID,
+		GrantedScope: scope,
+		IssuedAt:     issuedAt,
+		ValidUntil:   validUntil,
+		ChainHash:    chainHash,
+	}
+	signable, err := sessionTokenSignBytes(token)
+	if err != nil {
+		return nil, fmt.Errorf("serializing session token for MAC: %w", err)
+	}
+	m := hmac.New(sha256.New, sessionSecret)
+	m.Write(signable)
+	token.MAC = m.Sum(nil)
+	return token, nil
+}
+
+// VerifySessionToken checks a SessionToken's HMAC against sessionSecret and
+// its validity window against now. Returns nil iff the MAC matches and the
+// token is within [IssuedAt, ValidUntil]. This does NOT verify a challenge
+// signature; callers who need to verify a streamed turn use VerifyStreamedTurn.
+func VerifySessionToken(token *SessionToken, sessionSecret []byte, now time.Time) error {
+	if len(sessionSecret) == 0 {
+		return fmt.Errorf("session_secret must not be empty")
+	}
+	if token.Version != ProtocolVersion {
+		return fmt.Errorf("version_mismatch: unsupported version %d", token.Version)
+	}
+	if len(token.ChainHash) != sha256.Size {
+		return fmt.Errorf("chain_hash must be %d bytes, got %d", sha256.Size, len(token.ChainHash))
+	}
+	if len(token.MAC) != sha256.Size {
+		return fmt.Errorf("mac must be %d bytes, got %d", sha256.Size, len(token.MAC))
+	}
+	signable, err := sessionTokenSignBytes(token)
+	if err != nil {
+		return fmt.Errorf("serializing session token for MAC check: %w", err)
+	}
+	m := hmac.New(sha256.New, sessionSecret)
+	m.Write(signable)
+	want := m.Sum(nil)
+	if !hmac.Equal(token.MAC, want) {
+		return fmt.Errorf("session_token MAC invalid")
+	}
+	ts := now.Unix()
+	if ts < token.IssuedAt {
+		return fmt.Errorf("session_token not yet valid")
+	}
+	if ts > token.ValidUntil {
+		return fmt.Errorf("session_token expired")
+	}
+	return nil
+}
+
+// ============================================================================
+// Canonical JSON serialization
+//
+// Signable bytes follow RFC 8785 (JSON Canonicalization Scheme) with one
+// project-specific convention: byte arrays are encoded as base64-standard
+// strings (Go's default for []byte). Rules enforced below:
+//
+//   - Object members serialized in lexicographic key order. We achieve this
+//     by declaring signable structs with fields in alphabetical order —
+//     Go's encoding/json preserves declaration order.
+//   - No insignificant whitespace.
+//   - SetEscapeHTML(false): do NOT escape '<', '>', '&'.
+//   - Numbers serialized as shortest decimal representation.
+//   - UTF-8 encoding, minimal string escaping per RFC 8259.
+//   - U+2028 / U+2029 escape as \u2028 / \u2029 (matches Go's encoding/json).
+//
+// Other-language implementations MUST produce byte-identical output. The
+// canonical form of a HybridPublicKey is:
+//
+//	{"ed25519":"<base64>","ml_dsa_65":"<base64>"}
+//
+// (keys in lex order, byte arrays as base64-standard strings).
+// ============================================================================
+
+// CanonicalJSON marshals v into canonical bytes per the rules above. The
+// single chokepoint for canonical serialization; all three signable-bytes
+// helpers route through it.
+func CanonicalJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// delegationSignable is the canonical signable subset of DelegationCert.
+// Field order matches JSON key alphabetical order for determinism.
+type delegationSignable struct {
+	CertID        string          `json:"cert_id"`
+	Constraints   []Constraint    `json:"constraints"`
+	ExpiresAt     int64           `json:"expires_at"`
+	IssuedAt      int64           `json:"issued_at"`
+	IssuerID      string          `json:"issuer_id"`
+	IssuerPubKey  HybridPublicKey `json:"issuer_pub_key"`
+	Scope         []string        `json:"scope"`
+	SubjectID     string          `json:"subject_id"`
+	SubjectPubKey HybridPublicKey `json:"subject_pub_key"`
+	Version       int             `json:"version"`
+}
+
+func delegationSignBytes(cert *DelegationCert) ([]byte, error) {
+	// Canonical form requires constraints to be serialized as [] when empty,
+	// never null. This ensures cross-issuer determinism.
+	constraints := cert.Constraints
+	if constraints == nil {
+		constraints = []Constraint{}
+	}
+	s := delegationSignable{
+		CertID:        cert.CertID,
+		Constraints:   constraints,
+		ExpiresAt:     cert.ExpiresAt,
+		IssuedAt:      cert.IssuedAt,
+		IssuerID:      cert.IssuerID,
+		IssuerPubKey:  cert.IssuerPubKey,
+		Scope:         cert.Scope,
+		SubjectID:     cert.SubjectID,
+		SubjectPubKey: cert.SubjectPubKey,
+		Version:       cert.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+func challengeSignBytes(challenge []byte, ts int64, sessionContext, streamID []byte, streamSeq int64) []byte {
+	// sign_data = challenge || big-endian uint64(timestamp) ||
+	// optional 32-byte session_context ||
+	// optional (32-byte stream_id || big-endian int64(stream_seq))
+	//
+	// Raw binary concatenation, NOT JSON. The challenge is already opaque
+	// random bytes; JSON wrapping would add weight without adding security.
+	// Order matters: session_context precedes stream extension so the signable
+	// bytes remain well-defined regardless of which optional bindings are in
+	// play. A 72-byte signable (session-only), an 80-byte signable (stream-
+	// only), and a 112-byte signable (both) are unambiguously distinct.
+	streamLen := 0
+	if len(streamID) > 0 {
+		streamLen = len(streamID) + 8
+	}
+	buf := make([]byte, len(challenge)+8+len(sessionContext)+streamLen)
+	off := 0
+	copy(buf[off:], challenge)
+	off += len(challenge)
+	binary.BigEndian.PutUint64(buf[off:], uint64(ts))
+	off += 8
+	copy(buf[off:], sessionContext)
+	off += len(sessionContext)
+	if streamLen > 0 {
+		copy(buf[off:], streamID)
+		off += len(streamID)
+		binary.BigEndian.PutUint64(buf[off:], uint64(streamSeq))
+	}
+	return buf
+}
+
+// revocationSignable is the canonical subset of RevocationList for signing.
+type revocationSignable struct {
+	IssuerID     string   `json:"issuer_id"`
+	RevokedCerts []string `json:"revoked_certs"`
+	UpdatedAt    int64    `json:"updated_at"`
+}
+
+func revocationSignBytes(list *RevocationList) ([]byte, error) {
+	s := revocationSignable{
+		IssuerID:     list.IssuerID,
+		RevokedCerts: list.RevokedCerts,
+		UpdatedAt:    list.UpdatedAt,
+	}
+	return CanonicalJSON(s)
+}
+
+// keyRotationSignable is the canonical subset of KeyRotationStatement. Field
+// order matches JSON key alphabetical order for determinism.
+type keyRotationSignable struct {
+	NewID     string          `json:"new_id"`
+	NewPubKey HybridPublicKey `json:"new_pub_key"`
+	OldID     string          `json:"old_id"`
+	OldPubKey HybridPublicKey `json:"old_pub_key"`
+	Reason    string          `json:"reason"`
+	RotatedAt int64           `json:"rotated_at"`
+	Version   int             `json:"version"`
+}
+
+func keyRotationSignBytes(stmt *KeyRotationStatement) ([]byte, error) {
+	s := keyRotationSignable{
+		NewID:     stmt.NewID,
+		NewPubKey: stmt.NewPubKey,
+		OldID:     stmt.OldID,
+		OldPubKey: stmt.OldPubKey,
+		Reason:    stmt.Reason,
+		RotatedAt: stmt.RotatedAt,
+		Version:   stmt.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+// revocationPushSignable is the canonical subset of RevocationPush. Field
+// order matches JSON key alphabetical order for determinism.
+type revocationPushSignable struct {
+	Entries  []string `json:"entries"`
+	IssuerID string   `json:"issuer_id"`
+	PushedAt int64    `json:"pushed_at"`
+	SeqNo    int64    `json:"seq_no"`
+}
+
+func revocationPushSignBytes(push *RevocationPush) ([]byte, error) {
+	entries := push.Entries
+	if entries == nil {
+		entries = []string{}
+	}
+	s := revocationPushSignable{
+		Entries:  entries,
+		IssuerID: push.IssuerID,
+		PushedAt: push.PushedAt,
+		SeqNo:    push.SeqNo,
+	}
+	return CanonicalJSON(s)
+}
+
+// RevocationPushSignBytes returns the canonical byte sequence that is signed
+// to produce RevocationPush.Signature.
+func RevocationPushSignBytes(push *RevocationPush) ([]byte, error) {
+	return revocationPushSignBytes(push)
+}
+
+// IssueRevocationPush signs a RevocationPush with the issuer's hybrid private
+// key.
+func IssueRevocationPush(push *RevocationPush, issuerPriv HybridPrivateKey) error {
+	data, err := revocationPushSignBytes(push)
+	if err != nil {
+		return fmt.Errorf("serializing revocation push for signing: %w", err)
+	}
+	sig, err := signBoth(data, issuerPriv)
+	if err != nil {
+		return fmt.Errorf("signing revocation push: %w", err)
+	}
+	push.Signature = sig
+	return nil
+}
+
+// VerifyRevocationPush verifies the hybrid signature on a RevocationPush
+// against the issuer's public key. Returns nil iff the signature is valid.
+func VerifyRevocationPush(push *RevocationPush, issuerPub HybridPublicKey) error {
+	data, err := revocationPushSignBytes(push)
+	if err != nil {
+		return fmt.Errorf("serializing revocation push for verification: %w", err)
+	}
+	return verifyBoth(data, push.Signature, issuerPub)
+}
+
+// witnessEntrySignable is the canonical subset of WitnessEntry. Field
+// order matches JSON key alphabetical order for determinism.
+type witnessEntrySignable struct {
+	EntryData []byte `json:"entry_data"`
+	PrevHash  []byte `json:"prev_hash"`
+	Timestamp int64  `json:"timestamp"`
+	WitnessID string `json:"witness_id"`
+}
+
+func witnessEntrySignBytes(entry *WitnessEntry) ([]byte, error) {
+	s := witnessEntrySignable{
+		EntryData: entry.EntryData,
+		PrevHash:  entry.PrevHash,
+		Timestamp: entry.Timestamp,
+		WitnessID: entry.WitnessID,
+	}
+	return CanonicalJSON(s)
+}
+
+// WitnessEntrySignBytes returns the canonical byte sequence that is signed
+// to produce WitnessEntry.Signature.
+func WitnessEntrySignBytes(entry *WitnessEntry) ([]byte, error) {
+	return witnessEntrySignBytes(entry)
+}
+
+// IssueWitnessEntry signs a WitnessEntry with the witness operator's hybrid
+// private key.
+func IssueWitnessEntry(entry *WitnessEntry, witnessPriv HybridPrivateKey) error {
+	data, err := witnessEntrySignBytes(entry)
+	if err != nil {
+		return fmt.Errorf("serializing witness entry for signing: %w", err)
+	}
+	sig, err := signBoth(data, witnessPriv)
+	if err != nil {
+		return fmt.Errorf("signing witness entry: %w", err)
+	}
+	entry.Signature = sig
+	return nil
+}
+
+// VerifyWitnessEntry verifies the hybrid signature on a WitnessEntry
+// against the witness operator's public key. Returns nil iff the signature
+// is valid.
+func VerifyWitnessEntry(entry *WitnessEntry, witnessPub HybridPublicKey) error {
+	data, err := witnessEntrySignBytes(entry)
+	if err != nil {
+		return fmt.Errorf("serializing witness entry for verification: %w", err)
+	}
+	return verifyBoth(data, entry.Signature, witnessPub)
+}
+
+// receiptPartySignable is the canonical per-party subset that enters
+// TransactionReceipt signable bytes (§6.4.5). `proof_bundle` is excluded —
+// per-party bundles are verified independently by the generic verifier.
+type receiptPartySignable struct {
+	AgentID     string          `json:"agent_id"`
+	AgentPubKey HybridPublicKey `json:"agent_pub_key"`
+	PartyID     string          `json:"party_id"`
+	Role        string          `json:"role"`
+}
+
+// transactionReceiptSignable is the canonical signable that every party's
+// signature covers. `party_signatures` is excluded (signatures cannot cover
+// themselves) and `proof_bundle` is excluded (verified independently). The
+// full sorted `parties` set IS inside the signable, so adding, removing, or
+// altering any party invalidates every other party's signature.
+type transactionReceiptSignable struct {
+	CreatedAt          int64                  `json:"created_at"`
+	Parties            []receiptPartySignable `json:"parties"`
+	TermsCanonicalJSON []byte                 `json:"terms_canonical_json"`
+	TermsSchemaURI     string                 `json:"terms_schema_uri"`
+	TransactionID      string                 `json:"transaction_id"`
+	Version            int                    `json:"version"`
+}
+
+// TransactionReceiptSignBytes returns the canonical byte sequence that every
+// listed party signs to bind the receipt. Parties are sorted lex by
+// PartyID; duplicates are an error (the caller must ensure uniqueness —
+// Verify will reject non-unique receipts).
+func TransactionReceiptSignBytes(receipt *TransactionReceipt) ([]byte, error) {
+	return transactionReceiptSignBytes(receipt)
+}
+
+func transactionReceiptSignBytes(receipt *TransactionReceipt) ([]byte, error) {
+	parties := make([]receiptPartySignable, len(receipt.Parties))
+	for i, p := range receipt.Parties {
+		parties[i] = receiptPartySignable{
+			AgentID:     p.AgentID,
+			AgentPubKey: p.AgentPubKey,
+			PartyID:     p.PartyID,
+			Role:        p.Role,
+		}
+	}
+	sort.Slice(parties, func(i, j int) bool {
+		return parties[i].PartyID < parties[j].PartyID
+	})
+	s := transactionReceiptSignable{
+		CreatedAt:          receipt.CreatedAt,
+		Parties:            parties,
+		TermsCanonicalJSON: receipt.TermsCanonicalJSON,
+		TermsSchemaURI:     receipt.TermsSchemaURI,
+		TransactionID:      receipt.TransactionID,
+		Version:            receipt.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+// SignTransactionReceiptParty produces a party's hybrid signature over the
+// receipt's canonical signable bytes. Use once per party with that party's
+// agent private key; collect the resulting ReceiptPartySignature into
+// TransactionReceipt.PartySignatures before emitting the receipt.
+func SignTransactionReceiptParty(receipt *TransactionReceipt, partyID string, agentPriv HybridPrivateKey) (ReceiptPartySignature, error) {
+	data, err := transactionReceiptSignBytes(receipt)
+	if err != nil {
+		return ReceiptPartySignature{}, fmt.Errorf("serializing receipt for signing: %w", err)
+	}
+	sig, err := signBoth(data, agentPriv)
+	if err != nil {
+		return ReceiptPartySignature{}, fmt.Errorf("signing receipt for party %q: %w", partyID, err)
+	}
+	return ReceiptPartySignature{PartyID: partyID, Signature: sig}, nil
+}
+
+// sessionTokenSignable is the canonical subset of SessionToken. Field order
+// matches JSON key alphabetical order so every implementation's serde
+// preserves the canonical byte sequence.
+type sessionTokenSignable struct {
+	AgentID      string          `json:"agent_id"`
+	AgentPubKey  HybridPublicKey `json:"agent_pub_key"`
+	ChainHash    []byte          `json:"chain_hash"` // base64 in JSON per project convention
+	GrantedScope []string        `json:"granted_scope"`
+	HumanID      string          `json:"human_id"`
+	IssuedAt     int64           `json:"issued_at"`
+	SessionID    string          `json:"session_id"`
+	ValidUntil   int64           `json:"valid_until"`
+	Version      int             `json:"version"`
+}
+
+func sessionTokenSignBytes(token *SessionToken) ([]byte, error) {
+	scope := append([]string(nil), token.GrantedScope...)
+	sort.Strings(scope)
+	s := sessionTokenSignable{
+		AgentID:      token.AgentID,
+		AgentPubKey:  token.AgentPubKey,
+		ChainHash:    token.ChainHash,
+		GrantedScope: scope,
+		HumanID:      token.HumanID,
+		IssuedAt:     token.IssuedAt,
+		SessionID:    token.SessionID,
+		ValidUntil:   token.ValidUntil,
+		Version:      token.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+func isKeyRotationReasonKnown(reason string) bool {
+	switch reason {
+	case "routine", "compromise_suspected", "device_lost", "recovery", "other":
+		return true
+	default:
+		return false
+	}
+}

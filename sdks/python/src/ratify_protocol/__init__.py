@@ -1,0 +1,209 @@
+"""Ratify Protocol v1 — Python reference SDK.
+
+A cryptographic trust protocol for human-agent and agent-agent interactions
+as agents start to transact. Every signature is hybrid Ed25519 + ML-DSA-65
+(FIPS 204): quantum-safe by design.
+
+Quickstart:
+
+    import asyncio
+    from ratify_protocol import (
+        generate_human_root, generate_agent,
+        DelegationCert, ProofBundle, VerifyOptions,
+        PROTOCOL_VERSION, SCOPE_MEETING_ATTEND,
+        issue_delegation, sign_challenge, generate_challenge,
+        derive_id, verify_bundle,
+    )
+
+    root, root_priv = generate_human_root()
+    agent, agent_priv = generate_agent("Alice's Assistant", "voice_agent")
+
+    cert = DelegationCert(
+        cert_id="cert-1", version=PROTOCOL_VERSION,
+        issuer_id=root.id, issuer_pub_key=root.public_key,
+        subject_id=agent.id, subject_pub_key=agent.public_key,
+        scope=[SCOPE_MEETING_ATTEND],
+        issued_at=0, expires_at=2000000000,
+        signature=None,  # filled by issue_delegation
+    )
+    issue_delegation(cert, root_priv)
+    # ... then agent builds a ProofBundle, verifier runs verify_bundle(bundle)
+
+See docs/EXPLAINED.md and docs/AGENT_TO_AGENT.md for full semantics.
+"""
+from .canonical import (
+    base64_standard_decode,
+    base64_standard_encode,
+    canonical_json,
+    hex_decode,
+    hex_encode,
+)
+from .crypto import (
+    chain_hash,
+    challenge_sign_bytes,
+    delegation_sign_bytes,
+    derive_id,
+    generate_agent,
+    generate_challenge,
+    generate_human_root,
+    generate_hybrid_keypair,
+    hybrid_keypair_from_seeds,
+    issue_delegation,
+    issue_key_rotation_statement,
+    issue_revocation_list,
+    issue_revocation_push,
+    issue_session_token,
+    issue_witness_entry,
+    key_rotation_sign_bytes,
+    revocation_push_sign_bytes,
+    revocation_sign_bytes,
+    session_token_sign_bytes,
+    sign_both,
+    sign_challenge,
+    sign_transaction_receipt_party,
+    transaction_receipt_sign_bytes,
+    verify_both,
+    verify_challenge_signature,
+    verify_delegation_signature,
+    verify_delegation_signature_e,
+    verify_key_rotation_statement,
+    verify_key_rotation_statement_e,
+    verify_revocation_list,
+    verify_revocation_push,
+    verify_session_token,
+    verify_session_token_e,
+    verify_witness_entry,
+    witness_entry_sign_bytes,
+)
+from .scope import (
+    CUSTOM_SCOPE_PREFIX,
+    SCOPE_COMMS_CALENDAR_READ,
+    SCOPE_COMMS_CALENDAR_WRITE,
+    SCOPE_COMMS_EMAIL_DELETE,
+    SCOPE_COMMS_EMAIL_READ,
+    SCOPE_COMMS_EMAIL_SEND,
+    SCOPE_COMMS_MESSAGE_DELETE,
+    SCOPE_COMMS_MESSAGE_READ,
+    SCOPE_COMMS_MESSAGE_SEND,
+    SCOPE_CONTRACT_READ,
+    SCOPE_CONTRACT_SIGN,
+    SCOPE_DATA_DELETE,
+    SCOPE_DATA_EXPORT,
+    SCOPE_DATA_READ,
+    SCOPE_DATA_SHARE,
+    SCOPE_DATA_WRITE,
+    SCOPE_EXECUTE_CODE,
+    SCOPE_EXECUTE_TOOL,
+    SCOPE_FILES_READ,
+    SCOPE_FILES_WRITE,
+    SCOPE_GENERATE_CONTENT,
+    SCOPE_GENERATE_DEEPFAKE,
+    SCOPE_IDENTITY_DELEGATE,
+    SCOPE_IDENTITY_PROVE,
+    SCOPE_MEETING_ATTEND,
+    SCOPE_MEETING_CHAT,
+    SCOPE_MEETING_RECORD,
+    SCOPE_MEETING_SHARE_SCREEN,
+    SCOPE_MEETING_SPEAK,
+    SCOPE_MEETING_VIDEO,
+    SCOPE_PAYMENTS_AUTHORIZE,
+    SCOPE_PAYMENTS_RECEIVE,
+    SCOPE_PAYMENTS_SEND,
+    SCOPE_TRANSACT_PURCHASE,
+    SCOPE_TRANSACT_SELL,
+    expand_scopes,
+    has_scope,
+    intersect_scopes,
+    is_sensitive,
+    validate_scopes,
+)
+from .types import (
+    CHALLENGE_WINDOW_SECONDS,
+    ED25519_PUBLIC_KEY_SIZE,
+    ED25519_SIGNATURE_SIZE,
+    MAX_DELEGATION_CHAIN_DEPTH,
+    MLDSA65_PUBLIC_KEY_SIZE,
+    MLDSA65_SIGNATURE_SIZE,
+    PROTOCOL_VERSION,
+    AgentIdentity,
+    Anchor,
+    Constraint,
+    DelegationCert,
+    HumanRoot,
+    HybridPrivateKey,
+    HybridPublicKey,
+    HybridSignature,
+    IdentityStatus,
+    KeyRotationReason,
+    KeyRotationStatement,
+    ProofBundle,
+    ReceiptParty,
+    ReceiptPartySignature,
+    RevocationList,
+    RevocationPush,
+    SessionToken,
+    StreamContext,
+    TransactionReceipt,
+    TransactionReceiptResult,
+    VerifierContext,
+    VerifyOptions,
+    VerifyResult,
+    WitnessEntry,
+)
+from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
+
+__version__ = "1.0.0a5"
+
+__all__ = [
+    # types
+    "PROTOCOL_VERSION", "MAX_DELEGATION_CHAIN_DEPTH", "CHALLENGE_WINDOW_SECONDS",
+    "ED25519_PUBLIC_KEY_SIZE", "ED25519_SIGNATURE_SIZE",
+    "MLDSA65_PUBLIC_KEY_SIZE", "MLDSA65_SIGNATURE_SIZE",
+    "HybridPublicKey", "HybridSignature", "HybridPrivateKey",
+    "Anchor", "HumanRoot", "AgentIdentity",
+    "DelegationCert", "ProofBundle", "KeyRotationStatement", "KeyRotationReason",
+    "VerifyResult", "VerifyOptions", "StreamContext", "SessionToken",
+    "RevocationList", "RevocationPush", "WitnessEntry", "IdentityStatus",
+    "TransactionReceipt", "ReceiptParty", "ReceiptPartySignature",
+    "TransactionReceiptResult",
+    # crypto
+    "derive_id", "generate_hybrid_keypair", "hybrid_keypair_from_seeds",
+    "generate_human_root", "generate_agent",
+    "delegation_sign_bytes", "challenge_sign_bytes", "revocation_sign_bytes",
+    "key_rotation_sign_bytes", "revocation_push_sign_bytes", "witness_entry_sign_bytes",
+    "session_token_sign_bytes", "chain_hash",
+    "transaction_receipt_sign_bytes", "sign_transaction_receipt_party",
+    "sign_both", "verify_both",
+    "issue_delegation", "verify_delegation_signature", "verify_delegation_signature_e",
+    "issue_key_rotation_statement", "verify_key_rotation_statement",
+    "verify_key_rotation_statement_e",
+    "issue_session_token", "verify_session_token", "verify_session_token_e",
+    "sign_challenge", "verify_challenge_signature",
+    "issue_revocation_list", "verify_revocation_list",
+    "issue_revocation_push", "verify_revocation_push",
+    "issue_witness_entry", "verify_witness_entry",
+    "generate_challenge",
+    # scope
+    "expand_scopes", "intersect_scopes", "has_scope", "is_sensitive", "validate_scopes",
+    # verify
+    "verify_bundle", "verify_streamed_turn", "verify_transaction_receipt",
+    # canonical / utils
+    "canonical_json", "base64_standard_encode", "base64_standard_decode",
+    "hex_encode", "hex_decode",
+    # all scope constants
+    "SCOPE_MEETING_ATTEND", "SCOPE_MEETING_SPEAK", "SCOPE_MEETING_VIDEO",
+    "SCOPE_MEETING_CHAT", "SCOPE_MEETING_SHARE_SCREEN", "SCOPE_MEETING_RECORD",
+    "SCOPE_COMMS_MESSAGE_READ", "SCOPE_COMMS_MESSAGE_SEND", "SCOPE_COMMS_MESSAGE_DELETE",
+    "SCOPE_COMMS_EMAIL_READ", "SCOPE_COMMS_EMAIL_SEND", "SCOPE_COMMS_EMAIL_DELETE",
+    "SCOPE_COMMS_CALENDAR_READ", "SCOPE_COMMS_CALENDAR_WRITE",
+    "SCOPE_FILES_READ", "SCOPE_FILES_WRITE",
+    "SCOPE_IDENTITY_PROVE", "SCOPE_IDENTITY_DELEGATE",
+    "SCOPE_TRANSACT_PURCHASE", "SCOPE_TRANSACT_SELL",
+    "SCOPE_PAYMENTS_SEND", "SCOPE_PAYMENTS_RECEIVE", "SCOPE_PAYMENTS_AUTHORIZE",
+    "SCOPE_CONTRACT_READ", "SCOPE_CONTRACT_SIGN",
+    "SCOPE_DATA_READ", "SCOPE_DATA_WRITE", "SCOPE_DATA_DELETE",
+    "SCOPE_DATA_EXPORT", "SCOPE_DATA_SHARE",
+    "SCOPE_EXECUTE_TOOL", "SCOPE_EXECUTE_CODE",
+    "SCOPE_GENERATE_CONTENT", "SCOPE_GENERATE_DEEPFAKE",
+    "CUSTOM_SCOPE_PREFIX",
+]

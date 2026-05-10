@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ratify-protocol"
+version = "1.0.0a5"
+description = "Cryptographic trust protocol for human-agent and agent-agent interactions — Python reference SDK."
+readme = "README.md"
+authors = [{name = "Identities AI"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "identity", "ai-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "cryptography>=44.0",
+    "pqcrypto>=0.3.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/identities-ai/ratify-protocol"
+Repository = "https://github.com/identities-ai/ratify-protocol"
+Issues = "https://github.com/identities-ai/ratify-protocol/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

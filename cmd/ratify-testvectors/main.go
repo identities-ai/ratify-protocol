@@ -2595,6 +2595,15 @@ func main() {
 		written++
 	}
 	fmt.Printf("\nGenerated %d fixtures in %s\n", written, *outDir)
+
+	// Cross-SDK byte-equivalence vectors (SPEC §17.5–§17.6). Single file,
+	// outside the per-fixture-file corpus, loaded directly by every SDK's
+	// conformance test.
+	if err := generateCrossSDKVectors(*outDir); err != nil {
+		fmt.Fprintf(os.Stderr, "generate cross_sdk_vectors.json: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("  ✓ cross_sdk_vectors.json (alpha.7 byte-equivalence corpus)\n")
 }
 
 func writeFixture(dir string, fx *fixture) error {

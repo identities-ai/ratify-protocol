@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -37,3 +37,15 @@ path = "src/lib.rs"
 [[test]]
 name = "conformance"
 path = "tests/conformance.rs"
+
+[[test]]
+name = "providers"
+path = "tests/providers.rs"
+
+[[test]]
+name = "levers"
+path = "tests/levers.rs"
+
+[[test]]
+name = "cross_sdk"
+path = "tests/cross_sdk.rs"

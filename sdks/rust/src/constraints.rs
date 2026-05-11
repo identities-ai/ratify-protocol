@@ -3,22 +3,36 @@
 //! Every semantic must produce the same verdict for the same inputs, or
 //! cross-language conformance fails.
 
-use crate::types::{Constraint, DelegationCert, VerifierContext};
+use crate::types::{Constraint, ConstraintEvaluator, DelegationCert, VerifierContext};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
+use std::collections::HashMap;
 
 /// Run every Constraint on cert against the caller-supplied VerifierContext.
 /// Return `Ok(())` iff all pass; an error string otherwise.
 /// Fail-closed: unknown Type or missing required context field causes rejection.
-pub fn evaluate_constraints(
+/// (SPEC §17.7) Unknown built-in types fall through to `ext_evaluators`
+/// before failing closed.
+pub fn evaluate_constraints<'a>(
     cert: &DelegationCert,
     ctx: &VerifierContext,
     now_sec: i64,
+    ext_evaluators: Option<&HashMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
 ) -> Result<(), String> {
     for (i, c) in cert.constraints.iter().enumerate() {
-        if let Err(err) = evaluate_constraint(c, &cert.cert_id, ctx, now_sec) {
-            return Err(format!("constraint[{}] ({}): {}", i, c.kind, err));
+        let mut err = evaluate_constraint(c, &cert.cert_id, ctx, now_sec);
+        if let Err(ref msg) = err {
+            if msg.starts_with("constraint_unknown:") {
+                if let Some(map) = ext_evaluators {
+                    if let Some(ev) = map.get(&c.kind) {
+                        err = ev.evaluate(c, &cert.cert_id, ctx, now_sec);
+                    }
+                }
+            }
+        }
+        if let Err(e) = err {
+            return Err(format!("constraint[{}] ({}): {}", i, c.kind, e));
         }
     }
     Ok(())

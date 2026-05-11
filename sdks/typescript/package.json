@@ -1,6 +1,6 @@
 {
   "name": "@identities-ai/ratify-protocol",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "Cryptographic delegation protocol for AI agents \u2014 TypeScript reference SDK.",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,6 +20,7 @@
     "build": "tsc",
     "test": "node --import tsx/esm --test test/*.test.ts",
     "test:conformance": "node --import tsx/esm --test test/conformance.test.ts",
+    "prepublishOnly": "rm -rf dist && tsc && npm run test:conformance",
     "clean": "rm -rf dist"
   },
   "keywords": [

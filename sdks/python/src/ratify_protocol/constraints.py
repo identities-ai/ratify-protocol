@@ -16,17 +16,36 @@ def evaluate_constraints(
     cert: DelegationCert,
     ctx: VerifierContext | None,
     now_sec: int,
+    ext_evaluators: dict | None = None,
 ) -> str | None:
     """Run every Constraint on cert against the caller-supplied
     VerifierContext. Return None iff all pass; error message otherwise.
 
     Fail-closed: unknown Type or missing required context field causes
-    rejection.
+    rejection. (SPEC §17.7) Unknown built-in types fall through to
+    ``ext_evaluators`` before failing closed.
     """
     if ctx is None:
         ctx = VerifierContext()
     for i, c in enumerate(cert.constraints or []):
         err = _evaluate_constraint(c, cert.cert_id, ctx, now_sec)
+        if (
+            err is not None
+            and err.startswith("constraint_unknown:")
+            and ext_evaluators
+        ):
+            ev = ext_evaluators.get(c.type)
+            if ev is not None:
+                try:
+                    allow, reason = ev.evaluate(c, cert.cert_id, ctx, now_sec)
+                    if allow:
+                        err = None
+                    elif reason and reason.startswith("constraint_unverifiable"):
+                        err = reason
+                    else:
+                        err = reason or "extension evaluator denied constraint"
+                except Exception as e:  # noqa: BLE001
+                    err = f"extension evaluator threw: {e}"
         if err is not None:
             return f"constraint[{i}] ({c.type}): {err}"
     return None

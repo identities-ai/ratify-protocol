@@ -1,4 +1,12 @@
-# Ratify Protocol™
+<p align="center">
+  <img src="assets/ratify-protocol-logo.png" alt="Ratify Protocol" width="160" height="160" />
+</p>
+
+<h1 align="center">Ratify Protocol™</h1>
+
+<p align="center">
+  <em>A cryptographic trust protocol for human-to-agent and agent-to-agent interactions.</em>
+</p>
 
 [![CI](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/identities-ai/ratify-protocol?include_prereleases&sort=semver&color=blue)](https://github.com/identities-ai/ratify-protocol/releases)
@@ -11,15 +19,13 @@
 [![Crates.io](https://img.shields.io/crates/v/ratify-protocol?label=crates.io)](https://crates.io/crates/ratify-protocol)
 [![npm](https://img.shields.io/badge/npm-coming%20soon-yellow)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 
-**A cryptographic trust protocol for human-to-agent and agent-to-agent interactions.**
-
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
 
-**Status:** `v1.0.0-alpha.6` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust) · Patent Pending.
+**Status:** `v1.0.0-alpha.7` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust) · Patent Pending.
 
 Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
 
@@ -147,7 +153,7 @@ go test ./...
 Or install as a module in your own project:
 
 ```bash
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.6
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.7
 ```
 
 ### TypeScript
@@ -165,7 +171,7 @@ npm run test:conformance
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a6
+pip install ratify-protocol==1.0.0a7
 ```
 
 Or to run the conformance suite yourself:
@@ -181,7 +187,7 @@ pytest
 ### Rust
 
 ```bash
-cargo add ratify-protocol@1.0.0-alpha.6
+cargo add ratify-protocol@1.0.0-alpha.7
 ```
 
 Or to run the conformance suite yourself:
@@ -311,10 +317,10 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 
 | Implementation | Language | Status | Install |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.6` |
+| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.7` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` *(after npm org approval; install from source for now)* |
-| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a6` |
-| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.6` |
+| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a7` |
+| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.7` |
 | *C / C++ via stable C ABI* | — | planned | embedded systems / appliances |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |

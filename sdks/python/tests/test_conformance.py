@@ -157,7 +157,10 @@ def _decode_key_rotation(raw: dict) -> KeyRotationStatement:
 
 
 # Load all fixtures at collection time
-_FIXTURE_FILES = sorted(p for p in FIXTURE_DIR.glob("*.json"))
+# Exclude cross_sdk_vectors.json — different schema, loaded by test_cross_sdk.py.
+_FIXTURE_FILES = sorted(
+    p for p in FIXTURE_DIR.glob("*.json") if p.name != "cross_sdk_vectors.json"
+)
 assert _FIXTURE_FILES, f"no fixtures found in {FIXTURE_DIR}"
 
 
@@ -226,11 +229,19 @@ def _run_verify_fixture(fx: dict) -> None:
     opts_in = fx["expected"]["verify_options"]
     expected = fx["expected"]["verify_result"]
 
-    # revocation_middle_cert fixture uses an is_revoked callback
-    is_revoked = None
+    # revocation_middle_cert fixture exercises revocation. Use the
+    # SPEC §17.1 RevocationProvider — the legacy `is_revoked` closure is
+    # deprecated and emits a DeprecationWarning on use (which would fail
+    # under pytest -W error).
+    revocation = None
     if expected.get("identity_status") == "revoked" and len(bundle.delegations) > 1:
         revoked_id = bundle.delegations[1].cert_id
-        is_revoked = lambda cid: cid == revoked_id  # noqa: E731
+
+        class _ConformanceRevocation:
+            def is_revoked(self, cert_id):
+                return cert_id == revoked_id, None
+
+        revocation = _ConformanceRevocation()
 
     # Thread the fixture's verifier_context into the verify call so
     # constraint fixtures exercise the real constraint-evaluation path.
@@ -268,7 +279,7 @@ def _run_verify_fixture(fx: dict) -> None:
             else b""
         ),
         stream=stream_opt,
-        is_revoked=is_revoked,
+        revocation=revocation,
         context=context,
     )
     got = verify_bundle(bundle, opts)

@@ -677,6 +677,11 @@ func TestConformanceVectors(t *testing.T) {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
+		// cross_sdk_vectors.json has a different schema; it's exercised by
+		// TestCrossSDKByteEquivalence in cross_sdk_test.go.
+		if e.Name() == "cross_sdk_vectors.json" {
+			continue
+		}
 		count++
 		name := e.Name()
 		t.Run(name, func(t *testing.T) {

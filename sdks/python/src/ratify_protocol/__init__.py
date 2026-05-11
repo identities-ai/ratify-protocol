@@ -39,6 +39,7 @@ from .canonical import (
     hex_encode,
 )
 from .crypto import (
+    bundle_hash,
     chain_hash,
     challenge_sign_bytes,
     delegation_sign_bytes,
@@ -50,11 +51,15 @@ from .crypto import (
     hybrid_keypair_from_seeds,
     issue_delegation,
     issue_key_rotation_statement,
+    issue_policy_verdict,
     issue_revocation_list,
     issue_revocation_push,
     issue_session_token,
+    issue_verification_receipt,
     issue_witness_entry,
     key_rotation_sign_bytes,
+    policy_verdict_sign_bytes,
+    receipt_hash,
     revocation_push_sign_bytes,
     revocation_sign_bytes,
     session_token_sign_bytes,
@@ -62,16 +67,20 @@ from .crypto import (
     sign_challenge,
     sign_transaction_receipt_party,
     transaction_receipt_sign_bytes,
+    verification_receipt_sign_bytes,
+    verifier_context_hash,
     verify_both,
     verify_challenge_signature,
     verify_delegation_signature,
     verify_delegation_signature_e,
     verify_key_rotation_statement,
     verify_key_rotation_statement_e,
+    verify_policy_verdict_e,
     verify_revocation_list,
     verify_revocation_push,
     verify_session_token,
     verify_session_token_e,
+    verify_verification_receipt,
     verify_witness_entry,
     witness_entry_sign_bytes,
 )
@@ -127,7 +136,10 @@ from .types import (
     PROTOCOL_VERSION,
     AgentIdentity,
     Anchor,
+    AnchorResolver,
+    AuditProvider,
     Constraint,
+    ConstraintEvaluator,
     DelegationCert,
     HumanRoot,
     HybridPrivateKey,
@@ -136,15 +148,19 @@ from .types import (
     IdentityStatus,
     KeyRotationReason,
     KeyRotationStatement,
+    PolicyProvider,
+    PolicyVerdict,
     ProofBundle,
     ReceiptParty,
     ReceiptPartySignature,
     RevocationList,
+    RevocationProvider,
     RevocationPush,
     SessionToken,
     StreamContext,
     TransactionReceipt,
     TransactionReceiptResult,
+    VerificationReceipt,
     VerifierContext,
     VerifyOptions,
     VerifyResult,
@@ -152,7 +168,7 @@ from .types import (
 )
 from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
 
-__version__ = "1.0.0a6"
+__version__ = "1.0.0a7"
 
 __all__ = [
     # types
@@ -166,6 +182,17 @@ __all__ = [
     "RevocationList", "RevocationPush", "WitnessEntry", "IdentityStatus",
     "TransactionReceipt", "ReceiptParty", "ReceiptPartySignature",
     "TransactionReceiptResult",
+    # provider interfaces (SPEC §17)
+    "RevocationProvider", "PolicyProvider", "AuditProvider",
+    "ConstraintEvaluator", "AnchorResolver",
+    # alpha.7 levers (SPEC §17.5–§17.8)
+    "VerificationReceipt", "PolicyVerdict",
+    "bundle_hash", "verification_receipt_sign_bytes",
+    "issue_verification_receipt", "verify_verification_receipt",
+    "receipt_hash",
+    "verifier_context_hash",
+    "policy_verdict_sign_bytes", "issue_policy_verdict",
+    "verify_policy_verdict_e",
     # crypto
     "derive_id", "generate_hybrid_keypair", "hybrid_keypair_from_seeds",
     "generate_human_root", "generate_agent",

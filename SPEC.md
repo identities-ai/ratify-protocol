@@ -408,12 +408,19 @@ Controls what the verifier checks beyond the cryptographic basics. Passed as the
 | Field | Type | Default | Semantics |
 |---|---|---|---|
 | `RequiredScope` | `string` | `""` (skip scope check) | Must be present in the effective scope (chain intersection) for the proof to be valid. Empty string skips scope checking. |
-| `IsRevoked` | `func(certID string) bool` | `nil` (no revocation check) | Called for each cert ID during verification. Return true if the cert has been revoked. |
-| `ForceRevocationCheck` | `bool` | `false` | When true, signals the verifier to query for the freshest revocation state. When true and `IsRevoked` is nil, the verifier returns `force_revocation_no_callback`. |
+| `IsRevoked` | `func(certID string) bool` | `nil` (no revocation check) | Legacy v1 revocation closure. Called for each cert ID during verification. Return true if the cert has been revoked. Superseded by `Revocation` (§17.1); if both are set the provider wins. |
+| `Revocation` | `RevocationProvider` | `nil` (no revocation check) | Pluggable revocation provider (§17.1). Returns `(bool, error)`. A non-nil error fails the bundle as `revocation_error` (fail-closed). Takes precedence over `IsRevoked`. |
+| `ForceRevocationCheck` | `bool` | `false` | When true, signals the verifier to query for the freshest revocation state. When true and both `IsRevoked` and `Revocation` are nil, the verifier returns `force_revocation_no_callback`. |
 | `Now` | `time.Time` | `time.Now()` | Overrides the current time for testing. Zero value uses wall clock. |
 | `SessionContext` | `[]byte` | `nil` | Verifier-reconstructed 32-byte v1.1 context that binds a challenge to this verifier/session/request. When set, the bundle MUST carry byte-equal `session_context`; when absent, session-bound bundles are rejected as `session_context_unverifiable`. |
 | `Stream` | `*StreamContext` | `nil` | Verifier-tracked stream binding for v1.1 stream-bound bundles. `StreamContext` contains `StreamID` (32 bytes) and `LastSeenSeq` (highest accepted sequence number; 0 means no turns accepted yet). When set, the bundle MUST carry matching `stream_id` and `stream_seq == LastSeenSeq + 1`. When nil, bundles carrying `stream_id` are rejected as `stream_context_unverifiable`. |
 | `Context` | `VerifierContext` | zero value | Application inputs for constraint evaluation (§5.16). Zero value is fine for certs that declare no constraints. |
+| `Policy` | `PolicyProvider` | `nil` | Advanced policy evaluator hook (§17.2). Evaluated after all cryptographic, temporal, revocation, constraint, and scope checks pass. Deny → `scope_denied`; provider error → `policy_error`. |
+| `Audit` | `AuditProvider` | `nil` | Verification audit logging hook (§17.3). Invoked on every `Verify` call (success AND failure). Provider errors are swallowed — audit cannot alter the verdict. |
+| `ConstraintEvaluators` | `map[string]ConstraintEvaluator` | `nil` | Extension constraint registry (§17.7). Consulted ONLY for constraint types unknown to the SDK's built-in evaluators. Types without a registered evaluator still fail closed with `constraint_unknown`. |
+| `PolicyVerdict` | `*PolicyVerdict` | `nil` | Fast-path cached policy decision (§17.6). When present AND valid (MAC, freshness, scope, context_hash all match), the live `Policy` hook is skipped. Stale verdicts fall back to live policy without failing the bundle. |
+| `PolicySecret` | `[]byte` | `nil` | HMAC secret used to verify `PolicyVerdict.MAC`. Required when `PolicyVerdict` is non-nil; otherwise ignored. |
+| `AnchorResolver` | `AnchorResolver` | `nil` | Identity-binding resolver (§17.8). When non-nil, the verifier resolves `human_id` → `Anchor` on successful verifications and populates `VerifyResult.Anchor`. Resolver errors are non-fatal. |
 
 ---
 
@@ -1190,7 +1197,254 @@ The protocol provides the cryptographic tools (revocation, rotation, witness). T
 
 ---
 
-## 16. References
+## 17. SDK Architecture: Provider Interfaces
+
+The protocol — wire format, canonical signable bytes, hybrid signature algorithm, verifier state machine (§§4–9) — is open. The integration surfaces around it are where production deployments diverge: revocation freshness, policy evaluation, and audit retention each impose operational requirements that go well beyond what a static spec can mandate. SDKs therefore expose three **Provider** hooks that bracket the verifier's deterministic core.
+
+**The split is intentional.** The cryptographic primitives in §§5–9 are universal — every implementation must agree byte-for-byte. The provider surface in §17 is local — each deployment configures it to match its threat model, compliance regime, and infrastructure. A bundle verified with provider A and a bundle verified with provider B are byte-identical; only the verifier's local decision pipeline differs.
+
+This separation lets the protocol stay neutral and portable while letting commercial verifiers (Ratify Verify and any third-party equivalent) compete on operational surface — revocation push latency, policy UX, signed audit archive — without forking the wire format.
+
+### 17.0 Conformance and wire-format invariance
+
+- A conformant SDK MUST expose all three provider hook points (`Revocation`, `Policy`, `Audit`) on its verify-options surface, with consistent naming across languages.
+- A conformant SDK MUST treat any unset hook as a no-op — verification with all hooks `nil` MUST produce the same `VerifyResult` as a verifier with no provider surface at all.
+- Provider invocations MUST NOT modify the `ProofBundle`. They are read-only over signed material. A bundle that re-serializes byte-identically before and after a `Verify` call (with or without providers) is REQUIRED for fixture determinism.
+- Provider implementations are NOT covered by the test-vector conformance suite. The 59 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
+
+### 17.1 RevocationProvider
+
+A `RevocationProvider` decides whether a `cert_id` is currently revoked.
+
+**Interface:**
+- `IsRevoked(certID string) (bool, error)`
+
+**Semantics:**
+- Invoked once per cert per `Verify` call, in chain order.
+- A return of `(true, nil)` produces `identity_status="revoked"` and short-circuits the chain walk.
+- A non-nil `error` is fail-closed: the bundle is rejected with `error_reason="revocation_error: ..."` and `identity_status="invalid"`. An SDK MUST NOT treat a lookup failure as "not revoked."
+- The provider is on the verifier's hot path. Implementations SHOULD be O(1) at call time — bloom filter, in-memory delta cache, or warm CDN lookup. Synchronous network round-trips per-Verify are discouraged; push or batched sync is the intended pattern.
+
+**Precedence:** if both an `IsRevoked` closure (legacy v1 surface) and a `Revocation` provider are configured, the provider MUST win. SDKs MAY surface both for migration ergonomics; a future major version may remove the closure.
+
+**Standard Implementations:**
+- **Local (Default)** — reads from a caller-supplied `RevocationList` (§5.10) loaded at SDK init or polled at a configured interval. Adequate for low-throughput verifiers and for offline / air-gapped deployments. Staleness is bounded by the poll interval.
+- **Push (Commercial, e.g. Ratify Verify)** — subscribes to a real-time revocation stream and maintains a local delta cache. Staleness measured in milliseconds globally. Out of scope for this spec; the interface above is the only contract.
+
+### 17.2 PolicyProvider
+
+A `PolicyProvider` evaluates verifier-local, stateful policy that exceeds the deterministic, cert-bound constraint logic of §5.7.2.
+
+**Interface:**
+- `EvaluatePolicy(bundle *ProofBundle, context VerifierContext) (bool, error)`
+
+**Why this is separate from Constraints (§5.7.2):** Constraints are signed by the principal as part of the delegation cert — they travel with the bundle and are byte-identical for every verifier. Policy is the inverse: it is **verifier-local**, **mutable at runtime**, and **stateful** (quota counters, global security signals, per-tenant overrides). A policy provider can deny a bundle that every constraint accepts, and vice versa — both signals are required, neither replaces the other.
+
+**Evaluation order:** policy is evaluated AFTER all cryptographic, temporal, revocation, constraint, and scope-intersection checks have passed. A bundle that fails any earlier check never reaches the policy provider.
+
+**Outcome mapping:**
+- `(true, nil)` — allow; `Verify` returns the success result unchanged.
+- `(false, nil)` — deny; `Verify` returns `identity_status="scope_denied"` with `error_reason` indicating policy denial.
+- `(_, non-nil error)` — fail-closed; `Verify` returns `identity_status="invalid"`, `error_reason="policy_error: ..."`. An SDK MUST NOT allow on policy error.
+
+**Standard Implementations:**
+- **Default (no provider)** — the verifier's static scope + constraint checks are sufficient.
+- **Advanced (Commercial, e.g. Ratify Verify)** — evaluates Rego/OPA rules, per-agent usage quotas, geo-tagged kill switches, and global security signals via a low-latency control plane. Out of scope for this spec.
+
+### 17.3 AuditProvider
+
+An `AuditProvider` records verification receipts for forensic, compliance, and ML/observability use.
+
+**Interface:**
+- `LogVerification(result VerifyResult, bundle *ProofBundle) error`
+
+**Semantics:**
+- Invoked on every `Verify` call — success AND failure — so denied attempts are recorded.
+- Errors from the provider are **intentionally swallowed**. Auditing is observation, not control. An audit-store outage MUST NOT flip a `Valid=true` result to `Valid=false`. An SDK MAY surface provider errors through a separate diagnostic channel (logger, metric counter); it MUST NOT alter the verifier's verdict.
+- Invocation order: audit is the last operation in `Verify`, after policy. The result passed to the provider is the final result returned to the caller.
+
+**Standard Implementations:**
+- **Default (no provider)** — no audit trail. The caller is free to log the returned `VerifyResult` themselves.
+- **Local** — writes JSON lines to stdout or a local file. Adequate for development.
+- **Attestation (Commercial, e.g. Ratify Verify)** — wraps each verification in a verifier-signed `WitnessEntry` (§5.12) and streams to an append-only ledger. Each entry is cryptographically linked to its predecessor, so a missing or backdated entry is detectable. This is the interface used to back SOC2/ISO compliance claims.
+
+### 17.4 Naming across SDKs
+
+The provider surface is named consistently across languages so that interop documentation, conformance tests, and audit fixtures all reference the same concepts:
+
+| Concept | Go | TypeScript | Python | Rust |
+|---|---|---|---|---|
+| Revocation hook | `Revocation RevocationProvider` | `revocation?: RevocationProvider` | `revocation: RevocationProvider \| None` | `revocation: Option<Box<dyn RevocationProvider>>` |
+| Policy hook | `Policy PolicyProvider` | `policy?: PolicyProvider` | `policy: PolicyProvider \| None` | `policy: Option<Box<dyn PolicyProvider>>` |
+| Audit hook | `Audit AuditProvider` | `audit?: AuditProvider` | `audit: AuditProvider \| None` | `audit: Option<Box<dyn AuditProvider>>` |
+
+Method names: `IsRevoked` / `is_revoked`, `EvaluatePolicy` / `evaluate_policy`, `LogVerification` / `log_verification` — matching each language's idiomatic casing.
+
+### 17.5 VerificationReceipt — tamper-evident verification records
+
+A `VerificationReceipt` is a verifier-signed attestation that a specific `ProofBundle` was verified with a specific decision at a specific moment. It is the cryptographic complement of `AuditProvider`: an `AuditProvider` chooses *what to do* with verification events; a `VerificationReceipt` makes the event itself unforgeable. Even an auditor who does not trust the verifier operator can verify a receipt — provided they know the verifier's public key.
+
+**Why this exists.** An `AuditProvider` is a stateful component a deployment configures. A buggy or malicious provider can drop entries, backdate timestamps, or refuse to write at all. A `VerificationReceipt` is structurally append-only: each receipt's `prev_hash` is the SHA-256 of the previous receipt's canonical signable bytes, so missing or backdated entries are detectable. A chain of receipts is provable; a chain of stdout logs is not.
+
+**Wire format (canonical JSON, lex-ordered keys):**
+
+```jsonc
+{
+  "agent_id": "...",                    // optional; omitted iff empty
+  "bundle_hash": "<b64-32-bytes>",      // SHA-256 of canonical ProofBundle
+  "decision": "authorized_agent",        // verbatim VerifyResult.identity_status
+  "error_reason": "...",                // optional; omitted iff empty
+  "granted_scope": ["..."],             // optional; sorted lex
+  "human_id": "...",                    // optional; omitted iff empty
+  "prev_hash": "<b64-32-bytes>",        // SHA-256 of previous receipt's signable; zeros for genesis
+  "signature": {"ed25519": "...", "ml_dsa_65": "..."},  // hybrid signature
+  "verified_at": <unix-seconds>,
+  "verifier_id": "...",                 // derived ID of the verifier's signing key
+  "verifier_pub": {"ed25519": "...", "ml_dsa_65": "..."},
+  "version": 1
+}
+```
+
+`signature` is excluded from the signable bytes (a signature cannot cover itself).
+
+**SDK API:**
+
+```
+BundleHash(bundle) -> 32-byte SHA-256
+IssueVerificationReceipt(bundle, result, verifierID, verifierPub, verifierPriv, prevHash, verifiedAt) -> VerificationReceipt
+VerifyVerificationReceipt(receipt) -> nil | error
+ReceiptHash(receipt) -> 32-byte SHA-256 (use as prev_hash for the next receipt)
+```
+
+**Properties (test-vector–enforceable):**
+- Mutating `decision` after signing → `VerifyVerificationReceipt` returns error.
+- Substituting `bundle_hash` for a different bundle's hash → verification fails.
+- Tampering an earlier receipt changes its hash → the next receipt's `prev_hash` no longer matches → chain is detectably broken.
+- `BundleHash(bundle)` is deterministic across SDKs (RFC 8785).
+
+**Receipts are OPTIONAL.** The protocol does not auto-issue them. An `AuditProvider` may choose to wrap each `VerifyResult` in a `VerificationReceipt` before persisting; an implementation that doesn't, won't. Wire format and verifier output are unchanged either way.
+
+### 17.6 PolicyVerdict — HMAC-bound cached policy decisions
+
+A `PolicyVerdict` is the policy analogue of `SessionToken` (§5.13): a short-lived, verifier-cached attestation that `(agent_id, scope, context_hash)` passed advanced policy evaluation at a specific moment. Once issued, the verifier can accept the cached allow/deny for the rest of `valid_until` without re-calling the policy backend — a fast path for streaming workloads where policy round-trips would dominate latency.
+
+**MAC semantics** are identical to `SessionToken`:
+
+```
+mac = HMAC-SHA256(policy_secret, PolicyVerdictSignBytes(verdict))
+```
+
+`policy_secret` is private to whoever issued the verdict (typically a commercial policy backend). The backend rotates the secret to invalidate stale verdicts globally — the same way `SessionToken` invalidation works.
+
+**Context binding.** `context_hash` is the SHA-256 of the canonical-JSON serialization of the **policy-relevant subset** of a `VerifierContext` (location, speed, transaction amount, currency; the `invocations_in_window` closure is excluded). A verdict cached for one context (e.g. `current_lat=37, current_lon=-122`) does NOT apply to a different context (e.g. `current_lat=51.5, current_lon=-0.1`). The verifier recomputes the context hash on each call and compares.
+
+**Wire format:**
+
+```jsonc
+{
+  "agent_id": "...",
+  "allow": true,                        // false = explicit cached deny
+  "context_hash": "<b64-32-bytes>",     // SHA-256 of canonical VerifierContext subset
+  "issued_at": <unix-seconds>,
+  "mac": "<b64-32-bytes>",
+  "scope": "meeting:attend",            // the specific scope this verdict gates
+  "valid_until": <unix-seconds>,
+  "verdict_id": "...",                  // caller-assigned identifier
+  "version": 1
+}
+```
+
+**SDK API:**
+
+```
+VerifierContextHash(ctx) -> 32-byte SHA-256
+IssuePolicyVerdict(verdictID, agentID, scope, allow, contextHash, issuedAt, validUntil, policySecret) -> PolicyVerdict
+VerifyPolicyVerdict(verdict, policySecret, expectedAgentID, expectedScope, expectedContextHash, now) -> nil | error
+```
+
+The verify function:
+- Returns `nil` on cached **allow** (MAC valid, fresh, all fields match).
+- Returns `"policy_verdict_denied: ..."` on cached **deny** (MAC valid but `allow=false`).
+- Returns any other error if the verdict is unusable (bad MAC, expired, scope mismatch, etc).
+
+**Verifier fast-path semantics (§5.7.2):** when `VerifyOptions.PolicyVerdict` and `VerifyOptions.PolicySecret` are both set, the verifier consults the verdict BEFORE the `Policy` provider:
+- Cached allow → live policy is **not called**; return success.
+- Cached deny → live policy is **not called**; return `scope_denied`.
+- Verdict unusable (expired / wrong MAC / scope mismatch) → fall through to live `Policy` provider. A stale verdict MUST NOT cause a verification failure on its own.
+
+### 17.7 ConstraintEvaluator — extension constraint types
+
+The built-in constraint types in §5.7.2 (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`) are the universal vocabulary every conformant SDK must implement byte-identically. Real deployments routinely need additional types (`max_concurrent_sessions`, `max_daily_spend`, `region_allowlist`, etc.) that don't belong in the universal spec.
+
+The `ConstraintEvaluator` interface is the pluggable layer: callers register evaluators keyed by constraint type. The resolution order is:
+
+1. Built-in evaluators handle the universal types (always, by the SDK directly).
+2. For any type the built-in evaluators do not recognize, the registry is consulted.
+3. If no entry matches, the verifier fails closed with `identity_status="constraint_unknown"` (per §5.16).
+
+**Interface:**
+
+```
+Evaluate(constraint, certID, context, now) -> nil | error
+```
+
+- `nil` → constraint passes; verification continues.
+- `"constraint_unverifiable: <reason>"` (or wrapping the SDK's sentinel) → routes to `identity_status="constraint_unverifiable"`. Use this for "I don't have the inputs to decide."
+- Any other error → routes to `identity_status="constraint_denied"`.
+
+**Naming convention.** To prevent registry collisions between deployments, extension type names SHOULD use a vendor or namespace prefix:
+- `verify.<type>` — types defined by Ratify Verify.
+- `<vendor>.<type>` — types defined by a deployment / third party.
+
+The protocol does not enforce naming; it does fail closed on every unregistered type, which means a deployment that uses extension types implicitly requires every downstream verifier to recognize them. **That's the moat:** a managed verifier (Ratify Verify) can ship a registry of `verify.*` types its customers use; an OSS verifier can recognize the same types only if its operator registers each one explicitly.
+
+### 17.8 AnchorResolver — identity-bound audit
+
+`Anchor` (§5.4) is an optional binding between a `HumanRoot` and an external identity system (Okta SSO, government ID attestation, verified email). v1 carried `Anchor` only at HumanRoot mint time. v1.1 adds `AnchorResolver`: a verifier-local lookup from `human_id` to the `Anchor` originally registered, populated on `VerifyResult.Anchor` whenever a bundle verifies AND a resolver is configured.
+
+**Why this exists.** A `VerificationReceipt` proves "this bundle was verified at this time." An anchor-bound receipt proves "this bundle was verified at this time, AND the human root behind it was bound to an SSO-asserted identity at Okta as of `Anchor.VerifiedAt`." For compliance audits, that's the chain auditors want to see.
+
+**Interface:**
+
+```
+ResolveAnchor(humanID) -> *Anchor | error
+```
+
+**Resolver errors are non-fatal.** A resolver that errors (identity directory down, network partition, unknown human ID) MUST NOT fail the bundle. The verifier silently leaves `VerifyResult.Anchor` nil and continues. Rationale: an identity-directory outage should not block a properly-signed, cryptographically-valid bundle; it should only degrade the audit trail.
+
+**Audit interaction.** When both `AnchorResolver` and `Audit` are configured, the resolver runs BEFORE the audit hook, so the `VerifyResult` the audit provider sees already has `Anchor` populated. This is the contract: audit providers observe identity-bound results without having to perform their own lookup.
+
+### 17.9 Cross-language naming for §17.5–§17.8
+
+| Concept | Go | TypeScript | Python | Rust |
+|---|---|---|---|---|
+| Bundle hash | `BundleHash(b)` | `bundleHash(b)` | `bundle_hash(b)` | `bundle_hash(&b)` |
+| Issue receipt | `IssueVerificationReceipt(...)` | `issueVerificationReceipt(...)` | `issue_verification_receipt(...)` | `issue_verification_receipt(...)` |
+| Verify receipt | `VerifyVerificationReceipt(r)` | `verifyVerificationReceipt(r)` | `verify_verification_receipt(r)` | `verify_verification_receipt(&r)` |
+| Chain pointer | `ReceiptHash(r)` | `receiptHash(r)` | `receipt_hash(r)` | `receipt_hash(&r)` |
+| Context hash | `VerifierContextHash(ctx)` | `verifierContextHash(ctx)` | `verifier_context_hash(ctx)` | `verifier_context_hash(&ctx)` |
+| Issue verdict | `IssuePolicyVerdict(...)` | `issuePolicyVerdict(...)` | `issue_policy_verdict(...)` | `issue_policy_verdict(...)` |
+| Verify verdict | `VerifyPolicyVerdict(...)` | `verifyPolicyVerdict(...)` | `verify_policy_verdict_e(...)` | `verify_policy_verdict(...)` |
+| Constraint evaluator | `ConstraintEvaluators map[string]ConstraintEvaluator` | `constraint_evaluators?: Record<string, ConstraintEvaluator>` | `constraint_evaluators: dict \| None` | `constraint_evaluators: Option<HashMap<String, Box<dyn ConstraintEvaluator>>>` |
+| Anchor resolver | `AnchorResolver` | `anchor_resolver?: AnchorResolver` | `anchor_resolver: AnchorResolver \| None` | `anchor_resolver: Option<Box<dyn AnchorResolver>>` |
+
+### 17.10 Surface adapters — out of scope (intentional)
+
+The integration code that turns a `ProofBundle` into a "Zoom auth gate," "Twilio SIP attestation," "AWS API Gateway authorizer," etc. — the **surface adapters** — lives in separate SDKs outside this protocol repository (`ratify/zoom-sdk`, `ratify/voice-sdk`, etc). Those repositories are the home of proprietary "last-mile" integration code and are NOT covered by this specification.
+
+The protocol's contract stops at the `ProofBundle` wire format and the verifier algorithm. Anything above that — how a specific third-party platform's signaling layer is intercepted, how middleware is wired into a specific framework, how a specific incumbent product's auth model is mapped onto Ratify scopes — is integration work, not protocol work. Ratify Verify ships those adapters as commercial product; nothing about this specification prevents a third party from writing their own.
+
+### 17.11 Deprecation: legacy `IsRevoked` closure
+
+`VerifyOptions.IsRevoked` (the bare `func(certID) bool` closure) is **deprecated** in v1.0.0-alpha.7 and scheduled for removal in **v1.0.0-beta.1**. New code MUST use `Revocation` (§17.1).
+
+**Why deprecated.** The closure has no way to surface a lookup failure. It must collapse "I don't know" to `false` (allow) or `true` (deny), neither of which is correct. `Revocation` returns `(bool, error)` and the verifier fails closed on error (`revocation_error`), which is the only sound behavior for a security-critical lookup.
+
+Until v1.0.0-beta.1, the closure remains functional: when both fields are set on `VerifyOptions`, the `Revocation` provider takes precedence (§17.1). Each SDK marks the field deprecated via its language's idiomatic mechanism (Go doc comment, TypeScript `@deprecated` JSDoc, Python `warnings.warn` on use, Rust `#[deprecated]`).
+
+---
+
+## 18. References
 
 - Ed25519: [RFC 8032](https://datatracker.ietf.org/doc/html/rfc8032)
 - ML-DSA (post-quantum digital signatures): [FIPS 204](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.204.pdf)
@@ -1202,4 +1456,4 @@ The protocol provides the cryptographic tools (revocation, rotation, witness). T
 
 ---
 
-*v1.0.0-alpha.6 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.7 · Identities AI · CC-BY-4.0 · Patent Pending*

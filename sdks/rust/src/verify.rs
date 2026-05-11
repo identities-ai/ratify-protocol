@@ -17,7 +17,18 @@ use crate::types::{
     MLDSA65_PUBLIC_KEY_SIZE, PROTOCOL_VERSION,
 };
 
+/// `verify_bundle` is the entry point. Audit hook (SPEC §17.3) wraps the
+/// inner verifier so it fires on every call — success AND failure — and its
+/// errors are swallowed so auditing never alters the verdict.
 pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult {
+    let res = verify_bundle_inner(bundle, opts);
+    if let Some(audit) = &opts.audit {
+        audit.log_verification(&res, bundle);
+    }
+    res
+}
+
+fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult {
     let now = opts.now.unwrap_or_else(|| {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -160,10 +171,12 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         );
     }
 
-    if opts.force_revocation_check && opts.is_revoked.is_none() {
+    #[allow(deprecated)]
+    let legacy_revoke = opts.is_revoked.as_ref();
+    if opts.force_revocation_check && legacy_revoke.is_none() && opts.revocation.is_none() {
         return invalid(
             "force_revocation_no_callback",
-            "force_revocation_check is true but is_revoked callback is missing",
+            "force_revocation_check is true but neither is_revoked nor revocation provider is set",
         );
     }
 
@@ -181,7 +194,19 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         if now < cert.issued_at {
             return invalid("not_yet_valid", &format!("cert {} is not yet valid", i));
         }
-        if let Some(check) = &opts.is_revoked {
+        // Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+        if let Some(provider) = &opts.revocation {
+            match provider.is_revoked(&cert.cert_id) {
+                Err(e) => {
+                    return invalid(
+                        "revocation_error",
+                        &format!("cert {}: revocation lookup failed: {}", i, e),
+                    )
+                }
+                Ok(true) => return revoked(&human_id, &bundle.agent_id),
+                Ok(false) => {}
+            }
+        } else if let Some(check) = legacy_revoke {
             if check(&cert.cert_id) {
                 return revoked(&human_id, &bundle.agent_id);
             }
@@ -191,7 +216,12 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         }
         // Constraint evaluation — each cert's first-class constraints must all
         // pass against the caller-supplied VerifierContext. Fail-closed.
-        if let Err(constraint_err) = evaluate_constraints(cert, &opts.context, now) {
+        if let Err(constraint_err) = evaluate_constraints(
+            cert,
+            &opts.context,
+            now,
+            opts.constraint_evaluators.as_ref(),
+        ) {
             // Route constraint failures to the specific identity_status so
             // audit layers can distinguish unverifiable / unknown / denied.
             // Matches Go/TS/Python.
@@ -282,16 +312,86 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         );
     }
 
-    VerifyResult {
+    let mut result = VerifyResult {
         valid: true,
         identity_status: IdentityStatus::AuthorizedAgent,
-        human_id,
+        human_id: human_id.clone(),
         agent_id: bundle.agent_id.clone(),
         agent_name: String::new(),
         agent_type: String::new(),
         granted_scope: effective,
         error_reason: String::new(),
+        anchor: None,
+    };
+
+    // --- Anchor resolution (SPEC §17.8) ---
+    // Best-effort: populate anchor on the success result so downstream
+    // AuditProviders observe an identity-bound receipt. Resolver errors are
+    // non-fatal.
+    if let Some(resolver) = &opts.anchor_resolver {
+        if let Ok(Some(anchor)) = resolver.resolve_anchor(&human_id) {
+            result.anchor = Some(anchor);
+        }
     }
+
+    // --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+    //
+    // Fast path: if a PolicyVerdict is supplied AND verifies cleanly, skip
+    // the live Policy provider entirely.
+    if let (Some(verdict), Some(secret)) = (&opts.policy_verdict, &opts.policy_secret) {
+        if !opts.required_scope.is_empty() {
+            match crate::receipts::verifier_context_hash(&opts.context) {
+                Err(e) => {
+                    return invalid(
+                        "policy_error",
+                        &format!("verifier context hash failed: {}", e),
+                    );
+                }
+                Ok(ctx_hash) => {
+                    let v_err = crate::receipts::verify_policy_verdict(
+                        verdict,
+                        secret,
+                        &bundle.agent_id,
+                        &opts.required_scope,
+                        &ctx_hash,
+                        now,
+                    );
+                    match v_err {
+                        Ok(()) => return result,
+                        Err(e) if e.starts_with("policy_verdict_denied") => {
+                            return fail_with_status(
+                                "scope_denied",
+                                "policy verdict (cached) denied access",
+                            );
+                        }
+                        Err(_) => {
+                            // stale verdict — fall through to live policy
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(policy) = &opts.policy {
+        match policy.evaluate_policy(bundle, &opts.context) {
+            Err(e) => {
+                return invalid(
+                    "policy_error",
+                    &format!("advanced policy evaluation failed: {}", e),
+                )
+            }
+            Ok(false) => {
+                return fail_with_status(
+                    "scope_denied",
+                    "advanced policy evaluation denied access",
+                )
+            }
+            Ok(true) => {}
+        }
+    }
+
+    result
 }
 
 // ----------------------------------------------------------------------
@@ -328,6 +428,7 @@ fn invalid(reason: &str, msg: &str) -> VerifyResult {
         agent_type: String::new(),
         granted_scope: Vec::new(),
         error_reason: format!("{}: {}", reason, msg),
+        anchor: None,
     }
 }
 
@@ -347,6 +448,7 @@ fn fail_with_status(status: &str, msg: &str) -> VerifyResult {
         agent_type: String::new(),
         granted_scope: Vec::new(),
         error_reason: format!("{}: {}", status, msg),
+        anchor: None,
     }
 }
 
@@ -360,6 +462,7 @@ fn expired(human_id: &str, agent_id: &str) -> VerifyResult {
         agent_type: String::new(),
         granted_scope: Vec::new(),
         error_reason: "delegation certificate has expired".to_string(),
+        anchor: None,
     }
 }
 
@@ -373,6 +476,7 @@ fn revoked(human_id: &str, agent_id: &str) -> VerifyResult {
         agent_type: String::new(),
         granted_scope: Vec::new(),
         error_reason: "delegation certificate has been revoked".to_string(),
+        anchor: None,
     }
 }
 
@@ -610,5 +714,6 @@ pub fn verify_streamed_turn(
         agent_type: String::new(),
         granted_scope: token.granted_scope.clone(),
         error_reason: String::new(),
+        anchor: None,
     }
 }

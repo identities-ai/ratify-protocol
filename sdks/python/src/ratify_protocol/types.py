@@ -11,7 +11,7 @@ Field names use snake_case to match the canonical JSON wire format directly.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Literal, Optional
+from typing import Any, Callable, Literal, Optional, Protocol, Tuple, runtime_checkable
 
 
 PROTOCOL_VERSION: int = 1
@@ -262,6 +262,9 @@ class VerifyResult:
     agent_type: str = ""
     granted_scope: list[str] = field(default_factory=list)
     error_reason: str = ""
+    # SPEC §17.8 — resolved external-identity binding for human_id, populated
+    # when an AnchorResolver is configured. None when no resolver is set.
+    anchor: Optional["Anchor"] = None
 
 
 @dataclass
@@ -387,13 +390,131 @@ class StreamContext:
     last_seen_seq: int = 0
 
 
+@runtime_checkable
+class RevocationProvider(Protocol):
+    """Pluggable provider for revocation state (SPEC §17.1).
+
+    Implementations MUST return ``(is_revoked, error_message_or_None)``. A
+    non-None error string fails the bundle fail-closed as ``revocation_error``;
+    SDKs MUST NOT treat a lookup failure as "not revoked." On the verifier's
+    hot path — implementations SHOULD be O(1) (bloom filter, in-memory cache,
+    or local push-sync), never a synchronous network round-trip per call.
+    """
+    def is_revoked(self, cert_id: str) -> Tuple[bool, Optional[str]]: ...
+
+
+@runtime_checkable
+class PolicyProvider(Protocol):
+    """Pluggable evaluator for verifier-local policy (SPEC §17.2).
+
+    Evaluated AFTER all cryptographic, temporal, revocation, constraint, and
+    scope-intersection checks pass. Returns ``(allow, error_message_or_None)``:
+    ``(False, None)`` denies with ``scope_denied``; a non-None error fails
+    closed as ``policy_error``.
+    """
+    def evaluate_policy(self, bundle: Any, context: Optional["VerifierContext"]) -> Tuple[bool, Optional[str]]: ...
+
+
+@runtime_checkable
+class AuditProvider(Protocol):
+    """Pluggable audit-receipt persistence (SPEC §17.3).
+
+    Invoked on every ``verify_bundle`` call (success AND failure). Errors are
+    swallowed by the verifier — auditing MUST NOT alter the verdict. SDKs MAY
+    surface provider exceptions via a separate diagnostic channel.
+    """
+    def log_verification(self, result: "VerifyResult", bundle: Any) -> None: ...
+
+
+@runtime_checkable
+class ConstraintEvaluator(Protocol):
+    """Pluggable evaluator for extension constraint types (SPEC §17.7).
+
+    Built-in types (geo_*, time_window, max_*) are evaluated by the SDK
+    directly; the registry is only consulted for types the SDK does not
+    natively understand. Return ``(True, None)`` to allow,
+    ``(False, "<reason>")`` to deny with ``constraint_denied``, or
+    ``(False, "constraint_unverifiable: ...")`` to route to
+    ``constraint_unverifiable``. Raising is treated as a deny.
+    """
+    def evaluate(
+        self,
+        constraint: Any,
+        cert_id: str,
+        context: Optional["VerifierContext"],
+        now_unix: int,
+    ) -> Tuple[bool, Optional[str]]: ...
+
+
+@runtime_checkable
+class AnchorResolver(Protocol):
+    """Resolves a verified ``human_id`` to its external-identity binding
+    (SPEC §17.8). Errors are non-fatal — the verifier silently leaves
+    ``VerifyResult.anchor`` ``None`` and continues.
+    """
+    def resolve_anchor(self, human_id: str) -> Optional["Anchor"]: ...
+
+
+@dataclass
+class PolicyVerdict:
+    """HMAC-bound cached policy decision (SPEC §17.6).
+
+    Issued by a commercial policy backend with a private ``policy_secret``,
+    verified locally by the verifier — letting subsequent calls within
+    ``valid_until`` accept the cached allow/deny without re-calling the
+    backend. ``context_hash`` is the SHA-256 of the canonical
+    VerifierContext, computed via :func:`crypto.verifier_context_hash`.
+    """
+    version: int
+    verdict_id: str
+    agent_id: str
+    scope: str
+    allow: bool
+    context_hash: bytes
+    issued_at: int
+    valid_until: int
+    mac: bytes
+
+
+@dataclass
+class VerificationReceipt:
+    """Verifier-signed attestation that a specific ProofBundle was verified
+    at a specific moment with a specific outcome (SPEC §17.5).
+
+    Receipts chain by ``prev_hash`` (SHA-256 of the previous receipt's
+    canonical signable bytes) so a missing or backdated entry is detectable.
+    Genesis uses 32 zero bytes.
+    """
+    version: int
+    verifier_id: str
+    verifier_pub: HybridPublicKey
+    bundle_hash: bytes
+    decision: str
+    human_id: str
+    agent_id: str
+    granted_scope: list[str]
+    error_reason: str
+    verified_at: int
+    prev_hash: bytes
+    signature: HybridSignature
+
+
 @dataclass
 class VerifyOptions:
     """Configures verify_bundle() beyond cryptographic basics."""
     required_scope: str = ""
+    # Legacy v1 revocation closure.
+    # DEPRECATED: Use ``revocation`` (SPEC §17.1) instead. The closure has no
+    # way to surface lookup failures; ``revocation`` returns
+    # ``(bool, error_or_None)`` and fails closed on error. Slated for removal
+    # in v1.0.0-beta.1. When both fields are set, ``revocation`` wins.
     is_revoked: Optional[Callable[[str], bool]] = None
+    # Pluggable revocation provider (SPEC §17.1). Takes precedence over
+    # ``is_revoked``. A provider error fails the bundle as ``revocation_error``.
+    revocation: Optional[RevocationProvider] = None
     # Force a fresh revocation check for high-stakes endpoints. The SDK cannot
-    # fetch revocation state itself; callers must provide is_revoked when true.
+    # fetch revocation state itself; callers must provide is_revoked or a
+    # revocation provider when true.
     force_revocation_check: bool = False
     now: Optional[int] = None  # unix seconds; None = time.time()
     # Optional verifier-reconstructed 32-byte v1.1 session context.
@@ -406,3 +527,24 @@ class VerifyOptions:
     # is fine for certs with no constraints; constraint-bearing certs fail
     # closed if required context is missing.
     context: Optional[VerifierContext] = None
+    # Advanced verifier-local policy evaluator (SPEC §17.2). Evaluated after
+    # all cryptographic checks pass; deny → scope_denied; error → policy_error.
+    policy: Optional[PolicyProvider] = None
+    # Audit-receipt persistence hook (SPEC §17.3). Invoked on every Verify
+    # (success AND failure). Provider errors are swallowed — auditing cannot
+    # alter the verdict.
+    audit: Optional[AuditProvider] = None
+    # SPEC §17.7 — per-Verify registry of extension constraint evaluators.
+    # Built-in types are evaluated directly; unknown types fall through to
+    # the registry; types without an evaluator fail closed with
+    # ``constraint_unknown``.
+    constraint_evaluators: Optional[dict] = None
+    # SPEC §17.6 — fast-path cached policy decision. When present and valid,
+    # the verifier skips the live ``policy`` hook. Stale verdicts fall back.
+    policy_verdict: Optional["PolicyVerdict"] = None
+    # HMAC secret used to verify ``policy_verdict.mac``.
+    policy_secret: Optional[bytes] = None
+    # SPEC §17.8 — anchor resolver. When set on a Valid=true verification,
+    # the verifier populates ``VerifyResult.anchor`` with the human_id's
+    # external-identity binding. Resolver errors are non-fatal.
+    anchor_resolver: Optional[AnchorResolver] = None

@@ -29,6 +29,7 @@ import {
 } from "./crypto.js";
 import { intersectScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
 import { evaluateConstraints } from "./constraints.js";
+import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
 
 /**
  * Validate a ProofBundle against the Ratify Protocol.
@@ -54,6 +55,21 @@ import { evaluateConstraints } from "./constraints.js";
 export async function verifyBundle(
   bundle: ProofBundle,
   opts: VerifyOptions = {},
+): Promise<VerifyResult> {
+  const res = await _verifyBundle(bundle, opts);
+  if (opts.audit) {
+    try {
+      await opts.audit.logVerification(res, bundle);
+    } catch (e) {
+      // Ignored per reference implementation.
+    }
+  }
+  return res;
+}
+
+async function _verifyBundle(
+  bundle: ProofBundle,
+  opts: VerifyOptions,
 ): Promise<VerifyResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
@@ -170,10 +186,10 @@ export async function verifyBundle(
     return invalid("id_mismatch", "agent ID does not match delegation subject ID");
   }
 
-  if (opts.force_revocation_check && !opts.is_revoked) {
+  if (opts.force_revocation_check && !opts.is_revoked && !opts.revocation) {
     return invalid(
       "force_revocation_no_callback",
-      "force_revocation_check is true but is_revoked callback is missing",
+      "force_revocation_check is true but neither is_revoked nor revocation provider is set",
     );
   }
 
@@ -190,7 +206,19 @@ export async function verifyBundle(
     if (now < cert.issued_at) {
       return invalid("not_yet_valid", `cert ${i} is not yet valid`);
     }
-    if (opts.is_revoked && opts.is_revoked(cert.cert_id)) {
+    // Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+    if (opts.revocation) {
+      const [rev, revErr] = await opts.revocation.isRevoked(cert.cert_id);
+      if (revErr) {
+        return invalid(
+          "revocation_error",
+          `cert ${i}: revocation lookup failed: ${revErr.message ?? revErr}`,
+        );
+      }
+      if (rev) {
+        return revoked(humanID, bundle.agent_id);
+      }
+    } else if (opts.is_revoked && opts.is_revoked(cert.cert_id)) {
       return revoked(humanID, bundle.agent_id);
     }
     const sigErr = await verifyDelegationSignatureE(cert);
@@ -202,7 +230,12 @@ export async function verifyBundle(
     // pass against the caller-supplied VerifierContext. Fail-closed.
     // Route to the specific identity_status via sentinel prefix in the
     // returned error. Matches Go/Python/Rust — see SPEC §5.9 enum table.
-    const constraintErr = evaluateConstraints(cert, opts.context ?? {}, now);
+    const constraintErr = await evaluateConstraints(
+      cert,
+      opts.context ?? {},
+      now,
+      opts.constraint_evaluators,
+    );
     if (constraintErr !== null) {
       let status: IdentityStatus = "constraint_denied";
       if (constraintErr.includes("constraint_unverifiable")) {
@@ -273,13 +306,64 @@ export async function verifyBundle(
     }
   }
 
-  return {
+  const res: VerifyResult = {
     valid: true,
     human_id: humanID,
     agent_id: bundle.agent_id,
     granted_scope: effective,
     identity_status: "authorized_agent",
   };
+
+  // --- Anchor resolution (SPEC §17.8) ---
+  // Best-effort: populate anchor on the success result so downstream
+  // AuditProviders observe an identity-bound receipt. Resolver errors are
+  // non-fatal — the bundle still verifies.
+  if (opts.anchor_resolver) {
+    try {
+      const anchor = await opts.anchor_resolver.resolveAnchor(humanID);
+      if (anchor) res.anchor = anchor;
+    } catch {
+      // intentional swallow
+    }
+  }
+
+  // --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+  //
+  // Fast path: if a PolicyVerdict is supplied AND verifies cleanly, skip the
+  // live Policy provider entirely. Stale/mismatched verdicts fall back to
+  // live policy.
+  if (opts.policy_verdict && opts.required_scope && opts.policy_secret) {
+    const ctxHash = verifierContextHash(opts.context ?? {});
+    const verdictErr = verifyPolicyVerdict(
+      opts.policy_verdict,
+      opts.policy_secret,
+      bundle.agent_id,
+      opts.required_scope,
+      ctxHash,
+      now,
+    );
+    if (verdictErr === null) {
+      // Cached allow — skip live policy.
+      return res;
+    }
+    if (verdictErr.startsWith("policy_verdict_denied")) {
+      return failWithStatus("scope_denied", "policy verdict (cached) denied access");
+    }
+    // else: fall through to live policy.
+  }
+
+  if (opts.policy) {
+    try {
+      const ok = await opts.policy.evaluatePolicy(bundle, opts.context ?? {});
+      if (!ok) {
+        return failWithStatus("scope_denied", "advanced policy evaluation denied access");
+      }
+    } catch (err: any) {
+      return invalid("policy_error", `advanced policy evaluation failed: ${err}`);
+    }
+  }
+
+  return res;
 }
 
 // ============================================================================

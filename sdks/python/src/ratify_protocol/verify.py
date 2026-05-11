@@ -6,6 +6,7 @@ must verify for any signature check to pass.
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Optional
 
 from .constraints import evaluate_constraints
@@ -43,11 +44,25 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
       3. Per-cert: version, temporal validity, revocation, hybrid signature, linkage.
       4. Challenge freshness + hybrid signature.
       5. Effective scope (intersection across chain) contains required_scope.
+      6. Optional advanced policy (SPEC §17.2) — fail-closed.
 
     Fail-closed: any single-component signature failure fails the whole check.
+    Audit hook (SPEC §17.3) is invoked at the end on every call (success
+    AND failure). Provider errors from audit are intentionally swallowed.
     """
     if opts is None:
         opts = VerifyOptions()
+    res = _verify_bundle_inner(bundle, opts)
+    if opts.audit is not None:
+        try:
+            opts.audit.log_verification(res, bundle)
+        except Exception:
+            # Audit MUST NOT alter the verdict. SPEC §17.3.
+            pass
+    return res
+
+
+def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResult:
     now = opts.now if opts.now is not None else int(time.time())
 
     # --- Basic structure ---
@@ -145,10 +160,10 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
     if bundle.agent_id != first_cert.subject_id:
         return _invalid("id_mismatch", "agent ID does not match delegation subject ID")
 
-    if opts.force_revocation_check and opts.is_revoked is None:
+    if opts.force_revocation_check and opts.is_revoked is None and opts.revocation is None:
         return _invalid(
             "force_revocation_no_callback",
-            "force_revocation_check is true but is_revoked callback is missing",
+            "force_revocation_check is true but neither is_revoked nor revocation provider is set",
         )
 
     # --- Per-cert checks ---
@@ -159,14 +174,37 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
             return _expired(human_id, bundle.agent_id)
         if now < cert.issued_at:
             return _invalid("not_yet_valid", f"cert {i} is not yet valid")
-        if opts.is_revoked is not None and opts.is_revoked(cert.cert_id):
-            return _revoked(human_id, bundle.agent_id)
+        # Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+        if opts.revocation is not None:
+            rev, rev_err = opts.revocation.is_revoked(cert.cert_id)
+            if rev_err is not None:
+                return _invalid(
+                    "revocation_error",
+                    f"cert {i}: revocation lookup failed: {rev_err}",
+                )
+            if rev:
+                return _revoked(human_id, bundle.agent_id)
+        elif opts.is_revoked is not None:
+            # Legacy v1 closure. Emit a DeprecationWarning per SPEC §17.11
+            # the first time this code path is reached. Scheduled for
+            # removal in v1.0.0-beta.1; new code should use opts.revocation.
+            warnings.warn(
+                "VerifyOptions.is_revoked is deprecated and will be removed "
+                "in v1.0.0-beta.1. Use VerifyOptions.revocation "
+                "(RevocationProvider) instead — see SPEC §17.1 / §17.11.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if opts.is_revoked(cert.cert_id):
+                return _revoked(human_id, bundle.agent_id)
         sig_err = verify_delegation_signature_e(cert)
         if sig_err is not None:
             return _invalid("bad_signature", f"cert {i}: {sig_err}")
         # Constraint evaluation — each cert's first-class constraints must all
         # pass against the caller-supplied VerifierContext. Fail-closed.
-        constraint_err = evaluate_constraints(cert, opts.context, now)
+        constraint_err = evaluate_constraints(
+            cert, opts.context, now, opts.constraint_evaluators
+        )
         if constraint_err is not None:
             status = "constraint_denied"
             if "constraint_unverifiable" in constraint_err:
@@ -226,13 +264,65 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
                 f'required scope "{opts.required_scope}" not in effective delegation scope',
             )
 
-    return VerifyResult(
+    result = VerifyResult(
         valid=True,
         identity_status="authorized_agent",
         human_id=human_id,
         agent_id=bundle.agent_id,
         granted_scope=effective,
     )
+
+    # --- Anchor resolution (SPEC §17.8) ---
+    if opts.anchor_resolver is not None:
+        try:
+            anchor = opts.anchor_resolver.resolve_anchor(human_id)
+        except Exception:  # noqa: BLE001
+            anchor = None  # non-fatal
+        if anchor is not None:
+            result.anchor = anchor
+
+    # --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+    if (
+        opts.policy_verdict is not None
+        and opts.required_scope
+        and opts.policy_secret is not None
+    ):
+        from .crypto import verifier_context_hash, verify_policy_verdict_e
+        try:
+            ctx_hash = verifier_context_hash(opts.context)
+            verdict_err = verify_policy_verdict_e(
+                opts.policy_verdict,
+                opts.policy_secret,
+                bundle.agent_id,
+                opts.required_scope,
+                ctx_hash,
+                now,
+            )
+        except Exception as e:  # noqa: BLE001
+            return _invalid("policy_error", f"verifier context hash failed: {e}")
+        if verdict_err is None:
+            return result  # cached allow — skip live policy
+        if verdict_err.startswith("policy_verdict_denied"):
+            return _fail_with_status(
+                "scope_denied",
+                "policy verdict (cached) denied access",
+            )
+        # else: stale verdict — fall through to live policy
+
+    if opts.policy is not None:
+        try:
+            allow, pol_err = opts.policy.evaluate_policy(bundle, opts.context)
+        except Exception as e:
+            return _invalid("policy_error", f"advanced policy evaluation failed: {e}")
+        if pol_err is not None:
+            return _invalid("policy_error", f"advanced policy evaluation failed: {pol_err}")
+        if not allow:
+            return _fail_with_status(
+                "scope_denied",
+                "advanced policy evaluation denied access",
+            )
+
+    return result
 
 
 # ----------------------------------------------------------------------

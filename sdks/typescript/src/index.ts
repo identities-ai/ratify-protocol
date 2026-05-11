@@ -5,6 +5,17 @@ export * from "./scope.js";
 export * from "./crypto.js";
 export { verifyBundle, verifyStreamedTurn, verifyTransactionReceipt } from "./verify.js";
 export {
+  bundleHash,
+  issuePolicyVerdict,
+  issueVerificationReceipt,
+  policyVerdictSignBytesBuf,
+  receiptHash,
+  verificationReceiptSignBytesBuf,
+  verifierContextHash,
+  verifyPolicyVerdict,
+  verifyVerificationReceipt,
+} from "./receipts.js";
+export {
   canonicalJSON,
   base64StandardEncode,
   base64StandardDecode,

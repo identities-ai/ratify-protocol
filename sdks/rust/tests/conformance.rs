@@ -227,11 +227,22 @@ fn run_verify_fixture(fx: &Fixture) {
     };
     let bundle = parse_bundle(bundle_raw);
 
-    // revocation_middle_cert: reconstruct is_revoked from expected result shape.
-    let is_revoked: Option<Box<dyn Fn(&str) -> bool>> =
+    // revocation_middle_cert: reconstruct a RevocationProvider from expected
+    // result shape. Use the SPEC §17.1 interface — the legacy is_revoked
+    // closure is deprecated and using it would emit a `deprecated` lint
+    // warning in this test target.
+    struct ConformanceRevocation {
+        revoked_id: String,
+    }
+    impl ratify_protocol::RevocationProvider for ConformanceRevocation {
+        fn is_revoked(&self, cert_id: &str) -> Result<bool, String> {
+            Ok(cert_id == self.revoked_id)
+        }
+    }
+    let revocation: Option<Box<dyn ratify_protocol::RevocationProvider>> =
         if want.identity_status == "revoked" && bundle.delegations.len() > 1 {
             let revoked_id = bundle.delegations[1].cert_id.clone();
-            Some(Box::new(move |cid: &str| cid == revoked_id))
+            Some(Box::new(ConformanceRevocation { revoked_id }))
         } else {
             None
         };
@@ -257,9 +268,15 @@ fn run_verify_fixture(fx: &Fixture) {
         stream_id: base64_std_decode(&s.stream_id).expect("decode stream_id"),
         last_seen_seq: s.last_seen_seq,
     });
+    // VerifyOptions struct literal must mention every field; the deprecated
+    // legacy `is_revoked` is set to None here. #[allow(deprecated)] suppresses
+    // the lint at this single isolated site — the test fixture uses the new
+    // RevocationProvider (built above) for the actual revocation check.
+    #[allow(deprecated)]
     let opts = VerifyOptions {
         required_scope: opts_raw.required_scope.clone(),
-        is_revoked,
+        is_revoked: None,
+        revocation,
         force_revocation_check: false,
         now: Some(opts_raw.now),
         session_context: if opts_raw.session_context.is_empty() {
@@ -269,6 +286,12 @@ fn run_verify_fixture(fx: &Fixture) {
         },
         stream,
         context,
+        policy: None,
+        audit: None,
+        constraint_evaluators: None,
+        policy_verdict: None,
+        policy_secret: None,
+        anchor_resolver: None,
     };
     let got = verify_bundle(&bundle, &opts);
 
@@ -583,6 +606,14 @@ fn run_all_fixtures() {
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().map(|e| e == "json").unwrap_or(false))
+        // cross_sdk_vectors.json has a different schema and is loaded by
+        // tests/cross_sdk.rs.
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n != "cross_sdk_vectors.json")
+                .unwrap_or(true)
+        })
         .collect();
     paths.sort();
 

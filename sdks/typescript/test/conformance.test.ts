@@ -267,6 +267,10 @@ function decodeKeyRotation(raw: Record<string, unknown>): KeyRotationStatement {
 
 const fixtureFiles = readdirSync(FIXTURE_DIR)
   .filter((f) => f.endsWith(".json"))
+  // cross_sdk_vectors.json has a different schema and is loaded by
+  // cross_sdk.test.ts. Skipping here keeps the conformance loop on the 59
+  // wire-format fixtures.
+  .filter((f) => f !== "cross_sdk_vectors.json")
   .sort();
 
 if (fixtureFiles.length === 0) {

@@ -333,6 +333,9 @@ test("anchor resolver error is non-fatal", async () => {
   assert.equal(res.anchor, undefined);
 });
 
+// Cross-SDK byte-equivalence is covered by cross_sdk.test.ts which loads
+// the canonical fixture file testvectors/v1/cross_sdk_vectors.json.
+
 test("audit observes anchor", async () => {
   const { bundle, humanID } = await goodBundle();
   const anchor: Anchor = {

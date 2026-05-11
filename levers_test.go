@@ -3,6 +3,7 @@ package ratify_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -484,6 +485,26 @@ func TestAnchorResolver_AuditObservesAnchor(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Lever 5: IsRevoked closure remains functional (deprecation is doc-only)
 // ---------------------------------------------------------------------------
+
+// TestVerifierContextHash_NormalizesHasFlagInconsistency verifies the
+// fix for the Go-only foot-gun where a caller could set
+// `HasLocation=false, CurrentLat=37` and produce canonical bytes no
+// other SDK could reproduce. The Has* flag is authoritative — when
+// false, the corresponding numeric MUST be zero in the canonical output.
+func TestVerifierContextHash_NormalizesHasFlagInconsistency(t *testing.T) {
+	withGarbage := VerifierContext{
+		CurrentLat: 99.0, CurrentLon: 88.0, CurrentAltM: 77.0, HasLocation: false,
+		CurrentSpeedMps: 66.0, HasSpeed: false,
+		RequestedAmount: 55.0, RequestedCurrency: "EUR", HasAmount: false,
+	}
+	clean := VerifierContext{}
+	a, _ := VerifierContextHash(withGarbage)
+	b, _ := VerifierContextHash(clean)
+	if hex.EncodeToString(a) != hex.EncodeToString(b) {
+		t.Errorf("VerifierContextHash must zero numerics when Has* is false\n  with garbage: %s\n  clean:        %s",
+			hex.EncodeToString(a), hex.EncodeToString(b))
+	}
+}
 
 func TestLegacyIsRevoked_StillWorks(t *testing.T) {
 	bundle, certID := providerBundle(t)

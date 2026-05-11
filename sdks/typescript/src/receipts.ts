@@ -34,12 +34,41 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * BundleHash returns the canonical SHA-256 digest of a ProofBundle's full
- * wire form. The stable identifier of "what was verified" inside a
- * VerificationReceipt. Cross-implementation deterministic via RFC 8785.
+ * BundleHash returns the canonical SHA-256 digest of a ProofBundle.
+ *
+ * Cross-SDK byte equivalence requires a fixed-shape signable: every field is
+ * always present (no omitempty), keys are alphabetical at every level, and
+ * empty bytes / empty lists / zero ints serialize as `""` / `[]` / `0`.
+ * Every reference SDK (Go, TypeScript, Python, Rust) produces the same
+ * 32-byte digest for the same logical bundle. Verified against fixtures
+ * in `testvectors/v1/cross_sdk_vectors.json`.
  */
 export function bundleHash(bundle: ProofBundle): Uint8Array {
-  return sha256(canonicalJSON(bundle));
+  const delegations = bundle.delegations.map((d) => ({
+    cert_id: d.cert_id,
+    constraints: d.constraints ?? [],
+    expires_at: d.expires_at,
+    issued_at: d.issued_at,
+    issuer_id: d.issuer_id,
+    issuer_pub_key: d.issuer_pub_key,
+    scope: d.scope,
+    signature: d.signature,
+    subject_id: d.subject_id,
+    subject_pub_key: d.subject_pub_key,
+    version: d.version,
+  }));
+  const signable = {
+    agent_id: bundle.agent_id,
+    agent_pub_key: bundle.agent_pub_key,
+    challenge: bundle.challenge,
+    challenge_at: bundle.challenge_at,
+    challenge_sig: bundle.challenge_sig,
+    delegations,
+    session_context: bundle.session_context ?? new Uint8Array(0),
+    stream_id: bundle.stream_id ?? new Uint8Array(0),
+    stream_seq: bundle.stream_seq ?? 0,
+  };
+  return sha256(canonicalJSON(signable));
 }
 
 function verificationReceiptSignBytes(r: VerificationReceipt): Uint8Array {

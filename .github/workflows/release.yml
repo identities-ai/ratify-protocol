@@ -255,6 +255,19 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           tar -czf "ratify-testvectors-${tag}.tar.gz" testvectors/
           ls -lh ratify-testvectors-*.tar.gz
+      - name: compute install snippets for release notes
+        # GitHub Release notes are static strings. Pre-compute the per-language
+        # version forms here so the notes don't ask end users to run shell
+        # substitutions like `$(node -p "...")` from a copy-paste.
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"          # v1.0.0-alpha.7
+          tag_clean="${tag#v}"                     # 1.0.0-alpha.7
+          py_version=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
+          {
+            echo "TAG=$tag"
+            echo "TAG_CLEAN=$tag_clean"
+            echo "PY_VERSION=$py_version"
+          } >> "$GITHUB_ENV"
       - name: create release
         uses: softprops/action-gh-release@v2
         with:
@@ -266,20 +279,33 @@ jobs:
           body: |
             ## Ratify Protocol ${{ github.ref_name }}
 
-            Open cryptographic trust protocol for AI agent authorization.
+            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. 59 canonical conformance fixtures, byte-for-byte interoperable across Go, TypeScript, Python, and Rust.
 
-            **Install:**
+            ### Install
+
             ```bash
             # Go
-            go get github.com/identities-ai/ratify-protocol@${{ github.ref_name }}
+            go get github.com/identities-ai/ratify-protocol@${{ env.TAG }}
+
             # Python
-            pip install ratify-protocol==$(node -p "process.argv[1].replace(/^v/,'').replace('-alpha.','a').replace('-beta.','b').replace('-rc.','rc')" '${{ github.ref_name }}')
+            pip install ratify-protocol==${{ env.PY_VERSION }}
+
             # Rust
-            cargo add ratify-protocol@$(echo '${{ github.ref_name }}' | sed 's/^v//')
+            cargo add ratify-protocol@${{ env.TAG_CLEAN }}
+
+            # TypeScript
+            npm install @identities-ai/ratify-protocol@${{ env.TAG_CLEAN }}
             ```
 
-            See [docs.identities.ai](https://docs.identities.ai) for full quickstarts and the [SPEC](./SPEC.md) for the normative protocol specification.
+            ### Links
 
-            **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
-            **Patent:** U.S. patent application pending.
-            **License:** Apache-2.0 (code) · CC-BY-4.0 (spec text); see [`docs/LICENSES.md`](./docs/LICENSES.md).
+            - Full developer documentation: [docs.identities.ai](https://docs.identities.ai)
+            - Normative specification: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+            - Threat model: [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
+            - Conformance fixtures: bundled as `ratify-testvectors-${{ env.TAG }}.tar.gz` below
+
+            ### Legal
+
+            - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+            - **Patent:** U.S. patent application pending.
+            - **License:** Apache-2.0 (code) · CC-BY-4.0 (specification); see [docs/LICENSES.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/LICENSES.md).

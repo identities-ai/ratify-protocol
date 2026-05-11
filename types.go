@@ -300,6 +300,14 @@ type VerifyResult struct {
 	// Adding a new status is a spec change — never invent values locally.
 	IdentityStatus string `json:"identity_status"`
 	ErrorReason    string `json:"error_reason,omitempty"`
+	// Anchor is the resolved external-identity binding for the
+	// HumanID (SPEC §17.8). Populated by Verify only when the caller
+	// supplies a `VerifyOptions.AnchorResolver` AND the bundle verifies.
+	// When set, downstream `AuditProvider`s can record "this verification
+	// was tied to an SSO-bound human at Okta," etc., giving compliance
+	// auditors a chain from VerificationReceipt → identity attestation.
+	// Nil when no resolver is configured or no Anchor was found.
+	Anchor *Anchor `json:"anchor,omitempty"`
 }
 
 // RevocationList is a signed list of revoked CertIDs, served by the issuer
@@ -344,6 +352,40 @@ type WitnessEntry struct {
 	Timestamp int64           `json:"timestamp"`
 	WitnessID string          `json:"witness_id"`
 	Signature HybridSignature `json:"signature"`
+}
+
+// VerificationReceipt is a verifier-signed attestation that a specific
+// `ProofBundle` was verified at a specific moment with a specific outcome
+// (SPEC §17.5). It is the cryptographic complement of `AuditProvider`: an
+// AuditProvider chooses what to do with verification events; a
+// VerificationReceipt makes the event itself unforgeable, so any auditor
+// — even one that doesn't trust the verifier operator — can independently
+// confirm the verifier saw what it claims it saw.
+//
+// Receipts chain by `prev_hash` so a missing or backdated receipt is
+// detectable: an immutable verification log is just a sequence of
+// `VerificationReceipt`s where each one's `prev_hash` is the SHA-256 of
+// the previous receipt's canonical signable bytes. Genesis uses 32 zero
+// bytes.
+//
+// Receipts are OPTIONAL — the protocol does not auto-issue them. SDKs ship
+// `IssueVerificationReceipt` and `VerifyVerificationReceipt` helpers, and
+// downstream `AuditProvider` implementations may choose to wrap each
+// `VerifyResult` in a receipt before persisting it. Wire format is
+// unchanged whether receipts are issued or not.
+type VerificationReceipt struct {
+	Version      int             `json:"version"`        // = ProtocolVersion
+	VerifierID   string          `json:"verifier_id"`    // derived ID of verifier's signing key
+	VerifierPub  HybridPublicKey `json:"verifier_pub"`   // the key used to sign this receipt
+	BundleHash   []byte          `json:"bundle_hash"`    // SHA-256 of canonical bundle bytes
+	Decision     string          `json:"decision"`       // identity_status from VerifyResult
+	HumanID      string          `json:"human_id,omitempty"`
+	AgentID      string          `json:"agent_id,omitempty"`
+	GrantedScope []string        `json:"granted_scope,omitempty"`
+	ErrorReason  string          `json:"error_reason,omitempty"`
+	VerifiedAt   int64           `json:"verified_at"`     // unix seconds
+	PrevHash     []byte          `json:"prev_hash"`       // 32 bytes; zeros for genesis
+	Signature    HybridSignature `json:"signature"`       // hybrid sig over canonical bytes
 }
 
 // KeyRotationStatement links an old root key to a new root key. Both keys
@@ -431,4 +473,37 @@ type SessionToken struct {
 	ValidUntil   int64           `json:"valid_until"`
 	ChainHash    []byte          `json:"chain_hash"` // 32 bytes — SHA-256 of concatenated delegation sign bytes
 	MAC          []byte          `json:"mac"`        // 32 bytes — HMAC-SHA256 over canonical signable bytes
+}
+
+// PolicyVerdict is a v1.1 verifier-cached policy decision: a short-lived
+// HMAC-bound attestation that a given (agent_id, scope, context_hash) tuple
+// passed advanced policy evaluation at a specific moment (SPEC §17.6). It is
+// the policy equivalent of `SessionToken`: instead of caching the result of
+// a full *chain* verification, it caches the result of a `PolicyProvider`
+// evaluation — letting subsequent calls within ValidUntil accept the cached
+// allow/deny without re-calling the policy backend.
+//
+// MAC semantics are identical to `SessionToken`:
+//
+//	mac = HMAC-SHA256(policy_secret, PolicyVerdictSignBytes(verdict))
+//
+// `policy_secret` is private to whoever issued the verdict — a commercial
+// backend typically holds it, gives only public verdict objects to the
+// verifier, and rotates the secret to invalidate stale verdicts globally.
+//
+// `ContextHash` is the canonical SHA-256 of the VerifierContext used during
+// the original evaluation. If a verifier later runs with a different context,
+// the verdict no longer applies — preventing a verdict cached for one
+// context from leaking into another (e.g. different country, different
+// amount tier).
+type PolicyVerdict struct {
+	Version     int    `json:"version"` // = ProtocolVersion
+	VerdictID   string `json:"verdict_id"`
+	AgentID     string `json:"agent_id"`
+	Scope       string `json:"scope"`        // the specific scope this verdict allows
+	Allow       bool   `json:"allow"`        // false = explicit cached deny
+	ContextHash []byte `json:"context_hash"` // 32 bytes — SHA-256 of canonical VerifierContext
+	IssuedAt    int64  `json:"issued_at"`
+	ValidUntil  int64  `json:"valid_until"`
+	MAC         []byte `json:"mac"` // 32 bytes — HMAC-SHA256 over canonical signable bytes
 }

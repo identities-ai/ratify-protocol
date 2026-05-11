@@ -505,6 +505,190 @@ func IssueSessionToken(bundle *ProofBundle, result VerifyResult, sessionID strin
 	return token, nil
 }
 
+// verifierContextSignable is the canonical-byte representation of the
+// fields in `VerifierContext` that are hashed into a PolicyVerdict. The
+// `InvocationsInWindow` callback is excluded — closures don't serialize.
+// Field order matches alphabetical JSON key order.
+type verifierContextSignable struct {
+	CurrentAltM       float64 `json:"current_alt_m"`
+	CurrentLat        float64 `json:"current_lat"`
+	CurrentLon        float64 `json:"current_lon"`
+	CurrentSpeedMps   float64 `json:"current_speed_mps"`
+	HasAmount         bool    `json:"has_amount"`
+	HasLocation       bool    `json:"has_location"`
+	HasSpeed          bool    `json:"has_speed"`
+	RequestedAmount   float64 `json:"requested_amount"`
+	RequestedCurrency string  `json:"requested_currency"`
+}
+
+// VerifierContextHash returns the SHA-256 of the canonical-byte
+// representation of a VerifierContext (SPEC §17.6). Used as the
+// `ContextHash` on a PolicyVerdict so a verdict cached for one context
+// never accidentally applies to another (different country, different
+// amount tier, etc).
+func VerifierContextHash(ctx VerifierContext) ([]byte, error) {
+	s := verifierContextSignable{
+		CurrentAltM:       ctx.CurrentAltM,
+		CurrentLat:        ctx.CurrentLat,
+		CurrentLon:        ctx.CurrentLon,
+		CurrentSpeedMps:   ctx.CurrentSpeedMps,
+		HasAmount:         ctx.HasAmount,
+		HasLocation:       ctx.HasLocation,
+		HasSpeed:          ctx.HasSpeed,
+		RequestedAmount:   ctx.RequestedAmount,
+		RequestedCurrency: ctx.RequestedCurrency,
+	}
+	data, err := CanonicalJSON(s)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing verifier context: %w", err)
+	}
+	h := sha256.Sum256(data)
+	return h[:], nil
+}
+
+// policyVerdictSignable is the canonical subset of PolicyVerdict that is
+// HMAC-authenticated. Field order is alphabetical by JSON key.
+type policyVerdictSignable struct {
+	AgentID     string `json:"agent_id"`
+	Allow       bool   `json:"allow"`
+	ContextHash []byte `json:"context_hash"`
+	IssuedAt    int64  `json:"issued_at"`
+	Scope       string `json:"scope"`
+	ValidUntil  int64  `json:"valid_until"`
+	VerdictID   string `json:"verdict_id"`
+	Version     int    `json:"version"`
+}
+
+func policyVerdictSignBytes(v *PolicyVerdict) ([]byte, error) {
+	s := policyVerdictSignable{
+		AgentID:     v.AgentID,
+		Allow:       v.Allow,
+		ContextHash: v.ContextHash,
+		IssuedAt:    v.IssuedAt,
+		Scope:       v.Scope,
+		ValidUntil:  v.ValidUntil,
+		VerdictID:   v.VerdictID,
+		Version:     v.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+// PolicyVerdictSignBytes returns the canonical byte sequence over which a
+// PolicyVerdict's MAC is computed.
+func PolicyVerdictSignBytes(v *PolicyVerdict) ([]byte, error) {
+	return policyVerdictSignBytes(v)
+}
+
+// IssuePolicyVerdict constructs and HMAC-binds a PolicyVerdict. Typically
+// called by a commercial policy backend: it makes the allow/deny decision,
+// stamps the verdict, and hands it to the verifier — which can then accept
+// the verdict locally for the rest of `validUntil` without re-calling the
+// backend. `policySecret` MUST be cryptographically random (≥32 bytes) and
+// private to the issuing service.
+func IssuePolicyVerdict(
+	verdictID, agentID, scope string,
+	allow bool,
+	contextHash []byte,
+	issuedAt, validUntil int64,
+	policySecret []byte,
+) (*PolicyVerdict, error) {
+	if len(policySecret) == 0 {
+		return nil, fmt.Errorf("policy_secret must not be empty")
+	}
+	if verdictID == "" {
+		return nil, fmt.Errorf("verdict_id must not be empty")
+	}
+	if agentID == "" {
+		return nil, fmt.Errorf("agent_id must not be empty")
+	}
+	if scope == "" {
+		return nil, fmt.Errorf("scope must not be empty")
+	}
+	if len(contextHash) != sha256.Size {
+		return nil, fmt.Errorf("context_hash must be %d bytes, got %d", sha256.Size, len(contextHash))
+	}
+	if validUntil <= issuedAt {
+		return nil, fmt.Errorf("valid_until must be strictly after issued_at")
+	}
+	v := &PolicyVerdict{
+		Version:     ProtocolVersion,
+		VerdictID:   verdictID,
+		AgentID:     agentID,
+		Scope:       scope,
+		Allow:       allow,
+		ContextHash: contextHash,
+		IssuedAt:    issuedAt,
+		ValidUntil:  validUntil,
+	}
+	signable, err := policyVerdictSignBytes(v)
+	if err != nil {
+		return nil, fmt.Errorf("serializing policy verdict for MAC: %w", err)
+	}
+	m := hmac.New(sha256.New, policySecret)
+	m.Write(signable)
+	v.MAC = m.Sum(nil)
+	return v, nil
+}
+
+// VerifyPolicyVerdict checks a PolicyVerdict's HMAC against `policySecret`,
+// confirms the validity window contains `now`, and confirms the verdict's
+// (agent_id, scope, context_hash) tuple matches the caller's expectation.
+// Returns nil iff everything matches AND `verdict.Allow == true`. A
+// verdict whose MAC is fresh but whose `Allow == false` returns a
+// descriptive "policy_verdict_denied" error — explicit cached deny.
+func VerifyPolicyVerdict(
+	v *PolicyVerdict,
+	policySecret []byte,
+	expectedAgentID, expectedScope string,
+	expectedContextHash []byte,
+	now time.Time,
+) error {
+	if v == nil {
+		return fmt.Errorf("nil policy verdict")
+	}
+	if len(policySecret) == 0 {
+		return fmt.Errorf("policy_secret must not be empty")
+	}
+	if v.Version != ProtocolVersion {
+		return fmt.Errorf("version_mismatch: unsupported version %d", v.Version)
+	}
+	if len(v.ContextHash) != sha256.Size {
+		return fmt.Errorf("context_hash must be %d bytes, got %d", sha256.Size, len(v.ContextHash))
+	}
+	if len(v.MAC) != sha256.Size {
+		return fmt.Errorf("mac must be %d bytes, got %d", sha256.Size, len(v.MAC))
+	}
+	signable, err := policyVerdictSignBytes(v)
+	if err != nil {
+		return fmt.Errorf("serializing policy verdict for MAC check: %w", err)
+	}
+	m := hmac.New(sha256.New, policySecret)
+	m.Write(signable)
+	if !hmac.Equal(v.MAC, m.Sum(nil)) {
+		return fmt.Errorf("policy_verdict MAC invalid")
+	}
+	ts := now.Unix()
+	if ts < v.IssuedAt {
+		return fmt.Errorf("policy_verdict not yet valid")
+	}
+	if ts > v.ValidUntil {
+		return fmt.Errorf("policy_verdict expired")
+	}
+	if v.AgentID != expectedAgentID {
+		return fmt.Errorf("policy_verdict agent_id mismatch")
+	}
+	if v.Scope != expectedScope {
+		return fmt.Errorf("policy_verdict scope mismatch")
+	}
+	if !bytes.Equal(v.ContextHash, expectedContextHash) {
+		return fmt.Errorf("policy_verdict context_hash mismatch")
+	}
+	if !v.Allow {
+		return fmt.Errorf("policy_verdict_denied: cached deny for scope %q", v.Scope)
+	}
+	return nil
+}
+
 // VerifySessionToken checks a SessionToken's HMAC against sessionSecret and
 // its validity window against now. Returns nil iff the MAC matches and the
 // token is within [IssuedAt, ValidUntil]. This does NOT verify a challenge
@@ -863,6 +1047,157 @@ func SignTransactionReceiptParty(receipt *TransactionReceipt, partyID string, ag
 		return ReceiptPartySignature{}, fmt.Errorf("signing receipt for party %q: %w", partyID, err)
 	}
 	return ReceiptPartySignature{PartyID: partyID, Signature: sig}, nil
+}
+
+// verificationReceiptSignable is the canonical subset of VerificationReceipt
+// that gets hybrid-signed. Field order matches JSON key alphabetical order
+// for cross-implementation byte determinism (SPEC §17.5). The `signature`
+// field is excluded — signatures cannot cover themselves.
+type verificationReceiptSignable struct {
+	AgentID      string          `json:"agent_id,omitempty"`
+	BundleHash   []byte          `json:"bundle_hash"`
+	Decision     string          `json:"decision"`
+	ErrorReason  string          `json:"error_reason,omitempty"`
+	GrantedScope []string        `json:"granted_scope,omitempty"`
+	HumanID      string          `json:"human_id,omitempty"`
+	PrevHash     []byte          `json:"prev_hash"`
+	VerifiedAt   int64           `json:"verified_at"`
+	VerifierID   string          `json:"verifier_id"`
+	VerifierPub  HybridPublicKey `json:"verifier_pub"`
+	Version      int             `json:"version"`
+}
+
+// BundleHash returns the canonical SHA-256 digest of a ProofBundle's full
+// wire form. Used as the stable identifier of "what was verified" inside
+// a VerificationReceipt. Two callers verifying the same bundle MUST produce
+// the same BundleHash byte-for-byte (canonical serialization, RFC 8785).
+func BundleHash(bundle *ProofBundle) ([]byte, error) {
+	if bundle == nil {
+		return nil, fmt.Errorf("nil bundle")
+	}
+	b, err := CanonicalJSON(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing bundle for hash: %w", err)
+	}
+	h := sha256.Sum256(b)
+	return h[:], nil
+}
+
+func verificationReceiptSignBytes(r *VerificationReceipt) ([]byte, error) {
+	scope := append([]string(nil), r.GrantedScope...)
+	sort.Strings(scope)
+	s := verificationReceiptSignable{
+		AgentID:      r.AgentID,
+		BundleHash:   r.BundleHash,
+		Decision:     r.Decision,
+		ErrorReason:  r.ErrorReason,
+		GrantedScope: scope,
+		HumanID:      r.HumanID,
+		PrevHash:     r.PrevHash,
+		VerifiedAt:   r.VerifiedAt,
+		VerifierID:   r.VerifierID,
+		VerifierPub:  r.VerifierPub,
+		Version:      r.Version,
+	}
+	return CanonicalJSON(s)
+}
+
+// VerificationReceiptSignBytes returns the canonical byte sequence that is
+// signed to produce VerificationReceipt.Signature.
+func VerificationReceiptSignBytes(r *VerificationReceipt) ([]byte, error) {
+	return verificationReceiptSignBytes(r)
+}
+
+// IssueVerificationReceipt constructs and signs a VerificationReceipt over a
+// (bundle, VerifyResult, prev) triple. The verifier's hybrid private key
+// authenticates "this verifier saw this bundle, and reached this decision,
+// at this time." `prevHash` is the SHA-256 digest of the previous receipt's
+// canonical signable bytes — pass 32 zero bytes for genesis. `verifiedAt` is
+// unix seconds (use the same clock as the verifier).
+//
+// The receipt is OPTIONAL — the protocol does not auto-issue. AuditProvider
+// implementations that want a tamper-evident chain wrap this around each
+// VerifyResult before persisting; implementations that don't, don't.
+func IssueVerificationReceipt(
+	bundle *ProofBundle,
+	result VerifyResult,
+	verifierID string,
+	verifierPub HybridPublicKey,
+	verifierPriv HybridPrivateKey,
+	prevHash []byte,
+	verifiedAt int64,
+) (*VerificationReceipt, error) {
+	bundleHash, err := BundleHash(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("hashing bundle: %w", err)
+	}
+	prev := prevHash
+	if prev == nil {
+		prev = make([]byte, sha256.Size)
+	}
+	if len(prev) != sha256.Size {
+		return nil, fmt.Errorf("prev_hash must be %d bytes, got %d", sha256.Size, len(prev))
+	}
+	r := &VerificationReceipt{
+		Version:      ProtocolVersion,
+		VerifierID:   verifierID,
+		VerifierPub:  verifierPub,
+		BundleHash:   bundleHash,
+		Decision:     result.IdentityStatus,
+		HumanID:      result.HumanID,
+		AgentID:      result.AgentID,
+		GrantedScope: result.GrantedScope,
+		ErrorReason:  result.ErrorReason,
+		VerifiedAt:   verifiedAt,
+		PrevHash:     prev,
+	}
+	data, err := verificationReceiptSignBytes(r)
+	if err != nil {
+		return nil, fmt.Errorf("serializing verification receipt: %w", err)
+	}
+	sig, err := signBoth(data, verifierPriv)
+	if err != nil {
+		return nil, fmt.Errorf("signing verification receipt: %w", err)
+	}
+	r.Signature = sig
+	return r, nil
+}
+
+// VerifyVerificationReceipt verifies the hybrid signature on a
+// VerificationReceipt against the asserted verifier public key. Returns nil
+// iff both component signatures verify. Note: this only verifies the
+// receipt's *authenticity* — that the named verifier did sign it. Callers
+// who need to verify the receipt chain (prev_hash linkage) MUST hash each
+// prior receipt's signable bytes and check that the chain is contiguous.
+func VerifyVerificationReceipt(r *VerificationReceipt) error {
+	if r == nil {
+		return fmt.Errorf("nil receipt")
+	}
+	if r.Version != ProtocolVersion {
+		return fmt.Errorf("unsupported version %d", r.Version)
+	}
+	if len(r.BundleHash) != sha256.Size {
+		return fmt.Errorf("bundle_hash must be %d bytes, got %d", sha256.Size, len(r.BundleHash))
+	}
+	if len(r.PrevHash) != sha256.Size {
+		return fmt.Errorf("prev_hash must be %d bytes, got %d", sha256.Size, len(r.PrevHash))
+	}
+	data, err := verificationReceiptSignBytes(r)
+	if err != nil {
+		return fmt.Errorf("serializing receipt for verification: %w", err)
+	}
+	return verifyBoth(data, r.Signature, r.VerifierPub)
+}
+
+// ReceiptHash returns the SHA-256 of a receipt's canonical signable bytes.
+// Use this as the `prev_hash` for the NEXT receipt in the chain.
+func ReceiptHash(r *VerificationReceipt) ([]byte, error) {
+	data, err := verificationReceiptSignBytes(r)
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.Sum256(data)
+	return h[:], nil
 }
 
 // sessionTokenSignable is the canonical subset of SessionToken. Field order

@@ -7,10 +7,11 @@ name = "ratify-protocol"
 version = "1.0.0a6"
 description = "Cryptographic trust protocol for human-agent and agent-agent interactions — Python reference SDK."
 readme = "README.md"
-authors = [{name = "Identities AI"}]
+authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+maintainers = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
-keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "identity", "ai-agents"]
+keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "identity", "ai-agents", "authorization", "cryptography"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -33,9 +34,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/identities-ai/ratify-protocol"
-Repository = "https://github.com/identities-ai/ratify-protocol"
+Homepage = "https://identities.ai"
+Documentation = "https://docs.identities.ai"
+Source = "https://github.com/identities-ai/ratify-protocol"
+Changelog = "https://github.com/identities-ai/ratify-protocol/blob/main/CHANGELOG.md"
 Issues = "https://github.com/identities-ai/ratify-protocol/issues"
+Security = "https://github.com/identities-ai/ratify-protocol/blob/main/SECURITY.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

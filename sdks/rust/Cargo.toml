@@ -2,9 +2,12 @@
 name = "ratify-protocol"
 version = "1.0.0-alpha.6"
 edition = "2021"
-authors = ["Identities AI"]
+authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
 description = "Cryptographic trust protocol for human-agent and agent-agent interactions — Rust reference SDK."
+readme = "README.md"
+homepage = "https://identities.ai"
+documentation = "https://docs.identities.ai"
 repository = "https://github.com/identities-ai/ratify-protocol"
 keywords = ["ratify", "delegation", "identity", "post-quantum", "ed25519"]
 categories = ["cryptography", "authentication"]

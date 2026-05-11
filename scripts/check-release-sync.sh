@@ -71,7 +71,12 @@ for path, needle in must_contain.items():
     if needle not in read(path):
         fail(f"{path} does not contain {needle}")
 
-fixture_count = len(list((root / "testvectors/v1").glob("*.json")))
+# Wire-format fixture count. cross_sdk_vectors.json is a separate
+# alpha.7 byte-equivalence corpus and is not part of this count.
+fixture_count = len([
+    p for p in (root / "testvectors/v1").glob("*.json")
+    if p.name != "cross_sdk_vectors.json"
+])
 fixture_needles = {
     "README.md": [
         f"{fixture_count} canonical test vectors",

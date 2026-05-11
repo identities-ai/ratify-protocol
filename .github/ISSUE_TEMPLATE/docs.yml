@@ -1,0 +1,28 @@
+name: Documentation issue
+description: A typo, broken link, missing detail, or factual error in README, SPEC.md, docs/, or any SDK README.
+title: "[docs] "
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Where?
+      description: File path or URL.
+      placeholder: "SPEC.md §5.2, or sdks/python/README.md, or docs.identities.ai/quickstart/typescript"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's wrong?
+      description: Quote the problematic text. For factual errors, link the source of truth.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix (optional)
+    validations:
+      required: false

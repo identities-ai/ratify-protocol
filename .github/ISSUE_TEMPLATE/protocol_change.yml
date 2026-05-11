@@ -1,0 +1,74 @@
+name: Protocol change proposal
+description: Propose a change to the wire format, signable bytes, verifier algorithm, scope vocabulary, or any normative SPEC.md behavior.
+title: "[protocol] "
+labels: ["protocol", "design-discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Protocol changes are coordinated across every SDK and affect every fixture. Open this
+        issue **before** drafting a PR — design discussion first, code second. See
+        [`CONTRIBUTING.md`](https://github.com/identities-ai/ratify-protocol/blob/main/CONTRIBUTING.md)
+        for context.
+
+        If this is an additive, backward-compatible change (new optional field, new scope, new
+        helper that doesn't change canonical bytes), it can ship in a minor version (`1.x`).
+        If it changes canonical bytes for any existing fixture, it's a major version (`v2`)
+        per [`SPEC.md`](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) §10.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this solve? Why does it require a protocol change rather than an application-level workaround?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: |
+        Describe the change precisely. If it affects the wire format, show the before/after
+        of a specific signable byte sequence or a representative test vector.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Backward compatibility
+      options:
+        - Additive — existing fixtures still pass byte-identically (minor bump)
+        - Breaking — existing fixtures change canonical bytes (major bump, v2)
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other designs did you consider? Why is this one preferred?
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact on each SDK
+      description: |
+        Roughly what changes in each language? (Go, TypeScript, Python, Rust.) Include any
+        SDKs you can already make the change to.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have read CONTRIBUTING.md and understand the protocol-change process.
+          required: true
+        - label: I understand that protocol changes require updates to SPEC.md, every SDK, and the test vectors before they ship.
+          required: true

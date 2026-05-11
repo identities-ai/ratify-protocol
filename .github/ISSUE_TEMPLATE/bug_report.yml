@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a bug in the protocol reference, an SDK, the test vectors, or the docs.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please fill out as much as you can — a clear repro is the single
+        biggest factor in how fast we can fix it. See [SECURITY.md](https://github.com/identities-ai/ratify-protocol/blob/main/SECURITY.md)
+        if this is a security vulnerability — do NOT file it publicly here.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      description: Which part of the project is the bug in?
+      options:
+        - Go reference (root package)
+        - TypeScript SDK (sdks/typescript)
+        - Python SDK (sdks/python)
+        - Rust SDK (sdks/rust)
+        - Test vectors (testvectors/v1)
+        - CLI (cmd/ratify, cmd/ratify-verifier)
+        - Specification (SPEC.md)
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The exact published version or commit SHA where you observed the bug.
+      placeholder: "v1.0.0-alpha.6 or commit abc1234"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Minimum steps to reproduce. Include the input bytes / proof bundle / CLI invocation
+        if applicable. Ratify is cryptographic — exact bytes matter.
+      placeholder: |
+        1. Construct a DelegationCert with scopes ["meeting:attend"]
+        2. Sign with hybrid keypair X
+        3. Run `cargo run --example verify -- delegation.json`
+        4. Verifier returns "valid" — expected "expired"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cross_sdk
+    attributes:
+      label: Cross-SDK behavior
+      description: |
+        If you've checked, does this happen in only one SDK or multiple? Protocol bugs
+        usually manifest the same way everywhere; bugs in one SDK usually mean drift.
+      options:
+        - I have not checked other SDKs
+        - Only in one SDK (likely SDK drift)
+        - In multiple SDKs (likely a protocol / fixture issue)
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, language runtime version, install method.
+      placeholder: |
+        macOS 14, Python 3.12.3, pip-installed
+    validations:
+      required: false

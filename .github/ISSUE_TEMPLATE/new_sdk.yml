@@ -1,0 +1,71 @@
+name: New language SDK
+description: Coordinate a new reference SDK in a language not yet supported (e.g. Swift, Java, C, Kotlin).
+title: "[sdk] new SDK: "
+labels: ["sdk", "design-discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a new SDK is welcome — and coordinated. The goal is byte-for-byte interop
+        with the four existing SDKs (Go, TypeScript, Python, Rust). Open this issue first
+        so we can sync on directory layout, package name, and which `testvectors/v1/`
+        fixtures the new SDK must pass.
+
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: "Swift, Java, C, Kotlin, …"
+    validations:
+      required: true
+
+  - type: input
+    id: target_runtime
+    attributes:
+      label: Target runtime / standard
+      description: e.g. Swift 5.9+, JVM 17+, ISO C11, .NET 8.
+    validations:
+      required: true
+
+  - type: textarea
+    id: crypto_libs
+    attributes:
+      label: Cryptographic library plan
+      description: |
+        Which Ed25519 and ML-DSA-65 (FIPS 204) implementations do you propose to use?
+        Mature, audited libraries strongly preferred over rolling our own.
+    validations:
+      required: true
+
+  - type: textarea
+    id: package_name
+    attributes:
+      label: Proposed package name
+      description: |
+        Match the existing scheme where possible: `ratify-protocol` (PyPI, crates.io)
+        / `@identities-ai/ratify-protocol` (npm). Suggest the equivalent for the new
+        registry.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing_plan
+    attributes:
+      label: Conformance testing plan
+      description: |
+        How will the SDK load and run the 59 fixtures in `testvectors/v1/`? Identify
+        the test harness you propose to use.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have read CONTRIBUTING.md.
+          required: true
+        - label: I understand the new SDK must pass all 59 canonical conformance fixtures before merge.
+          required: true
+        - label: I understand the SDK must be released at the same version as the other SDKs at any tagged release.
+          required: true

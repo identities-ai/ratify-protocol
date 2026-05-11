@@ -1,0 +1,37 @@
+# Citation metadata for Ratify Protocol.
+# Schema: https://citation-file-format.github.io/
+# GitHub renders this as a "Cite this repository" sidebar widget and produces
+# BibTeX / APA / Chicago strings automatically.
+cff-version: 1.2.0
+title: "Ratify Protocol"
+message: >-
+  If you use Ratify Protocol in academic or research work, please cite it as
+  follows.
+type: software
+authors:
+  - name: "Identities AI, Inc."
+    website: "https://identities.ai"
+    email: hello@identities.ai
+repository-code: "https://github.com/identities-ai/ratify-protocol"
+url: "https://identities.ai"
+license: Apache-2.0
+keywords:
+  - cryptography
+  - authorization
+  - AI agents
+  - delegation
+  - post-quantum
+  - hybrid signature
+  - Ed25519
+  - ML-DSA-65
+  - FIPS 204
+  - identity
+abstract: >-
+  Ratify Protocol is an open cryptographic trust protocol for human-to-agent
+  and agent-to-agent delegation. Every signed object uses a hybrid
+  Ed25519 + ML-DSA-65 (NIST FIPS 204) signature so that authorization
+  proofs remain unforgeable both today and under a cryptographically-relevant
+  quantum computer. The specification is under CC-BY-4.0; the reference SDKs
+  (Go, TypeScript, Python, Rust) are under Apache-2.0. Patent pending.
+version: "1.0.0-alpha.6"
+date-released: "2026-05-10"

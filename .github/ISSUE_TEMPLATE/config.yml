@@ -1,0 +1,15 @@
+# Disable blank issues — every issue should pick a template so reporters get
+# the right prompts and we avoid "is this a bug or a protocol question?"
+# guessing on triage.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/identities-ai/ratify-protocol/blob/main/SECURITY.md
+    about: Do NOT open a public issue. See SECURITY.md to report privately to security@identities.ai.
+  - name: Ratify Verify (managed product) support
+    url: https://identities.ai
+    about: Questions about the commercial Ratify Verify control plane belong on the company site, not this OSS repo.
+  - name: Documentation
+    url: https://docs.identities.ai
+    about: Developer documentation, per-language quickstarts, protocol concepts, and the full SDK reference.

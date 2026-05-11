@@ -1,18 +1,58 @@
 package ratify
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
 )
 
+// ConstraintEvaluator is a pluggable evaluator for extension constraint
+// types (SPEC §17.7). Built-in types (geo_circle, geo_polygon, geo_bbox,
+// time_window, max_speed_mps, max_amount, max_rate — §5.7.2) are evaluated
+// by the SDK directly; an evaluator is consulted ONLY for types the SDK
+// does not natively understand. An evaluator returning `nil` allows the
+// constraint; any other error rejects. To explicitly mark a constraint as
+// requiring context the caller hasn't supplied, return a wrapped
+// `ErrConstraintUnverifiable`. Registering a built-in type name (e.g.
+// "geo_circle") is a no-op — the SDK's hard-coded evaluator wins.
+type ConstraintEvaluator interface {
+	Evaluate(c Constraint, certID string, ctx VerifierContext, now time.Time) error
+}
+
+// ErrConstraintUnverifiable, when wrapped or returned from a
+// ConstraintEvaluator, routes the failure to identity_status
+// `constraint_unverifiable` rather than `constraint_denied`. Use this for
+// "I don't have the inputs to decide" — never for "the cert says no."
+var ErrConstraintUnverifiable = errors.New("constraint_unverifiable")
+
 // evaluateConstraints runs every Constraint on cert against the caller-supplied
 // VerifierContext. Returns nil iff all pass; a descriptive error otherwise.
 // Fail-closed: an unknown Type or a constraint whose required context field
 // is absent causes rejection.
-func evaluateConstraints(cert *DelegationCert, ctx VerifierContext, now time.Time) error {
+//
+// `extEvaluators` is the per-Verify registry of extension evaluators (see
+// SPEC §17.7). The order of resolution is: built-in types are handled by
+// the hard-coded `evaluateConstraint` switch; for any constraint whose type
+// the switch does not recognize, the registry is consulted; only if no
+// entry matches does the verifier return `constraint_unknown`.
+func evaluateConstraints(cert *DelegationCert, ctx VerifierContext, now time.Time, extEvaluators map[string]ConstraintEvaluator) error {
 	for i, c := range cert.Constraints {
-		if err := evaluateConstraint(c, cert.CertID, ctx, now); err != nil {
+		err := evaluateConstraint(c, cert.CertID, ctx, now)
+		// If the built-in switch returned `unknownConstraintError`, the type
+		// is unknown to the SDK proper. Try the extension registry before
+		// failing closed.
+		if _, isUnknown := err.(unknownConstraintError); isUnknown && extEvaluators != nil {
+			if ev, ok := extEvaluators[string(c.Type)]; ok {
+				err = ev.Evaluate(c, cert.CertID, ctx, now)
+				// Honor wrapped ErrConstraintUnverifiable from extension
+				// evaluators by translating to the SDK's sentinel.
+				if err != nil && errors.Is(err, ErrConstraintUnverifiable) {
+					err = errConstraintUnverifiable(err.Error())
+				}
+			}
+		}
+		if err != nil {
 			return fmt.Errorf("constraint[%d] (%s): %w", i, c.Type, err)
 		}
 	}

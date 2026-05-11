@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -25,11 +26,16 @@ type VerifyOptions struct {
 	// be valid. Empty string skips scope checking.
 	RequiredScope string
 
-	// IsRevoked is called for each cert ID during verification. Return true
-	// if the cert has been revoked. Can be nil (no revocation check). For
-	// callers wiring a managed revocation backend (push-sync, edge cache),
-	// see Revocation (SPEC §17.1) — when both are set, Revocation takes
-	// precedence.
+	// IsRevoked is the legacy v1.0 revocation closure. Return true if the
+	// cert has been revoked; nil disables the check entirely.
+	//
+	// Deprecated: Use Revocation (SPEC §17.1) instead. The closure has no
+	// way to surface lookup failures — it must collapse "I don't know" to
+	// `false` (allow) or `true` (deny), neither of which is correct.
+	// Revocation returns `(bool, error)` and the verifier fails closed on
+	// error (`revocation_error`). When both are set, Revocation wins. The
+	// closure remains supported through v1.0.0-* releases and will be
+	// removed in v1.0.0-beta.1.
 	IsRevoked func(certID string) bool
 
 	// Revocation is the pluggable provider hook for revocation state
@@ -48,6 +54,37 @@ type VerifyOptions struct {
 	// from the audit provider are ignored — auditing MUST NOT alter the
 	// verifier's decision.
 	Audit AuditProvider
+
+	// ConstraintEvaluators is the per-Verify registry of extension
+	// constraint evaluators (SPEC §17.7). Keys are constraint type strings
+	// that are NOT in the built-in set (geo_circle, geo_polygon, geo_bbox,
+	// time_window, max_speed_mps, max_amount, max_rate). Built-in types
+	// are evaluated by the SDK directly; the registry is only consulted
+	// for unknown types. A type with no registered evaluator still fails
+	// closed with identity_status="constraint_unknown".
+	ConstraintEvaluators map[string]ConstraintEvaluator
+
+	// PolicyVerdict, when non-nil, is a fast-path cached policy decision
+	// (SPEC §17.6). When present, Verify skips the Policy provider hook
+	// IF the verdict is valid (MAC matches PolicySecret, within validity
+	// window, agent/scope/context-hash matches). If the verdict is
+	// expired or mismatched, the verifier falls back to Policy provider
+	// (or, if Policy is nil, treats the bundle as policy-passing).
+	PolicyVerdict *PolicyVerdict
+
+	// PolicySecret is the HMAC secret used to verify the PolicyVerdict's
+	// MAC. Required when PolicyVerdict is non-nil; otherwise ignored.
+	PolicySecret []byte
+
+	// AnchorResolver, when non-nil, is consulted on successful verifications
+	// to populate `VerifyResult.Anchor` (SPEC §17.8). It maps the verified
+	// HumanID to its external-identity binding (Okta SSO, government ID,
+	// email-verified, etc) so AuditProviders can record an unforgeable
+	// chain from the verification event to the identity attestation
+	// behind the human root. Errors from the resolver are non-fatal:
+	// the bundle still verifies; Anchor is simply left nil. A nil
+	// resolver disables the lookup entirely.
+	AnchorResolver AnchorResolver
 
 	// ForceRevocationCheck, when true, signals the verifier to bypass its
 	// local revocation cache and query the issuer (or registry) for the
@@ -241,7 +278,7 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 			return invalid("bad_signature", fmt.Sprintf("cert %d: %v", i, err))
 		}
 
-		if err := evaluateConstraints(cert, opts.Context, now); err != nil {
+		if err := evaluateConstraints(cert, opts.Context, now, opts.ConstraintEvaluators); err != nil {
 			status := IdentityStatusConstraintDenied
 			switch {
 			case isConstraintUnverifiable(err):
@@ -301,7 +338,49 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 		IdentityStatus: IdentityStatusAuthorizedAgent,
 	}
 
-	// --- Advanced Policy Gating (SPEC §17.2) ---
+	// --- Anchor resolution (SPEC §17.8) ---
+	// Best-effort: populate Anchor on the success result so downstream
+	// AuditProviders observe an identity-bound receipt. Resolver errors
+	// are non-fatal — the bundle still verifies.
+	if opts.AnchorResolver != nil {
+		if anchor, err := opts.AnchorResolver.ResolveAnchor(humanID); err == nil && anchor != nil {
+			res.Anchor = anchor
+		}
+	}
+
+	// --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+	//
+	// Fast path: if a PolicyVerdict is supplied AND verifies cleanly, skip
+	// the live Policy provider entirely. This is how commercial backends
+	// cut policy-server round-trips on streaming workloads: issue a verdict
+	// once, the verifier accepts it locally for the rest of the window.
+	if opts.PolicyVerdict != nil && opts.RequiredScope != "" {
+		ctxHash, err := VerifierContextHash(opts.Context)
+		if err != nil {
+			return invalid("policy_error", fmt.Sprintf("verifier context hash failed: %v", err))
+		}
+		err = VerifyPolicyVerdict(
+			opts.PolicyVerdict,
+			opts.PolicySecret,
+			bundle.AgentID,
+			opts.RequiredScope,
+			ctxHash,
+			now,
+		)
+		switch {
+		case err == nil:
+			// Cached allow — skip Policy provider.
+			return res
+		case strings.HasPrefix(err.Error(), "policy_verdict_denied"):
+			return failWithStatus(IdentityStatusScopeDenied, "policy verdict (cached) denied access")
+		default:
+			// MAC mismatch / expired / scope-mismatch → fall through to
+			// live Policy provider (or pass if Policy is nil). Treat
+			// transient verdict failures as "verdict unusable," NOT as
+			// "policy denied." A stale verdict must not block a session.
+		}
+	}
+
 	if opts.Policy != nil {
 		ok, err := opts.Policy.EvaluatePolicy(bundle, opts.Context)
 		if err != nil {
@@ -332,6 +411,19 @@ type PolicyProvider interface {
 // (SPEC §17.3)
 type AuditProvider interface {
 	LogVerification(result VerifyResult, bundle *ProofBundle) error
+}
+
+// AnchorResolver resolves a verified `human_id` to its external-identity
+// binding — the `Anchor` originally registered when the HumanRoot was
+// minted (SSO assertion, government ID attestation, email-verified, etc).
+// Implementations typically read from a verifier-local identity directory.
+// (SPEC §17.8)
+//
+// Errors are non-fatal: the verifier MUST NOT fail the bundle because the
+// resolver errored. The verifier silently leaves `VerifyResult.Anchor` nil
+// and continues. A nil resolver disables the lookup entirely.
+type AnchorResolver interface {
+	ResolveAnchor(humanID string) (*Anchor, error)
 }
 
 // ============================================================================

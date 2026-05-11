@@ -1,6 +1,7 @@
 package ratify_test
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -271,5 +272,173 @@ func TestAuditProvider_ErrorsDoNotAlterVerdict(t *testing.T) {
 	res := Verify(bundle, VerifyOptions{Audit: audit})
 	if !res.Valid {
 		t.Fatalf("audit error must not flip verdict; got %s: %s", res.IdentityStatus, res.ErrorReason)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Provider composition with VerifyTransactionReceipt — SPEC §5.14 + §17
+// ---------------------------------------------------------------------------
+//
+// Receipt verification calls Verify(bundle, ...) per party. Providers attached
+// to a party's options must therefore compose — a party-scoped revocation
+// provider that returns true must fail the receipt; a party-scoped audit
+// provider must capture each party's individual VerifyResult.
+
+func twoPartyReceipt(t *testing.T) (*TransactionReceipt, time.Time) {
+	t.Helper()
+	human, humanPriv, _ := GenerateHumanRootKeypair()
+	buyer, buyerPriv, _ := GenerateAgentKeypair("Buyer", "voice_agent")
+	seller, sellerPriv, _ := GenerateAgentKeypair("Seller", "voice_agent")
+	now := time.Now()
+
+	mkCert := func(subjID string, subjPub HybridPublicKey, scope []string) DelegationCert {
+		c := DelegationCert{
+			CertID:        "cert-" + subjID,
+			Version:       ProtocolVersion,
+			IssuerID:      human.ID,
+			IssuerPubKey:  human.PublicKey,
+			SubjectID:     subjID,
+			SubjectPubKey: subjPub,
+			Scope:         scope,
+			IssuedAt:      now.Add(-1 * time.Hour).Unix(),
+			ExpiresAt:     now.Add(1 * time.Hour).Unix(),
+		}
+		if err := IssueDelegation(&c, humanPriv); err != nil {
+			t.Fatalf("IssueDelegation: %v", err)
+		}
+		return c
+	}
+	buyerCert := mkCert(buyer.ID, buyer.PublicKey, []string{ScopePaymentsSend})
+	sellerCert := mkCert(seller.ID, seller.PublicKey, []string{ScopeTransactSell})
+
+	buyerCh := bytes.Repeat([]byte{0x01}, 32)
+	buyerSig, _ := SignChallenge(buyerCh, now.Unix(), buyerPriv)
+	sellerCh := bytes.Repeat([]byte{0x02}, 32)
+	sellerSig, _ := SignChallenge(sellerCh, now.Unix(), sellerPriv)
+
+	receipt := &TransactionReceipt{
+		Version:            ProtocolVersion,
+		TransactionID:      "tx-providers",
+		CreatedAt:          now.Unix(),
+		TermsSchemaURI:     "ratify://schemas/receipt/test/v1",
+		TermsCanonicalJSON: []byte(`{"amount":100}`),
+		Parties: []ReceiptParty{
+			{PartyID: "party-buyer", Role: "buyer", AgentID: buyer.ID, AgentPubKey: buyer.PublicKey, ProofBundle: ProofBundle{
+				AgentID: buyer.ID, AgentPubKey: buyer.PublicKey,
+				Delegations: []DelegationCert{buyerCert},
+				Challenge:   buyerCh, ChallengeAt: now.Unix(), ChallengeSig: buyerSig,
+			}},
+			{PartyID: "party-seller", Role: "seller", AgentID: seller.ID, AgentPubKey: seller.PublicKey, ProofBundle: ProofBundle{
+				AgentID: seller.ID, AgentPubKey: seller.PublicKey,
+				Delegations: []DelegationCert{sellerCert},
+				Challenge:   sellerCh, ChallengeAt: now.Unix(), ChallengeSig: sellerSig,
+			}},
+		},
+	}
+	bSig, _ := SignTransactionReceiptParty(receipt, "party-buyer", buyerPriv)
+	sSig, _ := SignTransactionReceiptParty(receipt, "party-seller", sellerPriv)
+	receipt.PartySignatures = []ReceiptPartySignature{bSig, sSig}
+	return receipt, now
+}
+
+func TestReceiptProviders_RevocationPerRole(t *testing.T) {
+	receipt, now := twoPartyReceipt(t)
+	// Revoke the seller's cert only; buyer should NOT be touched.
+	rev := &fakeRevocation{revoked: map[string]bool{"cert-" + receipt.Parties[1].AgentID: true}}
+
+	r := VerifyTransactionReceipt(receipt, VerifyReceiptOptions{
+		Now: now,
+		PartyVerifyOptions: func(role string) VerifyOptions {
+			if role == "seller" {
+				return VerifyOptions{Revocation: rev}
+			}
+			return VerifyOptions{}
+		},
+	})
+	if r.Valid {
+		t.Fatal("expected receipt invalid: seller cert revoked")
+	}
+	if !strings.Contains(r.ErrorReason, "party-seller") || !strings.Contains(r.ErrorReason, "revoked") {
+		t.Errorf("ErrorReason should call out seller + revoked; got %q", r.ErrorReason)
+	}
+	if len(r.PartyResults) < 2 || r.PartyResults[0].IdentityStatus != "authorized_agent" {
+		t.Errorf("buyer should have verified before seller failed; got party_results=%+v", r.PartyResults)
+	}
+}
+
+func TestReceiptProviders_PolicyDenyPerRole(t *testing.T) {
+	receipt, now := twoPartyReceipt(t)
+	denyBuyer := &fakePolicy{allow: false}
+
+	r := VerifyTransactionReceipt(receipt, VerifyReceiptOptions{
+		Now: now,
+		PartyVerifyOptions: func(role string) VerifyOptions {
+			if role == "buyer" {
+				return VerifyOptions{Policy: denyBuyer}
+			}
+			return VerifyOptions{}
+		},
+	})
+	if r.Valid {
+		t.Fatal("expected receipt invalid: buyer policy denied")
+	}
+	if !strings.Contains(r.ErrorReason, "party-buyer") || !strings.Contains(r.ErrorReason, "scope_denied") {
+		t.Errorf("ErrorReason should call out buyer + scope_denied; got %q", r.ErrorReason)
+	}
+}
+
+func TestReceiptProviders_AuditCapturesEveryParty(t *testing.T) {
+	receipt, now := twoPartyReceipt(t)
+	audit := &fakeAudit{}
+
+	r := VerifyTransactionReceipt(receipt, VerifyReceiptOptions{
+		Now: now,
+		PartyVerifyOptions: func(_ string) VerifyOptions {
+			return VerifyOptions{Audit: audit}
+		},
+	})
+	if !r.Valid {
+		t.Fatalf("expected valid receipt: %s", r.ErrorReason)
+	}
+	if len(audit.results) != 2 {
+		t.Errorf("audit should be invoked once per party; got %d results", len(audit.results))
+	}
+	for i, ar := range audit.results {
+		if !ar.Valid {
+			t.Errorf("party %d audit entry should be Valid; got %s", i, ar.ErrorReason)
+		}
+	}
+}
+
+func TestReceiptProviders_AuditCapturesFailingParty(t *testing.T) {
+	receipt, now := twoPartyReceipt(t)
+	audit := &fakeAudit{}
+	rev := &fakeRevocation{revoked: map[string]bool{"cert-" + receipt.Parties[1].AgentID: true}}
+
+	r := VerifyTransactionReceipt(receipt, VerifyReceiptOptions{
+		Now: now,
+		PartyVerifyOptions: func(role string) VerifyOptions {
+			opts := VerifyOptions{Audit: audit}
+			if role == "seller" {
+				opts.Revocation = rev
+			}
+			return opts
+		},
+	})
+	if r.Valid {
+		t.Fatal("expected receipt invalid: seller revoked")
+	}
+	// Both parties should have audit entries even though the receipt failed
+	// atomically — auditing observes per-party state regardless of overall
+	// atomicity.
+	if len(audit.results) != 2 {
+		t.Errorf("audit should have 2 entries (buyer pass + seller revoked); got %d", len(audit.results))
+	}
+	// Order matches Parties order: buyer first (valid), seller second (revoked).
+	if audit.results[0].IdentityStatus != "authorized_agent" {
+		t.Errorf("buyer audit should be authorized_agent; got %s", audit.results[0].IdentityStatus)
+	}
+	if audit.results[1].IdentityStatus != "revoked" {
+		t.Errorf("seller audit should be revoked; got %s", audit.results[1].IdentityStatus)
 	}
 }

@@ -1,5 +1,16 @@
 # Ratify Protocol™
 
+[![CI](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/identities-ai/ratify-protocol?include_prereleases&sort=semver&color=blue)](https://github.com/identities-ai/ratify-protocol/releases)
+[![License: Apache 2.0](https://img.shields.io/badge/code-Apache--2.0-green.svg)](LICENSE)
+[![Spec: CC BY 4.0](https://img.shields.io/badge/spec-CC--BY--4.0-lightgrey.svg)](docs/LICENSES.md)
+[![Patent Pending](https://img.shields.io/badge/patent-pending-orange.svg)](#license--trademarks--patent)
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/identities-ai/ratify-protocol.svg)](https://pkg.go.dev/github.com/identities-ai/ratify-protocol)
+[![PyPI](https://img.shields.io/pypi/v/ratify-protocol?label=pypi&color=informational)](https://pypi.org/project/ratify-protocol/)
+[![Crates.io](https://img.shields.io/crates/v/ratify-protocol?label=crates.io)](https://crates.io/crates/ratify-protocol)
+[![npm](https://img.shields.io/badge/npm-coming%20soon-yellow)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
+
 **A cryptographic trust protocol for human-to-agent and agent-to-agent interactions.**
 
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.

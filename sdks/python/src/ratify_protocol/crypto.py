@@ -39,12 +39,15 @@ from .types import (
     HybridPublicKey,
     HybridSignature,
     KeyRotationStatement,
+    PolicyVerdict,
     ProofBundle,
     ReceiptPartySignature,
     RevocationList,
     RevocationPush,
     SessionToken,
     TransactionReceipt,
+    VerificationReceipt,
+    VerifierContext,
     VerifyResult,
     WitnessEntry,
 )
@@ -590,3 +593,221 @@ def verify_session_token(
     token: SessionToken, session_secret: bytes, now: int
 ) -> bool:
     return verify_session_token_e(token, session_secret, now) is None
+
+
+# ----------------------------------------------------------------------
+# SPEC §17.5 — VerificationReceipt
+# ----------------------------------------------------------------------
+
+def bundle_hash(bundle: ProofBundle) -> bytes:
+    """SHA-256 of canonical JSON of the full ProofBundle. The stable
+    identifier of "what was verified" inside a VerificationReceipt.
+    """
+    return sha256(canonical_json(bundle)).digest()
+
+
+def verification_receipt_sign_bytes(r: VerificationReceipt) -> bytes:
+    """Canonical bytes signed to produce VerificationReceipt.signature."""
+    scope = sorted(r.granted_scope) if r.granted_scope else []
+    signable: dict = {
+        "bundle_hash": r.bundle_hash,
+        "decision": r.decision,
+        "prev_hash": r.prev_hash,
+        "verified_at": r.verified_at,
+        "verifier_id": r.verifier_id,
+        "verifier_pub": {
+            "ed25519": r.verifier_pub.ed25519,
+            "ml_dsa_65": r.verifier_pub.ml_dsa_65,
+        },
+        "version": r.version,
+    }
+    if r.agent_id:
+        signable["agent_id"] = r.agent_id
+    if r.error_reason:
+        signable["error_reason"] = r.error_reason
+    if scope:
+        signable["granted_scope"] = scope
+    if r.human_id:
+        signable["human_id"] = r.human_id
+    return canonical_json(signable)
+
+
+def issue_verification_receipt(
+    bundle: ProofBundle,
+    result: VerifyResult,
+    verifier_id: str,
+    verifier_pub: HybridPublicKey,
+    verifier_priv: HybridPrivateKey,
+    prev_hash: Optional[bytes],
+    verified_at: int,
+) -> VerificationReceipt:
+    """Construct and hybrid-sign a VerificationReceipt over a (bundle,
+    result, prev) triple (SPEC §17.5). ``prev_hash`` is 32 zero bytes for
+    genesis.
+    """
+    prev = prev_hash if prev_hash is not None else b"\x00" * 32
+    if len(prev) != 32:
+        raise ValueError(f"prev_hash must be 32 bytes, got {len(prev)}")
+    r = VerificationReceipt(
+        version=1,
+        verifier_id=verifier_id,
+        verifier_pub=verifier_pub,
+        bundle_hash=bundle_hash(bundle),
+        decision=result.identity_status,
+        human_id=result.human_id,
+        agent_id=result.agent_id,
+        granted_scope=list(result.granted_scope),
+        error_reason=result.error_reason,
+        verified_at=verified_at,
+        prev_hash=prev,
+        signature=HybridSignature(ed25519=b"", ml_dsa_65=b""),
+    )
+    r.signature = sign_both(verification_receipt_sign_bytes(r), verifier_priv)
+    return r
+
+
+def verify_verification_receipt(r: VerificationReceipt) -> Optional[str]:
+    """Verify the hybrid signature on a VerificationReceipt. Returns None
+    iff both component signatures verify; otherwise an error string.
+    """
+    if r.version != 1:
+        return f"unsupported version {r.version}"
+    if len(r.bundle_hash) != 32:
+        return f"bundle_hash must be 32 bytes, got {len(r.bundle_hash)}"
+    if len(r.prev_hash) != 32:
+        return f"prev_hash must be 32 bytes, got {len(r.prev_hash)}"
+    return verify_both(
+        verification_receipt_sign_bytes(r), r.signature, r.verifier_pub
+    )
+
+
+def receipt_hash(r: VerificationReceipt) -> bytes:
+    """SHA-256 of a receipt's canonical signable bytes. Use as ``prev_hash``
+    for the next receipt in the chain.
+    """
+    return sha256(verification_receipt_sign_bytes(r)).digest()
+
+
+# ----------------------------------------------------------------------
+# SPEC §17.6 — PolicyVerdict
+# ----------------------------------------------------------------------
+
+def verifier_context_hash(ctx: Optional[VerifierContext]) -> bytes:
+    """SHA-256 of the canonical-byte representation of the policy-relevant
+    subset of a VerifierContext (SPEC §17.6). The ``invocations_in_window``
+    callback is excluded — closures don't serialize.
+    """
+    c = ctx if ctx is not None else VerifierContext()
+    # has_* booleans derived from field presence so the canonical hash matches
+    # the Go reference's explicit Has* fields.
+    signable = {
+        "current_alt_m": c.current_alt_m if c.current_alt_m is not None else 0.0,
+        "current_lat": c.current_lat if c.current_lat is not None else 0.0,
+        "current_lon": c.current_lon if c.current_lon is not None else 0.0,
+        "current_speed_mps": (
+            c.current_speed_mps if c.current_speed_mps is not None else 0.0
+        ),
+        "has_amount": c.requested_amount is not None,
+        "has_location": c.current_lat is not None and c.current_lon is not None,
+        "has_speed": c.current_speed_mps is not None,
+        "requested_amount": (
+            c.requested_amount if c.requested_amount is not None else 0.0
+        ),
+        "requested_currency": c.requested_currency or "",
+    }
+    return sha256(canonical_json(signable)).digest()
+
+
+def policy_verdict_sign_bytes(v: PolicyVerdict) -> bytes:
+    """Canonical bytes over which a PolicyVerdict's MAC is computed."""
+    signable = {
+        "agent_id": v.agent_id,
+        "allow": v.allow,
+        "context_hash": v.context_hash,
+        "issued_at": v.issued_at,
+        "scope": v.scope,
+        "valid_until": v.valid_until,
+        "verdict_id": v.verdict_id,
+        "version": v.version,
+    }
+    return canonical_json(signable)
+
+
+def issue_policy_verdict(
+    verdict_id: str,
+    agent_id: str,
+    scope: str,
+    allow: bool,
+    context_hash: bytes,
+    issued_at: int,
+    valid_until: int,
+    policy_secret: bytes,
+) -> PolicyVerdict:
+    """Construct and HMAC-bind a PolicyVerdict (SPEC §17.6)."""
+    if not policy_secret:
+        raise ValueError("policy_secret must not be empty")
+    if not verdict_id:
+        raise ValueError("verdict_id must not be empty")
+    if not agent_id:
+        raise ValueError("agent_id must not be empty")
+    if not scope:
+        raise ValueError("scope must not be empty")
+    if len(context_hash) != 32:
+        raise ValueError(f"context_hash must be 32 bytes, got {len(context_hash)}")
+    if valid_until <= issued_at:
+        raise ValueError("valid_until must be strictly after issued_at")
+    v = PolicyVerdict(
+        version=1,
+        verdict_id=verdict_id,
+        agent_id=agent_id,
+        scope=scope,
+        allow=allow,
+        context_hash=context_hash,
+        issued_at=issued_at,
+        valid_until=valid_until,
+        mac=b"",
+    )
+    v.mac = stdlib_hmac.new(
+        policy_secret, policy_verdict_sign_bytes(v), sha256
+    ).digest()
+    return v
+
+
+def verify_policy_verdict_e(
+    v: PolicyVerdict,
+    policy_secret: bytes,
+    expected_agent_id: str,
+    expected_scope: str,
+    expected_context_hash: bytes,
+    now: int,
+) -> Optional[str]:
+    """Check a PolicyVerdict's HMAC and validity. Returns None on success
+    (cached allow); returns ``"policy_verdict_denied: ..."`` on cached
+    deny; any other return value indicates the verdict is unusable.
+    """
+    if not policy_secret:
+        return "policy_secret must not be empty"
+    if v.version != 1:
+        return f"unsupported version {v.version}"
+    if len(v.context_hash) != 32:
+        return f"context_hash must be 32 bytes, got {len(v.context_hash)}"
+    if len(v.mac) != 32:
+        return f"mac must be 32 bytes, got {len(v.mac)}"
+    want = stdlib_hmac.new(
+        policy_secret, policy_verdict_sign_bytes(v), sha256
+    ).digest()
+    if not stdlib_hmac.compare_digest(want, v.mac):
+        return "policy_verdict MAC invalid"
+    if now < v.issued_at:
+        return "policy_verdict not yet valid"
+    if now > v.valid_until:
+        return "policy_verdict expired"
+    if v.agent_id != expected_agent_id:
+        return "policy_verdict agent_id mismatch"
+    if v.scope != expected_scope:
+        return "policy_verdict scope mismatch"
+    if not stdlib_hmac.compare_digest(v.context_hash, expected_context_hash):
+        return "policy_verdict context_hash mismatch"
+    if not v.allow:
+        return f'policy_verdict_denied: cached deny for scope "{v.scope}"'
+    return None

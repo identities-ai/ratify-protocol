@@ -190,7 +190,9 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
             return _invalid("bad_signature", f"cert {i}: {sig_err}")
         # Constraint evaluation — each cert's first-class constraints must all
         # pass against the caller-supplied VerifierContext. Fail-closed.
-        constraint_err = evaluate_constraints(cert, opts.context, now)
+        constraint_err = evaluate_constraints(
+            cert, opts.context, now, opts.constraint_evaluators
+        )
         if constraint_err is not None:
             status = "constraint_denied"
             if "constraint_unverifiable" in constraint_err:
@@ -250,7 +252,51 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
                 f'required scope "{opts.required_scope}" not in effective delegation scope',
             )
 
-    # --- Advanced Policy Gating (SPEC §17.2) ---
+    result = VerifyResult(
+        valid=True,
+        identity_status="authorized_agent",
+        human_id=human_id,
+        agent_id=bundle.agent_id,
+        granted_scope=effective,
+    )
+
+    # --- Anchor resolution (SPEC §17.8) ---
+    if opts.anchor_resolver is not None:
+        try:
+            anchor = opts.anchor_resolver.resolve_anchor(human_id)
+        except Exception:  # noqa: BLE001
+            anchor = None  # non-fatal
+        if anchor is not None:
+            result.anchor = anchor
+
+    # --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+    if (
+        opts.policy_verdict is not None
+        and opts.required_scope
+        and opts.policy_secret is not None
+    ):
+        from .crypto import verifier_context_hash, verify_policy_verdict_e
+        try:
+            ctx_hash = verifier_context_hash(opts.context)
+            verdict_err = verify_policy_verdict_e(
+                opts.policy_verdict,
+                opts.policy_secret,
+                bundle.agent_id,
+                opts.required_scope,
+                ctx_hash,
+                now,
+            )
+        except Exception as e:  # noqa: BLE001
+            return _invalid("policy_error", f"verifier context hash failed: {e}")
+        if verdict_err is None:
+            return result  # cached allow — skip live policy
+        if verdict_err.startswith("policy_verdict_denied"):
+            return _fail_with_status(
+                "scope_denied",
+                "policy verdict (cached) denied access",
+            )
+        # else: stale verdict — fall through to live policy
+
     if opts.policy is not None:
         try:
             allow, pol_err = opts.policy.evaluate_policy(bundle, opts.context)
@@ -264,13 +310,7 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
                 "advanced policy evaluation denied access",
             )
 
-    return VerifyResult(
-        valid=True,
-        identity_status="authorized_agent",
-        human_id=human_id,
-        agent_id=bundle.agent_id,
-        granted_scope=effective,
-    )
+    return result
 
 
 # ----------------------------------------------------------------------

@@ -157,7 +157,10 @@ def _decode_key_rotation(raw: dict) -> KeyRotationStatement:
 
 
 # Load all fixtures at collection time
-_FIXTURE_FILES = sorted(p for p in FIXTURE_DIR.glob("*.json"))
+# Exclude cross_sdk_vectors.json — different schema, loaded by test_cross_sdk.py.
+_FIXTURE_FILES = sorted(
+    p for p in FIXTURE_DIR.glob("*.json") if p.name != "cross_sdk_vectors.json"
+)
 assert _FIXTURE_FILES, f"no fixtures found in {FIXTURE_DIR}"
 
 

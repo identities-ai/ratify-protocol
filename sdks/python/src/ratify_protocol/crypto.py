@@ -600,10 +600,57 @@ def verify_session_token(
 # ----------------------------------------------------------------------
 
 def bundle_hash(bundle: ProofBundle) -> bytes:
-    """SHA-256 of canonical JSON of the full ProofBundle. The stable
-    identifier of "what was verified" inside a VerificationReceipt.
+    """SHA-256 of a fixed-shape canonical form of a ProofBundle (SPEC §17.5).
+
+    Cross-SDK byte equivalence requires every field to be present (no
+    omitempty), keys alphabetical at every level, and empty bytes / empty
+    lists / zero ints serialized as ``""`` / ``[]`` / ``0``. Every reference
+    SDK (Go, TypeScript, Python, Rust) produces the same 32-byte digest for
+    the same logical bundle. Verified against
+    ``testvectors/v1/cross_sdk_vectors.json``.
     """
-    return sha256(canonical_json(bundle)).digest()
+    delegations = []
+    for d in bundle.delegations:
+        delegations.append({
+            "cert_id": d.cert_id,
+            "constraints": d.constraints or [],
+            "expires_at": d.expires_at,
+            "issued_at": d.issued_at,
+            "issuer_id": d.issuer_id,
+            "issuer_pub_key": {
+                "ed25519": d.issuer_pub_key.ed25519,
+                "ml_dsa_65": d.issuer_pub_key.ml_dsa_65,
+            },
+            "scope": d.scope,
+            "signature": {
+                "ed25519": d.signature.ed25519,
+                "ml_dsa_65": d.signature.ml_dsa_65,
+            },
+            "subject_id": d.subject_id,
+            "subject_pub_key": {
+                "ed25519": d.subject_pub_key.ed25519,
+                "ml_dsa_65": d.subject_pub_key.ml_dsa_65,
+            },
+            "version": d.version,
+        })
+    signable = {
+        "agent_id": bundle.agent_id,
+        "agent_pub_key": {
+            "ed25519": bundle.agent_pub_key.ed25519,
+            "ml_dsa_65": bundle.agent_pub_key.ml_dsa_65,
+        },
+        "challenge": bundle.challenge or b"",
+        "challenge_at": bundle.challenge_at,
+        "challenge_sig": {
+            "ed25519": bundle.challenge_sig.ed25519,
+            "ml_dsa_65": bundle.challenge_sig.ml_dsa_65,
+        },
+        "delegations": delegations,
+        "session_context": bundle.session_context or b"",
+        "stream_id": bundle.stream_id or b"",
+        "stream_seq": bundle.stream_seq or 0,
+    }
+    return sha256(canonical_json(signable)).digest()
 
 
 def verification_receipt_sign_bytes(r: VerificationReceipt) -> bytes:

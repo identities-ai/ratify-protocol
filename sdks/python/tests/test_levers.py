@@ -346,6 +346,10 @@ def test_anchor_resolver_error_is_non_fatal():
     assert res.anchor is None
 
 
+# Cross-SDK byte equivalence is covered by test_cross_sdk.py which loads
+# the canonical fixture file testvectors/v1/cross_sdk_vectors.json.
+
+
 def test_audit_observes_anchor():
     bundle, _, human_id = _good_bundle()
     anchor = Anchor(type="email", provider="google",

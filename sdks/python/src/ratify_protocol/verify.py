@@ -6,6 +6,7 @@ must verify for any signature check to pass.
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Optional
 
 from .constraints import evaluate_constraints
@@ -183,8 +184,19 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
                 )
             if rev:
                 return _revoked(human_id, bundle.agent_id)
-        elif opts.is_revoked is not None and opts.is_revoked(cert.cert_id):
-            return _revoked(human_id, bundle.agent_id)
+        elif opts.is_revoked is not None:
+            # Legacy v1 closure. Emit a DeprecationWarning per SPEC §17.11
+            # the first time this code path is reached. Scheduled for
+            # removal in v1.0.0-beta.1; new code should use opts.revocation.
+            warnings.warn(
+                "VerifyOptions.is_revoked is deprecated and will be removed "
+                "in v1.0.0-beta.1. Use VerifyOptions.revocation "
+                "(RevocationProvider) instead — see SPEC §17.1 / §17.11.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if opts.is_revoked(cert.cert_id):
+                return _revoked(human_id, bundle.agent_id)
         sig_err = verify_delegation_signature_e(cert)
         if sig_err is not None:
             return _invalid("bad_signature", f"cert {i}: {sig_err}")

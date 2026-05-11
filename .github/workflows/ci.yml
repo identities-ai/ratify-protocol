@@ -138,7 +138,11 @@ jobs:
 
       - name: check sign-off
         run: |
-          commits=$(git rev-list ${{ github.event.pull_request.base.sha }}..HEAD)
+          # Walk every commit in the PR. Skip merge commits — GitHub
+          # auto-creates a synthetic "Merge X into Y" commit for the
+          # PR test ref and never asks the author to sign it; requiring
+          # DCO on those would fail every PR.
+          commits=$(git rev-list --no-merges ${{ github.event.pull_request.base.sha }}..HEAD)
           for c in $commits; do
             msg=$(git log -1 --format=%B "$c")
             if ! echo "$msg" | grep -qE '^Signed-off-by: '; then

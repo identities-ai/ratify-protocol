@@ -359,6 +359,12 @@ pub struct VerifyResult {
     pub granted_scope: Vec<String>,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub error_reason: String,
+    /// Resolved external-identity binding for `human_id`, populated when
+    /// `VerifyOptions.anchor_resolver` is set on a successful verification.
+    /// Lets downstream `AuditProvider`s record an unforgeable chain from
+    /// verification event → identity attestation. (SPEC §17.8)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub anchor: Option<Anchor>,
 }
 
 /// Signed list of revoked cert IDs, served by the issuer.
@@ -505,12 +511,90 @@ pub trait AuditProvider {
     fn log_verification(&self, result: &VerifyResult, bundle: &ProofBundle);
 }
 
+/// Pluggable evaluator for extension constraint types (SPEC §17.7).
+///
+/// Built-in types (geo_*, time_window, max_*) are evaluated by the SDK
+/// directly; an evaluator is consulted only for types the SDK does not
+/// natively understand. Returning `Ok(true)` allows; `Ok(false)` denies as
+/// `constraint_denied`; `Err("constraint_unverifiable: ...")` routes to
+/// `constraint_unverifiable`; other `Err(...)` denies with the wrapped
+/// reason.
+pub trait ConstraintEvaluator {
+    fn evaluate(
+        &self,
+        constraint: &Constraint,
+        cert_id: &str,
+        context: &VerifierContext,
+        now: i64,
+    ) -> Result<(), String>;
+}
+
+/// Resolves a verified `human_id` to its external-identity binding
+/// (SPEC §17.8). Errors are non-fatal: the verifier MUST NOT fail the bundle
+/// because the resolver errored — it silently leaves `VerifyResult.anchor`
+/// `None` and continues.
+pub trait AnchorResolver {
+    fn resolve_anchor(&self, human_id: &str) -> Result<Option<Anchor>, String>;
+}
+
+/// HMAC-bound cached policy decision (SPEC §17.6). The policy equivalent
+/// of `SessionToken`: issued once by a commercial policy backend, accepted
+/// locally by the verifier for the rest of `valid_until` without re-calling
+/// the backend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyVerdict {
+    pub version: i32,
+    pub verdict_id: String,
+    pub agent_id: String,
+    pub scope: String,
+    pub allow: bool,
+    #[serde(with = "crate::canonical::base64_bytes")]
+    pub context_hash: Vec<u8>, // 32 bytes
+    pub issued_at: i64,
+    pub valid_until: i64,
+    #[serde(with = "crate::canonical::base64_bytes")]
+    pub mac: Vec<u8>, // 32 bytes — HMAC-SHA256
+}
+
+/// Verifier-signed attestation that a specific ProofBundle was verified at
+/// a specific moment with a specific outcome (SPEC §17.5).
+///
+/// Receipts chain by `prev_hash` (SHA-256 of previous receipt's canonical
+/// signable bytes) so a missing or backdated entry is detectable. Genesis
+/// uses 32 zero bytes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationReceipt {
+    pub version: i32,
+    pub verifier_id: String,
+    pub verifier_pub: HybridPublicKey,
+    #[serde(with = "crate::canonical::base64_bytes")]
+    pub bundle_hash: Vec<u8>, // 32 bytes
+    pub decision: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub human_id: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub agent_id: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub granted_scope: Vec<String>,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub error_reason: String,
+    pub verified_at: i64,
+    #[serde(with = "crate::canonical::base64_bytes")]
+    pub prev_hash: Vec<u8>, // 32 bytes; zeros for genesis
+    pub signature: HybridSignature,
+}
+
 /// Options passed to `verify_bundle`.
 pub struct VerifyOptions<'a> {
     /// Required scope; empty string skips scope checking.
     pub required_scope: String,
-    /// Legacy v1 revocation closure. Superseded by `revocation` (SPEC §17.1);
-    /// if both are set the provider wins.
+    /// Legacy v1 revocation closure.
+    ///
+    /// **Deprecated:** Use `revocation` (SPEC §17.1) instead. The closure
+    /// has no way to surface lookup failures; `revocation` returns
+    /// `Result<bool, String>` and fails closed on error. Slated for removal
+    /// in v1.0.0-beta.1. When both fields are set, `revocation` wins.
+    #[deprecated(since = "1.0.0-alpha.7", note = "use `revocation` (SPEC §17.1) instead")]
     pub is_revoked: Option<Box<dyn Fn(&str) -> bool + 'a>>,
     /// Pluggable revocation provider (SPEC §17.1). Takes precedence over
     /// `is_revoked`. A provider error fails the bundle as `revocation_error`.
@@ -537,10 +621,30 @@ pub struct VerifyOptions<'a> {
     /// (success AND failure). Provider errors are swallowed — auditing cannot
     /// alter the verdict.
     pub audit: Option<Box<dyn AuditProvider + 'a>>,
+    /// Per-Verify registry of extension constraint evaluators (SPEC §17.7).
+    /// Built-in types are evaluated by the SDK directly; the registry is
+    /// only consulted for unknown types.
+    pub constraint_evaluators:
+        Option<std::collections::HashMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
+    /// Fast-path cached policy decision (SPEC §17.6). When present and
+    /// valid (MAC matches `policy_secret`, within window, agent/scope/
+    /// context_hash matches), the verifier skips the live `policy` hook.
+    /// Stale verdicts fall back to live policy.
+    pub policy_verdict: Option<PolicyVerdict>,
+    /// HMAC secret used to verify `policy_verdict.mac`.
+    pub policy_secret: Option<Vec<u8>>,
+    /// Anchor resolver (SPEC §17.8). When set on a Valid=true verification,
+    /// the verifier populates `VerifyResult.anchor`. Resolver errors are
+    /// non-fatal.
+    pub anchor_resolver: Option<Box<dyn AnchorResolver + 'a>>,
 }
 
 impl<'a> Default for VerifyOptions<'a> {
     fn default() -> Self {
+        // The Default impl must initialize the deprecated field for backwards
+        // compatibility. Suppressing the warning is intentional and isolated
+        // to this single construction site.
+        #[allow(deprecated)]
         Self {
             required_scope: String::new(),
             is_revoked: None,
@@ -552,6 +656,10 @@ impl<'a> Default for VerifyOptions<'a> {
             context: VerifierContext::default(),
             policy: None,
             audit: None,
+            constraint_evaluators: None,
+            policy_verdict: None,
+            policy_secret: None,
+            anchor_resolver: None,
         }
     }
 }

@@ -10,6 +10,7 @@
 pub mod canonical;
 pub mod constraints;
 pub mod crypto;
+pub mod receipts;
 pub mod scope;
 pub mod types;
 pub mod verify;
@@ -42,11 +43,16 @@ pub use scope::{
     SCOPE_MEETING_SPEAK, SCOPE_MEETING_VIDEO, SCOPE_PAYMENTS_AUTHORIZE, SCOPE_PAYMENTS_RECEIVE,
     SCOPE_PAYMENTS_SEND, SCOPE_TRANSACT_PURCHASE, SCOPE_TRANSACT_SELL,
 };
+pub use receipts::{
+    bundle_hash, issue_policy_verdict, issue_verification_receipt, receipt_hash,
+    verifier_context_hash, verify_policy_verdict, verify_verification_receipt,
+};
 pub use types::{
-    AgentIdentity, Anchor, AuditProvider, Constraint, DelegationCert, HumanRoot, HybridPrivateKey,
-    HybridPublicKey, HybridSignature, IdentityStatus, KeyRotationStatement, PolicyProvider,
-    ProofBundle, ReceiptParty, ReceiptPartySignature, RevocationList, RevocationProvider,
-    RevocationPush, SessionToken, StreamContext, TransactionReceipt, TransactionReceiptResult,
+    AgentIdentity, Anchor, AnchorResolver, AuditProvider, Constraint, ConstraintEvaluator,
+    DelegationCert, HumanRoot, HybridPrivateKey, HybridPublicKey, HybridSignature, IdentityStatus,
+    KeyRotationStatement, PolicyProvider, PolicyVerdict, ProofBundle, ReceiptParty,
+    ReceiptPartySignature, RevocationList, RevocationProvider, RevocationPush, SessionToken,
+    StreamContext, TransactionReceipt, TransactionReceiptResult, VerificationReceipt,
     VerifierContext, VerifyOptions, VerifyResult, WitnessEntry, CHALLENGE_WINDOW_SECONDS,
     ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
     MLDSA65_PUBLIC_KEY_SIZE, MLDSA65_SIGNATURE_SIZE, PROTOCOL_VERSION,

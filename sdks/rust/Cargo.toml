@@ -41,3 +41,7 @@ path = "tests/conformance.rs"
 [[test]]
 name = "providers"
 path = "tests/providers.rs"
+
+[[test]]
+name = "levers"
+path = "tests/levers.rs"

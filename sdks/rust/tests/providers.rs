@@ -143,6 +143,7 @@ fn revocation_provider_error_fails_closed() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the deprecated `is_revoked` precedence
 fn revocation_provider_takes_precedence_over_closure() {
     let (bundle, cert_id) = good_bundle();
     let provider = FakeRevocation::new().with_revoked(&cert_id);

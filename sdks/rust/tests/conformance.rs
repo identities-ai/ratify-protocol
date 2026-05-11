@@ -272,6 +272,10 @@ fn run_verify_fixture(fx: &Fixture) {
         context,
         policy: None,
         audit: None,
+        constraint_evaluators: None,
+        policy_verdict: None,
+        policy_secret: None,
+        anchor_resolver: None,
     };
     let got = verify_bundle(&bundle, &opts);
 

@@ -44,7 +44,8 @@ pub use scope::{
     SCOPE_PAYMENTS_SEND, SCOPE_TRANSACT_PURCHASE, SCOPE_TRANSACT_SELL,
 };
 pub use receipts::{
-    bundle_hash, issue_policy_verdict, issue_verification_receipt, receipt_hash,
+    bundle_hash, issue_policy_verdict, issue_verification_receipt,
+    policy_verdict_sign_bytes_buf, receipt_hash, verification_receipt_sign_bytes_buf,
     verifier_context_hash, verify_policy_verdict, verify_verification_receipt,
 };
 pub use types::{

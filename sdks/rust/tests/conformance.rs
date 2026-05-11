@@ -590,6 +590,14 @@ fn run_all_fixtures() {
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().map(|e| e == "json").unwrap_or(false))
+        // cross_sdk_vectors.json has a different schema and is loaded by
+        // tests/cross_sdk.rs.
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n != "cross_sdk_vectors.json")
+                .unwrap_or(true)
+        })
         .collect();
     paths.sort();
 

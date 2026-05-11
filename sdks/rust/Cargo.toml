@@ -45,3 +45,7 @@ path = "tests/providers.rs"
 [[test]]
 name = "levers"
 path = "tests/levers.rs"
+
+[[test]]
+name = "cross_sdk"
+path = "tests/cross_sdk.rs"

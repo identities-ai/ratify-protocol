@@ -28,12 +28,86 @@ type HmacSha256 = Hmac<Sha256>;
 // Lever 1: VerificationReceipt — SPEC §17.5
 // ---------------------------------------------------------------------------
 
-/// SHA-256 of the canonical JSON of a ProofBundle. The stable identifier
-/// of "what was verified" inside a VerificationReceipt.
+/// SHA-256 of a fixed-shape canonical form of a ProofBundle (SPEC §17.5).
+///
+/// Cross-SDK byte equivalence requires every field to be present (no skip),
+/// keys alphabetical at every level, and empty bytes / empty lists / zero
+/// ints serialized as `""` / `[]` / `0`. Every reference SDK (Go,
+/// TypeScript, Python, Rust) produces the same 32-byte digest for the
+/// same logical bundle. Verified against
+/// `testvectors/v1/cross_sdk_vectors.json`.
 pub fn bundle_hash(bundle: &ProofBundle) -> Result<Vec<u8>, String> {
-    let v = serde_json::to_value(bundle).map_err(|e| format!("serialize bundle: {}", e))?;
-    let bytes = canonical_json(&v);
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let mut delegations = Vec::with_capacity(bundle.delegations.len());
+    for d in &bundle.delegations {
+        let mut m = serde_json::Map::new();
+        m.insert("cert_id".into(), serde_json::json!(d.cert_id));
+        m.insert(
+            "constraints".into(),
+            serde_json::to_value(&d.constraints).map_err(|e| e.to_string())?,
+        );
+        m.insert("expires_at".into(), serde_json::json!(d.expires_at));
+        m.insert("issued_at".into(), serde_json::json!(d.issued_at));
+        m.insert("issuer_id".into(), serde_json::json!(d.issuer_id));
+        m.insert(
+            "issuer_pub_key".into(),
+            serde_json::to_value(&d.issuer_pub_key).map_err(|e| e.to_string())?,
+        );
+        m.insert("scope".into(), serde_json::json!(d.scope));
+        m.insert(
+            "signature".into(),
+            serde_json::to_value(&d.signature).map_err(|e| e.to_string())?,
+        );
+        m.insert("subject_id".into(), serde_json::json!(d.subject_id));
+        m.insert(
+            "subject_pub_key".into(),
+            serde_json::to_value(&d.subject_pub_key).map_err(|e| e.to_string())?,
+        );
+        m.insert("version".into(), serde_json::json!(d.version));
+        delegations.push(serde_json::Value::Object(m));
+    }
+    let mut signable = serde_json::Map::new();
+    signable.insert("agent_id".into(), serde_json::json!(bundle.agent_id));
+    signable.insert(
+        "agent_pub_key".into(),
+        serde_json::to_value(&bundle.agent_pub_key).map_err(|e| e.to_string())?,
+    );
+    signable.insert(
+        "challenge".into(),
+        serde_json::json!(STANDARD.encode(&bundle.challenge)),
+    );
+    signable.insert(
+        "challenge_at".into(),
+        serde_json::json!(bundle.challenge_at),
+    );
+    signable.insert(
+        "challenge_sig".into(),
+        serde_json::to_value(&bundle.challenge_sig).map_err(|e| e.to_string())?,
+    );
+    signable.insert(
+        "delegations".into(),
+        serde_json::Value::Array(delegations),
+    );
+    signable.insert(
+        "session_context".into(),
+        serde_json::json!(STANDARD.encode(&bundle.session_context)),
+    );
+    signable.insert(
+        "stream_id".into(),
+        serde_json::json!(STANDARD.encode(&bundle.stream_id)),
+    );
+    signable.insert("stream_seq".into(), serde_json::json!(bundle.stream_seq));
+    let bytes = canonical_json(&serde_json::Value::Object(signable));
     Ok(Sha256::digest(&bytes).to_vec())
+}
+
+/// Canonical signable bytes for a VerificationReceipt. Public so tests
+/// (and any AuditProvider that wants to chain its own signatures) can
+/// recompute the bytes.
+pub fn verification_receipt_sign_bytes_buf(
+    r: &VerificationReceipt,
+) -> Result<Vec<u8>, String> {
+    verification_receipt_sign_bytes(r)
 }
 
 fn verification_receipt_sign_bytes(r: &VerificationReceipt) -> Result<Vec<u8>, String> {
@@ -178,6 +252,12 @@ struct PolicyVerdictSignable<'a> {
     valid_until: i64,
     verdict_id: &'a str,
     version: i32,
+}
+
+/// Canonical signable bytes for a PolicyVerdict. Public so tests and
+/// alternative issuance backends can recompute the bytes.
+pub fn policy_verdict_sign_bytes_buf(v: &PolicyVerdict) -> Result<Vec<u8>, String> {
+    policy_verdict_sign_bytes(v)
 }
 
 fn policy_verdict_sign_bytes(v: &PolicyVerdict) -> Result<Vec<u8>, String> {

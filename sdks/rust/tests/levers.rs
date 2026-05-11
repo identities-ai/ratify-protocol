@@ -500,6 +500,9 @@ fn audit_observes_anchor() {
     assert_eq!(a.provider, "google");
 }
 
+// Cross-SDK byte equivalence is covered by tests/cross_sdk.rs which loads
+// the canonical fixture file testvectors/v1/cross_sdk_vectors.json.
+
 // Silence unused-import warnings.
 #[allow(dead_code)]
 fn _silence() {

@@ -19,7 +19,7 @@ import {
   signChallenge,
   verifyBundle,
   hexEncode,
-} from "@identitiesai/ratify-protocol";
+} from "@identities-ai/ratify-protocol";
 
 function banner(text: string) {
   console.log();

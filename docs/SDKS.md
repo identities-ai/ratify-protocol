@@ -17,7 +17,7 @@ A protocol with one SDK is a product. A protocol with SDKs everywhere is a proto
 | Language | Package | Location | Test status |
 |---|---|---|---|
 | **Go** | `github.com/identities-ai/ratify-protocol` | module root | ✅ 59/59 fixtures + unit tests |
-| **TypeScript / JavaScript** | `@identitiesai/ratify-protocol` | `sdks/typescript/` | ✅ 59/59 fixtures |
+| **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 59/59 fixtures |
 | **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 59/59 fixtures |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 59/59 fixtures |
 | Swift | — | planned (mobile wallet) | — |
@@ -209,7 +209,7 @@ The `sdks/typescript/` directory is the reference template for what a mature SDK
 
 SDKs MAY live in this monorepo under `sdks/<language>/` (the recommended path for actively-maintained implementations), OR in their own repositories (if the maintainer prefers independent release cadence). Either is conformant as long as the fixture contract is met on every release.
 
-Package names SHOULD follow the pattern `@identitiesai/ratify-protocol` (JS scope), `identitiesai-ratify-protocol` (Python/PyPI), `ratify-protocol` (Rust crate), etc. Namespace squatting or confusingly-similar names on public registries are not acceptable.
+Package names SHOULD follow the pattern `@identities-ai/ratify-protocol` (JS scope), `identitiesai-ratify-protocol` (Python/PyPI), `ratify-protocol` (Rust crate), etc. Namespace squatting or confusingly-similar names on public registries are not acceptable.
 
 When transfer to a foundation (Linux Foundation, OpenSSF, etc.) happens in the future, SDK trademarks follow the protocol's naming convention and ownership moves accordingly.
 

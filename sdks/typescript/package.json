@@ -1,6 +1,6 @@
 {
-  "name": "@identitiesai/ratify-protocol",
-  "version": "1.0.0-alpha.5",
+  "name": "@identities-ai/ratify-protocol",
+  "version": "1.0.0-alpha.6",
   "description": "Cryptographic delegation protocol for AI agents \u2014 TypeScript reference SDK.",
   "type": "module",
   "main": "./dist/index.js",

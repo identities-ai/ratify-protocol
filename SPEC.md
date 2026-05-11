@@ -1062,7 +1062,7 @@ Both sides emit their own challenges, receive a bundle, and verify independently
 
 *When:* Two agents conclude a bounded, high-stakes transaction (payment, contract, data exchange). Both sides exchange `HybridSignature`s over application-defined terms (a JSON object whose format is application-specific) and retain the paired signed artifact as a cryptographic receipt. The signature primitive is authoritative; the `terms` schema is outside this spec.
 
-The `TransactionReceipt` envelope is normative as of v1.0.0-alpha.5 (§5.14). [`docs/TRANSACTION_RECEIPTS.md`](docs/TRANSACTION_RECEIPTS.md) provides expanded usage guidance. It is covered by canonical receipt fixtures in `testvectors/v1/`.
+The `TransactionReceipt` envelope is normative as of v1.0.0-alpha.6 (§5.14). [`docs/TRANSACTION_RECEIPTS.md`](docs/TRANSACTION_RECEIPTS.md) provides expanded usage guidance. It is covered by canonical receipt fixtures in `testvectors/v1/`.
 
 See `docs/AGENT_TO_AGENT.md` for detailed sequence diagrams of all three patterns.
 
@@ -1102,7 +1102,7 @@ GET /v1/ratify/scopes
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (59 fixtures at v1.0.0-alpha.5):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (59 fixtures at v1.0.0-alpha.6):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.
@@ -1202,4 +1202,4 @@ The protocol provides the cryptographic tools (revocation, rotation, witness). T
 
 ---
 
-*v1.0.0-alpha.5 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.6 · Identities AI · CC-BY-4.0 · Patent Pending*

@@ -23,7 +23,7 @@ ratify-protocol/
 ├── *.go (at root)       ← Go reference
 ├── cmd/ratify-testvectors/  ← the generator; anyone can reproduce fixtures from seeds
 └── sdks/
-    ├── typescript/      ← @identitiesai/ratify-protocol
+    ├── typescript/      ← @identities-ai/ratify-protocol
     ├── python/          ← ratify-protocol
     └── rust/            ← ratify-protocol
     (future: swift, java, c, etc.)
@@ -44,7 +44,7 @@ Contributors who prefer to iterate on a language in their own repository may do 
 
 ```
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
-1.0.0-alpha.5  →  current release
+1.0.0-alpha.6  →  current release
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs
@@ -68,14 +68,14 @@ During the alpha/beta/rc phase, **fixture bytes MAY change between versions**. A
 Every SDK release is tagged in git as `sdk-<language>-<version>`:
 
 ```
-sdk-go-v1.0.0-alpha.5
-sdk-typescript-v1.0.0-alpha.5
-sdk-python-v1.0.0-alpha.5
-sdk-rust-v1.0.0-alpha.5
-v1.0.0-alpha.5          ← the protocol-level tag; implies all above at the same version
+sdk-go-v1.0.0-alpha.6
+sdk-typescript-v1.0.0-alpha.6
+sdk-python-v1.0.0-alpha.6
+sdk-rust-v1.0.0-alpha.6
+v1.0.0-alpha.6          ← the protocol-level tag; implies all above at the same version
 ```
 
-The protocol-level tag `v1.0.0-alpha.5` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.5`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
+The protocol-level tag `v1.0.0-alpha.6` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.6`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
 
 ## 4. The release workflow
 
@@ -84,12 +84,14 @@ The protocol-level tag `v1.0.0-alpha.5` is what Go modules consume (`go get gith
 From a clean main branch:
 
 ```bash
-make release VERSION=v1.0.0-alpha.5 PUSH=1
+make release VERSION=v1.0.0-alpha.6 PUSH=1
 ```
 
-That single command runs the steps below in order. Any failure aborts. By default the release is local-only (`PUSH=0`, `PUBLISH=0`, `GITHUB_RELEASE=0`) so maintainers can verify the exact commit and tags before pushing. Use `PUSH=1` to push `main` and all coordinated tags. Use `PUBLISH=1` only when publishing to npm / PyPI / crates.io is intended.
+That single command runs the steps below in order. Any failure aborts. By default the release is local-only (`PUSH=0`, `PUBLISH=0`, `GITHUB_RELEASE=0`) so maintainers can verify the exact commit and tags before pushing. Use `PUSH=1` to push `main` and all coordinated tags.
 
-While the repository is private, use `PUSH=1 PUBLISH=0 GITHUB_RELEASE=0` for coordinated private tags only. After the public open-source launch, use `PUBLISH=1 GITHUB_RELEASE=1` only for versions that should be visible in public registries and GitHub Releases.
+**After the public launch, registry publishing is handled by CI**, not by `PUBLISH=1` on the local `make release` invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local `make release` flow still owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
+
+`PUBLISH=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It should be the exception, not the rule.
 
 ### 4.2 What the workflow does, step-by-step
 
@@ -105,15 +107,15 @@ While the repository is private, use `PUSH=1 PUBLISH=0 GITHUB_RELEASE=0` for coo
    - Rust: `cd sdks/rust && cargo build --all-targets && cargo test`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
-6. **Tag the protocol version.** `git tag v1.0.0-alpha.5`.
-7. **Tag each SDK.** `git tag sdk-go-v1.0.0-alpha.5`, etc.
+6. **Tag the protocol version.** `git tag v1.0.0-alpha.6`.
+7. **Tag each SDK.** `git tag sdk-go-v1.0.0-alpha.6`, etc.
 8. **Push main and tags if `PUSH=1`.** The script pushes `main`, then `vX.Y.Z...` plus every `sdk-*` tag explicitly.
-9. **Publish to registries if `PUBLISH=1`, per SDK.**
+9. **(Optional / emergency only) Publish to registries if `PUBLISH=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
-   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identitiesai/ratify-protocol@1.0.0-alpha.5`.
-   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==1.0.0a3`.
-   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "1.0.0-alpha.5"`.
-10. **GitHub release if `GITHUB_RELEASE=1`.** Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
+   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@1.0.0-alpha.6`.
+   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==1.0.0a5`.
+   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "1.0.0-alpha.6"`.
+10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now — see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
 11. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
 
 ### 4.3 What happens on failure mid-publish
@@ -124,7 +126,7 @@ Publishing to four registries is not atomic. If step 9 fails partway through (np
 2. Documents which registries have the release and which don't.
 3. Does NOT roll back already-published versions (npm and PyPI do not generally allow un-publishing of installed packages; crates.io explicitly forbids it).
 4. Marks the release as "partial" in the GitHub release page.
-5. Requires manual reconciliation — typically by publishing a patch version (`v1.0.0-alpha.5`) with the missing SDKs.
+5. Requires manual reconciliation — typically by publishing a patch version (`v1.0.0-alpha.6`) with the missing SDKs.
 
 This is why steps 1-8 (preflight + test + tag) must all succeed before step 9 runs.
 
@@ -247,14 +249,14 @@ cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../
 cd sdks/rust && cargo test --quiet && cd ../..
 
 # 4. Commit version bumps.
-git commit -sm "chore: bump to v1.0.0-alpha.5"
+git commit -sm "chore: bump to v1.0.0-alpha.6"
 
 # 5. Tag.
-git tag v1.0.0-alpha.5
-git tag sdk-go-v1.0.0-alpha.5
-git tag sdk-typescript-v1.0.0-alpha.5
-git tag sdk-python-v1.0.0-alpha.5
-git tag sdk-rust-v1.0.0-alpha.5
+git tag v1.0.0-alpha.6
+git tag sdk-go-v1.0.0-alpha.6
+git tag sdk-typescript-v1.0.0-alpha.6
+git tag sdk-python-v1.0.0-alpha.6
+git tag sdk-rust-v1.0.0-alpha.6
 
 # 6. Push.
 git push && git push --tags
@@ -270,5 +272,100 @@ cd sdks/rust && cargo publish && cd ../..
 The manual checklist above is retained as explanatory context. The authoritative command is:
 
 ```bash
-make release VERSION=v1.0.0-alpha.5 PUSH=1
+make release VERSION=v1.0.0-alpha.6 PUSH=1
 ```
+
+---
+
+## 5. CI-driven publishing (tag-triggered)
+
+After the public launch, the canonical publishing path is **push a tag → CI publishes**. The workflow lives at [`.github/workflows/release.yml`](../.github/workflows/release.yml). Nothing on your laptop ever calls `cargo publish` / `twine upload` / `npm publish` — those commands run inside an ephemeral GitHub Actions runner, with credentials that GitHub Actions exclusively controls.
+
+This is a stronger trust model than the manual flow for three reasons:
+
+1. **No long-lived registry credentials on developer laptops.** A stolen laptop can no longer publish a hostile version of the SDK.
+2. **Every published artifact is provably built from a known commit.** PyPI's Trusted Publisher records the GitHub Actions run that built each wheel; npm provenance attaches a Sigstore signature linking the package to the build run; crates.io publishes are constrained to the workflow's environment.
+3. **Tests gate every publish, every time.** Even if you skipped tests locally, the runner re-runs them on a fresh checkout and refuses to publish on red.
+
+### 5.1 The release flow, end-to-end
+
+```
+[ make release VERSION=v1.0.0-alpha.6 PUSH=1 ]   ←  on your laptop
+                       │
+                       │  bumps SDK versions, runs full test matrix locally,
+                       │  creates the protocol tag v1.0.0-alpha.6 and the
+                       │  four sdk-* sub-tags, pushes main + tags.
+                       ▼
+[ GitHub receives tag v* push ]
+                       │
+                       ▼
+[ .github/workflows/release.yml fires ]
+                       │
+                       ├─→ gate-tests              ← Go vet/test, TS conformance,
+                       │   (fresh runner)            Python conformance, Rust
+                       │                             conformance, testvector
+                       │                             determinism, release-sync,
+                       │                             tag ↔ SDK version coherence.
+                       │   ↓ red? everything stops.
+                       │
+                       ├─→ publish-pypi            ← OIDC via Trusted Publisher.
+                       │   environment: pypi-publish  No token. May require
+                       │                             reviewer approval.
+                       │
+                       ├─→ publish-crates          ← CARGO_REGISTRY_TOKEN
+                       │   environment: crates-publish
+                       │
+                       ├─→ publish-npm             ← Disabled until org is
+                       │   if NPM_PUBLISH_ENABLED=true   approved (variable
+                       │   environment: npm-publish      gated). NPM_TOKEN +
+                       │                                 provenance.
+                       │
+                       ├─→ publish-go              ← pkg.go.dev auto-discovery
+                       │                             pre-warm via proxy fetch.
+                       │
+                       └─→ github-release          ← runs after publishes.
+                           Notes + testvectors bundle. Marked pre-release
+                           if tag contains alpha/beta/rc.
+```
+
+### 5.2 Secrets and environments
+
+These are configured once on the GitHub repo. See [`docs/REGISTRY_SETUP.md`](./REGISTRY_SETUP.md) for the step-by-step.
+
+| Secret / variable           | Used by         | Notes                                                          |
+|-----------------------------|-----------------|----------------------------------------------------------------|
+| `CARGO_REGISTRY_TOKEN`      | publish-crates  | crates.io API token scoped to `publish-update` on `ratify-protocol`. |
+| `NPM_TOKEN`                 | publish-npm     | npm granular token scoped to `@identities-ai` org. Not used until variable below is set. |
+| `NPM_PUBLISH_ENABLED` (var) | publish-npm     | Repo variable. Set to `true` to activate the npm job after the npm org is approved. |
+| _(no secret for PyPI)_      | publish-pypi    | Trusted Publisher via OIDC — no long-lived secret stored anywhere. |
+
+Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `crates-publish`, `npm-publish`). Adding a required reviewer to an environment turns that publish into a manual-approval step — useful for prod-grade releases.
+
+### 5.3 What `gate-tests` checks before any publish runs
+
+1. `go vet ./...` clean
+2. `go test -race -count=1 ./...` passes
+3. `go mod tidy` produces no diff
+4. Test vectors regenerate byte-identical to committed
+5. `scripts/check-release-sync.sh` confirms package versions, lockfiles, docs, and SDK constants are all aligned
+6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 59 fixtures
+7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 59 fixtures
+8. Rust `cargo build --all-targets` clean, conformance tests pass against all 59 fixtures
+9. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
+
+If any check fails, all publish jobs are skipped. No partial state is created. You fix the failure, force-delete the tag (`git tag -d`, `git push --delete origin tagname`), re-run `make release`, push again.
+
+### 5.4 Recovery from partial publish
+
+Publishing to four registries is not atomic. If PyPI succeeds and crates.io fails (or vice versa):
+
+1. **Do not delete the tag.** Same-version re-publishing is rejected by the successful registry but is idempotent.
+2. **Inspect the failed job.** crates.io / npm / PyPI all have specific error messages — usually network, transient quota, or "version already exists" (which means another runner published before this one).
+3. **Re-run the failed job from the GitHub Actions UI.** The successful jobs are skipped (PyPI rejects same-version upload cleanly with `skip-existing: true`; crates.io rejects with a clean error code; npm rejects with a clean error code).
+4. **If a published artifact is genuinely bad** (security issue, broken build), yank rather than unpublish. See [`docs/REGISTRY_SETUP.md`](./REGISTRY_SETUP.md) §6.
+
+### 5.5 Pre-release vs stable
+
+The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively — installers default to skipping them unless explicitly asked. This means alpha consumers self-select via `pip install ratify-protocol==1.0.0a5` (explicit) rather than catching alphas accidentally on `pip install ratify-protocol`.
+
+This is the right behavior during the alpha series. When `v1.0.0` (stable) ships, the same workflow will produce a non-prerelease GitHub Release and the registries will surface it as the default install target.

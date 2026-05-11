@@ -7,7 +7,7 @@
     "demo": "node --import tsx/esm demo.ts"
   },
   "dependencies": {
-    "@identitiesai/ratify-protocol": "file:../../sdks/typescript"
+    "@identities-ai/ratify-protocol": "file:../../sdks/typescript"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

@@ -8,7 +8,7 @@ When a human authorizes an agent, when one agent transacts with another agent, o
 
 JSON wire format. No blockchain. No tokens. Open spec under CC-BY-4.0.
 
-**Status:** main branch after v1.0.0-alpha.5 — reference implementation complete, 59 canonical test vectors, cross-language interop proven (Go + TypeScript + Python + Rust). Patent Pending.
+**Status:** main branch after v1.0.0-alpha.6 — reference implementation complete, 59 canonical test vectors, cross-language interop proven (Go + TypeScript + Python + Rust). Patent Pending.
 
 Maintained by Identities AI, Inc. Identities AI, Inc. owns the Ratify Protocol™ trademark and the patent-pending invention.
 
@@ -98,7 +98,7 @@ ratify-protocol/
 │   └── v1/                      59 canonical fixtures (JSON)
 │
 ├── sdks/
-│   ├── typescript/              @identitiesai/ratify-protocol (npm)
+│   ├── typescript/              @identities-ai/ratify-protocol (npm)
 │   ├── python/                  ratify-protocol (PyPI)
 │   └── rust/                    ratify-protocol (crates.io)
 │
@@ -137,7 +137,7 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. Any impl
 | Implementation | Language | Status |
 |---|---|---|
 | `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 |
-| `@identitiesai/ratify-protocol` (`sdks/typescript`) | TypeScript | ✅ 59/59 |
+| `@identities-ai/ratify-protocol` (`sdks/typescript`) | TypeScript | ✅ 59/59 |
 | `ratify-protocol` (`sdks/python`) | Python | ✅ 59/59 |
 | `ratify-protocol` (`sdks/rust`) | Rust | ✅ 59/59 |
 | *C / C++ via C ABI* | — | planned (embedded systems / appliances) |

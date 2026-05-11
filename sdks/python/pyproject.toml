@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ratify-protocol"
-version = "1.0.0a5"
+version = "1.0.0a6"
 description = "Cryptographic trust protocol for human-agent and agent-agent interactions — Python reference SDK."
 readme = "README.md"
 authors = [{name = "Identities AI"}]

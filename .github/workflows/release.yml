@@ -1,0 +1,284 @@
+name: Release
+
+# Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
+# workflow runs the full CI matrix, then publishes each SDK to its registry
+# only if all tests pass. Per-SDK publish steps are conditional and continue
+# on individual failure so a partial failure on one registry doesn't block
+# the others. See docs/RELEASES.md for the full release process and how to
+# recover from partial-publish states.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Gate: every CI check must pass before any publish job runs. We re-run the
+  # tests here rather than depending on the CI workflow because tag pushes are
+  # the moment of truth — fresh runner, fresh checkout, no inherited state.
+  # ──────────────────────────────────────────────────────────────────────────
+  gate-tests:
+    name: Gate — all tests must pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Go
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test -race -count=1 ./...
+      - name: go mod tidy must be clean
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      # Testvector determinism — proves fixtures regenerate byte-identical
+      - name: regenerate fixtures
+        run: go run ./cmd/ratify-testvectors -out /tmp/regen
+      - name: diff fixtures
+        run: diff -rq testvectors/v1/ /tmp/regen/
+
+      # Release metadata sync — every SDK version + lock matches
+      - name: release-sync
+        run: ./scripts/check-release-sync.sh
+
+      # TypeScript
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: sdks/typescript/package-lock.json
+      - name: TS install
+        working-directory: sdks/typescript
+        run: npm install --no-audit --no-fund
+      - name: TS typecheck
+        working-directory: sdks/typescript
+        run: npx tsc --noEmit
+      - name: TS conformance (59 fixtures)
+        working-directory: sdks/typescript
+        run: npm run test:conformance
+
+      # Python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Python install
+        working-directory: sdks/python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: Python conformance (59 fixtures)
+        working-directory: sdks/python
+        run: pytest -v
+
+      # Rust
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/rust
+      - name: Rust build
+        working-directory: sdks/rust
+        run: cargo build --all-targets --release
+      - name: Rust conformance (59 fixtures)
+        working-directory: sdks/rust
+        run: cargo test --release
+
+      # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
+      # declared version. The release-sync script already proves cross-SDK
+      # alignment; here we prove the tag matches that aligned version.
+      - name: tag matches SDK versions
+        run: |
+          set -eu
+          tag="${GITHUB_REF#refs/tags/}"          # e.g. v1.0.0-alpha.6
+          tag_clean="${tag#v}"                     # 1.0.0-alpha.6
+          rust_version=$(grep -E '^version = "' sdks/rust/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          ts_version=$(node -p "require('./sdks/typescript/package.json').version")
+          py_version=$(grep -E '^version = "' sdks/python/pyproject.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          # Python uses PEP 440 form (1.0.0a6) — accept either form.
+          py_clean_from_tag=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
+          [ "$rust_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ rust $rust_version"; exit 1; }
+          [ "$ts_version"   = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ ts $ts_version"; exit 1; }
+          [ "$py_version"   = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
+          echo "✓ tag $tag matches all SDK versions"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PyPI — Trusted Publisher (OIDC). No long-lived secret. Requires that the
+  # 'pypi-publish' environment exist on the repo and that PyPI is configured
+  # with this repo + workflow as a trusted publisher for the project. See
+  # docs/REGISTRY_SETUP.md for the one-time PyPI UI steps.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: gate-tests
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol/
+    permissions:
+      id-token: write  # required for OIDC exchange with PyPI
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: build sdist + wheel
+        working-directory: sdks/python
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -lh dist/
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdks/python/dist
+          # Skip-existing tolerates the same-version re-run case (e.g.
+          # workflow re-triggered after a partial failure). PyPI rejects
+          # actual version conflicts independently.
+          skip-existing: true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # crates.io — token-based (cargo doesn't yet support OIDC). Token stored as
+  # a repo secret. Token should be scoped to publish-update for the
+  # 'ratify-protocol' crate; see docs/REGISTRY_SETUP.md.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-crates:
+    name: Publish to crates.io
+    needs: gate-tests
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-publish
+      url: https://crates.io/crates/ratify-protocol
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/rust
+      - name: cargo publish (dry-run sanity)
+        working-directory: sdks/rust
+        run: cargo publish --dry-run
+      - name: cargo publish
+        working-directory: sdks/rust
+        # cargo publish rejects re-uploads of the same version cleanly, so
+        # rerunning this job after a registry hiccup is safe.
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # npm — DISABLED until the @identities-ai org is approved by npm support.
+  # The job is left in place so flipping a single env flag activates it.
+  # Re-enable: change `if: ${{ vars.NPM_PUBLISH_ENABLED == 'true' }}` to
+  # always run, or set the repo variable NPM_PUBLISH_ENABLED=true.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-npm:
+    name: Publish to npm
+    needs: gate-tests
+    runs-on: ubuntu-latest
+    if: ${{ vars.NPM_PUBLISH_ENABLED == 'true' }}
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@identities-ai/ratify-protocol
+    permissions:
+      contents: read
+      id-token: write  # supports npm provenance attestation
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: sdks/typescript/package-lock.json
+      - name: install
+        working-directory: sdks/typescript
+        run: npm install --no-audit --no-fund
+      - name: build
+        working-directory: sdks/typescript
+        run: npm run build
+      - name: publish (with provenance)
+        working-directory: sdks/typescript
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Go: nothing to do. Tag push + pkg.go.dev auto-discovery handle it.
+  # This job exists as a tracking marker in the workflow graph so the
+  # release summary tells you Go is "ready" rather than "missing".
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-go:
+    name: Publish Go (auto via pkg.go.dev)
+    needs: gate-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: trigger pkg.go.dev index refresh
+        # Fetching the module against the new tag is the documented way to
+        # prompt pkg.go.dev to index the version sooner. Failures here are
+        # non-fatal — pkg.go.dev will pick it up eventually either way.
+        continue-on-error: true
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          curl -fsSL "https://proxy.golang.org/github.com/identities-ai/ratify-protocol/@v/${tag}.info" || true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # GitHub Release — last so it only appears once registry publishes have
+  # been attempted. Attaches the testvectors/v1 bundle as a release asset so
+  # downstream consumers can grab the canonical conformance fixtures
+  # alongside the version they're using.
+  # ──────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: [publish-pypi, publish-crates, publish-go]
+    if: always() && needs.gate-tests.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: bundle testvectors
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          tar -czf "ratify-testvectors-${tag}.tar.gz" testvectors/
+          ls -lh ratify-testvectors-*.tar.gz
+      - name: create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            ratify-testvectors-*.tar.gz
+          body: |
+            ## Ratify Protocol ${{ github.ref_name }}
+
+            Open cryptographic trust protocol for AI agent authorization.
+
+            **Install:**
+            ```bash
+            # Go
+            go get github.com/identities-ai/ratify-protocol@${{ github.ref_name }}
+            # Python
+            pip install ratify-protocol==$(node -p "process.argv[1].replace(/^v/,'').replace('-alpha.','a').replace('-beta.','b').replace('-rc.','rc')" '${{ github.ref_name }}')
+            # Rust
+            cargo add ratify-protocol@$(echo '${{ github.ref_name }}' | sed 's/^v//')
+            ```
+
+            See [docs.identities.ai](https://docs.identities.ai) for full quickstarts and the [SPEC](./SPEC.md) for the normative protocol specification.
+
+            **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+            **Patent:** U.S. patent application pending.
+            **License:** Apache-2.0 (code) · CC-BY-4.0 (spec text); see [`docs/LICENSES.md`](./docs/LICENSES.md).

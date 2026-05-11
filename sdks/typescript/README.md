@@ -1,4 +1,4 @@
-# @identitiesai/ratify-protocol
+# @identities-ai/ratify-protocol
 
 **TypeScript reference SDK for the Ratify Protocol v1 — cryptographic delegation for AI agents.**
 
@@ -16,7 +16,7 @@ Byte-for-byte interoperable with the Go reference implementation. Tested against
 ## Install
 
 ```bash
-npm install @identitiesai/ratify-protocol
+npm install @identities-ai/ratify-protocol
 ```
 
 ## Three verbs, three examples
@@ -32,7 +32,7 @@ import {
   SCOPE_MEETING_ATTEND,
   SCOPE_MEETING_SPEAK,
   type DelegationCert,
-} from "@identitiesai/ratify-protocol";
+} from "@identities-ai/ratify-protocol";
 
 // Alice creates her root (once, ever)
 const { root, privateKey: alicePriv } = await generateHumanRoot();
@@ -63,7 +63,7 @@ import {
   signChallenge,
   generateChallenge,
   type ProofBundle,
-} from "@identitiesai/ratify-protocol";
+} from "@identities-ai/ratify-protocol";
 
 // Challenge comes from the verifier, over the wire
 const challenge = /* received from verifier */ new Uint8Array(32);
@@ -84,7 +84,7 @@ const bundle: ProofBundle = {
 ### 3. VERIFY — any third party checks the proof
 
 ```ts
-import { verifyBundle, SCOPE_MEETING_ATTEND } from "@identitiesai/ratify-protocol";
+import { verifyBundle, SCOPE_MEETING_ATTEND } from "@identities-ai/ratify-protocol";
 
 const result = await verifyBundle(bundle, {
   required_scope: SCOPE_MEETING_ATTEND,
@@ -107,7 +107,7 @@ The protocol supports three key-custody modes with different trust tradeoffs. Se
 The user generates and holds their own keypair. No third party can sign on their behalf.
 
 ```ts
-import { generateHumanRoot, issueDelegation } from "@identitiesai/ratify-protocol";
+import { generateHumanRoot, issueDelegation } from "@identities-ai/ratify-protocol";
 
 // User generates keypair on their own device — private key never leaves
 const { root, privateKey } = await generateHumanRoot();
@@ -131,7 +131,7 @@ A user who started in custodial mode can migrate to self-custody at any time usi
 import {
   generateHumanRoot,
   issueKeyRotationStatement,
-} from "@identitiesai/ratify-protocol";
+} from "@identities-ai/ratify-protocol";
 
 // User generates a NEW keypair on their device
 const { root: newRoot, privateKey: newPrivateKey } = await generateHumanRoot();
@@ -159,7 +159,7 @@ await issueKeyRotationStatement(stmt, oldCustodialPrivateKey, newPrivateKey);
 Signed payloads follow Ratify's canonical JSON rules (see `RATIFY_PROTOCOL.md` §6.3.1). The SDK exposes:
 
 ```ts
-import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identitiesai/ratify-protocol";
+import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identities-ai/ratify-protocol";
 ```
 
 These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 59 published test vectors through the TS code and asserts byte-for-byte equivalence.
@@ -174,7 +174,7 @@ import {
   intersectScopes,
   isSensitive,
   validateScopes,
-} from "@identitiesai/ratify-protocol";
+} from "@identities-ai/ratify-protocol";
 
 expandScopes(["meeting:*"]);
 // ["meeting:attend", "meeting:chat", "meeting:share_screen", "meeting:speak", "meeting:video"]
@@ -190,7 +190,7 @@ Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` ex
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 
 ```ts
-import { CUSTOM_SCOPE_PREFIX, validateScopes } from "@identitiesai/ratify-protocol";
+import { CUSTOM_SCOPE_PREFIX, validateScopes } from "@identities-ai/ratify-protocol";
 
 validateScopes(["custom:acme:inventory:read"]); // → null (valid)
 ```

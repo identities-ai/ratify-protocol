@@ -215,25 +215,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratify-protocol"
-version = "1.0.0-alpha.5"
-dependencies = [
- "base64",
- "chrono",
- "chrono-tz",
- "ed25519-dalek",
- "hex",
- "hmac",
- "pqcrypto-mldsa",
- "pqcrypto-traits",
- "rand_core",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
-]
-
-[[package]]
 name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,6 +498,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom 0.2.17",
+]
+
+[[package]]
+name = "ratify-protocol"
+version = "1.0.0-alpha.6"
+dependencies = [
+ "base64",
+ "chrono",
+ "chrono-tz",
+ "ed25519-dalek",
+ "hex",
+ "hmac",
+ "pqcrypto-mldsa",
+ "pqcrypto-traits",
+ "rand_core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
 ]
 
 [[package]]

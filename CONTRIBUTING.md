@@ -9,6 +9,39 @@ Thanks for considering a contribution. Ratify is a protocol project, which means
 - **New language SDKs:** open an issue to coordinate. We want to keep SDK quality and naming consistent across languages.
 - **Breaking changes to v1:** extremely unlikely at this stage. Breaking changes require a version bump (v2) per `SPEC.md` §10.
 
+## How changes land in `main`
+
+`main` is protected. **No direct pushes are accepted, including from maintainers.** Every change goes through a pull request, and the CI checks must pass before merge.
+
+The flow:
+
+```
+1. git checkout -b feat/short-descriptive-name
+2. ... do the work, commit with -s (DCO) ...
+3. git push -u origin feat/short-descriptive-name
+4. gh pr create     (or open the PR in the GitHub UI)
+5. Wait for CI to go green. Required checks:
+     • Go tests
+     • Test vectors regenerate byte-identical
+     • Release metadata stays in sync
+     • TypeScript / Python / Rust SDK conformance (59 fixtures each)
+     • DCO sign-off
+6. Address review feedback. Every inline comment thread must be resolved.
+7. If `main` moved while the PR was open: click "Update branch" — strict
+   merging is enabled, so the PR must be up to date with main.
+8. Squash-and-merge is the default. The feature branch is auto-deleted.
+```
+
+Force-pushes to `main` are blocked. Branch deletion of `main` is blocked. Linear history is required (no merge commits). If a PR conflicts with the linear-history rule, rebase locally and force-push to your own feature branch — that's fine; only `main` is protected.
+
+Branch naming:
+
+- `feat/...` — new feature or SDK improvement
+- `fix/...` — bug fix
+- `docs/...` — documentation only
+- `chore/...` — tooling, CI, build, dependencies
+- `spec/...` — normative protocol change (requires a linked design issue)
+
 ## Developer Certificate of Origin (DCO)
 
 By contributing, you certify the [DCO](https://developercertificate.org/) v1.1 — the short form is: *you have the right to submit what you're submitting, under the project's license.* Sign off every commit with `git commit -s`, which appends `Signed-off-by: Your Name <your@email>` to the message.

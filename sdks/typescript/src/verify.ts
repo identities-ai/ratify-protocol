@@ -55,6 +55,21 @@ export async function verifyBundle(
   bundle: ProofBundle,
   opts: VerifyOptions = {},
 ): Promise<VerifyResult> {
+  const res = await _verifyBundle(bundle, opts);
+  if (opts.audit) {
+    try {
+      await opts.audit.logVerification(res, bundle);
+    } catch (e) {
+      // Ignored per reference implementation.
+    }
+  }
+  return res;
+}
+
+async function _verifyBundle(
+  bundle: ProofBundle,
+  opts: VerifyOptions,
+): Promise<VerifyResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
   // --- Basic structure ---
@@ -273,13 +288,27 @@ export async function verifyBundle(
     }
   }
 
-  return {
+  const res: VerifyResult = {
     valid: true,
     human_id: humanID,
     agent_id: bundle.agent_id,
     granted_scope: effective,
     identity_status: "authorized_agent",
   };
+
+  // --- Advanced Policy Gating (SPEC §17.2) ---
+  if (opts.policy) {
+    try {
+      const ok = await opts.policy.evaluatePolicy(bundle, opts.context ?? {});
+      if (!ok) {
+        return failWithStatus("scope_denied", "advanced policy evaluation denied access");
+      }
+    } catch (err: any) {
+      return invalid("policy_error", `advanced policy evaluation failed: ${err}`);
+    }
+  }
+
+  return res;
 }
 
 // ============================================================================

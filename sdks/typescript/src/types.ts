@@ -338,11 +338,31 @@ export interface VerifyReceiptOptions {
   party_verify_options?: (role: string) => VerifyOptions;
 }
 
+/**
+ * PolicyProvider evaluates application-level policy that exceeds the
+ * deterministic constraint logic defined in SPEC §5.7.2. (SPEC §17.2)
+ */
+export interface PolicyProvider {
+  evaluatePolicy(bundle: ProofBundle, context: VerifierContext): Promise<boolean>;
+}
+
+/**
+ * AuditProvider handles the persistence of verification receipts for
+ * compliance and forensic analysis. (SPEC §17.3)
+ */
+export interface AuditProvider {
+  logVerification(result: VerifyResult, bundle: ProofBundle): Promise<void>;
+}
+
 export interface VerifyOptions {
   /** The scope the verifier requires. Empty skips the scope check. */
   required_scope?: string;
   /** Callback returning true if the given cert_id is revoked. */
   is_revoked?: (certID: string) => boolean;
+  /** Advanced policy evaluator hook (SPEC §17.2). */
+  policy?: PolicyProvider;
+  /** Verification audit logging hook (SPEC §17.3). */
+  audit?: AuditProvider;
   /**
    * Force a fresh revocation check for high-stakes endpoints. The SDK cannot
    * fetch revocation state itself; callers must provide is_revoked when this

@@ -17,7 +17,18 @@ use crate::types::{
     MLDSA65_PUBLIC_KEY_SIZE, PROTOCOL_VERSION,
 };
 
+/// `verify_bundle` is the entry point. Audit hook (SPEC §17.3) wraps the
+/// inner verifier so it fires on every call — success AND failure — and its
+/// errors are swallowed so auditing never alters the verdict.
 pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult {
+    let res = verify_bundle_inner(bundle, opts);
+    if let Some(audit) = &opts.audit {
+        audit.log_verification(&res, bundle);
+    }
+    res
+}
+
+fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult {
     let now = opts.now.unwrap_or_else(|| {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -160,10 +171,10 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         );
     }
 
-    if opts.force_revocation_check && opts.is_revoked.is_none() {
+    if opts.force_revocation_check && opts.is_revoked.is_none() && opts.revocation.is_none() {
         return invalid(
             "force_revocation_no_callback",
-            "force_revocation_check is true but is_revoked callback is missing",
+            "force_revocation_check is true but neither is_revoked nor revocation provider is set",
         );
     }
 
@@ -181,7 +192,19 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
         if now < cert.issued_at {
             return invalid("not_yet_valid", &format!("cert {} is not yet valid", i));
         }
-        if let Some(check) = &opts.is_revoked {
+        // Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+        if let Some(provider) = &opts.revocation {
+            match provider.is_revoked(&cert.cert_id) {
+                Err(e) => {
+                    return invalid(
+                        "revocation_error",
+                        &format!("cert {}: revocation lookup failed: {}", i, e),
+                    )
+                }
+                Ok(true) => return revoked(&human_id, &bundle.agent_id),
+                Ok(false) => {}
+            }
+        } else if let Some(check) = &opts.is_revoked {
             if check(&cert.cert_id) {
                 return revoked(&human_id, &bundle.agent_id);
             }
@@ -280,6 +303,25 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
                 opts.required_scope
             ),
         );
+    }
+
+    // --- Advanced Policy Gating (SPEC §17.2) ---
+    if let Some(policy) = &opts.policy {
+        match policy.evaluate_policy(bundle, &opts.context) {
+            Err(e) => {
+                return invalid(
+                    "policy_error",
+                    &format!("advanced policy evaluation failed: {}", e),
+                )
+            }
+            Ok(false) => {
+                return fail_with_status(
+                    "scope_denied",
+                    "advanced policy evaluation denied access",
+                )
+            }
+            Ok(true) => {}
+        }
     }
 
     VerifyResult {

@@ -43,12 +43,12 @@ pub use scope::{
     SCOPE_PAYMENTS_SEND, SCOPE_TRANSACT_PURCHASE, SCOPE_TRANSACT_SELL,
 };
 pub use types::{
-    AgentIdentity, Anchor, Constraint, DelegationCert, HumanRoot, HybridPrivateKey,
-    HybridPublicKey, HybridSignature, IdentityStatus, KeyRotationStatement, ProofBundle,
-    ReceiptParty, ReceiptPartySignature, RevocationList, RevocationPush, SessionToken,
-    StreamContext, TransactionReceipt, TransactionReceiptResult, VerifierContext, VerifyOptions,
-    VerifyResult, WitnessEntry, CHALLENGE_WINDOW_SECONDS, ED25519_PUBLIC_KEY_SIZE,
-    ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH, MLDSA65_PUBLIC_KEY_SIZE,
-    MLDSA65_SIGNATURE_SIZE, PROTOCOL_VERSION,
+    AgentIdentity, Anchor, AuditProvider, Constraint, DelegationCert, HumanRoot, HybridPrivateKey,
+    HybridPublicKey, HybridSignature, IdentityStatus, KeyRotationStatement, PolicyProvider,
+    ProofBundle, ReceiptParty, ReceiptPartySignature, RevocationList, RevocationProvider,
+    RevocationPush, SessionToken, StreamContext, TransactionReceipt, TransactionReceiptResult,
+    VerifierContext, VerifyOptions, VerifyResult, WitnessEntry, CHALLENGE_WINDOW_SECONDS,
+    ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
+    MLDSA65_PUBLIC_KEY_SIZE, MLDSA65_SIGNATURE_SIZE, PROTOCOL_VERSION,
 };
 pub use verify::{verify_bundle, verify_streamed_turn, verify_transaction_receipt};

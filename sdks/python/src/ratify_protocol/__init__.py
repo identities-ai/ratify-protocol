@@ -127,6 +127,7 @@ from .types import (
     PROTOCOL_VERSION,
     AgentIdentity,
     Anchor,
+    AuditProvider,
     Constraint,
     DelegationCert,
     HumanRoot,
@@ -136,10 +137,12 @@ from .types import (
     IdentityStatus,
     KeyRotationReason,
     KeyRotationStatement,
+    PolicyProvider,
     ProofBundle,
     ReceiptParty,
     ReceiptPartySignature,
     RevocationList,
+    RevocationProvider,
     RevocationPush,
     SessionToken,
     StreamContext,
@@ -152,7 +155,7 @@ from .types import (
 )
 from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
 
-__version__ = "1.0.0a6"
+__version__ = "1.0.0a7"
 
 __all__ = [
     # types
@@ -166,6 +169,8 @@ __all__ = [
     "RevocationList", "RevocationPush", "WitnessEntry", "IdentityStatus",
     "TransactionReceipt", "ReceiptParty", "ReceiptPartySignature",
     "TransactionReceiptResult",
+    # provider interfaces (SPEC §17)
+    "RevocationProvider", "PolicyProvider", "AuditProvider",
     # crypto
     "derive_id", "generate_hybrid_keypair", "hybrid_keypair_from_seeds",
     "generate_human_root", "generate_agent",

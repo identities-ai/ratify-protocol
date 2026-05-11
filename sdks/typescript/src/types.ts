@@ -339,8 +339,25 @@ export interface VerifyReceiptOptions {
 }
 
 /**
+ * RevocationProvider determines if a `cert_id` is currently revoked.
+ * (SPEC §17.1)
+ *
+ * Implementations return `[isRevoked, errorOrNull]`. A non-null error fails
+ * the bundle as `revocation_error` — SDKs MUST NOT treat a lookup failure
+ * as "not revoked." On the verifier's hot path; implementations should be
+ * O(1) at call time.
+ */
+export interface RevocationProvider {
+  isRevoked(certID: string): Promise<[boolean, Error | null]>;
+}
+
+/**
  * PolicyProvider evaluates application-level policy that exceeds the
  * deterministic constraint logic defined in SPEC §5.7.2. (SPEC §17.2)
+ *
+ * Evaluated AFTER all cryptographic, temporal, revocation, constraint, and
+ * scope-intersection checks pass. Resolving to `false` denies with
+ * `scope_denied`; throwing fails closed as `policy_error`.
  */
 export interface PolicyProvider {
   evaluatePolicy(bundle: ProofBundle, context: VerifierContext): Promise<boolean>;
@@ -349,6 +366,9 @@ export interface PolicyProvider {
 /**
  * AuditProvider handles the persistence of verification receipts for
  * compliance and forensic analysis. (SPEC §17.3)
+ *
+ * Invoked on every `verify_bundle` call (success AND failure). Errors are
+ * swallowed by the verifier — auditing MUST NOT alter the verdict.
  */
 export interface AuditProvider {
   logVerification(result: VerifyResult, bundle: ProofBundle): Promise<void>;
@@ -357,16 +377,24 @@ export interface AuditProvider {
 export interface VerifyOptions {
   /** The scope the verifier requires. Empty skips the scope check. */
   required_scope?: string;
-  /** Callback returning true if the given cert_id is revoked. */
+  /**
+   * Legacy v1 revocation closure. Superseded by `revocation` (SPEC §17.1);
+   * if both are set the provider wins.
+   */
   is_revoked?: (certID: string) => boolean;
+  /**
+   * Pluggable revocation provider (SPEC §17.1). Takes precedence over
+   * `is_revoked`. A provider error fails the bundle as `revocation_error`.
+   */
+  revocation?: RevocationProvider;
   /** Advanced policy evaluator hook (SPEC §17.2). */
   policy?: PolicyProvider;
   /** Verification audit logging hook (SPEC §17.3). */
   audit?: AuditProvider;
   /**
    * Force a fresh revocation check for high-stakes endpoints. The SDK cannot
-   * fetch revocation state itself; callers must provide is_revoked when this
-   * is true.
+   * fetch revocation state itself; callers must provide is_revoked or a
+   * revocation provider when this is true.
    */
   force_revocation_check?: boolean;
   /** Override "now" for testing. Unix seconds. Default: current time. */

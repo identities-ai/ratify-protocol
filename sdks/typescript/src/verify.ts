@@ -185,10 +185,10 @@ async function _verifyBundle(
     return invalid("id_mismatch", "agent ID does not match delegation subject ID");
   }
 
-  if (opts.force_revocation_check && !opts.is_revoked) {
+  if (opts.force_revocation_check && !opts.is_revoked && !opts.revocation) {
     return invalid(
       "force_revocation_no_callback",
-      "force_revocation_check is true but is_revoked callback is missing",
+      "force_revocation_check is true but neither is_revoked nor revocation provider is set",
     );
   }
 
@@ -205,7 +205,19 @@ async function _verifyBundle(
     if (now < cert.issued_at) {
       return invalid("not_yet_valid", `cert ${i} is not yet valid`);
     }
-    if (opts.is_revoked && opts.is_revoked(cert.cert_id)) {
+    // Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+    if (opts.revocation) {
+      const [rev, revErr] = await opts.revocation.isRevoked(cert.cert_id);
+      if (revErr) {
+        return invalid(
+          "revocation_error",
+          `cert ${i}: revocation lookup failed: ${revErr.message ?? revErr}`,
+        );
+      }
+      if (rev) {
+        return revoked(humanID, bundle.agent_id);
+      }
+    } else if (opts.is_revoked && opts.is_revoked(cert.cert_id)) {
       return revoked(humanID, bundle.agent_id);
     }
     const sigErr = await verifyDelegationSignatureE(cert);

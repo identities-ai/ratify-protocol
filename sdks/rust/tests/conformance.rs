@@ -260,6 +260,7 @@ fn run_verify_fixture(fx: &Fixture) {
     let opts = VerifyOptions {
         required_scope: opts_raw.required_scope.clone(),
         is_revoked,
+        revocation: None,
         force_revocation_check: false,
         now: Some(opts_raw.now),
         session_context: if opts_raw.session_context.is_empty() {
@@ -269,6 +270,8 @@ fn run_verify_fixture(fx: &Fixture) {
         },
         stream,
         context,
+        policy: None,
+        audit: None,
     };
     let got = verify_bundle(&bundle, &opts);
 

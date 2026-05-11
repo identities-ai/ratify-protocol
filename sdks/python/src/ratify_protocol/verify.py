@@ -43,11 +43,25 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
       3. Per-cert: version, temporal validity, revocation, hybrid signature, linkage.
       4. Challenge freshness + hybrid signature.
       5. Effective scope (intersection across chain) contains required_scope.
+      6. Optional advanced policy (SPEC §17.2) — fail-closed.
 
     Fail-closed: any single-component signature failure fails the whole check.
+    Audit hook (SPEC §17.3) is invoked at the end on every call (success
+    AND failure). Provider errors from audit are intentionally swallowed.
     """
     if opts is None:
         opts = VerifyOptions()
+    res = _verify_bundle_inner(bundle, opts)
+    if opts.audit is not None:
+        try:
+            opts.audit.log_verification(res, bundle)
+        except Exception:
+            # Audit MUST NOT alter the verdict. SPEC §17.3.
+            pass
+    return res
+
+
+def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResult:
     now = opts.now if opts.now is not None else int(time.time())
 
     # --- Basic structure ---
@@ -145,10 +159,10 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
     if bundle.agent_id != first_cert.subject_id:
         return _invalid("id_mismatch", "agent ID does not match delegation subject ID")
 
-    if opts.force_revocation_check and opts.is_revoked is None:
+    if opts.force_revocation_check and opts.is_revoked is None and opts.revocation is None:
         return _invalid(
             "force_revocation_no_callback",
-            "force_revocation_check is true but is_revoked callback is missing",
+            "force_revocation_check is true but neither is_revoked nor revocation provider is set",
         )
 
     # --- Per-cert checks ---
@@ -159,7 +173,17 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
             return _expired(human_id, bundle.agent_id)
         if now < cert.issued_at:
             return _invalid("not_yet_valid", f"cert {i} is not yet valid")
-        if opts.is_revoked is not None and opts.is_revoked(cert.cert_id):
+        # Revocation: provider (SPEC §17.1) takes precedence over legacy closure.
+        if opts.revocation is not None:
+            rev, rev_err = opts.revocation.is_revoked(cert.cert_id)
+            if rev_err is not None:
+                return _invalid(
+                    "revocation_error",
+                    f"cert {i}: revocation lookup failed: {rev_err}",
+                )
+            if rev:
+                return _revoked(human_id, bundle.agent_id)
+        elif opts.is_revoked is not None and opts.is_revoked(cert.cert_id):
             return _revoked(human_id, bundle.agent_id)
         sig_err = verify_delegation_signature_e(cert)
         if sig_err is not None:
@@ -224,6 +248,20 @@ def verify_bundle(bundle: ProofBundle, opts: VerifyOptions = None) -> VerifyResu
             return _fail_with_status(
                 "scope_denied",
                 f'required scope "{opts.required_scope}" not in effective delegation scope',
+            )
+
+    # --- Advanced Policy Gating (SPEC §17.2) ---
+    if opts.policy is not None:
+        try:
+            allow, pol_err = opts.policy.evaluate_policy(bundle, opts.context)
+        except Exception as e:
+            return _invalid("policy_error", f"advanced policy evaluation failed: {e}")
+        if pol_err is not None:
+            return _invalid("policy_error", f"advanced policy evaluation failed: {pol_err}")
+        if not allow:
+            return _fail_with_status(
+                "scope_denied",
+                "advanced policy evaluation denied access",
             )
 
     return VerifyResult(

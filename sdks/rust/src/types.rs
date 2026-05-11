@@ -473,15 +473,51 @@ pub struct StreamContext {
     pub last_seen_seq: i64,
 }
 
+/// Pluggable provider for revocation state (SPEC §17.1).
+///
+/// Implementations return `Ok(true)` for revoked, `Ok(false)` for live, and
+/// `Err(...)` to surface a lookup failure. A provider error is fail-closed:
+/// the bundle is rejected with `error_reason="revocation_error: ..."` —
+/// SDKs MUST NOT treat a lookup failure as "not revoked." On the verifier's
+/// hot path; implementations should be O(1) at call time.
+pub trait RevocationProvider {
+    fn is_revoked(&self, cert_id: &str) -> Result<bool, String>;
+}
+
+/// Pluggable evaluator for verifier-local policy (SPEC §17.2).
+///
+/// Evaluated AFTER all cryptographic, temporal, revocation, constraint, and
+/// scope-intersection checks pass. `Ok(true)` allows; `Ok(false)` denies with
+/// `scope_denied`; `Err(...)` fails closed with `policy_error`.
+pub trait PolicyProvider {
+    fn evaluate_policy(
+        &self,
+        bundle: &ProofBundle,
+        context: &VerifierContext,
+    ) -> Result<bool, String>;
+}
+
+/// Pluggable audit-receipt persistence (SPEC §17.3).
+///
+/// Invoked on every `verify_bundle` call (success AND failure). Errors are
+/// swallowed — auditing MUST NOT alter the verdict.
+pub trait AuditProvider {
+    fn log_verification(&self, result: &VerifyResult, bundle: &ProofBundle);
+}
+
 /// Options passed to `verify_bundle`.
 pub struct VerifyOptions<'a> {
     /// Required scope; empty string skips scope checking.
     pub required_scope: String,
-    /// Revocation callback; None disables revocation checking.
+    /// Legacy v1 revocation closure. Superseded by `revocation` (SPEC §17.1);
+    /// if both are set the provider wins.
     pub is_revoked: Option<Box<dyn Fn(&str) -> bool + 'a>>,
+    /// Pluggable revocation provider (SPEC §17.1). Takes precedence over
+    /// `is_revoked`. A provider error fails the bundle as `revocation_error`.
+    pub revocation: Option<Box<dyn RevocationProvider + 'a>>,
     /// Force a fresh revocation check for high-stakes endpoints. The SDK
     /// cannot fetch revocation state itself; callers must provide is_revoked
-    /// when this is true.
+    /// or a revocation provider when this is true.
     pub force_revocation_check: bool,
     /// Override current time (unix seconds); None = SystemTime::now().
     pub now: Option<i64>,
@@ -493,6 +529,14 @@ pub struct VerifyOptions<'a> {
     /// empty; constraint-bearing certs fail closed if required context is
     /// absent.
     pub context: VerifierContext<'a>,
+    /// Advanced verifier-local policy evaluator (SPEC §17.2). Evaluated after
+    /// all cryptographic checks pass. Deny → `scope_denied`; provider error →
+    /// `policy_error`.
+    pub policy: Option<Box<dyn PolicyProvider + 'a>>,
+    /// Audit-receipt persistence hook (SPEC §17.3). Invoked on every Verify
+    /// (success AND failure). Provider errors are swallowed — auditing cannot
+    /// alter the verdict.
+    pub audit: Option<Box<dyn AuditProvider + 'a>>,
 }
 
 impl<'a> Default for VerifyOptions<'a> {
@@ -500,11 +544,14 @@ impl<'a> Default for VerifyOptions<'a> {
         Self {
             required_scope: String::new(),
             is_revoked: None,
+            revocation: None,
             force_revocation_check: false,
             now: None,
             session_context: Vec::new(),
             stream: None,
             context: VerifierContext::default(),
+            policy: None,
+            audit: None,
         }
     }
 }

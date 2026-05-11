@@ -26,13 +26,27 @@ type VerifyOptions struct {
 	RequiredScope string
 
 	// IsRevoked is called for each cert ID during verification. Return true
-	// if the cert has been revoked. Can be nil (no revocation check).
+	// if the cert has been revoked. Can be nil (no revocation check). For
+	// callers wiring a managed revocation backend (push-sync, edge cache),
+	// see Revocation (SPEC §17.1) — when both are set, Revocation takes
+	// precedence.
 	IsRevoked func(certID string) bool
 
-	// Policy is an advanced policy evaluator hook (SPEC §17.2).
+	// Revocation is the pluggable provider hook for revocation state
+	// (SPEC §17.1). If set, takes precedence over IsRevoked. A provider
+	// that returns an error fails the bundle as `revocation_error` —
+	// fail-closed semantics: a verifier that cannot determine revocation
+	// state MUST NOT report a cert as valid.
+	Revocation RevocationProvider
+
+	// Policy is an advanced policy evaluator hook (SPEC §17.2). Evaluated
+	// AFTER all cryptographic checks pass. A nil provider is a no-op.
 	Policy PolicyProvider
 
-	// Audit is a verification audit logging hook (SPEC §17.3).
+	// Audit is a verification audit logging hook (SPEC §17.3). Called on
+	// every Verify invocation (both Valid=true and Valid=false). Errors
+	// from the audit provider are ignored — auditing MUST NOT alter the
+	// verifier's decision.
 	Audit AuditProvider
 
 	// ForceRevocationCheck, when true, signals the verifier to bypass its
@@ -101,6 +115,10 @@ const (
 // vice versa) fails the whole signature — fail-closed is the v1 semantics.
 func Verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	res := verify(bundle, opts)
+	// Audit hook: always invoked on every verification (success AND failure)
+	// so receipts capture denied attempts. Errors are intentionally swallowed
+	// — auditing is observation, not control; an audit-store outage MUST NOT
+	// flip a Valid=true bundle to Valid=false. (SPEC §17.3)
 	if opts.Audit != nil {
 		_ = opts.Audit.LogVerification(res, bundle)
 	}
@@ -186,8 +204,10 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	}
 
 	// --- v1.1 force-fresh revocation check (ROADMAP §2.4) ---
-	if opts.ForceRevocationCheck && opts.IsRevoked == nil {
-		return invalid("force_revocation_no_callback", "ForceRevocationCheck is true but IsRevoked callback is nil — the caller asked for fresh revocation state but provided no way to check it")
+	// Both legacy IsRevoked and the new RevocationProvider satisfy
+	// "has a way to check fresh revocation."
+	if opts.ForceRevocationCheck && opts.IsRevoked == nil && opts.Revocation == nil {
+		return invalid("force_revocation_no_callback", "ForceRevocationCheck is true but neither IsRevoked nor Revocation provider is set — the caller asked for fresh revocation state but provided no way to check it")
 	}
 
 	// --- Per-cert checks ---
@@ -203,7 +223,18 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 		if now.Unix() < cert.IssuedAt {
 			return invalid("not_yet_valid", fmt.Sprintf("cert %d is not yet valid", i))
 		}
-		if opts.IsRevoked != nil && opts.IsRevoked(cert.CertID) {
+		// Revocation check: Revocation provider (SPEC §17.1) takes precedence
+		// over the legacy IsRevoked closure. Fail-closed — a provider error
+		// surfaces as `revocation_error`, NOT a silent allow.
+		if opts.Revocation != nil {
+			rev, err := opts.Revocation.IsRevoked(cert.CertID)
+			if err != nil {
+				return invalid("revocation_error", fmt.Sprintf("cert %d: revocation lookup failed: %v", i, err))
+			}
+			if rev {
+				return revoked(humanID, bundle.AgentID)
+			}
+		} else if opts.IsRevoked != nil && opts.IsRevoked(cert.CertID) {
 			return revoked(humanID, bundle.AgentID)
 		}
 		if err := VerifyDelegationSignature(cert); err != nil {

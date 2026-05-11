@@ -113,7 +113,7 @@ Concrete picture of one full interaction:
                                   ▼
                   ┌───────────────────────────────────┐
    2. issues      │   Verifier (Zoom / your API /     │
-   challenge ───▶│   any third party)                │
+   challenge ───▶ │   any third party)                │
                   │                                   │
                   │   ✓ both signatures verify        │
                   │   ✓ cert not expired              │

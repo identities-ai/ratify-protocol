@@ -90,9 +90,19 @@ This is the build-vs-buy boundary, in one diagram:
 [ hook ] RevocationProvider     ↔ local file  /  push-sync edge cache
 [ hook ] PolicyProvider         ↔ none        /  Rego/OPA + quota
 [ hook ] AuditProvider          ↔ stdout      /  signed immutable archive
+[ opt  ] ConstraintEvaluator    ↔ none        /  extension type registry
+[ opt  ] PolicyVerdict          ↔ none        /  HMAC-cached allow/deny
+[ opt  ] AnchorResolver         ↔ none        /  SSO-bound identity lookup
+[ opt  ] VerificationReceipt    ↔ none        /  signed audit chain
 ```
 
 A bundle moves freely across all four SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
+
+### Surface adapters (out of scope for this repository)
+
+The integration code that turns a `ProofBundle` into a "Zoom auth gate," "Twilio SIP attestation," "AWS API Gateway authorizer," etc. — the **surface adapters** — lives in separate repositories (`ratify/zoom-sdk`, `ratify/voice-sdk`, …). Those are the home of proprietary "last-mile" integration code and are not addressed by this specification.
+
+The protocol's contract stops at the `ProofBundle` wire format and the verifier algorithm. Anything above that — how a third-party platform's signaling layer is intercepted, how middleware is wired into a specific framework, how an incumbent product's auth model is mapped onto Ratify scopes — is integration work, not protocol work. Ratify Verify ships those adapters as commercial product; the specification does not prevent a third party from writing their own.
 
 ---
 

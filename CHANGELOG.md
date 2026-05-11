@@ -10,24 +10,57 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ### Added — SDK Provider Interfaces (SPEC §17)
 
-A new SDK-architecture surface that brackets the deterministic verifier core with three pluggable hooks. The protocol wire format, signable bytes, and verifier algorithm are unchanged — all 59 canonical test vectors regenerate byte-identical to alpha.6. The provider surface is purely additive: existing v1 callers continue to work with no changes.
+A new SDK-architecture surface that brackets the deterministic verifier core with pluggable hooks. The protocol wire format, signable bytes, and verifier algorithm are unchanged — all 59 canonical test vectors regenerate byte-identical to alpha.6. The provider surface is purely additive: existing v1 callers continue to work with no changes.
 
-- **`RevocationProvider` (§17.1)** — pluggable revocation lookup. Returns `(bool, error)` instead of a bare bool; errors are fail-closed (`revocation_error`). Takes precedence over the legacy `IsRevoked` closure when both are configured. Implementations are free to use bloom filters, push-sync delta caches, or any other mechanism — the SDK only requires the interface.
-- **`PolicyProvider` (§17.2)** — verifier-local, stateful policy evaluation that runs AFTER all cryptographic / temporal / revocation / constraint / scope checks pass. Deny → `scope_denied`. Provider error → `policy_error`. Distinct from cert-bound first-class constraints (§5.7.2) — policy is the verifier's local layer, constraints are signed by the principal and travel with the bundle.
-- **`AuditProvider` (§17.3)** — verification-receipt persistence hook. Invoked on every `Verify` call (success AND failure) so denied attempts are recorded. Provider errors are intentionally swallowed — auditing is observation, not control; an audit-store outage MUST NOT alter the verifier's verdict.
+**Provider hooks (§17.1–§17.4):**
+
+- **`RevocationProvider` (§17.1)** — pluggable revocation lookup. Returns `(bool, error)` instead of a bare bool; errors are fail-closed (`revocation_error`). Takes precedence over the legacy `IsRevoked` closure when both are configured.
+- **`PolicyProvider` (§17.2)** — verifier-local, stateful policy evaluation that runs AFTER all cryptographic / temporal / revocation / constraint / scope checks pass. Deny → `scope_denied`. Provider error → `policy_error`.
+- **`AuditProvider` (§17.3)** — verification-receipt persistence hook. Invoked on every `Verify` (success AND failure). Provider errors are swallowed — auditing cannot alter the verdict.
+
+**Crypto primitives & extension surfaces (§17.5–§17.8):**
+
+- **`VerificationReceipt` (§17.5)** — verifier-signed attestation that a specific `ProofBundle` was verified at a specific time with a specific outcome. Hybrid-signed; chains by `prev_hash` so missing or backdated entries are detectable. Optional: the protocol does not auto-issue. SDK API: `BundleHash`, `IssueVerificationReceipt`, `VerifyVerificationReceipt`, `ReceiptHash`.
+- **`PolicyVerdict` (§17.6)** — HMAC-bound cached policy decision. Same shape as `SessionToken`: issued once by a policy backend, accepted locally for the rest of `valid_until`. Context-bound: `context_hash` is SHA-256 of the canonical `VerifierContext`, so a verdict cached for one context cannot leak into another. Wired into `verify_bundle` as a fast-path that skips the live `Policy` provider; stale verdicts fall back without failing.
+- **`ConstraintEvaluator` registry (§17.7)** — per-Verify map of extension constraint-type evaluators. Built-in types (§5.7.2) are handled by the SDK directly; unknown types fall through to the registry; types with no registered evaluator still fail closed with `constraint_unknown`. Naming convention: `verify.<type>` for Verify-managed types, `<vendor>.<type>` for deployment / third-party types.
+- **`AnchorResolver` (§17.8)** — resolves verified `human_id` → `Anchor` (the external-identity binding registered when the HumanRoot was minted) on every successful verification. Populates `VerifyResult.Anchor` so downstream `AuditProvider`s observe identity-bound receipts. Resolver errors are non-fatal.
+
+**Deprecation (§17.11):**
+
+- `VerifyOptions.IsRevoked` (the legacy `func(string) bool` closure) is **deprecated** and slated for removal in `v1.0.0-beta.1`. New code MUST use `Revocation` (§17.1). The closure remains functional through all `v1.0.0-*` releases; when both fields are set, `Revocation` wins. Each SDK marks the field with its language's idiomatic deprecation mechanism.
 
 ### Why this matters
 
-These hook points are the integration boundary between the open-source protocol and operational services that wrap it (revocation push, no-code policy UI, immutable audit ledgers). The verifier's deterministic core stays universal and offline-capable; everything that requires global state, mutable rules, or compliance-grade retention is delegated to a provider the deployment configures. The 59 fixtures continue to exercise only the deterministic core.
+These hook points are the integration boundary between the open-source protocol and operational services that wrap it (revocation push, no-code policy UI, immutable audit ledgers, identity-directory lookups). The verifier's deterministic core stays universal and offline-capable; everything that requires global state, mutable rules, server-side state, or compliance-grade retention is delegated to a provider the deployment configures.
+
+Bundles verified with any provider stack are byte-identical to bundles verified with no providers at all. The 59 fixtures continue to exercise only the deterministic core; providers are tested per-SDK.
 
 ### Conformance
 
-All four reference SDKs ship matching interfaces with consistent naming (§17.4). Each SDK adds a per-language provider test suite (12 Go + 13 Python + 12 TypeScript + 11 Rust) covering allow / deny / fail-closed paths, precedence between provider and legacy closure, and the audit-never-alters-verdict invariant.
+All four reference SDKs ship matching interfaces with consistent cross-language naming (§17.4 + §17.9).
+
+Per-SDK provider + lever test suites:
+- **Go:** 12 provider + 22 lever + 4 receipt-composition tests; FuzzVerifyWithProvidersNeverPanics fuzz harness exercises provider error paths across millions of inputs.
+- **TypeScript:** 12 provider + 20 lever tests.
+- **Python:** 13 provider + 20 lever tests.
+- **Rust:** 11 provider + 20 lever tests.
+
+Total alpha.7 test additions: **134 tests**, all green; **59/59 canonical fixtures** regenerate byte-identical to alpha.6.
 
 ### Spec changes
 
-- **§5.7.2 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit` fields and the precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
-- **§17 (new section)** — Provider Interfaces, including conformance invariants (§17.0) and a cross-language naming table (§17.4).
+- **§5.7.2 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit`, `ConstraintEvaluators`, `PolicyVerdict`, `PolicySecret`, and `AnchorResolver` fields, with precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
+- **§17 (new section)** — Provider Interfaces, including:
+  - §17.0 conformance and wire-format invariance
+  - §17.1–§17.3 the three core providers
+  - §17.4 cross-language naming table
+  - §17.5 `VerificationReceipt`
+  - §17.6 `PolicyVerdict`
+  - §17.7 `ConstraintEvaluator` extension registry
+  - §17.8 `AnchorResolver`
+  - §17.9 cross-language naming for §17.5–§17.8
+  - §17.10 surface adapters (intentionally out of scope)
+  - §17.11 deprecation of legacy `IsRevoked`
 
 ### Wire format
 

@@ -29,6 +29,7 @@ import {
 } from "./crypto.js";
 import { intersectScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
 import { evaluateConstraints } from "./constraints.js";
+import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
 
 /**
  * Validate a ProofBundle against the Ratify Protocol.
@@ -229,7 +230,12 @@ async function _verifyBundle(
     // pass against the caller-supplied VerifierContext. Fail-closed.
     // Route to the specific identity_status via sentinel prefix in the
     // returned error. Matches Go/Python/Rust — see SPEC §5.9 enum table.
-    const constraintErr = evaluateConstraints(cert, opts.context ?? {}, now);
+    const constraintErr = await evaluateConstraints(
+      cert,
+      opts.context ?? {},
+      now,
+      opts.constraint_evaluators,
+    );
     if (constraintErr !== null) {
       let status: IdentityStatus = "constraint_denied";
       if (constraintErr.includes("constraint_unverifiable")) {
@@ -308,7 +314,44 @@ async function _verifyBundle(
     identity_status: "authorized_agent",
   };
 
-  // --- Advanced Policy Gating (SPEC §17.2) ---
+  // --- Anchor resolution (SPEC §17.8) ---
+  // Best-effort: populate anchor on the success result so downstream
+  // AuditProviders observe an identity-bound receipt. Resolver errors are
+  // non-fatal — the bundle still verifies.
+  if (opts.anchor_resolver) {
+    try {
+      const anchor = await opts.anchor_resolver.resolveAnchor(humanID);
+      if (anchor) res.anchor = anchor;
+    } catch {
+      // intentional swallow
+    }
+  }
+
+  // --- Advanced Policy Gating (SPEC §17.2 / §17.6) ---
+  //
+  // Fast path: if a PolicyVerdict is supplied AND verifies cleanly, skip the
+  // live Policy provider entirely. Stale/mismatched verdicts fall back to
+  // live policy.
+  if (opts.policy_verdict && opts.required_scope && opts.policy_secret) {
+    const ctxHash = verifierContextHash(opts.context ?? {});
+    const verdictErr = verifyPolicyVerdict(
+      opts.policy_verdict,
+      opts.policy_secret,
+      bundle.agent_id,
+      opts.required_scope,
+      ctxHash,
+      now,
+    );
+    if (verdictErr === null) {
+      // Cached allow — skip live policy.
+      return res;
+    }
+    if (verdictErr.startsWith("policy_verdict_denied")) {
+      return failWithStatus("scope_denied", "policy verdict (cached) denied access");
+    }
+    // else: fall through to live policy.
+  }
+
   if (opts.policy) {
     try {
       const ok = await opts.policy.evaluatePolicy(bundle, opts.context ?? {});

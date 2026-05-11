@@ -4,6 +4,7 @@
 
 import type {
   Constraint,
+  ConstraintEvaluator,
   DelegationCert,
   VerifierContext,
 } from "./types.js";
@@ -12,16 +13,36 @@ import type {
  * Run every Constraint on cert against the caller-supplied VerifierContext.
  * Returns null iff all pass; an error string otherwise.
  * Fail-closed: an unknown Type or a constraint whose required context field
- * is absent causes rejection.
+ * is absent causes rejection. (SPEC §17.7) When a built-in evaluator does
+ * not recognize the constraint type, the registry is consulted before
+ * failing closed.
  */
-export function evaluateConstraints(
+export async function evaluateConstraints(
   cert: DelegationCert,
   ctx: VerifierContext,
   nowSec: number,
-): string | null {
+  extEvaluators?: Record<string, ConstraintEvaluator>,
+): Promise<string | null> {
   const list = cert.constraints ?? [];
   for (let i = 0; i < list.length; i++) {
-    const err = evaluateConstraint(list[i]!, cert.cert_id, ctx, nowSec);
+    let err = evaluateConstraint(list[i]!, cert.cert_id, ctx, nowSec);
+    if (err !== null && err.startsWith("constraint_unknown:") && extEvaluators) {
+      const ev = extEvaluators[list[i]!.type];
+      if (ev) {
+        try {
+          const r = await ev.evaluate(list[i]!, cert.cert_id, ctx, nowSec);
+          if (r === true) {
+            err = null;
+          } else if (r === "unverifiable") {
+            err = "constraint_unverifiable: extension evaluator returned unverifiable";
+          } else {
+            err = "extension evaluator denied constraint";
+          }
+        } catch (e: any) {
+          err = `extension evaluator threw: ${e?.message ?? e}`;
+        }
+      }
+    }
     if (err !== null) {
       return `constraint[${i}] (${list[i]!.type}): ${err}`;
     }

@@ -277,6 +277,13 @@ export interface VerifyResult {
   granted_scope?: string[];
   identity_status: IdentityStatus;
   error_reason?: string;
+  /**
+   * Resolved external-identity binding for the human_id (SPEC §17.8).
+   * Populated only when the caller supplies an AnchorResolver and the bundle
+   * verifies. Lets downstream AuditProviders record an unforgeable chain from
+   * verification → identity attestation.
+   */
+  anchor?: Anchor;
 }
 
 export type IdentityStatus =
@@ -374,12 +381,92 @@ export interface AuditProvider {
   logVerification(result: VerifyResult, bundle: ProofBundle): Promise<void>;
 }
 
+/**
+ * ConstraintEvaluator is a pluggable evaluator for extension constraint
+ * types (SPEC §17.7). Built-in types (geo_circle, geo_polygon, geo_bbox,
+ * time_window, max_speed_mps, max_amount, max_rate) are evaluated by the
+ * SDK directly; an evaluator is consulted only for types the SDK does not
+ * natively understand. Resolve to `true` to allow; resolve to `false` to
+ * deny with `constraint_denied`; resolve to "unverifiable" string to route
+ * to `constraint_unverifiable`; throw to deny with the thrown message.
+ */
+export interface ConstraintEvaluator {
+  evaluate(
+    c: Constraint,
+    cert_id: string,
+    context: VerifierContext,
+    now_unix: number,
+  ): Promise<true | false | "unverifiable">;
+}
+
+/**
+ * AnchorResolver resolves a verified `human_id` to its external-identity
+ * binding (SPEC §17.8). Implementations typically read from a verifier-local
+ * identity directory.
+ *
+ * Errors and rejections are non-fatal: the verifier MUST NOT fail the bundle
+ * because the resolver errored. The verifier silently leaves
+ * `VerifyResult.anchor` undefined and continues.
+ */
+export interface AnchorResolver {
+  resolveAnchor(human_id: string): Promise<Anchor | null>;
+}
+
+/**
+ * PolicyVerdict is a v1.1 verifier-cached policy decision: a short-lived
+ * HMAC-bound attestation that a given (agent_id, scope, context_hash) tuple
+ * passed advanced policy evaluation at a specific moment (SPEC §17.6).
+ *
+ * Issued by a commercial policy backend with a private `policy_secret`,
+ * checked locally by the verifier — letting subsequent calls within
+ * `valid_until` accept the cached allow/deny without re-calling the backend.
+ */
+export interface PolicyVerdict {
+  version: number;
+  verdict_id: string;
+  agent_id: string;
+  scope: string;
+  allow: boolean;
+  context_hash: Uint8Array; // 32 bytes — SHA-256 of canonical VerifierContext
+  issued_at: number;
+  valid_until: number;
+  mac: Uint8Array; // 32 bytes — HMAC-SHA256 over canonical signable bytes
+}
+
+/**
+ * VerificationReceipt is a verifier-signed attestation that a specific
+ * ProofBundle was verified at a specific moment with a specific outcome
+ * (SPEC §17.5). It is the cryptographic complement of `AuditProvider`:
+ * AuditProvider chooses what to do with verification events; a chain of
+ * VerificationReceipts makes the event itself unforgeable.
+ *
+ * Receipts chain by `prev_hash` (SHA-256 of previous receipt's canonical
+ * signable bytes) so a missing or backdated receipt is detectable. Genesis
+ * uses 32 zero bytes.
+ */
+export interface VerificationReceipt {
+  version: number;
+  verifier_id: string;
+  verifier_pub: HybridPublicKey;
+  bundle_hash: Uint8Array;       // 32 bytes — SHA-256 of canonical bundle
+  decision: IdentityStatus;
+  human_id?: string;
+  agent_id?: string;
+  granted_scope?: string[];
+  error_reason?: string;
+  verified_at: number;            // unix seconds
+  prev_hash: Uint8Array;          // 32 bytes; zeros for genesis
+  signature: HybridSignature;
+}
+
 export interface VerifyOptions {
   /** The scope the verifier requires. Empty skips the scope check. */
   required_scope?: string;
   /**
-   * Legacy v1 revocation closure. Superseded by `revocation` (SPEC §17.1);
-   * if both are set the provider wins.
+   * Legacy v1 revocation closure.
+   * @deprecated Use `revocation` (SPEC §17.1) instead. The closure has no
+   * way to surface lookup failures; `revocation` returns `(bool, error)` and
+   * fails closed on error. Slated for removal in v1.0.0-beta.1.
    */
   is_revoked?: (certID: string) => boolean;
   /**
@@ -419,6 +506,28 @@ export interface VerifyOptions {
    * missing.
    */
   context?: VerifierContext;
+  /**
+   * Per-Verify registry of extension constraint evaluators (SPEC §17.7).
+   * Keys are constraint type strings outside the built-in set; built-in
+   * types are evaluated by the SDK directly. Types without a registered
+   * evaluator still fail closed with `constraint_unknown`.
+   */
+  constraint_evaluators?: Record<string, ConstraintEvaluator>;
+  /**
+   * Fast-path cached policy decision (SPEC §17.6). When present and valid
+   * (MAC matches `policy_secret`, within window, agent/scope/context match),
+   * the verifier skips the live `policy` hook. Stale or invalid verdicts
+   * fall back to live policy.
+   */
+  policy_verdict?: PolicyVerdict;
+  /** HMAC secret used to verify `policy_verdict.mac`. */
+  policy_secret?: Uint8Array;
+  /**
+   * Anchor resolver (SPEC §17.8). When set on a Valid=true verification,
+   * the verifier looks up the human_id's external-identity binding and
+   * populates `VerifyResult.anchor`. Resolver errors are non-fatal.
+   */
+  anchor_resolver?: AnchorResolver;
 }
 
 /**

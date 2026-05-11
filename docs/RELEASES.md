@@ -44,7 +44,7 @@ Contributors who prefer to iterate on a language in their own repository may do 
 
 ```
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
-1.0.0-alpha.6  →  current release
+v1.0.0-alpha.7  →  current release  (Provider Interfaces, SPEC §17)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

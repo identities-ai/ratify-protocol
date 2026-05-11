@@ -10,7 +10,7 @@ Byte-identical interoperability with the Go, TypeScript, and Python reference im
 
 ```toml
 [dependencies]
-ratify-protocol = "1.0.0-alpha.6"
+ratify-protocol = "1.0.0-alpha.7"
 ```
 
 ## Quickstart

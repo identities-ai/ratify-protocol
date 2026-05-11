@@ -68,8 +68,36 @@ When the Travel Agent presents the proof to the Airline, the Airline can see the
 
 ---
 
-## 6. Implementation Status
+## 6. SDK Provider Interfaces
 
-Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, and **Rust**. The 59 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable.
+The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal — every conformant SDK implements it identically, and the same 59 fixtures regenerate byte-identical across languages.
+
+But three of the verifier's responsibilities are inherently operational, and a single static spec cannot pin them down:
+
+1. **Revocation freshness** — a CRL file polled once an hour is fine for a low-throughput verifier; a high-throughput payment endpoint needs sub-second push propagation.
+2. **Policy evaluation** — quotas, geo-tagged kill switches, runtime overrides. These are stateful and verifier-local; they don't belong in a signed cert.
+3. **Audit retention** — a developer's local log file is enough for staging; SOC2/ISO compliance requires a signed, append-only ledger.
+
+The SDKs expose three pluggable hooks for these — `RevocationProvider`, `PolicyProvider`, `AuditProvider` — defined in SPEC §17. Each SDK ships with a no-op default; commercial verifiers (such as Ratify Verify) supply higher-performance, stateful implementations against the same interface. Bundles verified against one provider stack and bundles verified against another are byte-identical: the wire format does not change.
+
+This is the build-vs-buy boundary, in one diagram:
+
+```
+[ open ] ProofBundle wire format ──────────  same bytes everywhere
+[ open ] hybrid sig + chain walk + scope ─── same algorithm everywhere
+[ open ] cert-bound Constraints ─────────── same evaluation everywhere
+─────────────────────────────────────────── deterministic verifier core
+[ hook ] RevocationProvider     ↔ local file  /  push-sync edge cache
+[ hook ] PolicyProvider         ↔ none        /  Rego/OPA + quota
+[ hook ] AuditProvider          ↔ stdout      /  signed immutable archive
+```
+
+A bundle moves freely across all four SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
+
+---
+
+## 7. Implementation Status
+
+Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, and **Rust**. The 59 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable. Each SDK also ships a provider-test suite covering the three SPEC §17 hooks.
 
 For the normative specification, see [`SPEC.md`](../SPEC.md).

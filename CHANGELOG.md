@@ -6,6 +6,33 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.7 (2026-05-11)
+
+### Added — SDK Provider Interfaces (SPEC §17)
+
+A new SDK-architecture surface that brackets the deterministic verifier core with three pluggable hooks. The protocol wire format, signable bytes, and verifier algorithm are unchanged — all 59 canonical test vectors regenerate byte-identical to alpha.6. The provider surface is purely additive: existing v1 callers continue to work with no changes.
+
+- **`RevocationProvider` (§17.1)** — pluggable revocation lookup. Returns `(bool, error)` instead of a bare bool; errors are fail-closed (`revocation_error`). Takes precedence over the legacy `IsRevoked` closure when both are configured. Implementations are free to use bloom filters, push-sync delta caches, or any other mechanism — the SDK only requires the interface.
+- **`PolicyProvider` (§17.2)** — verifier-local, stateful policy evaluation that runs AFTER all cryptographic / temporal / revocation / constraint / scope checks pass. Deny → `scope_denied`. Provider error → `policy_error`. Distinct from cert-bound first-class constraints (§5.7.2) — policy is the verifier's local layer, constraints are signed by the principal and travel with the bundle.
+- **`AuditProvider` (§17.3)** — verification-receipt persistence hook. Invoked on every `Verify` call (success AND failure) so denied attempts are recorded. Provider errors are intentionally swallowed — auditing is observation, not control; an audit-store outage MUST NOT alter the verifier's verdict.
+
+### Why this matters
+
+These hook points are the integration boundary between the open-source protocol and operational services that wrap it (revocation push, no-code policy UI, immutable audit ledgers). The verifier's deterministic core stays universal and offline-capable; everything that requires global state, mutable rules, or compliance-grade retention is delegated to a provider the deployment configures. The 59 fixtures continue to exercise only the deterministic core.
+
+### Conformance
+
+All four reference SDKs ship matching interfaces with consistent naming (§17.4). Each SDK adds a per-language provider test suite (12 Go + 13 Python + 12 TypeScript + 11 Rust) covering allow / deny / fail-closed paths, precedence between provider and legacy closure, and the audit-never-alters-verdict invariant.
+
+### Spec changes
+
+- **§5.7.2 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit` fields and the precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
+- **§17 (new section)** — Provider Interfaces, including conformance invariants (§17.0) and a cross-language naming table (§17.4).
+
+### Wire format
+
+Unchanged. v1.0.0-alpha.7 verifiers accept v1.0.0-alpha.6 bundles and vice versa.
+
 ## v1.0.0-alpha.5 (2026-05-10)
 
 ### Changed

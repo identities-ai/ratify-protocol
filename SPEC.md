@@ -414,6 +414,8 @@ Controls what the verifier checks beyond the cryptographic basics. Passed as the
 | `SessionContext` | `[]byte` | `nil` | Verifier-reconstructed 32-byte v1.1 context that binds a challenge to this verifier/session/request. When set, the bundle MUST carry byte-equal `session_context`; when absent, session-bound bundles are rejected as `session_context_unverifiable`. |
 | `Stream` | `*StreamContext` | `nil` | Verifier-tracked stream binding for v1.1 stream-bound bundles. `StreamContext` contains `StreamID` (32 bytes) and `LastSeenSeq` (highest accepted sequence number; 0 means no turns accepted yet). When set, the bundle MUST carry matching `stream_id` and `stream_seq == LastSeenSeq + 1`. When nil, bundles carrying `stream_id` are rejected as `stream_context_unverifiable`. |
 | `Context` | `VerifierContext` | zero value | Application inputs for constraint evaluation (§5.16). Zero value is fine for certs that declare no constraints. |
+| `Policy` | `PolicyProvider` | `nil` | Advanced policy evaluator hook (§17.2). |
+| `Audit` | `AuditProvider` | `nil` | Verification audit logging hook (§17.3). |
 
 ---
 
@@ -1190,7 +1192,46 @@ The protocol provides the cryptographic tools (revocation, rotation, witness). T
 
 ---
 
-## 16. References
+## 17. SDK Architecture: Provider Interfaces
+
+To maintain commercial viability and operational security, conformant SDKs SHOULD implement a "Provider" pattern for non-cryptographic verifier logic. This allows the core protocol to remain open-source while permitting proprietary extensions for high-performance revocation, policy, and audit.
+
+### 17.1 RevocationProvider
+
+A `RevocationProvider` is responsible for determining if a certificate ID is currently revoked.
+
+**Interface:**
+- `IsRevoked(certID string) (bool, error)`
+
+**Standard Implementations:**
+- **Local (Default)**: Reads from a local signed `RevocationList` (§5.10).
+- **Verify (Commercial)**: Connects to the Ratify Verify real-time revocation push service (§5.11).
+
+### 17.2 PolicyProvider
+
+A `PolicyProvider` evaluates application-level policy that exceeds the deterministic constraint logic defined in §5.7.2.
+
+**Interface:**
+- `EvaluatePolicy(bundle *ProofBundle, context VerifierContext) (bool, error)`
+
+**Standard Implementations:**
+- **Static (Default)**: Checks required scopes and first-class constraints.
+- **Advanced (Commercial)**: Evaluates complex Rego/OPA rules, usage quotas, and global security signals via the Ratify Verify control plane.
+
+### 17.3 AuditProvider
+
+An `AuditProvider` handles the persistence of verification receipts for compliance and forensic analysis.
+
+**Interface:**
+- `LogVerification(result VerifyResult, bundle *ProofBundle) error`
+
+**Standard Implementations:**
+- **Local (Default)**: Logs to standard output or local file system.
+- **Attestation (Commercial)**: Streams signed `WitnessEntry` objects (§5.12) to the Ratify Verify immutable audit archive.
+
+---
+
+## 18. References
 
 - Ed25519: [RFC 8032](https://datatracker.ietf.org/doc/html/rfc8032)
 - ML-DSA (post-quantum digital signatures): [FIPS 204](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.204.pdf)
@@ -1202,4 +1243,4 @@ The protocol provides the cryptographic tools (revocation, rotation, witness). T
 
 ---
 
-*v1.0.0-alpha.6 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.7 · Identities AI · CC-BY-4.0 · Patent Pending*

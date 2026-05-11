@@ -527,16 +527,31 @@ type verifierContextSignable struct {
 // never accidentally applies to another (different country, different
 // amount tier, etc).
 func VerifierContextHash(ctx VerifierContext) ([]byte, error) {
+	// Normalize: when a Has* flag is false the corresponding numeric fields
+	// MUST be zeroed before hashing. Other SDKs derive Has* from field
+	// presence (Optional/None/undefined → 0), so a caller-set non-zero
+	// number with Has*=false would produce canonical bytes no non-Go SDK
+	// could reproduce — silently breaking cross-SDK PolicyVerdict
+	// portability. The Has* flag is the authoritative signal; numeric
+	// fields are meaningful only when their flag is true.
 	s := verifierContextSignable{
-		CurrentAltM:       ctx.CurrentAltM,
-		CurrentLat:        ctx.CurrentLat,
-		CurrentLon:        ctx.CurrentLon,
-		CurrentSpeedMps:   ctx.CurrentSpeedMps,
 		HasAmount:         ctx.HasAmount,
 		HasLocation:       ctx.HasLocation,
 		HasSpeed:          ctx.HasSpeed,
-		RequestedAmount:   ctx.RequestedAmount,
 		RequestedCurrency: ctx.RequestedCurrency,
+	}
+	if ctx.HasLocation {
+		s.CurrentLat = ctx.CurrentLat
+		s.CurrentLon = ctx.CurrentLon
+		s.CurrentAltM = ctx.CurrentAltM
+	}
+	if ctx.HasSpeed {
+		s.CurrentSpeedMps = ctx.CurrentSpeedMps
+	}
+	if ctx.HasAmount {
+		s.RequestedAmount = ctx.RequestedAmount
+	} else {
+		s.RequestedCurrency = ""
 	}
 	data, err := CanonicalJSON(s)
 	if err != nil {
@@ -1067,19 +1082,104 @@ type verificationReceiptSignable struct {
 	Version      int             `json:"version"`
 }
 
-// BundleHash returns the canonical SHA-256 digest of a ProofBundle's full
-// wire form. Used as the stable identifier of "what was verified" inside
-// a VerificationReceipt. Two callers verifying the same bundle MUST produce
-// the same BundleHash byte-for-byte (canonical serialization, RFC 8785).
+// bundleHashSignable is the canonical fixed-shape representation of a
+// ProofBundle used as input to BundleHash. Field order is alphabetical
+// JSON-key order; NO field uses omitempty so the shape is the same
+// regardless of which optionals the caller populated. Every reference
+// SDK builds an equivalent fixed shape, producing byte-identical canonical
+// JSON for the same logical bundle. Verified against
+// `testvectors/v1/cross_sdk_vectors.json`.
+type bundleHashSignable struct {
+	AgentID        string             `json:"agent_id"`
+	AgentPubKey    HybridPublicKey    `json:"agent_pub_key"`
+	Challenge      []byte             `json:"challenge"`
+	ChallengeAt    int64              `json:"challenge_at"`
+	ChallengeSig   HybridSignature    `json:"challenge_sig"`
+	Delegations    []bundleHashDelegationSignable `json:"delegations"`
+	SessionContext []byte             `json:"session_context"`
+	StreamID       []byte             `json:"stream_id"`
+	StreamSeq      int64              `json:"stream_seq"`
+}
+
+// bundleHashDelegationSignable mirrors DelegationCert with alpha-ordered
+// fields and no omitempty. Constraints is always serialized as `[]`
+// when empty.
+type bundleHashDelegationSignable struct {
+	CertID        string          `json:"cert_id"`
+	Constraints   []Constraint    `json:"constraints"`
+	ExpiresAt     int64           `json:"expires_at"`
+	IssuedAt      int64           `json:"issued_at"`
+	IssuerID      string          `json:"issuer_id"`
+	IssuerPubKey  HybridPublicKey `json:"issuer_pub_key"`
+	Scope         []string        `json:"scope"`
+	Signature     HybridSignature `json:"signature"`
+	SubjectID     string          `json:"subject_id"`
+	SubjectPubKey HybridPublicKey `json:"subject_pub_key"`
+	Version       int             `json:"version"`
+}
+
+// BundleHash returns the canonical SHA-256 digest of a ProofBundle. The
+// stable identifier of "what was verified" inside a VerificationReceipt.
+//
+// Every reference SDK (Go, TypeScript, Python, Rust) MUST produce the same
+// 32-byte digest for the same logical bundle. The canonical form is a
+// fixed alphabetical-key shape with no omitempty so the byte output is
+// deterministic regardless of which optional v1.1 fields are set.
+//
+// Verified against fixtures in `testvectors/v1/cross_sdk_vectors.json`.
+// Drift in any SDK is caught by that SDK's cross-SDK test suite.
 func BundleHash(bundle *ProofBundle) ([]byte, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("nil bundle")
 	}
-	b, err := CanonicalJSON(bundle)
+	delegations := make([]bundleHashDelegationSignable, len(bundle.Delegations))
+	for i, d := range bundle.Delegations {
+		constraints := d.Constraints
+		if constraints == nil {
+			constraints = []Constraint{}
+		}
+		delegations[i] = bundleHashDelegationSignable{
+			CertID:        d.CertID,
+			Constraints:   constraints,
+			ExpiresAt:     d.ExpiresAt,
+			IssuedAt:      d.IssuedAt,
+			IssuerID:      d.IssuerID,
+			IssuerPubKey:  d.IssuerPubKey,
+			Scope:         d.Scope,
+			Signature:     d.Signature,
+			SubjectID:     d.SubjectID,
+			SubjectPubKey: d.SubjectPubKey,
+			Version:       d.Version,
+		}
+	}
+	sessionContext := bundle.SessionContext
+	if sessionContext == nil {
+		sessionContext = []byte{}
+	}
+	streamID := bundle.StreamID
+	if streamID == nil {
+		streamID = []byte{}
+	}
+	challenge := bundle.Challenge
+	if challenge == nil {
+		challenge = []byte{}
+	}
+	s := bundleHashSignable{
+		AgentID:        bundle.AgentID,
+		AgentPubKey:    bundle.AgentPubKey,
+		Challenge:      challenge,
+		ChallengeAt:    bundle.ChallengeAt,
+		ChallengeSig:   bundle.ChallengeSig,
+		Delegations:    delegations,
+		SessionContext: sessionContext,
+		StreamID:       streamID,
+		StreamSeq:      bundle.StreamSeq,
+	}
+	canonical, err := CanonicalJSON(s)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalizing bundle for hash: %w", err)
 	}
-	h := sha256.Sum256(b)
+	h := sha256.Sum256(canonical)
 	return h[:], nil
 }
 

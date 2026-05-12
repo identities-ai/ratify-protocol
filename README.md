@@ -337,7 +337,7 @@ If you're implementing a new language port, **start from the fixtures, not the s
 | **Understand the threat model** | [`docs/EXPLAINED.md`](docs/EXPLAINED.md) |
 | **Read the normative spec** | [`SPEC.md`](SPEC.md) |
 | **Use the Verify managed service** (revocation, audit, policy enforcement at scale) | [docs.identities.ai](https://docs.identities.ai) |
-| **Integrate with a specific surface** (meetings, voice, API gateway, physical AI) | [docs.identities.ai/guides](https://docs.identities.ai) |
+| **Integrate with a specific surface** (Meetings, Conversational AI, Agentic API, Physical AI) | [docs.identities.ai/guides](https://docs.identities.ai) |
 | **Add a new language SDK** | [`docs/SDKS.md`](docs/SDKS.md) + the new-SDK issue template |
 | **Report a security issue** | [`SECURITY.md`](SECURITY.md) — do not open a public issue |
 | **Cite Ratify in academic work** | [`CITATION.cff`](CITATION.cff) — GitHub auto-renders BibTeX/APA/Chicago |

@@ -10,6 +10,9 @@
 //! Wire format unchanged: these wrap output of the verifier rather than
 //! adding fields to existing signed objects.
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec, vec::Vec};
+
 use crate::canonical::{
     encode_bool, encode_bytes_b64, encode_f64, encode_hybrid_pub_key, encode_hybrid_sig, encode_i32,
     encode_i64, encode_str, encode_str_array,

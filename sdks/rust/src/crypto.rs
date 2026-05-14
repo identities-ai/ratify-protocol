@@ -7,6 +7,9 @@
 //! Every sign produces BOTH component signatures. Every verify checks BOTH;
 //! either failure fails the whole signature.
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec::Vec};
+
 use ed25519_dalek::{Signature as EdSignature, Signer as _, SigningKey, Verifier, VerifyingKey};
 use fips204::ml_dsa_65;
 use fips204::traits::{SerDes, Signer as MlSigner, Verifier as MlVerifier};
@@ -18,10 +21,12 @@ use crate::canonical::{
     encode_str, encode_str_array,
 };
 use crate::types::{
-    AgentIdentity, DelegationCert, HumanRoot, HybridPrivateKey, HybridPublicKey, HybridSignature,
-    KeyRotationStatement, ProofBundle, ReceiptPartySignature, RevocationList, RevocationPush,
-    SessionToken, TransactionReceipt, VerifyResult, WitnessEntry,
+    DelegationCert, HybridPrivateKey, HybridPublicKey, HybridSignature, KeyRotationStatement,
+    ProofBundle, ReceiptPartySignature, RevocationList, RevocationPush, SessionToken,
+    TransactionReceipt, VerifyResult, WitnessEntry,
 };
+#[cfg(feature = "std")]
+use crate::types::{AgentIdentity, HumanRoot};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -66,6 +71,11 @@ pub fn generate_hybrid_keypair() -> (HybridPublicKey, HybridPrivateKey) {
 }
 
 /// Generate a fresh HumanRoot (public + private).
+///
+/// Only available with the `std` feature (uses `SystemTime::now()` for
+/// `created_at`). In no_std environments, build the struct directly and
+/// supply your own timestamp.
+#[cfg(feature = "std")]
 pub fn generate_human_root() -> (HumanRoot, HybridPrivateKey) {
     let (pub_key, priv_key) = generate_hybrid_keypair();
     let id = derive_id(&pub_key);
@@ -81,6 +91,11 @@ pub fn generate_human_root() -> (HumanRoot, HybridPrivateKey) {
 }
 
 /// Generate a fresh AgentIdentity.
+///
+/// Only available with the `std` feature (uses `SystemTime::now()` for
+/// `created_at`). In no_std environments, build the struct directly and
+/// supply your own timestamp.
+#[cfg(feature = "std")]
 pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPrivateKey) {
     let (pub_key, priv_key) = generate_hybrid_keypair();
     let id = derive_id(&pub_key);
@@ -96,6 +111,8 @@ pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPri
     )
 }
 
+/// Current time as Unix seconds. Only available with the `std` feature.
+#[cfg(feature = "std")]
 fn now_unix() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()

@@ -13,17 +13,24 @@
 //!   - U+2028 / U+2029 escape as \\u2028 / \\u2029 (matches Go behavior).
 //!   - Minimum string escaping per RFC 8259.
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec::Vec};
+
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use serde_json::Value;
 
 /// Canonical JSON-encode a serde_json::Value.
-pub fn canonical_json(value: &Value) -> Vec<u8> {
+///
+/// Available with the `std` feature only (requires `serde_json`).
+#[cfg(feature = "std")]
+pub fn canonical_json(value: &serde_json::Value) -> Vec<u8> {
     let mut out = String::new();
     encode_value(value, &mut out);
     out.into_bytes()
 }
 
-fn encode_value(v: &Value, out: &mut String) {
+#[cfg(feature = "std")]
+fn encode_value(v: &serde_json::Value, out: &mut String) {
+    use serde_json::Value;
     match v {
         Value::Null => out.push_str("null"),
         Value::Bool(true) => out.push_str("true"),
@@ -70,6 +77,7 @@ fn encode_value(v: &Value, out: &mut String) {
 // non-integer floats serialize via their default textual representation.
 // Without this, serde_json's f64 default emits "500.0" where the other
 // implementations emit "500", breaking cross-SDK byte identicality.
+#[cfg(feature = "std")]
 fn encode_number(n: &serde_json::Number) -> String {
     if let Some(i) = n.as_i64() {
         return i.to_string();
@@ -312,6 +320,8 @@ pub fn encode_hybrid_sig(sig: &crate::types::HybridSignature, out: &mut String) 
 
 /// serde helper to (de)serialize Vec<u8> as base64-standard strings.
 pub mod base64_bytes {
+    #[cfg(not(feature = "std"))]
+    use alloc::{format, string::String, vec::Vec};
     use super::{base64_std_decode, base64_std_encode};
     use serde::{de::Error, Deserialize, Deserializer, Serializer};
 

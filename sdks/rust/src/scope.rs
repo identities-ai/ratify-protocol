@@ -2,6 +2,11 @@
 //!
 //! MUST stay in lock-step with Go's scope.go, TS's scope.ts, and Python's scope.py.
 
+#[cfg(not(feature = "std"))]
+use alloc::{collections::BTreeSet, format, string::String, string::ToString, vec::Vec};
+#[cfg(feature = "std")]
+use std::collections::BTreeSet;
+
 // --- Meeting scopes ---
 pub const SCOPE_MEETING_ATTEND: &str = "meeting:attend";
 pub const SCOPE_MEETING_SPEAK: &str = "meeting:speak";
@@ -247,7 +252,7 @@ pub fn is_sensitive(scope: &str) -> bool {
 /// Replace wildcard scopes with their constituent non-sensitive scopes.
 /// Deduplicates and returns lex-sorted. Custom scopes pass through unchanged.
 pub fn expand_scopes(scopes: &[String]) -> Vec<String> {
-    let mut seen = std::collections::BTreeSet::new();
+    let mut seen = BTreeSet::new();
     for s in scopes {
         if let Some(children) = wildcard_expansion(s) {
             for c in children {
@@ -269,10 +274,10 @@ pub fn intersect_scopes(lists: &[&[String]]) -> Vec<String> {
     if lists.is_empty() {
         return Vec::new();
     }
-    let mut effective: std::collections::BTreeSet<String> =
+    let mut effective: BTreeSet<String> =
         expand_scopes(lists[0]).into_iter().collect();
     for list in &lists[1..] {
-        let expanded: std::collections::BTreeSet<String> =
+        let expanded: BTreeSet<String> =
             expand_scopes(list).into_iter().collect();
         effective = effective.intersection(&expanded).cloned().collect();
     }

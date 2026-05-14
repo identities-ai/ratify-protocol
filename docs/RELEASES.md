@@ -44,7 +44,8 @@ Contributors who prefer to iterate on a language in their own repository may do 
 
 ```
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
-v1.0.0-alpha.7  →  current release  (Provider Interfaces, SPEC §17)
+v1.0.0-alpha.7  →  Provider Interfaces, SPEC §17
+v1.0.0-alpha.8  →  current release  (C/C++ SDK, Rust no_std, fips204 migration)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs
@@ -68,14 +69,15 @@ During the alpha/beta/rc phase, **fixture bytes MAY change between versions**. A
 Every SDK release is tagged in git as `sdk-<language>-<version>`:
 
 ```
-sdk-go-v1.0.0-alpha.7
-sdk-typescript-v1.0.0-alpha.7
-sdk-python-v1.0.0-alpha.7
-sdk-rust-v1.0.0-alpha.7
-v1.0.0-alpha.7          ← the protocol-level tag; implies all above at the same version
+sdk-go-v1.0.0-alpha.8
+sdk-typescript-v1.0.0-alpha.8
+sdk-python-v1.0.0-alpha.8
+sdk-rust-v1.0.0-alpha.8
+sdk-c-v1.0.0-alpha.8
+v1.0.0-alpha.8          ← the protocol-level tag; implies all above at the same version
 ```
 
-The protocol-level tag `v1.0.0-alpha.7` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.7`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
+The protocol-level tag `v1.0.0-alpha.8` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.8`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
 
 ## 4. The release workflow
 

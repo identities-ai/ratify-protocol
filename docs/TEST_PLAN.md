@@ -136,7 +136,7 @@ This is the single highest-leverage test artifact for the open-source launch. Wi
 
 ### 3.1 Location
 
-`testvectors/v1/*.json` — each file is a self-contained test case. All four SDKs read from the same directory.
+`testvectors/v1/*.json` — each file is a self-contained test case. All five SDKs read from the same directory.
 
 ### 3.2 Format
 
@@ -166,7 +166,7 @@ This is the single highest-leverage test artifact for the open-source launch. Wi
 
 ### 3.3 Current vectors
 
-All **59 fixtures** present, generated deterministically, and passing conformance across Go / TypeScript / Python / Rust:
+All **59 fixtures** present, generated deterministically, and passing conformance across Go / TypeScript / Python / Rust / C:
 
 **Core v1 — 20 fixtures**
 
@@ -289,20 +289,21 @@ go test -run TestConformanceVectors ./...
 
 ## Layer 4 — Cross-language interop
 
-**Status:** Go ↔ TypeScript ↔ Python ↔ Rust all proven. All **59 fixtures** byte-identical across every pairing.
+**Status:** Go ↔ TypeScript ↔ Python ↔ Rust ↔ C all proven. All **59 fixtures** byte-identical across every pairing.
 
 ### 4.1 The NxN conformance matrix
 
 Every SDK must pass the **59 canonical fixtures** when acting as a verifier against bundles produced by every other SDK (including itself). For N implementations the matrix is NxN:
 
-|   | Go verifier | TS verifier | Python verifier | Rust verifier |
-|---|---|---|---|---|
-| **Go signer** | ✅ | ✅ | ✅ | ✅ |
-| **TS signer** | ✅ | ✅ | ✅ | ✅ |
-| **Python signer** | ✅ | ✅ | ✅ | ✅ |
-| **Rust signer** | ✅ | ✅ | ✅ | ✅ |
+|   | Go verifier | TS verifier | Python verifier | Rust verifier | C verifier |
+|---|---|---|---|---|---|
+| **Go signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **TS signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Python signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Rust signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **C signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-All four SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 59 covers: 20 original v1 fixtures + 2 sub-delegation fixtures + 12 constraint-bearing fixtures + 2 session-binding fixtures + 2 key-rotation fixtures + 6 stream-sequence fixtures + 5 session-token fixtures + 5 transaction-receipt fixtures + 1 revocation-push fixture + 1 witness-entry fixture + 1 challenge-forwarding fixture + 2 hybrid single-component-corruption fixtures (Ed25519-only and ML-DSA-65-only).
+All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 59 covers: 20 original v1 fixtures + 2 sub-delegation fixtures + 12 constraint-bearing fixtures + 2 session-binding fixtures + 2 key-rotation fixtures + 6 stream-sequence fixtures + 5 session-token fixtures + 5 transaction-receipt fixtures + 1 revocation-push fixture + 1 witness-entry fixture + 1 challenge-forwarding fixture + 2 hybrid single-component-corruption fixtures (Ed25519-only and ML-DSA-65-only).
 
 Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 59 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
 

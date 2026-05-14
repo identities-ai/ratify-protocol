@@ -6,7 +6,7 @@ Four testing levels, from fastest to most realistic:
 
 | Level | What | Time | Shows |
 |---|---|---|---|
-| 1 | Conformance suite | <10 s | Library primitives work in all 4 SDKs |
+| 1 | Conformance suite | <10 s | Library primitives work in all 5 SDKs |
 | 2 | Narrative demo (any language) | ~5 s | Full lifecycle + attack rejections |
 | 3 | Bash-only end-to-end | ~2 s | CLI-only flow, no code |
 | 4 | HTTP wire protocol | ~5 s | Real network flow with server + client |
@@ -34,7 +34,7 @@ cd sdks/python && python -m venv .venv && source .venv/bin/activate && \
 cd sdks/rust && cargo test --quiet && cd ../..
 ```
 
-**Pass criterion:** all four print green, all 59 fixtures pass in every language.
+**Pass criterion:** all five print green, all 59 fixtures pass in every language.
 
 ---
 
@@ -57,7 +57,7 @@ cd demos/typescript && npm install && npm run demo && cd ../..
 cd demos/rust && cargo run && cd ../..
 ```
 
-**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all four languages (only random IDs differ).
+**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all five languages (only random IDs differ).
 
 ---
 
@@ -192,7 +192,7 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 
 - **Deployment / scale.** No production load testing yet. Allocated for `TEST_PLAN.md` §8 with k6/vegeta; gated on first production deployment.
 - **Adversarial security audit.** External audit (Trail of Bits / NCC / Cure53) scheduled before v1.0.0 stable — see `RELEASES.md`.
-- **Interop with third-party agent platforms.** Third-party platform integrations are gated on design partner engagement; meanwhile, cross-language interop across our four SDKs is a reasonable proxy.
+- **Interop with third-party agent platforms.** Third-party platform integrations are gated on design partner engagement; meanwhile, cross-language interop across our five SDKs is a reasonable proxy.
 - **Long-term session / streaming properties.** See `ROADMAP.md` §2 for v1.1 gaps (session binding, sequence numbers, session cert cache).
 
 ---
@@ -208,7 +208,7 @@ go test ./... && \
   cd sdks/rust && cargo test --quiet && cd ../..
 ```
 
-If all four are green, your change doesn't drift the protocol. That's the contract.
+If all five are green, your change doesn't drift the protocol. That's the contract.
 
 For broader changes (new canonical rules, new field), also run:
 

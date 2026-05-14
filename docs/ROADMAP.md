@@ -6,7 +6,7 @@ Companion to [`SPEC.md`](../SPEC.md), [`EXPLAINED.md`](EXPLAINED.md), and [`AGEN
 
 ## What shipped in v1.0.0-alpha.5
 
-All v1.1 features are backward-compatible with v1.0. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 59 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, and Rust.
+All v1.1 features are backward-compatible with v1.0. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 59 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
 
 ### Continuous real-time interactions
 

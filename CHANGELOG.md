@@ -6,6 +6,35 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.8 (2026-05-13)
+
+### Added — Fifth Reference SDK: C / C++ (`sdks/c/`)
+
+A new C reference implementation (`sdks/c/`) ships as the fifth SDK. Licensed Apache-2.0.
+
+**Artifacts:**
+- Static library: `libratify_c.a`
+- Shared library: `libratify_c.so`
+- Auto-generated header: `ratify.h` (produced by cbindgen)
+
+**Operations supported:** Delegate, Present, Verify (all three verbs), session tokens, verification receipts, revocation, key rotation, scope utilities, policy verdicts, and transaction receipts — full parity with the other four SDKs.
+
+**Embedded target support:** `no_std` + alloc. The C SDK compiles for embedded RTOS targets (Cortex-M4/M7) with no heap allocator requirement beyond a caller-supplied alloc. Custom entropy via `ratify_set_entropy_source()` for hardware RNG on RTOS targets.
+
+**Conformance:** 100 new tests in the C SDK. All five SDKs pass all 59 canonical test vectors byte-identical.
+
+### Changed — Rust SDK
+
+- **`fips204` (pure Rust) replaces `pqcrypto-mldsa` (C FFI).** The Rust SDK's ML-DSA-65 implementation is now `fips204`, a pure-Rust, `no_std`-compatible FIPS 204 implementation. Eliminates the C FFI dependency entirely.
+- **`#![no_std]` + alloc support.** The Rust SDK now compiles for embedded Cortex-M4/M7 RTOS targets. Requires only `alloc`; no `std` dependency.
+- **Eliminated `serde_json` from the canonical signing path.** The canonical serializer no longer touches `serde_json` in the hot path, removing a source of potential non-determinism and improving embedded portability.
+
+### Wire format
+
+Unchanged. All five SDKs produce and accept the same wire format as alpha.7. All 59 canonical test vectors regenerate byte-identical.
+
+---
+
 ## v1.0.0-alpha.7 (2026-05-11)
 
 ### Added — SDK Provider Interfaces (SPEC §17)

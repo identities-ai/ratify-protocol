@@ -2,24 +2,31 @@
 //!
 //! Uses:
 //!   - `ed25519-dalek` — audited Ed25519, pure Rust.
-//!   - `pqcrypto-mldsa` — PQClean-based ML-DSA-65 (FIPS 204).
+//!   - `fips204` — pure-Rust ML-DSA-65 (FIPS 204), no_std compatible.
 //!
 //! Every sign produces BOTH component signatures. Every verify checks BOTH;
 //! either failure fails the whole signature.
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec::Vec};
+
 use ed25519_dalek::{Signature as EdSignature, Signer as _, SigningKey, Verifier, VerifyingKey};
+use fips204::ml_dsa_65;
+use fips204::traits::{SerDes, Signer as MlSigner, Verifier as MlVerifier};
 use hmac::{Hmac, Mac};
-use pqcrypto_mldsa::mldsa65 as mldsa;
-use pqcrypto_traits::sign::{DetachedSignature, PublicKey as _, SecretKey as _};
 use sha2::{Digest, Sha256};
 
-use crate::canonical::canonical_json;
-use crate::types::{
-    AgentIdentity, DelegationCert, HumanRoot, HybridPrivateKey, HybridPublicKey, HybridSignature,
-    KeyRotationStatement, ProofBundle, ReceiptPartySignature, RevocationList, RevocationPush,
-    SessionToken, TransactionReceipt, VerifyResult, WitnessEntry,
+use crate::canonical::{
+    encode_bytes_b64, encode_constraints, encode_hybrid_pub_key, encode_i32, encode_i64,
+    encode_str, encode_str_array,
 };
-use serde_json::json;
+use crate::types::{
+    DelegationCert, HybridPrivateKey, HybridPublicKey, HybridSignature, KeyRotationStatement,
+    ProofBundle, ReceiptPartySignature, RevocationList, RevocationPush, SessionToken,
+    TransactionReceipt, VerifyResult, WitnessEntry,
+};
+#[cfg(feature = "std")]
+use crate::types::{AgentIdentity, HumanRoot};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -49,21 +56,26 @@ pub fn generate_hybrid_keypair() -> (HybridPublicKey, HybridPrivateKey) {
     let ed_sk = SigningKey::from_bytes(&seed);
     let ed_pk = ed_sk.verifying_key();
 
-    let (ml_pk, ml_sk) = mldsa::keypair();
+    let (ml_pk, ml_sk) = ml_dsa_65::try_keygen().expect("ML-DSA-65 keygen");
 
     (
         HybridPublicKey {
             ed25519: ed_pk.to_bytes().to_vec(),
-            ml_dsa_65: ml_pk.as_bytes().to_vec(),
+            ml_dsa_65: ml_pk.into_bytes().to_vec(),
         },
         HybridPrivateKey {
             ed25519: seed.to_vec(),
-            ml_dsa_65: ml_sk.as_bytes().to_vec(),
+            ml_dsa_65: ml_sk.into_bytes().to_vec(),
         },
     )
 }
 
 /// Generate a fresh HumanRoot (public + private).
+///
+/// Only available with the `std` feature (uses `SystemTime::now()` for
+/// `created_at`). In no_std environments, build the struct directly and
+/// supply your own timestamp.
+#[cfg(feature = "std")]
 pub fn generate_human_root() -> (HumanRoot, HybridPrivateKey) {
     let (pub_key, priv_key) = generate_hybrid_keypair();
     let id = derive_id(&pub_key);
@@ -79,6 +91,11 @@ pub fn generate_human_root() -> (HumanRoot, HybridPrivateKey) {
 }
 
 /// Generate a fresh AgentIdentity.
+///
+/// Only available with the `std` feature (uses `SystemTime::now()` for
+/// `created_at`). In no_std environments, build the struct directly and
+/// supply your own timestamp.
+#[cfg(feature = "std")]
 pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPrivateKey) {
     let (pub_key, priv_key) = generate_hybrid_keypair();
     let id = derive_id(&pub_key);
@@ -94,6 +111,8 @@ pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPri
     )
 }
 
+/// Current time as Unix seconds. Only available with the `std` feature.
+#[cfg(feature = "std")]
 fn now_unix() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -109,29 +128,24 @@ fn now_unix() -> i64 {
 /// Canonical bytes signed to produce DelegationCert.signature.
 ///
 /// `constraints` is always serialized — as `[]` when empty — so canonical
-/// bytes are deterministic across issuers and cross-SDK. Each Constraint
-/// round-trips through serde_json with `skip_serializing_if` matching Go's
-/// `omitempty` behavior.
+/// bytes are deterministic across issuers and cross-SDK.
+/// Keys in lex order: cert_id, constraints, expires_at, issued_at, issuer_id,
+/// issuer_pub_key, scope, subject_id, subject_pub_key, version.
 pub fn delegation_sign_bytes(cert: &DelegationCert) -> Vec<u8> {
-    let signable = json!({
-        "cert_id": cert.cert_id,
-        "constraints": cert.constraints,
-        "expires_at": cert.expires_at,
-        "issued_at": cert.issued_at,
-        "issuer_id": cert.issuer_id,
-        "issuer_pub_key": {
-            "ed25519": crate::canonical::base64_std_encode(&cert.issuer_pub_key.ed25519),
-            "ml_dsa_65": crate::canonical::base64_std_encode(&cert.issuer_pub_key.ml_dsa_65),
-        },
-        "scope": cert.scope,
-        "subject_id": cert.subject_id,
-        "subject_pub_key": {
-            "ed25519": crate::canonical::base64_std_encode(&cert.subject_pub_key.ed25519),
-            "ml_dsa_65": crate::canonical::base64_std_encode(&cert.subject_pub_key.ml_dsa_65),
-        },
-        "version": cert.version,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"cert_id\":");  encode_str(&cert.cert_id, &mut out);
+    out.push_str(",\"constraints\":");  encode_constraints(&cert.constraints, &mut out);
+    out.push_str(",\"expires_at\":");  encode_i64(cert.expires_at, &mut out);
+    out.push_str(",\"issued_at\":");   encode_i64(cert.issued_at, &mut out);
+    out.push_str(",\"issuer_id\":");   encode_str(&cert.issuer_id, &mut out);
+    out.push_str(",\"issuer_pub_key\":");  encode_hybrid_pub_key(&cert.issuer_pub_key, &mut out);
+    out.push_str(",\"scope\":");       encode_str_array(&cert.scope, &mut out);
+    out.push_str(",\"subject_id\":");  encode_str(&cert.subject_id, &mut out);
+    out.push_str(",\"subject_pub_key\":");  encode_hybrid_pub_key(&cert.subject_pub_key, &mut out);
+    out.push_str(",\"version\":");     encode_i32(cert.version, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 /// Canonical bytes signed to produce ProofBundle.challenge_sig.
@@ -181,33 +195,31 @@ pub fn challenge_sign_bytes_with_stream(
 }
 
 /// Canonical bytes signed to produce RevocationList.signature.
+/// Keys: issuer_id, revoked_certs, updated_at.
 pub fn revocation_sign_bytes(list: &RevocationList) -> Vec<u8> {
-    let signable = json!({
-        "issuer_id": list.issuer_id,
-        "revoked_certs": list.revoked_certs,
-        "updated_at": list.updated_at,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"issuer_id\":");    encode_str(&list.issuer_id, &mut out);
+    out.push_str(",\"revoked_certs\":");  encode_str_array(&list.revoked_certs, &mut out);
+    out.push_str(",\"updated_at\":");  encode_i64(list.updated_at, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 /// Canonical bytes signed by both old and new keys in KeyRotationStatement.
+/// Keys: new_id, new_pub_key, old_id, old_pub_key, reason, rotated_at, version.
 pub fn key_rotation_sign_bytes(stmt: &KeyRotationStatement) -> Vec<u8> {
-    let signable = json!({
-        "new_id": stmt.new_id,
-        "new_pub_key": {
-            "ed25519": crate::canonical::base64_std_encode(&stmt.new_pub_key.ed25519),
-            "ml_dsa_65": crate::canonical::base64_std_encode(&stmt.new_pub_key.ml_dsa_65),
-        },
-        "old_id": stmt.old_id,
-        "old_pub_key": {
-            "ed25519": crate::canonical::base64_std_encode(&stmt.old_pub_key.ed25519),
-            "ml_dsa_65": crate::canonical::base64_std_encode(&stmt.old_pub_key.ml_dsa_65),
-        },
-        "reason": stmt.reason,
-        "rotated_at": stmt.rotated_at,
-        "version": stmt.version,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"new_id\":");      encode_str(&stmt.new_id, &mut out);
+    out.push_str(",\"new_pub_key\":"); encode_hybrid_pub_key(&stmt.new_pub_key, &mut out);
+    out.push_str(",\"old_id\":");      encode_str(&stmt.old_id, &mut out);
+    out.push_str(",\"old_pub_key\":"); encode_hybrid_pub_key(&stmt.old_pub_key, &mut out);
+    out.push_str(",\"reason\":");     encode_str(&stmt.reason, &mut out);
+    out.push_str(",\"rotated_at\":"); encode_i64(stmt.rotated_at, &mut out);
+    out.push_str(",\"version\":");    encode_i32(stmt.version, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 // ----------------------------------------------------------------------
@@ -221,13 +233,15 @@ pub fn sign_both(msg: &[u8], priv_key: &HybridPrivateKey) -> HybridSignature {
     let ed_sk = SigningKey::from_bytes(&ed_seed);
     let ed_sig = ed_sk.sign(msg);
 
-    let ml_sk =
-        mldsa::SecretKey::from_bytes(&priv_key.ml_dsa_65).expect("ML-DSA-65 secret key malformed");
-    let ml_sig = mldsa::detached_sign(msg, &ml_sk);
+    let mut ml_sk_bytes = [0u8; ml_dsa_65::SK_LEN];
+    ml_sk_bytes.copy_from_slice(&priv_key.ml_dsa_65);
+    let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(ml_sk_bytes)
+        .expect("ML-DSA-65 secret key malformed");
+    let ml_sig = ml_sk.try_sign(msg, &[]).expect("ML-DSA-65 sign");
 
     HybridSignature {
         ed25519: ed_sig.to_bytes().to_vec(),
-        ml_dsa_65: ml_sig.as_bytes().to_vec(),
+        ml_dsa_65: ml_sig.to_vec(),
     }
 }
 
@@ -272,12 +286,15 @@ pub fn verify_both(
         .verify(msg, &ed_sig)
         .map_err(|_| "Ed25519 signature invalid".to_string())?;
 
-    let ml_pk = mldsa::PublicKey::from_bytes(&pub_key.ml_dsa_65)
+    let mut ml_pk_bytes = [0u8; ml_dsa_65::PK_LEN];
+    ml_pk_bytes.copy_from_slice(&pub_key.ml_dsa_65);
+    let ml_pk = ml_dsa_65::PublicKey::try_from_bytes(ml_pk_bytes)
         .map_err(|_| "ML-DSA-65 public key malformed".to_string())?;
-    let ml_sig = mldsa::DetachedSignature::from_bytes(&sig.ml_dsa_65)
-        .map_err(|_| "ML-DSA-65 signature malformed".to_string())?;
-    mldsa::verify_detached_signature(&ml_sig, msg, &ml_pk)
-        .map_err(|_| "ML-DSA-65 signature invalid".to_string())?;
+    let mut ml_sig_bytes = [0u8; ml_dsa_65::SIG_LEN];
+    ml_sig_bytes.copy_from_slice(&sig.ml_dsa_65);
+    if !ml_pk.verify(msg, &ml_sig_bytes, &[]) {
+        return Err("ML-DSA-65 signature invalid".to_string());
+    }
 
     Ok(())
 }
@@ -401,14 +418,16 @@ pub fn verify_revocation_list(list: &RevocationList, issuer_pub: &HybridPublicKe
 }
 
 /// Canonical bytes signed to produce RevocationPush.signature.
+/// Keys: entries, issuer_id, pushed_at, seq_no.
 pub fn revocation_push_sign_bytes(push: &RevocationPush) -> Vec<u8> {
-    let signable = json!({
-        "entries": push.entries,
-        "issuer_id": push.issuer_id,
-        "pushed_at": push.pushed_at,
-        "seq_no": push.seq_no,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"entries\":");    encode_str_array(&push.entries, &mut out);
+    out.push_str(",\"issuer_id\":"); encode_str(&push.issuer_id, &mut out);
+    out.push_str(",\"pushed_at\":"); encode_i64(push.pushed_at, &mut out);
+    out.push_str(",\"seq_no\":");   encode_i64(push.seq_no, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 pub fn issue_revocation_push(push: &mut RevocationPush, issuer_priv: &HybridPrivateKey) {
@@ -425,14 +444,16 @@ pub fn verify_revocation_push(push: &RevocationPush, issuer_pub: &HybridPublicKe
 }
 
 /// Canonical bytes signed to produce WitnessEntry.signature.
+/// Keys: entry_data, prev_hash, timestamp, witness_id.
 pub fn witness_entry_sign_bytes(entry: &WitnessEntry) -> Vec<u8> {
-    let signable = json!({
-        "entry_data": crate::canonical::base64_std_encode(&entry.entry_data),
-        "prev_hash": crate::canonical::base64_std_encode(&entry.prev_hash),
-        "timestamp": entry.timestamp,
-        "witness_id": entry.witness_id,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"entry_data\":"); encode_bytes_b64(&entry.entry_data, &mut out);
+    out.push_str(",\"prev_hash\":"); encode_bytes_b64(&entry.prev_hash, &mut out);
+    out.push_str(",\"timestamp\":"); encode_i64(entry.timestamp, &mut out);
+    out.push_str(",\"witness_id\":"); encode_str(&entry.witness_id, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 pub fn issue_witness_entry(entry: &mut WitnessEntry, witness_priv: &HybridPrivateKey) {
@@ -505,37 +526,37 @@ pub fn generate_challenge() -> Vec<u8> {
 // ----------------------------------------------------------------------
 
 /// Canonical bytes that every party signs to bind a TransactionReceipt.
-/// Parties are sorted lex by party_id.
+/// Parties are sorted lex by party_id; party object keys: agent_id,
+/// agent_pub_key, party_id, role.
+/// Outer keys: created_at, parties, terms_canonical_json, terms_schema_uri,
+/// transaction_id, version.
 pub fn transaction_receipt_sign_bytes(receipt: &TransactionReceipt) -> Vec<u8> {
-    let mut parties: Vec<serde_json::Value> = receipt
-        .parties
-        .iter()
-        .map(|p| {
-            json!({
-                "agent_id": p.agent_id,
-                "agent_pub_key": {
-                    "ed25519": crate::canonical::base64_std_encode(&p.agent_pub_key.ed25519),
-                    "ml_dsa_65": crate::canonical::base64_std_encode(&p.agent_pub_key.ml_dsa_65),
-                },
-                "party_id": p.party_id,
-                "role": p.role,
-            })
-        })
-        .collect();
-    parties.sort_by(|a, b| {
-        let a_id = a["party_id"].as_str().unwrap_or("");
-        let b_id = b["party_id"].as_str().unwrap_or("");
-        a_id.cmp(b_id)
-    });
-    let signable = json!({
-        "created_at": receipt.created_at,
-        "parties": parties,
-        "terms_canonical_json": crate::canonical::base64_std_encode(&receipt.terms_canonical_json),
-        "terms_schema_uri": receipt.terms_schema_uri,
-        "transaction_id": receipt.transaction_id,
-        "version": receipt.version,
-    });
-    canonical_json(&signable)
+    // Sort parties by party_id (lex).
+    let mut sorted_parties: Vec<&crate::types::ReceiptParty> = receipt.parties.iter().collect();
+    sorted_parties.sort_by(|a, b| a.party_id.cmp(&b.party_id));
+
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"created_at\":"); encode_i64(receipt.created_at, &mut out);
+    out.push_str(",\"parties\":[");
+    for (i, p) in sorted_parties.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        out.push_str("\"agent_id\":"); encode_str(&p.agent_id, &mut out);
+        out.push_str(",\"agent_pub_key\":"); encode_hybrid_pub_key(&p.agent_pub_key, &mut out);
+        out.push_str(",\"party_id\":"); encode_str(&p.party_id, &mut out);
+        out.push_str(",\"role\":"); encode_str(&p.role, &mut out);
+        out.push('}');
+    }
+    out.push(']');
+    out.push_str(",\"terms_canonical_json\":"); encode_bytes_b64(&receipt.terms_canonical_json, &mut out);
+    out.push_str(",\"terms_schema_uri\":"); encode_str(&receipt.terms_schema_uri, &mut out);
+    out.push_str(",\"transaction_id\":"); encode_str(&receipt.transaction_id, &mut out);
+    out.push_str(",\"version\":"); encode_i32(receipt.version, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 /// Produce a party's hybrid signature over the receipt's canonical signable.
@@ -569,24 +590,24 @@ pub fn chain_hash(chain: &[DelegationCert]) -> Vec<u8> {
 
 /// Canonical MAC-input bytes for a SessionToken. The MAC itself is excluded
 /// from the signable (a MAC cannot cover itself).
+/// Keys: agent_id, agent_pub_key, chain_hash, granted_scope, human_id,
+/// issued_at, session_id, valid_until, version.
 pub fn session_token_sign_bytes(token: &SessionToken) -> Vec<u8> {
     let mut scope = token.granted_scope.clone();
     scope.sort();
-    let signable = json!({
-        "agent_id": token.agent_id,
-        "agent_pub_key": {
-            "ed25519": crate::canonical::base64_std_encode(&token.agent_pub_key.ed25519),
-            "ml_dsa_65": crate::canonical::base64_std_encode(&token.agent_pub_key.ml_dsa_65),
-        },
-        "chain_hash": crate::canonical::base64_std_encode(&token.chain_hash),
-        "granted_scope": scope,
-        "human_id": token.human_id,
-        "issued_at": token.issued_at,
-        "session_id": token.session_id,
-        "valid_until": token.valid_until,
-        "version": token.version,
-    });
-    canonical_json(&signable)
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"agent_id\":");     encode_str(&token.agent_id, &mut out);
+    out.push_str(",\"agent_pub_key\":"); encode_hybrid_pub_key(&token.agent_pub_key, &mut out);
+    out.push_str(",\"chain_hash\":");  encode_bytes_b64(&token.chain_hash, &mut out);
+    out.push_str(",\"granted_scope\":"); encode_str_array(&scope, &mut out);
+    out.push_str(",\"human_id\":");    encode_str(&token.human_id, &mut out);
+    out.push_str(",\"issued_at\":");   encode_i64(token.issued_at, &mut out);
+    out.push_str(",\"session_id\":");  encode_str(&token.session_id, &mut out);
+    out.push_str(",\"valid_until\":"); encode_i64(token.valid_until, &mut out);
+    out.push_str(",\"version\":");     encode_i32(token.version, &mut out);
+    out.push('}');
+    out.into_bytes()
 }
 
 /// Issue a SessionToken from a previously verified bundle's result. Callers

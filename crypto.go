@@ -1121,7 +1121,7 @@ type bundleHashDelegationSignable struct {
 // BundleHash returns the canonical SHA-256 digest of a ProofBundle. The
 // stable identifier of "what was verified" inside a VerificationReceipt.
 //
-// Every reference SDK (Go, TypeScript, Python, Rust) MUST produce the same
+// Every reference SDK (Go, TypeScript, Python, Rust, C/C++) MUST produce the same
 // 32-byte digest for the same logical bundle. The canonical form is a
 // fixed alphabetical-key shape with no omitempty so the byte output is
 // deterministic regardless of which optional v1.1 fields are set.

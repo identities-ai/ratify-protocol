@@ -3,11 +3,14 @@
 //! Every semantic must produce the same verdict for the same inputs, or
 //! cross-language conformance fails.
 
+#[cfg(not(feature = "std"))]
+use alloc::{boxed::Box, format, string::String, string::ToString};
+
 use crate::types::{Constraint, ConstraintEvaluator, DelegationCert, VerifierContext};
 
+use alloc::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use std::collections::HashMap;
 
 /// Run every Constraint on cert against the caller-supplied VerifierContext.
 /// Return `Ok(())` iff all pass; an error string otherwise.
@@ -18,7 +21,7 @@ pub fn evaluate_constraints<'a>(
     cert: &DelegationCert,
     ctx: &VerifierContext,
     now_sec: i64,
-    ext_evaluators: Option<&HashMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
+    ext_evaluators: Option<&BTreeMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
 ) -> Result<(), String> {
     for (i, c) in cert.constraints.iter().enumerate() {
         let mut err = evaluate_constraint(c, &cert.cert_id, ctx, now_sec);
@@ -226,7 +229,7 @@ fn evaluate_constraint(
 
 fn haversine_meters(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let earth_radius_m = 6371000.0_f64;
-    let rad = std::f64::consts::PI / 180.0;
+    let rad = core::f64::consts::PI / 180.0;
     let d_lat = (lat2 - lat1) * rad;
     let d_lon = (lon2 - lon1) * rad;
     let a = (d_lat / 2.0).sin().powi(2)

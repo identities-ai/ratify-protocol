@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol"
-version = "1.0.0-alpha.7"
+version = "1.0.0-alpha.8"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -12,19 +12,21 @@ repository = "https://github.com/identities-ai/ratify-protocol"
 keywords = ["ratify", "delegation", "identity", "post-quantum", "ed25519"]
 categories = ["cryptography", "authentication"]
 
+[features]
+default = ["std"]
+std = ["serde_json"]
+
 [dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
-pqcrypto-mldsa = "0.1"
-pqcrypto-traits = "0.3"
-rand_core = { version = "0.6", features = ["std"] }
+fips204 = "0.4.6"
+rand_core = { version = "0.6" }
 sha2 = "0.10"
 hmac = "0.12"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", optional = true }
 base64 = "0.22"
 hex = "0.4"
-thiserror = "1"
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono-tz = "0.9"
 
 [dev-dependencies]

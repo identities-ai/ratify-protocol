@@ -1,9 +1,11 @@
 //! Verify — the core verifier. Mirrors the Go reference verify.go exactly.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec::Vec};
+
+use alloc::collections::BTreeMap;
 
 use crate::constraints::evaluate_constraints;
-use std::collections::HashMap;
 
 use crate::crypto::{
     transaction_receipt_sign_bytes, verify_both, verify_challenge_signature_with_stream,
@@ -30,10 +32,19 @@ pub fn verify_bundle(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult
 
 fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResult {
     let now = opts.now.unwrap_or_else(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64
+        #[cfg(feature = "std")]
+        {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            // Without std, callers MUST supply opts.now.
+            panic!("verify_bundle: opts.now must be set when std feature is disabled")
+        }
     });
 
     // --- Structure ---
@@ -512,7 +523,7 @@ pub fn verify_transaction_receipt(
     }
 
     // Party IDs must be unique.
-    let mut party_idx: HashMap<&str, usize> = HashMap::new();
+    let mut party_idx: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, p) in receipt.parties.iter().enumerate() {
         if p.party_id.is_empty() {
             return receipt_fail(&format!("empty_party_id: party {} has no party_id", i));
@@ -528,7 +539,7 @@ pub fn verify_transaction_receipt(
 
     // Each listed party must have exactly one signature; every signature's
     // party_id must refer to a listed party.
-    let mut sig_by_party: HashMap<&str, usize> = HashMap::new();
+    let mut sig_by_party: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, s) in receipt.party_signatures.iter().enumerate() {
         if !party_idx.contains_key(s.party_id.as_str()) {
             return receipt_fail(&format!(

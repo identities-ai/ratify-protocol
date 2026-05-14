@@ -1,4 +1,6 @@
 //! Tests for the Provider interfaces defined in SPEC §17.
+//! Requires the `std` feature (uses generate_human_root / generate_agent).
+#![cfg(feature = "std")]
 //!
 //! Each test builds a known-good single-cert ProofBundle as the fixture, then
 //! configures one provider hook at a time and asserts the verifier's behaviour

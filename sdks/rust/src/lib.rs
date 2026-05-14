@@ -6,6 +6,15 @@
 //!
 //! See docs/EXPLAINED.md and docs/AGENT_TO_AGENT.md in the repository for
 //! architecture, threat model, and agent-to-agent patterns.
+//!
+//! # `no_std` support
+//!
+//! Disable the default `std` feature to use this crate without the standard
+//! library. An `alloc` crate is required. I/O, `SystemTime`, and `serde_json`
+//! support are only available with `std`.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
 
 pub mod canonical;
 pub mod constraints;
@@ -15,15 +24,16 @@ pub mod scope;
 pub mod types;
 pub mod verify;
 
-pub use canonical::{base64_std_decode, base64_std_encode, canonical_json, hex_decode, hex_encode};
+pub use canonical::{base64_std_decode, base64_std_encode, hex_decode, hex_encode};
+#[cfg(feature = "std")]
+pub use canonical::canonical_json;
 pub use crypto::{
     chain_hash, challenge_sign_bytes, challenge_sign_bytes_with_session_context,
-    challenge_sign_bytes_with_stream, delegation_sign_bytes, derive_id, generate_agent,
-    generate_challenge, generate_human_root, generate_hybrid_keypair, issue_delegation,
-    issue_key_rotation_statement, issue_revocation_list, issue_revocation_push,
-    issue_session_token, issue_witness_entry, key_rotation_sign_bytes, revocation_push_sign_bytes,
-    revocation_sign_bytes, session_token_sign_bytes, sign_both, sign_challenge,
-    sign_challenge_with_session_context, sign_challenge_with_stream,
+    challenge_sign_bytes_with_stream, delegation_sign_bytes, derive_id, generate_challenge,
+    generate_hybrid_keypair, issue_delegation, issue_key_rotation_statement, issue_revocation_list,
+    issue_revocation_push, issue_session_token, issue_witness_entry, key_rotation_sign_bytes,
+    revocation_push_sign_bytes, revocation_sign_bytes, session_token_sign_bytes, sign_both,
+    sign_challenge, sign_challenge_with_session_context, sign_challenge_with_stream,
     sign_transaction_receipt_party, transaction_receipt_sign_bytes, verify_both,
     verify_challenge_signature, verify_challenge_signature_with_session_context,
     verify_challenge_signature_with_stream, verify_delegation_signature,
@@ -31,6 +41,8 @@ pub use crypto::{
     verify_revocation_push, verify_session_token, verify_session_token_e, verify_witness_entry,
     witness_entry_sign_bytes,
 };
+#[cfg(feature = "std")]
+pub use crypto::{generate_agent, generate_human_root};
 pub use scope::{
     expand_scopes, has_scope, intersect_scopes, is_sensitive, validate_scopes, CUSTOM_SCOPE_PREFIX,
     SCOPE_COMMS_CALENDAR_READ, SCOPE_COMMS_CALENDAR_WRITE, SCOPE_COMMS_EMAIL_DELETE,

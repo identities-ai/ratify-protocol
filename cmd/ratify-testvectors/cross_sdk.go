@@ -1,4 +1,4 @@
-// Cross-SDK byte-equivalence vectors (SPEC §17.5–§17.6, alpha.7).
+// Cross-SDK byte-equivalence vectors (SPEC §17.5–§17.6, alpha.8).
 //
 // The vectors emitted here are independent of the 59 wire-format conformance
 // fixtures. They lock the canonical byte representation of the alpha.7
@@ -44,11 +44,11 @@ type crossSDKVector struct {
 }
 
 // generateCrossSDKVectors emits cross_sdk_vectors.json under outDir.
-// This is the alpha.7 byte-equivalence corpus; every SDK loads it.
+// This is the alpha.8 byte-equivalence corpus; every SDK loads it.
 func generateCrossSDKVectors(outDir string) error {
 	doc := crossSDKDoc{
-		Description: "Cross-SDK byte-equivalence vectors for alpha.7 primitives. " +
-			"Every reference SDK (Go, TypeScript, Python, Rust) MUST produce " +
+		Description: "Cross-SDK byte-equivalence vectors for alpha.8 primitives. " +
+			"Every reference SDK (Go, TypeScript, Python, Rust, C/C++) MUST produce " +
 			"identical bytes for each vector. Generated deterministically by " +
 			"cmd/ratify-testvectors; regenerate via `go run ./cmd/ratify-testvectors`.",
 		Vectors: []crossSDKVector{},
@@ -373,6 +373,6 @@ func verificationReceiptSignableVectors() ([]crossSDKVector, error) {
 
 func base64Standard(b []byte) string {
 	// Standard alphabet, with padding — matches canonical_json's []byte
-	// convention used uniformly across all four reference SDKs.
+	// convention used uniformly across all five reference SDKs.
 	return base64.StdEncoding.EncodeToString(b)
 }

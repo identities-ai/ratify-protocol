@@ -25,7 +25,7 @@ When a human authorizes an AI agent — or when one agent transacts with another
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
 
-**Status:** `v1.0.0-alpha.7` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust) · Patent Pending.
+**Status:** `v1.0.0-alpha.8` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
 Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
 
@@ -153,7 +153,7 @@ go test ./...
 Or install as a module in your own project:
 
 ```bash
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.7
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.8
 ```
 
 ### TypeScript
@@ -171,7 +171,7 @@ npm run test:conformance
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a7
+pip install ratify-protocol==1.0.0a8
 ```
 
 Or to run the conformance suite yourself:
@@ -187,7 +187,7 @@ pytest
 ### Rust
 
 ```bash
-cargo add ratify-protocol@1.0.0-alpha.7
+cargo add ratify-protocol@1.0.0-alpha.8
 ```
 
 Or to run the conformance suite yourself:
@@ -279,7 +279,7 @@ Both signers must produce identical bytes from the same logical input. JSON is u
 - UTF-8 with `\u` escapes only where mandatory
 - Numbers as integers when integer-valued, no trailing zeros otherwise
 
-The canonicalizer is hand-written in every SDK and produces byte-identical output across Go, TypeScript, Python, and Rust. The 59 fixtures verify this on every CI run.
+The canonicalizer is hand-written in every SDK and produces byte-identical output across Go, TypeScript, Python, Rust, and C/C++. The 59 fixtures verify this on every CI run.
 
 Spec: [`SPEC.md`](SPEC.md) §6 (canonical JSON) and §7 (`delegationSignBytes` / `challengeSignBytes`).
 
@@ -317,11 +317,11 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 
 | Implementation | Language | Status | Install |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.7` |
+| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.8` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` *(after npm org approval; install from source for now)* |
-| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a7` |
-| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.7` |
-| *C / C++ via stable C ABI* | — | planned | embedded systems / appliances |
+| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a8` |
+| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.8` |
+| `sdks/c/` (`libratify_c`) | C / C++ | ✅ 59/59 | build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
 
@@ -379,7 +379,8 @@ ratify-protocol/
 ├── sdks/
 │   ├── typescript/        @identities-ai/ratify-protocol (npm — coming soon)
 │   ├── python/            ratify-protocol (PyPI)
-│   └── rust/              ratify-protocol (crates.io)
+│   ├── rust/              ratify-protocol (crates.io)
+│   └── c/                 libratify_c — static + shared library, ratify.h (Apache-2.0)
 │
 ├── demos/                 End-to-end narrative demos: go/ python/ typescript/ rust/
 │

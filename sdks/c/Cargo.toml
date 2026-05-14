@@ -1,0 +1,72 @@
+[package]
+name = "ratify-c"
+version = "1.0.0-alpha.8"
+edition = "2021"
+authors = ["Identities AI, Inc. <hello@identities.ai>"]
+license = "Apache-2.0"
+description = "C/C++ bindings for the Ratify Protocol — static and shared libraries for embedded, IoT, and native targets."
+homepage = "https://identities.ai"
+documentation = "https://docs.identities.ai"
+repository = "https://github.com/identities-ai/ratify-protocol"
+keywords = ["ratify", "delegation", "identity", "post-quantum", "ffi"]
+categories = ["cryptography", "external-ffi-bindings"]
+build = "build.rs"
+
+[lib]
+name = "ratify_c"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[features]
+default = ["std"]
+
+# "std" is required because serde_json (used by ratify-protocol for the JSON wire
+# format) does not support no_std. Targets running embedded Linux, FreeRTOS with
+# a std shim, or Zephyr with std support can use this build.
+#
+# For targets with no OS entropy source (no /dev/urandom, no getrandom syscall),
+# enable "custom-entropy" and supply a ratify_entropy_callback via
+# ratify_set_entropy_source() before any call to ratify_challenge_generate()
+# or ratify_delegation_issue(). See the Custom Entropy section in README.md.
+std = []
+custom-entropy = ["getrandom/custom"]
+
+[dependencies]
+ratify-protocol = { path = "../rust" }
+serde_json = "1"
+getrandom = { version = "0.2", features = [] }
+
+[build-dependencies]
+cbindgen = "0.27"
+
+[[test]]
+name = "conformance"
+path = "tests/conformance.rs"
+
+[[test]]
+name = "api"
+path = "tests/api.rs"
+
+[[test]]
+name = "advanced"
+path = "tests/advanced.rs"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ---------------------------------------------------------------------------
+# Release profile: optimised for embedded / small-footprint targets.
+# These settings apply when building with `cargo build --release` or
+# `cross build --release`. They do NOT affect test or debug builds.
+# ---------------------------------------------------------------------------
+[profile.release]
+opt-level    = "z"   # optimise for binary size (smallest output)
+lto          = true  # link-time optimisation removes dead code across crates
+codegen-units = 1    # single codegen unit enables maximum LTO effectiveness
+panic        = "abort"  # no stack-unwinding machinery; critical for no_std targets
+strip        = "symbols" # strip debug symbols from the final library
+
+# Debug builds keep full debug info and no size pressure.
+[profile.dev]
+opt-level = 0
+debug = true

@@ -96,7 +96,7 @@ This is the build-vs-buy boundary, in one diagram:
 [ opt  ] VerificationReceipt    ↔ none        /  signed audit chain
 ```
 
-A bundle moves freely across all four SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
+A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
 
 ### Surface adapters (out of scope for this repository)
 
@@ -108,6 +108,6 @@ The protocol's contract stops at the `ProofBundle` wire format and the verifier 
 
 ## 7. Implementation Status
 
-Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, and **Rust**. The 59 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable. Each SDK also ships a provider-test suite covering the three SPEC §17 hooks.
+Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, **Rust**, and **C/C++**. The 59 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable. Each SDK also ships a provider-test suite covering the three SPEC §17 hooks.
 
 For the normative specification, see [`SPEC.md`](../SPEC.md).

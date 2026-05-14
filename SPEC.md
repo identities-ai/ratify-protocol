@@ -1272,13 +1272,13 @@ An `AuditProvider` records verification receipts for forensic, compliance, and M
 
 The provider surface is named consistently across languages so that interop documentation, conformance tests, and audit fixtures all reference the same concepts:
 
-| Concept | Go | TypeScript | Python | Rust |
-|---|---|---|---|---|
-| Revocation hook | `Revocation RevocationProvider` | `revocation?: RevocationProvider` | `revocation: RevocationProvider \| None` | `revocation: Option<Box<dyn RevocationProvider>>` |
-| Policy hook | `Policy PolicyProvider` | `policy?: PolicyProvider` | `policy: PolicyProvider \| None` | `policy: Option<Box<dyn PolicyProvider>>` |
-| Audit hook | `Audit AuditProvider` | `audit?: AuditProvider` | `audit: AuditProvider \| None` | `audit: Option<Box<dyn AuditProvider>>` |
+| Concept | Go | TypeScript | Python | Rust | C/C++ |
+|---|---|---|---|---|---|
+| Revocation hook | `Revocation RevocationProvider` | `revocation?: RevocationProvider` | `revocation: RevocationProvider \| None` | `revocation: Option<Box<dyn RevocationProvider>>` | `ratify_set_revocation_source()` |
+| Policy hook | `Policy PolicyProvider` | `policy?: PolicyProvider` | `policy: PolicyProvider \| None` | `policy: Option<Box<dyn PolicyProvider>>` | `ratify_set_policy_source()` |
+| Audit hook | `Audit AuditProvider` | `audit?: AuditProvider` | `audit: AuditProvider \| None` | `audit: Option<Box<dyn AuditProvider>>` | `ratify_set_audit_source()` |
 
-Method names: `IsRevoked` / `is_revoked`, `EvaluatePolicy` / `evaluate_policy`, `LogVerification` / `log_verification` — matching each language's idiomatic casing.
+Method names: `IsRevoked` / `is_revoked`, `EvaluatePolicy` / `evaluate_policy`, `LogVerification` / `log_verification` — matching each language's idiomatic casing. C/C++ uses the `ratify_` prefix convention throughout.
 
 ### 17.5 VerificationReceipt — tamper-evident verification records
 
@@ -1416,17 +1416,17 @@ ResolveAnchor(humanID) -> *Anchor | error
 
 ### 17.9 Cross-language naming for §17.5–§17.8
 
-| Concept | Go | TypeScript | Python | Rust |
-|---|---|---|---|---|
-| Bundle hash | `BundleHash(b)` | `bundleHash(b)` | `bundle_hash(b)` | `bundle_hash(&b)` |
-| Issue receipt | `IssueVerificationReceipt(...)` | `issueVerificationReceipt(...)` | `issue_verification_receipt(...)` | `issue_verification_receipt(...)` |
-| Verify receipt | `VerifyVerificationReceipt(r)` | `verifyVerificationReceipt(r)` | `verify_verification_receipt(r)` | `verify_verification_receipt(&r)` |
-| Chain pointer | `ReceiptHash(r)` | `receiptHash(r)` | `receipt_hash(r)` | `receipt_hash(&r)` |
-| Context hash | `VerifierContextHash(ctx)` | `verifierContextHash(ctx)` | `verifier_context_hash(ctx)` | `verifier_context_hash(&ctx)` |
-| Issue verdict | `IssuePolicyVerdict(...)` | `issuePolicyVerdict(...)` | `issue_policy_verdict(...)` | `issue_policy_verdict(...)` |
-| Verify verdict | `VerifyPolicyVerdict(...)` | `verifyPolicyVerdict(...)` | `verify_policy_verdict_e(...)` | `verify_policy_verdict(...)` |
-| Constraint evaluator | `ConstraintEvaluators map[string]ConstraintEvaluator` | `constraint_evaluators?: Record<string, ConstraintEvaluator>` | `constraint_evaluators: dict \| None` | `constraint_evaluators: Option<HashMap<String, Box<dyn ConstraintEvaluator>>>` |
-| Anchor resolver | `AnchorResolver` | `anchor_resolver?: AnchorResolver` | `anchor_resolver: AnchorResolver \| None` | `anchor_resolver: Option<Box<dyn AnchorResolver>>` |
+| Concept | Go | TypeScript | Python | Rust | C/C++ |
+|---|---|---|---|---|---|
+| Bundle hash | `BundleHash(b)` | `bundleHash(b)` | `bundle_hash(b)` | `bundle_hash(&b)` | `ratify_bundle_hash(b)` |
+| Issue receipt | `IssueVerificationReceipt(...)` | `issueVerificationReceipt(...)` | `issue_verification_receipt(...)` | `issue_verification_receipt(...)` | `ratify_issue_verification_receipt(...)` |
+| Verify receipt | `VerifyVerificationReceipt(r)` | `verifyVerificationReceipt(r)` | `verify_verification_receipt(r)` | `verify_verification_receipt(&r)` | `ratify_verify_verification_receipt(r)` |
+| Chain pointer | `ReceiptHash(r)` | `receiptHash(r)` | `receipt_hash(r)` | `receipt_hash(&r)` | `ratify_receipt_hash(r)` |
+| Context hash | `VerifierContextHash(ctx)` | `verifierContextHash(ctx)` | `verifier_context_hash(ctx)` | `verifier_context_hash(&ctx)` | `ratify_verifier_context_hash(ctx)` |
+| Issue verdict | `IssuePolicyVerdict(...)` | `issuePolicyVerdict(...)` | `issue_policy_verdict(...)` | `issue_policy_verdict(...)` | `ratify_issue_policy_verdict(...)` |
+| Verify verdict | `VerifyPolicyVerdict(...)` | `verifyPolicyVerdict(...)` | `verify_policy_verdict_e(...)` | `verify_policy_verdict(...)` | `ratify_verify_policy_verdict(...)` |
+| Constraint evaluator | `ConstraintEvaluators map[string]ConstraintEvaluator` | `constraint_evaluators?: Record<string, ConstraintEvaluator>` | `constraint_evaluators: dict \| None` | `constraint_evaluators: Option<HashMap<String, Box<dyn ConstraintEvaluator>>>` | `ratify_set_constraint_evaluator(type, fn)` |
+| Anchor resolver | `AnchorResolver` | `anchor_resolver?: AnchorResolver` | `anchor_resolver: AnchorResolver \| None` | `anchor_resolver: Option<Box<dyn AnchorResolver>>` | `ratify_set_anchor_resolver(fn)` |
 
 ### 17.10 Surface adapters — out of scope (intentional)
 
@@ -1440,7 +1440,7 @@ The protocol's contract stops at the `ProofBundle` wire format and the verifier 
 
 **Why deprecated.** The closure has no way to surface a lookup failure. It must collapse "I don't know" to `false` (allow) or `true` (deny), neither of which is correct. `Revocation` returns `(bool, error)` and the verifier fails closed on error (`revocation_error`), which is the only sound behavior for a security-critical lookup.
 
-Until v1.0.0-beta.1, the closure remains functional: when both fields are set on `VerifyOptions`, the `Revocation` provider takes precedence (§17.1). Each SDK marks the field deprecated via its language's idiomatic mechanism (Go doc comment, TypeScript `@deprecated` JSDoc, Python `warnings.warn` on use, Rust `#[deprecated]`).
+Until v1.0.0-beta.1, the closure remains functional: when both fields are set on `VerifyOptions`, the `Revocation` provider takes precedence (§17.1). Each SDK marks the field deprecated via its language's idiomatic mechanism (Go doc comment, TypeScript `@deprecated` JSDoc, Python `warnings.warn` on use, Rust `#[deprecated]`, C `ratify_set_revocation_source()` replaces the legacy `is_revoked` function pointer field).
 
 ---
 
@@ -1456,4 +1456,4 @@ Until v1.0.0-beta.1, the closure remains functional: when both fields are set on
 
 ---
 
-*v1.0.0-alpha.7 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.8 · Identities AI · CC-BY-4.0 · Patent Pending*

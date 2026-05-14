@@ -1,7 +1,9 @@
 //! Tests for the SPEC §17.5–§17.8 levers introduced in alpha.7.
+//! Requires the `std` feature (uses generate_human_root / generate_agent).
+#![cfg(feature = "std")]
 
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
 use ratify_protocol::{
@@ -371,7 +373,7 @@ fn constraint_evaluator_unknown_fails_closed() {
 #[test]
 fn constraint_evaluator_registry_allow() {
     let bundle = bundle_with_custom_constraint("verify.max_concurrent_sessions");
-    let mut evs: HashMap<String, Box<dyn ConstraintEvaluator>> = HashMap::new();
+    let mut evs: BTreeMap<String, Box<dyn ConstraintEvaluator>> = BTreeMap::new();
     evs.insert("verify.max_concurrent_sessions".into(), Box::new(AllowEval));
     let opts = VerifyOptions {
         constraint_evaluators: Some(evs),
@@ -384,7 +386,7 @@ fn constraint_evaluator_registry_allow() {
 #[test]
 fn constraint_evaluator_registry_deny() {
     let bundle = bundle_with_custom_constraint("verify.max_concurrent_sessions");
-    let mut evs: HashMap<String, Box<dyn ConstraintEvaluator>> = HashMap::new();
+    let mut evs: BTreeMap<String, Box<dyn ConstraintEvaluator>> = BTreeMap::new();
     evs.insert("verify.max_concurrent_sessions".into(), Box::new(DenyEval));
     let opts = VerifyOptions {
         constraint_evaluators: Some(evs),
@@ -398,7 +400,7 @@ fn constraint_evaluator_registry_deny() {
 #[test]
 fn constraint_evaluator_unverifiable_routes() {
     let bundle = bundle_with_custom_constraint("verify.needs_context");
-    let mut evs: HashMap<String, Box<dyn ConstraintEvaluator>> = HashMap::new();
+    let mut evs: BTreeMap<String, Box<dyn ConstraintEvaluator>> = BTreeMap::new();
     evs.insert("verify.needs_context".into(), Box::new(UnverifiableEval));
     let opts = VerifyOptions {
         constraint_evaluators: Some(evs),

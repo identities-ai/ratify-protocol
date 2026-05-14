@@ -1,6 +1,6 @@
 # Transaction Receipt Envelope
 
-**Status:** Normative as of v1.0.0-alpha.5 (SPEC §5.14, §6.4.7). Implemented in Go, TypeScript, Python, and Rust. Five canonical fixtures prove the envelope and tamper cases.
+**Status:** Normative as of v1.0.0-alpha.5 (SPEC §5.14, §6.4.7). Implemented in Go, TypeScript, Python, Rust, and C/C++. Five canonical fixtures prove the envelope and tamper cases.
 
 Ratify v1 already gives each party a `ProofBundle` that proves identity, authorization, and freshness. A transaction receipt adds a durable, multi-party artifact that says: these parties committed to the same application-defined terms at the same time, under these Ratify proofs.
 

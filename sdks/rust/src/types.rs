@@ -3,6 +3,9 @@
 //! Every public key and every signature is a hybrid pair: one Ed25519
 //! component and one ML-DSA-65 (FIPS 204) component. Both must verify.
 
+#[cfg(not(feature = "std"))]
+use alloc::{boxed::Box, string::String, vec, vec::Vec};
+
 use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -625,7 +628,7 @@ pub struct VerifyOptions<'a> {
     /// Built-in types are evaluated by the SDK directly; the registry is
     /// only consulted for unknown types.
     pub constraint_evaluators:
-        Option<std::collections::HashMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
+        Option<alloc::collections::BTreeMap<String, Box<dyn ConstraintEvaluator + 'a>>>,
     /// Fast-path cached policy decision (SPEC §17.6). When present and
     /// valid (MAC matches `policy_secret`, within window, agent/scope/
     /// context_hash matches), the verifier skips the live `policy` hook.

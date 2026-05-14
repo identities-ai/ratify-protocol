@@ -31,7 +31,7 @@ std = []
 custom-entropy = ["getrandom/custom"]
 
 [dependencies]
-ratify-protocol = { path = "../rust" }
+ratify-protocol = { path = "../rust", version = "1.0.0-alpha.8" }
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }
 

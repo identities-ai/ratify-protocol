@@ -39,6 +39,7 @@ SDK_TAGS=(
   "sdk-typescript-$VERSION"
   "sdk-python-$VERSION"
   "sdk-rust-$VERSION"
+  "sdk-c-$VERSION"
 )
 
 require_clean() {
@@ -155,8 +156,19 @@ publish_registries() {
   echo "==> Publishing PyPI"
   (cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*)
 
-  echo "==> Publishing crates.io"
+  echo "==> Publishing crates.io — Rust SDK (ratify-protocol)"
   (cd sdks/rust && cargo publish)
+
+  # The C SDK depends on ratify-protocol via a local path. Crates.io requires
+  # the dependency to be already indexed before the dependent can be published.
+  # Wait for the Rust SDK to appear on the registry, then publish the C SDK.
+  echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
+  sleep 60
+
+  echo "==> Publishing crates.io — C SDK (ratify-c)"
+  # Cargo automatically substitutes path = "../rust" → version = "$NPM_VERSION"
+  # in the published metadata once ratify-protocol is indexed on crates.io.
+  (cd sdks/c && cargo publish)
 }
 
 create_github_release() {
@@ -166,7 +178,21 @@ create_github_release() {
   fi
   local archive="/tmp/ratify-protocol-testvectors-${VERSION}.tar.gz"
   tar -czf "$archive" testvectors/v1
-  gh release create "$VERSION" "$archive" --generate-notes --title "Ratify Protocol $VERSION"
+
+  # Build C SDK release artifacts (static + shared library + header)
+  echo "==> Building C SDK release artifacts"
+  (cd sdks/c && cargo build --release 2>&1)
+  local header_archive="/tmp/ratify-c-${VERSION}-header.tar.gz"
+  tar -czf "$header_archive" \
+    -C sdks/c \
+    include/ratify.h \
+    README.md
+
+  gh release create "$VERSION" \
+    "$archive" \
+    "$header_archive" \
+    --generate-notes \
+    --title "Ratify Protocol $VERSION"
 }
 
 if [[ "$(git branch --show-current)" != "main" && "${ALLOW_NON_MAIN:-0}" != "1" ]]; then

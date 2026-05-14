@@ -10,16 +10,17 @@
 //! Wire format unchanged: these wrap output of the verifier rather than
 //! adding fields to existing signed objects.
 
-use crate::canonical::canonical_json;
+use crate::canonical::{
+    encode_bool, encode_bytes_b64, encode_f64, encode_hybrid_pub_key, encode_hybrid_sig, encode_i32,
+    encode_i64, encode_str, encode_str_array,
+};
 use crate::crypto::{sign_both, verify_both};
 use crate::types::{
-    HybridPrivateKey, HybridPublicKey, HybridSignature, PolicyVerdict, ProofBundle,
+    DelegationCert, HybridPrivateKey, HybridPublicKey, HybridSignature, PolicyVerdict, ProofBundle,
     VerificationReceipt, VerifierContext, VerifyResult,
 };
 
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use sha2::{Digest, Sha256};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -27,6 +28,25 @@ type HmacSha256 = Hmac<Sha256>;
 // ---------------------------------------------------------------------------
 // Lever 1: VerificationReceipt — SPEC §17.5
 // ---------------------------------------------------------------------------
+
+/// Canonical delegation object for the bundle hash (all fields present,
+/// no skip, including signature). Keys in lex order.
+fn encode_delegation_for_hash(d: &DelegationCert, out: &mut String) {
+    use crate::canonical::encode_constraints;
+    out.push('{');
+    out.push_str("\"cert_id\":");        encode_str(&d.cert_id, out);
+    out.push_str(",\"constraints\":");   encode_constraints(&d.constraints, out);
+    out.push_str(",\"expires_at\":");    encode_i64(d.expires_at, out);
+    out.push_str(",\"issued_at\":");     encode_i64(d.issued_at, out);
+    out.push_str(",\"issuer_id\":");     encode_str(&d.issuer_id, out);
+    out.push_str(",\"issuer_pub_key\":"); encode_hybrid_pub_key(&d.issuer_pub_key, out);
+    out.push_str(",\"scope\":");         encode_str_array(&d.scope, out);
+    out.push_str(",\"signature\":");     encode_hybrid_sig(&d.signature, out);
+    out.push_str(",\"subject_id\":");    encode_str(&d.subject_id, out);
+    out.push_str(",\"subject_pub_key\":"); encode_hybrid_pub_key(&d.subject_pub_key, out);
+    out.push_str(",\"version\":");       encode_i32(d.version, out);
+    out.push('}');
+}
 
 /// SHA-256 of a fixed-shape canonical form of a ProofBundle (SPEC §17.5).
 ///
@@ -37,67 +57,31 @@ type HmacSha256 = Hmac<Sha256>;
 /// same logical bundle. Verified against
 /// `testvectors/v1/cross_sdk_vectors.json`.
 pub fn bundle_hash(bundle: &ProofBundle) -> Result<Vec<u8>, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-    let mut delegations = Vec::with_capacity(bundle.delegations.len());
-    for d in &bundle.delegations {
-        let mut m = serde_json::Map::new();
-        m.insert("cert_id".into(), serde_json::json!(d.cert_id));
-        m.insert(
-            "constraints".into(),
-            serde_json::to_value(&d.constraints).map_err(|e| e.to_string())?,
-        );
-        m.insert("expires_at".into(), serde_json::json!(d.expires_at));
-        m.insert("issued_at".into(), serde_json::json!(d.issued_at));
-        m.insert("issuer_id".into(), serde_json::json!(d.issuer_id));
-        m.insert(
-            "issuer_pub_key".into(),
-            serde_json::to_value(&d.issuer_pub_key).map_err(|e| e.to_string())?,
-        );
-        m.insert("scope".into(), serde_json::json!(d.scope));
-        m.insert(
-            "signature".into(),
-            serde_json::to_value(&d.signature).map_err(|e| e.to_string())?,
-        );
-        m.insert("subject_id".into(), serde_json::json!(d.subject_id));
-        m.insert(
-            "subject_pub_key".into(),
-            serde_json::to_value(&d.subject_pub_key).map_err(|e| e.to_string())?,
-        );
-        m.insert("version".into(), serde_json::json!(d.version));
-        delegations.push(serde_json::Value::Object(m));
+    let mut out = String::new();
+    // Outer keys in lex order: agent_id, agent_pub_key, challenge,
+    // challenge_at, challenge_sig, delegations, session_context, stream_id,
+    // stream_seq.
+    out.push('{');
+    out.push_str("\"agent_id\":"); encode_str(&bundle.agent_id, &mut out);
+    out.push_str(",\"agent_pub_key\":"); encode_hybrid_pub_key(&bundle.agent_pub_key, &mut out);
+    // challenge and session_context/stream_id always b64 (empty slice → "")
+    out.push_str(",\"challenge\":"); encode_bytes_b64(&bundle.challenge, &mut out);
+    out.push_str(",\"challenge_at\":"); encode_i64(bundle.challenge_at, &mut out);
+    out.push_str(",\"challenge_sig\":"); encode_hybrid_sig(&bundle.challenge_sig, &mut out);
+    // delegations array (all fields present, including signature)
+    out.push_str(",\"delegations\":[");
+    for (i, d) in bundle.delegations.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        encode_delegation_for_hash(d, &mut out);
     }
-    let mut signable = serde_json::Map::new();
-    signable.insert("agent_id".into(), serde_json::json!(bundle.agent_id));
-    signable.insert(
-        "agent_pub_key".into(),
-        serde_json::to_value(&bundle.agent_pub_key).map_err(|e| e.to_string())?,
-    );
-    signable.insert(
-        "challenge".into(),
-        serde_json::json!(STANDARD.encode(&bundle.challenge)),
-    );
-    signable.insert(
-        "challenge_at".into(),
-        serde_json::json!(bundle.challenge_at),
-    );
-    signable.insert(
-        "challenge_sig".into(),
-        serde_json::to_value(&bundle.challenge_sig).map_err(|e| e.to_string())?,
-    );
-    signable.insert(
-        "delegations".into(),
-        serde_json::Value::Array(delegations),
-    );
-    signable.insert(
-        "session_context".into(),
-        serde_json::json!(STANDARD.encode(&bundle.session_context)),
-    );
-    signable.insert(
-        "stream_id".into(),
-        serde_json::json!(STANDARD.encode(&bundle.stream_id)),
-    );
-    signable.insert("stream_seq".into(), serde_json::json!(bundle.stream_seq));
-    let bytes = canonical_json(&serde_json::Value::Object(signable));
+    out.push(']');
+    out.push_str(",\"session_context\":"); encode_bytes_b64(&bundle.session_context, &mut out);
+    out.push_str(",\"stream_id\":"); encode_bytes_b64(&bundle.stream_id, &mut out);
+    out.push_str(",\"stream_seq\":"); encode_i64(bundle.stream_seq, &mut out);
+    out.push('}');
+    let bytes = out.into_bytes();
     Ok(Sha256::digest(&bytes).to_vec())
 }
 
@@ -111,34 +95,52 @@ pub fn verification_receipt_sign_bytes_buf(
 }
 
 fn verification_receipt_sign_bytes(r: &VerificationReceipt) -> Result<Vec<u8>, String> {
-    // We need to base64-encode bytes for canonical JSON; canonical_json over
-    // the typed struct produces b64 directly when fields use base64_bytes
-    // serde, but here we build the signable as a flat json! for control.
-    // Simpler: hand-canonicalize a serde_json::Value so the bytes match Go.
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-    let mut signable = serde_json::Map::new();
+    // Keys in lex order. Optional fields (agent_id, error_reason, granted_scope,
+    // human_id) are omitted when empty, matching Go's omitempty.
+    // Sorted: agent_id < bundle_hash < decision < error_reason <
+    // granted_scope < human_id < prev_hash < verified_at < verifier_id <
+    // verifier_pub < version.
+    let mut out = String::new();
+    out.push('{');
+
+    // Build a vec of (key, writer) pairs for present fields, then join with commas.
+    // Simpler: just track separator manually.
+    let mut sep = "";
+
     if !r.agent_id.is_empty() {
-        signable.insert("agent_id".into(), json!(r.agent_id));
+        out.push_str(sep); sep = ",";
+        out.push_str("\"agent_id\":"); encode_str(&r.agent_id, &mut out);
     }
-    signable.insert("bundle_hash".into(), json!(STANDARD.encode(&r.bundle_hash)));
-    signable.insert("decision".into(), json!(r.decision));
+    out.push_str(sep); sep = ",";
+    out.push_str("\"bundle_hash\":"); encode_bytes_b64(&r.bundle_hash, &mut out);
+    out.push_str(sep);
+    out.push_str("\"decision\":"); encode_str(&r.decision, &mut out);
     if !r.error_reason.is_empty() {
-        signable.insert("error_reason".into(), json!(r.error_reason));
+        out.push_str(sep);
+        out.push_str("\"error_reason\":"); encode_str(&r.error_reason, &mut out);
     }
     if !r.granted_scope.is_empty() {
         let mut scope = r.granted_scope.clone();
         scope.sort();
-        signable.insert("granted_scope".into(), json!(scope));
+        out.push_str(sep);
+        out.push_str("\"granted_scope\":"); encode_str_array(&scope, &mut out);
     }
     if !r.human_id.is_empty() {
-        signable.insert("human_id".into(), json!(r.human_id));
+        out.push_str(sep);
+        out.push_str("\"human_id\":"); encode_str(&r.human_id, &mut out);
     }
-    signable.insert("prev_hash".into(), json!(STANDARD.encode(&r.prev_hash)));
-    signable.insert("verified_at".into(), json!(r.verified_at));
-    signable.insert("verifier_id".into(), json!(r.verifier_id));
-    signable.insert("verifier_pub".into(), serde_json::to_value(&r.verifier_pub).map_err(|e| e.to_string())?);
-    signable.insert("version".into(), json!(r.version));
-    Ok(canonical_json(&serde_json::Value::Object(signable)))
+    out.push_str(sep);
+    out.push_str("\"prev_hash\":"); encode_bytes_b64(&r.prev_hash, &mut out);
+    out.push_str(sep);
+    out.push_str("\"verified_at\":"); encode_i64(r.verified_at, &mut out);
+    out.push_str(sep);
+    out.push_str("\"verifier_id\":"); encode_str(&r.verifier_id, &mut out);
+    out.push_str(sep);
+    out.push_str("\"verifier_pub\":"); encode_hybrid_pub_key(&r.verifier_pub, &mut out);
+    out.push_str(sep);
+    out.push_str("\"version\":"); encode_i32(r.version, &mut out);
+    out.push('}');
+    Ok(out.into_bytes())
 }
 
 /// Construct and hybrid-sign a VerificationReceipt over a (bundle, result,
@@ -207,73 +209,53 @@ pub fn receipt_hash(r: &VerificationReceipt) -> Result<Vec<u8>, String> {
 // Lever 2: PolicyVerdict — SPEC §17.6
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize)]
-struct VerifierContextSignable {
-    current_alt_m: f64,
-    current_lat: f64,
-    current_lon: f64,
-    current_speed_mps: f64,
-    has_amount: bool,
-    has_location: bool,
-    has_speed: bool,
-    requested_amount: f64,
-    requested_currency: String,
-}
-
 /// SHA-256 of the canonical-byte representation of the policy-relevant
 /// subset of a VerifierContext. Used as `context_hash` on a PolicyVerdict.
 /// `invocations_in_window` is excluded — closures don't serialize.
+/// Keys in lex order: current_alt_m, current_lat, current_lon,
+/// current_speed_mps, has_amount, has_location, has_speed,
+/// requested_amount, requested_currency.
 pub fn verifier_context_hash(ctx: &VerifierContext) -> Result<Vec<u8>, String> {
-    // has_* booleans derived from field presence (Option::is_some) so the
-    // canonical hash matches the Go reference's explicit Has* fields.
-    let signable = VerifierContextSignable {
-        current_alt_m: ctx.current_alt_m.unwrap_or(0.0),
-        current_lat: ctx.current_lat.unwrap_or(0.0),
-        current_lon: ctx.current_lon.unwrap_or(0.0),
-        current_speed_mps: ctx.current_speed_mps.unwrap_or(0.0),
-        has_amount: ctx.requested_amount.is_some(),
-        has_location: ctx.current_lat.is_some() && ctx.current_lon.is_some(),
-        has_speed: ctx.current_speed_mps.is_some(),
-        requested_amount: ctx.requested_amount.unwrap_or(0.0),
-        requested_currency: ctx.requested_currency.clone().unwrap_or_default(),
-    };
-    let v = serde_json::to_value(&signable).map_err(|e| format!("serialize ctx: {}", e))?;
-    let bytes = canonical_json(&v);
+    let has_amount = ctx.requested_amount.is_some();
+    let has_location = ctx.current_lat.is_some() && ctx.current_lon.is_some();
+    let has_speed = ctx.current_speed_mps.is_some();
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"current_alt_m\":"); encode_f64(ctx.current_alt_m.unwrap_or(0.0), &mut out);
+    out.push_str(",\"current_lat\":"); encode_f64(ctx.current_lat.unwrap_or(0.0), &mut out);
+    out.push_str(",\"current_lon\":"); encode_f64(ctx.current_lon.unwrap_or(0.0), &mut out);
+    out.push_str(",\"current_speed_mps\":"); encode_f64(ctx.current_speed_mps.unwrap_or(0.0), &mut out);
+    out.push_str(",\"has_amount\":"); encode_bool(has_amount, &mut out);
+    out.push_str(",\"has_location\":"); encode_bool(has_location, &mut out);
+    out.push_str(",\"has_speed\":"); encode_bool(has_speed, &mut out);
+    out.push_str(",\"requested_amount\":"); encode_f64(ctx.requested_amount.unwrap_or(0.0), &mut out);
+    out.push_str(",\"requested_currency\":"); encode_str(ctx.requested_currency.as_deref().unwrap_or(""), &mut out);
+    out.push('}');
+    let bytes = out.into_bytes();
     Ok(Sha256::digest(&bytes).to_vec())
-}
-
-#[derive(Serialize)]
-struct PolicyVerdictSignable<'a> {
-    agent_id: &'a str,
-    allow: bool,
-    context_hash: String,
-    issued_at: i64,
-    scope: &'a str,
-    valid_until: i64,
-    verdict_id: &'a str,
-    version: i32,
 }
 
 /// Canonical signable bytes for a PolicyVerdict. Public so tests and
 /// alternative issuance backends can recompute the bytes.
+/// Keys: agent_id, allow, context_hash, issued_at, scope, valid_until,
+/// verdict_id, version.
 pub fn policy_verdict_sign_bytes_buf(v: &PolicyVerdict) -> Result<Vec<u8>, String> {
     policy_verdict_sign_bytes(v)
 }
 
 fn policy_verdict_sign_bytes(v: &PolicyVerdict) -> Result<Vec<u8>, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-    let signable = PolicyVerdictSignable {
-        agent_id: &v.agent_id,
-        allow: v.allow,
-        context_hash: STANDARD.encode(&v.context_hash),
-        issued_at: v.issued_at,
-        scope: &v.scope,
-        valid_until: v.valid_until,
-        verdict_id: &v.verdict_id,
-        version: v.version,
-    };
-    let v = serde_json::to_value(&signable).map_err(|e| format!("serialize signable: {}", e))?;
-    Ok(canonical_json(&v))
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"agent_id\":"); encode_str(&v.agent_id, &mut out);
+    out.push_str(",\"allow\":"); encode_bool(v.allow, &mut out);
+    out.push_str(",\"context_hash\":"); encode_bytes_b64(&v.context_hash, &mut out);
+    out.push_str(",\"issued_at\":"); encode_i64(v.issued_at, &mut out);
+    out.push_str(",\"scope\":"); encode_str(&v.scope, &mut out);
+    out.push_str(",\"valid_until\":"); encode_i64(v.valid_until, &mut out);
+    out.push_str(",\"verdict_id\":"); encode_str(&v.verdict_id, &mut out);
+    out.push_str(",\"version\":"); encode_i32(v.version, &mut out);
+    out.push('}');
+    Ok(out.into_bytes())
 }
 
 /// Construct and HMAC-bind a PolicyVerdict.

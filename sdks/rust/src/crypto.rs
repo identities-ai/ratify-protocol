@@ -2,15 +2,15 @@
 //!
 //! Uses:
 //!   - `ed25519-dalek` — audited Ed25519, pure Rust.
-//!   - `pqcrypto-mldsa` — PQClean-based ML-DSA-65 (FIPS 204).
+//!   - `fips204` — pure-Rust ML-DSA-65 (FIPS 204), no_std compatible.
 //!
 //! Every sign produces BOTH component signatures. Every verify checks BOTH;
 //! either failure fails the whole signature.
 
 use ed25519_dalek::{Signature as EdSignature, Signer as _, SigningKey, Verifier, VerifyingKey};
+use fips204::ml_dsa_65;
+use fips204::traits::{SerDes, Signer as MlSigner, Verifier as MlVerifier};
 use hmac::{Hmac, Mac};
-use pqcrypto_mldsa::mldsa65 as mldsa;
-use pqcrypto_traits::sign::{DetachedSignature, PublicKey as _, SecretKey as _};
 use sha2::{Digest, Sha256};
 
 use crate::canonical::canonical_json;
@@ -49,16 +49,16 @@ pub fn generate_hybrid_keypair() -> (HybridPublicKey, HybridPrivateKey) {
     let ed_sk = SigningKey::from_bytes(&seed);
     let ed_pk = ed_sk.verifying_key();
 
-    let (ml_pk, ml_sk) = mldsa::keypair();
+    let (ml_pk, ml_sk) = ml_dsa_65::try_keygen().expect("ML-DSA-65 keygen");
 
     (
         HybridPublicKey {
             ed25519: ed_pk.to_bytes().to_vec(),
-            ml_dsa_65: ml_pk.as_bytes().to_vec(),
+            ml_dsa_65: ml_pk.into_bytes().to_vec(),
         },
         HybridPrivateKey {
             ed25519: seed.to_vec(),
-            ml_dsa_65: ml_sk.as_bytes().to_vec(),
+            ml_dsa_65: ml_sk.into_bytes().to_vec(),
         },
     )
 }
@@ -221,13 +221,15 @@ pub fn sign_both(msg: &[u8], priv_key: &HybridPrivateKey) -> HybridSignature {
     let ed_sk = SigningKey::from_bytes(&ed_seed);
     let ed_sig = ed_sk.sign(msg);
 
-    let ml_sk =
-        mldsa::SecretKey::from_bytes(&priv_key.ml_dsa_65).expect("ML-DSA-65 secret key malformed");
-    let ml_sig = mldsa::detached_sign(msg, &ml_sk);
+    let mut ml_sk_bytes = [0u8; ml_dsa_65::SK_LEN];
+    ml_sk_bytes.copy_from_slice(&priv_key.ml_dsa_65);
+    let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(ml_sk_bytes)
+        .expect("ML-DSA-65 secret key malformed");
+    let ml_sig = ml_sk.try_sign(msg, &[]).expect("ML-DSA-65 sign");
 
     HybridSignature {
         ed25519: ed_sig.to_bytes().to_vec(),
-        ml_dsa_65: ml_sig.as_bytes().to_vec(),
+        ml_dsa_65: ml_sig.to_vec(),
     }
 }
 
@@ -272,12 +274,15 @@ pub fn verify_both(
         .verify(msg, &ed_sig)
         .map_err(|_| "Ed25519 signature invalid".to_string())?;
 
-    let ml_pk = mldsa::PublicKey::from_bytes(&pub_key.ml_dsa_65)
+    let mut ml_pk_bytes = [0u8; ml_dsa_65::PK_LEN];
+    ml_pk_bytes.copy_from_slice(&pub_key.ml_dsa_65);
+    let ml_pk = ml_dsa_65::PublicKey::try_from_bytes(ml_pk_bytes)
         .map_err(|_| "ML-DSA-65 public key malformed".to_string())?;
-    let ml_sig = mldsa::DetachedSignature::from_bytes(&sig.ml_dsa_65)
-        .map_err(|_| "ML-DSA-65 signature malformed".to_string())?;
-    mldsa::verify_detached_signature(&ml_sig, msg, &ml_pk)
-        .map_err(|_| "ML-DSA-65 signature invalid".to_string())?;
+    let mut ml_sig_bytes = [0u8; ml_dsa_65::SIG_LEN];
+    ml_sig_bytes.copy_from_slice(&sig.ml_dsa_65);
+    if !ml_pk.verify(msg, &ml_sig_bytes, &[]) {
+        return Err("ML-DSA-65 signature invalid".to_string());
+    }
 
     Ok(())
 }

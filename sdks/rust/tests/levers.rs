@@ -1,4 +1,6 @@
 //! Tests for the SPEC §17.5–§17.8 levers introduced in alpha.7.
+//! Requires the `std` feature (uses generate_human_root / generate_agent).
+#![cfg(feature = "std")]
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};

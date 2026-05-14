@@ -187,9 +187,10 @@ jobs:
         run: cargo publish --dry-run
       - name: cargo publish
         working-directory: sdks/rust
-        # cargo publish rejects re-uploads of the same version cleanly, so
-        # rerunning this job after a registry hiccup is safe.
-        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+        # cargo publish exits 101 if the version already exists on crates.io
+        # (e.g. published locally before CI ran). Treat that as success so
+        # a re-triggered workflow doesn't block the rest of the release.
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN" || { code=$?; [ $code -eq 101 ] && echo "already published — ok" || exit $code; }
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -285,6 +286,7 @@ jobs:
       - name: create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}   # required for workflow_dispatch (no tag in ref)
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(env.RELEASE_TAG, 'alpha') || contains(env.RELEASE_TAG, 'beta') || contains(env.RELEASE_TAG, 'rc') }}

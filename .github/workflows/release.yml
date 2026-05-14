@@ -11,6 +11,20 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger for cases where the tag-push didn't fire (e.g. bypassed
+  # branch protection). Pass the exact tag to publish, e.g. v1.0.0-alpha.8.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v1.0.0-alpha.8)'
+        required: true
+        type: string
+
+env:
+  # Normalise the ref so both push and workflow_dispatch use the same variable.
+  # For push: github.ref_name = "v1.0.0-alpha.8"
+  # For workflow_dispatch: inputs.tag = "v1.0.0-alpha.8"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
@@ -102,7 +116,7 @@ jobs:
       - name: tag matches SDK versions
         run: |
           set -eu
-          tag="${GITHUB_REF#refs/tags/}"          # e.g. v1.0.0-alpha.6
+          tag="$RELEASE_TAG"          # e.g. v1.0.0-alpha.6
           tag_clean="${tag#v}"                     # 1.0.0-alpha.6
           rust_version=$(grep -E '^version = "' sdks/rust/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
           ts_version=$(node -p "require('./sdks/typescript/package.json').version")
@@ -232,7 +246,7 @@ jobs:
         # non-fatal — pkg.go.dev will pick it up eventually either way.
         continue-on-error: true
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="$RELEASE_TAG"
           curl -fsSL "https://proxy.golang.org/github.com/identities-ai/ratify-protocol/@v/${tag}.info" || true
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -252,7 +266,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: bundle testvectors
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="$RELEASE_TAG"
           tar -czf "ratify-testvectors-${tag}.tar.gz" testvectors/
           ls -lh ratify-testvectors-*.tar.gz
       - name: compute install snippets for release notes
@@ -260,7 +274,7 @@ jobs:
         # version forms here so the notes don't ask end users to run shell
         # substitutions like `$(node -p "...")` from a copy-paste.
         run: |
-          tag="${GITHUB_REF#refs/tags/}"          # v1.0.0-alpha.7
+          tag="$RELEASE_TAG"          # v1.0.0-alpha.7
           tag_clean="${tag#v}"                     # 1.0.0-alpha.7
           py_version=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
           {
@@ -273,11 +287,11 @@ jobs:
         with:
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, 'alpha') || contains(env.RELEASE_TAG, 'beta') || contains(env.RELEASE_TAG, 'rc') }}
           files: |
             ratify-testvectors-*.tar.gz
           body: |
-            ## Ratify Protocol ${{ github.ref_name }}
+            ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
             Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. 59 canonical conformance fixtures, byte-for-byte interoperable across Go, TypeScript, Python, and Rust.
 

@@ -2603,7 +2603,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "generate cross_sdk_vectors.json: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("  ✓ cross_sdk_vectors.json (alpha.7 byte-equivalence corpus)\n")
+	fmt.Printf("  ✓ cross_sdk_vectors.json (alpha.9 byte-equivalence corpus)\n")
 }
 
 func writeFixture(dir string, fx *fixture) error {

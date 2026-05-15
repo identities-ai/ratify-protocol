@@ -6,6 +6,18 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.9 (2026-05-15)
+
+### Changed — SDK READMEs and registry publishing
+
+- All five SDK READMEs (Go, TypeScript, Python, Rust, C/C++) now include a "What is Ratify Protocol?" introduction, the quantum-safe line, and consistent cross-language interop framing
+- All relative links in SDK READMEs replaced with absolute GitHub URLs (broken on npm, PyPI, and crates.io package pages)
+- npm package homepage updated to `docs.identities.ai`
+- npm publishing switched from long-lived `NPM_TOKEN` to OIDC Trusted Publisher — no stored secret required
+- `publish.sh` auto-detects prerelease tag from version string
+
+---
+
 ## v1.0.0-alpha.8 (2026-05-13)
 
 ### Added — Fifth Reference SDK: C / C++ (`sdks/c/`)

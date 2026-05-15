@@ -172,17 +172,21 @@ reviewers if you want manual approval on every release. This matches the
 
 ## 3. npm — `@identities-ai` scoped org
 
-npm's `@identities-ai` org name was reserved via a support request. Until
-the org is granted, the `publish-npm` job in `release.yml` is gated behind a
-repo variable (`NPM_PUBLISH_ENABLED`) and does not run. Marketing's
-`/developers` page is already configured to advertise GitHub as the
-installation path while the npm package is pending.
+**Status: ACTIVE.** The `@identities-ai` org is approved on npm and the package is live
+at <https://www.npmjs.com/package/@identities-ai/ratify-protocol>.
 
-### 3.1 Once npm approves the org
+The `publish-npm` job in `release.yml` runs on every tagged release (when
+`NPM_PUBLISH_ENABLED=true` is set in repo variables, which it is).
 
-1. Log in to <https://www.npmjs.com/> as the account that filed the support
-   ticket.
-2. Verify you have **Owner** role on the `identities-ai` org.
+### 3.1 npm org ownership
+
+1. Log in to <https://www.npmjs.com/>.
+2. Verify you have **Owner** role on the `identities-ai` org at
+   <https://www.npmjs.com/settings/identities-ai/packages>.
+3. Org **Settings → Profile**:
+   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises.`
+   - **URL:** `https://identities.ai`
+   - **Email:** `hello@identities.ai`
 3. Org **Settings → Profile**:
    - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises.`
    - **URL:** `https://identities.ai`

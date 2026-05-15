@@ -22,10 +22,10 @@ A human issues a signed **delegation cert** to an agent. The agent presents a **
 
 | You're writing | Use |
 |---|---|
-| A Go service or CLI | [Go SDK](../go/) |
-| A Node.js or browser app | [TypeScript SDK](../typescript/) |
-| A Python script, ML pipeline, data tool | [Python SDK](../python/) |
-| A Rust service or high-performance binary | [Rust SDK](../rust/) — use directly, no FFI overhead |
+| A Go service or CLI | [Go SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/go) |
+| A Node.js or browser app | [TypeScript SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/typescript) |
+| A Python script, ML pipeline, data tool | [Python SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python) |
+| A Rust service or high-performance binary | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) — use directly, no FFI overhead |
 | **C or C++ code** | **This SDK** |
 | **Firmware, RTOS, hardware driver** | **This SDK** (static library, `libratify_c.a`) |
 | **A language that FFIs to C** (Swift, Zig, Julia, Lua, etc.) | **This SDK** |

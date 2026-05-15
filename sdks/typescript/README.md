@@ -1,17 +1,20 @@
 # @identities-ai/ratify-protocol
 
-**TypeScript reference SDK for the Ratify Protocol v1 — cryptographic delegation for AI agents.**
+**TypeScript reference SDK for the Ratify Protocol v1 — a cryptographic trust protocol for human-agent and agent-agent interactions as agents start to transact.**
 
-This package lets you:
+Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-- Generate human and agent hybrid keypairs
-- Issue signed delegation certs (human side)
-- Build signed proof bundles (agent side)
-- Verify proof bundles (verifier side)
+Byte-identical interoperability with the Go, Python, and Rust reference implementations. Validated against the **59 canonical test vectors** on every CI run.
 
-See [`docs/EXPLAINED.md`](../../docs/EXPLAINED.md) and [`docs/AGENT_TO_AGENT.md`](../../docs/AGENT_TO_AGENT.md) in the repository for full protocol semantics.
+## What is Ratify Protocol?
 
-Byte-for-byte interoperable with the Go reference implementation. Tested against the canonical test vectors at `../../testvectors/v1/`.
+Ratify is an open cryptographic protocol that answers the question: *"Is this AI agent authorized to act, by whom, for what, and under what constraints?"*
+
+A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
+
+- Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
+- Developer docs: [docs.identities.ai](https://docs.identities.ai)
 
 ## Install
 
@@ -100,7 +103,7 @@ if (!result.valid) {
 
 ## Key custody
 
-The protocol supports three key-custody modes with different trust tradeoffs. See `SPEC.md` §15.2 for the full model.
+The protocol supports three key-custody modes with different trust tradeoffs. See [SPEC.md §15.2](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full model.
 
 ### Self-custody (strongest)
 
@@ -156,7 +159,7 @@ await issueKeyRotationStatement(stmt, oldCustodialPrivateKey, newPrivateKey);
 
 ## Canonical serialization
 
-Signed payloads follow Ratify's canonical JSON rules (see `RATIFY_PROTOCOL.md` §6.3.1). The SDK exposes:
+Signed payloads follow Ratify's canonical JSON rules (see [SPEC.md §6.3.1](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)). The SDK exposes:
 
 ```ts
 import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identities-ai/ratify-protocol";
@@ -183,9 +186,7 @@ intersectScopes(["meeting:*"], ["meeting:attend", "meeting:speak"]);
 // ["meeting:attend", "meeting:speak"]
 ```
 
-### Full scope vocabulary at a glance
-
-Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [`SPEC.md`](../../SPEC.md) §9 for the full table including sensitivity flags and wildcard expansions.
+Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [SPEC.md §9](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full table including sensitivity flags and wildcard expansions.
 
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 
@@ -206,7 +207,7 @@ npm install
 npm run test:conformance
 ```
 
-The conformance suite loads every fixture at `../../../../testvectors/v1/*.json` and runs it through the TS implementation. It checks:
+The conformance suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the TS implementation. It checks:
 
 - Canonical signing bytes match the committed hex for every cert
 - Challenge signing bytes match
@@ -219,6 +220,7 @@ A single failure means TS and Go have drifted.
 ## Security posture
 
 - **Ed25519** via [@noble/ed25519](https://github.com/paulmillr/noble-ed25519) — audited, zero native deps, universal.
+- **ML-DSA-65** via [@noble/post-quantum](https://github.com/paulmillr/noble-post-quantum) — NIST FIPS 204, post-quantum lattice signature.
 - **SHA-256** via [@noble/hashes](https://github.com/paulmillr/noble-hashes) — same author, same posture.
 - **WebCrypto** for secure random (32-byte challenges).
 

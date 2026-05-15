@@ -17,7 +17,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/identities-ai/ratify-protocol.svg)](https://pkg.go.dev/github.com/identities-ai/ratify-protocol)
 [![PyPI](https://img.shields.io/pypi/v/ratify-protocol?label=pypi&color=informational)](https://pypi.org/project/ratify-protocol/)
 [![Crates.io](https://img.shields.io/crates/v/ratify-protocol?label=crates.io)](https://crates.io/crates/ratify-protocol)
-[![npm](https://img.shields.io/badge/npm-coming%20soon-yellow)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
+[![npm](https://img.shields.io/npm/v/@identities-ai/ratify-protocol?label=npm&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 
@@ -166,7 +166,7 @@ npm run test:conformance
 # → 59/59 fixtures pass
 ```
 
-(npm package `@identities-ai/ratify-protocol` ships once the npm org is approved. Until then, install from source as above.)
+
 
 ### Python
 
@@ -318,7 +318,7 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 | Implementation | Language | Status | Install |
 |---|---|---|---|
 | `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.8` |
-| `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` *(after npm org approval; install from source for now)* |
+| `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` |
 | `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a8` |
 | `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.8` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ 59/59 | build from source: `sdks/c/` (Apache-2.0) |
@@ -377,7 +377,7 @@ ratify-protocol/
 ├── testvectors/v1/        59 canonical fixtures (JSON)
 │
 ├── sdks/
-│   ├── typescript/        @identities-ai/ratify-protocol (npm — coming soon)
+│   ├── typescript/        @identities-ai/ratify-protocol (npm)
 │   ├── python/            ratify-protocol (PyPI)
 │   ├── rust/              ratify-protocol (crates.io)
 │   └── c/                 libratify_c — static + shared library, ratify.h (Apache-2.0)

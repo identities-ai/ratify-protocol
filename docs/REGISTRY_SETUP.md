@@ -172,51 +172,53 @@ reviewers if you want manual approval on every release. This matches the
 
 ## 3. npm — `@identities-ai` scoped org
 
-npm's `@identities-ai` org name was reserved via a support request. Until
-the org is granted, the `publish-npm` job in `release.yml` is gated behind a
-repo variable (`NPM_PUBLISH_ENABLED`) and does not run. Marketing's
-`/developers` page is already configured to advertise GitHub as the
-installation path while the npm package is pending.
+**Status: ACTIVE.** The `@identities-ai` org is approved on npm and the package is live
+at <https://www.npmjs.com/package/@identities-ai/ratify-protocol>.
 
-### 3.1 Once npm approves the org
+The `publish-npm` job in `release.yml` runs on every tagged release (when
+`NPM_PUBLISH_ENABLED=true` is set in repo variables, which it is).
 
-1. Log in to <https://www.npmjs.com/> as the account that filed the support
-   ticket.
-2. Verify you have **Owner** role on the `identities-ai` org.
+### 3.1 npm org ownership
+
+1. Log in to <https://www.npmjs.com/>.
+2. Verify you have **Owner** role on the `identities-ai` org at
+   <https://www.npmjs.com/settings/identities-ai/packages>.
 3. Org **Settings → Profile**:
    - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises.`
    - **URL:** `https://identities.ai`
    - **Email:** `hello@identities.ai`
 
-### 3.2 Create the granular access token for CI
+### 3.2 Configure Trusted Publisher (no token needed)
 
-1. **Account → Access Tokens → Generate New Token → Granular Access Token**.
-2. Configuration:
-   - **Token name:** `gh-actions-release-ratify-protocol`
-   - **Expiration:** 1 year (re-rotate annually; track in a calendar entry)
-   - **Permissions → Packages:** select the `@identities-ai` org scope,
-     grant `Read and write`.
-   - **Permissions → Organizations:** none.
-3. Copy the token.
-4. On the GitHub repo: **Settings → Secrets and variables → Actions →
-   New repository secret**. Name `NPM_TOKEN`, paste the value.
+Publishing uses npm's OIDC Trusted Publisher — no long-lived token stored in GitHub Secrets.
+
+The Trusted Publisher is already configured on the npm package page with:
+- **Repository:** `identities-ai/ratify-protocol`
+- **Workflow:** `release.yml`
+- **Environment:** `npm-publish`
+
+If it ever needs to be reconfigured: go to
+<https://www.npmjs.com/package/@identities-ai/ratify-protocol> → **Settings** →
+**Trusted Publishers** → add the values above.
+
+The `release.yml` job has `id-token: write` and `environment: npm-publish` already set.
+No `NPM_TOKEN` secret is required or used.
 
 ### 3.3 Enable the workflow's npm job
 
 1. **Settings → Secrets and variables → Actions → Variables → New repository
    variable**.
-2. Name `NPM_PUBLISH_ENABLED`, value `true`.
+2. Name `NPM_PUBLISH_ENABLED`, value `true` (already set).
 
 The next tag push will exercise the full four-registry pipeline.
 
-### 3.4 (Optional) Provenance attestations
+### 3.4 Provenance attestations
 
 The workflow uses `npm publish --provenance` which creates a Sigstore
 attestation linking the published package back to the exact GitHub Actions
 run that built it. The badge appears on the npm package page as "Published
-by GitHub Actions". This is the npm-native version of supply-chain
-attestation. No extra config needed beyond `id-token: write` permission
-(already set in the job).
+by GitHub Actions". No extra config needed — the OIDC exchange and provenance
+signing both use the `id-token: write` permission already set in the job.
 
 ---
 

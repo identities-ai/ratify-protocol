@@ -1,8 +1,20 @@
 # Ratify Protocol — C/C++ SDK
 
-C and C++ bindings for the [Ratify Protocol](https://github.com/identities-ai/ratify-protocol) — cryptographic authorization for AI agents.
+**C and C++ reference SDK for the Ratify Protocol v1 — a cryptographic trust protocol for human-agent and agent-agent interactions as agents start to transact.**
 
-**Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Offline verifiable in <1ms. No central authority.**
+Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
+
+Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **59 canonical test vectors** on every CI run.
+
+## What is Ratify Protocol?
+
+Ratify is an open cryptographic protocol that answers the question: *"Is this AI agent authorized to act, by whom, for what, and under what constraints?"*
+
+A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
+
+- Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
+- Developer docs: [docs.identities.ai](https://docs.identities.ai)
 
 ---
 
@@ -10,10 +22,10 @@ C and C++ bindings for the [Ratify Protocol](https://github.com/identities-ai/ra
 
 | You're writing | Use |
 |---|---|
-| A Go service or CLI | [Go SDK](../go/) |
-| A Node.js or browser app | [TypeScript SDK](../typescript/) |
-| A Python script, ML pipeline, data tool | [Python SDK](../python/) |
-| A Rust service or high-performance binary | [Rust SDK](../rust/) — use directly, no FFI overhead |
+| A Go service or CLI | [Go SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/go) |
+| A Node.js or browser app | [TypeScript SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/typescript) |
+| A Python script, ML pipeline, data tool | [Python SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python) |
+| A Rust service or high-performance binary | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) — use directly, no FFI overhead |
 | **C or C++ code** | **This SDK** |
 | **Firmware, RTOS, hardware driver** | **This SDK** (static library, `libratify_c.a`) |
 | **A language that FFIs to C** (Swift, Zig, Julia, Lua, etc.) | **This SDK** |
@@ -424,6 +436,6 @@ cc examples/verify_bundle.c -I include -L target/release \
 
 ## License
 
-Apache-2.0 — see [LICENSE](../../LICENSE).
+Apache-2.0 — see [LICENSE](https://github.com/identities-ai/ratify-protocol/blob/main/LICENSE).
 
 Ratify Protocol™ is a trademark of Identities AI, Inc. Patent pending.

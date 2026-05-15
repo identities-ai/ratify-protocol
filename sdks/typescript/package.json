@@ -40,7 +40,7 @@
     "email": "hello@identities.ai",
     "url": "https://identities.ai"
   },
-  "homepage": "https://identities.ai",
+  "homepage": "https://docs.identities.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/identities-ai/ratify-protocol.git",

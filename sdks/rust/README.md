@@ -20,7 +20,7 @@ A human issues a signed **delegation cert** to an agent. The agent presents a **
 
 ```toml
 [dependencies]
-ratify-protocol = "1.0.0-alpha.8"
+ratify-protocol = "1.0.0-alpha.9"
 ```
 
 ## Quickstart

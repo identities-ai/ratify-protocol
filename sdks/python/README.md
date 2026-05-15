@@ -6,6 +6,16 @@ Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS
 
 Byte-identical interoperability with the Go, TypeScript, and Rust reference implementations. Validated against the **59 canonical test vectors** on every CI run.
 
+## What is Ratify Protocol?
+
+Ratify is an open cryptographic protocol that answers the question: *"Is this AI agent authorized to act, by whom, for what, and under what constraints?"*
+
+A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
+
+- Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
+- Developer docs: [docs.identities.ai](https://docs.identities.ai)
+
 ## Install
 
 ```bash
@@ -83,7 +93,7 @@ else:
 
 ## Key custody
 
-The protocol supports three key-custody modes with different trust tradeoffs. See `SPEC.md` §15.2 for the full model.
+The protocol supports three key-custody modes with different trust tradeoffs. See [SPEC.md §15.2](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full model.
 
 ### Self-custody (strongest)
 
@@ -164,7 +174,7 @@ intersect_scopes(["meeting:*"], ["meeting:attend", "meeting:speak"])
 
 ### Full scope vocabulary at a glance
 
-Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [`SPEC.md`](../../SPEC.md) §9 for the full table including sensitivity flags and wildcard expansions.
+Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [SPEC.md §9](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full table including sensitivity flags and wildcard expansions.
 
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 
@@ -187,7 +197,7 @@ pip install pytest
 pytest -v
 ```
 
-The suite loads every fixture at `../../testvectors/v1/*.json` and runs it through the Python implementation. All 59 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 59 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## Notes on the ML-DSA-65 library
 

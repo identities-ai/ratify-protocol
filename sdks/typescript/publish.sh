@@ -16,6 +16,7 @@ VERSION=$(node -p "require('./package.json').version")
 if [[ "$VERSION" == *"-"* ]]; then
   TAG=$(echo "$VERSION" | sed 's/.*-\([a-zA-Z]*\).*/\1/')
   npm publish --access public --tag "$TAG"
+  npm dist-tag add "@identities-ai/ratify-protocol@${VERSION}" latest
 else
   npm publish --access public
 fi

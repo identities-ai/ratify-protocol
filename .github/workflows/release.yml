@@ -232,6 +232,7 @@ jobs:
           if [[ "$VERSION" == *"-"* ]]; then
             TAG=$(echo "$VERSION" | sed 's/.*-\([a-zA-Z]*\).*/\1/')
             npm publish --access public --provenance --tag "$TAG"
+            npm dist-tag add "@identities-ai/ratify-protocol@${VERSION}" latest
           else
             npm publish --access public --provenance
           fi

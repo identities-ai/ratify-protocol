@@ -1,6 +1,6 @@
 [package]
 name = "ratify-c"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -31,7 +31,7 @@ std = []
 custom-entropy = ["getrandom/custom"]
 
 [dependencies]
-ratify-protocol = { path = "../rust", version = "1.0.0-alpha.9" }
+ratify-protocol = { path = "../rust", version = "1.0.0-alpha.10" }
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }
 

@@ -6,6 +6,26 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.10 (2026-05-17)
+
+### Added — C/C++ SDK: full 59/59 conformance + pre-built release binaries
+
+**C ABI surface expanded.** 13 new exported functions added to `advanced.rs`:
+
+- `ratify_revocation_list_sign_bytes_hex`, `ratify_revocation_push_sign_bytes_hex`, `ratify_key_rotation_sign_bytes_hex`, `ratify_session_token_sign_bytes_hex`, `ratify_transaction_receipt_sign_bytes_hex`, `ratify_witness_entry_sign_bytes_hex` — canonical sign-bytes as lowercase hex for all signed types
+- `ratify_revocation_push_sig_ed25519_hex`, `ratify_revocation_push_sig_ml_dsa_65_hex`, `ratify_witness_entry_sig_ed25519_hex`, `ratify_witness_entry_sig_ml_dsa_65_hex` — signature component hex accessors
+- `ratify_verify_streamed_turn` — session-token fast-path multi-turn verification via C ABI
+- `ratify_transaction_receipt_verify_full` — receipt verify with explicit `valid` + `error_reason` outputs
+- `ratify_session_token_mac_hex` — token MAC as hex for conformance testing
+
+**Conformance test rewritten.** `tests/conformance.rs` now exercises all 59 canonical fixtures across all 8 fixture kinds (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry). Previously only verify fixtures (42) ran through the C ABI; all 17 non-verify kinds were skipped. Now 59/59 pass.
+
+**Pre-built library release assets.** CI now builds and publishes `.tar.gz` archives for x86-64 Linux, ARM64 Linux, ARM32 Linux, macOS Intel, macOS Apple Silicon, and Windows x86-64 as part of every release. C/C++ consumers no longer need the Rust toolchain.
+
+**Wire format unchanged.** All 59 canonical test vectors regenerate byte-identical to alpha.9.
+
+---
+
 ## v1.0.0-alpha.9 (2026-05-15)
 
 ### Changed — SDK READMEs and registry publishing

@@ -47,7 +47,7 @@ Contributors who prefer to iterate on a language in their own repository may do 
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
 v1.0.0-alpha.7  →  Provider Interfaces, SPEC §17
 v1.0.0-alpha.8  →  C/C++ SDK, Rust no_std, fips204 migration
-v1.0.0-alpha.9  →  current release  (SDK README overhaul, npm Trusted Publisher OIDC)
+v1.0.0-alpha.10  →  current release  (SDK README overhaul, npm Trusted Publisher OIDC)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs
@@ -71,15 +71,15 @@ During the alpha/beta/rc phase, **fixture bytes MAY change between versions**. A
 Every SDK release is tagged in git as `sdk-<language>-<version>`:
 
 ```
-sdk-go-v1.0.0-alpha.9
-sdk-typescript-v1.0.0-alpha.9
-sdk-python-v1.0.0-alpha.9
-sdk-rust-v1.0.0-alpha.9
-sdk-c-v1.0.0-alpha.9
-v1.0.0-alpha.9          ← the protocol-level tag; implies all above at the same version
+sdk-go-v1.0.0-alpha.10
+sdk-typescript-v1.0.0-alpha.10
+sdk-python-v1.0.0-alpha.10
+sdk-rust-v1.0.0-alpha.10
+sdk-c-v1.0.0-alpha.10
+v1.0.0-alpha.10          ← the protocol-level tag; implies all above at the same version
 ```
 
-The protocol-level tag `v1.0.0-alpha.9` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.9`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
+The protocol-level tag `v1.0.0-alpha.10` is what Go modules consume (`go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10`). The SDK-specific tags are what the release workflow uses to decide which registries to push to.
 
 ## 4. The release workflow
 
@@ -88,7 +88,7 @@ The protocol-level tag `v1.0.0-alpha.9` is what Go modules consume (`go get gith
 From a clean main branch:
 
 ```bash
-make release VERSION=v1.0.0-alpha.9 PUSH=1
+make release VERSION=v1.0.0-alpha.10 PUSH=1
 ```
 
 That single command runs the steps below in order. Any failure aborts. By default the release is local-only (`PUSH=0`, `PUBLISH=0`, `GITHUB_RELEASE=0`) so maintainers can verify the exact commit and tags before pushing. Use `PUSH=1` to push `main` and all coordinated tags.
@@ -111,14 +111,14 @@ That single command runs the steps below in order. Any failure aborts. By defaul
    - Rust: `cd sdks/rust && cargo build --all-targets && cargo test`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
-6. **Tag the protocol version.** `git tag v1.0.0-alpha.9`.
-7. **Tag each SDK.** `git tag sdk-go-v1.0.0-alpha.9`, etc.
+6. **Tag the protocol version.** `git tag v1.0.0-alpha.10`.
+7. **Tag each SDK.** `git tag sdk-go-v1.0.0-alpha.10`, etc.
 8. **Push main and tags if `PUSH=1`.** The script pushes `main`, then `vX.Y.Z...` plus every `sdk-*` tag explicitly.
 9. **(Optional / emergency only) Publish to registries if `PUBLISH=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
-   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@1.0.0-alpha.9`.
-   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==1.0.0a9`.
-   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "1.0.0-alpha.9"`.
+   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@1.0.0-alpha.10`.
+   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==1.0.0a10`.
+   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "1.0.0-alpha.10"`.
 10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now — see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
 11. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
 
@@ -130,7 +130,7 @@ Publishing to four registries is not atomic. If step 9 fails partway through (np
 2. Documents which registries have the release and which don't.
 3. Does NOT roll back already-published versions (npm and PyPI do not generally allow un-publishing of installed packages; crates.io explicitly forbids it).
 4. Marks the release as "partial" in the GitHub release page.
-5. Requires manual reconciliation — typically by publishing a patch version (`v1.0.0-alpha.9`) with the missing SDKs.
+5. Requires manual reconciliation — typically by publishing a patch version (`v1.0.0-alpha.10`) with the missing SDKs.
 
 This is why steps 1-8 (preflight + test + tag) must all succeed before step 9 runs.
 
@@ -253,14 +253,14 @@ cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../
 cd sdks/rust && cargo test --quiet && cd ../..
 
 # 4. Commit version bumps.
-git commit -sm "chore: bump to v1.0.0-alpha.9"
+git commit -sm "chore: bump to v1.0.0-alpha.10"
 
 # 5. Tag.
-git tag v1.0.0-alpha.9
-git tag sdk-go-v1.0.0-alpha.9
-git tag sdk-typescript-v1.0.0-alpha.9
-git tag sdk-python-v1.0.0-alpha.9
-git tag sdk-rust-v1.0.0-alpha.9
+git tag v1.0.0-alpha.10
+git tag sdk-go-v1.0.0-alpha.10
+git tag sdk-typescript-v1.0.0-alpha.10
+git tag sdk-python-v1.0.0-alpha.10
+git tag sdk-rust-v1.0.0-alpha.10
 
 # 6. Push.
 git push && git push --tags
@@ -276,7 +276,7 @@ cd sdks/rust && cargo publish && cd ../..
 The manual checklist above is retained as explanatory context. The authoritative command is:
 
 ```bash
-make release VERSION=v1.0.0-alpha.9 PUSH=1
+make release VERSION=v1.0.0-alpha.10 PUSH=1
 ```
 
 ---
@@ -294,10 +294,10 @@ This is a stronger trust model than the manual flow for three reasons:
 ### 5.1 The release flow, end-to-end
 
 ```
-[ make release VERSION=v1.0.0-alpha.9 PUSH=1 ]   ←  on your laptop
+[ make release VERSION=v1.0.0-alpha.10 PUSH=1 ]   ←  on your laptop
                        │
                        │  bumps SDK versions, runs full test matrix locally,
-                       │  creates the protocol tag v1.0.0-alpha.9 and the
+                       │  creates the protocol tag v1.0.0-alpha.10 and the
                        │  five sdk-* sub-tags, pushes main + tags.
                        ▼
 [ GitHub receives tag v* push ]
@@ -370,6 +370,6 @@ Publishing to four registries is not atomic. If PyPI succeeds and crates.io fail
 
 ### 5.5 Pre-release vs stable
 
-The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively — installers default to skipping them unless explicitly asked. This means alpha consumers self-select via `pip install ratify-protocol==1.0.0a9` (explicit) rather than catching alphas accidentally on `pip install ratify-protocol`.
+The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively — installers default to skipping them unless explicitly asked. This means alpha consumers self-select via `pip install ratify-protocol==1.0.0a10` (explicit) rather than catching alphas accidentally on `pip install ratify-protocol`.
 
 This is the right behavior during the alpha series. When `v1.0.0` (stable) ships, the same workflow will produce a non-prerelease GitHub Release and the registries will surface it as the default install target.

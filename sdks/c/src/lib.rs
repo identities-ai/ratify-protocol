@@ -300,7 +300,7 @@ pub struct RatifyHumanRoot(HumanRoot, HybridPrivateKey);
 pub struct RatifyAgent(AgentIdentity, HybridPrivateKey);
 pub struct RatifyDelegationCert(DelegationCert);
 pub struct RatifyProofBundle(ProofBundle);
-pub struct RatifyVerifyResult(VerifyResult);
+pub struct RatifyVerifyResult(pub(crate) VerifyResult);
 
 // ============================================================================
 // Internal helpers

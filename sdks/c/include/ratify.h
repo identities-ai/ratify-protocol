@@ -1,6 +1,6 @@
 /*
  * Ratify Protocol — C/C++ bindings
- * Version: 1.0.0-alpha.7
+ * Version: 1.0.0-alpha.9
  *
  * Cryptographic authorization for AI agents.
  * Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204).
@@ -679,6 +679,85 @@ enum RatifyStatus ratify_chain_hash(const struct RatifyProofBundle *bundle,
 enum RatifyStatus ratify_verifier_context_hash(const struct RatifyVerifierContext *ctx,
                                                unsigned char *out_32,
                                                char **err_out);
+
+// Return the canonical revocation-list signing bytes as a lowercase hex string.
+char *ratify_revocation_list_sign_bytes_hex(const char *list_json, char **err_out);
+
+// Return the canonical revocation-push signing bytes as a lowercase hex string.
+char *ratify_revocation_push_sign_bytes_hex(const char *push_json, char **err_out);
+
+// Return the Ed25519 component of a RevocationPush signature as hex. Free with `ratify_string_free`.
+char *ratify_revocation_push_sig_ed25519_hex(const char *push_json,
+                                             char **err_out);
+
+// Return the ML-DSA-65 component of a RevocationPush signature as hex. Free with `ratify_string_free`.
+char *ratify_revocation_push_sig_ml_dsa_65_hex(const char *push_json,
+                                               char **err_out);
+
+// Return the canonical key-rotation signing bytes as a lowercase hex string.
+char *ratify_key_rotation_sign_bytes_hex(const char *rotation_json, char **err_out);
+
+// Return the canonical session-token signing bytes as a lowercase hex string.
+char *ratify_session_token_sign_bytes_hex(const char *token_json, char **err_out);
+
+// Return the session-token MAC bytes as a lowercase hex string. Free with `ratify_string_free`.
+char *ratify_session_token_mac_hex(const char *token_json, char **err_out);
+
+// Return the canonical transaction-receipt signing bytes as a lowercase hex string.
+char *ratify_transaction_receipt_sign_bytes_hex(const char *receipt_json, char **err_out);
+
+// Return the canonical witness-entry signing bytes as a lowercase hex string.
+char *ratify_witness_entry_sign_bytes_hex(const char *entry_json, char **err_out);
+
+// Return the Ed25519 component of a WitnessEntry signature as hex. Free with `ratify_string_free`.
+char *ratify_witness_entry_sig_ed25519_hex(const char *entry_json, char **err_out);
+
+// Return the ML-DSA-65 component of a WitnessEntry signature as hex. Free with `ratify_string_free`.
+char *ratify_witness_entry_sig_ml_dsa_65_hex(const char *entry_json,
+                                             char **err_out);
+
+// Verify a single streamed turn against an already-issued session token.
+//
+// This is the fast path for embedded streaming: after a full `verify_bundle`
+// that issued a session token, each subsequent turn is verified with this
+// function — no cert chain re-verification needed.
+//
+// Returns a `RatifyVerifyResult*` (same type as `ratify_verify_bundle`).
+// Free with `ratify_verify_result_free`.
+//
+// - `token_json`          — JSON of the `SessionToken` returned by `ratify_session_token_issue`.
+// - `session_secret`      — the HMAC secret used when the token was issued (raw bytes, ≥1 byte).
+// - `challenge` / `challenge_len` — the fresh challenge bytes for this turn.
+// - `challenge_at`        — Unix timestamp the challenge was issued.
+// - `challenge_sig_json`  — `HybridSignature` JSON produced by the agent.
+// - `session_context`     — optional 32-byte session context (NULL + 0 = none).
+// - `stream_id`           — optional 32-byte stream ID (NULL + 0 = none).
+// - `stream_seq`          — highest sequence number already accepted (0 = first turn).
+// - `now_unix`            — current clock; 0 = use system clock.
+struct RatifyVerifyResult *ratify_verify_streamed_turn(const char *token_json,
+                                                       const unsigned char *session_secret,
+                                                       uintptr_t session_secret_len,
+                                                       const unsigned char *challenge,
+                                                       uintptr_t challenge_len,
+                                                       int64_t challenge_at,
+                                                       const char *challenge_sig_json,
+                                                       const unsigned char *session_context,
+                                                       uintptr_t session_context_len,
+                                                       const unsigned char *stream_id,
+                                                       uintptr_t stream_id_len,
+                                                       int64_t stream_seq,
+                                                       int64_t now_unix,
+                                                       char **err_out);
+
+// Full transaction-receipt verification with explicit valid/error_reason outputs.
+//
+// Writes 1 to `*valid_out` on success, 0 on failure.
+// On failure, `*err_out` contains the error_reason string (free with `ratify_error_free`).
+// Returns `RatifyOk` on parse success (the receipt may still be invalid — check `*valid_out`).
+enum RatifyStatus ratify_transaction_receipt_verify_full(const char *receipt_json,
+                                                         int64_t now_unix,
+                                                         int *valid_out,
+                                                         char **err_out);
 
 // Register a custom entropy callback for platforms without OS-level RNG.
 //

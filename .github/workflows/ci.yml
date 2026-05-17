@@ -76,11 +76,11 @@ jobs:
       - name: typecheck
         run: npx tsc --noEmit
 
-      - name: conformance tests (59 fixtures)
-        run: npm run test:conformance
+      - name: full test suite (101 tests — conformance + cross-SDK + levers + providers)
+        run: npm test
 
   python:
-    name: Python SDK conformance
+    name: Python SDK (102 tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -103,7 +103,7 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
-      - name: conformance tests (59 fixtures)
+      - name: full test suite (59 fixtures)
         run: pytest -v
 
   rust:
@@ -124,7 +124,7 @@ jobs:
       - name: build
         run: cargo build --all-targets
 
-      - name: conformance tests (59 fixtures)
+      - name: full test suite (59 fixtures)
         run: cargo test
 
   dco:

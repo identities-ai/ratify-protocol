@@ -81,9 +81,9 @@ jobs:
       - name: TS typecheck
         working-directory: sdks/typescript
         run: npx tsc --noEmit
-      - name: TS conformance (59 fixtures)
+      - name: TS full test suite (101 tests)
         working-directory: sdks/typescript
-        run: npm run test:conformance
+        run: npm test
 
       # Python
       - uses: actions/setup-python@v6
@@ -94,7 +94,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e '.[dev]'
-      - name: Python conformance (59 fixtures)
+      - name: Python full test suite (102 tests)
         working-directory: sdks/python
         run: pytest -v
 

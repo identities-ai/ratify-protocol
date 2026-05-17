@@ -326,7 +326,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [publish-pypi, publish-crates, publish-npm, publish-go, build-c-binaries]
+    needs: [gate-tests, publish-pypi, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: always() && needs.gate-tests.result == 'success'
     runs-on: ubuntu-latest
     permissions:

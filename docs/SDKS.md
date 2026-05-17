@@ -46,7 +46,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance:** All 59 canonical fixtures pass through the C ABI — 42 verify fixtures plus all non-verify kinds (scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry) — plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
+**Conformance:** All 59 canonical fixtures pass through the C ABI — 42 "verify"-kind fixtures plus all 17 non-verify kinds (scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry) — plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
@@ -84,11 +84,11 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 **Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (has Ed25519 and is getting ML-DSA support) or a direct Java port.
 
-### C / C++ via C ABI as a universal integration layer
+### C / C++ via C ABI — shipped in v1.0.0-alpha.8, full conformance in v1.0.0-alpha.10
 
-**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, older PHP, embedded environments, and vendor firmware all benefit.
+**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, Swift, Zig, embedded environments, and vendor firmware all benefit.
 
-**Target:** cgo export of the Go reference as a shared library, with a clean C header. Plus Ruby/Elixir/etc. wrappers on top.
+**Implementation:** wraps the Rust SDK via `cbindgen`-generated C ABI. Ships as `libratify_c.a` (static) and `libratify_c.so`/`.dylib`/`.dll` (shared) with a committed `ratify.h` header. Pre-built archives for common targets are published as GitHub Release assets — no Rust toolchain required to consume the SDK. See `sdks/c/` for full details.
 
 ## 4. The conformance contract
 

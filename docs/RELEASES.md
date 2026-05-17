@@ -47,7 +47,7 @@ Contributors who prefer to iterate on a language in their own repository may do 
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
 v1.0.0-alpha.7  →  Provider Interfaces, SPEC §17
 v1.0.0-alpha.8  →  C/C++ SDK, Rust no_std, fips204 migration
-v1.0.0-alpha.10  →  current release  (SDK README overhaul, npm Trusted Publisher OIDC)
+v1.0.0-alpha.10  →  current release  (C SDK 59/59 conformance, 13 new C ABI functions, pre-built release binaries)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs
@@ -106,7 +106,7 @@ That single command runs the steps below in order. Any failure aborts. By defaul
 5. **Run the full conformance suite across all SDKs.**
    - Go: `go vet ./...` and `go test -race -count=1 ./...`
    - Determinism: regenerate fixtures to `/tmp` and `diff -rq` against `testvectors/v1/`
-   - TypeScript: `cd sdks/typescript && npm ci && npx tsc --noEmit && npm run test:conformance`
+   - TypeScript: `cd sdks/typescript && npm ci && npx tsc --noEmit && npm test`
    - Python: `cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q`
    - Rust: `cd sdks/rust && cargo build --all-targets && cargo test`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
@@ -248,7 +248,7 @@ diff -rq testvectors/v1/ /tmp/regen/          # must be empty
 
 # 3. Run conformance everywhere.
 go test ./...
-cd sdks/typescript && npm ci && npm run test:conformance && cd ../..
+cd sdks/typescript && npm ci && npm test && cd ../..
 cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../..
 cd sdks/rust && cargo test --quiet && cd ../..
 

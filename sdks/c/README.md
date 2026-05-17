@@ -405,7 +405,7 @@ cargo test
 
 All 59 canonical fixtures pass through the C ABI:
 
-- 42 verify fixtures (proof-bundle verification, constraints, session/stream binding, revocation)
+- 42 "verify" kind fixtures (proof-bundle verification, constraints, session/stream binding, revocation)
 - 17 non-verify fixtures — scope expansion/validation, revocation list, revocation push,
   key rotation, session tokens, transaction receipts, witness entries
 

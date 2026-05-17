@@ -1300,18 +1300,36 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
         Err(e) => { set_err(err_out, &format!("challenge_sig_json: {e}")); return std::ptr::null_mut(); }
     };
 
-    // Optional session context (32 bytes or empty)
-    let sess_ctx: &[u8] = if session_context.is_null() || session_context_len == 0 {
+    // Optional session context: NULL+0 = absent; non-NULL must be exactly 32 bytes.
+    let sess_ctx: &[u8] = if session_context.is_null() {
+        if session_context_len != 0 {
+            set_err(err_out, "session_context is null but session_context_len is non-zero");
+            return std::ptr::null_mut();
+        }
         &[]
+    } else if session_context_len == 0 {
+        &[]
+    } else if session_context_len != 32 {
+        set_err(err_out, &format!("session_context_len must be 0 or 32, got {session_context_len}"));
+        return std::ptr::null_mut();
     } else {
-        slice::from_raw_parts(session_context, session_context_len)
+        slice::from_raw_parts(session_context, 32)
     };
 
-    // Optional stream ID (32 bytes or empty)
-    let sid: &[u8] = if stream_id.is_null() || stream_id_len == 0 {
+    // Optional stream ID: NULL+0 = absent; non-NULL must be exactly 32 bytes.
+    let sid: &[u8] = if stream_id.is_null() {
+        if stream_id_len != 0 {
+            set_err(err_out, "stream_id is null but stream_id_len is non-zero");
+            return std::ptr::null_mut();
+        }
         &[]
+    } else if stream_id_len == 0 {
+        &[]
+    } else if stream_id_len != 32 {
+        set_err(err_out, &format!("stream_id_len must be 0 or 32, got {stream_id_len}"));
+        return std::ptr::null_mut();
     } else {
-        slice::from_raw_parts(stream_id, stream_id_len)
+        slice::from_raw_parts(stream_id, 32)
     };
 
     let result = verify_streamed_turn(

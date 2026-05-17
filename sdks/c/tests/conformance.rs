@@ -579,11 +579,16 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
     }
 
     // Decode session secret from hex
-    let secret: Vec<u8> = (0..st.session_secret_hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&st.session_secret_hex[i..i+2], 16)
-            .unwrap_or_else(|_| panic!("{} bad session_secret_hex", fixture.name)))
-        .collect();
+    let mut secret = Vec::with_capacity(st.session_secret_hex.len() / 2);
+    for i in (0..st.session_secret_hex.len()).step_by(2) {
+        match u8::from_str_radix(&st.session_secret_hex[i..i+2], 16) {
+            Ok(b) => secret.push(b),
+            Err(_) => {
+                failures.push(format!("[{}] bad session_secret_hex at index {i}", fixture.name));
+                return false;
+            }
+        }
+    }
 
     // Decode challenge
     let mut chall: Vec<u8> = Vec::new();
@@ -654,8 +659,13 @@ unsafe fn run_transaction_receipt_fixture(fixture: &Fixture, failures: &mut Vec<
     }
 
     // full verify
-    let now = *fixture.timestamps.get("verifier_now")
-        .unwrap_or_else(|| panic!("{} missing timestamps.verifier_now", fixture.name));
+    let now = match fixture.timestamps.get("verifier_now") {
+        Some(t) => *t,
+        None => {
+            failures.push(format!("[{}] missing timestamps.verifier_now", fixture.name));
+            return false;
+        }
+    };
 
     let mut valid_out: std::os::raw::c_int = 0;
     let mut ve: *mut std::os::raw::c_char = std::ptr::null_mut();

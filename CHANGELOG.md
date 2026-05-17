@@ -20,7 +20,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 **Conformance test rewritten.** `tests/conformance.rs` now exercises all 59 canonical fixtures across all 8 fixture kinds (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry). Previously only verify fixtures (42) ran through the C ABI; all 17 non-verify kinds were skipped. Now 59/59 pass.
 
-**Pre-built library release assets.** CI now builds and publishes `.tar.gz` archives for x86-64 Linux, ARM64 Linux, ARM32 Linux, macOS Intel, macOS Apple Silicon, and Windows x86-64 as part of every release. C/C++ consumers no longer need the Rust toolchain.
+**Pre-built library release assets.** CI now builds and publishes `.tar.gz` archives for Linux (x86-64, ARM64, ARM32) and macOS (Intel, Apple Silicon), and `.zip` for Windows x86-64 as part of every release. C/C++ consumers no longer need the Rust toolchain.
 
 **Wire format unchanged.** All 59 canonical test vectors regenerate byte-identical to alpha.9.
 

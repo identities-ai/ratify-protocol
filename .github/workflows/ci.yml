@@ -127,6 +127,30 @@ jobs:
       - name: full test suite (59 fixtures)
         run: cargo test
 
+  c-sdk:
+    name: C/C++ SDK (59 fixtures + 58 unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/c
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/c
+
+      - name: build
+        run: cargo build --all-targets
+
+      - name: conformance tests (59 fixtures — all fixture kinds)
+        run: cargo test --test conformance -- --nocapture
+
+      - name: unit tests
+        run: cargo test --test api
+
   dco:
     name: DCO sign-off
     runs-on: ubuntu-latest

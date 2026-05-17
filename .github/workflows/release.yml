@@ -242,13 +242,17 @@ jobs:
         working-directory: sdks/typescript
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *"-"* ]]; then
-            TAG=$(echo "$VERSION" | sed 's/.*-\([a-zA-Z]*\).*/\1/')
-            npm publish --access public --provenance --tag "$TAG"
-            npm dist-tag add "@identities-ai/ratify-protocol@${VERSION}" latest
-          else
-            npm publish --access public --provenance
+          # Skip gracefully if this version is already published (re-run safety).
+          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qF "$VERSION"; then
+            echo "Version ${VERSION} already published — skipping."
+            exit 0
           fi
+          # Publish with --tag latest in a single OIDC-authenticated command.
+          # Pre-release versions (containing '-') get tagged latest so
+          # 'npm install @identities-ai/ratify-protocol' always resolves to
+          # the newest published version. Stable 1.0.0 will naturally become
+          # latest when it ships.
+          npm publish --access public --provenance --tag latest
 
   # ──────────────────────────────────────────────────────────────────────────
   # Go: nothing to do. Tag push + pkg.go.dev auto-discovery handle it.

@@ -298,7 +298,7 @@ This is a stronger trust model than the manual flow for three reasons:
                        │
                        │  bumps SDK versions, runs full test matrix locally,
                        │  creates the protocol tag v1.0.0-alpha.9 and the
-                       │  four sdk-* sub-tags, pushes main + tags.
+                       │  five sdk-* sub-tags, pushes main + tags.
                        ▼
 [ GitHub receives tag v* push ]
                        │

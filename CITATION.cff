@@ -32,6 +32,6 @@ abstract: >-
   Ed25519 + ML-DSA-65 (NIST FIPS 204) signature so that authorization
   proofs remain unforgeable both today and under a cryptographically-relevant
   quantum computer. The specification is under CC-BY-4.0; the reference SDKs
-  (Go, TypeScript, Python, Rust) are under Apache-2.0. Patent pending.
-version: "1.0.0-alpha.6"
-date-released: "2026-05-10"
+  (Go, TypeScript, Python, Rust, C/C++) are under Apache-2.0. Patent pending.
+version: "1.0.0-alpha.10"
+date-released: "2026-05-17"

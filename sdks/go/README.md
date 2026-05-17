@@ -21,7 +21,7 @@ A human issues a signed **delegation cert** to an agent. The agent presents a **
 The Go SDK is the **reference implementation** and lives at the project root — not in this directory.
 
 ```go
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.9
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10
 ```
 
 ```go

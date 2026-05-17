@@ -5,7 +5,8 @@
 use ratify_protocol::{
     generate_agent, generate_challenge, generate_human_root, hex_encode, issue_delegation,
     sign_challenge, verify_bundle, DelegationCert, HybridSignature, IdentityStatus, ProofBundle,
-    VerifyOptions, PROTOCOL_VERSION, SCOPE_FILES_WRITE, SCOPE_MEETING_ATTEND, SCOPE_MEETING_RECORD,
+    RevocationProvider, VerifyOptions, PROTOCOL_VERSION, SCOPE_FILES_WRITE, SCOPE_MEETING_ATTEND,
+    SCOPE_MEETING_RECORD,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -63,6 +64,7 @@ fn main() {
         subject_id: agent.id.clone(),
         subject_pub_key: agent.public_key.clone(),
         scope: vec![SCOPE_MEETING_ATTEND.into()],
+        constraints: vec![],
         issued_at: now,
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
@@ -92,6 +94,9 @@ fn main() {
         challenge: challenge.clone(),
         challenge_at,
         challenge_sig,
+        session_context: vec![],
+        stream_id: vec![],
+        stream_seq: 0,
     };
     kv(
         "Challenge:",
@@ -171,12 +176,17 @@ fn main() {
 
     // Revocation
     banner("REVOCATION  Alice revokes the cert");
-    let revoked_id = cert.cert_id.clone();
+    struct DemoRevocation(String);
+    impl RevocationProvider for DemoRevocation {
+        fn is_revoked(&self, cert_id: &str) -> Result<bool, String> {
+            Ok(cert_id == self.0)
+        }
+    }
     let r = verify_bundle(
         &bundle,
         &VerifyOptions {
             required_scope: SCOPE_MEETING_ATTEND.into(),
-            is_revoked: Some(Box::new(move |cid| cid == revoked_id)),
+            revocation: Some(Box::new(DemoRevocation(cert.cert_id.clone()))),
             ..Default::default()
         },
     );

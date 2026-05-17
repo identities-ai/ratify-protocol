@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-c"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "cbindgen",
  "getrandom 0.2.17",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "base64",
  "chrono",

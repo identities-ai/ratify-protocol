@@ -403,13 +403,13 @@ vectors as the Go, TypeScript, Python, and Rust SDKs.
 cargo test
 ```
 
-21 of 59 "verify" fixtures run through the C ABI in the current release.
-38 are skipped with explicit Phase 3 notes:
-- 12 need `RatifyVerifierContext` (geo, speed, amount, rate) — wire in a context
-- 1  needs a RevocationProvider for a "revoked" middle cert
-- 4  need session-context binding (`opts.session_context`)
-- 5  need stream binding (not yet in opts)
-- 16 are non-verify kind (sign, rotate, revocation-list, etc.)
+All canonical fixture kinds pass through the C ABI:
+
+- Proof-bundle verification, constraints, session/stream binding, and revocation
+- Scope expansion/validation, revocation list, revocation push, key rotation,
+  session tokens, transaction receipts, and witness entries
+
+0 skipped. Full conformance parity with Go, TypeScript, Python, and Rust.
 
 ---
 
@@ -419,7 +419,7 @@ cargo test
 # Unit tests (all functions, null pointers, malformed JSON, round-trips)
 cargo test --test api
 
-# Conformance tests (21/59 verify fixtures)
+# Conformance tests (59/59 fixtures)
 cargo test --test conformance
 
 # Cross-architecture via QEMU (requires `cross`)

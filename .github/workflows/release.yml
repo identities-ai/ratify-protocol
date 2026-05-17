@@ -81,9 +81,9 @@ jobs:
       - name: TS typecheck
         working-directory: sdks/typescript
         run: npx tsc --noEmit
-      - name: TS conformance (59 fixtures)
+      - name: TS full test suite (101 tests)
         working-directory: sdks/typescript
-        run: npm run test:conformance
+        run: npm test
 
       # Python
       - uses: actions/setup-python@v6
@@ -94,7 +94,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e '.[dev]'
-      - name: Python conformance (59 fixtures)
+      - name: Python full test suite (102 tests)
         working-directory: sdks/python
         run: pytest -v
 
@@ -109,6 +109,17 @@ jobs:
       - name: Rust conformance (59 fixtures)
         working-directory: sdks/rust
         run: cargo test --release
+
+      # C / C++
+      - name: C/C++ build
+        working-directory: sdks/c
+        run: cargo build --all-targets
+      - name: C/C++ conformance (59 fixtures)
+        working-directory: sdks/c
+        run: cargo test --test conformance -- --nocapture
+      - name: C/C++ API tests
+        working-directory: sdks/c
+        run: cargo test --test api
 
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
       # declared version. The release-sync script already proves cross-SDK
@@ -257,25 +268,94 @@ jobs:
           curl -fsSL "https://proxy.golang.org/github.com/identities-ai/ratify-protocol/@v/${tag}.info" || true
 
   # ──────────────────────────────────────────────────────────────────────────
+  # Pre-built C/C++ libraries — cross-compile for common targets and upload
+  # as artifacts so github-release can attach them. Consumers can link
+  # against libratify_c.a without installing the Rust toolchain.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-c-binaries:
+    name: C/C++ library (${{ matrix.archive }})
+    needs: [gate-tests]
+    if: needs.gate-tests.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,      os: ubuntu-latest,  cross: false, archive: linux-x86_64   }
+          - { target: aarch64-unknown-linux-gnu,     os: ubuntu-latest,  cross: true,  archive: linux-aarch64  }
+          - { target: armv7-unknown-linux-gnueabihf, os: ubuntu-latest,  cross: true,  archive: linux-armv7    }
+          - { target: x86_64-apple-darwin,           os: macos-latest,   cross: false, archive: macos-x86_64   }
+          - { target: aarch64-apple-darwin,          os: macos-latest,   cross: false, archive: macos-aarch64  }
+          - { target: x86_64-pc-windows-msvc,        os: windows-latest, cross: false, archive: windows-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Build
+        working-directory: sdks/c
+        shell: bash
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+      - name: Package
+        working-directory: sdks/c
+        shell: bash
+        env:
+          ARCHIVE_NAME: ratify-c-${{ env.RELEASE_TAG }}-${{ matrix.archive }}
+        run: |
+          mkdir -p "dist/${ARCHIVE_NAME}/lib" "dist/${ARCHIVE_NAME}/include"
+          cp include/ratify.h "dist/${ARCHIVE_NAME}/include/"
+          target_dir="target/${{ matrix.target }}/release"
+          for ext in a so dylib dll lib; do
+            [ -f "${target_dir}/libratify_c.${ext}" ] && cp "${target_dir}/libratify_c.${ext}" "dist/${ARCHIVE_NAME}/lib/" || true
+            [ -f "${target_dir}/ratify_c.${ext}" ]    && cp "${target_dir}/ratify_c.${ext}"    "dist/${ARCHIVE_NAME}/lib/" || true
+          done
+          cd dist
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            7z a "${ARCHIVE_NAME}.zip" "${ARCHIVE_NAME}/"
+            echo "ARCHIVE_FILE=${ARCHIVE_NAME}.zip" >> "$GITHUB_ENV"
+          else
+            tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}/"
+            echo "ARCHIVE_FILE=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: c-lib-${{ matrix.archive }}
+          path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
+          retention-days: 1
+
   # GitHub Release — last so it only appears once registry publishes have
-  # been attempted. Attaches the testvectors/v1 bundle as a release asset so
-  # downstream consumers can grab the canonical conformance fixtures
-  # alongside the version they're using.
+  # been attempted. Attaches the testvectors/v1 bundle and pre-built C
+  # libraries as release assets.
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [publish-pypi, publish-crates, publish-npm, publish-go]
+    needs: [gate-tests, publish-pypi, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: always() && needs.gate-tests.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
+      - name: Download C library artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: c-lib-*
+          path: c-artifacts/
+          merge-multiple: true
       - name: bundle testvectors
         run: |
           tag="$RELEASE_TAG"
           tar -czf "ratify-testvectors-${tag}.tar.gz" testvectors/
           ls -lh ratify-testvectors-*.tar.gz
+          ls -lh c-artifacts/ || true
       - name: compute install snippets for release notes
         # GitHub Release notes are static strings. Pre-compute the per-language
         # version forms here so the notes don't ask end users to run shell
@@ -298,10 +378,11 @@ jobs:
           prerelease: ${{ contains(env.RELEASE_TAG, 'alpha') || contains(env.RELEASE_TAG, 'beta') || contains(env.RELEASE_TAG, 'rc') }}
           files: |
             ratify-testvectors-*.tar.gz
+            c-artifacts/*
           body: |
             ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
-            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. 59 canonical conformance fixtures, byte-for-byte interoperable across Go, TypeScript, Python, and Rust.
+            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. 59 canonical conformance fixtures, byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
 
             ### Install
 
@@ -317,6 +398,9 @@ jobs:
 
             # TypeScript
             npm install @identities-ai/ratify-protocol@${{ env.TAG_CLEAN }}
+
+            # C/C++ — download pre-built archive above (no Rust required)
+            # or build from source: cd sdks/c && cargo build --release
             ```
 
             ### Links

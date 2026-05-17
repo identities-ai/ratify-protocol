@@ -29,13 +29,15 @@ use std::slice;
 
 use ratify_protocol::{
     bundle_hash as sdk_bundle_hash, chain_hash as sdk_chain_hash,
-    expand_scopes, has_scope, intersect_scopes, is_sensitive,
+    expand_scopes, has_scope, hex_encode, intersect_scopes, is_sensitive,
     issue_key_rotation_statement, issue_policy_verdict, issue_revocation_list,
     issue_revocation_push, issue_session_token, issue_verification_receipt,
-    issue_witness_entry, sign_transaction_receipt_party,
-    validate_scopes, verify_key_rotation_statement, verify_policy_verdict,
-    verify_revocation_list, verify_revocation_push, verify_session_token_e,
-    verify_transaction_receipt, verify_verification_receipt, verify_witness_entry,
+    issue_witness_entry, key_rotation_sign_bytes, revocation_push_sign_bytes,
+    revocation_sign_bytes, session_token_sign_bytes, sign_transaction_receipt_party,
+    transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
+    verify_policy_verdict, verify_revocation_list, verify_revocation_push,
+    verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
+    verify_verification_receipt, verify_witness_entry, witness_entry_sign_bytes,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -1101,4 +1103,269 @@ pub unsafe extern "C" fn ratify_verifier_context_hash(
         }
         Err(e) => map_sdk_err(err_out, e),
     }
+}
+
+// ============================================================================
+// Canonical sign-bytes helpers — for conformance testing and audit tooling.
+// Each function deserialises the typed object from JSON, computes the
+// canonical signing bytes defined in SPEC.md, and returns the bytes as a
+// lowercase hex string. Free the result with `ratify_string_free`.
+// ============================================================================
+
+/// Return the canonical revocation-list signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_revocation_list_sign_bytes_hex(
+    list_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(list_json, "list_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let list: RevocationList = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&revocation_sign_bytes(&list)))
+}
+
+/// Return the canonical revocation-push signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_revocation_push_sign_bytes_hex(
+    push_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&revocation_push_sign_bytes(&push)))
+}
+
+/// Return the Ed25519 component of a RevocationPush signature as hex. Free with `ratify_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_revocation_push_sig_ed25519_hex(
+    push_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&push.signature.ed25519))
+}
+
+/// Return the ML-DSA-65 component of a RevocationPush signature as hex. Free with `ratify_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_revocation_push_sig_ml_dsa_65_hex(
+    push_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&push.signature.ml_dsa_65))
+}
+
+/// Return the canonical key-rotation signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_key_rotation_sign_bytes_hex(
+    rotation_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(rotation_json, "rotation_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let stmt: KeyRotationStatement = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&key_rotation_sign_bytes(&stmt)))
+}
+
+/// Return the canonical session-token signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_session_token_sign_bytes_hex(
+    token_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(token_json, "token_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let token: SessionToken = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&session_token_sign_bytes(&token)))
+}
+
+/// Return the session-token MAC bytes as a lowercase hex string. Free with `ratify_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_session_token_mac_hex(
+    token_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(token_json, "token_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let token: SessionToken = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&token.mac))
+}
+
+/// Return the canonical transaction-receipt signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_transaction_receipt_sign_bytes_hex(
+    receipt_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let receipt: TransactionReceipt = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&transaction_receipt_sign_bytes(&receipt)))
+}
+
+/// Return the canonical witness-entry signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_witness_entry_sign_bytes_hex(
+    entry_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&witness_entry_sign_bytes(&entry)))
+}
+
+/// Return the Ed25519 component of a WitnessEntry signature as hex. Free with `ratify_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_witness_entry_sig_ed25519_hex(
+    entry_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&entry.signature.ed25519))
+}
+
+/// Return the ML-DSA-65 component of a WitnessEntry signature as hex. Free with `ratify_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_witness_entry_sig_ml_dsa_65_hex(
+    entry_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&entry.signature.ml_dsa_65))
+}
+
+// ============================================================================
+// Streamed-turn verification (session token fast path)
+// ============================================================================
+
+/// Verify a single streamed turn against an already-issued session token.
+///
+/// This is the fast path for embedded streaming: after a full `verify_bundle`
+/// that issued a session token, each subsequent turn is verified with this
+/// function — no cert chain re-verification needed.
+///
+/// Returns a `RatifyVerifyResult*` (same type as `ratify_verify_bundle`).
+/// Free with `ratify_verify_result_free`.
+///
+/// - `token_json`          — JSON of the `SessionToken` returned by `ratify_session_token_issue`.
+/// - `session_secret`      — the HMAC secret used when the token was issued (raw bytes, ≥1 byte).
+/// - `challenge` / `challenge_len` — the fresh challenge bytes for this turn.
+/// - `challenge_at`        — Unix timestamp the challenge was issued.
+/// - `challenge_sig_json`  — `HybridSignature` JSON produced by the agent.
+/// - `session_context`     — optional 32-byte session context (NULL + 0 = none).
+/// - `stream_id`           — optional 32-byte stream ID (NULL + 0 = none).
+/// - `stream_seq`          — highest sequence number already accepted (0 = first turn).
+/// - `now_unix`            — current clock; 0 = use system clock.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_streamed_turn(
+    token_json:           *const c_char,
+    session_secret:       *const c_uchar,
+    session_secret_len:   usize,
+    challenge:            *const c_uchar,
+    challenge_len:        usize,
+    challenge_at:         i64,
+    challenge_sig_json:   *const c_char,
+    session_context:      *const c_uchar,
+    session_context_len:  usize,
+    stream_id:            *const c_uchar,
+    stream_id_len:        usize,
+    stream_seq:           i64,
+    now_unix:             i64,
+    err_out:              *mut *mut c_char,
+) -> *mut crate::RatifyVerifyResult {
+    // Parse session token
+    let token_str = match cstr_to_string(token_json, "token_json", err_out) {
+        Some(s) => s, None => return std::ptr::null_mut(),
+    };
+    let token: SessionToken = match serde_json::from_str(&token_str) {
+        Ok(t) => t,
+        Err(e) => { set_err(err_out, &format!("token_json: {e}")); return std::ptr::null_mut(); }
+    };
+
+    // Session secret
+    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
+        Some(b) => b, None => return std::ptr::null_mut(),
+    };
+
+    // Challenge bytes
+    let chall = match validated_buf(challenge, challenge_len, 1, "challenge", err_out) {
+        Some(b) => b, None => return std::ptr::null_mut(),
+    };
+
+    // Challenge signature
+    let sig_str = match cstr_to_string(challenge_sig_json, "challenge_sig_json", err_out) {
+        Some(s) => s, None => return std::ptr::null_mut(),
+    };
+    let sig: HybridSignature = match serde_json::from_str(&sig_str) {
+        Ok(s) => s,
+        Err(e) => { set_err(err_out, &format!("challenge_sig_json: {e}")); return std::ptr::null_mut(); }
+    };
+
+    // Optional session context: NULL+0 = absent; non-NULL must be exactly 32 bytes.
+    let sess_ctx: &[u8] = if session_context.is_null() {
+        if session_context_len != 0 {
+            set_err(err_out, "session_context is null but session_context_len is non-zero");
+            return std::ptr::null_mut();
+        }
+        &[]
+    } else if session_context_len == 0 {
+        &[]
+    } else if session_context_len != 32 {
+        set_err(err_out, &format!("session_context_len must be 0 or 32, got {session_context_len}"));
+        return std::ptr::null_mut();
+    } else {
+        slice::from_raw_parts(session_context, 32)
+    };
+
+    // Optional stream ID: NULL+0 = absent; non-NULL must be exactly 32 bytes.
+    let sid: &[u8] = if stream_id.is_null() {
+        if stream_id_len != 0 {
+            set_err(err_out, "stream_id is null but stream_id_len is non-zero");
+            return std::ptr::null_mut();
+        }
+        &[]
+    } else if stream_id_len == 0 {
+        &[]
+    } else if stream_id_len != 32 {
+        set_err(err_out, &format!("stream_id_len must be 0 or 32, got {stream_id_len}"));
+        return std::ptr::null_mut();
+    } else {
+        slice::from_raw_parts(stream_id, 32)
+    };
+
+    let result = verify_streamed_turn(
+        &token, secret, chall, challenge_at, &sig,
+        sess_ctx, sid, stream_seq,
+        if now_unix == 0 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) } else { now_unix },
+    );
+
+    Box::into_raw(Box::new(crate::RatifyVerifyResult(result)))
+}
+
+/// Full transaction-receipt verification with explicit valid/error_reason outputs.
+///
+/// Writes 1 to `*valid_out` on success, 0 on failure.
+/// On failure, `*err_out` contains the error_reason string (free with `ratify_error_free`).
+/// Returns `RatifyOk` on parse success (the receipt may still be invalid — check `*valid_out`).
+#[no_mangle]
+pub unsafe extern "C" fn ratify_transaction_receipt_verify_full(
+    receipt_json: *const c_char,
+    now_unix: i64,
+    valid_out: *mut c_int,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if valid_out.is_null() { set_err(err_out, "valid_out is null"); return RatifyStatus::RatifyErrNullPointer; }
+    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) {
+        Some(s) => s, None => return RatifyStatus::RatifyErrJson,
+    };
+    let receipt: TransactionReceipt = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => return json_err(err_out, "receipt_json", e),
+    };
+    let ts = if now_unix == 0 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) } else { now_unix };
+    let result = verify_transaction_receipt(&receipt, ts);
+    *valid_out = result.valid as c_int;
+    if !result.valid && !result.error_reason.is_empty() {
+        set_err(err_out, &result.error_reason);
+    }
+    RatifyStatus::RatifyOk
 }

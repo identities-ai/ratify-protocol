@@ -22,7 +22,7 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 59/59 fixtures |
 | **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 59/59 fixtures |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 59/59 fixtures |
-| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 42/59 verify fixtures + 58 unit tests |
+| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 59/59 fixtures + 58 unit tests |
 | Swift | — | planned (mobile wallet) | — |
 | Java / Kotlin | — | planned (Android / JVM) | — |
 
@@ -46,7 +46,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance note:** 42 of 59 verify fixtures pass through the C ABI today. The remaining 17 cover constraint context fields (`geo`, `speed`, `amount`, `rate`), session binding, stream binding, and non-verify fixture kinds — all tracked in the Phase 3 roadmap.
+**Conformance:** All 59 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
@@ -84,11 +84,11 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 **Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (has Ed25519 and is getting ML-DSA support) or a direct Java port.
 
-### C / C++ via C ABI as a universal integration layer
+### C / C++ via C ABI — shipped in v1.0.0-alpha.8, full conformance in v1.0.0-alpha.10
 
-**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, older PHP, embedded environments, and vendor firmware all benefit.
+**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, Swift, Zig, embedded environments, and vendor firmware all benefit.
 
-**Target:** cgo export of the Go reference as a shared library, with a clean C header. Plus Ruby/Elixir/etc. wrappers on top.
+**Implementation:** wraps the Rust SDK via `cbindgen`-generated C ABI. Ships as `libratify_c.a` (static) and `libratify_c.so`/`.dylib`/`.dll` (shared) with a committed `ratify.h` header. Pre-built archives for common targets are published as GitHub Release assets — no Rust toolchain required to consume the SDK. See `sdks/c/` for full details.
 
 ## 4. The conformance contract
 

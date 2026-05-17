@@ -40,6 +40,7 @@ unsafe fn read_cstr(ptr: *mut c_char) -> String {
 }
 
 /// Read a C string, optionally null. Returns None if null, Some(String) if set.
+#[allow(dead_code)]
 unsafe fn read_cstr_opt(ptr: *mut c_char) -> Option<String> {
     if ptr.is_null() { return None; }
     let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();

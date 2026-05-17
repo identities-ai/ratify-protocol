@@ -186,7 +186,7 @@ intersectScopes(["meeting:*"], ["meeting:attend", "meeting:speak"]);
 // ["meeting:attend", "meeting:speak"]
 ```
 
-Ratify v1 ships 52 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [SPEC.md §9](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full table including sensitivity flags and wildcard expansions.
+Ratify v1 ships 53 canonical scopes across fourteen domains, plus a `custom:` extension pattern for application-specific scopes. See [SPEC.md §9](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md) for the full table including sensitivity flags and wildcard expansions.
 
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 

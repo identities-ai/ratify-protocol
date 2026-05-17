@@ -175,7 +175,7 @@ The release logic lives in:
 
 ## 6. Continuous integration
 
-Every push and every pull request runs a matrix across all four SDKs. `.github/workflows/ci.yml` already defines the Go + determinism + TS jobs; Python and Rust are added now.
+Every push and every pull request runs a matrix across all five SDKs (Go, TypeScript, Python, Rust, C/C++). `.github/workflows/ci.yml` already defines the Go + determinism + TS jobs; Python and Rust are added now.
 
 Every PR must pass the full conformance grid before merge. The NxN interop matrix (see [`SDKS.md`](SDKS.md) §5) is enforced — a bundle produced by any implementation must verify in every implementation.
 
@@ -221,7 +221,7 @@ Critical security fixes (e.g., a verifier algorithm bug that accepts forgeries) 
 
 A release cycle is considered stable when:
 
-- All four SDKs (Go, TS, Python, Rust) pass all 59 fixtures (20 original v1 + 2 sub-delegation + 12 constraint + 2 session-binding + 2 key-rotation + 6 stream-sequence + 5 session-token + 5 transaction-receipt + 1 revocation-push + 1 witness-entry + 1 challenge-forwarding fixtures).
+- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 59 fixtures (20 original v1 + 2 sub-delegation + 12 constraint + 2 session-binding + 2 key-rotation + 6 stream-sequence + 5 session-token + 5 transaction-receipt + 1 revocation-push + 1 witness-entry + 1 challenge-forwarding fixtures).
 - Determinism check passes (regen = zero diff).
 - The generator itself hasn't changed since the last release, OR its change is reviewed and new fixtures have been committed.
 - CI is green on main.

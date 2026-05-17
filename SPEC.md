@@ -718,7 +718,7 @@ Pure ML-DSA-65 would be a single point of cryptographic failure against future a
 
 ## 9. Scope vocabulary (v1)
 
-52 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension.
+53 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension.
 
 The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3.5, §3.6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
 

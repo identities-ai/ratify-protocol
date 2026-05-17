@@ -36,7 +36,7 @@ All v1.1 features are backward-compatible with v1.0. Legacy v1.0 bundles continu
 - **Chain authorization** with scope intersection. An intermediate cannot grant what it did not receive.
 - **Explicit revocation** with signed revocation lists. Verifiers cache and fail-closed on unreachability.
 - **Cryptographic tamper-evidence** per object. Every `DelegationCert`, `ProofBundle`, and `RevocationList` is signed; byte-level modification is detected.
-- **52 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
+- **53 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
 - **First-class constraints** (geo, time-window, speed, amount, rate) evaluated at verify time against caller-supplied context.
 - **Three key-custody modes** — self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
 

@@ -64,7 +64,7 @@ The regenerated fixtures MUST be byte-identical to the committed ones. If `go ru
 ```bash
 cd sdks/typescript
 npm install
-npm run test:conformance
+npm test
 ```
 
 All 59 fixtures must pass in every SDK. If a change breaks the TS conformance but passes Go, or vice versa, the implementations have drifted — fix the divergence before the PR is merged.
@@ -88,7 +88,7 @@ The canonicalizer in `crypto.go` (Go) and `sdks/typescript/src/canonical.ts` (TS
 
 Before requesting review:
 
-- [ ] Tests pass locally: `go test ./...` and `npm run test:conformance`
+- [ ] Tests pass locally: `go test ./...` and `npm test`
 - [ ] `go mod tidy` leaves no diff
 - [ ] Fixtures unchanged if no protocol change; regenerated if yes
 - [ ] `SPEC.md` / `docs/EXPLAINED.md` updated for protocol-affecting changes

@@ -18,7 +18,7 @@ GOCACHE="$GOCACHE" go run ./cmd/ratify-testvectors -out /tmp/ratify-protocol-reg
 diff -rq testvectors/v1/ /tmp/ratify-protocol-regenerated/
 
 echo "==> TypeScript SDK"
-(cd sdks/typescript && npm ci --no-audit --no-fund && npx tsc --noEmit && npm run test:conformance)
+(cd sdks/typescript && npm ci --no-audit --no-fund && npx tsc --noEmit && npm test)
 
 echo "==> Python SDK"
 (cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q)

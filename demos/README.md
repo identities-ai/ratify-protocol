@@ -79,7 +79,7 @@ These demos are narrative, not exhaustive. For the rigorous validation:
 
 - `testvectors/v1/` — 20 canonical fixtures, every SDK passes byte-identical.
 - Go unit tests: `go test ./...`
-- TS conformance: `cd sdks/typescript && npm run test:conformance`
+- TS conformance: `cd sdks/typescript && npm test`
 - Python conformance: `cd sdks/python && pytest`
 - Rust conformance: `cd sdks/rust && cargo test`
 

@@ -171,7 +171,7 @@ npm run test:conformance
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a8
+pip install ratify-protocol==1.0.0a9
 ```
 
 Or to run the conformance suite yourself:
@@ -319,9 +319,9 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 |---|---|---|---|
 | `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.9` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` |
-| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a8` |
+| `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a9` |
 | `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.9` |
-| `sdks/c/` (`libratify_c`) | C / C++ | ✅ 59/59 | build from source: `sdks/c/` (Apache-2.0) |
+| `sdks/c/` (`libratify_c`) | C / C++ | ✅ 42/59 verify | build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
 
@@ -361,7 +361,7 @@ ratify-protocol/
 │
 ├── types.go               Data structures (DelegationCert, ProofBundle, …)
 ├── crypto.go              Hybrid Ed25519 + ML-DSA-65 primitives + canonical JSON
-├── scope.go               Canonical 52-scope vocabulary + intersect/expand
+├── scope.go               Canonical 53-scope vocabulary + intersect/expand
 ├── constraints.go         Geo, time, version constraints
 ├── verify.go              The verifier algorithm
 ├── ratify_test.go         Unit tests + conformance-suite loader

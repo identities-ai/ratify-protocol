@@ -110,6 +110,17 @@ jobs:
         working-directory: sdks/rust
         run: cargo test --release
 
+      # C / C++
+      - name: C/C++ build
+        working-directory: sdks/c
+        run: cargo build --all-targets
+      - name: C/C++ conformance (59 fixtures)
+        working-directory: sdks/c
+        run: cargo test --test conformance -- --nocapture
+      - name: C/C++ API tests
+        working-directory: sdks/c
+        run: cargo test --test api
+
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
       # declared version. The release-sync script already proves cross-SDK
       # alignment; here we prove the tag matches that aligned version.

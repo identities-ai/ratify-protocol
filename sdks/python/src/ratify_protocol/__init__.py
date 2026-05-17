@@ -168,7 +168,7 @@ from .types import (
 )
 from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
 
-__version__ = "1.0.0a9"
+__version__ = "1.0.0a10"
 
 __all__ = [
     # types

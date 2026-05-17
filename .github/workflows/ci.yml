@@ -145,7 +145,7 @@ jobs:
       - name: build
         run: cargo build --all-targets
 
-      - name: conformance tests (59 fixtures — all fixture kinds)
+      - name: conformance tests (59 fixtures)
         run: cargo test --test conformance -- --nocapture
 
       - name: unit tests

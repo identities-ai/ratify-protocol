@@ -204,7 +204,7 @@ From this SDK directory:
 
 ```bash
 npm install
-npm run test:conformance
+npm test
 ```
 
 The conformance suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the TS implementation. It checks:

@@ -109,6 +109,7 @@ That single command runs the steps below in order. Any failure aborts. By defaul
    - TypeScript: `cd sdks/typescript && npm ci && npx tsc --noEmit && npm test`
    - Python: `cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q`
    - Rust: `cd sdks/rust && cargo build --all-targets && cargo test`
+   - C/C++: `cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
 6. **Tag the protocol version.** `git tag v1.0.0-alpha.10`.
@@ -134,16 +135,15 @@ Publishing to four registries is not atomic. If step 9 fails partway through (np
 
 This is why steps 1-8 (preflight + test + tag) must all succeed before step 9 runs.
 
-### 4.4 Required secrets for automation
+### 4.4 Required secrets and variables for automation
 
-Wiring this up in GitHub Actions requires these repository secrets:
+Wiring this up in GitHub Actions requires these repository secrets and variables:
 
-- `NPM_TOKEN` — npm automation token with `publish` scope on `@identitiesai`.
-- `PYPI_API_TOKEN` — PyPI token scoped to `ratify-protocol`.
 - `CARGO_REGISTRY_TOKEN` — crates.io API token.
+- `NPM_PUBLISH_ENABLED` — repository variable that enables the npm Trusted Publisher job.
 - `GITHUB_TOKEN` — automatic; used for the release.
 
-All tokens MUST be scoped to specific packages / orgs. No "full account" tokens.
+PyPI and npm publishing use GitHub Actions OIDC Trusted Publisher flows, so no long-lived PyPI or npm token is required.
 
 ## 5. The Makefile
 
@@ -251,6 +251,7 @@ go test ./...
 cd sdks/typescript && npm ci && npm test && cd ../..
 cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../..
 cd sdks/rust && cargo test --quiet && cd ../..
+cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
 
 # 4. Commit version bumps.
 git commit -sm "chore: bump to v1.0.0-alpha.10"
@@ -321,7 +322,7 @@ This is a stronger trust model than the manual flow for three reasons:
                        │
                        ├─→ publish-npm             ← Disabled until org is
                        │   if NPM_PUBLISH_ENABLED=true   approved (variable
-                       │   environment: npm-publish      gated). NPM_TOKEN +
+                       │   environment: npm-publish      gated). OIDC +
                        │                                 provenance.
                        │
                        ├─→ publish-go              ← pkg.go.dev auto-discovery
@@ -339,7 +340,6 @@ These are configured once on the GitHub repo. See [`docs/REGISTRY_SETUP.md`](./R
 | Secret / variable           | Used by         | Notes                                                          |
 |-----------------------------|-----------------|----------------------------------------------------------------|
 | `CARGO_REGISTRY_TOKEN`      | publish-crates  | crates.io API token scoped to `publish-update` on `ratify-protocol`. |
-| `NPM_TOKEN`                 | publish-npm     | npm granular token scoped to `@identities-ai` org. Not used until variable below is set. |
 | `NPM_PUBLISH_ENABLED` (var) | publish-npm     | Repo variable. Set to `true` to activate the npm job after the npm org is approved. |
 | _(no secret for PyPI)_      | publish-pypi    | Trusted Publisher via OIDC — no long-lived secret stored anywhere. |
 
@@ -355,7 +355,8 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 59 fixtures
 7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 59 fixtures
 8. Rust `cargo build --all-targets` clean, conformance tests pass against all 59 fixtures
-9. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
+9. C/C++ conformance and API tests pass through the C ABI
+10. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
 
 If any check fails, all publish jobs are skipped. No partial state is created. You fix the failure, force-delete the tag (`git tag -d`, `git push --delete origin tagname`), re-run `make release`, push again.
 

@@ -24,7 +24,7 @@ cd ~/projects/IdentitiesAI/ratify-protocol
 go test ./...
 
 # TypeScript
-cd sdks/typescript && npm install && npm run test:conformance && cd ../..
+cd sdks/typescript && npm install && npm test && cd ../..
 
 # Python
 cd sdks/python && python -m venv .venv && source .venv/bin/activate && \
@@ -32,6 +32,9 @@ cd sdks/python && python -m venv .venv && source .venv/bin/activate && \
 
 # Rust
 cd sdks/rust && cargo test --quiet && cd ../..
+
+# C / C++
+cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
 ```
 
 **Pass criterion:** all five print green, all 59 fixtures pass in every language.
@@ -203,9 +206,10 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 # Before any PR:
 cd ~/projects/IdentitiesAI/ratify-protocol
 go test ./... && \
-  cd sdks/typescript && npm run test:conformance && cd ../.. && \
+  cd sdks/typescript && npm test && cd ../.. && \
   cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../.. && \
-  cd sdks/rust && cargo test --quiet && cd ../..
+  cd sdks/rust && cargo test --quiet && cd ../.. && \
+  cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
 ```
 
 If all five are green, your change doesn't drift the protocol. That's the contract.

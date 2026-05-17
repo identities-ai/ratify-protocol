@@ -321,7 +321,7 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` |
 | `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a10` |
 | `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.10` |
-| `sdks/c/` (`libratify_c`) | C / C++ | ✅ 59/59 fixtures | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
+| `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
 

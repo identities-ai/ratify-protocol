@@ -403,11 +403,11 @@ vectors as the Go, TypeScript, Python, and Rust SDKs.
 cargo test
 ```
 
-All 59 canonical fixtures pass through the C ABI:
+All canonical fixture kinds pass through the C ABI:
 
-- 42 "verify" kind fixtures (proof-bundle verification, constraints, session/stream binding, revocation)
-- 17 non-verify fixtures — scope expansion/validation, revocation list, revocation push,
-  key rotation, session tokens, transaction receipts, witness entries
+- Proof-bundle verification, constraints, session/stream binding, and revocation
+- Scope expansion/validation, revocation list, revocation push, key rotation,
+  session tokens, transaction receipts, and witness entries
 
 0 skipped. Full conformance parity with Go, TypeScript, Python, and Rust.
 

@@ -46,7 +46,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance:** All 59 canonical fixtures pass through the C ABI — 42 "verify"-kind fixtures plus all 17 non-verify kinds (scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry) — plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
+**Conformance:** All 59 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 

@@ -63,6 +63,7 @@ fn main() {
         subject_id: agent.id.clone(),
         subject_pub_key: agent.public_key.clone(),
         scope: vec![SCOPE_MEETING_ATTEND.into()],
+        constraints: vec![],
         issued_at: now,
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
@@ -92,6 +93,9 @@ fn main() {
         challenge: challenge.clone(),
         challenge_at,
         challenge_sig,
+        session_context: vec![],
+        stream_id: vec![],
+        stream_seq: 0,
     };
     kv(
         "Challenge:",

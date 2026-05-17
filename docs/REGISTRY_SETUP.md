@@ -244,18 +244,18 @@ These should already match — verify and fix if not:
 
 Once one or more registries are set up:
 
-1. Bump SDK versions to `v1.0.0-alpha.6` (or whatever the next release is)
-   using `make release VERSION=v1.0.0-alpha.6 PUSH=0` — this updates files
+1. Bump SDK versions to `v1.0.0-alpha.10` (or whatever the next release is)
+   using `make release VERSION=v1.0.0-alpha.10 PUSH=0` — this updates files
    locally without pushing.
 2. Verify with `make release-check` that all SDK metadata is in sync.
-3. Push the bump commit to `main`, then push the tag: `git push origin v1.0.0-alpha.6`.
+3. Push the bump commit to `main`, then push the tag: `git push origin v1.0.0-alpha.10`.
 4. Watch <https://github.com/identities-ai/ratify-protocol/actions> for the
    Release workflow.
 5. After it completes:
    - PyPI: <https://pypi.org/project/ratify-protocol/>
    - crates.io: <https://crates.io/crates/ratify-protocol>
    - npm: <https://www.npmjs.com/package/@identities-ai/ratify-protocol> (if enabled)
-   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol@v1.0.0-alpha.6>
+   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10>
    - GitHub Release: <https://github.com/identities-ai/ratify-protocol/releases>
 
 ---

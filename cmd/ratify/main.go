@@ -376,7 +376,7 @@ func cmdStatus(args []string) {
 // ============================================================================
 
 func cmdScopes(args []string) {
-	fmt.Println("Canonical Ratify v1 scope vocabulary (52 scopes + 14 wildcards + custom: pattern)")
+	fmt.Println("Canonical Ratify v1 scope vocabulary (53 scopes + 14 wildcards + custom: pattern)")
 	fmt.Println()
 	fmt.Println("Meeting:")
 	fmt.Println("  meeting:attend")

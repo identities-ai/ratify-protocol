@@ -242,6 +242,11 @@ jobs:
         working-directory: sdks/typescript
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          # Check if this version already exists — tolerate re-runs gracefully.
+          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qF "$VERSION"; then
+            echo "Version ${VERSION} already published — skipping."
+            exit 0
+          fi
           if [[ "$VERSION" == *"-"* ]]; then
             TAG=$(echo "$VERSION" | sed 's/.*-\([a-zA-Z]*\).*/\1/')
             npm publish --access public --provenance --tag "$TAG"

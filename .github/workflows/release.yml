@@ -227,9 +227,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
           cache-dependency-path: sdks/typescript/package-lock.json
+          # No registry-url here — that would write a token-based .npmrc entry
+          # that conflicts with OIDC Automated Publishing. The OIDC token from
+          # id-token: write is exchanged directly by npm publish --provenance.
       - name: install
         working-directory: sdks/typescript
         run: npm install --no-audit --no-fund

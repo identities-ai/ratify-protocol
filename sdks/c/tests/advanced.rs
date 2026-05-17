@@ -12,10 +12,10 @@
 use ratify_c::{
     // Core ops (needed for setup)
     ratify_human_root_generate, ratify_human_root_free, ratify_human_root_id,
-    ratify_human_root_to_json, ratify_human_root_pub_key_json,
+    ratify_human_root_pub_key_json,
     ratify_agent_generate, ratify_agent_free,
     ratify_delegation_issue, ratify_delegation_cert_free,
-    ratify_challenge_generate, ratify_proof_bundle_create, ratify_proof_bundle_free,
+    ratify_challenge_generate, ratify_proof_bundle_create,
     ratify_verify_bundle, ratify_verify_result_free, ratify_verify_result_is_valid,
     ratify_string_free, ratify_error_free,
     // Advanced ops
@@ -38,7 +38,7 @@ use ratify_c::{
     ratify_policy_verdict_issue, ratify_policy_verdict_verify,
     ratify_policy_verdict_to_json, ratify_policy_verdict_from_json, ratify_policy_verdict_free,
     ratify_verifier_context_hash,
-    ratify_transaction_receipt_verify, ratify_transaction_receipt_sign_party,
+    ratify_transaction_receipt_sign_party,
     ratify_transaction_receipt_from_json, ratify_transaction_receipt_to_json,
     ratify_transaction_receipt_free,
     RatifyStatus, RatifyVerifierContext,
@@ -579,7 +579,7 @@ fn transaction_receipt_sign_and_verify() {
         let mut agent = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         ratify_agent_generate(cstr!("TxBot"), cstr!("custom"), &mut agent);
-        let agent_id = read_str(ratify_c::ratify_agent_id(agent));
+        let _agent_id = read_str(ratify_c::ratify_agent_id(agent));
 
         // Build a minimal TransactionReceipt JSON manually.
         // Agent pub key comes from the delegation cert's subject_pub_key.

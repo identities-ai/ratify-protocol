@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, and Python reference implementations. Validated against the **59 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Python, and C/C++ reference implementations. Validated against the **59 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -49,6 +49,7 @@ fn main() {
         subject_id: agent.id.clone(),
         subject_pub_key: agent.public_key.clone(),
         scope: vec![SCOPE_MEETING_ATTEND.into()],
+        constraints: Vec::new(),
         issued_at: now,
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
@@ -65,6 +66,9 @@ fn main() {
         challenge: challenge.clone(),
         challenge_at,
         challenge_sig: sign_challenge(&challenge, challenge_at, &agent_priv),
+        session_context: Vec::new(),
+        stream_id: Vec::new(),
+        stream_seq: 0,
     };
 
     // 3. VERIFY
@@ -126,8 +130,8 @@ let mut stmt = KeyRotationStatement {
     new_pub_key: new_root.public_key.clone(),
     rotated_at: now_unix(),
     reason: "routine".into(),
-    signature_old: Default::default(),
-    signature_new: Default::default(),
+    signature_old: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
+    signature_new: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
 };
 issue_key_rotation_statement(&mut stmt, &old_custodial_key, &new_private_key);
 

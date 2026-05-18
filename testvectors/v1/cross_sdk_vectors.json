@@ -1,5 +1,5 @@
 {
-  "description": "Cross-SDK byte-equivalence vectors for alpha.9 primitives. Every reference SDK (Go, TypeScript, Python, Rust, C/C++) MUST produce identical bytes for each vector. Generated deterministically by cmd/ratify-testvectors; regenerate via `go run ./cmd/ratify-testvectors`.",
+  "description": "Cross-SDK byte-equivalence vectors for alpha.10 primitives. Every reference SDK (Go, TypeScript, Python, Rust, C/C++) MUST produce identical bytes for each vector. Generated deterministically by cmd/ratify-testvectors; regenerate via `go run ./cmd/ratify-testvectors`.",
   "vectors": [
     {
       "kind": "verifier_context_hash",

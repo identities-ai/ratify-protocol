@@ -1,7 +1,7 @@
-// Cross-SDK byte-equivalence vectors (SPEC §17.5–§17.6, alpha.9).
+// Cross-SDK byte-equivalence vectors (SPEC §17.5–§17.6, alpha.10).
 //
 // The vectors emitted here are independent of the 59 wire-format conformance
-// fixtures. They lock the canonical byte representation of the alpha.7
+// fixtures. They lock the canonical byte representation of the alpha.10
 // derived primitives (BundleHash, VerifierContextHash) and the signable
 // bytes of the new HMAC- / hybrid-signed primitives (PolicyVerdict,
 // VerificationReceipt) across every reference SDK. Each SDK's conformance
@@ -26,8 +26,8 @@ import (
 
 // crossSDKDoc is the wire shape of the cross_sdk_vectors.json file.
 type crossSDKDoc struct {
-	Description string             `json:"description"`
-	Vectors     []crossSDKVector   `json:"vectors"`
+	Description string           `json:"description"`
+	Vectors     []crossSDKVector `json:"vectors"`
 }
 
 // crossSDKVector is one byte-equivalence assertion. `Kind` discriminates the
@@ -44,10 +44,10 @@ type crossSDKVector struct {
 }
 
 // generateCrossSDKVectors emits cross_sdk_vectors.json under outDir.
-// This is the alpha.9 byte-equivalence corpus; every SDK loads it.
+// This is the alpha.10 byte-equivalence corpus; every SDK loads it.
 func generateCrossSDKVectors(outDir string) error {
 	doc := crossSDKDoc{
-		Description: "Cross-SDK byte-equivalence vectors for alpha.9 primitives. " +
+		Description: "Cross-SDK byte-equivalence vectors for alpha.10 primitives. " +
 			"Every reference SDK (Go, TypeScript, Python, Rust, C/C++) MUST produce " +
 			"identical bytes for each vector. Generated deterministically by " +
 			"cmd/ratify-testvectors; regenerate via `go run ./cmd/ratify-testvectors`.",
@@ -259,14 +259,14 @@ func policyVerdictSignableVectors() []crossSDKVector {
 			Name:        c.name,
 			Description: c.description,
 			Input: map[string]interface{}{
-				"version":           v.Version,
-				"verdict_id":        v.VerdictID,
-				"agent_id":          v.AgentID,
-				"scope":             v.Scope,
-				"allow":             v.Allow,
-				"context_hash_hex":  hex.EncodeToString(v.ContextHash),
-				"issued_at":         v.IssuedAt,
-				"valid_until":       v.ValidUntil,
+				"version":          v.Version,
+				"verdict_id":       v.VerdictID,
+				"agent_id":         v.AgentID,
+				"scope":            v.Scope,
+				"allow":            v.Allow,
+				"context_hash_hex": hex.EncodeToString(v.ContextHash),
+				"issued_at":        v.IssuedAt,
+				"valid_until":      v.ValidUntil,
 			},
 			ExpectedBytesB64: base64Standard(bytes),
 		})
@@ -282,14 +282,14 @@ func verificationReceiptSignableVectors() ([]crossSDKVector, error) {
 	prevHash := make([]byte, 32) // genesis
 
 	cases := []struct {
-		name        string
-		description string
-		decision    string
-		humanID     string
-		agentID     string
+		name         string
+		description  string
+		decision     string
+		humanID      string
+		agentID      string
 		grantedScope []string
-		errorReason string
-		verifiedAt  int64
+		errorReason  string
+		verifiedAt   int64
 	}{
 		{
 			name:        "verification_receipt_sign_bytes_minimal",
@@ -337,8 +337,8 @@ func verificationReceiptSignableVectors() ([]crossSDKVector, error) {
 			return nil, fmt.Errorf("verification_receipt_sign_bytes %s: %w", c.name, err)
 		}
 		in := map[string]interface{}{
-			"version":         r.Version,
-			"verifier_id":     r.VerifierID,
+			"version":     r.Version,
+			"verifier_id": r.VerifierID,
 			"verifier_pub": map[string]string{
 				"ed25519":   base64Standard(verifier.PublicKey.Ed25519),
 				"ml_dsa_65": base64Standard(verifier.PublicKey.MLDSA65),

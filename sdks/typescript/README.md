@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, Python, and Rust reference implementations. Validated against the **59 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **59 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -19,7 +19,7 @@ A human issues a signed **delegation cert** to an agent. The agent presents a **
 ## Install
 
 ```bash
-npm install @identities-ai/ratify-protocol
+npm install @identities-ai/ratify-protocol@1.0.0-alpha.10
 ```
 
 ## Three verbs, three examples
@@ -41,7 +41,7 @@ import {
 const { root, privateKey: alicePriv } = await generateHumanRoot();
 
 // Her agent has its own keypair
-const { agent } = await generateAgent("Alice's Scheduler", "custom");
+const { agent, privateKey: agentPrivateKey } = await generateAgent("Alice's Scheduler", "custom");
 
 // Alice signs a delegation
 const cert: DelegationCert = {
@@ -54,7 +54,8 @@ const cert: DelegationCert = {
   scope: [SCOPE_MEETING_ATTEND, SCOPE_MEETING_SPEAK],
   issued_at: Math.floor(Date.now() / 1000),
   expires_at: Math.floor(Date.now() / 1000) + 7 * 24 * 3600, // 7 days
-  signature: new Uint8Array(), // filled in by issueDelegation
+  constraints: [],
+  signature: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) }, // filled in by issueDelegation
 };
 await issueDelegation(cert, alicePriv);
 ```
@@ -148,8 +149,8 @@ const stmt = {
   new_pub_key: newRoot.public_key,
   rotated_at: Math.floor(Date.now() / 1000),
   reason: "routine" as const,
-  signature_old: { ed25519: new Uint8Array(), ml_dsa_65: new Uint8Array() },
-  signature_new: { ed25519: new Uint8Array(), ml_dsa_65: new Uint8Array() },
+  signature_old: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
+  signature_new: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
 };
 await issueKeyRotationStatement(stmt, oldCustodialPrivateKey, newPrivateKey);
 
@@ -207,7 +208,7 @@ npm install
 npm test
 ```
 
-The conformance suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the TS implementation. It checks:
+The conformance suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the TypeScript implementation. It checks:
 
 - Canonical signing bytes match the committed hex for every cert
 - Challenge signing bytes match
@@ -215,7 +216,7 @@ The conformance suite loads every fixture from the [canonical test vectors](http
 - Scope expansion is deterministic and matches
 - Revocation list signatures verify
 
-A single failure means TS and Go have drifted.
+A single failure means TypeScript and the Go reference have drifted.
 
 ## Security posture
 

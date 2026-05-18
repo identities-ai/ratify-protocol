@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, and Rust reference implementations. Validated against the **59 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **59 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -19,7 +19,7 @@ A human issues a signed **delegation cert** to an agent. The agent presents a **
 ## Install
 
 ```bash
-pip install ratify-protocol
+pip install ratify-protocol==1.0.0a10
 ```
 
 This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
@@ -151,7 +151,7 @@ issue_key_rotation_statement(stmt, old_custodial_private_key, new_private_key)
 from ratify_protocol import canonical_json, delegation_sign_bytes, challenge_sign_bytes
 ```
 
-These produce byte-identical output to the Go / TS / Rust references. If your application needs to sign Ratify artifacts with custom code, always pass through `canonical_json` for the JSON pieces.
+These produce byte-identical output to the Go / TypeScript / Rust / C/C++ references. If your application needs to sign Ratify artifacts with custom code, always pass through `canonical_json` for the JSON pieces.
 
 ## Scope vocabulary
 
@@ -203,7 +203,7 @@ The suite loads every fixture from the [canonical test vectors](https://github.c
 
 This SDK uses `pqcrypto` which wraps PQClean's ML-DSA-65 implementation. Two things to be aware of:
 
-**Randomized signing.** `pqcrypto`'s default signing mode is randomized (two signings of the same message produce different bytes). This does NOT affect interop: signatures produced here verify correctly in Go, TS, and Rust implementations, and vice versa. The canonical signable bytes (what gets fed into the signature function) are what must match across languages — those do match byte-for-byte.
+**Randomized signing.** `pqcrypto`'s default signing mode is randomized (two signings of the same message produce different bytes). This does NOT affect interop: signatures produced here verify correctly in Go, TypeScript, Rust, and C/C++ implementations, and vice versa. The canonical signable bytes (what gets fed into the signature function) are what must match across languages — those do match byte-for-byte.
 
 **Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API — `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only — it verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
 

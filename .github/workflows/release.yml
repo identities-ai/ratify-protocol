@@ -243,12 +243,14 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           # Skip gracefully if this version is already published (re-run safety).
+          # The normal publish path uses --tag latest, so if we're skipping an
+          # already-published version, latest was already set correctly.
           if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qF "$VERSION"; then
             echo "Version ${VERSION} already published — skipping."
             exit 0
           fi
           # Publish with --tag latest in a single OIDC-authenticated command.
-          # Pre-release versions (containing '-') get tagged latest so
+          # Pre-release versions get tagged latest so
           # 'npm install @identities-ai/ratify-protocol' always resolves to
           # the newest published version. Stable 1.0.0 will naturally become
           # latest when it ships.

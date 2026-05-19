@@ -1,14 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="216" height="30" viewBox="0 0 216 30" role="img" aria-label="Verified by Ratify Protocol">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="216" height="30" viewBox="0 0 216 30" role="img" aria-label="Verified by Ratify Protocol">
   <title>Verified by Ratify Protocol</title>
-  <!-- Background -->
   <rect width="216" height="30" rx="6" fill="#f8fafc"/>
   <rect x="0.5" y="0.5" width="215" height="29" rx="5.5" fill="none" stroke="#e2e8f0"/>
-  <!-- Icon area -->
-  <rect x="7" y="7" width="16" height="16" rx="3" fill="#0ea5e9" fill-opacity="0.10"/>
-  <!-- Checkmark -->
-  <polyline points="10.5,15 13.5,18 19.5,12" fill="none" stroke="#0284c7" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- "Verified by" label -->
+  <image x="5" y="5" width="20" height="20" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAFKADAAQAAAABAAAAFAAAAACy3fD9AAACm0lEQVQ4EeWTT0gUURzHf+/NzM7OrLuukRb90wiWqFtmhyBaJIioDpJtmVRegqLSQ5cIDx26BN26eFMrM1hiCUIjCgtMwkhFMsl/Ce4Sarmb7u7M7M57r/fcRd3N8uIl+s3wmPfe9/f5/d7v/QbgvzOUf+KT975sJE7vMQoUAyFAuQALkSTxQbYQtbo767eFxdJqlgOsecw2JeajQex0HaLE5nq2+ApHJh5KgaStKWImz768UdazBpChPZdCDx2e4lrbinPtiliMgqoXQEmpD5CkcDCZYbZx6kVDaXc+dIUX3/JdOACysw0Q3sy9lrWMZ4oQ7Ko4rPv2V2JJUUWms5Ghj5WDTSc+LQt5UVZOYORBL5TVVYCE3ABGzhaYKTbe371P8Za2Owq8+vexvuLp4Xc7uegvQIHwXzQhUZKEIoOVl5cvQaMTEzozZ0+bIGmRvjewMPWZZ03nlwTZj9wM+aI6M+kH7cd9HMNo5O038LjdIMkSryhyYodza3S0FxbCwwIWBmZP5ANza5jZRY6q9juSVngL86ZRFAe4OVTmdYuOf4DY10F+5fY4MKsahloG4HhbkebSWzEhjYmn1YOLLZYXhaVCNY0slWgGrICdTkE8NmfPjfR0xEbfh8A2WwGxqkVY7SOPpuvPeUdRNWlOCs5vR87CmYnYVVfa2IJU11FCiUQLd4zB8LUGb12X10rGOtjuI43MQjd5unNGInzG6Ky3hO9qGWaYwYCBaOo8TScHGMIIy856z7lnt2Mt/p9A7D6QXK+BMsOITAYgCxOOq9UwA8yOatUTn6xqr7CibRe9yKzk9fh0f5O6Ye8VS2LNEAyIv2DJ1gQKpVbdfhDJ+l0uVvnURMS6HA8GeN+sizEE/q4/1X5dIvxjkF+U+AdHzpD4GAAAAABJRU5ErkJggg=="/>
   <text x="30" y="19.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5" fill="#94a3b8">Verified by</text>
-  <!-- "Ratify Protocol" name -->
   <text x="95" y="19.5" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5" font-weight="600" fill="#0f172a">Ratify Protocol</text>
 </svg>

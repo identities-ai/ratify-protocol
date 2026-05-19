@@ -409,10 +409,31 @@ ratify-protocol/
 
 ---
 
+## Attribution & badge program
+
+When you build a product on Ratify Protocol, we ask — but don't require — that you say so. The reason is the same reason apps display "Messages secured with Signal Protocol": your users' trust is grounded in an inspectable open standard, and making that visible increases confidence rather than eroding it.
+
+**In developer docs / security pages:**
+```
+Agent authorization powered by Ratify Protocol (https://identities.ai/protocol)
+```
+
+**In product UIs** (verification results, meeting policy screens, agent consents):
+
+| Variant | Asset |
+|---|---|
+| Dark background | [`assets/badge-verified-dark.svg`](assets/badge-verified-dark.svg) |
+| Light background | [`assets/badge-verified-light.svg`](assets/badge-verified-light.svg) |
+| "Powered by" (dark) | [`assets/badge-powered-dark.svg`](assets/badge-powered-dark.svg) |
+| "Powered by" (light) | [`assets/badge-powered-light.svg`](assets/badge-powered-light.svg) |
+
+Link any badge to `https://identities.ai/protocol`. Full guidelines: [`docs/ATTRIBUTION.md`](docs/ATTRIBUTION.md).
+
 ## License + trademarks + patent
 
 - **Source code:** Apache-2.0 — see [`LICENSE`](LICENSE).
 - **Specification text:** CC-BY-4.0 — see [`docs/LICENSES.md`](docs/LICENSES.md).
+- **Attribution:** Apache 2.0 requires preserving the [`NOTICE`](NOTICE) file. The badge program above is a request, not a license condition — see [`docs/ATTRIBUTION.md`](docs/ATTRIBUTION.md).
 - **Trademarks:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc. The trademark and patent rights are not licensed under the open-source licenses governing the code or specification.
 - **Patent:** U.S. patent application pending.
 

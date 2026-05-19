@@ -1,0 +1,32 @@
+Ratify Protocol
+Copyright 2026 Identities AI, Inc.
+
+This product includes software and specification text developed by
+Identities AI, Inc. (https://identities.ai).
+
+Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+U.S. patent application pending.
+
+---
+
+ATTRIBUTION NOTICE
+
+When you build a product or service that uses the Ratify Protocol,
+Identities AI, Inc. requests — but does not require under the Apache 2.0
+license — that you:
+
+  1. Credit the protocol in your product documentation or a "powered by"
+     section, such as:
+
+       "Agent authorization powered by Ratify Protocol
+        (https://identities.ai/protocol)"
+
+  2. Where your product shows verification results to end users, display the
+     "Verified by Ratify Protocol" badge so that the cryptographic trust
+     basis is visible to the people who depend on it.
+
+The badge, usage guidelines, and commercial attribution policy are at:
+
+  https://github.com/identities-ai/ratify-protocol/blob/main/docs/ATTRIBUTION.md
+
+These requests are not conditions of the Apache 2.0 license.

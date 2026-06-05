@@ -21,6 +21,8 @@
 
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 
+Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in under a millisecond, with no vendor in the path.
+
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.

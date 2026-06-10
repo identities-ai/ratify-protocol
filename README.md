@@ -19,6 +19,11 @@
 [![Crates.io](https://img.shields.io/crates/v/ratify-protocol?label=crates.io)](https://crates.io/crates/ratify-protocol)
 [![npm](https://img.shields.io/npm/v/@identities-ai/ratify-protocol?label=npm&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 
+[![PyPI Downloads](https://img.shields.io/pepy/dt/ratify-protocol?label=pypi%20downloads&color=informational)](https://pepy.tech/projects/ratify-protocol)
+[![Crates.io Downloads](https://img.shields.io/crates/d/ratify-protocol?label=crates.io%20downloads&color=informational)](https://crates.io/crates/ratify-protocol)
+[![npm Downloads](https://img.shields.io/npm/dt/@identities-ai/ratify-protocol?label=npm%20downloads&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
+[![Release Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=release%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
+
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 
 Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in under a millisecond, with no vendor in the path.

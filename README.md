@@ -22,7 +22,7 @@
 [![PyPI Downloads](https://img.shields.io/pepy/dt/ratify-protocol?label=pypi%20downloads&color=informational)](https://pepy.tech/projects/ratify-protocol)
 [![Crates.io Downloads](https://img.shields.io/crates/d/ratify-protocol?label=crates.io%20downloads&color=informational)](https://crates.io/crates/ratify-protocol)
 [![npm Downloads](https://img.shields.io/npm/dt/@identities-ai/ratify-protocol?label=npm%20downloads&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
-[![Release Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=release%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
+[![C/C++ Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=c%2Fc%2B%2B%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
 
 When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
 

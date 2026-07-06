@@ -15,7 +15,7 @@ Four testing levels, from fastest to most realistic:
 
 ## Level 1 — Conformance suites
 
-Exercises the protocol primitives in each SDK against the 59 canonical test vectors.
+Exercises the protocol primitives in each SDK against the 62 canonical test vectors.
 
 ```bash
 cd ~/projects/IdentitiesAI/ratify-protocol
@@ -37,7 +37,7 @@ cd sdks/rust && cargo test --quiet && cd ../..
 cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
 ```
 
-**Pass criterion:** all five print green, all 59 fixtures pass in every language.
+**Pass criterion:** all five print green, all 62 fixtures pass in every language.
 
 ---
 

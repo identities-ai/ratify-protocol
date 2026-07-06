@@ -19,7 +19,7 @@ All reference implementations live in this single repository:
 ```
 ratify-protocol/
 ├── SPEC.md              ← the spec
-├── testvectors/v1/      ← 59 canonical fixtures
+├── testvectors/v1/      ← 62 canonical fixtures
 ├── *.go (at root)       ← Go reference
 ├── cmd/ratify-testvectors/  ← the generator; anyone can reproduce fixtures from seeds
 └── sdks/
@@ -47,7 +47,7 @@ Contributors who prefer to iterate on a language in their own repository may do 
 1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
 v1.0.0-alpha.7  →  Provider Interfaces, SPEC §17
 v1.0.0-alpha.8  →  C/C++ SDK, Rust no_std, fips204 migration
-v1.0.0-alpha.11  →  current release  (C SDK 59/59 conformance, 13 new C ABI functions, pre-built release binaries)
+v1.0.0-alpha.11  →  current release  (C SDK 62/62 conformance, 13 new C ABI functions, pre-built release binaries)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs
@@ -234,7 +234,7 @@ Critical security fixes (e.g., a verifier algorithm bug that accepts forgeries) 
 
 A release cycle is considered stable when:
 
-- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 59 fixtures (20 original v1 + 2 sub-delegation + 12 constraint + 2 session-binding + 2 key-rotation + 6 stream-sequence + 5 session-token + 5 transaction-receipt + 1 revocation-push + 1 witness-entry + 1 challenge-forwarding fixtures).
+- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 62 fixtures (by kind: 44 verify + 3 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry).
 - Determinism check passes (regen = zero diff).
 - The generator itself hasn't changed since the last release, OR its change is reviewed and new fixtures have been committed.
 - CI is green on main.
@@ -342,9 +342,9 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 3. `go mod tidy` produces no diff
 4. Test vectors regenerate byte-identical to committed
 5. `scripts/check-release-sync.sh` confirms package versions, lockfiles, docs, and SDK constants are all aligned
-6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 59 fixtures
-7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 59 fixtures
-8. Rust `cargo build --all-targets` clean, conformance tests pass against all 59 fixtures
+6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 62 fixtures
+7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 62 fixtures
+8. Rust `cargo build --all-targets` clean, conformance tests pass against all 62 fixtures
 9. C/C++ conformance and API tests pass through the C ABI
 10. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
 

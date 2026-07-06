@@ -18,11 +18,11 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 
 | Language | Package | Location | Test status |
 |---|---|---|---|
-| **Go** | `github.com/identities-ai/ratify-protocol` | module root | ✅ 59/59 fixtures + unit tests |
-| **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 59/59 fixtures |
-| **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 59/59 fixtures |
-| **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 59/59 fixtures |
-| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 59/59 fixtures + 58 unit tests |
+| **Go** | `github.com/identities-ai/ratify-protocol` | module root | ✅ 62/62 fixtures + unit tests |
+| **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 62/62 fixtures |
+| **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 62/62 fixtures |
+| **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 62/62 fixtures |
+| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 62/62 fixtures + 58 unit tests |
 | Swift | — | planned (mobile wallet) | — |
 | Java / Kotlin | — | planned (Android / JVM) | — |
 
@@ -46,7 +46,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance:** All 59 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
+**Conformance:** All 62 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
@@ -58,25 +58,25 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 **Why:** iOS Secure Enclave is the best available civilian hardware for private-key custody. A mobile wallet and native iOS integrations need a Swift SDK that integrates with iOS Keychain for secure key storage.
 
-**Target:** SwiftPM. Crypto via Apple's CryptoKit (Ed25519) + an external ML-DSA-65 implementation (probably a Swift wrapper around liboqs or a Swift port). Must pass all 59 fixtures. Note: Swift can already link the C SDK via bridging header as an interim path.
+**Target:** SwiftPM. Crypto via Apple's CryptoKit (Ed25519) + an external ML-DSA-65 implementation (probably a Swift wrapper around liboqs or a Swift port). Must pass all 62 fixtures. Note: Swift can already link the C SDK via bridging header as an interim path.
 
 ### After Swift: Java / Kotlin
 
 **Why:** Android, JVM agent services, and enterprise middleware. A Kotlin-first SDK covers Android wallet work and Java backends without forcing those deployments through FFI.
 
-**Target:** Maven Central. Crypto via mainstream Ed25519 and ML-DSA-65 libraries or a tightly-audited native binding. Must pass all 59 fixtures.
+**Target:** Maven Central. Crypto via mainstream Ed25519 and ML-DSA-65 libraries or a tightly-audited native binding. Must pass all 62 fixtures.
 
 ### Completed: Python
 
 **Why:** the AI/agent ecosystem is Python-heavy. LangChain, AutoGen, CrewAI, every major agent framework has Python bindings. Voice-agent platforms run Python on their backends. MCP server reference impls exist in both Python and TypeScript. A Python SDK unlocks the largest single ecosystem of agent authors.
 
-**Status:** Implemented in `sdks/python/` and passing all 59 fixtures. Note: the `pqcrypto` ML-DSA-65 library does not support deterministic keygen from seeds, so Python is a verification-only SDK for fixture conformance — it cannot regenerate the canonical test fixtures. See `sdks/python/README.md` for details.
+**Status:** Implemented in `sdks/python/` and passing all 62 fixtures. Note: the `pqcrypto` ML-DSA-65 library does not support deterministic keygen from seeds, so Python is a verification-only SDK for fixture conformance — it cannot regenerate the canonical test fixtures. See `sdks/python/README.md` for details.
 
 ### Completed: Rust
 
 **Why:** edge verifiers. Cloudflare Workers, Fastly, Vercel Edge all run WebAssembly workloads. A Rust implementation compiles to WASM and lets enterprises drop Ratify verification into their edge gateway config. Rust also covers embedded, IoT, and systems programming use cases where Go/Python aren't appropriate.
 
-**Status:** Implemented in `sdks/rust/` and passing all 59 fixtures.
+**Status:** Implemented in `sdks/rust/` and passing all 62 fixtures.
 
 ### Enterprise-pulled: Java / Kotlin
 
@@ -207,7 +207,7 @@ signer ↓    Go      TS     Python   Rust     ...
 
 Any red cell means two implementations have drifted. Drift is always a bug in at least one of them, not a spec ambiguity — the test vectors are the spec.
 
-When a new SDK PR is opened, CI runs all existing implementations as verifiers against bundles produced by the new one, and the new one as a verifier against all existing implementations' bundles. 59 × (signer_count) × (verifier_count) total assertions per CI run at full matrix.
+When a new SDK PR is opened, CI runs all existing implementations as verifiers against bundles produced by the new one, and the new one as a verifier against all existing implementations' bundles. 62 × (signer_count) × (verifier_count) total assertions per CI run at full matrix.
 
 ## 6. Contributing a new SDK
 

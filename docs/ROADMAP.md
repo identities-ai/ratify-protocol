@@ -10,7 +10,7 @@ This roadmap has three buckets: **shipped** (in the current release), **planned*
 
 ## Shipped — current release: v1.0.0-alpha.10
 
-All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 59 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 62 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
 
 ### Continuous real-time interactions
 
@@ -40,7 +40,7 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 - **Chain authorization** with scope intersection. An intermediate cannot grant what it did not receive.
 - **Explicit revocation** with signed revocation lists. Verifiers cache and fail-closed on unreachability.
 - **Cryptographic tamper-evidence** per object. Every `DelegationCert`, `ProofBundle`, and `RevocationList` is signed; byte-level modification is detected.
-- **53 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
+- **54 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
 - **First-class constraints** (geo, time-window, speed, amount, rate) evaluated at verify time against caller-supplied context.
 - **Three key-custody modes** — self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
 
@@ -48,12 +48,12 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 
 ## Planned — next releases (backward-compatible)
 
-### v1.0.0-alpha.11 — docs & spec hardening (no wire change, no protocol or SDK code change)
+### v1.0.0-alpha.11 — docs & spec hardening (RELEASED 2026-07-06; no wire change, no protocol or SDK code change)
 
 - README truth pass: representative demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
 - SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
 - Local test gate (`scripts/test-all.sh`) now runs the C/C++ SDK, matching what CI and `docs/RELEASES.md` already claimed.
-- All 59 canonical fixtures byte-identical to alpha.10.
+- All 62 canonical fixtures byte-identical to alpha.10.
 
 ### v1.0.0-alpha.12 — protocol additions (below)
 
@@ -63,7 +63,7 @@ The two items below are scopes and features identified through production adapte
 
 ### No-expiry sentinel — `ExpiresAt = 4070908799`
 
-**Status:** Defined in Ratify platform layer (2026-04-28). Scheduled for v1.0.0-alpha.12.
+**Status:** Implemented — ships in v1.0.0-alpha.12. Normative in SPEC §5.1 + §5.7; fixture `no_expiry_cert`; `NoExpirySentinel` + `IsNoExpiry()` in all SDKs.
 
 **Problem:** `DelegationCert.ExpiresAt` is `int64` (Unix timestamp). The struct has no null/optional representation. Users of the Ratify Verify managed platform can grant delegations with "no expiry (until revoked)," which the platform stores as `NULL` in the database. The cert that gets signed must still have a finite `ExpiresAt` value for protocol compliance.
 
@@ -87,7 +87,7 @@ The two items below are scopes and features identified through production adapte
 
 ### `presence:represent` — agent representation of a human
 
-**Status:** Design locked 2026-07-06. Scheduled for v1.0.0-alpha.12.
+**Status:** Implemented — ships in v1.0.0-alpha.12. SPEC §9.1; fixtures `presence_represent_allowed` + `reject_presence_sensitive_wildcard`.
 
 **Problem it solves:**
 

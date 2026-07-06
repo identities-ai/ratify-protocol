@@ -113,6 +113,20 @@ fixture_needles = {
     ".github/workflows/ci.yml": [
         f"conformance tests ({fixture_count} fixtures)",
     ],
+    "SPEC.md": [
+        f"{fixture_count} fixtures as of",
+        f"The {fixture_count} fixtures in",
+    ],
+    "sdks/typescript/README.md": [
+        f"{fixture_count} canonical test vectors",
+    ],
+    "sdks/go/README.md": [
+        f"{fixture_count} canonical test vectors",
+    ],
+    "sdks/c/README.md": [
+        f"{fixture_count} canonical test vectors",
+        f"{fixture_count}/{fixture_count} fixtures",
+    ],
 }
 for path, needles in fixture_needles.items():
     text = read(path)
@@ -120,5 +134,22 @@ for path, needles in fixture_needles.items():
         if needle not in text:
             fail(f"{path} does not contain fixture-count marker: {needle}")
 
-print(f"release-sync: ok ({protocol_tag})")
+# Canonical scope count, derived from the Go reference vocabulary. Docs that
+# state the count must agree with scope.go.
+scope_count = len(re.findall(r'^\tScope\w+\s+=\s+"', read("scope.go"), re.M))
+scope_needles = {
+    "README.md": [f"Canonical {scope_count}-scope vocabulary"],
+    "SPEC.md": [f"{scope_count} canonical scope strings"],
+    "docs/ROADMAP.md": [f"**{scope_count} canonical scopes**"],
+    "sdks/typescript/README.md": [f"{scope_count} canonical scopes"],
+    "sdks/python/README.md": [f"{scope_count} canonical scopes"],
+    "sdks/rust/README.md": [f"{scope_count} canonical scopes"],
+}
+for path, needles in scope_needles.items():
+    text = read(path)
+    for needle in needles:
+        if needle not in text:
+            fail(f"{path} does not contain scope-count marker: {needle}")
+
+print(f"release-sync: ok ({protocol_tag}, {fixture_count} fixtures, {scope_count} scopes)")
 PY

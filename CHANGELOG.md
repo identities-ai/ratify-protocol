@@ -8,6 +8,22 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ## v1.0.0-alpha.12 (unreleased)
 
+### Added — no-expiry sentinel (normative)
+
+- `NO_EXPIRY_SENTINEL = 4070908799` (2099-12-31 23:59:59 UTC): a cert whose `expires_at` equals the sentinel means **"no expiry (until revoked)"**. Implementations MUST treat it that way in display and policy evaluation — never as a literal 2099 expiry. Verification is unchanged (the sentinel is a future timestamp); revocation is the sole termination mechanism. SPEC §5.1 + §5.7; Go reference adds `NoExpirySentinel` and `DelegationCert.IsNoExpiry()`; mirrored in all SDKs. Fixture: `no_expiry_cert`.
+- Closes a live gap: the Ratify Verify platform already signs sentinel certs; offline SDK verifiers previously had no way to distinguish "no expiry" from a cert legitimately expiring in 2099.
+
+### Added — `presence:represent` scope (sensitive)
+
+- New canonical scope (54 total): the agent is authorized to attend and interact as a **direct representative of the principal** — other parties may be interacting with the agent as if it were the principal. Covers non-likeness representatives and full likeness agents.
+- Design as locked 2026-07-06: does NOT imply `identity:prove` (grant both explicitly; no implication table); one scope, no fidelity sub-qualifiers; disclosure of the representation relationship is platform policy with a non-normative SPEC note — not a protocol constraint. SPEC §9.1.
+- There is deliberately no `presence:*` wildcard — sensitive scopes never ride wildcards. Fixtures: `presence_represent_allowed`, `reject_presence_sensitive_wildcard`.
+
+### Changed — conformance suite: 59 → 62 canonical fixtures
+
+- Three new fixtures (above). All 59 pre-existing fixtures are byte-identical to alpha.11.
+- `scripts/check-release-sync.sh` now also gates SPEC.md and the TypeScript/Go/C READMEs on the fixture count, and adds a **scope-count check** derived from `scope.go` — documented counts can no longer silently drift from the vocabulary.
+
 ### Changed — release process: no more direct pushes to main
 
 - The single-step `make release` (which committed the version bump directly to main via a ruleset bypass) is removed. Releases are now two-phase: `make release-prepare VERSION=…` creates a `release/<version>` branch, bumps versions, runs the full cross-SDK gate, and opens a PR; after it merges through the normal path (CI + DCO), `make release-tag VERSION=…` verifies main carries the bump and pushes the coordinated tags. See `docs/RELEASES.md` §4.

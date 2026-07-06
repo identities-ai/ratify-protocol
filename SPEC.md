@@ -1218,11 +1218,13 @@ A verifier MUST obtain principal public keys through at least one of the followi
 |------|------------------------------|------------------|------|
 | **Pinned keys** | Operator pins principal keys out-of-band during onboarding (contract exchange, config management). | The onboarding channel. | Closed B2B integrations, high-stakes endpoints, offline/edge verifiers. |
 | **Enterprise IdP root** | The organization's IdP holds the root key (delegated custody, §15.2); the verifier pins one IdP key and every member identity chains from it. | The enterprise IdP. | Workforce deployments. |
-| **Registry lookup** | A registry maps `human_id` / `Anchor` (§5.5) to a public key; resolved via `AnchorResolver` (§17.8). | The registry operator (threat T9 applies). | Internet-scale consumer deployments. |
+| **Registry lookup** | A registry maps `human_id` / `Anchor` (§5.5) to a public key, queried through a deployment-specific resolver *before* verification. | The registry operator (threat T9 applies). | Internet-scale consumer deployments. |
 | **Self-published + continuity** | The principal publishes the key at a stable location they control (DNS record, website, profile). First acquisition is trust-on-first-use; subsequent key changes MUST be validated as a `KeyRotationStatement` chain (§5.15) from the pinned first key. | The publication channel, once, at first use. | Individuals and small publishers. |
 | **Witness-backed evidence** | Key publications and rotations are logged to one or more `WitnessEntry` chains (§5.12); the verifier checks that the key it received is consistent with the log and that no conflicting rotation exists. | At least one honest witness. | Augments any of the above; detects equivocation. |
 
 These modes compose: a registry whose entries are witness-logged is strictly stronger than a bare registry; a pinned key with rotation-chain continuity survives key rotation without re-onboarding.
+
+Note that the `AnchorResolver` provider interface (§17.8) is **not** a trust-anchor discovery mechanism: it runs *after* successful verification to attach external-identity metadata (`VerifyResult.Anchor`) for audit purposes, and it returns an `Anchor`, not a public key. v1 defines no wire protocol for key discovery; the resolver a deployment uses to obtain root public keys before verification is deployment code, built on one of the modes above.
 
 Deployments SHOULD document which bootstrap mode(s) they use. A verifier that cannot state where a principal key came from has no basis for the trust decisions this protocol automates.
 

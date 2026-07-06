@@ -8,9 +8,9 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ## v1.0.0-alpha.11 (unreleased)
 
-### Changed — docs & spec truth pass (no wire change, no code change)
+### Changed — docs & spec truth pass (no wire change, no protocol or SDK code change)
 
-**Wire format unchanged. All 59 canonical test vectors are byte-identical to alpha.10. No SDK code was modified.**
+**Wire format unchanged. All 59 canonical test vectors are byte-identical to alpha.10. No protocol or SDK code was modified — the only executable change is to the local test-gate script (see Fixed below).**
 
 **README credibility pass.** The README described the alpha.4-era one-shot protocol; the shipped protocol is larger.
 

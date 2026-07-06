@@ -48,10 +48,11 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 
 ## Planned — next releases (backward-compatible)
 
-### v1.0.0-alpha.11 — docs & spec hardening (no wire change, no code change)
+### v1.0.0-alpha.11 — docs & spec hardening (no wire change, no protocol or SDK code change)
 
-- README truth pass: real demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
+- README truth pass: representative demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
 - SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
+- Local test gate (`scripts/test-all.sh`) now runs the C/C++ SDK, matching what CI and `docs/RELEASES.md` already claimed.
 - All 59 canonical fixtures byte-identical to alpha.10.
 
 ### v1.0.0-alpha.12 — protocol additions (below)
@@ -114,9 +115,9 @@ Semantics: "This agent is authorized to attend and interact as a direct represen
 
 Sensitive by design — requires explicit human confirmation beyond standard delegation, because the scope asserts identity representation, not just task execution.
 
-**Companion disclosure flag (proposed):**
+**Companion disclosure flag — considered and rejected (2026-07-06):**
 
-Certs carrying `presence:represent` should include a boolean `requires_disclosure` constraint (default `true`). Verifiers receiving a proof bundle with this scope are expected to surface the representation relationship to other participants. The protocol defines the constraint; enforcement is at the application layer.
+An earlier draft proposed a boolean `requires_disclosure` constraint (default `true`) on certs carrying this scope, with the protocol defining the constraint and applications enforcing it. Rejected — see the locked decisions below: a verify-time constraint cannot verify that disclosure actually happened, so it would assert an obligation the protocol is structurally unable to check. Disclosure is platform policy, carried in the SPEC as a non-normative expectation.
 
 **Wire impact:** None. New scope string + `sensitiveScopes` entry + `validScopes` entry. Fully backward-compatible. v1.0 verifiers that don't know this scope treat it as unknown and may reject it (correct fail-closed behavior for unknown sensitive scopes).
 

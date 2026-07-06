@@ -22,6 +22,7 @@ use ratify_c::{
     ratify_verify_result_agent_id, ratify_verify_result_error_reason,
     ratify_verify_result_free, ratify_verify_result_human_id,
     ratify_verify_result_identity_status, ratify_verify_result_is_valid, ratify_version,
+    ratify_no_expiry_sentinel, ratify_expires_at_is_no_expiry,
     RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
 };
 use std::ffi::{CStr, CString};
@@ -70,6 +71,49 @@ fn version_is_nonempty() {
         let s = CStr::from_ptr(v).to_str().unwrap();
         assert!(!s.is_empty(), "version string must not be empty");
         assert!(s.contains("alpha") || s.contains('.'), "version must look like a semver: {s}");
+    }
+}
+
+// ============================================================================
+// ratify_no_expiry_sentinel / ratify_expires_at_is_no_expiry
+// ============================================================================
+
+#[test]
+fn no_expiry_sentinel_value_and_predicate() {
+    // SPEC §5.7: 4070908799 = 2099-12-31 23:59:59 UTC.
+    assert_eq!(ratify_no_expiry_sentinel(), 4_070_908_799i64);
+    assert!(ratify_expires_at_is_no_expiry(4_070_908_799));
+    assert!(!ratify_expires_at_is_no_expiry(4_070_908_798));
+    assert!(!ratify_expires_at_is_no_expiry(0));
+}
+
+#[test]
+fn delegation_issue_zero_expiry_signs_sentinel() {
+    unsafe {
+        let mut root = std::ptr::null_mut();
+        let mut agent = std::ptr::null_mut();
+        let mut err = std::ptr::null_mut();
+        ratify_human_root_generate(&mut root);
+        ratify_agent_generate(cstr!("agent"), cstr!("custom"), &mut agent);
+
+        let mut cert = std::ptr::null_mut();
+        // expires_at_unix = 0 → the library signs the no-expiry sentinel.
+        assert_eq!(
+            ratify_delegation_issue(root, agent, cstr!("[\"meeting:attend\"]"), 1_800_000_000, 0, &mut cert, &mut err),
+            RatifyStatus::RatifyOk
+        );
+        let json = ratify_delegation_cert_to_json(cert, &mut err);
+        assert!(!json.is_null());
+        let s = CStr::from_ptr(json).to_str().unwrap();
+        assert!(
+            s.contains("\"expires_at\":4070908799"),
+            "zero expiry must sign the sentinel, got: {s}"
+        );
+
+        ratify_string_free(json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
     }
 }
 

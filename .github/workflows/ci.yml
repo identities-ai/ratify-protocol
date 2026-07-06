@@ -128,7 +128,7 @@ jobs:
         run: cargo test
 
   c-sdk:
-    name: C/C++ SDK (62 fixtures + 58 unit tests)
+    name: C/C++ SDK (62 fixtures + API tests)
     runs-on: ubuntu-latest
     defaults:
       run:

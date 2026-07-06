@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-}"
-PUSH="${PUSH:-0}"
+MODE="${1:-}"
+VERSION="${2:-}"
 PUBLISH="${PUBLISH:-0}"
 GITHUB_RELEASE="${GITHUB_RELEASE:-0}"
 GOCACHE="${GOCACHE:-/tmp/ratify-protocol-go-cache}"
@@ -11,10 +11,32 @@ GOCACHE="${GOCACHE:-/tmp/ratify-protocol-go-cache}"
 cd "$ROOT"
 
 usage() {
-  echo "usage: make release VERSION=vX.Y.Z[-tag.N] [PUSH=1] [PUBLISH=1] [GITHUB_RELEASE=1]" >&2
+  cat >&2 <<'EOF'
+usage:
+  make release-prepare VERSION=vX.Y.Z[-tag.N]
+      From clean, up-to-date main: creates release/<version>, bumps all SDK
+      versions, runs the full cross-SDK gate, commits, pushes, opens the PR.
+
+  make release-tag VERSION=vX.Y.Z[-tag.N] [PUBLISH=1] [GITHUB_RELEASE=1]
+      After the release PR is merged, from clean, up-to-date main: creates
+      the protocol + sdk-* tags and pushes them. The tag push triggers the
+      CI publish workflow. PUBLISH=1 / GITHUB_RELEASE=1 are break-glass
+      manual paths only.
+
+Releases go through a PR like every other change to main. There is no
+single-step release: it required a direct push to main, which the branch
+ruleset forbids.
+EOF
 }
 
-if [[ -z "$VERSION" ]]; then
+# The old single-step invocation passed the version as the first argument.
+if [[ "$MODE" =~ ^v[0-9] ]]; then
+  echo "release: the single-step release flow was removed — it required a direct push to main." >&2
+  usage
+  exit 1
+fi
+
+if [[ "$MODE" != "prepare" && "$MODE" != "tag" ]] || [[ -z "$VERSION" ]]; then
   usage
   exit 1
 fi
@@ -195,41 +217,109 @@ create_github_release() {
     --title "Ratify Protocol $VERSION"
 }
 
-if [[ "$(git branch --show-current)" != "main" && "${ALLOW_NON_MAIN:-0}" != "1" ]]; then
-  echo "release: must run from main (set ALLOW_NON_MAIN=1 to override)" >&2
-  exit 1
-fi
+require_main() {
+  if [[ "$(git branch --show-current)" != "main" ]]; then
+    echo "release: must run from main" >&2
+    exit 1
+  fi
+}
 
-require_clean
-require_tag_absent "$VERSION"
-for tag in "${SDK_TAGS[@]}"; do
-  require_tag_absent "$tag"
-done
+require_main_up_to_date() {
+  git fetch origin main
+  if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+    echo "release: local main is not in sync with origin/main — pull first" >&2
+    exit 1
+  fi
+}
 
-echo "==> Bumping versions to $VERSION"
-bump_versions
-./scripts/check-release-sync.sh
+require_all_tags_absent() {
+  require_tag_absent "$VERSION"
+  for tag in "${SDK_TAGS[@]}"; do
+    require_tag_absent "$tag"
+  done
+}
 
-echo "==> Running full release test suite"
-GOCACHE="$GOCACHE" run_tests
+current_npm_version() {
+  python -c "import json; print(json.load(open('sdks/typescript/package.json'))['version'])"
+}
 
-if [[ -n "$(git status --porcelain)" ]]; then
+prepare() {
+  local branch="release/$VERSION"
+  require_main
+  require_clean
+  require_main_up_to_date
+  require_all_tags_absent
+  if git rev-parse -q --verify "refs/heads/$branch" >/dev/null; then
+    echo "release: branch already exists: $branch" >&2
+    exit 1
+  fi
+
+  echo "==> Creating $branch"
+  git checkout -b "$branch"
+
+  echo "==> Bumping versions to $VERSION"
+  bump_versions
+
+  # Stamp the changelog entry for this version, if one is marked unreleased.
+  python - "$VERSION" <<'PY'
+import datetime
+import pathlib
+import sys
+
+version = sys.argv[1]
+path = pathlib.Path("CHANGELOG.md")
+text = path.read_text()
+marker = f"## {version} (unreleased)"
+if marker in text:
+    today = datetime.date.today().isoformat()
+    path.write_text(text.replace(marker, f"## {version} ({today})", 1))
+PY
+
+  ./scripts/check-release-sync.sh
+
+  echo "==> Running full release test suite"
+  GOCACHE="$GOCACHE" run_tests
+
   echo "==> Committing release version bump"
   git add -A
   git commit -s -m "chore: release $VERSION"
-fi
 
-require_clean
+  echo "==> Pushing $branch"
+  git push -u origin "$branch"
 
-echo "==> Creating coordinated tags"
-git tag "$VERSION"
-for tag in "${SDK_TAGS[@]}"; do
-  git tag "$tag"
-done
+  if command -v gh >/dev/null 2>&1; then
+    echo "==> Opening release PR"
+    gh pr create --base main \
+      --title "chore: release $VERSION" \
+      --body "Coordinated version bump for $VERSION across all SDK manifests. Full cross-SDK gate passed locally; CI re-runs it here. After merge, run: \`make release-tag VERSION=$VERSION\`."
+  else
+    echo "==> gh not found — open the PR manually for branch $branch"
+  fi
 
-if [[ "$PUSH" == "1" ]]; then
-  echo "==> Pushing main and tags"
-  git push origin main
+  echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
+}
+
+tag_release() {
+  require_main
+  require_clean
+  require_main_up_to_date
+
+  local live_version
+  live_version="$(current_npm_version)"
+  if [[ "$live_version" != "$NPM_VERSION" ]]; then
+    echo "release: main is at $live_version, expected $NPM_VERSION — has the release-prepare PR been merged?" >&2
+    exit 1
+  fi
+  ./scripts/check-release-sync.sh
+  require_all_tags_absent
+
+  echo "==> Creating coordinated tags"
+  git tag "$VERSION"
+  for tag in "${SDK_TAGS[@]}"; do
+    git tag "$tag"
+  done
+
+  echo "==> Pushing tags"
   # Push the protocol tag on its own: GitHub does not create push events
   # when more than three tags arrive in a single push, so pushing all six
   # tags together silently suppresses the tag-triggered release workflow.
@@ -238,20 +328,23 @@ if [[ "$PUSH" == "1" ]]; then
   git push origin "${SDK_TAGS[@]}"
   echo "==> Verify the Release workflow started: gh run list --workflow=release.yml --limit 1"
   echo "    If it did not, dispatch it manually: gh workflow run release.yml -f tag=$VERSION"
-else
-  echo "==> PUSH=0: tags created locally only"
-fi
 
-if [[ "$PUBLISH" == "1" ]]; then
-  publish_registries
-else
-  echo "==> PUBLISH=0: registry publishing skipped"
-fi
+  if [[ "$PUBLISH" == "1" ]]; then
+    publish_registries
+  else
+    echo "==> PUBLISH=0: registry publishing left to CI (normal path)"
+  fi
 
-if [[ "$GITHUB_RELEASE" == "1" ]]; then
-  create_github_release
-else
-  echo "==> GITHUB_RELEASE=0: GitHub release creation skipped"
-fi
+  if [[ "$GITHUB_RELEASE" == "1" ]]; then
+    create_github_release
+  else
+    echo "==> GITHUB_RELEASE=0: GitHub release creation left to CI (normal path)"
+  fi
 
-echo "release: ok ($VERSION)"
+  echo "release-tag: ok ($VERSION)"
+}
+
+case "$MODE" in
+  prepare) prepare ;;
+  tag)     tag_release ;;
+esac

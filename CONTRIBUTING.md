@@ -11,7 +11,7 @@ Thanks for considering a contribution. Ratify is a protocol project, which means
 
 ## How changes land in `main`
 
-`main` is protected. **No direct pushes are accepted, including from maintainers.** Every change goes through a pull request, and the CI checks must pass before merge.
+`main` is protected. **No direct pushes are accepted, including from maintainers — and including releases.** Every change goes through a pull request, and the CI checks must pass before merge. Release version bumps travel the same path: `make release-prepare` opens a release PR, and only after it merges does `make release-tag` push tags (see [`docs/RELEASES.md`](docs/RELEASES.md) §4). The branch ruleset enforces this with no standing bypass.
 
 The flow:
 

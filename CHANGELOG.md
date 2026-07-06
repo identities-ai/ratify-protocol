@@ -10,7 +10,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ### Added — no-expiry sentinel (normative)
 
-- `NO_EXPIRY_SENTINEL = 4070908799` (2099-12-31 23:59:59 UTC): a cert whose `expires_at` equals the sentinel means **"no expiry (until revoked)"**. Implementations MUST treat it that way in display and policy evaluation — never as a literal 2099 expiry. Verification is unchanged (the sentinel is a future timestamp); revocation is the sole termination mechanism. SPEC §5.1 + §5.7; Go reference adds `NoExpirySentinel` and `DelegationCert.IsNoExpiry()`; mirrored in all SDKs. Fixture: `no_expiry_cert`.
+- `NO_EXPIRY_SENTINEL = 4070908799` (2099-12-31 23:59:59 UTC): a cert whose `expires_at` equals the sentinel means **"no expiry (until revoked)"**. Implementations MUST treat it that way in display and policy evaluation — never as a literal 2099 expiry. Verification is unchanged (the sentinel is a future timestamp); revocation is the sole termination mechanism. SPEC §5.1 + §5.7; Go reference adds `NoExpirySentinel` and `DelegationCert.IsNoExpiry()`; mirrored in TS (`NO_EXPIRY_SENTINEL`/`isNoExpiry`), Python (`NO_EXPIRY_SENTINEL`/`is_no_expiry`), Rust (`NO_EXPIRY_SENTINEL`/`is_no_expiry`), and the C ABI (`ratify_no_expiry_sentinel()`, `ratify_expires_at_is_no_expiry()`). Fixture: `no_expiry_cert`.
 - Closes a live gap: the Ratify Verify platform already signs sentinel certs; offline SDK verifiers previously had no way to distinguish "no expiry" from a cert legitimately expiring in 2099.
 
 ### Added — `presence:represent` scope (sensitive)

@@ -234,7 +234,7 @@ Critical security fixes (e.g., a verifier algorithm bug that accepts forgeries) 
 
 A release cycle is considered stable when:
 
-- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 62 fixtures (by kind: 44 verify + 3 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry).
+- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 62 fixtures (by kind: 45 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry).
 - Determinism check passes (regen = zero diff).
 - The generator itself hasn't changed since the last release, OR its change is reviewed and new fixtures have been committed.
 - CI is green on main.

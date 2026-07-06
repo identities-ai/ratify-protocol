@@ -32,7 +32,9 @@ Ratify is not agent login, registration, or credential issuance. Ratify starts w
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
 
-**Status:** `v1.0.0-alpha.11` · reference implementation complete · 62 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
+**Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 62 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
+
+Counts and feature descriptions in this README describe `main` (the development branch). Install commands reference the latest published release — see [Releases](https://github.com/identities-ai/ratify-protocol/releases) for its notes and exact fixture set.
 
 Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
 

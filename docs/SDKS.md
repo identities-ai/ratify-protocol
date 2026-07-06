@@ -22,7 +22,7 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 62/62 fixtures |
 | **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 62/62 fixtures |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 62/62 fixtures |
-| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 62/62 fixtures + 58 unit tests |
+| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 62/62 fixtures + API test suite |
 | Swift | — | planned (mobile wallet) | — |
 | Java / Kotlin | — | planned (Android / JVM) | — |
 
@@ -46,7 +46,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance:** All 62 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus 58 unit tests. Full parity with Go, TypeScript, Python, and Rust.
+**Conformance:** All 62 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus the API test suite (42 tests). Full parity with Go, TypeScript, Python, and Rust.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 

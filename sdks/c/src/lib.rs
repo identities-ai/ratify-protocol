@@ -627,8 +627,11 @@ pub unsafe extern "C" fn ratify_agent_id(
 /// - `issued_at_unix` — Unix timestamp for `issued_at`. Pass 0 to use the
 ///   system clock. Embedded targets without a synchronised RTC should set this
 ///   explicitly (e.g. from an NTP-synced value stored in flash).
-/// - `expires_at_unix` — Unix timestamp for expiry. Pass 0 for no expiry
-///   (the library signs as 2099-12-31 per SPEC §4.3).
+/// - `expires_at_unix` — Unix timestamp for expiry. Pass 0 for no expiry:
+///   the library signs NO_EXPIRY_SENTINEL (4070908799), which means
+///   "no expiry (until revoked)" per SPEC §5.7 — display and policy code
+///   MUST NOT treat it as a literal 2099 expiry. See
+///   `ratify_no_expiry_sentinel()` / `ratify_expires_at_is_no_expiry()`.
 ///
 /// Free with `ratify_delegation_cert_free`.
 #[no_mangle]
@@ -661,7 +664,7 @@ pub unsafe extern "C" fn ratify_delegation_issue(
     } else {
         issued_at_unix
     };
-    let expires_at = if expires_at_unix == 0 { 4_070_908_799i64 } else { expires_at_unix };
+    let expires_at = if expires_at_unix == 0 { ratify_protocol::NO_EXPIRY_SENTINEL } else { expires_at_unix };
 
     let cert_id = make_uuid(); // panics on entropy failure
     let issuer_ref = &*issuer;
@@ -1038,4 +1041,20 @@ pub unsafe extern "C" fn ratify_error_free(s: *mut c_char) {
 #[no_mangle]
 pub extern "C" fn ratify_version() -> *const c_char {
     concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
+}
+
+/// Returns NO_EXPIRY_SENTINEL (4070908799 = 2099-12-31 23:59:59 UTC): the
+/// `expires_at` value that means "no expiry (until revoked)" per SPEC §5.7.
+#[no_mangle]
+pub extern "C" fn ratify_no_expiry_sentinel() -> i64 {
+    ratify_protocol::NO_EXPIRY_SENTINEL
+}
+
+/// Returns true iff `expires_at_unix` is the no-expiry sentinel. Display and
+/// policy code MUST branch on this rather than treating the sentinel as a
+/// real 2099 timestamp: a sentinel cert is an open-ended grant terminated
+/// only by revocation, not a ~75-year grant.
+#[no_mangle]
+pub extern "C" fn ratify_expires_at_is_no_expiry(expires_at_unix: i64) -> bool {
+    expires_at_unix == ratify_protocol::NO_EXPIRY_SENTINEL
 }

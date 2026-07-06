@@ -1403,30 +1403,39 @@ func genPresenceRepresentAllowed() *fixture {
 	)
 }
 
-// genRejectPresenceSensitiveWildcard pins that there is deliberately NO
-// presence:* wildcard: presence:represent is sensitive, sensitive scopes
-// never ride wildcards, and presence:represent is the domain's only member —
-// so "presence:*" is not a valid scope at all.
+// genRejectPresenceSensitiveWildcard pins — as a full verify-kind rejection —
+// that there is deliberately NO presence:* wildcard: presence:represent is
+// sensitive, sensitive scopes never ride wildcards, and it is the domain's
+// only member. A signed cert granting "presence:*" conveys nothing for
+// presence:represent, so the verifier rejects with scope_denied.
 func genRejectPresenceSensitiveWildcard() *fixture {
-	input := []string{"presence:*"}
-	expanded := ratify.ExpandScopes(input) // no wildcard match — passes through
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+	cert := buildCert(
+		"00000000-0000-0000-0000-000000000042",
+		human, agent,
+		[]string{"presence:*"},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("reject_presence_sensitive_wildcard")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
 
-	return &fixture{
-		Name: "reject_presence_sensitive_wildcard",
-		Description: "There is deliberately no presence:* wildcard. " +
-			"presence:represent is sensitive, sensitive scopes are never " +
-			"introduced by wildcard expansion, and it is the domain's only " +
-			"member — so \"presence:*\" is not in the vocabulary. ExpandScopes " +
-			"passes the string through unchanged (no wildcard match) and " +
-			"ValidateScopes rejects it as unknown. Representation must always " +
-			"be granted explicitly.",
-		ProtocolVersion: ratify.ProtocolVersion,
-		Kind:            "scope",
-		ScopeInput:      input,
-		Expected: expectedBlock{
-			ExpandedScopes: expanded,
-		},
-	}
+	return buildVerifyFixture(
+		"reject_presence_sensitive_wildcard",
+		"SECURITY: there is deliberately no presence:* wildcard — "+
+			"presence:represent is sensitive, sensitive scopes are never "+
+			"introduced by wildcard expansion, and it is the domain's only "+
+			"member. A signed cert granting \"presence:*\" conveys nothing for "+
+			"presence:represent: ExpandScopes passes the unknown string through "+
+			"unchanged (no wildcard match), the required scope is not in the "+
+			"effective scope, and verification rejects with scope_denied. "+
+			"(ValidateScopes also rejects \"presence:*\" as unknown at issuance "+
+			"time — representation must always be granted explicitly.)",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopePresenceRepresent, Now: unixTime(fixtureNow)},
+	)
 }
 
 // ============================================================================

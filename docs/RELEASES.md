@@ -1,6 +1,6 @@
 # Release Process
 
-**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep — and how a single `make release` action creates coordinated protocol / SDK tags. Registry publishing is explicit (`PUBLISH=1`) so package publication never happens accidentally.**
+**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep — and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`PUBLISH=1`) is break-glass only.**
 
 Companion to [`SPEC.md`](../SPEC.md), [`SDKS.md`](SDKS.md), and [`TEST_PLAN.md`](TEST_PLAN.md).
 
@@ -83,25 +83,36 @@ The protocol-level tag `v1.0.0-alpha.11` is what Go modules consume (`go get git
 
 ## 4. The release workflow
 
-### 4.1 One-command release
+### 4.1 Two-phase release — through a PR, like every other change
 
-From a clean main branch:
+**Releases do not push to main.** `main` accepts changes only via pull request — including release version bumps. The old single-step `make release` required a direct (ruleset-bypassing) push to main and was removed. The flow is now:
 
 ```bash
-make release VERSION=v1.0.0-alpha.11 PUSH=1
+# Phase 1 — from clean, up-to-date main:
+make release-prepare VERSION=v1.0.0-alpha.12
+#   → creates release/v1.0.0-alpha.12, bumps all SDK versions, runs the
+#     full cross-SDK gate, commits (signed-off), pushes, opens the PR.
+
+# Phase 2 — merge the release PR (CI + DCO run on it like any PR), then:
+git checkout main && git pull
+make release-tag VERSION=v1.0.0-alpha.12
+#   → verifies main carries the bump, creates the protocol + sdk-* tags,
+#     pushes them. The protocol tag triggers the CI publish workflow.
 ```
 
-That single command runs the steps below in order. Any failure aborts. By default the release is local-only (`PUSH=0`, `PUBLISH=0`, `GITHUB_RELEASE=0`) so maintainers can verify the exact commit and tags before pushing. Use `PUSH=1` to push `main` and all coordinated tags.
+Any failure in either phase aborts. `release-tag` refuses to run if main's versions don't match the target (i.e. the release PR hasn't merged).
 
-**After the public launch, registry publishing is handled by CI**, not by `PUBLISH=1` on the local `make release` invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local `make release` flow still owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
+**Registry publishing is handled by CI**, not by `PUBLISH=1` on a local invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local two-phase flow owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
 
 `PUBLISH=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It should be the exception, not the rule.
 
 ### 4.2 What the workflow does, step-by-step
 
-1. **Preflight — working tree clean.** Refuse to proceed if uncommitted changes exist.
-2. **Preflight — version sanity.** Reject versions that don't match `vX.Y.Z(-\w+\.\d+)?`. Reject if the tag already exists locally or remotely.
-3. **Bump SDK versions in-place.** Update `go.mod` (implicit — Go tags directly), `sdks/typescript/package.json`, `sdks/python/pyproject.toml`, `sdks/rust/Cargo.toml` to the target version. Commit as "chore: bump to VERSION."
+**Phase 1 — `make release-prepare`:**
+
+1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-\w+\.\d+)?`; no target tag exists locally or remotely.
+2. **Create `release/<version>`.**
+3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing — Go consumes the git tag directly.)
 4. **Regenerate test vectors deterministically.** `go run ./cmd/ratify-testvectors`. If the result differs from committed, the release is aborted and the user is told to investigate.
 5. **Run the full conformance suite across all SDKs.**
    - Go: `go vet ./...` and `go test -race -count=1 ./...`
@@ -112,9 +123,13 @@ That single command runs the steps below in order. Any failure aborts. By defaul
    - C/C++: `cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
-6. **Tag the protocol version.** `git tag v1.0.0-alpha.11`.
-7. **Tag each SDK.** `git tag sdk-go-v1.0.0-alpha.11`, etc.
-8. **Push main and tags if `PUSH=1`.** The script pushes `main`, then `vX.Y.Z...` plus every `sdk-*` tag explicitly.
+6. **Commit (signed-off), push the branch, open the PR.** CI and the DCO check run on the release PR exactly as on any other PR.
+
+**Phase 2 — `make release-tag` (after the PR merges):**
+
+7. **Preflight.** On clean, up-to-date main; main's versions match the target (refuses otherwise); release-sync check passes; tags still absent.
+8. **Tag the protocol version and each SDK.** `git tag v1.0.0-alpha.12`, then `sdk-go-v1.0.0-alpha.12`, etc.
+8a. **Push the protocol tag alone, then the `sdk-*` tags.** GitHub creates no push event when more than three tags arrive at once (see §5.3.1) — the protocol tag must travel by itself to trigger the Release workflow.
 9. **(Optional / emergency only) Publish to registries if `PUBLISH=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
    - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@1.0.0-alpha.11`.
@@ -148,13 +163,7 @@ PyPI and npm publishing use GitHub Actions OIDC Trusted Publisher flows, so no l
 ## 5. The Makefile
 
 ```make
-.PHONY: test-all release release-check
-
-VERSION ?=
-PUSH ?= 0
-PUBLISH ?= 0
-GITHUB_RELEASE ?= 0
-GOCACHE ?= /tmp/ratify-protocol-go-cache
+.PHONY: test-all release release-prepare release-tag release-check
 
 test-all:
 	@GOCACHE="$(GOCACHE)" ./scripts/test-all.sh
@@ -162,16 +171,20 @@ test-all:
 release-check:
 	@./scripts/check-release-sync.sh
 
-release:
-	@test -n "$(VERSION)" || (echo "usage: make release VERSION=vX.Y.Z[-tag.N] [PUSH=1] [PUBLISH=1] [GITHUB_RELEASE=1]"; exit 1)
-	@GOCACHE="$(GOCACHE)" PUSH="$(PUSH)" PUBLISH="$(PUBLISH)" GITHUB_RELEASE="$(GITHUB_RELEASE)" ./scripts/release.sh "$(VERSION)"
+release-prepare:
+	@GOCACHE="$(GOCACHE)" ./scripts/release.sh prepare "$(VERSION)"
+
+release-tag:
+	@GOCACHE="$(GOCACHE)" PUBLISH="$(PUBLISH)" GITHUB_RELEASE="$(GITHUB_RELEASE)" ./scripts/release.sh tag "$(VERSION)"
+
+release:   # removed — prints the two-phase instructions and exits 1
 ```
 
 The release logic lives in:
 
 - `scripts/check-release-sync.sh` — fails if package versions, lockfiles, docs, or SDK constants drift.
 - `scripts/test-all.sh` — runs the same conformance and determinism gates as CI, with stricter local Go race tests.
-- `scripts/release.sh` — bumps versions, runs all gates, commits, tags protocol + SDKs, and optionally pushes / publishes / creates the GitHub release.
+- `scripts/release.sh` — `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags (and carries the break-glass `PUBLISH=1` / `GITHUB_RELEASE=1` paths).
 
 ## 6. Continuous integration
 
@@ -227,58 +240,29 @@ A release cycle is considered stable when:
 - CI is green on main.
 - No open security advisories affect this version.
 
-Only then does `make release VERSION=…` run without aborting on any of the preflight gates.
+Only then do `make release-prepare VERSION=…` and `make release-tag VERSION=…` run without aborting on any of the preflight gates.
 
 ---
 
-## Appendix A — today's release checklist (manual, until automation ships)
+## Appendix A — the release checklist
 
 ```bash
-# From a clean main with no uncommitted changes:
+# Phase 1 — from clean, up-to-date main:
+make release-prepare VERSION=v1.0.0-alpha.12
+#   branch release/v1.0.0-alpha.12 + version bumps + full gate + PR
 
-# 1. Update versions in:
-#    - sdks/typescript/package.json
-#    - sdks/python/pyproject.toml
-#    - sdks/rust/Cargo.toml
+# Phase 2 — after the release PR merges:
+git checkout main && git pull
+make release-tag VERSION=v1.0.0-alpha.12
+#   coordinated tags pushed; protocol tag triggers CI publishing
 
-# 2. Regenerate and verify.
-cd <repo root>
-go run ./cmd/ratify-testvectors -out /tmp/regen
-diff -rq testvectors/v1/ /tmp/regen/          # must be empty
-
-# 3. Run conformance everywhere.
-go test ./...
-cd sdks/typescript && npm ci && npm test && cd ../..
-cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../..
-cd sdks/rust && cargo test --quiet && cd ../..
-cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
-
-# 4. Commit version bumps.
-git commit -sm "chore: bump to v1.0.0-alpha.11"
-
-# 5. Tag.
-git tag v1.0.0-alpha.11
-git tag sdk-go-v1.0.0-alpha.11
-git tag sdk-typescript-v1.0.0-alpha.11
-git tag sdk-python-v1.0.0-alpha.11
-git tag sdk-rust-v1.0.0-alpha.11
-
-# 6. Push.
-git push && git push --tags
-
-# 7. Publish (after GitHub tags are pushed).
-cd sdks/typescript && npm publish --access public && cd ../..
-cd sdks/python && python -m build && twine upload dist/* && cd ../..
-cd sdks/rust && cargo publish && cd ../..
-
-# 8. Create GitHub release with auto-generated notes + testvectors bundle.
+# Phase 3 — verify:
+gh run list --workflow=release.yml --limit 1
+#   if no run appeared (see §5.3.1):
+gh workflow run release.yml -f tag=v1.0.0-alpha.12
 ```
 
-The manual checklist above is retained as explanatory context. The authoritative command is:
-
-```bash
-make release VERSION=v1.0.0-alpha.11 PUSH=1
-```
+**Never `git push --tags`** — it pushes every local tag in one push, which suppresses the workflow trigger (§5.3.1) and may push stray local tags. The script pushes the protocol tag alone, then the `sdk-*` tags.
 
 ---
 
@@ -295,11 +279,17 @@ This is a stronger trust model than the manual flow for three reasons:
 ### 5.1 The release flow, end-to-end
 
 ```
-[ make release VERSION=v1.0.0-alpha.11 PUSH=1 ]   ←  on your laptop
+[ make release-prepare VERSION=v1.0.0-alpha.12 ]  ←  on your laptop
                        │
-                       │  bumps SDK versions, runs full test matrix locally,
-                       │  creates the protocol tag v1.0.0-alpha.11 and the
-                       │  five sdk-* sub-tags, pushes main + tags.
+                       │  release branch + version bumps + full local test
+                       │  matrix + PR. Merged through the normal PR path
+                       │  (CI + DCO). No direct push to main, ever.
+                       ▼
+[ make release-tag VERSION=v1.0.0-alpha.12 ]      ←  on your laptop, post-merge
+                       │
+                       │  verifies main carries the bump, creates the
+                       │  protocol tag + five sdk-* sub-tags, pushes the
+                       │  protocol tag alone, then the sdk-* tags.
                        ▼
 [ GitHub receives tag v* push ]
                        │
@@ -358,7 +348,7 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 9. C/C++ conformance and API tests pass through the C ABI
 10. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
 
-If any check fails, all publish jobs are skipped. No partial state is created. You fix the failure, force-delete the tag (`git tag -d`, `git push --delete origin tagname`), re-run `make release`, push again.
+If any check fails, all publish jobs are skipped. No partial state is created. You fix the failure (via a normal PR to main), force-delete the tag (`git tag -d`, `git push --delete origin tagname`), then re-run `make release-tag`.
 
 ### 5.3.1 If the Release workflow never started
 

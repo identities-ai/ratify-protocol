@@ -15,7 +15,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 **README credibility pass.** The README described the alpha.4-era one-shot protocol; the shipped protocol is larger.
 
 - New "Beyond one-shot verify" section surfaces the shipped v1.1 feature set: session-bound challenges, stream sequence numbers, SessionToken fast path, push-based revocation, transaction receipts, witness append-only logs, key rotation statements — each linked to its SPEC section.
-- Demo section now shows real `go run ./demos/go` output and describes the narrative accurately (one positive end-to-end flow + four rejection scenarios; previously mislabeled "nine-scenario — five positive").
+- Demo section now shows representative `go run ./demos/go` output (signatures and timestamps vary per run) and describes the narrative accurately (one positive end-to-end flow + four rejection scenarios; previously mislabeled "nine-scenario — five positive").
 - Repository layout tree updated: adds `streamed_verify.go`, `receipt_verify.go`, the benchmark/cross-SDK/lever/provider test files, `Makefile`, `scripts/`, `sdks/go/`, `docs/BENCHMARKS.md`, `docs/ATTRIBUTION.md`; relabels `docs/TRANSACTION_RECEIPTS.md` as normative-companion rather than "v1.1 design."
 - Fixture-count note: 59 canonical fixtures; `cross_sdk_vectors.json` is a separate byte-equivalence corpus.
 - The "under a millisecond" claim now links to [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
@@ -31,6 +31,10 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 - **§5.13 SessionToken operational guidance** — token lifetimes by risk tier (≤5 min high-stakes, ≤15 min conversational), eviction triggers, and multi-instance `session_secret` handling for load-balanced verifiers.
 - **§12 crypto agility** — why v1 fixes the algorithm pair instead of negotiating, and the migration path if a component weakens.
 - **§5.16** — one-line pointer to §15.7 on what constraint evaluation does and does not prove.
+
+### Fixed — local test gate now covers all five SDKs
+
+- `scripts/test-all.sh` now runs the C/C++ SDK conformance and API tests. Previously the local `make test-all` / `make release` gate covered only four of the five SDKs — CI tested C/C++ on every push, but the local release preflight did not, contradicting `docs/RELEASES.md` §4.2 step 5.
 
 ### Changed — ROADMAP restructured into three buckets
 

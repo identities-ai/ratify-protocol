@@ -26,6 +26,9 @@ echo "==> Python SDK"
 echo "==> Rust SDK"
 (cd sdks/rust && cargo build --all-targets && cargo test)
 
+echo "==> C/C++ SDK"
+(cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api)
+
 echo "==> Release sync check"
 "$ROOT/scripts/check-release-sync.sh"
 

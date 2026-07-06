@@ -1406,8 +1406,9 @@ func genPresenceRepresentAllowed() *fixture {
 // genRejectPresenceSensitiveWildcard pins — as a full verify-kind rejection —
 // that there is deliberately NO presence:* wildcard: presence:represent is
 // sensitive, sensitive scopes never ride wildcards, and it is the domain's
-// only member. A signed cert granting "presence:*" conveys nothing for
-// presence:represent, so the verifier rejects with scope_denied.
+// only member. "presence:*" is therefore not in the vocabulary at all, and
+// the verifier rejects the cert as malformed with invalid_scope (SPEC §9,
+// §10 step 7.a2) before any effective-scope arithmetic.
 func genRejectPresenceSensitiveWildcard() *fixture {
 	human := newEntity("human_root", 0x01)
 	agent := newEntity("agent", 0x02)

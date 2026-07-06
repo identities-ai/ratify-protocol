@@ -90,6 +90,7 @@ All structures are JSON objects serialized in canonical form (see §6).
 | `PROTOCOL_VERSION` | `1` |
 | `MAX_DELEGATION_CHAIN_DEPTH` | `3` |
 | `CHALLENGE_WINDOW_SECONDS` | `300` |
+| `NO_EXPIRY_SENTINEL` | `4070908799` (2099-12-31 23:59:59 UTC) — see §5.7 |
 | `ED25519_PUBLIC_KEY_SIZE` | `32` bytes |
 | `ED25519_SIGNATURE_SIZE` | `64` bytes |
 | `MLDSA65_PUBLIC_KEY_SIZE` | `1952` bytes (FIPS 204) |
@@ -166,6 +167,8 @@ Only the public component travels on the wire. Private keys SHOULD be stored on 
 ```
 
 `scope` answers *what* the agent may do. `constraints` answer *where / when / how much* — first-class bounds evaluated at verify time against a caller-supplied context (§5.7.1). `constraints` is always present in the JSON even when empty (serialized as `[]`) so canonical bytes are deterministic across issuers.
+
+**No-expiry sentinel.** `expires_at` is a required integer with no null representation. A delegation intended to last "until revoked" carries the sentinel value `NO_EXPIRY_SENTINEL = 4070908799` (2099-12-31 23:59:59 UTC) as its `expires_at`. Conformant implementations MUST treat a cert whose `expires_at` equals the sentinel as **"no expiry (until revoked)"** in display and policy evaluation — never as a literal 2099 expiry (e.g. an organizational lifetime cap MUST NOT interpret the sentinel as a ~75-year grant; it is an open-ended grant terminated only by revocation). Verification behavior is unchanged: the sentinel is a future timestamp, so the temporal check in §10 passes; revocation (§5.10, §5.11) is the sole termination mechanism for such certs. Issuers MUST NOT sign `expires_at` values greater than the sentinel. The fixture `no_expiry_cert` pins this behavior.
 
 ### 5.7.1 Constraint
 
@@ -728,7 +731,7 @@ Pure ML-DSA-65 would be a single point of cryptographic failure against future a
 
 ## 9. Scope vocabulary (v1)
 
-53 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension.
+54 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension.
 
 The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3.5, §3.6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
 
@@ -771,6 +774,16 @@ The vocabulary covers both software agents (meetings, comms, files, transactions
 |---|---|---|
 | `identity:prove` | | Present Ratify proofs (implicitly granted to all agents) |
 | `identity:delegate` | **Yes** | Sub-delegate to another agent (required for A2A sub-delegation) |
+
+**Presence**
+
+| Scope | Sensitive | Meaning |
+|---|---|---|
+| `presence:represent` | **Yes** | Attend and interact as a direct representative of the principal — other parties may be interacting with this agent as if it were the principal. Covers both non-likeness representatives and full likeness agents. |
+
+`presence:represent` does NOT imply any other scope — in particular it does not imply `identity:prove`; issuers grant both explicitly when both are needed. Scope lists are literal: there is no implication table. It is distinct from `generate:deepfake` (content generation, not real-time representation) and from `identity:delegate` (key delegation). There is deliberately no `presence:*` wildcard — sensitive scopes never ride wildcards, and representation must always be granted explicitly.
+
+*Disclosure (non-normative):* verifiers that accept a proof bundle carrying `presence:represent` are expected to surface the representation relationship to the other participants in the interaction. This disclosure is platform policy, not a protocol constraint — the protocol cannot verify at verify time that disclosure occurred. If disclosure ever requires protocol-level attestation, the receipt/audit layer (§5.14, §17.5) is the intended mechanism.
 
 **Transactions** *(core to the "transaction horizon" thesis — §1.5)*
 
@@ -1121,7 +1134,7 @@ GET /v1/ratify/scopes
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (59 fixtures at v1.0.0-alpha.6):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (62 fixtures as of v1.0.0-alpha.12):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.
@@ -1273,7 +1286,7 @@ This separation lets the protocol stay neutral and portable while letting commer
 - A conformant SDK MUST expose all three provider hook points (`Revocation`, `Policy`, `Audit`) on its verify-options surface, with consistent naming across languages.
 - A conformant SDK MUST treat any unset hook as a no-op — verification with all hooks `nil` MUST produce the same `VerifyResult` as a verifier with no provider surface at all.
 - Provider invocations MUST NOT modify the `ProofBundle`. They are read-only over signed material. A bundle that re-serializes byte-identically before and after a `Verify` call (with or without providers) is REQUIRED for fixture determinism.
-- Provider implementations are NOT covered by the test-vector conformance suite. The 59 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
+- Provider implementations are NOT covered by the test-vector conformance suite. The 62 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
 
 ### 17.1 RevocationProvider
 

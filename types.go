@@ -23,6 +23,17 @@ import "encoding/json"
 // Ed25519 + ML-DSA-65 signing on every signed object.
 const ProtocolVersion = 1
 
+// NoExpirySentinel is the ExpiresAt value that means "no expiry (until
+// revoked)": 4070908799 = 2099-12-31 23:59:59 UTC. DelegationCert.ExpiresAt
+// is a required int64 with no null representation, so open-ended delegations
+// carry this sentinel in the signed bytes. Conformant implementations MUST
+// treat a cert with ExpiresAt == NoExpirySentinel as "no expiry (until
+// revoked)" in display and policy evaluation — NOT as a literal 2099 expiry.
+// Verification is unchanged: the sentinel is a future timestamp, so the
+// temporal check passes; revocation is the sole termination mechanism for
+// such certs. See SPEC §5.7.
+const NoExpirySentinel int64 = 4070908799
+
 // HybridPublicKey pairs an Ed25519 public key with an ML-DSA-65 public key.
 // Both are used for verification; a signature is accepted only if both
 // component signatures verify against their respective component public keys.
@@ -102,6 +113,14 @@ type DelegationCert struct {
 	IssuedAt    int64           `json:"issued_at"`
 	ExpiresAt   int64           `json:"expires_at"`
 	Signature   HybridSignature `json:"signature"`
+}
+
+// IsNoExpiry reports whether the cert carries the NoExpirySentinel, meaning
+// "no expiry (until revoked)". Callers rendering expiry to users or applying
+// lifetime policy caps MUST branch on this rather than treating the sentinel
+// as a real 2099 timestamp.
+func (c *DelegationCert) IsNoExpiry() bool {
+	return c.ExpiresAt == NoExpirySentinel
 }
 
 // Constraint is an optional, first-class bound on when / where / how much an

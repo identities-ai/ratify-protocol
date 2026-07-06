@@ -1,0 +1,14 @@
+{
+  "name": "reject_presence_sensitive_wildcard",
+  "description": "There is deliberately no presence:* wildcard. presence:represent is sensitive, sensitive scopes are never introduced by wildcard expansion, and it is the domain's only member — so \"presence:*\" is not in the vocabulary. ExpandScopes passes the string through unchanged (no wildcard match) and ValidateScopes rejects it as unknown. Representation must always be granted explicitly.",
+  "protocol_version": 1,
+  "kind": "scope",
+  "scope_input": [
+    "presence:*"
+  ],
+  "expected": {
+    "expanded_scopes": [
+      "presence:*"
+    ]
+  }
+}

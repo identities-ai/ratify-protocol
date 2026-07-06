@@ -83,6 +83,7 @@ fixture_needles = {
         f"{fixture_count} canonical test vectors",
         f"passes all {fixture_count}",
         f"{fixture_count}/{fixture_count}",
+        f"full {fixture_count}-fixture conformance suite",
     ],
     "docs/SDKS.md": [
         f"{fixture_count}/{fixture_count} fixtures",
@@ -97,6 +98,7 @@ fixture_needles = {
         f"**{fixture_count} fixtures**",
         f"**{fixture_count} canonical fixtures**",
         f"every one of the {fixture_count} fixtures",
+        f"The fixture count of {fixture_count} breaks down",
     ],
     "docs/RELEASES.md": [
         f"{fixture_count} canonical fixtures",

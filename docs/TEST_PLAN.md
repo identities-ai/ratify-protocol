@@ -303,7 +303,7 @@ Every SDK must pass the **63 canonical fixtures** when acting as a verifier agai
 | **Rust signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **C signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 62 breaks down by kind as: 46 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. The v1.x additions (no-expiry sentinel, presence:represent) contribute 4 verify fixtures.
+All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 63 breaks down by kind as: 46 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. The v1.x additions (no-expiry sentinel, presence:represent) contribute 4 verify fixtures.
 
 Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 63 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
 

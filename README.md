@@ -149,7 +149,7 @@ For sub-delegation (Agent-A authorizing Agent-B), the bundle just carries **two 
 
 ## 60-second install + verify
 
-Pick your language. Each one runs the full 62-fixture conformance suite — the same fixtures every other SDK passes byte-for-byte. If you see "all passing," you've proven cross-language interop **on your own machine.**
+Pick your language. Each one runs the full 63-fixture conformance suite — the same fixtures every other SDK passes byte-for-byte. If you see "all passing," you've proven cross-language interop **on your own machine.**
 
 ### Go
 

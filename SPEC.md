@@ -1535,4 +1535,4 @@ Until v1.0.0-beta.1, the closure remains functional: when both fields are set on
 
 ---
 
-*v1.0.0-alpha.11 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.12 · Identities AI · CC-BY-4.0 · Patent Pending*

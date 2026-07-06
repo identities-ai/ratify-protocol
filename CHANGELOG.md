@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.12 (unreleased)
+## v1.0.0-alpha.12 (2026-07-06)
 
 ### Added — no-expiry sentinel (normative)
 

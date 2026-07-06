@@ -4,9 +4,13 @@ Companion to [`SPEC.md`](../SPEC.md), [`EXPLAINED.md`](EXPLAINED.md), and [`AGEN
 
 ---
 
-## What shipped in v1.0.0-alpha.5
+This roadmap has three buckets: **shipped** (in the current release), **planned** (backward-compatible, next releases), and **v2** (wire-breaking). Anything not listed is either in [Not planned](#not-planned-explicit-scope-boundary) or hasn't been proposed yet — see [How to propose additions](#how-to-propose-additions).
 
-All v1.1 features are backward-compatible with v1.0. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 59 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
+---
+
+## Shipped — current release: v1.0.0-alpha.10
+
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 59 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
 
 ### Continuous real-time interactions
 
@@ -42,15 +46,23 @@ All v1.1 features are backward-compatible with v1.0. Legacy v1.0 bundles continu
 
 ---
 
-## Candidate v1.x additions (backward-compatible, under design)
+## Planned — next releases (backward-compatible)
 
-These are scopes and features identified through production adapter design that are not yet in the canonical vocabulary. Each is a minor-version candidate — no wire format change required, just new `scope.go` entries, updated SPEC §9, and new test fixtures.
+### v1.0.0-alpha.11 — docs & spec hardening (no wire change, no code change)
+
+- README truth pass: real demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
+- SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
+- All 59 canonical fixtures byte-identical to alpha.10.
+
+### v1.0.0-alpha.12 — protocol additions (below)
+
+The two items below are scopes and features identified through production adapter design. No wire format change required — new `scope.go` entries, updated SPEC §9/§4, and new test fixtures. Adding fixtures changes the canonical fixture count; the release includes a full sweep of the documented count plus a fixture-count check in `scripts/check-release-sync.sh`.
 
 ---
 
 ### No-expiry sentinel — `ExpiresAt = 4070908799`
 
-**Status:** Defined in Ratify platform layer (2026-04-28). Requires protocol-level normalization.
+**Status:** Defined in Ratify platform layer (2026-04-28). Scheduled for v1.0.0-alpha.12.
 
 **Problem:** `DelegationCert.ExpiresAt` is `int64` (Unix timestamp). The struct has no null/optional representation. Users of the Ratify Verify managed platform can grant delegations with "no expiry (until revoked)," which the platform stores as `NULL` in the database. The cert that gets signed must still have a finite `ExpiresAt` value for protocol compliance.
 
@@ -74,7 +86,7 @@ These are scopes and features identified through production adapter design that 
 
 ### `presence:represent` — agent representation of a human
 
-**Status:** Design decision recorded 2026-04-27. Not yet implemented.
+**Status:** Design locked 2026-07-06. Scheduled for v1.0.0-alpha.12.
 
 **Problem it solves:**
 
@@ -108,10 +120,10 @@ Certs carrying `presence:represent` should include a boolean `requires_disclosur
 
 **Wire impact:** None. New scope string + `sensitiveScopes` entry + `validScopes` entry. Fully backward-compatible. v1.0 verifiers that don't know this scope treat it as unknown and may reject it (correct fail-closed behavior for unknown sensitive scopes).
 
-**Open questions before shipping:**
-- Should `presence:represent` imply `identity:prove`, or are these always granted together?
-- Should the scope carry a sub-qualifier for representation fidelity — `presence:represent:voice`, `presence:represent:likeness`? Or is one scope with platform-layer constraints sufficient?
-- Disclosure enforcement: protocol obligation vs. platform policy vs. legal layer?
+**Design decisions (locked 2026-07-06):**
+- **No implication.** `presence:represent` does NOT imply `identity:prove`. Issuers grant both explicitly when both are needed. Scope lists stay literal — effective authority is exactly the chain intersection, with no hidden expansion table for verifiers or auditors to consult.
+- **One scope, no sub-qualifiers.** `presence:represent:voice` / `presence:represent:likeness` are deferred until real adapter pressure proves the distinction is needed at the protocol layer. Fidelity distinctions live in platform-layer constraints for now. Adding sub-qualifier scopes later is a backward-compatible minor version; retiring a wrongly guessed one is not, and no scope-deprecation process exists yet.
+- **Disclosure is platform policy, not a protocol constraint.** A `requires_disclosure` constraint would assert an obligation the verifier cannot verify at verify time — disclosure happens in the application UI after verification. The SPEC scope entry will carry a non-normative note that verifiers accepting this scope are expected to surface the representation relationship to other participants. If disclosure ever needs protocol-level teeth, the right mechanism is a disclosure attestation in the receipt/audit layer, designed against an actual compliance requirement.
 
 ---
 

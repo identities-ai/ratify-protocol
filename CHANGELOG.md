@@ -6,6 +6,38 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.11 (unreleased)
+
+### Changed — docs & spec truth pass (no wire change, no code change)
+
+**Wire format unchanged. All 59 canonical test vectors are byte-identical to alpha.10. No SDK code was modified.**
+
+**README credibility pass.** The README described the alpha.4-era one-shot protocol; the shipped protocol is larger.
+
+- New "Beyond one-shot verify" section surfaces the shipped v1.1 feature set: session-bound challenges, stream sequence numbers, SessionToken fast path, push-based revocation, transaction receipts, witness append-only logs, key rotation statements — each linked to its SPEC section.
+- Demo section now shows real `go run ./demos/go` output and describes the narrative accurately (one positive end-to-end flow + four rejection scenarios; previously mislabeled "nine-scenario — five positive").
+- Repository layout tree updated: adds `streamed_verify.go`, `receipt_verify.go`, the benchmark/cross-SDK/lever/provider test files, `Makefile`, `scripts/`, `sdks/go/`, `docs/BENCHMARKS.md`, `docs/ATTRIBUTION.md`; relabels `docs/TRANSACTION_RECEIPTS.md` as normative-companion rather than "v1.1 design."
+- Fixture-count note: 59 canonical fixtures; `cross_sdk_vectors.json` is a separate byte-equivalence corpus.
+- The "under a millisecond" claim now links to [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+- All five SDK READMEs gained the same "beyond one-shot verify" summary so registry pages (npm, PyPI, crates.io) tell the full story.
+
+### Added — SPEC security-considerations hardening (guidance only, no normative wire change)
+
+- **§15.4 Trust anchors and public-key discovery** — the five supported key-bootstrap modes (pinned keys, enterprise IdP root, registry lookup, self-published + rotation continuity, witness-backed evidence); verifiers MUST NOT treat in-band keys as trust roots.
+- **Threat T12 — key-substitution attacker** added to the §15.0 threat model: signature verification proves key possession, not key ownership; trust bootstrap is a required deployment decision.
+- **§15.5 Revocation freshness** — fail-closed requirement restated, staleness bounds by risk tier, `ForceRevocationCheck` guidance, push-gap recovery (full `RevocationList` refetch after a missed-delta gap).
+- **§15.6 Verifier clock discipline** — NTS/NTP guidance, ±30s budget, drift-compensated challenge windows for offline/edge verifiers; temporal bounds stay strict in v1 (slack belongs at issuance, not verification).
+- **§15.7 Constraint attestation limits** — constraints defend the principal against agent overreach at an honest verifier; verifier-supplied context is asserted, not proven; bind evaluated context into `VerificationReceipt`/`TransactionReceipt.terms` for auditable claims.
+- **§5.13 SessionToken operational guidance** — token lifetimes by risk tier (≤5 min high-stakes, ≤15 min conversational), eviction triggers, and multi-instance `session_secret` handling for load-balanced verifiers.
+- **§12 crypto agility** — why v1 fixes the algorithm pair instead of negotiating, and the migration path if a component weakens.
+- **§5.16** — one-line pointer to §15.7 on what constraint evaluation does and does not prove.
+
+### Changed — ROADMAP restructured into three buckets
+
+Shipped (alpha.10) / planned backward-compatible (alpha.11 docs pass, alpha.12 protocol additions) / v2 wire-breaking. `presence:represent` design locked (2026-07-06): no scope implication, single scope without sub-qualifiers, disclosure as platform policy with a non-normative SPEC note. No-expiry sentinel (`4070908799`) scheduled for alpha.12.
+
+---
+
 ## v1.0.0-alpha.10 (2026-05-17)
 
 ### Added — C/C++ SDK: full 59/59 conformance + pre-built release binaries

@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "1.0.0-alpha.10"
+version = "1.0.0-alpha.11"
 dependencies = [
  "base64",
  "chrono",

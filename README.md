@@ -32,7 +32,7 @@ Ratify is not agent login, registration, or credential issuance. Ratify starts w
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
 
-**Status:** `v1.0.0-alpha.10` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
+**Status:** `v1.0.0-alpha.11` · reference implementation complete · 59 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
 Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
 
@@ -161,7 +161,7 @@ go test ./...
 Or install as a module in your own project:
 
 ```bash
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.11
 ```
 
 ### TypeScript
@@ -195,7 +195,7 @@ pytest
 ### Rust
 
 ```bash
-cargo add ratify-protocol@1.0.0-alpha.10
+cargo add ratify-protocol@1.0.0-alpha.11
 ```
 
 Or to run the conformance suite yourself:
@@ -350,10 +350,10 @@ The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 
 | Implementation | Language | Status | Install |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10` |
+| `github.com/identities-ai/ratify-protocol` | Go | ✅ 59/59 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.11` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 59/59 | `npm install @identities-ai/ratify-protocol` |
 | `ratify-protocol` | Python | ✅ 59/59 | `pip install ratify-protocol==1.0.0a10` |
-| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.10` |
+| `ratify-protocol` | Rust | ✅ 59/59 | `cargo add ratify-protocol@1.0.0-alpha.11` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |

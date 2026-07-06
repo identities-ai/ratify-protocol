@@ -22,7 +22,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 
 ```toml
 [dependencies]
-ratify-protocol = "1.0.0-alpha.10"
+ratify-protocol = "1.0.0-alpha.11"
 ```
 
 ## Quickstart

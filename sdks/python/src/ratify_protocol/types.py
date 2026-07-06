@@ -15,6 +15,18 @@ from typing import Any, Callable, Literal, Optional, Protocol, Tuple, runtime_ch
 
 
 PROTOCOL_VERSION: int = 1
+
+# NO_EXPIRY_SENTINEL is the expires_at value that means "no expiry (until
+# revoked)": 4070908799 = 2099-12-31 23:59:59 UTC. DelegationCert.expires_at
+# is a required int with no null representation, so open-ended delegations
+# carry this sentinel in the signed bytes. Conformant implementations MUST
+# treat a cert with expires_at == NO_EXPIRY_SENTINEL as "no expiry (until
+# revoked)" in display and policy evaluation — NOT as a literal 2099 expiry.
+# Verification is unchanged: the sentinel is a future timestamp, so the
+# temporal check passes; revocation is the sole termination mechanism for
+# such certs. See SPEC §5.7.
+NO_EXPIRY_SENTINEL: int = 4070908799
+
 MAX_DELEGATION_CHAIN_DEPTH: int = 3
 CHALLENGE_WINDOW_SECONDS: int = 300
 
@@ -213,6 +225,16 @@ class DelegationCert:
     issued_at: int = 0
     expires_at: int = 0
     signature: HybridSignature = field(default_factory=lambda: HybridSignature(ed25519=b"", ml_dsa_65=b""))
+
+    def is_no_expiry(self) -> bool:
+        """True if the cert carries NO_EXPIRY_SENTINEL, meaning "no expiry
+        (until revoked)".
+
+        Callers rendering expiry to users or applying lifetime policy caps
+        MUST branch on this rather than treating the sentinel as a real
+        2099 timestamp.
+        """
+        return self.expires_at == NO_EXPIRY_SENTINEL
 
 
 @dataclass

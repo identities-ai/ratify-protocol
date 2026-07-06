@@ -33,6 +33,23 @@ pub const SCOPE_FILES_WRITE: &str = "files:write"; // sensitive
 pub const SCOPE_IDENTITY_PROVE: &str = "identity:prove";
 pub const SCOPE_IDENTITY_DELEGATE: &str = "identity:delegate"; // sensitive
 
+// --- Presence scopes ---
+// SCOPE_PRESENCE_REPRESENT: (sensitive) the agent is authorized to attend
+// and interact as a direct representative of the principal — other parties
+// in the interaction may be interacting with this agent as if it were the
+// principal. Covers both non-likeness representatives and full likeness
+// agents (Tavus, HeyGen, etc.).
+//
+// Distinct from generate:deepfake (content generation, not real-time
+// representation) and identity:delegate (key delegation). Does NOT imply
+// identity:prove — issuers grant both explicitly when both are needed;
+// scope lists are literal, with no implication table.
+//
+// Verifiers accepting this scope are expected to surface the
+// representation relationship to the other participants. That disclosure
+// is platform policy, not a protocol constraint — see SPEC §9.1.
+pub const SCOPE_PRESENCE_REPRESENT: &str = "presence:represent"; // sensitive
+
 // --- Transaction scopes (v1, core to the "transaction horizon" thesis) ---
 pub const SCOPE_TRANSACT_PURCHASE: &str = "transact:purchase";
 pub const SCOPE_TRANSACT_SELL: &str = "transact:sell";
@@ -107,6 +124,7 @@ fn sensitive_scopes() -> &'static [&'static str] {
         SCOPE_COMMS_EMAIL_DELETE,
         SCOPE_FILES_WRITE,
         SCOPE_IDENTITY_DELEGATE,
+        SCOPE_PRESENCE_REPRESENT,
         SCOPE_PAYMENTS_AUTHORIZE,
         SCOPE_CONTRACT_SIGN,
         SCOPE_DATA_WRITE,
@@ -146,6 +164,7 @@ fn valid_scopes() -> &'static [&'static str] {
         SCOPE_FILES_WRITE,
         SCOPE_IDENTITY_PROVE,
         SCOPE_IDENTITY_DELEGATE,
+        SCOPE_PRESENCE_REPRESENT,
         SCOPE_TRANSACT_PURCHASE,
         SCOPE_TRANSACT_SELL,
         SCOPE_PAYMENTS_SEND,
@@ -214,6 +233,8 @@ fn wildcard_expansion(w: &str) -> Option<&'static [&'static str]> {
         "vehicle:*" => Some(&[SCOPE_VEHICLE_TRANSPORT, SCOPE_VEHICLE_CHARGE]),
         "infrastructure:*" => Some(&[SCOPE_INFRASTRUCTURE_MONITOR]),
         // actuate:* — every member sensitive; NO wildcard expansion.
+        // presence:* — presence:represent is sensitive, so NO wildcard
+        // expansion. Representation must always be granted explicitly.
         _ => None,
     }
 }

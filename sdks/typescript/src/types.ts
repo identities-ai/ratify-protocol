@@ -9,6 +9,19 @@
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * NO_EXPIRY_SENTINEL is the `expires_at` value that means "no expiry (until
+ * revoked)": 4070908799 = 2099-12-31 23:59:59 UTC. DelegationCert.expires_at
+ * is a required integer with no null representation, so open-ended
+ * delegations carry this sentinel in the signed bytes. Conformant
+ * implementations MUST treat a cert with expires_at === NO_EXPIRY_SENTINEL
+ * as "no expiry (until revoked)" in display and policy evaluation — NOT as a
+ * literal 2099 expiry. Verification is unchanged: the sentinel is a future
+ * timestamp, so the temporal check passes; revocation is the sole
+ * termination mechanism for such certs. See SPEC §5.7.
+ */
+export const NO_EXPIRY_SENTINEL = 4070908799;
+
 export const MAX_DELEGATION_CHAIN_DEPTH = 3;
 export const CHALLENGE_WINDOW_SECONDS = 300;
 
@@ -95,6 +108,16 @@ export interface DelegationCert {
   issued_at: number;
   expires_at: number;
   signature: HybridSignature;
+}
+
+/**
+ * Reports whether the cert carries NO_EXPIRY_SENTINEL, meaning "no expiry
+ * (until revoked)". Callers rendering expiry to users or applying lifetime
+ * policy caps MUST branch on this rather than treating the sentinel as a
+ * real 2099 timestamp.
+ */
+export function isNoExpiry(cert: DelegationCert): boolean {
+  return cert.expires_at === NO_EXPIRY_SENTINEL;
 }
 
 /**

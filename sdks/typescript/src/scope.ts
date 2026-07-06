@@ -27,6 +27,23 @@ export const SCOPE_FILES_WRITE = "files:write"; // sensitive
 export const SCOPE_IDENTITY_PROVE = "identity:prove";
 export const SCOPE_IDENTITY_DELEGATE = "identity:delegate"; // sensitive
 
+// --- Presence scopes ---
+// SCOPE_PRESENCE_REPRESENT: (sensitive) the agent is authorized to attend
+// and interact as a direct representative of the principal — other parties
+// in the interaction may be interacting with this agent as if it were the
+// principal. Covers both non-likeness representatives and full likeness
+// agents (Tavus, HeyGen, etc.).
+//
+// Distinct from generate:deepfake (content generation, not real-time
+// representation) and identity:delegate (key delegation). Does NOT imply
+// identity:prove — issuers grant both explicitly when both are needed;
+// scope lists are literal, with no implication table.
+//
+// Verifiers accepting this scope are expected to surface the
+// representation relationship to the other participants. That disclosure
+// is platform policy, not a protocol constraint — see SPEC §9.1.
+export const SCOPE_PRESENCE_REPRESENT = "presence:represent"; // sensitive
+
 // --- Transaction scopes (v1, core to the "transaction horizon" thesis) ---
 export const SCOPE_TRANSACT_PURCHASE = "transact:purchase";
 export const SCOPE_TRANSACT_SELL = "transact:sell";
@@ -104,6 +121,7 @@ const SENSITIVE_SCOPES: ReadonlySet<string> = new Set([
   SCOPE_COMMS_EMAIL_DELETE,
   SCOPE_FILES_WRITE,
   SCOPE_IDENTITY_DELEGATE,
+  SCOPE_PRESENCE_REPRESENT,
   SCOPE_PAYMENTS_AUTHORIZE,
   SCOPE_CONTRACT_SIGN,
   SCOPE_DATA_WRITE,
@@ -141,6 +159,7 @@ const VALID_SCOPES: ReadonlySet<string> = new Set([
   SCOPE_FILES_WRITE,
   SCOPE_IDENTITY_PROVE,
   SCOPE_IDENTITY_DELEGATE,
+  SCOPE_PRESENCE_REPRESENT,
   SCOPE_TRANSACT_PURCHASE,
   SCOPE_TRANSACT_SELL,
   SCOPE_PAYMENTS_SEND,
@@ -209,6 +228,8 @@ const SCOPE_WILDCARDS: Readonly<Record<string, readonly string[]>> = {
   "vehicle:*": [SCOPE_VEHICLE_TRANSPORT, SCOPE_VEHICLE_CHARGE],
   "infrastructure:*": [SCOPE_INFRASTRUCTURE_MONITOR],
   // actuate:* — every member is sensitive; NO wildcard expansion.
+  // presence:* — presence:represent is sensitive, so NO wildcard expansion.
+  // Representation must always be granted explicitly.
 };
 
 function isCustomScope(s: string): boolean {

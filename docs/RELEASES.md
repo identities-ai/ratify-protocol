@@ -44,10 +44,16 @@ Contributors who prefer to iterate on a language in their own repository may do 
 ### 3.2 The alpha → stable ladder
 
 ```
-1.0.0-alpha.1  →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
+1.0.0-alpha.1   →  initial open-source drop (hybrid Ed25519 + ML-DSA-65 shipped)
 v1.0.0-alpha.7  →  Provider Interfaces, SPEC §17
 v1.0.0-alpha.8  →  C/C++ SDK, Rust no_std, fips204 migration
-v1.0.0-alpha.11  →  current release  (C SDK 62/62 conformance, 13 new C ABI functions, pre-built release binaries)
+v1.0.0-alpha.10 →  C SDK 59/59 conformance, 13 new C ABI functions,
+                   pre-built release binaries
+v1.0.0-alpha.11 →  docs & spec truth pass (trust anchors, revocation
+                   freshness, clock discipline); C/C++ added to local gate.
+                   59 fixtures, byte-identical to alpha.10
+v1.0.0-alpha.12 →  next: no-expiry sentinel, presence:represent (54th scope),
+                   invalid_scope verifier check, 62-fixture suite
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

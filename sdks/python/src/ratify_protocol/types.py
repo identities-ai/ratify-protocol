@@ -268,6 +268,11 @@ IdentityStatus = Literal[
     "constraint_unverifiable",
     "constraint_unknown",
     "delegation_not_authorized",
+    # invalid_scope: a cert in the chain grants a scope that is not canonical,
+    # not a wildcard, and not a `custom:` extension (SPEC §9). Fail-closed —
+    # vocabulary outside the protocol is rejected as malformed rather than
+    # silently intersected.
+    "invalid_scope",
     "invalid",
     "unauthorized",
 ]

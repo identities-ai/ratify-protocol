@@ -1425,12 +1425,11 @@ func genRejectPresenceSensitiveWildcard() *fixture {
 		"SECURITY: there is deliberately no presence:* wildcard — "+
 			"presence:represent is sensitive, sensitive scopes are never "+
 			"introduced by wildcard expansion, and it is the domain's only "+
-			"member. A signed cert granting \"presence:*\" conveys nothing for "+
-			"presence:represent: ExpandScopes passes the unknown string through "+
-			"unchanged (no wildcard match), the required scope is not in the "+
-			"effective scope, and verification rejects with scope_denied. "+
-			"(ValidateScopes also rejects \"presence:*\" as unknown at issuance "+
-			"time — representation must always be granted explicitly.)",
+			"member. \"presence:*\" is therefore not in the vocabulary at all, "+
+			"and the verifier rejects the cert as malformed with invalid_scope "+
+			"(SPEC §9: scopes that are not canonical, not a wildcard, and not "+
+			"a custom: extension MUST be rejected) — before any effective-scope "+
+			"arithmetic. Representation must always be granted explicitly.",
 		[]entity{human, agent},
 		[]ratify.DelegationCert{cert},
 		&bundle,

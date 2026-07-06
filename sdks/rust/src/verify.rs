@@ -11,7 +11,7 @@ use crate::crypto::{
     transaction_receipt_sign_bytes, verify_both, verify_challenge_signature_with_stream,
     verify_delegation_signature_e, verify_session_token_e,
 };
-use crate::scope::{intersect_scopes, SCOPE_IDENTITY_DELEGATE};
+use crate::scope::{intersect_scopes, validate_scopes, SCOPE_IDENTITY_DELEGATE};
 use crate::types::{
     HybridPublicKey, HybridSignature, IdentityStatus, ProofBundle, SessionToken,
     TransactionReceipt, TransactionReceiptResult, VerifyOptions, VerifyResult,
@@ -198,6 +198,13 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
                 "version_mismatch",
                 &format!("cert {} has unsupported version {}", i, cert.version),
             );
+        }
+        // Scope vocabulary validation (SPEC §9): every granted scope must be
+        // canonical, a wildcard, or a custom: extension. Checked before any
+        // scope arithmetic so invalid vocabulary can never reach the
+        // effective-scope intersection.
+        if let Some(scope_err) = validate_scopes(&cert.scope) {
+            return fail_with_status("invalid_scope", &format!("cert {}: {}", i, scope_err));
         }
         if now > cert.expires_at {
             return expired(&human_id, &bundle.agent_id);

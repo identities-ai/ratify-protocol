@@ -27,7 +27,7 @@ import {
   transactionReceiptSignBytes,
   verifyBoth,
 } from "./crypto.js";
-import { intersectScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
+import { intersectScopes, validateScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
 import { evaluateConstraints } from "./constraints.js";
 import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
 
@@ -199,6 +199,14 @@ async function _verifyBundle(
 
     if (cert.version !== PROTOCOL_VERSION) {
       return invalid("version_mismatch", `cert ${i} has unsupported version ${cert.version}`);
+    }
+    // Scope vocabulary validation (SPEC §9): every granted scope must be
+    // canonical, a wildcard, or a custom: extension. Checked before any
+    // scope arithmetic so invalid vocabulary can never reach the
+    // effective-scope intersection.
+    const scopeErr = validateScopes(cert.scope);
+    if (scopeErr !== null) {
+      return failWithStatus("invalid_scope", `cert ${i}: ${scopeErr}`);
     }
     if (now > cert.expires_at) {
       return expired(humanID, bundle.agent_id);

@@ -19,6 +19,10 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 - Design as locked 2026-07-06: does NOT imply `identity:prove` (grant both explicitly; no implication table); one scope, no fidelity sub-qualifiers; disclosure of the representation relationship is platform policy with a non-normative SPEC note — not a protocol constraint. SPEC §9.1.
 - There is deliberately no `presence:*` wildcard — sensitive scopes never ride wildcards. Fixtures: `presence_represent_allowed`, `reject_presence_sensitive_wildcard`.
 
+### Added — verifier scope-vocabulary validation (`invalid_scope`)
+
+- The verifier now enforces SPEC §9 at verification time, not just at issuance: any cert granting a scope that is not canonical, not a wildcard, and not a `custom:` extension is rejected with the new identity status `invalid_scope`, before any effective-scope arithmetic. Previously invalid vocabulary was silently carried into the intersection and only failed by non-membership — meaning an unknown string could in principle become an effective grant. New verifier step §10 7.a2; `identity_status` enum extended (§5.9 — a closed set, extended via this spec bump). Mirrored in all SDKs; pinned by the `reject_presence_sensitive_wildcard` fixture.
+
 ### Changed — conformance suite: 59 → 62 canonical fixtures
 
 - Three new fixtures (above). All 59 pre-existing fixtures are byte-identical to alpha.11.

@@ -106,7 +106,7 @@ jobs:
       - name: Rust build
         working-directory: sdks/rust
         run: cargo build --all-targets --release
-      - name: Rust conformance (59 fixtures)
+      - name: Rust conformance (all canonical fixtures)
         working-directory: sdks/rust
         run: cargo test --release
 
@@ -114,7 +114,7 @@ jobs:
       - name: C/C++ build
         working-directory: sdks/c
         run: cargo build --all-targets
-      - name: C/C++ conformance (59 fixtures)
+      - name: C/C++ conformance (all canonical fixtures)
         working-directory: sdks/c
         run: cargo test --test conformance -- --nocapture
       - name: C/C++ API tests
@@ -390,7 +390,7 @@ jobs:
           body: |
             ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
-            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. 59 canonical conformance fixtures, byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
+            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
 
             ### Install
 

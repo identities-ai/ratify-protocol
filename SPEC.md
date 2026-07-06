@@ -238,6 +238,7 @@ A `Constraint` is a tagged JSON object. `type` identifies the kind; the remainin
 | `constraint_denied` | A first-class `Constraint` (geo, time, speed, amount, rate) evaluated false against the caller-supplied `VerifierContext`. |
 | `constraint_unverifiable` | A constraint required a context field the caller did not supply. Fail-closed. |
 | `constraint_unknown` | A cert carried a `Constraint` with a `type` the verifier does not recognize. Fail-closed — prevents silently ignoring an unknown type that a future verifier version might treat as meaningful. |
+| `invalid_scope` | A cert in the chain grants a scope that is not canonical, not a wildcard, and not a `custom:` extension (§9). Fail-closed — invalid vocabulary is rejected as malformed before any effective-scope arithmetic, so unknown strings can never become effective grants. |
 | `delegation_not_authorized` | A non-root cert was issued by a subject whose parent cert did not explicitly grant `identity:delegate`. |
 | `invalid` | Catch-all for structural or cryptographic failures (bad signature, malformed chain, bad key length, wrong version, bad challenge signature, etc.). |
 | `unauthorized` | Reserved for future use. Not currently emitted by the reference verifier. |
@@ -731,7 +732,7 @@ Pure ML-DSA-65 would be a single point of cryptographic failure against future a
 
 ## 9. Scope vocabulary (v1)
 
-54 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension.
+54 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension — at issuance via `ValidateScopes`, and at verification: the verifier rejects any cert granting invalid vocabulary with `invalid_scope` (§5.9, §10 step 7.a2) before any effective-scope arithmetic.
 
 The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3.5, §3.6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
 
@@ -1009,6 +1010,8 @@ Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional requir
 
 7. Per-cert checks — for each cert in delegations (index 0 to N-1):
    a. cert.version == PROTOCOL_VERSION              (else: version_mismatch)
+   a2. Every scope in cert.scope is canonical, a wildcard, or a custom:
+       extension (§9)                               (else: invalid_scope)
    b. now <= cert.expires_at                        (else: expired)
    c. now >= cert.issued_at                         (else: not_yet_valid)
    d. if is_revoked(cert.cert_id): reject           (status: revoked)

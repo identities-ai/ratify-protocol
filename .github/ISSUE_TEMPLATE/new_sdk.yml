@@ -53,7 +53,7 @@ body:
     attributes:
       label: Conformance testing plan
       description: |
-        How will the SDK load and run the 59 fixtures in `testvectors/v1/`? Identify
+        How will the SDK load and run the canonical fixtures in `testvectors/v1/`? Identify
         the test harness you propose to use.
     validations:
       required: true
@@ -65,7 +65,7 @@ body:
       options:
         - label: I have read CONTRIBUTING.md.
           required: true
-        - label: I understand the new SDK must pass all 59 canonical conformance fixtures before merge.
+        - label: I understand the new SDK must pass every canonical conformance fixture in `testvectors/v1/` before merge.
           required: true
         - label: I understand the SDK must be released at the same version as the other SDKs at any tagged release.
           required: true

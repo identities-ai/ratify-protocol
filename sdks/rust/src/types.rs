@@ -325,6 +325,11 @@ pub enum IdentityStatus {
     ConstraintUnverifiable,
     ConstraintUnknown,
     DelegationNotAuthorized,
+    /// A cert in the chain grants a scope that is not canonical, not a
+    /// wildcard, and not a `custom:` extension (SPEC §9). Fail-closed —
+    /// vocabulary outside the protocol is rejected as malformed rather than
+    /// silently intersected.
+    InvalidScope,
     Invalid,
     Unauthorized,
 }
@@ -341,6 +346,7 @@ impl IdentityStatus {
             Self::ConstraintUnverifiable => "constraint_unverifiable",
             Self::ConstraintUnknown => "constraint_unknown",
             Self::DelegationNotAuthorized => "delegation_not_authorized",
+            Self::InvalidScope => "invalid_scope",
             Self::Invalid => "invalid",
             Self::Unauthorized => "unauthorized",
         }
@@ -359,6 +365,7 @@ impl IdentityStatus {
             "constraint_unverifiable" => Self::ConstraintUnverifiable,
             "constraint_unknown" => Self::ConstraintUnknown,
             "delegation_not_authorized" => Self::DelegationNotAuthorized,
+            "invalid_scope" => Self::InvalidScope,
             "invalid" => Self::Invalid,
             "unauthorized" => Self::Unauthorized,
             _ => return None,

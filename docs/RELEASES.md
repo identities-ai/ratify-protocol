@@ -360,6 +360,19 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 
 If any check fails, all publish jobs are skipped. No partial state is created. You fix the failure, force-delete the tag (`git tag -d`, `git push --delete origin tagname`), re-run `make release`, push again.
 
+### 5.3.1 If the Release workflow never started
+
+GitHub does not create push events when **more than three tags arrive in a single push**. The release script used to push the protocol tag and all five `sdk-*` tags together (six tags, one push), which silently suppressed the `v*` trigger — the tag landed on GitHub but no Release run appeared. This is why the v1.0.0-alpha.11 release had to be published via manual dispatch.
+
+`scripts/release.sh` now pushes the protocol tag on its own (fires the trigger), then the `sdk-*` tags together (they trigger nothing). If a Release run still doesn't appear within a minute of the tag push:
+
+```bash
+gh run list --workflow=release.yml --limit 1        # confirm nothing started
+gh workflow run release.yml -f tag=v1.0.0-alpha.11  # documented fallback — same gates, same publishes
+```
+
+The dispatch path is byte-equivalent to the tag path: `RELEASE_TAG` is normalized at the top of the workflow, and gate-tests re-run everything on a fresh runner either way.
+
 ### 5.4 Recovery from partial publish
 
 Publishing to four registries is not atomic. If PyPI succeeds and crates.io fails (or vice versa):

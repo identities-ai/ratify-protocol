@@ -230,7 +230,14 @@ done
 if [[ "$PUSH" == "1" ]]; then
   echo "==> Pushing main and tags"
   git push origin main
-  git push origin "$VERSION" "${SDK_TAGS[@]}"
+  # Push the protocol tag on its own: GitHub does not create push events
+  # when more than three tags arrive in a single push, so pushing all six
+  # tags together silently suppresses the tag-triggered release workflow.
+  # The sdk-* tags carry no workflow trigger and can go together after.
+  git push origin "$VERSION"
+  git push origin "${SDK_TAGS[@]}"
+  echo "==> Verify the Release workflow started: gh run list --workflow=release.yml --limit 1"
+  echo "    If it did not, dispatch it manually: gh workflow run release.yml -f tag=$VERSION"
 else
   echo "==> PUSH=0: tags created locally only"
 fi

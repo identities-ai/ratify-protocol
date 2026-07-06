@@ -24,7 +24,7 @@
 [![npm Downloads](https://img.shields.io/npm/dt/@identities-ai/ratify-protocol?label=npm%20downloads&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 [![C/C++ Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=c%2Fc%2B%2B%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
 
-When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in under a millisecond, across voice, video, API, and Physical AI.
+When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in [under a millisecond](docs/BENCHMARKS.md), across voice, video, API, and Physical AI.
 
 Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in under a millisecond, with no vendor in the path.
 
@@ -46,6 +46,7 @@ Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are tr
 - [60-second install + verify](#60-second-install--verify)
 - [End-to-end demo — see the full protocol run](#end-to-end-demo--see-the-full-protocol-run)
 - [What's actually happening (read this once)](#whats-actually-happening-read-this-once)
+- [Beyond one-shot verify — continuous and multi-party interactions](#beyond-one-shot-verify--continuous-and-multi-party-interactions)
 - [Cross-language interop](#cross-language-interop)
 - [Where to go next](#where-to-go-next)
 - [Repository layout](#repository-layout)
@@ -210,7 +211,7 @@ cargo test
 
 ## End-to-end demo — see the full protocol run
 
-The conformance suite proves *the bytes are correct*. The demos prove *the protocol does what it claims.* Each runs the same nine-scenario narrative — five positive (authorized → verified), four negative (tampered / out-of-scope / expired / revoked) — and prints what happened and why.
+The conformance suite proves *the bytes are correct*. The demos prove *the protocol does what it claims.* Each runs the same narrative — one positive end-to-end flow (delegate → present → verify, in five steps) followed by four rejection scenarios (tampered / out-of-scope / expired / revoked) — and prints what happened and why.
 
 | Language | Run from repo root |
 |---|---|
@@ -219,33 +220,40 @@ The conformance suite proves *the bytes are correct*. The demos prove *the proto
 | TypeScript | `cd sdks/typescript && npm install && npm run build && cd ../../demos/typescript && npm install && npm run demo` |
 | Rust | `cargo run --manifest-path demos/rust/Cargo.toml` |
 
-What you'll see (abbreviated):
+What you'll see (abbreviated — this is real output from `go run ./demos/go`):
 
 ```
-═══ Scenario 1: Authorized agent joins a meeting ═══
-Alice creates her hybrid root identity ✓
-Agent-A generates its hybrid keypair  ✓
-Alice signs delegation:
-  scope: [meeting:attend, meeting:speak]
-  expires: 2026-05-17 18:00:00 UTC
-Agent-A builds proof bundle with fresh challenge ✓
-Verifier runs verify_bundle() → ✅ VALID
-  effective scope: [meeting:attend, meeting:speak]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3  Alice authorizes the agent for meeting:attend, 7 days
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Cert ID:             cert-demo-001
+  Scope:               meeting:attend
+  Ed25519 sig:         cf0a687f5e946b732175e6f0e103a8ce…
+  ML-DSA-65 sig:       <3309 bytes>
 
-═══ Scenario 2: Attacker tampers cert scope after signing ═══
-Attacker modifies cert.scope: [meeting:attend] → [meeting:record]
-Verifier runs verify_bundle() → ❌ REJECTED
-  identity_status: bad_signature
-  reason: Ed25519 signature does not cover modified bytes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 5  Verifier runs Verify() — expects meeting:attend
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✅  VALID
+  Status:              authorized_agent
+  Granted scope:       meeting:attend
 
-═══ Scenario 3: Agent presents wrong scope ═══
-Agent-A holds cert for meeting:attend, requests meeting:record
-Verifier runs verify_bundle(required_scope: meeting:record) → ❌ REJECTED
-  identity_status: scope_denied
-  reason: requested scope not in effective chain scope
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATTACK 1  Attacker appends files:write to the scope after signing
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ❌  REJECTED as expected: bad_signature: cert 0: Ed25519 signature invalid
+  Why:                 Canonical bytes differ; Ed25519 AND ML-DSA-65 both fail verify.
 
-═══ Scenario 4: Cert expired ═══
-... (and so on)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATTACK 2  Agent tries to use meeting:attend cert for meeting:record
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ❌  REJECTED as expected: scope_denied: required scope "meeting:record"
+      not in effective delegation scope
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REVOCATION  Alice revokes the cert
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ❌  REJECTED as expected: revoked: delegation certificate has been revoked
 ```
 
 This is what an alpha tester runs to convince themselves the protocol works the way the spec says. **Read the spec second; run the demo first.**
@@ -318,9 +326,27 @@ An agent *cannot* grant more rights than it itself was given. Spec: [`SPEC.md`](
 
 ---
 
+## Beyond one-shot verify — continuous and multi-party interactions
+
+Everything above describes a single delegate → present → verify round trip. Real deployments — a voice agent on a 20-minute call, two agents settling a transaction, an auditor reconstructing what happened — need more. All of the following is **shipped, normative, and covered by the canonical fixture set in every SDK**:
+
+| Feature | What it solves | Spec |
+|---|---|---|
+| **Session-bound challenges** | A 32-byte `session_context` binds a proof bundle to one verifier, so a bundle presented to Zoom can't be replayed at your bank. Also defeats challenge-forwarding by a malicious verifier. | §5.8, §15.1 |
+| **Stream sequence numbers** | `stream_id` + `stream_seq` in the challenge signable detect replay, reordering, and omission across the turns of a multi-turn conversation. | §5.8, §6.4.2 |
+| **SessionToken fast path** | After one full chain verification, the verifier issues an HMAC-based session token; subsequent turns verify the token plus a fresh challenge signature — roughly 95% less per-turn crypto work. This is what makes per-turn verification practical on live voice calls. | §5.13, §6.4.8 |
+| **Push-based revocation** | Signed `RevocationPush` deltas let issuers push revocations to subscribed verifiers in real time, instead of waiting for the next poll. | §5.11, §6.4.5 |
+| **Transaction receipts** | A canonical `TransactionReceipt` where every party signs the same bytes (terms + sorted party set + transaction ID). Adding, removing, or altering any party invalidates every signature — no partial-valid state. | §5.14, §6.4.7 |
+| **Witness append-only log** | Signed `WitnessEntry` hash chain for tamper-evident audit logs. Any party can operate a witness. | §5.12, §6.4.6 |
+| **Key rotation statements** | `KeyRotationStatement` signed by both the old and new root keys, so auditors and registries can verify identity continuity across rotations. | §5.15, §6.4.4 |
+
+The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these compose for agent-to-agent patterns (mutual authorization, sub-delegation, receipts), and [`docs/TRANSACTION_RECEIPTS.md`](docs/TRANSACTION_RECEIPTS.md) has the receipt envelope design rationale.
+
+---
+
 ## Cross-language interop
 
-The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 59 is byte-for-byte interoperable with the reference.** This is the contract.
+The 59 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 59 is byte-for-byte interoperable with the reference.** This is the contract. (The directory also contains `cross_sdk_vectors.json` — a separate byte-equivalence corpus used by the NxN cross-SDK matrix; it is not one of the 59 canonical fixtures.)
 
 | Implementation | Language | Status | Install |
 |---|---|---|---|
@@ -341,6 +367,7 @@ If you're implementing a new language port, **start from the fixtures, not the s
 | You want to… | Go to |
 |---|---|
 | **Run the demo and see the protocol work** | [`demos/README.md`](demos/README.md) |
+| **See the measured performance numbers** | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
 | **Understand the threat model** | [`docs/EXPLAINED.md`](docs/EXPLAINED.md) |
 | **Read the normative spec** | [`SPEC.md`](SPEC.md) |
 | **Use the Verify managed service** (revocation, audit, policy enforcement at scale) | [docs.identities.ai](https://docs.identities.ai) |
@@ -366,14 +393,25 @@ ratify-protocol/
 ├── CODE_OF_CONDUCT.md
 ├── CITATION.cff           Citation metadata
 │
+├── CHANGELOG.md           Release history
+│
 ├── types.go               Data structures (DelegationCert, ProofBundle, …)
 ├── crypto.go              Hybrid Ed25519 + ML-DSA-65 primitives + canonical JSON
 ├── scope.go               Canonical 53-scope vocabulary + intersect/expand
 ├── constraints.go         Geo, time, version constraints
 ├── verify.go              The verifier algorithm
+├── streamed_verify.go     SessionToken fast path — multi-turn verification (§5.13)
+├── receipt_verify.go      TransactionReceipt verification (§5.14)
 ├── ratify_test.go         Unit tests + conformance-suite loader
 ├── fuzz_test.go           Fuzz harness
+├── bench_verify_test.go   Benchmarks backing docs/BENCHMARKS.md
+├── cross_sdk_test.go      NxN cross-SDK byte-equivalence tests
+├── levers_test.go         Verifier option / policy lever tests
+├── providers_test.go      Provider interface (§17) tests
 ├── go.mod
+│
+├── Makefile               test-all / release-check / release targets
+├── scripts/               test-all.sh, check-release-sync.sh, release.sh
 │
 ├── cmd/
 │   ├── ratify/                  ratify-cli (init, delegate, agent-init,
@@ -381,9 +419,10 @@ ratify-protocol/
 │   ├── ratify-testvectors/      Deterministic fixture generator
 │   └── ratify-verifier/         Minimal HTTP reference verifier
 │
-├── testvectors/v1/        59 canonical fixtures (JSON)
+├── testvectors/v1/        59 canonical fixtures + cross_sdk_vectors.json
 │
 ├── sdks/
+│   ├── go/                Pointer README — the Go SDK lives at the repo root
 │   ├── typescript/        @identities-ai/ratify-protocol (npm)
 │   ├── python/            ratify-protocol (PyPI)
 │   ├── rust/              ratify-protocol (crates.io)
@@ -394,13 +433,15 @@ ratify-protocol/
 └── docs/
     ├── EXPLAINED.md           Architecture + threat model + real-time patterns
     ├── AGENT_TO_AGENT.md      A2A patterns (mutual auth, sub-delegation, receipts)
+    ├── BENCHMARKS.md          Measured numbers behind the <1ms claim
+    ├── ATTRIBUTION.md         Badge program + attribution guidelines
     ├── RELEASES.md            Release process + cross-SDK sync
     ├── REGISTRY_SETUP.md      How the SDK orgs are set up on PyPI/crates.io/npm
-    ├── ROADMAP.md             v1.1 / v2 planned work
+    ├── ROADMAP.md             Shipped / planned / v2 work
     ├── SDKS.md                SDK roadmap + conformance contract for new languages
     ├── TESTING.md             Internal testing guide — four levels
     ├── TEST_PLAN.md           Testing methodology
-    └── TRANSACTION_RECEIPTS.md  v1.1 receipt envelope design
+    └── TRANSACTION_RECEIPTS.md  Receipt envelope — design rationale (normative text: SPEC §5.14)
 ```
 
 ---

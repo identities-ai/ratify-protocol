@@ -220,7 +220,7 @@ The conformance suite proves *the bytes are correct*. The demos prove *the proto
 | TypeScript | `cd sdks/typescript && npm install && npm run build && cd ../../demos/typescript && npm install && npm run demo` |
 | Rust | `cargo run --manifest-path demos/rust/Cargo.toml` |
 
-What you'll see (abbreviated — this is real output from `go run ./demos/go`):
+What you'll see (abbreviated, representative output from `go run ./demos/go` — signatures and timestamps vary per run):
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -332,13 +332,13 @@ Everything above describes a single delegate → present → verify round trip. 
 
 | Feature | What it solves | Spec |
 |---|---|---|
-| **Session-bound challenges** | A 32-byte `session_context` binds a proof bundle to one verifier, so a bundle presented to Zoom can't be replayed at your bank. Also defeats challenge-forwarding by a malicious verifier. | §5.8, §15.1 |
-| **Stream sequence numbers** | `stream_id` + `stream_seq` in the challenge signable detect replay, reordering, and omission across the turns of a multi-turn conversation. | §5.8, §6.4.2 |
-| **SessionToken fast path** | After one full chain verification, the verifier issues an HMAC-based session token; subsequent turns verify the token plus a fresh challenge signature — roughly 95% less per-turn crypto work. This is what makes per-turn verification practical on live voice calls. | §5.13, §6.4.8 |
-| **Push-based revocation** | Signed `RevocationPush` deltas let issuers push revocations to subscribed verifiers in real time, instead of waiting for the next poll. | §5.11, §6.4.5 |
-| **Transaction receipts** | A canonical `TransactionReceipt` where every party signs the same bytes (terms + sorted party set + transaction ID). Adding, removing, or altering any party invalidates every signature — no partial-valid state. | §5.14, §6.4.7 |
-| **Witness append-only log** | Signed `WitnessEntry` hash chain for tamper-evident audit logs. Any party can operate a witness. | §5.12, §6.4.6 |
-| **Key rotation statements** | `KeyRotationStatement` signed by both the old and new root keys, so auditors and registries can verify identity continuity across rotations. | §5.15, §6.4.4 |
+| **Session-bound challenges** | A 32-byte `session_context` binds a proof bundle to one verifier, so a bundle presented to Zoom can't be replayed at your bank. Also defeats challenge-forwarding by a malicious verifier. | [§5.8](SPEC.md#58-proofbundle), [§15.1](SPEC.md#151-challenge-forwarding-by-malicious-verifier) |
+| **Stream sequence numbers** | `stream_id` + `stream_seq` in the challenge signable detect replay, reordering, and omission across the turns of a multi-turn conversation. | [§5.8](SPEC.md#58-proofbundle), [§6.4.2](SPEC.md#642-challengesignable-not-json) |
+| **SessionToken fast path** | After one full chain verification, the verifier issues an HMAC-based session token; subsequent turns verify the token plus a fresh challenge signature — roughly 95% less per-turn crypto work. This is what makes per-turn verification practical on live voice calls. | [§5.13](SPEC.md#513-sessiontoken), [§6.4.8](SPEC.md#648-sessiontokensignable) |
+| **Push-based revocation** | Signed `RevocationPush` deltas let issuers push revocations to subscribed verifiers in real time, instead of waiting for the next poll. | [§5.11](SPEC.md#511-revocationpush), [§6.4.5](SPEC.md#645-revocationpushsignable) |
+| **Transaction receipts** | A canonical `TransactionReceipt` where every party signs the same bytes (terms + sorted party set + transaction ID). Adding, removing, or altering any party invalidates every signature — no partial-valid state. | [§5.14](SPEC.md#514-transactionreceipt), [§6.4.7](SPEC.md#647-transactionreceiptsignable) |
+| **Witness append-only log** | Signed `WitnessEntry` hash chain for tamper-evident audit logs. Any party can operate a witness. | [§5.12](SPEC.md#512-witnessentry), [§6.4.6](SPEC.md#646-witnessentrysignable) |
+| **Key rotation statements** | `KeyRotationStatement` signed by both the old and new root keys, so auditors and registries can verify identity continuity across rotations. | [§5.15](SPEC.md#515-keyrotationstatement), [§6.4.4](SPEC.md#644-keyrotationsignable) |
 
 The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these compose for agent-to-agent patterns (mutual authorization, sub-delegation, receipts), and [`docs/TRANSACTION_RECEIPTS.md`](docs/TRANSACTION_RECEIPTS.md) has the receipt envelope design rationale.
 

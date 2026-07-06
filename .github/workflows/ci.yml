@@ -103,7 +103,7 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
-      - name: full test suite (59 fixtures)
+      - name: full test suite (62 fixtures)
         run: pytest -v
 
   rust:
@@ -124,11 +124,11 @@ jobs:
       - name: build
         run: cargo build --all-targets
 
-      - name: full test suite (59 fixtures)
+      - name: full test suite (62 fixtures)
         run: cargo test
 
   c-sdk:
-    name: C/C++ SDK (59 fixtures + 58 unit tests)
+    name: C/C++ SDK (62 fixtures + 58 unit tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -145,7 +145,7 @@ jobs:
       - name: build
         run: cargo build --all-targets
 
-      - name: conformance tests (59 fixtures)
+      - name: conformance tests (62 fixtures)
         run: cargo test --test conformance -- --nocapture
 
       - name: unit tests

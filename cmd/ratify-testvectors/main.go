@@ -1338,6 +1338,98 @@ func genRevocationMiddleCert() *fixture {
 }
 
 // ============================================================================
+// v1.x addition fixtures — no-expiry sentinel + presence:represent
+// ============================================================================
+
+// genNoExpiryCert pins the no-expiry sentinel: a cert with
+// ExpiresAt == NoExpirySentinel (4070908799 = 2099-12-31 23:59:59 UTC) is a
+// valid, verifiable cert. Implementations must accept it and must treat the
+// sentinel as "no expiry (until revoked)" in display and policy evaluation,
+// not as a literal 2099 expiry.
+func genNoExpiryCert() *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+	cert := buildCert(
+		"00000000-0000-0000-0000-000000000040",
+		human, agent,
+		[]string{ratify.ScopeMeetingAttend},
+		fixtureIssuedAt, ratify.NoExpirySentinel,
+	)
+	challenge := deterministicChallenge("no_expiry_cert")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	return buildVerifyFixture(
+		"no_expiry_cert",
+		"No-expiry sentinel: expires_at = 4070908799 (2099-12-31 23:59:59 UTC) "+
+			"means \"no expiry (until revoked)\" — see SPEC §5.7. The bundle "+
+			"verifies normally; revocation is the sole termination mechanism. "+
+			"Implementations MUST NOT display or policy-evaluate the sentinel "+
+			"as a real 2099 expiry.",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeMeetingAttend, Now: unixTime(fixtureNow)},
+	)
+}
+
+// genPresenceRepresentAllowed pins the presence:represent happy path. The
+// cert grants presence:represent alongside an explicit identity:prove —
+// presence:represent does NOT imply identity:prove; both are granted
+// explicitly when both are needed.
+func genPresenceRepresentAllowed() *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+	cert := buildCert(
+		"00000000-0000-0000-0000-000000000041",
+		human, agent,
+		[]string{ratify.ScopePresenceRepresent, ratify.ScopeIdentityProve},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("presence_represent_allowed")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	return buildVerifyFixture(
+		"presence_represent_allowed",
+		"presence:represent (sensitive): the agent is authorized to attend and "+
+			"interact as a direct representative of the principal. Granted "+
+			"explicitly alongside identity:prove — there is no scope implication. "+
+			"Verifiers accepting this scope are expected to surface the "+
+			"representation relationship to other participants (platform "+
+			"policy; SPEC §9.1).",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopePresenceRepresent, Now: unixTime(fixtureNow)},
+	)
+}
+
+// genRejectPresenceSensitiveWildcard pins that there is deliberately NO
+// presence:* wildcard: presence:represent is sensitive, sensitive scopes
+// never ride wildcards, and presence:represent is the domain's only member —
+// so "presence:*" is not a valid scope at all.
+func genRejectPresenceSensitiveWildcard() *fixture {
+	input := []string{"presence:*"}
+	expanded := ratify.ExpandScopes(input) // no wildcard match — passes through
+
+	return &fixture{
+		Name: "reject_presence_sensitive_wildcard",
+		Description: "There is deliberately no presence:* wildcard. " +
+			"presence:represent is sensitive, sensitive scopes are never " +
+			"introduced by wildcard expansion, and it is the domain's only " +
+			"member — so \"presence:*\" is not in the vocabulary. ExpandScopes " +
+			"passes the string through unchanged (no wildcard match) and " +
+			"ValidateScopes rejects it as unknown. Representation must always " +
+			"be granted explicitly.",
+		ProtocolVersion: ratify.ProtocolVersion,
+		Kind:            "scope",
+		ScopeInput:      input,
+		Expected: expectedBlock{
+			ExpandedScopes: expanded,
+		},
+	}
+}
+
+// ============================================================================
 // Scope-kind fixture
 // ============================================================================
 
@@ -2567,6 +2659,9 @@ var fixtureGenerators = []func() *fixture{
 	genRejectTransactionReceiptPartyTampered,
 	genRejectTransactionReceiptTermsTampered,
 	genRejectTransactionReceiptWrongPartyKey,
+	genNoExpiryCert,
+	genPresenceRepresentAllowed,
+	genRejectPresenceSensitiveWildcard,
 }
 
 // unixTime builds a fixed-instant time.Time for use as ratify.VerifyOptions.Now.

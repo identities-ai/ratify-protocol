@@ -35,20 +35,22 @@ const (
 	ScopeIdentityProve    = "identity:prove"
 	ScopeIdentityDelegate = "identity:delegate" // sensitive
 
-	// --- Presence scopes (candidate v1.x — not yet in canonical vocabulary) ---
-	// ScopePresenceRepresent is proposed but NOT YET ADDED to validScopes or
-	// sensitiveScopes. See docs/ROADMAP.md §"Candidate v1.x additions" for the
-	// full design rationale and open questions before this ships.
+	// --- Presence scopes ---
+	// ScopePresenceRepresent: (sensitive) the agent is authorized to attend
+	// and interact as a direct representative of the principal — other parties
+	// in the interaction may be interacting with this agent as if it were the
+	// principal. Covers both non-likeness representatives and full likeness
+	// agents (Tavus, HeyGen, etc.).
 	//
-	// Intended semantics: the agent is authorized to attend and interact as a
-	// direct representative of the principal. Distinct from generate:deepfake
-	// (content generation) and identity:delegate (key delegation). Covers both
-	// non-likeness representatives and full likeness agents (Tavus, HeyGen, etc.).
-	// Sensitive — requires explicit human confirmation.
+	// Distinct from generate:deepfake (content generation, not real-time
+	// representation) and identity:delegate (key delegation). Does NOT imply
+	// identity:prove — issuers grant both explicitly when both are needed;
+	// scope lists are literal, with no implication table.
 	//
-	// Until this ships, platforms needing representation semantics should use the
-	// custom: extension pattern: "custom:presence:represent"
-	// ScopePresenceRepresent = "presence:represent" // proposed, sensitive
+	// Verifiers accepting this scope are expected to surface the
+	// representation relationship to the other participants. That disclosure
+	// is platform policy, not a protocol constraint — see SPEC §9.1.
+	ScopePresenceRepresent = "presence:represent"
 
 	// --- Transaction scopes (v1, core to the "transaction horizon" thesis) ---
 	// ScopeTransactPurchase: buy goods/services on behalf of the principal
@@ -183,6 +185,7 @@ var sensitiveScopes = map[string]bool{
 	ScopeCommsEmailDelete:      true,
 	ScopeFilesWrite:            true,
 	ScopeIdentityDelegate:      true,
+	ScopePresenceRepresent:     true,
 	ScopePaymentsAuthorize:     true,
 	ScopeContractSign:          true,
 	ScopeDataWrite:             true,
@@ -221,6 +224,7 @@ var validScopes = map[string]bool{
 	ScopeFilesWrite:            true,
 	ScopeIdentityProve:         true,
 	ScopeIdentityDelegate:      true,
+	ScopePresenceRepresent:     true,
 	ScopeTransactPurchase:      true,
 	ScopeTransactSell:          true,
 	ScopePaymentsSend:          true,
@@ -294,6 +298,8 @@ var scopeWildcards = map[string][]string{
 	"infrastructure:*": {ScopeInfrastructureMonitor},
 	// actuate:* — every member is sensitive, so NO wildcard expansion.
 	// Every actuate grant must be explicit.
+	// presence:* — presence:represent is sensitive, so NO wildcard expansion.
+	// Representation must always be granted explicitly.
 }
 
 // ValidateScopes returns an error if any scope is not in the canonical

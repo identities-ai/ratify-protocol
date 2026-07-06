@@ -10,6 +10,17 @@ use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: i32 = 1;
+
+/// The `expires_at` value that means "no expiry (until revoked)":
+/// 4070908799 = 2099-12-31 23:59:59 UTC. `DelegationCert.expires_at` is a
+/// required i64 with no null representation, so open-ended delegations carry
+/// this sentinel in the signed bytes. Conformant implementations MUST treat
+/// a cert with `expires_at == NO_EXPIRY_SENTINEL` as "no expiry (until
+/// revoked)" in display and policy evaluation — NOT as a literal 2099
+/// expiry. Verification is unchanged: the sentinel is a future timestamp, so
+/// the temporal check passes; revocation is the sole termination mechanism
+/// for such certs. See SPEC §5.7.
+pub const NO_EXPIRY_SENTINEL: i64 = 4070908799;
 pub const MAX_DELEGATION_CHAIN_DEPTH: usize = 3;
 pub const CHALLENGE_WINDOW_SECONDS: i64 = 300;
 
@@ -99,6 +110,16 @@ pub struct DelegationCert {
     pub issued_at: i64,
     pub expires_at: i64,
     pub signature: HybridSignature,
+}
+
+impl DelegationCert {
+    /// Reports whether the cert carries [`NO_EXPIRY_SENTINEL`], meaning "no
+    /// expiry (until revoked)". Callers rendering expiry to users or applying
+    /// lifetime policy caps MUST branch on this rather than treating the
+    /// sentinel as a real 2099 timestamp.
+    pub fn is_no_expiry(&self) -> bool {
+        self.expires_at == NO_EXPIRY_SENTINEL
+    }
 }
 
 /// First-class bound on when/where/how much an agent may exercise its scopes.

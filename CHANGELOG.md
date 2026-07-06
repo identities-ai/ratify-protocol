@@ -23,9 +23,9 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 - The verifier now enforces SPEC §9 at verification time, not just at issuance: any cert granting a scope that is not canonical, not a wildcard, and not a `custom:` extension is rejected with the new identity status `invalid_scope`, before any effective-scope arithmetic. Previously invalid vocabulary was silently carried into the intersection and only failed by non-membership — meaning an unknown string could in principle become an effective grant. New verifier step §10 7.a2; `identity_status` enum extended (§5.9 — a closed set, extended via this spec bump). Mirrored in all SDKs; pinned by the `reject_presence_sensitive_wildcard` fixture.
 
-### Changed — conformance suite: 59 → 62 canonical fixtures
+### Changed — conformance suite: 59 → 63 canonical fixtures
 
-- Three new fixtures (above). All 59 pre-existing fixtures are byte-identical to alpha.11.
+- Four new fixtures (above). All 59 pre-existing fixtures are byte-identical to alpha.11.
 - `scripts/check-release-sync.sh` now also gates SPEC.md and the TypeScript/Go/C READMEs on the fixture count, and adds a **scope-count check** derived from `scope.go` — documented counts can no longer silently drift from the vocabulary.
 
 ### Changed — release process: no more direct pushes to main

@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **62 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **63 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -12,7 +12,7 @@ Ratify is an open cryptographic protocol that answers the question: *"Is this AI
 
 A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
 
-Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), the SessionToken fast path (~95% less per-turn crypto — practical for live voice and video), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec, all covered by the 62 canonical fixtures.
+Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), the SessionToken fast path (~95% less per-turn crypto — practical for live voice and video), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec, all covered by the 63 canonical fixtures.
 
 - Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
@@ -34,7 +34,7 @@ If you cloned the repo and want to run `python -m pytest` against the committed 
 cd sdks/python
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'              # installs ratify-protocol + cryptography + pqcrypto + pytest
-python -m pytest tests/              # runs 62/62 conformance fixtures
+python -m pytest tests/              # runs 63/63 conformance fixtures
 ```
 
 If `pqcrypto` fails to install (typical on older pip), upgrade pip first:
@@ -199,7 +199,7 @@ pip install pytest
 pytest -v
 ```
 
-The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 62 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 63 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## Notes on the ML-DSA-65 library
 

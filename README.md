@@ -32,7 +32,7 @@ Ratify is not agent login, registration, or credential issuance. Ratify starts w
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
 
-**Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 62 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
+**Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 63 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
 Counts and feature descriptions in this README describe `main` (the development branch). Install commands reference the latest published release — see [Releases](https://github.com/identities-ai/ratify-protocol/releases) for its notes and exact fixture set.
 
@@ -173,7 +173,7 @@ git clone https://github.com/identities-ai/ratify-protocol
 cd ratify-protocol/sdks/typescript
 npm install
 npm test
-# → 62/62 fixtures pass
+# → 63/63 fixtures pass
 ```
 
 
@@ -191,7 +191,7 @@ git clone https://github.com/identities-ai/ratify-protocol
 cd ratify-protocol/sdks/python
 pip install -e '.[dev]'
 pytest
-# → 62 passed
+# → 63 passed
 ```
 
 ### Rust
@@ -206,7 +206,7 @@ Or to run the conformance suite yourself:
 git clone https://github.com/identities-ai/ratify-protocol
 cd ratify-protocol/sdks/rust
 cargo test
-# → test result: ok. 1 passed (loads all 62 fixtures)
+# → test result: ok. 1 passed (loads all 63 fixtures)
 ```
 
 ---
@@ -296,7 +296,7 @@ Both signers must produce identical bytes from the same logical input. JSON is u
 - UTF-8 with `\u` escapes only where mandatory
 - Numbers as integers when integer-valued, no trailing zeros otherwise
 
-The canonicalizer is hand-written in every SDK and produces byte-identical output across Go, TypeScript, Python, Rust, and C/C++. The 62 fixtures verify this on every CI run.
+The canonicalizer is hand-written in every SDK and produces byte-identical output across Go, TypeScript, Python, Rust, and C/C++. The 63 fixtures verify this on every CI run.
 
 Spec: [`SPEC.md`](SPEC.md) §6 (canonical JSON) and §7 (`delegationSignBytes` / `challengeSignBytes`).
 
@@ -348,14 +348,14 @@ The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these com
 
 ## Cross-language interop
 
-The 62 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 62 is byte-for-byte interoperable with the reference.** This is the contract. (The directory also contains `cross_sdk_vectors.json` — a separate byte-equivalence corpus used by the NxN cross-SDK matrix; it is not one of the 62 canonical fixtures.)
+The 63 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 63 is byte-for-byte interoperable with the reference.** This is the contract. (The directory also contains `cross_sdk_vectors.json` — a separate byte-equivalence corpus used by the NxN cross-SDK matrix; it is not one of the 63 canonical fixtures.)
 
 | Implementation | Language | Conformance (`main`) | Install (latest release) |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 62/62 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.11` |
-| `@identities-ai/ratify-protocol` | TypeScript | ✅ 62/62 | `npm install @identities-ai/ratify-protocol` |
-| `ratify-protocol` | Python | ✅ 62/62 | `pip install ratify-protocol==1.0.0a11` |
-| `ratify-protocol` | Rust | ✅ 62/62 | `cargo add ratify-protocol@1.0.0-alpha.11` |
+| `github.com/identities-ai/ratify-protocol` | Go | ✅ 63/63 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.11` |
+| `@identities-ai/ratify-protocol` | TypeScript | ✅ 63/63 | `npm install @identities-ai/ratify-protocol` |
+| `ratify-protocol` | Python | ✅ 63/63 | `pip install ratify-protocol==1.0.0a11` |
+| `ratify-protocol` | Rust | ✅ 63/63 | `cargo add ratify-protocol@1.0.0-alpha.11` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
@@ -423,7 +423,7 @@ ratify-protocol/
 │   ├── ratify-testvectors/      Deterministic fixture generator
 │   └── ratify-verifier/         Minimal HTTP reference verifier
 │
-├── testvectors/v1/        62 canonical fixtures + cross_sdk_vectors.json
+├── testvectors/v1/        63 canonical fixtures + cross_sdk_vectors.json
 │
 ├── sdks/
 │   ├── go/                Pointer README — the Go SDK lives at the repo root

@@ -1137,7 +1137,7 @@ GET /v1/ratify/scopes
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (62 fixtures as of v1.0.0-alpha.12):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (63 fixtures as of v1.0.0-alpha.12):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.
@@ -1289,7 +1289,7 @@ This separation lets the protocol stay neutral and portable while letting commer
 - A conformant SDK MUST expose all three provider hook points (`Revocation`, `Policy`, `Audit`) on its verify-options surface, with consistent naming across languages.
 - A conformant SDK MUST treat any unset hook as a no-op — verification with all hooks `nil` MUST produce the same `VerifyResult` as a verifier with no provider surface at all.
 - Provider invocations MUST NOT modify the `ProofBundle`. They are read-only over signed material. A bundle that re-serializes byte-identically before and after a `Verify` call (with or without providers) is REQUIRED for fixture determinism.
-- Provider implementations are NOT covered by the test-vector conformance suite. The 62 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
+- Provider implementations are NOT covered by the test-vector conformance suite. The 63 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
 
 ### 17.1 RevocationProvider
 

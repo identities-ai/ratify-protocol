@@ -1438,6 +1438,42 @@ func genRejectPresenceSensitiveWildcard() *fixture {
 	)
 }
 
+// genRejectUnknownScopeCert pins the verifier-layer counterpart of the
+// reject_unknown_scope scope fixture: a signed cert granting a scope that is
+// not canonical, not a wildcard, and not a custom: extension is rejected as
+// malformed with invalid_scope (SPEC §9, §10 step 7.a2) before any
+// effective-scope arithmetic. Unlike reject_presence_sensitive_wildcard
+// (wildcard-shaped unknown), this covers the generic unknown-string case.
+func genRejectUnknownScopeCert() *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+	cert := buildCert(
+		"00000000-0000-0000-0000-000000000043",
+		human, agent,
+		[]string{"pretend:unknown:scope", ratify.ScopeMeetingAttend},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("reject_unknown_scope_cert")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	return buildVerifyFixture(
+		"reject_unknown_scope_cert",
+		"SECURITY: a signed cert granting a scope outside the vocabulary "+
+			"(\"pretend:unknown:scope\" — not canonical, not a wildcard, not a "+
+			"custom: extension) is rejected as malformed with invalid_scope "+
+			"(SPEC §9, §10 step 7.a2) before any effective-scope arithmetic — "+
+			"even though the cert also grants a valid scope and the required "+
+			"scope (meeting:attend) is that valid scope. Invalid vocabulary "+
+			"anywhere in a cert poisons the whole cert, fail-closed. This is "+
+			"the verify-layer counterpart of the reject_unknown_scope scope "+
+			"fixture, which pins that ExpandScopes alone does not validate.",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeMeetingAttend, Now: unixTime(fixtureNow)},
+	)
+}
+
 // ============================================================================
 // Scope-kind fixture
 // ============================================================================
@@ -2671,6 +2707,7 @@ var fixtureGenerators = []func() *fixture{
 	genNoExpiryCert,
 	genPresenceRepresentAllowed,
 	genRejectPresenceSensitiveWildcard,
+	genRejectUnknownScopeCert,
 }
 
 // unixTime builds a fixed-instant time.Time for use as ratify.VerifyOptions.Now.

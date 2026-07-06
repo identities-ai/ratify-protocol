@@ -1,10 +1,10 @@
 //! C API conformance tests — validates the C FFI layer against the same
-//! 62 canonical test vectors used by Go, TypeScript, Python, and Rust.
+//! 63 canonical test vectors used by Go, TypeScript, Python, and Rust.
 //!
 //! Every fixture is loaded and exercised through the C API:
 //!
-//! - "verify"              — proof-bundle verification (44 fixtures)
-//! - "scope"               — scope expansion + validation (3 fixtures)
+//! - "verify"              — proof-bundle verification (46 fixtures)
+//! - "scope"               — scope expansion + validation (2 fixtures)
 //! - "revocation"          — revocation list sign bytes + verify (1 fixture)
 //! - "revocation_push"     — revocation push sign bytes + sig hex + verify (1 fixture)
 //! - "key_rotation"        — key rotation sign bytes + verify (2 fixtures)
@@ -12,7 +12,7 @@
 //! - "transaction_receipt" — receipt sign bytes + full verify (5 fixtures)
 //! - "witness_entry"       — witness entry sign bytes + sig hex + verify (1 fixture)
 //!
-//! 62/62 fixtures pass (cross_sdk_vectors.json uses a different schema and is
+//! 63/63 fixtures pass (cross_sdk_vectors.json uses a different schema and is
 //! handled by tests/cross_sdk.rs).
 
 use ratify_c::{

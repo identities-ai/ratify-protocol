@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **62 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **63 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -12,7 +12,7 @@ Ratify is an open cryptographic protocol that answers the question: *"Is this AI
 
 A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
 
-Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), the SessionToken fast path (~95% less per-turn crypto — practical for live voice and video), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec, all covered by the 62 canonical fixtures.
+Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), the SessionToken fast path (~95% less per-turn crypto — practical for live voice and video), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec, all covered by the 63 canonical fixtures.
 
 - Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
@@ -398,7 +398,7 @@ ratify_error_free(err);         // for err_out parameters
 
 ## Conformance
 
-The C SDK is validated against the same 62 canonical cross-language test
+The C SDK is validated against the same 63 canonical cross-language test
 vectors as the Go, TypeScript, Python, and Rust SDKs.
 
 ```bash
@@ -421,7 +421,7 @@ All canonical fixture kinds pass through the C ABI:
 # Unit tests (all functions, null pointers, malformed JSON, round-trips)
 cargo test --test api
 
-# Conformance tests (62/62 fixtures)
+# Conformance tests (63/63 fixtures)
 cargo test --test conformance
 
 # Cross-architecture via QEMU (requires `cross`)

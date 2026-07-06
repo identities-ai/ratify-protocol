@@ -319,6 +319,14 @@ Verifiers of a streamed turn MUST check:
 
 On success the verifier returns `identity_status = authorized_agent`, `granted_scope = token.granted_scope`, `agent_id = token.agent_id`, `human_id = token.human_id`. Revocation and expiry of underlying certs are NOT re-checked — callers who need fresh revocation semantics evict tokens when the issuer publishes a new revocation list or when `valid_until` expires.
 
+**Token lifetime guidance.** Because revocation is not re-checked during a token's lifetime, `valid_until − issued_at` is the maximum revocation-staleness window for the session. Deployments SHOULD size token lifetimes to risk:
+
+- **High-stakes actions** (payments, physical actuation, `identity:*` scopes): token lifetime ≤ 5 minutes — or skip the fast path entirely and run full verification with `ForceRevocationCheck` (§5.17) on each such action.
+- **Ordinary conversational sessions** (meetings, voice/video calls): token lifetime ≤ 15 minutes. Longer lifetimes SHOULD be paired with a `RevocationPush` (§5.11) subscription so revocations evict tokens in real time rather than at expiry.
+- Verifiers SHOULD evict a token immediately upon: receiving a `RevocationPush` covering any cert in the token's chain, ingesting a new `RevocationList` from the issuer, observing a `KeyRotationStatement` (§5.15) for the issuing root, a local policy change, or session end.
+
+**Multi-instance verifiers.** The `session_secret` is private to one verifier *trust boundary*, which may span multiple processes. A load-balanced verifier deployment MUST do one of the following, or streamed turns will be spuriously rejected mid-session on failover: (a) share `session_secret` across replicas through a secret store so any replica can validate any token; (b) route each session consistently to the replica that issued its token, and force full chain re-verification on failover; or (c) treat tokens as instance-local ephemera and accept the re-verification cost whenever a session moves. Sharing the secret does not weaken the design — the boundary that matters is the verifier organization, not the process — but the shared secret then MUST be stored and rotated with the same care as any signing key.
+
 ### 5.14 TransactionReceipt
 
 ```
@@ -400,6 +408,8 @@ Application-supplied inputs for evaluating first-class constraints at verify tim
 | `RequestedCurrency` | `string` | `max_amount` | ISO 4217 currency code of the transaction. Must match the constraint's `currency`. |
 | `HasAmount` | `bool` | `max_amount` | Must be true for amount constraints to evaluate; false causes `constraint_unverifiable`. |
 | `InvocationsInWindow` | `func(certID string, windowS int64) int` | `max_rate` | Callback returning how many times this cert has been exercised in the most recent `windowS` seconds. Must be non-nil for rate constraints to evaluate; nil causes `constraint_unverifiable`. |
+
+Constraint evaluation proves that the verifier's decision was consistent with the context it supplied — it does not prove that the supplied context was true in the world. See §15.7 for what constraints do and do not attest.
 
 ### 5.17 VerifyOptions
 
@@ -1082,6 +1092,8 @@ See `docs/AGENT_TO_AGENT.md` for detailed sequence diagrams of all three pattern
 - A future v2 MAY extend `HybridPublicKey` and `HybridSignature` with additional algorithm components (e.g. SLH-DSA for ultra-conservative fallback). The wire format will remain backward-readable; v2 verifiers will accept v1 bundles during a documented migration window.
 - No v1 fields are to be omitted or renamed. Extensions requiring new fields or new algorithm components require a version bump.
 
+**Crypto agility.** v1 deliberately fixes the algorithm pair (Ed25519 + ML-DSA-65) rather than negotiating algorithms on the wire — negotiation is itself an attack surface (downgrade attacks), and a fixed pair keeps every verifier byte-compatible. The consequence is that replacing a broken component is a protocol-version event, not a configuration change. If a practical weakness is found in ML-DSA-65 (a young algorithm, FIPS 204 finalized 2024), the migration path is: v2 adds a replacement or third component (e.g. SLH-DSA, whose hash-based security assumptions are independent of both existing components), verifiers dual-accept v1 and v2 bundles during the documented migration window, and issuers re-sign delegations under v2. Until both components of the v1 pair are broken *simultaneously*, previously issued v1 bundles remain unforgeable — that is the point of the hybrid. Deployments with archival needs beyond the v1 lifetime SHOULD anchor long-lived artifacts (receipts, witness chains) so that re-attestation under a future version is possible.
+
 ---
 
 ## 13. HTTP transport binding (optional but defined)
@@ -1142,7 +1154,8 @@ The following table enumerates the adversaries, their capabilities, and how the 
 | T8 | **Malicious verifier** | Legitimate verifier that acts dishonestly | Forward V1's challenge to the agent, replay the bundle at V1 | Session context binding (§5.8, §15.1): agent signs with the verifier's context. Cross-verifier replay fails because contexts differ. | Requires the agent to include session_context. Legacy unbound bundles are vulnerable on non-TLS transports. |
 | T9 | **Rogue registry operator** (custodial mode) | Holds envelope-encrypted user keys | Decrypt keys and issue unauthorized delegations | Envelope encryption (DEK + KEK via KMS) limits blast radius. Self-custody mode (§15.2) eliminates this adversary entirely. Self-custody upgrade path via `KeyRotationStatement`. | In custodial mode, the operator IS trusted. This is documented in §15.2. Self-custody is the mitigation. |
 | T10 | **Side-channel attacker** | Observes timing/power during signing on shared infrastructure | Extract private key material via side-channel analysis | Use well-audited crypto libraries. v1 uses deterministic ML-DSA-65 signing; future versions MAY add hedged-randomization for hostile environments. | Deterministic signing on shared VMs is a known industry-wide risk. See §8.3. |
-| T11 | **Clock-skew attacker** | Manipulate the verifier's or agent's clock | Accept expired certs or stale challenges | Temporal checks use the verifier's clock. Clock skew beyond the challenge window (300s) causes rejection. | If the verifier's clock is compromised, temporal checks are meaningless. This is a deployment concern. |
+| T11 | **Clock-skew attacker** | Manipulate the verifier's or agent's clock | Accept expired certs or stale challenges | Temporal checks use the verifier's clock. Clock skew beyond the challenge window (300s) causes rejection. See §15.6 for clock discipline requirements. | If the verifier's clock is compromised, temporal checks are meaningless. This is a deployment concern. |
+| T12 | **Key-substitution attacker** | Controls or spoofs the channel a verifier uses to obtain principal public keys | Present a chain rooted in an attacker-generated key labeled "Alice" — every signature verifies, because the signatures are genuine over the attacker's key | None at the wire layer. Signature verification proves possession of a private key, not that the key belongs to the claimed principal. Trust bootstrap is a REQUIRED deployment decision — see §15.4. | Verification is only as strong as the verifier's key-discovery channel. A verifier that accepts principal keys from an unauthenticated source is fully spoofable regardless of the cryptography. |
 
 **Out of scope (not defended by protocol):**
 
@@ -1194,6 +1207,54 @@ If a root private key is stolen, the attacker can issue new delegation certs and
 - **Witness anchoring.** If delegation certs and rotation statements are logged to a `WitnessEntry` chain (§5.12), auditors can detect conflicting rotation statements after the fact.
 
 The protocol provides the cryptographic tools (revocation, rotation, witness). The operational response to key compromise is a deployment concern that depends on the custody mode and the operator's security posture.
+
+### 15.4 Trust anchors and public-key discovery
+
+Every guarantee in this specification is conditional on one premise: **the verifier holds the correct public key for the principal at the root of the chain.** Signature verification proves possession of a private key; it cannot prove the key belongs to the person or organization the presenter claims (threat T12). The protocol deliberately does not mandate a PKI — requiring one would reintroduce the central issuer the protocol exists to avoid — but that makes key acquisition an explicit security decision for every deployment, not an implementation detail.
+
+A verifier MUST obtain principal public keys through at least one of the following bootstrap modes, and MUST NOT treat a key that arrives in-band with the proof bundle itself as a trust root:
+
+| Mode | How the verifier gets the key | Trust assumption | Fits |
+|------|------------------------------|------------------|------|
+| **Pinned keys** | Operator pins principal keys out-of-band during onboarding (contract exchange, config management). | The onboarding channel. | Closed B2B integrations, high-stakes endpoints, offline/edge verifiers. |
+| **Enterprise IdP root** | The organization's IdP holds the root key (delegated custody, §15.2); the verifier pins one IdP key and every member identity chains from it. | The enterprise IdP. | Workforce deployments. |
+| **Registry lookup** | A registry maps `human_id` / `Anchor` (§5.5) to a public key; resolved via `AnchorResolver` (§17.8). | The registry operator (threat T9 applies). | Internet-scale consumer deployments. |
+| **Self-published + continuity** | The principal publishes the key at a stable location they control (DNS record, website, profile). First acquisition is trust-on-first-use; subsequent key changes MUST be validated as a `KeyRotationStatement` chain (§5.15) from the pinned first key. | The publication channel, once, at first use. | Individuals and small publishers. |
+| **Witness-backed evidence** | Key publications and rotations are logged to one or more `WitnessEntry` chains (§5.12); the verifier checks that the key it received is consistent with the log and that no conflicting rotation exists. | At least one honest witness. | Augments any of the above; detects equivocation. |
+
+These modes compose: a registry whose entries are witness-logged is strictly stronger than a bare registry; a pinned key with rotation-chain continuity survives key rotation without re-onboarding.
+
+Deployments SHOULD document which bootstrap mode(s) they use. A verifier that cannot state where a principal key came from has no basis for the trust decisions this protocol automates.
+
+### 15.5 Revocation freshness
+
+Verification is offline; revocation state is not. A verifier checks revocation against its local copy of the issuer's signed `RevocationList` (or its accumulated `RevocationPush` deltas), and that copy has an age. The gap between a revocation being published and every verifier honoring it is the protocol's principal freshness exposure (threat T6, threat T7).
+
+Requirements and guidance:
+
+- Verifiers MUST fail closed when revocation state is required but unavailable (`revocation_error`, §5.17) — an unreachable revocation source is never treated as "nothing revoked."
+- Verifiers SHOULD bound the age of the revocation state they will act on, sized to risk: for high-stakes actions, fresh state (seconds — via `RevocationPush` subscription or a live check triggered by `ForceRevocationCheck`); for ordinary interactive sessions, minutes; polling intervals beyond one hour are appropriate only where the action is low-consequence or another control (short cert lifetimes) bounds exposure.
+- `ForceRevocationCheck` (§5.17) SHOULD be set for actions that are irreversible or high-value regardless of session state — payments above a threshold, physical actuation, `identity:*` scoped operations — even when a valid `SessionToken` exists (§5.13).
+- **Push-gap recovery.** A verifier that subscribes to `RevocationPush` and detects a delivery gap (missed sequence, reconnect after downtime) MUST NOT resume acting on its delta state; it MUST fetch the issuer's full current `RevocationList` before trusting its revocation view again.
+- Short cert lifetimes (§15.3) are the complementary control: the shorter the cert, the less revocation freshness matters.
+
+### 15.6 Verifier clock discipline
+
+All temporal checks — cert validity windows, challenge freshness (§10), `SessionToken` lifetimes (§5.13) — use the verifier's clock. The protocol's freshness guarantees therefore degrade with clock error (threat T11).
+
+- Networked verifiers SHOULD synchronize time via authenticated NTP (NTS) or an equivalent trusted source. Total clock error SHOULD be kept well under the 300-second challenge window; ±30 seconds is a reasonable budget.
+- Offline and edge verifiers (vehicles, drones, air-gapped deployments) SHOULD use a hardware RTC with a known drift bound, and SHOULD subtract their worst-case accumulated drift from the challenge acceptance window — a verifier that may be 60 seconds wrong should accept challenges no older than 240 seconds.
+- Temporal bounds remain strict in v1: `not_before` and `expires_at` get no skew tolerance at verification time (`reject_not_yet_valid` and `reject_expired` fixtures are exact). Issuers who need slack SHOULD build it into the cert at issuance (set `not_before` slightly in the past) rather than expecting verifiers to loosen checks — a per-verifier tolerance would make acceptance non-deterministic across verifiers, which the fixture contract forbids.
+
+### 15.7 What constraints attest — and what they do not
+
+First-class constraints (§5.7.1, §5.7.2) are evaluated by the verifier against context the verifier itself supplies (§5.16). The signed cert proves *what the principal authorized*; the verify-time evaluation proves *the decision was consistent with the supplied context*. Nothing in the protocol proves the supplied context was true in the world: a verifier that reports `CurrentLat`/`CurrentLon` inside a `geo_circle` has asserted the agent's location, not demonstrated it.
+
+Consequences:
+
+- Constraints defend the **principal** against agent overreach at an honest verifier. They do not defend anyone against a dishonest or compromised verifier, which can trivially supply satisfying context (see also threat T8 — the malicious-verifier row — and §10: the verifier is the party running the algorithm; it can also simply skip it).
+- A third party auditing a transaction after the fact cannot independently confirm constraint context from the protocol artifacts alone. Deployments that need auditable constraint claims SHOULD bind the evaluated context into a signed artifact — include it in the `VerificationReceipt` (§17.5) or in `TransactionReceipt.terms` (§5.14) — so the claim is at least signed and attributable to the verifier that made it.
+- Where context must be *proven* rather than asserted (regulated geofencing, financial limits), the context source itself needs attestation — signed GNSS fixes, platform attestation, or a co-signing oracle — which is outside the protocol. The `ConstraintEvaluator` extension point (§17.7) is where such attested evaluators plug in.
 
 ---
 

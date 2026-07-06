@@ -140,6 +140,13 @@ const (
 	// the protocol rejects the cert so each version's verifier sees a
 	// consistent supported set.
 	IdentityStatusConstraintUnknown = "constraint_unknown"
+	// IdentityStatusInvalidScope is returned when any cert in the chain
+	// grants a scope that is not canonical, not a wildcard, and not a
+	// `custom:` extension (SPEC §9). Fail-closed — a cert carrying
+	// vocabulary outside the protocol is rejected as malformed rather than
+	// silently intersected, so unknown strings can never become effective
+	// grants that a confused verifier might match against.
+	IdentityStatusInvalidScope = "invalid_scope"
 	// IdentityStatusInvalid is the catch-all for structural / cryptographic
 	// failures (bad signature, malformed chain, wrong key, etc).
 	IdentityStatusInvalid = "invalid"
@@ -253,6 +260,13 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 
 		if cert.Version != ProtocolVersion {
 			return invalid("version_mismatch", fmt.Sprintf("cert %d has unsupported version %d", i, cert.Version))
+		}
+		// Scope vocabulary validation (SPEC §9): every granted scope must be
+		// canonical, a wildcard, or a custom: extension. Checked before any
+		// scope arithmetic so invalid vocabulary can never reach the
+		// effective-scope intersection.
+		if err := ValidateScopes(cert.Scope); err != nil {
+			return failWithStatus(IdentityStatusInvalidScope, fmt.Sprintf("cert %d: %v", i, err))
 		}
 		if now.Unix() > cert.ExpiresAt {
 			return expired(humanID, bundle.AgentID)

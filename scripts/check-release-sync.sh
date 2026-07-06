@@ -61,10 +61,11 @@ if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
 
 protocol_tag = f"v{ts_version}"
+# docs/RELEASES.md is deliberately absent: its version strings are
+# historical (the §3.2 ladder) or illustrative examples, not release-synced.
 must_contain = {
     "README.md": protocol_tag,
     "SPEC.md": protocol_tag,
-    "docs/RELEASES.md": protocol_tag,
     "sdks/rust/README.md": rust_version,
 }
 for path, needle in must_contain.items():

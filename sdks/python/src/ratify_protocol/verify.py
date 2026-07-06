@@ -17,7 +17,7 @@ from .crypto import (
     verify_delegation_signature_e,
     verify_session_token_e,
 )
-from .scope import SCOPE_IDENTITY_DELEGATE, intersect_scopes
+from .scope import SCOPE_IDENTITY_DELEGATE, intersect_scopes, validate_scopes
 from .types import (
     CHALLENGE_WINDOW_SECONDS,
     ED25519_PUBLIC_KEY_SIZE,
@@ -170,6 +170,13 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
     for i, cert in enumerate(bundle.delegations):
         if cert.version != PROTOCOL_VERSION:
             return _invalid("version_mismatch", f"cert {i} has unsupported version {cert.version}")
+        # Scope vocabulary validation (SPEC §9): every granted scope must be
+        # canonical, a wildcard, or a custom: extension. Checked before any
+        # scope arithmetic so invalid vocabulary can never reach the
+        # effective-scope intersection.
+        scope_err = validate_scopes(cert.scope)
+        if scope_err is not None:
+            return _fail_with_status("invalid_scope", f"cert {i}: {scope_err}")
         if now > cert.expires_at:
             return _expired(human_id, bundle.agent_id)
         if now < cert.issued_at:

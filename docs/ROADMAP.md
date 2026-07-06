@@ -8,9 +8,9 @@ This roadmap has three buckets: **shipped** (in the current release), **planned*
 
 ---
 
-## Shipped — current release: v1.0.0-alpha.10
+## Shipped
 
-All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. 62 canonical test vectors prove cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++.
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++ — see [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
 
 ### Continuous real-time interactions
 
@@ -53,7 +53,7 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 - README truth pass: representative demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
 - SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
 - Local test gate (`scripts/test-all.sh`) now runs the C/C++ SDK, matching what CI and `docs/RELEASES.md` already claimed.
-- All 62 canonical fixtures byte-identical to alpha.10.
+- All 59 canonical fixtures (the count at the time) byte-identical to alpha.10.
 
 ### v1.0.0-alpha.12 — protocol additions (below)
 
@@ -63,7 +63,7 @@ The two items below are scopes and features identified through production adapte
 
 ### No-expiry sentinel — `ExpiresAt = 4070908799`
 
-**Status:** Implemented — ships in v1.0.0-alpha.12. Normative in SPEC §5.1 + §5.7; fixture `no_expiry_cert`; `NoExpirySentinel` + `IsNoExpiry()` in all SDKs.
+**Status:** Implemented — ships in v1.0.0-alpha.12. Normative in SPEC §5.1 + §5.7; fixture `no_expiry_cert`; no-expiry sentinel constant + helper in every SDK (Go `NoExpirySentinel`/`IsNoExpiry()`, TS `NO_EXPIRY_SENTINEL`/`isNoExpiry()`, Python/Rust `NO_EXPIRY_SENTINEL`/`is_no_expiry()`, C `ratify_no_expiry_sentinel()`/`ratify_expires_at_is_no_expiry()`).
 
 **Problem:** `DelegationCert.ExpiresAt` is `int64` (Unix timestamp). The struct has no null/optional representation. Users of the Ratify Verify managed platform can grant delegations with "no expiry (until revoked)," which the platform stores as `NULL` in the database. The cert that gets signed must still have a finite `ExpiresAt` value for protocol compliance.
 

@@ -181,7 +181,7 @@ npm test
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a10
+pip install ratify-protocol==1.0.0a11
 ```
 
 Or to run the conformance suite yourself:
@@ -350,15 +350,17 @@ The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these com
 
 The 62 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 62 is byte-for-byte interoperable with the reference.** This is the contract. (The directory also contains `cross_sdk_vectors.json` — a separate byte-equivalence corpus used by the NxN cross-SDK matrix; it is not one of the 62 canonical fixtures.)
 
-| Implementation | Language | Status | Install |
+| Implementation | Language | Conformance (`main`) | Install (latest release) |
 |---|---|---|---|
 | `github.com/identities-ai/ratify-protocol` | Go | ✅ 62/62 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.11` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 62/62 | `npm install @identities-ai/ratify-protocol` |
-| `ratify-protocol` | Python | ✅ 62/62 | `pip install ratify-protocol==1.0.0a10` |
+| `ratify-protocol` | Python | ✅ 62/62 | `pip install ratify-protocol==1.0.0a11` |
 | `ratify-protocol` | Rust | ✅ 62/62 | `cargo add ratify-protocol@1.0.0-alpha.11` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
+
+The Conformance column describes `main`; a published release's exact fixture set is in its [release notes](https://github.com/identities-ai/ratify-protocol/releases). Between a feature merging and the next tag, `main` may be ahead of what the install commands deliver.
 
 If you're implementing a new language port, **start from the fixtures, not the spec.** Match the bytes; the rest follows. See [`docs/SDKS.md`](docs/SDKS.md) for the conformance contract.
 

@@ -145,10 +145,13 @@ write(
 )
 
 old_protocol = "v" + old_npm
+# docs/RELEASES.md is deliberately NOT in this list: it contains historical
+# version references (the alpha ladder in §3.2) that a blanket old→new
+# replacement corrupts — this happened at alpha.11, rewriting the alpha.10
+# ladder entry. Its version examples are illustrative, not release-synced.
 paths = [
     "README.md",
     "SPEC.md",
-    "docs/RELEASES.md",
     "sdks/rust/README.md",
     "sdks/typescript/package.json",
     "sdks/typescript/package-lock.json",
@@ -161,6 +164,7 @@ for path in paths:
     write(path, text)
 
 py_paths = [
+    "README.md",  # root README pins the pip install command in PEP 440 form
     "sdks/python/README.md",
     "sdks/python/pyproject.toml",
     "sdks/python/src/ratify_protocol/__init__.py",

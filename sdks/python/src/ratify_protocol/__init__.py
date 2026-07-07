@@ -170,7 +170,7 @@ from .types import (
 )
 from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
 
-__version__ = "1.0.0a12"
+__version__ = "1.0.0a13"
 
 __all__ = [
     # types

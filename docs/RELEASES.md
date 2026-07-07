@@ -345,7 +345,7 @@ These are configured once on the GitHub repo. See [`docs/REGISTRY_SETUP.md`](./R
 
 | Secret / variable           | Used by         | Notes                                                          |
 |-----------------------------|-----------------|----------------------------------------------------------------|
-| `CARGO_REGISTRY_TOKEN`      | publish-crates  | crates.io API token scoped to `publish-update` on `ratify-protocol`. |
+| `CARGO_REGISTRY_TOKEN`      | publish-crates  | crates.io API token scoped to `publish-update` on **both** `ratify-protocol` and `ratify-c`. Single-crate scoping 403s the other publish (bit at alpha.13). |
 | `NPM_PUBLISH_ENABLED` (var) | publish-npm     | Repo variable. Set to `true` to activate the npm job after the npm org is approved. |
 | _(no secret for PyPI)_      | publish-pypi    | Trusted Publisher via OIDC — no long-lived secret stored anywhere. |
 

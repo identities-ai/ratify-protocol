@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.13 (unreleased)
+## v1.0.0-alpha.13 (2026-07-06)
 
 ### Added — SPEC §13.1: registry read binding (optional)
 

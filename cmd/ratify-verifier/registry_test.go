@@ -189,41 +189,62 @@ func TestResolverRejectsFinalKeyMismatch(t *testing.T) {
 	}
 }
 
-func TestResolverPinnedKeyContinuity(t *testing.T) {
+func TestResolverHistoricalPinRealisticSequence(t *testing.T) {
+	// The realistic caller model: the verifier pinned Alice BEFORE the
+	// rotation, so its pin is keyed by the OLD key's own derived id — it
+	// cannot know the post-rotation id in advance. A post-rotation bundle
+	// presents the NEW id; resolving it must still engage the pin via the
+	// chain, with no old-id → new-id mapping supplied by the caller.
 	p0 := newPrincipal(t)
 	stmt1, p1 := rotate(t, p0)
-
-	// Pin the ORIGINAL key; a chain connecting it to the current key (which
-	// is what the current id resolves to) must pass.
 	resolver, _ := serveRecord(t, &registryRecord{
 		HumanID:   p1.root.ID,
 		PublicKey: p1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmt1},
 	})
-	resolver.Pin(p1.root.ID, p0.root.PublicKey)
+	resolver.Pin(p0.root.PublicKey) // stored under p0's own id — pin-time knowledge only
+
+	// General resolution: the chain passes through the pinned id with the
+	// pinned key — engages and passes.
 	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
-		t.Fatalf("pinned historical key connected by the chain must resolve: %v", err)
+		t.Fatalf("resolving the post-rotation id with a pre-rotation pin must work: %v", err)
 	}
 
-	// A registry answer whose chain does NOT include the pinned key fails —
-	// even if internally consistent (registry substituted a different lineage).
+	// Descent-required resolution: this is the check with teeth. The same
+	// record descends from the pin — passes.
+	if _, err := resolver.ResolveRootDescendedFrom(p1.root.ID, p0.root.PublicKey); err != nil {
+		t.Fatalf("descent from the pinned key must be provable from the chain: %v", err)
+	}
+}
+
+func TestResolverDescentRequirementCatchesLineageSubstitution(t *testing.T) {
+	// A registry serving an internally consistent but UNRELATED lineage for
+	// an id the caller believes succeeds a known principal: plain
+	// ResolveRoot passes (the record is valid and touches no pinned id),
+	// but the descent-required call must fail — that distinction is the
+	// point of ResolveRootDescendedFrom.
+	p0 := newPrincipal(t)
 	q0 := newPrincipal(t)
 	stmtQ, q1 := rotate(t, q0)
-	resolver2, _ := serveRecord(t, &registryRecord{
+	resolver, _ := serveRecord(t, &registryRecord{
 		HumanID:   q1.root.ID,
 		PublicKey: q1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmtQ},
 	})
-	resolver2.Pin(q1.root.ID, p0.root.PublicKey)
-	if _, err := resolver2.ResolveRoot(q1.root.ID); err == nil {
-		t.Fatal("chain that does not connect the pinned key must be a continuity failure")
+	resolver.Pin(p0.root.PublicKey)
+
+	if _, err := resolver.ResolveRoot(q1.root.ID); err != nil {
+		t.Fatalf("unrelated principal must still resolve under registry trust: %v", err)
+	}
+	if _, err := resolver.ResolveRootDescendedFrom(q1.root.ID, p0.root.PublicKey); err == nil {
+		t.Fatal("descent requirement must reject a lineage that does not contain the pinned key")
 	}
 }
 
 func TestResolverPinRecordedAfterCacheIsEnforced(t *testing.T) {
-	// SPEC §13.1: pin continuity applies to every resolution, including
-	// cache hits — a pin recorded after a record was cached must be
-	// enforced against it, not bypassed by the cache.
+	// SPEC §13.1: pin checks apply to every resolution, including cache
+	// hits — a pin recorded after a record was cached must be enforced
+	// against it, not bypassed by the cache.
 	p0 := newPrincipal(t)
 	stmt1, p1 := rotate(t, p0)
 	resolver, _ := serveRecord(t, &registryRecord{
@@ -236,19 +257,22 @@ func TestResolverPinRecordedAfterCacheIsEnforced(t *testing.T) {
 		t.Fatalf("first resolve (caches record): %v", err)
 	}
 
-	// Pin a key from an UNRELATED lineage after caching: the cached record
-	// cannot connect it, so the next resolution must fail.
-	stranger := newPrincipal(t)
-	resolver.Pin(p1.root.ID, stranger.root.PublicKey)
-	if _, err := resolver.ResolveRoot(p1.root.ID); err == nil {
-		t.Fatal("pin recorded after caching must be enforced on cache hits (continuity failure expected)")
+	// Pin recorded AFTER caching: the cached record's chain passes through
+	// the pinned id with the pinned key — engages on the cache hit and
+	// passes (no refetch).
+	resolver.Pin(p0.root.PublicKey)
+	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
+		t.Fatalf("pin recorded after caching must be evaluated on cache hits: %v", err)
 	}
 
-	// Re-pin with the genuine historical key: the same cached record
-	// connects it, so resolution succeeds again.
-	resolver.Pin(p1.root.ID, p0.root.PublicKey)
-	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
-		t.Fatalf("genuine pin connected by the cached chain must resolve: %v", err)
+	// Descent requirement against the CACHED record: unrelated key fails,
+	// genuine historical key passes — both served from cache.
+	stranger := newPrincipal(t)
+	if _, err := resolver.ResolveRootDescendedFrom(p1.root.ID, stranger.root.PublicKey); err == nil {
+		t.Fatal("descent from an unrelated key must fail on cached records too")
+	}
+	if _, err := resolver.ResolveRootDescendedFrom(p1.root.ID, p0.root.PublicKey); err != nil {
+		t.Fatalf("descent from the genuine pinned key must pass on cached records: %v", err)
 	}
 }
 

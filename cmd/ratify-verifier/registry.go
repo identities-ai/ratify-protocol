@@ -92,63 +92,108 @@ func NewRegistryResolver(baseURL string, ttl time.Duration, client *http.Client)
 	}, nil
 }
 
-// Pin records a trusted key for humanID — the verifier's own trust decision
-// (first trust; §13.1, §15.4). Once pinned, ResolveRoot additionally requires
-// the registry's rotation chain to connect this key to the current key.
-func (r *RegistryResolver) Pin(humanID string, key ratify.HybridPublicKey) {
+// Pin records a trusted key — the verifier's own trust decision (first
+// trust; §13.1, §15.4). Pins are keyed by the pinned key's OWN derived id
+// (§7): that is the only id the verifier can know at pin time — a rotation
+// that happens later changes the principal's id, and discovering that new
+// id's legitimacy is exactly what the rotation chain proves. Once pinned,
+// any resolution whose chain passes through this key's id must carry
+// exactly this key, and callers that require descent from this specific
+// key use ResolveRootDescendedFrom.
+func (r *RegistryResolver) Pin(key ratify.HybridPublicKey) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.pinned[humanID] = key
+	r.pinned[ratify.DeriveID(key)] = key
+}
+
+// ResolveRootDescendedFrom resolves currentID like ResolveRoot and
+// ADDITIONALLY requires the returned record to descend from pinnedKey: the
+// pinned key must be the current key itself or appear as a statement's old
+// key in the rotation chain. This is the check with real teeth against
+// lineage substitution — a registry serving an internally consistent but
+// unrelated chain for an id the caller believes succeeds a known principal.
+// Applies to cache hits identically.
+func (r *RegistryResolver) ResolveRootDescendedFrom(currentID string, pinnedKey ratify.HybridPublicKey) (ratify.HybridPublicKey, error) {
+	var zero ratify.HybridPublicKey
+	key, rec, err := r.resolve(currentID)
+	if err != nil {
+		return zero, err
+	}
+	if !chainContainsKey(rec, pinnedKey) {
+		return zero, errors.New("record does not descend from the required pinned key (continuity failure)")
+	}
+	return key, nil
 }
 
 // ResolveRoot returns the principal's current root key. Every failure mode
 // returns an error; callers MUST treat any error as "key unresolved" and
 // fail verification.
 func (r *RegistryResolver) ResolveRoot(humanID string) (ratify.HybridPublicKey, error) {
+	key, _, err := r.resolve(humanID)
+	return key, err
+}
+
+// resolve is the shared fetch/cache/validate path. It returns the current
+// key and the validated record so descent checks can inspect the chain.
+func (r *RegistryResolver) resolve(humanID string) (ratify.HybridPublicKey, *registryRecord, error) {
 	var zero ratify.HybridPublicKey
 	if !humanIDPattern.MatchString(humanID) {
-		return zero, fmt.Errorf("human_id %q is not 32 lowercase hex characters", humanID)
+		return zero, nil, fmt.Errorf("human_id %q is not 32 lowercase hex characters", humanID)
 	}
 
 	r.mu.Lock()
 	if c, ok := r.cache[humanID]; ok && r.now().Sub(c.fetchedAt) < r.ttl {
 		rec := c.rec
 		r.mu.Unlock()
-		// Pin connectivity is a property of the verifier's CURRENT pin
-		// set, not of the fetch — re-check it on every cache hit so a pin
+		// Pin checks are a property of the verifier's CURRENT pin set,
+		// not of the fetch — re-check on every cache hit so a pin
 		// recorded after caching cannot be bypassed (SPEC §13.1).
-		if err := r.checkPinConnectivity(humanID, &rec); err != nil {
-			return zero, err
+		if err := r.checkPins(&rec); err != nil {
+			return zero, nil, err
 		}
-		return rec.PublicKey, nil
+		return rec.PublicKey, &rec, nil
 	}
 	r.mu.Unlock()
 
 	resp, err := r.client.Get(r.baseURL + "/v1/registry/principals/" + humanID)
 	if err != nil {
-		return zero, fmt.Errorf("registry fetch: %w", err)
+		return zero, nil, fmt.Errorf("registry fetch: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return zero, fmt.Errorf("registry returned status %d", resp.StatusCode)
+		return zero, nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return zero, fmt.Errorf("registry body: %w", err)
+		return zero, nil, fmt.Errorf("registry body: %w", err)
 	}
 	var rec registryRecord
 	if err := json.Unmarshal(body, &rec); err != nil {
-		return zero, fmt.Errorf("registry JSON: %w", err)
+		return zero, nil, fmt.Errorf("registry JSON: %w", err)
 	}
 	if err := r.validate(humanID, &rec); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 
 	r.mu.Lock()
 	r.cache[humanID] = cachedRecord{rec: rec, fetchedAt: r.now()}
 	r.mu.Unlock()
-	return rec.PublicKey, nil
+	return rec.PublicKey, &rec, nil
+}
+
+// chainContainsKey reports whether key is the record's current key or
+// appears as any rotation statement's old key.
+func chainContainsKey(rec *registryRecord, key ratify.HybridPublicKey) bool {
+	if pubKeyEqual(key, rec.PublicKey) {
+		return true
+	}
+	for i := range rec.Rotations {
+		if pubKeyEqual(key, rec.Rotations[i].OldPubKey) {
+			return true
+		}
+	}
+	return false
 }
 
 // validate applies the §13.1 resolver checks to a fetched record.
@@ -189,31 +234,33 @@ func (r *RegistryResolver) validate(humanID string, rec *registryRecord) error {
 		}
 	}
 
-	return r.checkPinConnectivity(humanID, rec)
+	return r.checkPins(rec)
 }
 
-// checkPinConnectivity enforces pinned-key continuity: when a pin exists for
-// humanID, the record's rotation chain must connect the pinned key to the
-// current key. The pin may be the current key itself or any historical key
-// appearing as a statement's old key. Called on fetch AND on every cache hit
-// — connectivity depends on the verifier's current pin set, not on when the
-// record was fetched.
-func (r *RegistryResolver) checkPinConnectivity(humanID string, rec *registryRecord) error {
+// checkPins enforces the store-based pin rule: whenever the record's
+// lineage passes through an id the verifier has pinned — as a rotation
+// statement's old id or as the current id — the key at that position must
+// equal the pinned key. Pins are keyed by the pinned key's own derived id
+// (the only id the verifier could know at pin time), so this fires for a
+// pre-rotation pin when the post-rotation chain is presented, without the
+// caller needing to know the new id in advance. Called on fetch AND on
+// every cache hit. Note: a record whose lineage never touches a pinned id
+// passes this check — pins constrain claimed lineage; requiring descent
+// from a specific pin is ResolveRootDescendedFrom's job.
+func (r *RegistryResolver) checkPins(rec *registryRecord) error {
 	r.mu.Lock()
-	pin, pinned := r.pinned[humanID]
-	r.mu.Unlock()
-	if !pinned {
+	defer r.mu.Unlock()
+	if len(r.pinned) == 0 {
 		return nil
 	}
-	connected := pubKeyEqual(pin, rec.PublicKey)
-	for i := range rec.Rotations {
-		if pubKeyEqual(pin, rec.Rotations[i].OldPubKey) {
-			connected = true
-			break
-		}
+	if pin, ok := r.pinned[rec.HumanID]; ok && !pubKeyEqual(pin, rec.PublicKey) {
+		return errors.New("record's current key does not match the key pinned under this id")
 	}
-	if !connected {
-		return errors.New("rotation chain does not connect the pinned key to the current key (continuity failure)")
+	for i := range rec.Rotations {
+		stmt := &rec.Rotations[i]
+		if pin, ok := r.pinned[stmt.OldID]; ok && !pubKeyEqual(pin, stmt.OldPubKey) {
+			return fmt.Errorf("rotation %d claims lineage through pinned id %s with a different key", i, stmt.OldID)
+		}
 	}
 	return nil
 }

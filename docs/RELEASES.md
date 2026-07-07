@@ -138,11 +138,12 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 8a. **Push the protocol tag alone, then the `sdk-*` tags.** GitHub creates no push event when more than three tags arrive at once (see §5.3.1) — the protocol tag must travel by itself to trigger the Release workflow.
 9. **(Optional / emergency only) Publish to registries if `PUBLISH=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
-   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@1.0.0-alpha.11`.
-   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==1.0.0a10`.
-   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "1.0.0-alpha.11"`.
+   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@<version>`.
+   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==<PEP 440 version>`.
+   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "<version>"`.
 10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now — see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
-11. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
+11. **Update downstream claims.** The docs site (`ratify-docs`) and marketing site (`identities-marketing`) each carry protocol facts — version, fixture count, scope count, SDK list — centralized in one constants file per repo (`src/constants/protocol.ts` / `lib/protocol-facts.ts`, plus each repo's bump checklist for literals in code snippets). Bump them via a normal PR in each repo as part of release day. `check-release-sync.sh` cannot reach those repos; this step is the manual bridge.
+12. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
 
 ### 4.3 What happens on failure mid-publish
 

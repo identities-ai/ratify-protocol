@@ -6,6 +6,19 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.13 (unreleased)
+
+### Fixed — C SDK version pipeline
+
+- `sdks/c` was invisible to the release pipeline: `bump_versions` never touched its manifests (crate stuck at alpha.10 in-tree — meaning `ratify_version()` in the alpha.11/alpha.12 release binaries reported alpha.10), the CI crates job never published it (crates.io `ratify-c` frozen at alpha.8 since publishing moved off the manual flow), and `check-release-sync.sh` never checked it. All three fixed: the bump now covers `sdks/c/Cargo.toml` (crate version + `ratify-protocol` dependency pin), `Cargo.lock`, and the cbindgen header banner; the sync gate asserts all three match; the CI crates job publishes `ratify-c` after `ratify-protocol` indexes; the tag-coherence gate checks the C version. C crate bumped to alpha.12 in-tree.
+- Remaining count-stale CI step/job names made count-free ("Python SDK (102 tests)", "TS full test suite (101 tests)", "C/C++ SDK (63 fixtures + API tests)", "Python full test suite (102 tests)"). Note for consumers of required status checks: the required context "Python SDK (102 tests)" is renamed to "Python SDK".
+
+### Changed — ROADMAP
+
+- No-expiry sentinel section rewritten from "proposed / until this ships" to shipped-in-alpha.12 behavior (and its stale SPEC §4.3 reference corrected to §5.1/§5.7).
+
+---
+
 ## v1.0.0-alpha.12 (2026-07-06)
 
 ### Added — no-expiry sentinel (normative)

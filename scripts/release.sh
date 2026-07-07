@@ -144,6 +144,33 @@ write(
     ),
 )
 
+# C SDK: crate version, the ratify-protocol dependency pin (used by
+# cargo publish to substitute the path dependency), the cbindgen header
+# banner, and both package entries in its lockfile. Forgetting these left
+# ratify-c stuck at alpha.10 in-tree (and alpha.8 on crates.io) through
+# two releases.
+c_toml = read("sdks/c/Cargo.toml")
+c_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', c_toml, count=1, flags=re.M)
+c_toml = re.sub(
+    r'(ratify-protocol = \{ path = "\.\./rust", version = ")[^"]+("\ \})',
+    rf'\g<1>{npm_version}\2',
+    c_toml,
+)
+write("sdks/c/Cargo.toml", c_toml)
+
+c_lock = read("sdks/c/Cargo.lock")
+for pkg in ("ratify-c", "ratify-protocol"):
+    c_lock = re.sub(
+        rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
+        rf'\g<1>{npm_version}\2',
+        c_lock,
+        count=1,
+    )
+write("sdks/c/Cargo.lock", c_lock)
+
+cbindgen = read("sdks/c/cbindgen.toml")
+write("sdks/c/cbindgen.toml", re.sub(r'(\* Version: )[^\n"]+', rf'\g<1>{npm_version}', cbindgen, count=1))
+
 old_protocol = "v" + old_npm
 # docs/RELEASES.md is deliberately NOT in this list: it contains historical
 # version references (the alpha ladder in §3.2) that a blanket old→new

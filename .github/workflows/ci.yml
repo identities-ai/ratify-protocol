@@ -80,7 +80,7 @@ jobs:
         run: npm test
 
   python:
-    name: Python SDK (102 tests)
+    name: Python SDK
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -128,7 +128,7 @@ jobs:
         run: cargo test
 
   c-sdk:
-    name: C/C++ SDK (63 fixtures + API tests)
+    name: C/C++ SDK
     runs-on: ubuntu-latest
     defaults:
       run:

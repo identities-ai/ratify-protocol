@@ -74,14 +74,12 @@ The two items below are scopes and features identified through production adapte
 
 **Problem for SDK consumers:** Offline verifiers using only the protocol SDK see `ExpiresAt = 4070908799` and have no way to distinguish "no expiry" from a cert that legitimately expires in 2099. They may apply organizational policy caps incorrectly.
 
-**Proposed normalization:**
-1. Define `4070908799` as a normative sentinel in SPEC §4.3 with required display and policy behavior.
-2. Require all conformant SDKs to treat `ExpiresAt == 4070908799` as "no expiry (until revoked)" in display and policy evaluation — not as a literal 2099 expiry.
-3. Add a conformance fixture: `no_expiry_cert.json` with `ExpiresAt = 4070908799`, verify that all SDKs accept it as valid without treating it as expired.
+**Normalization (shipped in v1.0.0-alpha.12):**
+1. `4070908799` is a normative sentinel — `NO_EXPIRY_SENTINEL` in SPEC §5.1, display/policy behavior in §5.7.
+2. Conformant SDKs MUST treat `ExpiresAt == NO_EXPIRY_SENTINEL` as "no expiry (until revoked)" in display and policy evaluation — not as a literal 2099 expiry. Constant + helper in every SDK (Go `IsNoExpiry()`, TS `isNoExpiry()`, Python/Rust `is_no_expiry()`, C `ratify_expires_at_is_no_expiry()`).
+3. Conformance fixture `no_expiry_cert.json` pins the verify behavior.
 
-**Alternative (v2.0):** Add `NoExpiry bool` or `ExpiresAt *int64` to `DelegationCert`. This is a wire-breaking change and belongs in v2.0 rather than a v1.x patch.
-
-**Until this ships:** Platforms consuming the offline SDK should treat `ExpiresAt > (now + 50 years)` as "no expiry" for display purposes, and rely on Ratify's managed revocation rather than local expiry checks for these certs.
+**Alternative not taken:** `NoExpiry bool` or `ExpiresAt *int64` on `DelegationCert` would be wire-breaking; if the sentinel ever proves insufficient it belongs in v2.0.
 
 ---
 

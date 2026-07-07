@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-c"
-version = "1.0.0-alpha.10"
+version = "1.0.0-alpha.12"
 dependencies = [
  "cbindgen",
  "getrandom 0.2.17",

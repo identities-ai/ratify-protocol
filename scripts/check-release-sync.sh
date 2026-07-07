@@ -52,6 +52,17 @@ if not lock_match:
 if lock_match.group(1) != rust_version:
     fail(f"Cargo.lock ratify-protocol {lock_match.group(1)} != Cargo.toml {rust_version}")
 
+c_toml = read("sdks/c/Cargo.toml")
+c_match = re.search(r'^version = "([^"]+)"$', c_toml, re.M)
+if not c_match:
+    fail("missing C version in sdks/c/Cargo.toml")
+c_version = c_match.group(1)
+c_dep_match = re.search(r'ratify-protocol = \{ path = "\.\./rust", version = "([^"]+)" \}', c_toml)
+if not c_dep_match:
+    fail("missing ratify-protocol dependency pin in sdks/c/Cargo.toml")
+cbindgen = read("sdks/c/cbindgen.toml")
+c_banner_match = re.search(r'\* Version: (\S+)', cbindgen)
+
 def py_to_semver(v: str) -> str:
     return re.sub(r'a(\d+)$', r'-alpha.\1', v)
 
@@ -59,6 +70,13 @@ if py_to_semver(py_version) != ts_version:
     fail(f"Python version {py_version} does not match TypeScript {ts_version}")
 if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
+if c_version != ts_version:
+    fail(f"C version {c_version} does not match TypeScript {ts_version}")
+if c_dep_match.group(1) != ts_version:
+    fail(f"C ratify-protocol dependency pin {c_dep_match.group(1)} does not match {ts_version}")
+if not c_banner_match or c_banner_match.group(1) != ts_version:
+    got = c_banner_match.group(1) if c_banner_match else "missing"
+    fail(f"cbindgen.toml header banner version {got} does not match {ts_version}")
 
 protocol_tag = f"v{ts_version}"
 # docs/RELEASES.md is deliberately absent: its version strings are

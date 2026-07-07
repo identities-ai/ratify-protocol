@@ -84,6 +84,9 @@ protocol_tag = f"v{ts_version}"
 must_contain = {
     "README.md": protocol_tag,
     "SPEC.md": protocol_tag,
+    "sdks/go/README.md": protocol_tag,
+    "sdks/typescript/README.md": ts_version,
+    "sdks/python/README.md": py_version,
     "sdks/rust/README.md": rust_version,
 }
 for path, needle in must_contain.items():

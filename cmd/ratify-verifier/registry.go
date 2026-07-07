@@ -41,8 +41,14 @@ type registryRecord struct {
 	UpdatedAt int64                         `json:"updated_at"`
 }
 
-type cachedKey struct {
-	key       ratify.HybridPublicKey
+// cachedRecord stores the FULL validated record, not just the key: pin
+// connectivity must be re-checked on every cache hit, because a pin recorded
+// after the record was cached must be enforced against it (SPEC §13.1), and
+// that check needs the rotation chain. Signatures are validated once at
+// fetch time — the cached chain is immutable — but connectivity is not a
+// fetch-time property; it depends on the verifier's current pin set.
+type cachedRecord struct {
+	rec       registryRecord
 	fetchedAt time.Time
 }
 
@@ -55,7 +61,7 @@ type RegistryResolver struct {
 
 	mu     sync.Mutex
 	pinned map[string]ratify.HybridPublicKey
-	cache  map[string]cachedKey
+	cache  map[string]cachedRecord
 }
 
 // NewRegistryResolver builds a resolver for the given registry base URL.
@@ -82,7 +88,7 @@ func NewRegistryResolver(baseURL string, ttl time.Duration, client *http.Client)
 		ttl:     ttl,
 		now:     time.Now,
 		pinned:  make(map[string]ratify.HybridPublicKey),
-		cache:   make(map[string]cachedKey),
+		cache:   make(map[string]cachedRecord),
 	}, nil
 }
 
@@ -106,9 +112,15 @@ func (r *RegistryResolver) ResolveRoot(humanID string) (ratify.HybridPublicKey, 
 
 	r.mu.Lock()
 	if c, ok := r.cache[humanID]; ok && r.now().Sub(c.fetchedAt) < r.ttl {
-		key := c.key
+		rec := c.rec
 		r.mu.Unlock()
-		return key, nil
+		// Pin connectivity is a property of the verifier's CURRENT pin
+		// set, not of the fetch — re-check it on every cache hit so a pin
+		// recorded after caching cannot be bypassed (SPEC §13.1).
+		if err := r.checkPinConnectivity(humanID, &rec); err != nil {
+			return zero, err
+		}
+		return rec.PublicKey, nil
 	}
 	r.mu.Unlock()
 
@@ -134,7 +146,7 @@ func (r *RegistryResolver) ResolveRoot(humanID string) (ratify.HybridPublicKey, 
 	}
 
 	r.mu.Lock()
-	r.cache[humanID] = cachedKey{key: rec.PublicKey, fetchedAt: r.now()}
+	r.cache[humanID] = cachedRecord{rec: rec, fetchedAt: r.now()}
 	r.mu.Unlock()
 	return rec.PublicKey, nil
 }
@@ -146,6 +158,15 @@ func (r *RegistryResolver) validate(humanID string, rec *registryRecord) error {
 	}
 	if len(rec.PublicKey.Ed25519) != 32 || len(rec.PublicKey.MLDSA65) != 1952 {
 		return errors.New("registry record public_key has wrong component sizes")
+	}
+	// Identifier semantics (§13.1): {human_id} addresses the CURRENT key,
+	// and ids are key-derived (§7) — so the record's public_key must derive
+	// exactly the id it is served under. This also enforces "final new_id
+	// == human_id" for rotated principals, since statement ids are bound to
+	// their keys by VerifyKeyRotationStatement and the final new key must
+	// equal public_key.
+	if ratify.DeriveID(rec.PublicKey) != humanID {
+		return errors.New("public_key does not derive human_id — record is not addressed by its current key")
 	}
 
 	// Rotation chain: oldest → newest, each statement dual-signed and
@@ -168,23 +189,31 @@ func (r *RegistryResolver) validate(humanID string, rec *registryRecord) error {
 		}
 	}
 
-	// Pinned-key continuity: the chain must connect the verifier's pinned
-	// key to the current key. The pin may be the current key itself or any
-	// historical key that appears as a statement's old key.
+	return r.checkPinConnectivity(humanID, rec)
+}
+
+// checkPinConnectivity enforces pinned-key continuity: when a pin exists for
+// humanID, the record's rotation chain must connect the pinned key to the
+// current key. The pin may be the current key itself or any historical key
+// appearing as a statement's old key. Called on fetch AND on every cache hit
+// — connectivity depends on the verifier's current pin set, not on when the
+// record was fetched.
+func (r *RegistryResolver) checkPinConnectivity(humanID string, rec *registryRecord) error {
 	r.mu.Lock()
 	pin, pinned := r.pinned[humanID]
 	r.mu.Unlock()
-	if pinned {
-		connected := pubKeyEqual(pin, rec.PublicKey)
-		for i := range rec.Rotations {
-			if pubKeyEqual(pin, rec.Rotations[i].OldPubKey) {
-				connected = true
-				break
-			}
+	if !pinned {
+		return nil
+	}
+	connected := pubKeyEqual(pin, rec.PublicKey)
+	for i := range rec.Rotations {
+		if pubKeyEqual(pin, rec.Rotations[i].OldPubKey) {
+			connected = true
+			break
 		}
-		if !connected {
-			return errors.New("rotation chain does not connect the pinned key to the current key (continuity failure)")
-		}
+	}
+	if !connected {
+		return errors.New("rotation chain does not connect the pinned key to the current key (continuity failure)")
 	}
 	return nil
 }

@@ -103,17 +103,36 @@ func TestResolverHappyPathWithRotationChain(t *testing.T) {
 	p0 := newPrincipal(t)
 	stmt1, p1 := rotate(t, p0)
 	stmt2, p2 := rotate(t, p1)
+	// §13.1 identifier semantics: ids are key-derived, so rotation changes
+	// the principal's id — the registry addresses the record by the CURRENT
+	// id, and that is the id a current-key bundle presents as its root issuer.
 	resolver, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID, // the registry keys the record by the ORIGINAL id
+		HumanID:   p2.root.ID,
 		PublicKey: p2.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmt1, stmt2},
 	})
-	key, err := resolver.ResolveRoot(p0.root.ID)
+	key, err := resolver.ResolveRoot(p2.root.ID)
 	if err != nil {
 		t.Fatalf("resolve with chain: %v", err)
 	}
 	if !pubKeyEqual(key, p2.root.PublicKey) {
 		t.Fatal("resolved key must be the post-rotation current key")
+	}
+}
+
+func TestResolverRejectsRecordNotAddressedByCurrentKey(t *testing.T) {
+	// A record served under a rotated-away id (public_key does not derive
+	// the id it is addressed by) is malformed — DeriveID(public_key) must
+	// equal human_id. This pins the §13.1 identifier semantics.
+	p0 := newPrincipal(t)
+	stmt1, p1 := rotate(t, p0)
+	resolver, _ := serveRecord(t, &registryRecord{
+		HumanID:   p0.root.ID, // WRONG: addressed by the original id
+		PublicKey: p1.root.PublicKey,
+		Rotations: []ratify.KeyRotationStatement{stmt1},
+	})
+	if _, err := resolver.ResolveRoot(p0.root.ID); err == nil {
+		t.Fatal("record addressed by a rotated-away id must be rejected (DeriveID(public_key) != human_id)")
 	}
 }
 
@@ -133,11 +152,11 @@ func TestResolverRejectsBrokenChainLink(t *testing.T) {
 	q0 := newPrincipal(t)
 	stmtX, q1 := rotate(t, q0)
 	resolver, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID,
+		HumanID:   q1.root.ID, // correctly addressed by the current key's id
 		PublicKey: q1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmt1, stmtX},
 	})
-	if _, err := resolver.ResolveRoot(p0.root.ID); err == nil {
+	if _, err := resolver.ResolveRoot(q1.root.ID); err == nil {
 		t.Fatal("non-contiguous rotation chain must be rejected")
 	}
 }
@@ -147,11 +166,11 @@ func TestResolverRejectsTamperedRotation(t *testing.T) {
 	stmt1, p1 := rotate(t, p0)
 	stmt1.Reason = "tampered-after-signing"
 	resolver, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID,
+		HumanID:   p1.root.ID,
 		PublicKey: p1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmt1},
 	})
-	if _, err := resolver.ResolveRoot(p0.root.ID); err == nil {
+	if _, err := resolver.ResolveRoot(p1.root.ID); err == nil {
 		t.Fatal("rotation statement with invalid signatures must be rejected")
 	}
 }
@@ -161,11 +180,11 @@ func TestResolverRejectsFinalKeyMismatch(t *testing.T) {
 	stmt1, _ := rotate(t, p0)
 	impostor := newPrincipal(t)
 	resolver, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID,
-		PublicKey: impostor.root.PublicKey, // not stmt1's new key
-		Rotations: []ratify.KeyRotationStatement{stmt1},
+		HumanID:   impostor.root.ID, // id derives from public_key, so the
+		PublicKey: impostor.root.PublicKey, // final-key check is what trips
+		Rotations: []ratify.KeyRotationStatement{stmt1}, // stmt1's new key ≠ public_key
 	})
-	if _, err := resolver.ResolveRoot(p0.root.ID); err == nil {
+	if _, err := resolver.ResolveRoot(impostor.root.ID); err == nil {
 		t.Fatal("public_key not produced by the final rotation must be rejected")
 	}
 }
@@ -174,14 +193,15 @@ func TestResolverPinnedKeyContinuity(t *testing.T) {
 	p0 := newPrincipal(t)
 	stmt1, p1 := rotate(t, p0)
 
-	// Pin the ORIGINAL key; a chain connecting it to current must pass.
+	// Pin the ORIGINAL key; a chain connecting it to the current key (which
+	// is what the current id resolves to) must pass.
 	resolver, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID,
+		HumanID:   p1.root.ID,
 		PublicKey: p1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmt1},
 	})
-	resolver.Pin(p0.root.ID, p0.root.PublicKey)
-	if _, err := resolver.ResolveRoot(p0.root.ID); err != nil {
+	resolver.Pin(p1.root.ID, p0.root.PublicKey)
+	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
 		t.Fatalf("pinned historical key connected by the chain must resolve: %v", err)
 	}
 
@@ -190,13 +210,45 @@ func TestResolverPinnedKeyContinuity(t *testing.T) {
 	q0 := newPrincipal(t)
 	stmtQ, q1 := rotate(t, q0)
 	resolver2, _ := serveRecord(t, &registryRecord{
-		HumanID:   p0.root.ID,
+		HumanID:   q1.root.ID,
 		PublicKey: q1.root.PublicKey,
 		Rotations: []ratify.KeyRotationStatement{stmtQ},
 	})
-	resolver2.Pin(p0.root.ID, p0.root.PublicKey)
-	if _, err := resolver2.ResolveRoot(p0.root.ID); err == nil {
+	resolver2.Pin(q1.root.ID, p0.root.PublicKey)
+	if _, err := resolver2.ResolveRoot(q1.root.ID); err == nil {
 		t.Fatal("chain that does not connect the pinned key must be a continuity failure")
+	}
+}
+
+func TestResolverPinRecordedAfterCacheIsEnforced(t *testing.T) {
+	// SPEC §13.1: pin continuity applies to every resolution, including
+	// cache hits — a pin recorded after a record was cached must be
+	// enforced against it, not bypassed by the cache.
+	p0 := newPrincipal(t)
+	stmt1, p1 := rotate(t, p0)
+	resolver, _ := serveRecord(t, &registryRecord{
+		HumanID:   p1.root.ID,
+		PublicKey: p1.root.PublicKey,
+		Rotations: []ratify.KeyRotationStatement{stmt1},
+	})
+
+	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
+		t.Fatalf("first resolve (caches record): %v", err)
+	}
+
+	// Pin a key from an UNRELATED lineage after caching: the cached record
+	// cannot connect it, so the next resolution must fail.
+	stranger := newPrincipal(t)
+	resolver.Pin(p1.root.ID, stranger.root.PublicKey)
+	if _, err := resolver.ResolveRoot(p1.root.ID); err == nil {
+		t.Fatal("pin recorded after caching must be enforced on cache hits (continuity failure expected)")
+	}
+
+	// Re-pin with the genuine historical key: the same cached record
+	// connects it, so resolution succeeds again.
+	resolver.Pin(p1.root.ID, p0.root.PublicKey)
+	if _, err := resolver.ResolveRoot(p1.root.ID); err != nil {
+		t.Fatalf("genuine pin connected by the cached chain must resolve: %v", err)
 	}
 }
 

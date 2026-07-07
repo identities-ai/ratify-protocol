@@ -8,6 +8,12 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ## v1.0.0-alpha.13 (unreleased)
 
+### Added — SPEC §13.1: registry read binding (optional)
+
+- Defines the open lookup contract for registry-mode key discovery (§15.4): `GET /v1/registry/principals/{human_id}` returning the current root key, the full `KeyRotationStatement` chain (oldest → newest), the optional `Anchor`, and `updated_at`. TLS mandatory; no enumeration endpoint; constant-shape 404s; short cache lifetimes.
+- Resolver requirements are fail-closed on every branch (network, schema, chain order, dual-signature validity, link contiguity, final-key match, pinned-key continuity, staleness). Historical-root bundles are rejected by default after rotation. The contract states plainly that rotation proves continuity **after** first trust — first key acquisition is the trust decision — and that the v1 trust model is registry operator + TLS, with signed responses / witness-logged registries as the designated future hardening.
+- A reference resolver in `cmd/ratify-verifier` ships alongside (no SDK API surface, no fixtures, no wire change).
+
 ### Fixed — C SDK version pipeline
 
 - `sdks/c` was invisible to the release pipeline: `bump_versions` never touched its manifests (crate stuck at alpha.10 in-tree — meaning `ratify_version()` in the alpha.11/alpha.12 release binaries reported alpha.10), the CI crates job never published it (crates.io `ratify-c` frozen at alpha.8 since publishing moved off the manual flow), and `check-release-sync.sh` never checked it. All three fixed: the bump now covers `sdks/c/Cargo.toml` (crate version + `ratify-protocol` dependency pin), `Cargo.lock`, and the cbindgen header banner; the sync gate asserts all three match; the CI crates job publishes `ratify-c` after `ratify-protocol` indexes; the tag-coherence gate checks the C version. C crate bumped to alpha.12 in-tree.

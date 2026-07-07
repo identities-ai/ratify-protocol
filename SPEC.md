@@ -1133,6 +1133,41 @@ GET /v1/ratify/scopes
 
 `Content-Type` MUST be `application/json`. Canonical serialization applies only to signable-bytes computation; wire-format JSON at the HTTP layer MAY include whitespace for readability.
 
+### 13.1 Registry read binding (optional)
+
+The registry bootstrap mode of §15.4 needs a lookup contract: given a `human_id`, return the principal's current public key with enough evidence for a verifier to validate key continuity. This binding defines that contract so that **any** registry — the Ratify Verify managed service or a third party — can implement it interchangeably. Like the rest of §13, it is optional but defined: a deployment that uses registry-mode key discovery SHOULD use this shape; deployments using other bootstrap modes need none of it.
+
+```
+GET /v1/registry/principals/{human_id}
+
+Response 200:
+{
+  "human_id":   "<hex>",
+  "public_key": <HybridPublicKey>,          // the CURRENT root key
+  "rotations":  [<KeyRotationStatement>…],  // full chain, oldest → newest; [] if never rotated
+  "anchor":     <Anchor> | null,            // external-identity binding (§5.5), if published
+  "updated_at": <unix-seconds>              // when this record last changed
+}
+
+Response 404: unknown principal. The body carries no detail.
+```
+
+**Transport requirements.** Registry-mode lookup MUST use authenticated transport (in practice HTTPS/TLS with certificate verification). A registry reached over unauthenticated transport is an attacker-writable trust root; resolvers MUST refuse plain-HTTP registry URLs rather than fall back.
+
+**Registry server requirements.**
+- `human_id` MUST be validated and normalized (lowercase hex of the defined length) before lookup; malformed IDs are a 404-equivalent rejection, not an error-detail oracle.
+- There is deliberately NO enumeration or listing endpoint in this binding. Registries MUST NOT expose one under this contract's path prefix.
+- Responses SHOULD carry `Cache-Control: max-age` (short — minutes, not hours) and an `ETag`; `updated_at` is informational, not a freshness guarantee.
+- Unknown principals are `404` with a constant-shape body; the registry MUST NOT distinguish "never existed" from "existed, now removed."
+
+**Resolver (verifier-side) requirements — fail closed on every branch.** A resolver consuming this binding MUST reject (treat the principal's key as unresolved, causing verification to fail) on: network failure; non-200 status; malformed or schema-violating JSON; a rotation chain that is out of order, contains a statement whose signatures do not both verify (§5.15), or whose links are not contiguous (each statement's new key is the next statement's old key); a final rotation whose new key does not equal `public_key`; or cached data older than the deployment's staleness policy. When the verifier holds a **pinned historical key** for the principal, the chain MUST connect that pinned key to `public_key`; a chain that does not include the pinned key is a continuity failure, not a soft mismatch.
+
+**Historical roots.** A proof bundle whose chain root is signed by a key that the rotation chain shows was rotated *away* MUST be rejected by default. A verifier MAY accept historical-root bundles under explicit policy (e.g. a grace window after rotation), but silence means reject.
+
+**What this binding does and does not establish.** Rotation-chain validation proves **continuity after first trust** — that today's key is the legitimate successor of a key you already trusted. It does not, and cannot, prove that the *first* key belonged to the claimed principal: first acquisition — from this registry or anywhere else — **is** the trust decision (§15.4, threat T12). The v1 contract's trust model is explicit: the verifier trusts the registry operator (threat T9) and the TLS channel. Signed response envelopes and witness-logged registry entries (§5.12) are the designated future hardening path and are intentionally not specified here; a registry MAY additionally log its records to a witness chain today, and verifiers MAY check consistency, per §15.4's composition note.
+
+The `AnchorResolver` provider interface (§17.8) is unrelated to this binding: it runs after successful verification to attach audit identity metadata. This binding is consulted *before* verification, to obtain the trust root itself.
+
 ---
 
 ## 14. Conformance
@@ -1234,7 +1269,7 @@ A verifier MUST obtain principal public keys through at least one of the followi
 |------|------------------------------|------------------|------|
 | **Pinned keys** | Operator pins principal keys out-of-band during onboarding (contract exchange, config management). | The onboarding channel. | Closed B2B integrations, high-stakes endpoints, offline/edge verifiers. |
 | **Enterprise IdP root** | The organization's IdP holds the root key (delegated custody, §15.2); the verifier pins one IdP key and every member identity chains from it. | The enterprise IdP. | Workforce deployments. |
-| **Registry lookup** | A registry maps `human_id` / `Anchor` (§5.5) to a public key, queried through a deployment-specific resolver *before* verification. | The registry operator (threat T9 applies). | Internet-scale consumer deployments. |
+| **Registry lookup** | A registry maps `human_id` / `Anchor` (§5.5) to a public key, queried through a resolver *before* verification. §13.1 defines the optional read binding any registry can implement. | The registry operator (threat T9 applies). | Internet-scale consumer deployments. |
 | **Self-published + continuity** | The principal publishes the key at a stable location they control (DNS record, website, profile). First acquisition is trust-on-first-use; subsequent key changes MUST be validated as a `KeyRotationStatement` chain (§5.15) from the pinned first key. | The publication channel, once, at first use. | Individuals and small publishers. |
 | **Witness-backed evidence** | Key publications and rotations are logged to one or more `WitnessEntry` chains (§5.12); the verifier checks that the key it received is consistent with the log and that no conflicting rotation exists. | At least one honest witness. | Augments any of the above; detects equivocation. |
 

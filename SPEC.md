@@ -1149,16 +1149,16 @@ Response 200:
   "updated_at": <unix-seconds>              // when this record last changed
 }
 
-Response 404: unknown principal. The body carries no detail.
+Response 404: see rejection shape below.
 ```
 
-**Transport requirements.** Registry-mode lookup MUST use authenticated transport (in practice HTTPS/TLS with certificate verification). A registry reached over unauthenticated transport is an attacker-writable trust root; resolvers MUST refuse plain-HTTP registry URLs rather than fall back.
+**Transport requirements.** Registry-mode lookup MUST use authenticated transport (in practice HTTPS/TLS with certificate verification). A registry reached over unauthenticated transport is an attacker-writable trust root; resolvers MUST refuse plain-HTTP registry URLs rather than fall back. (Test harnesses use TLS test servers; there is no loopback carveout in the contract.)
 
 **Registry server requirements.**
-- `human_id` MUST be validated and normalized (lowercase hex of the defined length) before lookup; malformed IDs are a 404-equivalent rejection, not an error-detail oracle.
+- `human_id` is exactly 32 lowercase hex characters (`hex(SHA-256(ed25519_pub || ml_dsa_65_pub)[:16])`, §7). The registry MUST validate this before lookup.
+- **One rejection shape.** Malformed `human_id`, unknown principal, and removed principal all return the identical response: `404` with the fixed body `{}` and no reason string, header, or timing behavior that distinguishes the cases. The registry is not an existence or format oracle.
 - There is deliberately NO enumeration or listing endpoint in this binding. Registries MUST NOT expose one under this contract's path prefix.
 - Responses SHOULD carry `Cache-Control: max-age` (short — minutes, not hours) and an `ETag`; `updated_at` is informational, not a freshness guarantee.
-- Unknown principals are `404` with a constant-shape body; the registry MUST NOT distinguish "never existed" from "existed, now removed."
 
 **Resolver (verifier-side) requirements — fail closed on every branch.** A resolver consuming this binding MUST reject (treat the principal's key as unresolved, causing verification to fail) on: network failure; non-200 status; malformed or schema-violating JSON; a rotation chain that is out of order, contains a statement whose signatures do not both verify (§5.15), or whose links are not contiguous (each statement's new key is the next statement's old key); a final rotation whose new key does not equal `public_key`; or cached data older than the deployment's staleness policy. When the verifier holds a **pinned historical key** for the principal, the chain MUST connect that pinned key to `public_key`; a chain that does not include the pinned key is a continuity failure, not a soft mismatch.
 

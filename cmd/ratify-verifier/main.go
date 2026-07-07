@@ -155,10 +155,22 @@ func main() {
 	apiKey := flag.String("api-key", "", "optional Bearer API key (if set, all requests must include it)")
 	rateLimit := flag.Int("rate-limit", 60, "max challenge requests per IP per minute (0 = unlimited)")
 	maxChallenges := flag.Int("max-challenges", 10000, "max pending challenges in memory")
+	registryURL := flag.String("registry", "", "optional https registry base URL (SPEC §13.1) — when set, the chain root key must be the registry's current key for the principal")
+	registryTTL := flag.Duration("registry-ttl", 5*time.Minute, "registry cache lifetime; stale entries are re-fetched, never served")
 	flag.Parse()
 
 	store := newChallengeStore(*maxChallenges)
 	limiter := newRateLimiter(*rateLimit)
+
+	var resolver *RegistryResolver
+	if *registryURL != "" {
+		var err error
+		resolver, err = NewRegistryResolver(*registryURL, *registryTTL, nil)
+		if err != nil {
+			log.Fatalf("registry: %v", err)
+		}
+		log.Printf("registry-mode key discovery enabled: %s (SPEC §13.1, fail-closed)", *registryURL)
+	}
 
 	authMiddleware := func(next http.HandlerFunc) http.HandlerFunc {
 		if *apiKey == "" {
@@ -232,6 +244,41 @@ func main() {
 			})
 			log.Printf("reject: unknown or consumed challenge")
 			return
+		}
+
+		// Registry-mode key discovery (SPEC §13.1): the chain root's issuer
+		// key must be the registry's CURRENT key for the principal. Any
+		// resolution failure is a rejection (fail closed); a mismatch is a
+		// rejection — historical roots are rejected by default.
+		if resolver != nil {
+			if len(bundle.Delegations) == 0 {
+				writeJSON(w, http.StatusOK, ratify.VerifyResult{
+					Valid:          false,
+					IdentityStatus: "invalid",
+					ErrorReason:    "registry_unresolved: bundle carries no delegations",
+				})
+				return
+			}
+			root := &bundle.Delegations[len(bundle.Delegations)-1]
+			key, err := resolver.ResolveRoot(root.IssuerID)
+			if err != nil {
+				writeJSON(w, http.StatusOK, ratify.VerifyResult{
+					Valid:          false,
+					IdentityStatus: "invalid",
+					ErrorReason:    "registry_unresolved: " + err.Error(),
+				})
+				log.Printf("reject: registry resolution failed for %s: %v", root.IssuerID, err)
+				return
+			}
+			if !pubKeyEqual(key, root.IssuerPubKey) {
+				writeJSON(w, http.StatusOK, ratify.VerifyResult{
+					Valid:          false,
+					IdentityStatus: "invalid",
+					ErrorReason:    "registry_key_mismatch: chain root key is not the registry's current key for this principal (historical roots are rejected by default — SPEC §13.1)",
+				})
+				log.Printf("reject: registry key mismatch for %s", root.IssuerID)
+				return
+			}
 		}
 
 		result := ratify.Verify(&bundle, ratify.VerifyOptions{RequiredScope: req.RequiredScope})

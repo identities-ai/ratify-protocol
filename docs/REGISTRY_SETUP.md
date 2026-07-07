@@ -154,11 +154,14 @@ This removes the personal-account attribution from the crate page entirely.
 ### 2.5 Create the API token for CI
 
 1. On <https://crates.io/me>, click **API Tokens → New Token**.
-2. Name: `gh-actions-release-ratify-protocol`.
-3. Scopes: select **publish-update** only, and scope to the crate
-   `ratify-protocol` (not "all crates"). This minimizes blast radius if the
-   token leaks.
-4. Copy the token.
+2. Name: `gh-actions-release-ratify`.
+3. Scopes: select **publish-update** only, and scope to **both crates this
+   repo publishes: `ratify-protocol` AND `ratify-c`** (not "all crates").
+   This minimizes blast radius if the token leaks. A token scoped to only
+   one crate fails the other's publish with a 403 — this happened at
+   v1.0.0-alpha.13 and was initially masked by the publish step's old
+   error handling.
+4. Set an expiry (a year is fine) and copy the token.
 5. On the GitHub repo: **Settings → Secrets and variables → Actions →
    New repository secret**. Name `CARGO_REGISTRY_TOKEN`, paste the value.
 
@@ -242,20 +245,29 @@ These should already match — verify and fix if not:
 
 ## 5. Smoke test the pipeline
 
-Once one or more registries are set up:
+Once one or more registries are set up, run a normal release through the
+two-phase flow ([`RELEASES.md`](RELEASES.md) §4). There is no direct push to
+main — the branch ruleset forbids it, releases included; the single-step
+`make release` this section used to describe was removed for that reason.
 
-1. Bump SDK versions to `v1.0.0-alpha.10` (or whatever the next release is)
-   using `make release VERSION=v1.0.0-alpha.10 PUSH=0` — this updates files
-   locally without pushing.
-2. Verify with `make release-check` that all SDK metadata is in sync.
-3. Push the bump commit to `main`, then push the tag: `git push origin v1.0.0-alpha.10`.
+1. `make release-prepare VERSION=<next version>` — creates the release
+   branch, bumps all SDK versions and README pins, runs the full cross-SDK
+   gate, and opens the release PR.
+2. Merge the release PR through the normal path (CI + DCO run on it), then
+   `git checkout main && git pull`.
+3. `make release-tag VERSION=<next version>` — verifies main carries the
+   bump, pushes the protocol tag alone (then the `sdk-*` tags), which
+   triggers the Release workflow.
 4. Watch <https://github.com/identities-ai/ratify-protocol/actions> for the
    Release workflow.
-5. After it completes:
+5. After it completes, verify each registry ACTUALLY serves the new version
+   (a green publish job is not proof — see `RELEASES.md` Appendix A Phase 4):
    - PyPI: <https://pypi.org/project/ratify-protocol/>
-   - crates.io: <https://crates.io/crates/ratify-protocol>
+   - crates.io: <https://crates.io/crates/ratify-protocol> and
+     <https://crates.io/crates/ratify-c> — the token must be scoped to
+     BOTH crates
    - npm: <https://www.npmjs.com/package/@identities-ai/ratify-protocol> (if enabled)
-   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol@v1.0.0-alpha.10>
+   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol>
    - GitHub Release: <https://github.com/identities-ai/ratify-protocol/releases>
 
 ---

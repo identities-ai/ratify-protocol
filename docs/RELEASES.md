@@ -263,10 +263,19 @@ git checkout main && git pull
 make release-tag VERSION=v1.0.0-alpha.12
 #   coordinated tags pushed; protocol tag triggers CI publishing
 
-# Phase 3 — verify:
+# Phase 3 — verify the workflow fired:
 gh run list --workflow=release.yml --limit 1
 #   if no run appeared (see §5.3.1):
 gh workflow run release.yml -f tag=v1.0.0-alpha.12
+
+# Phase 4 — verify EVERY registry actually serves the new version.
+# A green publish job is NOT proof: at alpha.13 a real 403 was masked as
+# success and only this step caught it. PyPI's index can lag ~1 minute.
+npm view @identities-ai/ratify-protocol version
+curl -s https://crates.io/api/v1/crates/ratify-protocol -A release-check | python3 -c 'import sys,json; print(json.load(sys.stdin)["crate"]["newest_version"])'
+curl -s https://crates.io/api/v1/crates/ratify-c -A release-check | python3 -c 'import sys,json; print(json.load(sys.stdin)["crate"]["newest_version"])'
+curl -s https://pypi.org/pypi/ratify-protocol/json | python3 -c 'import sys,json; print(json.load(sys.stdin)["info"]["version"])'
+gh release view <tag> --json assets --jq '[.assets[].name]'   # 6 C/C++ archives + testvectors
 ```
 
 **Never `git push --tags`** — it pushes every local tag in one push, which suppresses the workflow trigger (§5.3.1) and may push stray local tags. The script pushes the protocol tag alone, then the `sdk-*` tags.

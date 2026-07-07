@@ -12,7 +12,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 - Defines the open lookup contract for registry-mode key discovery (§15.4): `GET /v1/registry/principals/{human_id}` returning the current root key, the full `KeyRotationStatement` chain (oldest → newest), the optional `Anchor`, and `updated_at`. TLS mandatory; no enumeration endpoint; constant-shape 404s; short cache lifetimes.
 - Resolver requirements are fail-closed on every branch (network, schema, chain order, dual-signature validity, link contiguity, final-key match, pinned-key continuity, staleness). Historical-root bundles are rejected by default after rotation. The contract states plainly that rotation proves continuity **after** first trust — first key acquisition is the trust decision — and that the v1 trust model is registry operator + TLS, with signed responses / witness-logged registries as the designated future hardening.
-- A reference resolver in `cmd/ratify-verifier` ships alongside (no SDK API surface, no fixtures, no wire change).
+- A reference resolver in `cmd/ratify-verifier` (`--registry`) implements the resolver requirements — fail-closed on every branch, TLS-only, pinned-key continuity — with TLS-server test coverage. No SDK API surface, no fixtures, no wire change.
 
 ### Fixed — C SDK version pipeline
 

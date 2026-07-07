@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -180,6 +181,59 @@ func (r *RegistryResolver) resolve(humanID string) (ratify.HybridPublicKey, *reg
 	r.cache[humanID] = cachedRecord{rec: rec, fetchedAt: r.now()}
 	r.mu.Unlock()
 	return rec.PublicKey, &rec, nil
+}
+
+// ResolveRootDescendedFromAnyPin resolves currentID and requires the record
+// to descend from AT LEAST ONE key in the pin store. This is the
+// pin-plus-registry deployment mode: key discovery via the registry, trust
+// restricted to first-trusted principals and their rotation successors.
+// Fails closed when the pin store is empty — a caller in this mode with no
+// pins configured is misconfigured, not permissive.
+func (r *RegistryResolver) ResolveRootDescendedFromAnyPin(currentID string) (ratify.HybridPublicKey, error) {
+	var zero ratify.HybridPublicKey
+	r.mu.Lock()
+	pins := make([]ratify.HybridPublicKey, 0, len(r.pinned))
+	for _, k := range r.pinned {
+		pins = append(pins, k)
+	}
+	r.mu.Unlock()
+	if len(pins) == 0 {
+		return zero, errors.New("pin-required mode with an empty pin store")
+	}
+	key, rec, err := r.resolve(currentID)
+	if err != nil {
+		return zero, err
+	}
+	for _, pin := range pins {
+		if chainContainsKey(rec, pin) {
+			return key, nil
+		}
+	}
+	return zero, errors.New("record does not descend from any pinned key (continuity failure)")
+}
+
+// LoadPinsFile reads a JSON array of HybridPublicKey objects
+// ({"ed25519": "<base64>", "ml_dsa_65": "<base64>"}) and pins each one.
+// Returns the number of keys pinned.
+func (r *RegistryResolver) LoadPinsFile(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("read pins file: %w", err)
+	}
+	var keys []ratify.HybridPublicKey
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return 0, fmt.Errorf("pins file JSON: %w", err)
+	}
+	if len(keys) == 0 {
+		return 0, errors.New("pins file contains no keys")
+	}
+	for i, k := range keys {
+		if len(k.Ed25519) != 32 || len(k.MLDSA65) != 1952 {
+			return 0, fmt.Errorf("pins file key %d has wrong component sizes", i)
+		}
+		r.Pin(k)
+	}
+	return len(keys), nil
 }
 
 // chainContainsKey reports whether key is the record's current key or

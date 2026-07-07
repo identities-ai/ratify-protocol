@@ -157,19 +157,41 @@ func main() {
 	maxChallenges := flag.Int("max-challenges", 10000, "max pending challenges in memory")
 	registryURL := flag.String("registry", "", "optional https registry base URL (SPEC §13.1) — when set, the chain root key must be the registry's current key for the principal")
 	registryTTL := flag.Duration("registry-ttl", 5*time.Minute, "registry cache lifetime; stale entries are re-fetched, never served")
+	registryPins := flag.String("registry-pins", "", "optional JSON file of pinned HybridPublicKeys — pins are keyed by their own derived id and enforced per SPEC §13.1")
+	registryRequirePinned := flag.Bool("registry-require-pinned", false, "pin-plus-registry mode: only accept principals descending from a configured pin (requires -registry-pins)")
 	flag.Parse()
 
 	store := newChallengeStore(*maxChallenges)
 	limiter := newRateLimiter(*rateLimit)
 
 	var resolver *RegistryResolver
+	requirePinned := false
 	if *registryURL != "" {
 		var err error
 		resolver, err = NewRegistryResolver(*registryURL, *registryTTL, nil)
 		if err != nil {
 			log.Fatalf("registry: %v", err)
 		}
-		log.Printf("registry-mode key discovery enabled: %s (SPEC §13.1, fail-closed)", *registryURL)
+		if *registryPins != "" {
+			n, err := resolver.LoadPinsFile(*registryPins)
+			if err != nil {
+				log.Fatalf("registry pins: %v", err)
+			}
+			log.Printf("loaded %d pinned key(s) from %s", n, *registryPins)
+		}
+		if *registryRequirePinned {
+			if *registryPins == "" {
+				log.Fatal("registry: -registry-require-pinned needs -registry-pins (fail closed on misconfiguration)")
+			}
+			requirePinned = true
+		}
+		mode := "registry trust (operator + TLS)"
+		if requirePinned {
+			mode = "pin-plus-registry (only pinned principals and their rotation successors)"
+		}
+		log.Printf("registry-mode key discovery enabled: %s — %s (SPEC §13.1, fail-closed)", *registryURL, mode)
+	} else if *registryPins != "" || *registryRequirePinned {
+		log.Fatal("registry: -registry-pins / -registry-require-pinned need -registry")
 	}
 
 	authMiddleware := func(next http.HandlerFunc) http.HandlerFunc {
@@ -260,7 +282,13 @@ func main() {
 				return
 			}
 			root := &bundle.Delegations[len(bundle.Delegations)-1]
-			key, err := resolver.ResolveRoot(root.IssuerID)
+			var key ratify.HybridPublicKey
+			var err error
+			if requirePinned {
+				key, err = resolver.ResolveRootDescendedFromAnyPin(root.IssuerID)
+			} else {
+				key, err = resolver.ResolveRoot(root.IssuerID)
+			}
 			if err != nil {
 				writeJSON(w, http.StatusOK, ratify.VerifyResult{
 					Valid:          false,

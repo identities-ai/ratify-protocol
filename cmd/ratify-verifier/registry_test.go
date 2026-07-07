@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -273,6 +274,78 @@ func TestResolverPinRecordedAfterCacheIsEnforced(t *testing.T) {
 	}
 	if _, err := resolver.ResolveRootDescendedFrom(p1.root.ID, p0.root.PublicKey); err != nil {
 		t.Fatalf("descent from the genuine pinned key must pass on cached records: %v", err)
+	}
+}
+
+func TestResolverDescendedFromAnyPin(t *testing.T) {
+	// Pin-plus-registry mode: only pinned principals and their rotation
+	// successors resolve; everything else is a continuity failure, and an
+	// empty pin store is a misconfiguration, not a pass-through.
+	p0 := newPrincipal(t)
+	stmt1, p1 := rotate(t, p0)
+	resolver, _ := serveRecord(t, &registryRecord{
+		HumanID:   p1.root.ID,
+		PublicKey: p1.root.PublicKey,
+		Rotations: []ratify.KeyRotationStatement{stmt1},
+	})
+
+	// Empty pin store fails closed.
+	if _, err := resolver.ResolveRootDescendedFromAnyPin(p1.root.ID); err == nil {
+		t.Fatal("pin-required mode with no pins must fail closed")
+	}
+
+	// An unrelated pin does not admit this lineage.
+	stranger := newPrincipal(t)
+	resolver.Pin(stranger.root.PublicKey)
+	if _, err := resolver.ResolveRootDescendedFromAnyPin(p1.root.ID); err == nil {
+		t.Fatal("record descending from no configured pin must be rejected")
+	}
+
+	// Adding the genuine historical pin admits the successor.
+	resolver.Pin(p0.root.PublicKey)
+	key, err := resolver.ResolveRootDescendedFromAnyPin(p1.root.ID)
+	if err != nil {
+		t.Fatalf("successor of a pinned principal must resolve: %v", err)
+	}
+	if !pubKeyEqual(key, p1.root.PublicKey) {
+		t.Fatal("resolved key must be the current key")
+	}
+}
+
+func TestLoadPinsFile(t *testing.T) {
+	p0 := newPrincipal(t)
+	p1 := newPrincipal(t)
+	dir := t.TempDir()
+
+	good := dir + "/pins.json"
+	data, err := json.Marshal([]ratify.HybridPublicKey{p0.root.PublicKey, p1.root.PublicKey})
+	if err != nil {
+		t.Fatalf("marshal pins: %v", err)
+	}
+	if err := os.WriteFile(good, data, 0o600); err != nil {
+		t.Fatalf("write pins: %v", err)
+	}
+
+	resolver, _ := serveRecord(t, &registryRecord{HumanID: p0.root.ID, PublicKey: p0.root.PublicKey})
+	n, err := resolver.LoadPinsFile(good)
+	if err != nil || n != 2 {
+		t.Fatalf("load pins: n=%d err=%v", n, err)
+	}
+	// The loaded pin admits its principal in pin-required mode.
+	if _, err := resolver.ResolveRootDescendedFromAnyPin(p0.root.ID); err != nil {
+		t.Fatalf("loaded pin must admit its principal: %v", err)
+	}
+
+	// Empty array and malformed keys fail closed.
+	empty := dir + "/empty.json"
+	os.WriteFile(empty, []byte("[]"), 0o600)
+	if _, err := resolver.LoadPinsFile(empty); err == nil {
+		t.Fatal("empty pins file must be rejected")
+	}
+	bad := dir + "/bad.json"
+	os.WriteFile(bad, []byte(`[{"ed25519":"AAECAw==","ml_dsa_65":"AAECAw=="}]`), 0o600)
+	if _, err := resolver.LoadPinsFile(bad); err == nil {
+		t.Fatal("pins with wrong key sizes must be rejected")
 	}
 }
 

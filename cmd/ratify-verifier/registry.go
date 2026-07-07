@@ -187,8 +187,7 @@ func (r *RegistryResolver) resolve(humanID string) (ratify.HybridPublicKey, *reg
 // to descend from AT LEAST ONE key in the pin store. This is the
 // pin-plus-registry deployment mode: key discovery via the registry, trust
 // restricted to first-trusted principals and their rotation successors.
-// Fails closed when the pin store is empty — a caller in this mode with no
-// pins configured is misconfigured, not permissive.
+// Fails closed when the pin store is empty.
 func (r *RegistryResolver) ResolveRootDescendedFromAnyPin(currentID string) (ratify.HybridPublicKey, error) {
 	var zero ratify.HybridPublicKey
 	r.mu.Lock()

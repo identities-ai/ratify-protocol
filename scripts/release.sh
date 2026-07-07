@@ -179,7 +179,9 @@ old_protocol = "v" + old_npm
 paths = [
     "README.md",
     "SPEC.md",
+    "sdks/go/README.md",
     "sdks/rust/README.md",
+    "sdks/typescript/README.md",
     "sdks/typescript/package.json",
     "sdks/typescript/package-lock.json",
 ]

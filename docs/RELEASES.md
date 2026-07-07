@@ -52,8 +52,11 @@ v1.0.0-alpha.10 →  C SDK 59/59 conformance, 13 new C ABI functions,
 v1.0.0-alpha.11 →  docs & spec truth pass (trust anchors, revocation
                    freshness, clock discipline); C/C++ added to local gate.
                    59 fixtures, byte-identical to alpha.10
-v1.0.0-alpha.12 →  next: no-expiry sentinel, presence:represent (54th scope),
+v1.0.0-alpha.12 →  no-expiry sentinel, presence:represent (54th scope),
                    invalid_scope verifier check, 63-fixture suite
+v1.0.0-alpha.13 →  SPEC §13.1 registry read binding + reference resolver
+                   (registry-mode key discovery, pin-plus-registry);
+                   two-phase release flow, ratify-c publish pipeline fixed
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

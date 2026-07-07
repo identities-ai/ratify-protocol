@@ -375,6 +375,17 @@ tag_release() {
   fi
 
   echo "release-tag: ok ($VERSION)"
+  cat <<'EOF'
+
+REMAINING RELEASE-DAY STEPS (docs/RELEASES.md §4.2):
+  11. Bump downstream claims — a PR in EACH of:
+      - ratify-docs:            src/constants/protocol.ts + RELEASE_BUMP.md sweep
+      - identities-marketing:   lib/protocol-facts.ts + public/llms.txt
+      Also add this release's line to the RELEASES.md §3.2 ladder.
+  12. Phase 4 — verify every registry actually serves the new version
+      (npm, crates.io BOTH crates, PyPI, GitHub release assets).
+      A green publish job is not proof.
+EOF
 }
 
 case "$MODE" in

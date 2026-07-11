@@ -8,6 +8,12 @@
 #
 # c-cpp is deliberately absent: the only C sources are the generated header
 # and one example; the implementation CodeQL should look at is the Rust.
+#
+# go/javascript-typescript/python overlap with the dynamic scanning is
+# intentional, not accidental: the Code Quality product runs quality
+# queries, while this workflow runs the security suite — those three
+# languages had no security-suite analysis before this workflow. Alert
+# dedup handles any rule overlap.
 name: CodeQL
 
 on:

@@ -17,11 +17,15 @@ usage:
       From clean, up-to-date main: creates release/<version>, bumps all SDK
       versions, runs the full cross-SDK gate, commits, pushes, opens the PR.
 
-  make release-tag VERSION=vX.Y.Z[-tag.N] [PUBLISH=1] [GITHUB_RELEASE=1]
+  make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]
       After the release PR is merged, from clean, up-to-date main: creates
       the protocol + sdk-* tags and pushes them. The tag push triggers the
-      CI publish workflow. PUBLISH=1 / GITHUB_RELEASE=1 are break-glass
-      manual paths only.
+      CI publish workflow — registry publishing is CI's job on this path.
+
+  make release-publish VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N] RELEASE_CI_FAILED=1 [GITHUB_RELEASE=1]
+      Break-glass ONLY: manually publish to the registries after the
+      tag-triggered CI release run has definitively failed. Refuses to run
+      without RELEASE_CI_FAILED=1 so it can never race the CI publish.
 
 Releases go through a PR like every other change to main. There is no
 single-step release: it required a direct push to main, which the branch
@@ -36,13 +40,18 @@ if [[ "$MODE" =~ ^v[0-9] ]]; then
   exit 1
 fi
 
-if [[ "$MODE" != "prepare" && "$MODE" != "tag" ]] || [[ -z "$VERSION" ]]; then
+if [[ "$MODE" != "prepare" && "$MODE" != "tag" && "$MODE" != "publish" ]] || [[ -z "$VERSION" ]]; then
   usage
   exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; then
-  echo "release: invalid VERSION '$VERSION'" >&2
+# Only prerelease forms the whole pipeline normalizes are accepted:
+# the Python bump below and the release workflow's tag check both map
+# alpha/beta/rc to PEP 440 (a/b/rc). Anything else (e.g. -dev.1) would
+# mutate files here and fail later in CI with Python metadata in a form
+# the workflow does not expect.
+if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
+  echo "release: invalid VERSION '$VERSION' — vX.Y.Z with optional -alpha.N / -beta.N / -rc.N" >&2
   usage
   exit 1
 fi
@@ -52,7 +61,9 @@ PY_VERSION="$(python - "$NPM_VERSION" <<'PY'
 import re
 import sys
 v = sys.argv[1]
-print(re.sub(r"-alpha\.(\d+)$", r"a\1", v))
+print(re.sub(r"-alpha\.(\d+)$", r"a\1",
+      re.sub(r"-beta\.(\d+)$", r"b\1",
+      re.sub(r"-rc\.(\d+)$", r"rc\1", v))))
 PY
 )"
 
@@ -332,7 +343,46 @@ PY
   echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
 }
 
+# Break-glass manual publish: for when the tag exists but the CI release
+# run has definitively failed. Isolated from the tag push so it can never
+# race the tag-triggered workflow — requires the operator to assert the
+# CI failure explicitly.
+publish_release() {
+  if [[ "${RELEASE_CI_FAILED:-0}" != "1" ]]; then
+    echo "release: manual publishing races the tag-triggered CI release unless that run" >&2
+    echo "  has already failed. Confirm it (gh run list --workflow=release.yml) and" >&2
+    echo "  re-run with RELEASE_CI_FAILED=1." >&2
+    exit 1
+  fi
+  require_main
+  require_clean
+  require_main_up_to_date
+
+  local live_version
+  live_version="$(current_npm_version)"
+  if [[ "$live_version" != "$NPM_VERSION" ]]; then
+    echo "release: main is at $live_version, expected $NPM_VERSION" >&2
+    exit 1
+  fi
+  if ! git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+    echo "release: tag $VERSION does not exist — run make release-tag first" >&2
+    exit 1
+  fi
+  ./scripts/check-release-sync.sh
+
+  publish_registries
+  if [[ "$GITHUB_RELEASE" == "1" ]]; then
+    create_github_release
+  fi
+}
+
 tag_release() {
+  if [[ "$PUBLISH" == "1" || "$GITHUB_RELEASE" == "1" ]]; then
+    echo "release: PUBLISH=1 / GITHUB_RELEASE=1 no longer run during release-tag —" >&2
+    echo "  the tag push already triggers the CI publish, so a local publish here" >&2
+    echo "  races it. Use: make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1" >&2
+    exit 1
+  fi
   require_main
   require_clean
   require_main_up_to_date
@@ -362,17 +412,9 @@ tag_release() {
   echo "==> Verify the Release workflow started: gh run list --workflow=release.yml --limit 1"
   echo "    If it did not, dispatch it manually: gh workflow run release.yml -f tag=$VERSION"
 
-  if [[ "$PUBLISH" == "1" ]]; then
-    publish_registries
-  else
-    echo "==> PUBLISH=0: registry publishing left to CI (normal path)"
-  fi
-
-  if [[ "$GITHUB_RELEASE" == "1" ]]; then
-    create_github_release
-  else
-    echo "==> GITHUB_RELEASE=0: GitHub release creation left to CI (normal path)"
-  fi
+  echo "==> Registry publishing is CI-driven off the tag push (normal path)."
+  echo "    Break-glass manual publish (only after the CI release run has"
+  echo "    definitively failed): make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1"
 
   echo "release-tag: ok ($VERSION)"
   cat <<'EOF'
@@ -391,4 +433,5 @@ EOF
 case "$MODE" in
   prepare) prepare ;;
   tag)     tag_release ;;
+  publish) publish_release ;;
 esac

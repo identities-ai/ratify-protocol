@@ -78,6 +78,37 @@ if not c_banner_match or c_banner_match.group(1) != ts_version:
     got = c_banner_match.group(1) if c_banner_match else "missing"
     fail(f"cbindgen.toml header banner version {got} does not match {ts_version}")
 
+# Install pins. The alpha.13 npm tarball shipped with a README that still
+# pinned alpha.10 — registries render the README snapshotted at publish
+# time, so a stale pin becomes the package's public install instruction
+# until the next release. Two-part check: the pinned install command must
+# be present, and no OTHER release version may appear anywhere in these
+# files. (Pattern covers pre-release forms; extend when stable versions
+# ship.)
+install_pins = {
+    "sdks/typescript/README.md": [f"npm install @identities-ai/ratify-protocol@{ts_version}"],
+    "sdks/python/README.md": [f"pip install ratify-protocol=={py_version}"],
+    "sdks/rust/README.md": [f'ratify-protocol = "{rust_version}"'],
+    "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol@v{ts_version}"],
+    "README.md": [
+        f"go get github.com/identities-ai/ratify-protocol@v{ts_version}",
+        f"pip install ratify-protocol=={py_version}",
+        f"cargo add ratify-protocol@{rust_version}",
+    ],
+}
+for path, needles in install_pins.items():
+    content = read(path)
+    for needle in needles:
+        if needle not in content:
+            fail(f"{path} is missing the pinned install command: {needle}")
+
+release_version_re = re.compile(r"\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+|\d+\.\d+\.\d+(?:a|b|rc)\d+")
+current_versions = {ts_version, py_version, rust_version, c_version}
+for path in [*install_pins, "sdks/c/README.md"]:
+    for found in sorted(set(release_version_re.findall(read(path)))):
+        if found not in current_versions:
+            fail(f"{path} references release version {found} but current is {ts_version} — stale pin?")
+
 # One protocol, one description. The canonical tagline must appear on every
 # public face of the project: root README, SPEC subtitle, all five SDK
 # READMEs, the three registry metadata descriptions, and the Go package doc

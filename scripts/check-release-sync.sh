@@ -78,6 +78,30 @@ if not c_banner_match or c_banner_match.group(1) != ts_version:
     got = c_banner_match.group(1) if c_banner_match else "missing"
     fail(f"cbindgen.toml header banner version {got} does not match {ts_version}")
 
+# One protocol, one description. The canonical tagline must appear on every
+# public face of the project: root README, SPEC subtitle, all five SDK
+# READMEs, the three registry metadata descriptions, and the Go package doc
+# (pkg.go.dev). Edit it everywhere or nowhere.
+CANONICAL_TAGLINE = "delegated-authority proofs for human-agent and agent-agent interactions"
+tagline_files = [
+    "README.md",
+    "SPEC.md",
+    "sdks/go/README.md",
+    "sdks/typescript/README.md",
+    "sdks/python/README.md",
+    "sdks/rust/README.md",
+    "sdks/c/README.md",
+    "sdks/typescript/package.json",
+    "sdks/python/pyproject.toml",
+    "sdks/rust/Cargo.toml",
+    "sdks/python/src/ratify_protocol/__init__.py",
+    "sdks/rust/src/lib.rs",
+    "verify.go",
+]
+for path in tagline_files:
+    if CANONICAL_TAGLINE not in read(path).lower().replace("\n// ", " "):
+        fail(f"{path} does not carry the canonical tagline ({CANONICAL_TAGLINE!r})")
+
 protocol_tag = f"v{ts_version}"
 # docs/RELEASES.md is deliberately absent: its version strings are
 # historical (the §3.2 ladder) or illustrative examples, not release-synced.

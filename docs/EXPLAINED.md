@@ -1,6 +1,6 @@
 # Ratify Protocol™: Explained
 
-**A technical deep-dive into the architecture, threat model, and workflow patterns of the Ratify trust protocol.**
+**A technical deep-dive into the architecture, threat model, and workflow patterns of the Ratify Protocol.**
 
 ---
 

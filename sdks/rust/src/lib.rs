@@ -1,8 +1,8 @@
 //! Ratify Protocol v1 — Rust reference SDK.
 //!
-//! A cryptographic trust protocol for human-agent and agent-agent interactions
-//! as agents start to transact. Every signature is hybrid Ed25519 + ML-DSA-65
-//! (FIPS 204): quantum-safe by design.
+//! Delegated-authority proofs for human-agent and agent-agent interactions.
+//! Every signature is hybrid Ed25519 + ML-DSA-65 (FIPS 204): quantum-safe
+//! by design.
 //!
 //! See docs/EXPLAINED.md and docs/AGENT_TO_AGENT.md in the repository for
 //! architecture, threat model, and agent-to-agent patterns.

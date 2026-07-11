@@ -94,6 +94,8 @@ tagline_files = [
     "sdks/typescript/package.json",
     "sdks/python/pyproject.toml",
     "sdks/rust/Cargo.toml",
+    "sdks/python/src/ratify_protocol/__init__.py",
+    "sdks/rust/src/lib.rs",
     "verify.go",
 ]
 for path in tagline_files:

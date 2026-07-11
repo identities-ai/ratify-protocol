@@ -28,6 +28,8 @@ When a human authorizes an AI agent — or when one agent transacts with another
 
 Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in under a millisecond, with no vendor in the path.
 
+Keep your IAM, OAuth, MCP, A2A, and policy engines — Ratify adds the missing proof; it replaces none of them. IAM authenticates the human. MCP and A2A move the request. Policy engines interpret local rules. **Ratify proves delegated authority before the action.**
+
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 
 JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
@@ -66,6 +68,8 @@ Today, when an AI agent shows up — joining a meeting, calling your support lin
 1. **Who** authorized this agent to act?
 2. **What** is this agent allowed to do?
 3. **For how long** is that authority valid?
+
+Bearer tokens never had to answer these. They were built for an era when a human was present at the keyboard, a known client called a known API, and the session stayed inside one app boundary. Agents break all three assumptions: they act later, call many tools, cross vendor boundaries, and hand work to other agents.
 
 Ratify answers those three questions with a single primitive — a signed delegation certificate paired with a fresh challenge signature — that any verifier can check **offline, in under a millisecond, with no live call to a central authority.**
 

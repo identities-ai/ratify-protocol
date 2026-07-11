@@ -215,16 +215,50 @@ for path in py_paths:
 PY
 }
 
-registry_live_npm() {
-  [ "$(npm view "@identities-ai/ratify-protocol@${NPM_VERSION}" version 2>/dev/null)" = "$NPM_VERSION" ]
+# Registry probes are tri-state: live / absent / unknown. Publishing must
+# only happen on a definite 404 — a transient lookup failure (network,
+# 5xx, rate limit) must NOT be read as "missing", or recovery would try to
+# republish a live version and die on "already exists" before converging.
+RELEASE_UA="ratify-protocol-release-script (https://github.com/identities-ai/ratify-protocol)"
+
+registry_http_state() {
+  local status
+  status="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 --retry 2 \
+    -A "$RELEASE_UA" "$1" 2>/dev/null)" || status="000"
+  case "$status" in
+    200) echo live ;;
+    404) echo absent ;;
+    *)   echo "unknown:$status" ;;
+  esac
 }
-registry_live_pypi() {
-  curl -fsSL "https://pypi.org/pypi/ratify-protocol/${PY_VERSION}/json" >/dev/null 2>&1
+registry_state_npm() {
+  registry_http_state "https://registry.npmjs.org/@identities-ai%2Fratify-protocol/${NPM_VERSION}"
 }
-registry_live_crate() {
-  # crates.io returns 403 to requests without a descriptive User-Agent.
-  curl -fsSL -A "ratify-protocol-release-script (https://github.com/identities-ai/ratify-protocol)" \
-    "https://crates.io/api/v1/crates/$1/${NPM_VERSION}" >/dev/null 2>&1
+registry_state_pypi() {
+  registry_http_state "https://pypi.org/pypi/ratify-protocol/${PY_VERSION}/json"
+}
+registry_state_crate() {
+  # crates.io returns 403 to requests without a descriptive User-Agent —
+  # with the UA above, 403 lands in "unknown" rather than a false "absent".
+  registry_http_state "https://crates.io/api/v1/crates/$1/${NPM_VERSION}"
+}
+
+# ensure_published <label> <state> <publish-command...>
+# live → skip; absent → publish; unknown → refuse to publish blind.
+ensure_published() {
+  local label="$1" state="$2"; shift 2
+  case "$state" in
+    live)
+      echo "==> ${label} already has this version — skipping" ;;
+    absent)
+      echo "==> Publishing ${label}"
+      "$@" ;;
+    *)
+      echo "release: could not verify ${label} (probe: ${state}) — refusing to publish blind." >&2
+      echo "  A transient registry failure read as 'missing' would republish a live version." >&2
+      echo "  Re-run release-publish when the registry is reachable." >&2
+      exit 1 ;;
+  esac
 }
 
 publish_registries() {
@@ -233,53 +267,47 @@ publish_registries() {
   # live, crates missing). Recovery must finish the missing registries, not
   # die with "already exists" on the completed ones — so probe first, publish
   # only what is missing, and verify everything at the end.
-  local published_rust=0
+  local rust_state
+  rust_state="$(registry_state_crate ratify-protocol)"
 
-  if registry_live_npm; then
-    echo "==> npm already has ${NPM_VERSION} — skipping"
-  else
-    echo "==> Publishing npm"
-    (cd sdks/typescript && npm publish --access public)
-  fi
+  ensure_published "npm" "$(registry_state_npm)" \
+    bash -c 'cd sdks/typescript && npm publish --access public'
 
-  if registry_live_pypi; then
-    echo "==> PyPI already has ${PY_VERSION} — skipping"
-  else
-    echo "==> Publishing PyPI"
-    (cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*)
-  fi
+  ensure_published "PyPI" "$(registry_state_pypi)" \
+    bash -c "cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*"
 
-  if registry_live_crate ratify-protocol; then
-    echo "==> crates.io already has ratify-protocol ${NPM_VERSION} — skipping"
-  else
-    echo "==> Publishing crates.io — Rust SDK (ratify-protocol)"
-    (cd sdks/rust && cargo publish)
-    published_rust=1
-  fi
+  ensure_published "crates.io ratify-protocol" "$rust_state" \
+    bash -c 'cd sdks/rust && cargo publish'
 
-  if registry_live_crate ratify-c; then
-    echo "==> crates.io already has ratify-c ${NPM_VERSION} — skipping"
-  else
-    # The C SDK depends on ratify-protocol via a local path. Crates.io
-    # requires the dependency to be indexed before the dependent publishes.
-    if [ "$published_rust" = "1" ]; then
+  # The C SDK depends on ratify-protocol via a local path. Crates.io requires
+  # the dependency to be indexed before the dependent publishes — wait only
+  # if we just published the Rust SDK in this run. Cargo substitutes
+  # path = "../rust" → version = "$NPM_VERSION" in the published metadata.
+  c_publish() {
+    if [ "$rust_state" = "absent" ]; then
       echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
       sleep 60
     fi
-    echo "==> Publishing crates.io — C SDK (ratify-c)"
-    # Cargo automatically substitutes path = "../rust" → version = "$NPM_VERSION"
-    # in the published metadata once ratify-protocol is indexed on crates.io.
     (cd sdks/c && cargo publish)
-  fi
+  }
+  ensure_published "crates.io ratify-c" "$(registry_state_crate ratify-c)" c_publish
 
   echo "==> Verifying all registries carry ${NPM_VERSION}"
-  local missing=0
-  registry_live_npm                 || { echo "  ✗ npm";                    missing=1; }
-  registry_live_pypi                || { echo "  ✗ PyPI";                   missing=1; }
-  registry_live_crate ratify-protocol || { echo "  ✗ crates ratify-protocol"; missing=1; }
-  registry_live_crate ratify-c      || { echo "  ✗ crates ratify-c (may still be indexing — re-run to verify)"; missing=1; }
-  if [ "$missing" = "1" ]; then
-    echo "release: one or more registries still missing ${NPM_VERSION} — re-run release-publish to converge" >&2
+  local not_live=0 state
+  for probe in "npm:registry_state_npm" "PyPI:registry_state_pypi" \
+               "crates ratify-protocol:registry_state_crate ratify-protocol" \
+               "crates ratify-c:registry_state_crate ratify-c"; do
+    label="${probe%%:*}"
+    state="$(${probe#*:})"
+    if [ "$state" != "live" ]; then
+      echo "  ✗ ${label}: ${state}"
+      not_live=1
+    fi
+  done
+  if [ "$not_live" = "1" ]; then
+    echo "release: not all registries verified live for ${NPM_VERSION} (absent = still" >&2
+    echo "  missing or indexing; unknown = could not verify) — re-run release-publish" >&2
+    echo "  to converge." >&2
     exit 1
   fi
   echo "  ✓ npm, PyPI, crates (ratify-protocol, ratify-c) all live"

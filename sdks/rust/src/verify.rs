@@ -288,7 +288,7 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
 
     // --- Liveness ---
     let challenge_age = now - bundle.challenge_at;
-    if challenge_age < 0 || challenge_age > CHALLENGE_WINDOW_SECONDS {
+    if !(0..=CHALLENGE_WINDOW_SECONDS).contains(&challenge_age) {
         return invalid(
             "stale_challenge",
             &format!(
@@ -700,7 +700,7 @@ pub fn verify_streamed_turn(
         );
     }
     let challenge_age = now - challenge_at;
-    if challenge_age < 0 || challenge_age > CHALLENGE_WINDOW_SECONDS {
+    if !(0..=CHALLENGE_WINDOW_SECONDS).contains(&challenge_age) {
         return invalid(
             "stale_challenge",
             &format!(

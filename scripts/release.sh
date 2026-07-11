@@ -243,6 +243,40 @@ registry_state_crate() {
   registry_http_state "https://crates.io/api/v1/crates/$1/${NPM_VERSION}"
 }
 
+# Per-registry publish commands, mirroring the CI release jobs' re-run
+# tolerance. A probe 404 is not proof of "never published" — PyPI and
+# crates.io visibility lags (documented in docs/RELEASES.md) mean a version
+# can be live but not yet queryable. So the publish attempt itself must
+# treat the registry's own "already exists" rejection as convergence, and
+# only that message — matching on exit codes masked a real 403 at alpha.13.
+publish_npm() {
+  local out
+  out=$( (cd sdks/typescript && npm publish --access public) 2>&1 ) && { echo "$out"; return 0; }
+  echo "$out"
+  if echo "$out" | grep -qiE "cannot publish over|previously published"; then
+    echo "==> npm reports this version already exists (visibility lag) — converged"
+    return 0
+  fi
+  return 1
+}
+publish_pypi() {
+  # --skip-existing is twine's official already-published tolerance,
+  # matching skip-existing: true in the CI PyPI job.
+  (cd sdks/python && python -m pip install --upgrade build twine \
+    && rm -rf dist build *.egg-info && python -m build \
+    && twine upload --skip-existing dist/*)
+}
+publish_crate_dir() {
+  local out
+  out=$( (cd "$1" && cargo publish) 2>&1 ) && { echo "$out"; return 0; }
+  echo "$out"
+  if echo "$out" | grep -qiE "already (exists|uploaded)"; then
+    echo "==> crates.io reports this version already exists (visibility lag) — converged"
+    return 0
+  fi
+  return 1
+}
+
 # ensure_published <label> <state> <publish-command...>
 # live → skip; absent → publish; unknown → refuse to publish blind.
 ensure_published() {
@@ -270,14 +304,11 @@ publish_registries() {
   local rust_state
   rust_state="$(registry_state_crate ratify-protocol)"
 
-  ensure_published "npm" "$(registry_state_npm)" \
-    bash -c 'cd sdks/typescript && npm publish --access public'
+  ensure_published "npm" "$(registry_state_npm)" publish_npm
 
-  ensure_published "PyPI" "$(registry_state_pypi)" \
-    bash -c "cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*"
+  ensure_published "PyPI" "$(registry_state_pypi)" publish_pypi
 
-  ensure_published "crates.io ratify-protocol" "$rust_state" \
-    bash -c 'cd sdks/rust && cargo publish'
+  ensure_published "crates.io ratify-protocol" "$rust_state" publish_crate_dir sdks/rust
 
   # The C SDK depends on ratify-protocol via a local path. Crates.io requires
   # the dependency to be indexed before the dependent publishes — wait only
@@ -288,7 +319,7 @@ publish_registries() {
       echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
       sleep 60
     fi
-    (cd sdks/c && cargo publish)
+    publish_crate_dir sdks/c
   }
   ensure_published "crates.io ratify-c" "$(registry_state_crate ratify-c)" c_publish
 
@@ -305,9 +336,12 @@ publish_registries() {
     fi
   done
   if [ "$not_live" = "1" ]; then
-    echo "release: not all registries verified live for ${NPM_VERSION} (absent = still" >&2
-    echo "  missing or indexing; unknown = could not verify) — re-run release-publish" >&2
-    echo "  to converge." >&2
+    echo "release: not all registries verified live for ${NPM_VERSION}." >&2
+    echo "  absent  = still missing, or published but not yet visible (registry" >&2
+    echo "            indexing / visibility lag — if a publish above reported" >&2
+    echo "            'already exists', this is lag, not failure)" >&2
+    echo "  unknown = could not verify (registry unreachable)" >&2
+    echo "  Re-run release-publish later to converge and verify." >&2
     exit 1
   fi
   echo "  ✓ npm, PyPI, crates (ratify-protocol, ratify-c) all live"

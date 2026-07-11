@@ -13,7 +13,7 @@ cd "$ROOT"
 usage() {
   cat >&2 <<'EOF'
 usage:
-  make release-prepare VERSION=vX.Y.Z[-tag.N]
+  make release-prepare VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]
       From clean, up-to-date main: creates release/<version>, bumps all SDK
       versions, runs the full cross-SDK gate, commits, pushes, opens the PR.
 
@@ -215,26 +215,74 @@ for path in py_paths:
 PY
 }
 
+registry_live_npm() {
+  [ "$(npm view "@identities-ai/ratify-protocol@${NPM_VERSION}" version 2>/dev/null)" = "$NPM_VERSION" ]
+}
+registry_live_pypi() {
+  curl -fsSL "https://pypi.org/pypi/ratify-protocol/${PY_VERSION}/json" >/dev/null 2>&1
+}
+registry_live_crate() {
+  # crates.io returns 403 to requests without a descriptive User-Agent.
+  curl -fsSL -A "ratify-protocol-release-script (https://github.com/identities-ai/ratify-protocol)" \
+    "https://crates.io/api/v1/crates/$1/${NPM_VERSION}" >/dev/null 2>&1
+}
+
 publish_registries() {
-  echo "==> Publishing npm"
-  (cd sdks/typescript && npm publish --access public)
+  # Converge to fully-published. The CI release publishes each registry in an
+  # independent job, so a failed run can leave a PARTIAL state (npm + PyPI
+  # live, crates missing). Recovery must finish the missing registries, not
+  # die with "already exists" on the completed ones — so probe first, publish
+  # only what is missing, and verify everything at the end.
+  local published_rust=0
 
-  echo "==> Publishing PyPI"
-  (cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*)
+  if registry_live_npm; then
+    echo "==> npm already has ${NPM_VERSION} — skipping"
+  else
+    echo "==> Publishing npm"
+    (cd sdks/typescript && npm publish --access public)
+  fi
 
-  echo "==> Publishing crates.io — Rust SDK (ratify-protocol)"
-  (cd sdks/rust && cargo publish)
+  if registry_live_pypi; then
+    echo "==> PyPI already has ${PY_VERSION} — skipping"
+  else
+    echo "==> Publishing PyPI"
+    (cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*)
+  fi
 
-  # The C SDK depends on ratify-protocol via a local path. Crates.io requires
-  # the dependency to be already indexed before the dependent can be published.
-  # Wait for the Rust SDK to appear on the registry, then publish the C SDK.
-  echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
-  sleep 60
+  if registry_live_crate ratify-protocol; then
+    echo "==> crates.io already has ratify-protocol ${NPM_VERSION} — skipping"
+  else
+    echo "==> Publishing crates.io — Rust SDK (ratify-protocol)"
+    (cd sdks/rust && cargo publish)
+    published_rust=1
+  fi
 
-  echo "==> Publishing crates.io — C SDK (ratify-c)"
-  # Cargo automatically substitutes path = "../rust" → version = "$NPM_VERSION"
-  # in the published metadata once ratify-protocol is indexed on crates.io.
-  (cd sdks/c && cargo publish)
+  if registry_live_crate ratify-c; then
+    echo "==> crates.io already has ratify-c ${NPM_VERSION} — skipping"
+  else
+    # The C SDK depends on ratify-protocol via a local path. Crates.io
+    # requires the dependency to be indexed before the dependent publishes.
+    if [ "$published_rust" = "1" ]; then
+      echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
+      sleep 60
+    fi
+    echo "==> Publishing crates.io — C SDK (ratify-c)"
+    # Cargo automatically substitutes path = "../rust" → version = "$NPM_VERSION"
+    # in the published metadata once ratify-protocol is indexed on crates.io.
+    (cd sdks/c && cargo publish)
+  fi
+
+  echo "==> Verifying all registries carry ${NPM_VERSION}"
+  local missing=0
+  registry_live_npm                 || { echo "  ✗ npm";                    missing=1; }
+  registry_live_pypi                || { echo "  ✗ PyPI";                   missing=1; }
+  registry_live_crate ratify-protocol || { echo "  ✗ crates ratify-protocol"; missing=1; }
+  registry_live_crate ratify-c      || { echo "  ✗ crates ratify-c (may still be indexing — re-run to verify)"; missing=1; }
+  if [ "$missing" = "1" ]; then
+    echo "release: one or more registries still missing ${NPM_VERSION} — re-run release-publish to converge" >&2
+    exit 1
+  fi
+  echo "  ✓ npm, PyPI, crates (ratify-protocol, ratify-c) all live"
 }
 
 create_github_release() {

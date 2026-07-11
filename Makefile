@@ -12,7 +12,7 @@ release-check:
 	@./scripts/check-release-sync.sh
 
 release-prepare:
-	@test -n "$(VERSION)" || (echo "usage: make release-prepare VERSION=vX.Y.Z[-tag.N]"; exit 1)
+	@test -n "$(VERSION)" || (echo "usage: make release-prepare VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]"; exit 1)
 	@GOCACHE="$(GOCACHE)" ./scripts/release.sh prepare "$(VERSION)"
 
 release-tag:
@@ -26,7 +26,7 @@ release-publish:
 release:
 	@echo "The single-step 'make release' was removed — it required a direct push to main."
 	@echo "Releases now go through a PR like every other change:"
-	@echo "  1. make release-prepare VERSION=vX.Y.Z[-tag.N]   # branch + bump + gate + PR"
+	@echo "  1. make release-prepare VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]   # branch + bump + gate + PR"
 	@echo "  2. merge the release PR"
-	@echo "  3. make release-tag VERSION=vX.Y.Z[-tag.N]        # tags -> CI publishes"
+	@echo "  3. make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]        # tags -> CI publishes"
 	@exit 1

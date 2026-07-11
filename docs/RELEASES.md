@@ -119,7 +119,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 
 **Phase 1 — `make release-prepare`:**
 
-1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-\w+\.\d+)?`; no target tag exists locally or remotely.
+1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-(alpha|beta|rc)\.\d+)?` — only prerelease forms the Python bump and the release workflow PEP 440-normalize; no target tag exists locally or remotely.
 2. **Create `release/<version>`.**
 3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing — Go consumes the git tag directly.)
 4. **Regenerate test vectors deterministically.** `go run ./cmd/ratify-testvectors`. If the result differs from committed, the release is aborted and the user is told to investigate.

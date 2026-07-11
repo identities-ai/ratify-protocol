@@ -13,15 +13,19 @@ cd "$ROOT"
 usage() {
   cat >&2 <<'EOF'
 usage:
-  make release-prepare VERSION=vX.Y.Z[-tag.N]
+  make release-prepare VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]
       From clean, up-to-date main: creates release/<version>, bumps all SDK
       versions, runs the full cross-SDK gate, commits, pushes, opens the PR.
 
-  make release-tag VERSION=vX.Y.Z[-tag.N] [PUBLISH=1] [GITHUB_RELEASE=1]
+  make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]
       After the release PR is merged, from clean, up-to-date main: creates
       the protocol + sdk-* tags and pushes them. The tag push triggers the
-      CI publish workflow. PUBLISH=1 / GITHUB_RELEASE=1 are break-glass
-      manual paths only.
+      CI publish workflow — registry publishing is CI's job on this path.
+
+  make release-publish VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N] RELEASE_CI_FAILED=1 [GITHUB_RELEASE=1]
+      Break-glass ONLY: manually publish to the registries after the
+      tag-triggered CI release run has definitively failed. Refuses to run
+      without RELEASE_CI_FAILED=1 so it can never race the CI publish.
 
 Releases go through a PR like every other change to main. There is no
 single-step release: it required a direct push to main, which the branch
@@ -36,13 +40,18 @@ if [[ "$MODE" =~ ^v[0-9] ]]; then
   exit 1
 fi
 
-if [[ "$MODE" != "prepare" && "$MODE" != "tag" ]] || [[ -z "$VERSION" ]]; then
+if [[ "$MODE" != "prepare" && "$MODE" != "tag" && "$MODE" != "publish" ]] || [[ -z "$VERSION" ]]; then
   usage
   exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; then
-  echo "release: invalid VERSION '$VERSION'" >&2
+# Only prerelease forms the whole pipeline normalizes are accepted:
+# the Python bump below and the release workflow's tag check both map
+# alpha/beta/rc to PEP 440 (a/b/rc). Anything else (e.g. -dev.1) would
+# mutate files here and fail later in CI with Python metadata in a form
+# the workflow does not expect.
+if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
+  echo "release: invalid VERSION '$VERSION' — vX.Y.Z with optional -alpha.N / -beta.N / -rc.N" >&2
   usage
   exit 1
 fi
@@ -52,7 +61,9 @@ PY_VERSION="$(python - "$NPM_VERSION" <<'PY'
 import re
 import sys
 v = sys.argv[1]
-print(re.sub(r"-alpha\.(\d+)$", r"a\1", v))
+print(re.sub(r"-alpha\.(\d+)$", r"a\1",
+      re.sub(r"-beta\.(\d+)$", r"b\1",
+      re.sub(r"-rc\.(\d+)$", r"rc\1", v))))
 PY
 )"
 
@@ -204,26 +215,136 @@ for path in py_paths:
 PY
 }
 
+# Registry probes are tri-state: live / absent / unknown. Publishing must
+# only happen on a definite 404 — a transient lookup failure (network,
+# 5xx, rate limit) must NOT be read as "missing", or recovery would try to
+# republish a live version and die on "already exists" before converging.
+RELEASE_UA="ratify-protocol-release-script (https://github.com/identities-ai/ratify-protocol)"
+
+registry_http_state() {
+  local status
+  status="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 --retry 2 \
+    -A "$RELEASE_UA" "$1" 2>/dev/null)" || status="000"
+  case "$status" in
+    200) echo live ;;
+    404) echo absent ;;
+    *)   echo "unknown:$status" ;;
+  esac
+}
+registry_state_npm() {
+  registry_http_state "https://registry.npmjs.org/@identities-ai%2Fratify-protocol/${NPM_VERSION}"
+}
+registry_state_pypi() {
+  registry_http_state "https://pypi.org/pypi/ratify-protocol/${PY_VERSION}/json"
+}
+registry_state_crate() {
+  # crates.io returns 403 to requests without a descriptive User-Agent —
+  # with the UA above, 403 lands in "unknown" rather than a false "absent".
+  registry_http_state "https://crates.io/api/v1/crates/$1/${NPM_VERSION}"
+}
+
+# Per-registry publish commands, mirroring the CI release jobs' re-run
+# tolerance. A probe 404 is not proof of "never published" — PyPI and
+# crates.io visibility lags (documented in docs/RELEASES.md) mean a version
+# can be live but not yet queryable. So the publish attempt itself must
+# treat the registry's own "already exists" rejection as convergence, and
+# only that message — matching on exit codes masked a real 403 at alpha.13.
+publish_npm() {
+  local out
+  out=$( (cd sdks/typescript && npm publish --access public) 2>&1 ) && { echo "$out"; return 0; }
+  echo "$out"
+  if echo "$out" | grep -qiE "cannot publish over|previously published"; then
+    echo "==> npm reports this version already exists (visibility lag) — converged"
+    return 0
+  fi
+  return 1
+}
+publish_pypi() {
+  # --skip-existing is twine's official already-published tolerance,
+  # matching skip-existing: true in the CI PyPI job.
+  (cd sdks/python && python -m pip install --upgrade build twine \
+    && rm -rf dist build *.egg-info && python -m build \
+    && twine upload --skip-existing dist/*)
+}
+publish_crate_dir() {
+  local out
+  out=$( (cd "$1" && cargo publish) 2>&1 ) && { echo "$out"; return 0; }
+  echo "$out"
+  if echo "$out" | grep -qiE "already (exists|uploaded)"; then
+    echo "==> crates.io reports this version already exists (visibility lag) — converged"
+    return 0
+  fi
+  return 1
+}
+
+# ensure_published <label> <state> <publish-command...>
+# live → skip; absent → publish; unknown → refuse to publish blind.
+ensure_published() {
+  local label="$1" state="$2"; shift 2
+  case "$state" in
+    live)
+      echo "==> ${label} already has this version — skipping" ;;
+    absent)
+      echo "==> Publishing ${label}"
+      "$@" ;;
+    *)
+      echo "release: could not verify ${label} (probe: ${state}) — refusing to publish blind." >&2
+      echo "  A transient registry failure read as 'missing' would republish a live version." >&2
+      echo "  Re-run release-publish when the registry is reachable." >&2
+      exit 1 ;;
+  esac
+}
+
 publish_registries() {
-  echo "==> Publishing npm"
-  (cd sdks/typescript && npm publish --access public)
+  # Converge to fully-published. The CI release publishes each registry in an
+  # independent job, so a failed run can leave a PARTIAL state (npm + PyPI
+  # live, crates missing). Recovery must finish the missing registries, not
+  # die with "already exists" on the completed ones — so probe first, publish
+  # only what is missing, and verify everything at the end.
+  local rust_state
+  rust_state="$(registry_state_crate ratify-protocol)"
 
-  echo "==> Publishing PyPI"
-  (cd sdks/python && python -m pip install --upgrade build twine && rm -rf dist build *.egg-info && python -m build && twine upload dist/*)
+  ensure_published "npm" "$(registry_state_npm)" publish_npm
 
-  echo "==> Publishing crates.io — Rust SDK (ratify-protocol)"
-  (cd sdks/rust && cargo publish)
+  ensure_published "PyPI" "$(registry_state_pypi)" publish_pypi
+
+  ensure_published "crates.io ratify-protocol" "$rust_state" publish_crate_dir sdks/rust
 
   # The C SDK depends on ratify-protocol via a local path. Crates.io requires
-  # the dependency to be already indexed before the dependent can be published.
-  # Wait for the Rust SDK to appear on the registry, then publish the C SDK.
-  echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
-  sleep 60
+  # the dependency to be indexed before the dependent publishes — wait only
+  # if we just published the Rust SDK in this run. Cargo substitutes
+  # path = "../rust" → version = "$NPM_VERSION" in the published metadata.
+  c_publish() {
+    if [ "$rust_state" = "absent" ]; then
+      echo "==> Waiting 60s for ratify-protocol to be indexed on crates.io..."
+      sleep 60
+    fi
+    publish_crate_dir sdks/c
+  }
+  ensure_published "crates.io ratify-c" "$(registry_state_crate ratify-c)" c_publish
 
-  echo "==> Publishing crates.io — C SDK (ratify-c)"
-  # Cargo automatically substitutes path = "../rust" → version = "$NPM_VERSION"
-  # in the published metadata once ratify-protocol is indexed on crates.io.
-  (cd sdks/c && cargo publish)
+  echo "==> Verifying all registries carry ${NPM_VERSION}"
+  local not_live=0 state
+  for probe in "npm:registry_state_npm" "PyPI:registry_state_pypi" \
+               "crates ratify-protocol:registry_state_crate ratify-protocol" \
+               "crates ratify-c:registry_state_crate ratify-c"; do
+    label="${probe%%:*}"
+    state="$(${probe#*:})"
+    if [ "$state" != "live" ]; then
+      echo "  ✗ ${label}: ${state}"
+      not_live=1
+    fi
+  done
+  if [ "$not_live" = "1" ]; then
+    echo "release: not all registries verified live for ${NPM_VERSION}." >&2
+    echo "  absent  = still missing, or published but not yet visible (registry" >&2
+    echo "            indexing / visibility lag — if a publish above reported" >&2
+    echo "            'already exists', this is lag, not failure)" >&2
+    echo "  unknown = could not verify (registry unreachable)" >&2
+    echo "  Re-run release-publish later to converge and verify." >&2
+    exit 1
+  fi
+  echo "  ✓ npm, PyPI, crates (ratify-protocol, ratify-c) all live"
 }
 
 create_github_release() {
@@ -332,7 +453,46 @@ PY
   echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
 }
 
+# Break-glass manual publish: for when the tag exists but the CI release
+# run has definitively failed. Isolated from the tag push so it can never
+# race the tag-triggered workflow — requires the operator to assert the
+# CI failure explicitly.
+publish_release() {
+  if [[ "${RELEASE_CI_FAILED:-0}" != "1" ]]; then
+    echo "release: manual publishing races the tag-triggered CI release unless that run" >&2
+    echo "  has already failed. Confirm it (gh run list --workflow=release.yml) and" >&2
+    echo "  re-run with RELEASE_CI_FAILED=1." >&2
+    exit 1
+  fi
+  require_main
+  require_clean
+  require_main_up_to_date
+
+  local live_version
+  live_version="$(current_npm_version)"
+  if [[ "$live_version" != "$NPM_VERSION" ]]; then
+    echo "release: main is at $live_version, expected $NPM_VERSION" >&2
+    exit 1
+  fi
+  if ! git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+    echo "release: tag $VERSION does not exist — run make release-tag first" >&2
+    exit 1
+  fi
+  ./scripts/check-release-sync.sh
+
+  publish_registries
+  if [[ "$GITHUB_RELEASE" == "1" ]]; then
+    create_github_release
+  fi
+}
+
 tag_release() {
+  if [[ "$PUBLISH" == "1" || "$GITHUB_RELEASE" == "1" ]]; then
+    echo "release: PUBLISH=1 / GITHUB_RELEASE=1 no longer run during release-tag —" >&2
+    echo "  the tag push already triggers the CI publish, so a local publish here" >&2
+    echo "  races it. Use: make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1" >&2
+    exit 1
+  fi
   require_main
   require_clean
   require_main_up_to_date
@@ -362,17 +522,9 @@ tag_release() {
   echo "==> Verify the Release workflow started: gh run list --workflow=release.yml --limit 1"
   echo "    If it did not, dispatch it manually: gh workflow run release.yml -f tag=$VERSION"
 
-  if [[ "$PUBLISH" == "1" ]]; then
-    publish_registries
-  else
-    echo "==> PUBLISH=0: registry publishing left to CI (normal path)"
-  fi
-
-  if [[ "$GITHUB_RELEASE" == "1" ]]; then
-    create_github_release
-  else
-    echo "==> GITHUB_RELEASE=0: GitHub release creation left to CI (normal path)"
-  fi
+  echo "==> Registry publishing is CI-driven off the tag push (normal path)."
+  echo "    Break-glass manual publish (only after the CI release run has"
+  echo "    definitively failed): make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1"
 
   echo "release-tag: ok ($VERSION)"
   cat <<'EOF'
@@ -391,4 +543,5 @@ EOF
 case "$MODE" in
   prepare) prepare ;;
   tag)     tag_release ;;
+  publish) publish_release ;;
 esac

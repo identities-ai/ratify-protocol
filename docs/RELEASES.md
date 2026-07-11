@@ -1,6 +1,6 @@
 # Release Process
 
-**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep — and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`PUBLISH=1`) is break-glass only.**
+**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep — and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`make release-publish`, gated on `RELEASE_CI_FAILED=1`) is break-glass only.**
 
 Companion to [`SPEC.md`](../SPEC.md), [`SDKS.md`](SDKS.md), and [`TEST_PLAN.md`](TEST_PLAN.md).
 
@@ -111,15 +111,15 @@ make release-tag VERSION=v1.0.0-alpha.12
 
 Any failure in either phase aborts. `release-tag` refuses to run if main's versions don't match the target (i.e. the release PR hasn't merged).
 
-**Registry publishing is handled by CI**, not by `PUBLISH=1` on a local invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local two-phase flow owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
+**Registry publishing is handled by CI**, not by a local invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local two-phase flow owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
 
-`PUBLISH=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It should be the exception, not the rule.
+`make release-publish VERSION=… RELEASE_CI_FAILED=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It is deliberately a separate step from `release-tag`: the tag push triggers the CI publish, so publishing locally in the same breath would race it. The script refuses to run without `RELEASE_CI_FAILED=1` — an explicit operator assertion that the tag-triggered run has already failed.
 
 ### 4.2 What the workflow does, step-by-step
 
 **Phase 1 — `make release-prepare`:**
 
-1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-\w+\.\d+)?`; no target tag exists locally or remotely.
+1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-(alpha|beta|rc)\.\d+)?` — only prerelease forms the Python bump and the release workflow PEP 440-normalize; no target tag exists locally or remotely.
 2. **Create `release/<version>`.**
 3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing — Go consumes the git tag directly.)
 4. **Regenerate test vectors deterministically.** `go run ./cmd/ratify-testvectors`. If the result differs from committed, the release is aborted and the user is told to investigate.
@@ -139,7 +139,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 7. **Preflight.** On clean, up-to-date main; main's versions match the target (refuses otherwise); release-sync check passes; tags still absent.
 8. **Tag the protocol version and each SDK.** `git tag v1.0.0-alpha.12`, then `sdk-go-v1.0.0-alpha.12`, etc.
 8a. **Push the protocol tag alone, then the `sdk-*` tags.** GitHub creates no push event when more than three tags arrive at once (see §5.3.1) — the protocol tag must travel by itself to trigger the Release workflow.
-9. **(Optional / emergency only) Publish to registries if `PUBLISH=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
+9. **(Optional / emergency only) Publish to registries via `make release-publish VERSION=… RELEASE_CI_FAILED=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
    - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@<version>`.
    - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==<PEP 440 version>`.
@@ -194,7 +194,7 @@ The release logic lives in:
 
 - `scripts/check-release-sync.sh` — fails if package versions, lockfiles, docs, or SDK constants drift.
 - `scripts/test-all.sh` — runs the same conformance and determinism gates as CI, with stricter local Go race tests.
-- `scripts/release.sh` — `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags (and carries the break-glass `PUBLISH=1` / `GITHUB_RELEASE=1` paths).
+- `scripts/release.sh` — `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags; `publish` is the isolated break-glass registry publish (requires `RELEASE_CI_FAILED=1` so it cannot race the tag-triggered CI publish).
 
 ## 6. Continuous integration
 

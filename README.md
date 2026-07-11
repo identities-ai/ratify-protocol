@@ -5,7 +5,7 @@
 <h1 align="center">Ratify Protocol™</h1>
 
 <p align="center">
-  <em>A cryptographic trust protocol for human-to-agent and agent-to-agent interactions.</em>
+  <em>Delegated-authority proofs for human-agent and agent-agent interactions — who authorized the agent, what it may do, and for how long.</em>
 </p>
 
 [![CI](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/identities-ai/ratify-protocol/actions/workflows/ci.yml)

@@ -1,6 +1,5 @@
-// Package ratify implements the Ratify Protocol — a cryptographic trust
-// protocol for human-agent and agent-agent interactions as agents start
-// to transact.
+// Package ratify implements the Ratify Protocol — delegated-authority
+// proofs for human-agent and agent-agent interactions.
 package ratify
 
 import (

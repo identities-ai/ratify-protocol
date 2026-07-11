@@ -1,6 +1,6 @@
 # @identities-ai/ratify-protocol
 
-**TypeScript reference SDK for the Ratify Protocol v1 — a cryptographic trust protocol for human-agent and agent-agent interactions as agents start to transact.**
+**TypeScript reference SDK for the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 

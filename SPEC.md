@@ -1,6 +1,6 @@
 # Ratify Protocol™ Specification — v1
 
-**A cryptographic trust protocol for human-agent and agent-agent interactions as agents start to transact.**
+**Delegated-authority proofs for human-agent and agent-agent interactions.**
 
 **Status:** Reference — authoritative alongside the Go implementation at module root. Maintained by Identities AI, Inc. Identities AI, Inc. owns the Ratify Protocol™ trademark and the patent-pending invention.
 **Version:** 1 (wire format `version` = 1)

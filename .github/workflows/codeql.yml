@@ -1,0 +1,51 @@
+# CodeQL security analysis — advanced setup.
+#
+# GitHub's dynamically-configured scanning only analyzes the no-build
+# languages it supports (JS/TS, Go, Python), which silently skips the Rust
+# reference implementation — including the sdks/c crate, whose actual code
+# is Rust behind a C ABI. This workflow adds Rust (CodeQL public preview,
+# build-mode: none) and Actions workflow scanning alongside the big three.
+#
+# c-cpp is deliberately absent: the only C sources are the generated header
+# and one example; the implementation CodeQL should look at is the Rust.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1" # weekly, Monday 05:23 UTC
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: rust
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

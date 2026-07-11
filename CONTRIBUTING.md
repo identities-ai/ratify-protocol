@@ -48,6 +48,22 @@ By contributing, you certify the [DCO](https://developercertificate.org/) v1.1 �
 
 We use DCO rather than a CLA. Commits without the sign-off will be refused by CI.
 
+## Commit and PR messages are public
+
+This repository is open source: commit messages, PR titles and bodies, and
+review threads are permanently public, and they are read by people evaluating
+the protocol. Write them for an outside reader:
+
+- Describe the change and its reasoning in project terms — what changed in the
+  spec, SDKs, or docs, and why it is correct.
+- Do not reference internal tools, private repositories, internal review
+  processes, or company planning. "fix: scope-intersection edge case found in
+  adversarial review" is public-friendly; naming the internal tool or process
+  that found it is not.
+- No AI-tool attribution footers or "generated with" banners.
+- Squash-and-merge means the merge-time message is what lands on `main` —
+  proofread it at merge time, not only the branch commits.
+
 ## Running the tests
 
 ### Go

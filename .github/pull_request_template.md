@@ -31,6 +31,7 @@ done is worse than an empty checklist — it means triage has to verify by hand.
 - [ ] If the threat model changed: `docs/EXPLAINED.md` updated.
 - [ ] If the public docs reference a new field, method, or scope: `docs.identities.ai` (separate repo) follow-up is filed.
 - [ ] Commit messages use conventional prefixes (`fix:`, `feat:`, `spec:`, `docs:`, `chore:`); first line under 72 chars.
+- [ ] Commit and PR text written for a public audience — no internal tools, private repo names, or internal process references (see CONTRIBUTING.md).
 
 ## Cross-SDK impact
 

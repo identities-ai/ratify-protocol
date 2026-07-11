@@ -170,12 +170,16 @@ fn policy_verdict_wrong_secret_rejected() {
 #[test]
 fn policy_verdict_context_hash_mismatch() {
     let n = now();
-    let mut ctx_a = VerifierContext::default();
-    ctx_a.current_lat = Some(37.0);
-    ctx_a.current_lon = Some(-122.0);
-    let mut ctx_b = VerifierContext::default();
-    ctx_b.current_lat = Some(51.5);
-    ctx_b.current_lon = Some(-0.1);
+    let ctx_a = VerifierContext {
+        current_lat: Some(37.0),
+        current_lon: Some(-122.0),
+        ..Default::default()
+    };
+    let ctx_b = VerifierContext {
+        current_lat: Some(51.5),
+        current_lon: Some(-0.1),
+        ..Default::default()
+    };
     let hash_a = verifier_context_hash(&ctx_a).unwrap();
     let hash_b = verifier_context_hash(&ctx_b).unwrap();
     let v = issue_policy_verdict("v", "a", "s", true, &hash_a, n, n + 3600, &SECRET).unwrap();

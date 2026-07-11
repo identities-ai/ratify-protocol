@@ -66,7 +66,8 @@ pub use types::{
     KeyRotationStatement, PolicyProvider, PolicyVerdict, ProofBundle, ReceiptParty,
     ReceiptPartySignature, RevocationList, RevocationProvider, RevocationPush, SessionToken,
     StreamContext, TransactionReceipt, TransactionReceiptResult, VerificationReceipt,
-    VerifierContext, VerifyOptions, VerifyResult, WitnessEntry, CHALLENGE_WINDOW_SECONDS,
+    InvocationCounter, VerifierContext, VerifyOptions, VerifyResult, WitnessEntry,
+    CHALLENGE_WINDOW_SECONDS,
     ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
     MLDSA65_PUBLIC_KEY_SIZE, MLDSA65_SIGNATURE_SIZE, NO_EXPIRY_SENTINEL, PROTOCOL_VERSION,
 };

@@ -417,6 +417,10 @@ impl RevocationProvider for CRevocationProvider {
 /// - `session_context` is null or points to exactly `session_context_len` bytes
 /// - `stream_id` is null or points to exactly `stream_id_len` bytes
 /// - All pointers remain valid for the duration of the returned `VerifyOptions`
+// Eight parameters is deliberate: this bridge takes the C ABI's argument
+// list verbatim; bundling them into a struct here would just move the
+// mismatch to the FFI boundary.
+#[allow(clippy::too_many_arguments)]
 unsafe fn build_opts<'a>(
     required_scope: *const c_char,
     now_unix: i64,
@@ -459,7 +463,7 @@ unsafe fn build_opts<'a>(
 
         let rate_fn: Option<unsafe extern "C" fn(*const c_char, i64, *mut std::ffi::c_void) -> i64> = ctx.rate_fn;
         let rate_ud = ctx.rate_userdata;
-        let invocations: Option<Box<dyn Fn(&str, i64) -> i64 + 'a>> = rate_fn.map(|f| {
+        let invocations: Option<ratify_protocol::InvocationCounter<'a>> = rate_fn.map(|f| {
             Box::new(move |cert_id: &str, window_s: i64| -> i64 {
                 // cert_id is stack-allocated; the closure must not store the pointer.
                 if let Ok(c) = CString::new(cert_id) {
@@ -837,11 +841,9 @@ pub unsafe extern "C" fn ratify_verify_bundle(
 ) -> RatifyStatus {
     // Validate required_scope is valid UTF-8 before delegating, so the error
     // is surfaced immediately rather than silently becoming an empty scope.
-    if !required_scope.is_null() {
-        if CStr::from_ptr(required_scope).to_str().is_err() {
-            set_err(err_out, "required_scope contains invalid UTF-8");
-            return RatifyStatus::RatifyErrEncoding;
-        }
+    if !required_scope.is_null() && CStr::from_ptr(required_scope).to_str().is_err() {
+        set_err(err_out, "required_scope contains invalid UTF-8");
+        return RatifyStatus::RatifyErrEncoding;
     }
     ratify_verify_bundle_opts(
         bundle_json,
@@ -911,11 +913,9 @@ pub unsafe extern "C" fn ratify_verify_bundle_opts(
         }
 
         // Validate required_scope UTF-8
-        if !o.required_scope.is_null() {
-            if CStr::from_ptr(o.required_scope).to_str().is_err() {
-                set_err(err_out, "required_scope contains invalid UTF-8");
-                return RatifyStatus::RatifyErrEncoding;
-            }
+        if !o.required_scope.is_null() && CStr::from_ptr(o.required_scope).to_str().is_err() {
+            set_err(err_out, "required_scope contains invalid UTF-8");
+            return RatifyStatus::RatifyErrEncoding;
         }
     }
 

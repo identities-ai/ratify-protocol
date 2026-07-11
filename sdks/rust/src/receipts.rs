@@ -262,6 +262,11 @@ fn policy_verdict_sign_bytes(v: &PolicyVerdict) -> Result<Vec<u8>, String> {
 }
 
 /// Construct and HMAC-bind a PolicyVerdict.
+///
+/// Eight explicit parameters is deliberate: this signature mirrors
+/// issue_policy_verdict in the Go/TypeScript/Python SDKs, and cross-SDK
+/// signature parity outranks the lint here.
+#[allow(clippy::too_many_arguments)]
 pub fn issue_policy_verdict(
     verdict_id: &str,
     agent_id: &str,

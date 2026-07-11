@@ -259,6 +259,10 @@ enum FieldValue {
     Points(Vec<[f64; 2]>),
 }
 
+/// Callback answering "how many invocations of this cert in this window?"
+/// — (cert_id, window_s) -> count. Used by rate-limit constraints.
+pub type InvocationCounter<'a> = Box<dyn Fn(&str, i64) -> i64 + 'a>;
+
 /// Application-supplied inputs for evaluating first-class constraints.
 /// A cert bearing a constraint whose required context field is absent will
 /// be rejected with `constraint_unverifiable` (fail-closed).
@@ -271,7 +275,7 @@ pub struct VerifierContext<'a> {
     pub requested_amount: Option<f64>,
     pub requested_currency: Option<String>,
     /// (cert_id, window_s) -> invocation count
-    pub invocations_in_window: Option<Box<dyn Fn(&str, i64) -> i64 + 'a>>,
+    pub invocations_in_window: Option<InvocationCounter<'a>>,
 }
 
 /// Proof an agent presents to a verifier.
@@ -626,6 +630,8 @@ pub struct VerifyOptions<'a> {
     /// `Result<bool, String>` and fails closed on error. Slated for removal
     /// in v1.0.0-beta.1. When both fields are set, `revocation` wins.
     #[deprecated(since = "1.0.0-alpha.7", note = "use `revocation` (SPEC §17.1) instead")]
+    // Slated for removal in v1.0.0-beta.1 — not worth a public type alias.
+    #[allow(clippy::type_complexity)]
     pub is_revoked: Option<Box<dyn Fn(&str) -> bool + 'a>>,
     /// Pluggable revocation provider (SPEC §17.1). Takes precedence over
     /// `is_revoked`. A provider error fails the bundle as `revocation_error`.
@@ -670,6 +676,10 @@ pub struct VerifyOptions<'a> {
     pub anchor_resolver: Option<Box<dyn AnchorResolver + 'a>>,
 }
 
+// Not derived: this manual impl exists to isolate the #[allow(deprecated)]
+// initialization of `is_revoked` to a single construction site. Deriving
+// would spread the deprecation suppression to the whole struct.
+#[allow(clippy::derivable_impls)]
 impl<'a> Default for VerifyOptions<'a> {
     fn default() -> Self {
         // The Default impl must initialize the deprecated field for backwards

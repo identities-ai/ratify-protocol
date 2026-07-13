@@ -3,6 +3,7 @@ package ratify
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -300,6 +301,21 @@ var scopeWildcards = map[string][]string{
 	// Every actuate grant must be explicit.
 	// presence:* — presence:represent is sensitive, so NO wildcard expansion.
 	// Representation must always be granted explicitly.
+}
+
+// Vocabulary returns the complete canonical scope vocabulary for v1,
+// sorted lexicographically. The slice is a fresh copy — callers may modify
+// it freely. Consumers that present scope choices to users (consoles,
+// policy editors) should derive their lists from this accessor rather than
+// hardcoding scope strings, so UI vocabularies cannot drift from the
+// protocol.
+func Vocabulary() []string {
+	out := make([]string, 0, len(validScopes))
+	for s := range validScopes {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ValidateScopes returns an error if any scope is not in the canonical

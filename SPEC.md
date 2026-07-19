@@ -1347,7 +1347,7 @@ A `RevocationProvider` decides whether a `cert_id` is currently revoked.
 
 **Standard Implementations:**
 - **Local (Default)** — reads from a caller-supplied `RevocationList` (§5.10) loaded at SDK init or polled at a configured interval. Adequate for low-throughput verifiers and for offline / air-gapped deployments. Staleness is bounded by the poll interval.
-- **Push (Commercial, e.g. Ratify Verify)** — subscribes to a real-time revocation stream and maintains a local delta cache. Staleness measured in milliseconds globally. Out of scope for this spec; the interface above is the only contract.
+- **Push (Commercial, e.g. Ratify Verify)** — subscribes to a real-time revocation stream and maintains a local delta cache. Designed for low-staleness delivery. Out of scope for this spec; the interface above is the only contract.
 
 ### 17.2 PolicyProvider
 

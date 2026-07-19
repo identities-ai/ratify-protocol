@@ -87,9 +87,9 @@ This is the build-vs-buy boundary, in one diagram:
 [ open ] hybrid sig + chain walk + scope ─── same algorithm everywhere
 [ open ] cert-bound Constraints ─────────── same evaluation everywhere
 ─────────────────────────────────────────── deterministic verifier core
-[ hook ] RevocationProvider     ↔ local file  /  push-sync edge cache
+[ hook ] RevocationProvider     ↔ local file  /  hosted revocation lists
 [ hook ] PolicyProvider         ↔ none        /  Rego/OPA + quota
-[ hook ] AuditProvider          ↔ stdout      /  signed immutable archive
+[ hook ] AuditProvider          ↔ stdout      /  hash-chained audit trail
 [ opt  ] ConstraintEvaluator    ↔ none        /  extension type registry
 [ opt  ] PolicyVerdict          ↔ none        /  HMAC-cached allow/deny
 [ opt  ] AnchorResolver         ↔ none        /  SSO-bound identity lookup

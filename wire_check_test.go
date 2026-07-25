@@ -98,3 +98,76 @@ func TestNegativeWireCorpus(t *testing.T) {
 		})
 	}
 }
+
+// Encoder side of the wire integer domain (SPEC §6.2): the canonical
+// signable/marshal helpers must never emit an integer that strict wire
+// decoders reject. Positive cases sit exactly on the safe-integer bounds.
+func TestEncoderIntegerDomain(t *testing.T) {
+	const maxSafe = int64(1)<<53 - 1
+
+	cert := DelegationCert{
+		CertID:  "cert-1",
+		Version: 1,
+		Scope:   []string{"meeting:attend"},
+	}
+	cert.ExpiresAt = maxSafe
+	cert.IssuedAt = -maxSafe
+	if _, err := DelegationSignBytes(&cert); err != nil {
+		t.Fatalf("bounds must be accepted: %v", err)
+	}
+	cert.ExpiresAt = maxSafe + 1
+	if _, err := DelegationSignBytes(&cert); err == nil {
+		t.Fatal("expires_at above the safe-integer range must be rejected")
+	}
+	cert.ExpiresAt = 0
+	cert.IssuedAt = -(maxSafe + 1)
+	if _, err := DelegationSignBytes(&cert); err == nil {
+		t.Fatal("issued_at below the safe-integer range must be rejected")
+	}
+	cert.IssuedAt = 0
+	cert.Constraints = []Constraint{{Type: "max_rate", Count: 5, WindowS: maxSafe}}
+	if _, err := DelegationSignBytes(&cert); err != nil {
+		t.Fatalf("max_rate window_s at the bound must be accepted: %v", err)
+	}
+	cert.Constraints[0].WindowS = maxSafe + 1
+	if _, err := DelegationSignBytes(&cert); err == nil {
+		t.Fatal("max_rate window_s above the safe-integer range must be rejected")
+	}
+	cert.Constraints[0].WindowS = 300
+	// Constraint.Count is int — 64-bit on every supported build platform,
+	// so it can carry an out-of-domain value that the encoder must reject.
+	cert.Constraints[0].Count = int(maxSafe + 1)
+	if _, err := DelegationSignBytes(&cert); err == nil {
+		t.Fatal("max_rate count above the safe-integer range must be rejected")
+	}
+
+	token := SessionToken{Version: 1, SessionID: "s", AgentID: "a", HumanID: "h"}
+	token.IssuedAt = maxSafe
+	token.ValidUntil = maxSafe
+	if _, err := SessionTokenSignBytes(&token); err != nil {
+		t.Fatalf("token bounds must be accepted: %v", err)
+	}
+	token.ValidUntil = maxSafe + 1
+	if _, err := SessionTokenSignBytes(&token); err == nil {
+		t.Fatal("token valid_until above the safe-integer range must be rejected")
+	}
+	token.ValidUntil = 0
+	token.IssuedAt = -(maxSafe + 1)
+	if _, err := SessionTokenSignBytes(&token); err == nil {
+		t.Fatal("token issued_at below the safe-integer range must be rejected")
+	}
+
+	bundle := ProofBundle{AgentID: "a", ChallengeAt: maxSafe, StreamSeq: maxSafe}
+	if _, err := BundleHash(&bundle); err != nil {
+		t.Fatalf("bundle bounds must be accepted: %v", err)
+	}
+	bundle.ChallengeAt = maxSafe + 1
+	if _, err := BundleHash(&bundle); err == nil {
+		t.Fatal("challenge_at above the safe-integer range must be rejected")
+	}
+	bundle.ChallengeAt = 0
+	bundle.StreamSeq = maxSafe + 1
+	if _, err := BundleHash(&bundle); err == nil {
+		t.Fatal("stream_seq above the safe-integer range must be rejected")
+	}
+}

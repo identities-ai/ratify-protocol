@@ -14,23 +14,30 @@ acceptance tests for the SDKs' wire boundaries.
 ## The contract
 
 For every case, an SDK's untrusted entry point MUST NOT accept the
-document as valid. Two outcomes satisfy that, and `strictness` says which
-apply:
+document as valid. `strictness` says how the rejection must surface:
 
-- **`decode`** — every SDK must reject the document before verification
-  (a decode/parse error). These defects are visible to any strict parser:
-  duplicate keys, unknown fields in signed structures, integers outside
-  the safe-integer range [-(2^53-1), 2^53-1] (SPEC §6.2), malformed
-  base64, malformed UTF-8, BOM prefixes.
-- **`decode_or_verify`** — SDKs whose wire codecs validate cryptographic
-  byte lengths and chain depth at decode time (TypeScript, Python) reject
-  these at decode; SDKs that parse structurally and validate during
-  verification (Go, Rust, C) may parse them, but the public verify entry
-  point must then return an invalid result. Either way the document is
-  never accepted.
+- **`decode`** — the document MUST fail at the transport boundary (a
+  decode/parse error) in every SDK; verification-time rejection does NOT
+  satisfy these cases. This class covers every canonical-format
+  violation: duplicate keys, unknown fields in signed structures,
+  integers outside the safe-integer range [-(2^53-1), 2^53-1]
+  (SPEC §6.2), non-integer lexical forms (fraction, exponent, leading
+  zero) on integer fields, malformed or non-canonical base64 (missing
+  padding, nonzero unused padding bits, embedded whitespace), trailing
+  content after the document, malformed UTF-8, and BOM prefixes. Several
+  base64 cases decode to bytes identical to a valid bundle, so a
+  permissive decoder would otherwise pass them through untouched —
+  decode-stage rejection is the only acceptable outcome.
+- **`decode_or_verify`** — structural cases only (wrong cryptographic
+  byte lengths, empty delegation chain). SDKs whose wire codecs validate
+  these at decode time (TypeScript, Python) reject them there; SDKs that
+  parse structurally and validate during verification (Go, Rust, C) may
+  parse them, but the public verify entry point must then return an
+  invalid result.
 
 What is NOT acceptable, for any case, in any SDK: a decode that succeeds
-followed by a verification that reports the bundle valid.
+followed by a verification that reports the bundle valid — and for
+`decode`-class cases, any successful decode at all.
 
 ## Case targets
 

@@ -171,3 +171,156 @@ func TestEncoderIntegerDomain(t *testing.T) {
 		t.Fatal("stream_seq above the safe-integer range must be rejected")
 	}
 }
+
+// The exported wire encoders (EncodeProofBundle, EncodeDelegationCert,
+// EncodeSessionToken) route through CanonicalJSON, so they refuse to emit
+// integers outside the safe-integer domain. Positive cases sit exactly on
+// the bounds; negative cases one beyond.
+func TestWireEncodersIntegerDomain(t *testing.T) {
+	const maxSafe = int64(1)<<53 - 1
+
+	cert := DelegationCert{
+		CertID:  "cert-1",
+		Version: 1,
+		Scope:   []string{"meeting:attend"},
+		Constraints: []Constraint{
+			{Type: "max_rate", Count: 5, WindowS: maxSafe},
+		},
+		IssuedAt:  -maxSafe,
+		ExpiresAt: maxSafe,
+	}
+	if _, err := EncodeDelegationCert(&cert); err != nil {
+		t.Fatalf("cert bounds must encode: %v", err)
+	}
+	cert.ExpiresAt = maxSafe + 1
+	if _, err := EncodeDelegationCert(&cert); err == nil {
+		t.Fatal("cert expires_at above the safe-integer range must not encode")
+	}
+	cert.ExpiresAt = 0
+	cert.IssuedAt = -(maxSafe + 1)
+	if _, err := EncodeDelegationCert(&cert); err == nil {
+		t.Fatal("cert issued_at below the safe-integer range must not encode")
+	}
+	cert.IssuedAt = 0
+	cert.Constraints[0].WindowS = maxSafe + 1
+	if _, err := EncodeDelegationCert(&cert); err == nil {
+		t.Fatal("max_rate window_s above the safe-integer range must not encode")
+	}
+	cert.Constraints[0].WindowS = 300
+	cert.Constraints[0].Count = int(maxSafe + 1)
+	if _, err := EncodeDelegationCert(&cert); err == nil {
+		t.Fatal("max_rate count above the safe-integer range must not encode")
+	}
+	cert.Constraints[0].Count = 5
+
+	bundle := ProofBundle{
+		AgentID:     "a",
+		Delegations: []DelegationCert{cert},
+		ChallengeAt: maxSafe,
+		StreamSeq:   maxSafe,
+	}
+	if _, err := EncodeProofBundle(&bundle); err != nil {
+		t.Fatalf("bundle bounds must encode: %v", err)
+	}
+	bundle.ChallengeAt = maxSafe + 1
+	if _, err := EncodeProofBundle(&bundle); err == nil {
+		t.Fatal("bundle challenge_at above the safe-integer range must not encode")
+	}
+	bundle.ChallengeAt = 0
+	bundle.StreamSeq = maxSafe + 1
+	if _, err := EncodeProofBundle(&bundle); err == nil {
+		t.Fatal("bundle stream_seq above the safe-integer range must not encode")
+	}
+	bundle.StreamSeq = 0
+	// The nested constraint reaches the encoder through the bundle too.
+	bundle.Delegations[0].Constraints[0].WindowS = maxSafe + 1
+	if _, err := EncodeProofBundle(&bundle); err == nil {
+		t.Fatal("nested max_rate window_s above the safe-integer range must not encode")
+	}
+	bundle.Delegations[0].Constraints[0].WindowS = 300
+
+	token := SessionToken{Version: 1, SessionID: "s", AgentID: "a", HumanID: "h"}
+	token.IssuedAt = maxSafe
+	token.ValidUntil = -maxSafe
+	if _, err := EncodeSessionToken(&token); err != nil {
+		t.Fatalf("token bounds must encode: %v", err)
+	}
+	token.IssuedAt = maxSafe + 1
+	if _, err := EncodeSessionToken(&token); err == nil {
+		t.Fatal("token issued_at above the safe-integer range must not encode")
+	}
+	token.IssuedAt = 0
+	token.ValidUntil = -(maxSafe + 1)
+	if _, err := EncodeSessionToken(&token); err == nil {
+		t.Fatal("token valid_until below the safe-integer range must not encode")
+	}
+}
+
+// The encoders emit canonical wire JSON that the strict decode path accepts
+// and that round-trips: encode(decode(fixture)) re-decodes to an equal
+// document and passes CheckWireJSON.
+func TestWireEncodersRoundTripFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testvectors", "v1", "happy_path_depth_1.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fx struct {
+		Bundle json.RawMessage `json:"bundle"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	var bundle ProofBundle
+	if err := strictDecode(fx.Bundle, &bundle); err != nil {
+		t.Fatalf("decode fixture bundle: %v", err)
+	}
+	encoded, err := EncodeProofBundle(&bundle)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	var again ProofBundle
+	if err := strictDecode(encoded, &again); err != nil {
+		t.Fatalf("re-decode of encoder output must pass strict acceptance: %v", err)
+	}
+	reEncoded, err := EncodeProofBundle(&again)
+	if err != nil {
+		t.Fatalf("re-encode: %v", err)
+	}
+	if !bytes.Equal(encoded, reEncoded) {
+		t.Fatal("encode(decode(encode(x))) must be byte-identical")
+	}
+}
+
+// Exponent notation on a legitimate float field still decodes through the
+// strict path — the lexical rule applies to integer fields only.
+func TestFloatFieldsAcceptExponentForm(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testvectors", "v1", "constraint_geo_circle_inside.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fx struct {
+		Bundle json.RawMessage `json:"bundle"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	var bundle ProofBundle
+	if err := strictDecode(fx.Bundle, &bundle); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	encoded, err := EncodeProofBundle(&bundle)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	doc := bytes.Replace(encoded, []byte(`"radius_m":500`), []byte(`"radius_m":5e2`), 1)
+	if bytes.Equal(doc, encoded) {
+		t.Fatal("fixture must contain radius_m:500")
+	}
+	var again ProofBundle
+	if err := strictDecode(doc, &again); err != nil {
+		t.Fatalf("exponent form on a float field must decode: %v", err)
+	}
+	if again.Delegations[0].Constraints[0].RadiusM != 500 {
+		t.Fatalf("radius_m = %v, want 500", again.Delegations[0].Constraints[0].RadiusM)
+	}
+}

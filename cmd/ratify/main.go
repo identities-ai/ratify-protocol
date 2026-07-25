@@ -286,7 +286,10 @@ func cmdDelegate(args []string) {
 		fatalf("signing failed: %v", err)
 	}
 
-	certJSON, _ := json.MarshalIndent(cert, "", "  ")
+	certJSON, err := ratify.EncodeDelegationCert(cert)
+	if err != nil {
+		fatalf("encode delegation: %v", err)
+	}
 	if err := os.WriteFile(*outFile, certJSON, 0o644); err != nil {
 		fatalf("write delegation: %v", err)
 	}
@@ -609,7 +612,10 @@ func cmdAgentBundle(args []string) {
 		ChallengeSig: sig,
 	}
 
-	bundleJSON, _ := json.MarshalIndent(bundle, "", "  ")
+	bundleJSON, err := ratify.EncodeProofBundle(bundle)
+	if err != nil {
+		fatalf("encode bundle: %v", err)
+	}
 	if err := os.WriteFile(*outFile, bundleJSON, 0o644); err != nil {
 		fatalf("write bundle: %v", err)
 	}

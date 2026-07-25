@@ -30,7 +30,7 @@ echo "==> Rust SDK"
 (cd sdks/rust && cargo build --all-targets && cargo test)
 
 echo "==> C/C++ SDK"
-(cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api)
+(cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cargo test --test advanced)
 
 echo "==> Release sync check"
 "$ROOT/scripts/check-release-sync.sh"

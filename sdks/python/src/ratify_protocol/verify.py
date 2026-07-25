@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import warnings
+from dataclasses import dataclass
 from typing import Optional
 
 from .challenge_store import UNKNOWN_CHALLENGE
@@ -582,6 +583,188 @@ def verify_transaction_receipt(
 # v1.1 session cert cache (ROADMAP 2.3) streamed-turn verification
 # ----------------------------------------------------------------------
 
+@dataclass
+class StreamedTurn:
+    """The presentation-side inputs of one streamed turn: the fresh
+    challenge the agent signed and the bindings it signed it under (SPEC
+    §6.4.2). Presented values, distinct from the verifier-side
+    expectations carried in ``VerifyOptions``."""
+
+    challenge: bytes
+    challenge_at: int
+    challenge_sig: HybridSignature
+    session_context: bytes = b""
+    stream_id: bytes = b""
+    stream_seq: int = 0
+
+
+def verify_streamed_turn_with_options(
+    token: SessionToken,
+    session_secret: bytes,
+    turn: StreamedTurn,
+    opts: Optional[VerifyOptions] = None,
+) -> VerifyResult:
+    """Options-object form of the streamed fast path (SPEC §5.13).
+
+    Verifies one turn against a previously issued SessionToken and
+    enforces the same verifier-side controls as full ``verify_bundle``
+    where they apply to a token presentation.
+
+    Consulted ``VerifyOptions`` fields: ``required_scope`` (checked
+    against ``token.granted_scope`` — stored lex-sorted for exactly
+    this), ``challenge_store`` (single-use per SPEC §10: validated before
+    signature work, atomically consumed after the challenge signature
+    verifies, before the scope check; all store failures normalize to the
+    canonical unknown_challenge result), ``session_context``, ``stream``,
+    and ``now``. Revocation, policy, constraint, audit, and anchor
+    options are ignored — a streamed turn re-verifies liveness and
+    bindings, not the chain.
+    """
+    import time
+
+    if opts is None:
+        opts = VerifyOptions()
+    now = opts.now if opts.now is not None else int(time.time())
+
+    # --- Token authenticity and validity window ---
+    if token is None:
+        return _invalid("nil_session_token", "session_token must not be nil")
+    mac_err = verify_session_token_e(token, session_secret, now)
+    if mac_err is not None:
+        return _invalid("session_token_invalid", mac_err)
+
+    # --- Basic structure ---
+    if not turn.challenge:
+        return _invalid("no_challenge", "streamed turn contains no challenge")
+
+    # --- Session context validation (mirrors SPEC §10 step 2) ---
+    if turn.session_context and len(turn.session_context) != 32:
+        return _invalid(
+            "invalid_session_context",
+            f"session_context must be 32 bytes, got {len(turn.session_context)}",
+        )
+    if opts.session_context and len(opts.session_context) != 32:
+        return _invalid(
+            "invalid_session_context",
+            f"verify option session_context must be 32 bytes, got {len(opts.session_context)}",
+        )
+    if opts.session_context:
+        if not turn.session_context:
+            return _invalid(
+                "missing_session_context",
+                "verifier requires a session-bound challenge but turn has no session_context",
+            )
+        if turn.session_context != opts.session_context:
+            return _invalid(
+                "session_context_mismatch",
+                "turn session_context does not match verifier context",
+            )
+    elif turn.session_context:
+        return _invalid(
+            "session_context_unverifiable",
+            "turn has session_context but verifier did not provide one",
+        )
+
+    # --- Single-use challenge: locate WITHOUT consuming (SPEC §10 step 2b) ---
+    if opts.challenge_store is not None:
+        if not _challenge_store_allows(
+            opts.challenge_store.validate, turn.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
+
+    # --- Stream binding validation (mirrors SPEC §10 step 3) ---
+    if turn.stream_id and len(turn.stream_id) != 32:
+        return _invalid(
+            "invalid_stream_id",
+            f"stream_id must be 32 bytes, got {len(turn.stream_id)}",
+        )
+    if not turn.stream_id and turn.stream_seq != 0:
+        return _invalid("invalid_stream_seq", "stream_seq set without stream_id")
+    if turn.stream_id and turn.stream_seq < 1:
+        return _invalid(
+            "invalid_stream_seq",
+            f"stream_seq must be >=1, got {turn.stream_seq}",
+        )
+    if opts.stream is not None:
+        if len(opts.stream.stream_id) != 32:
+            return _invalid(
+                "invalid_stream_id",
+                f"verify option stream_id must be 32 bytes, got {len(opts.stream.stream_id)}",
+            )
+        if not turn.stream_id:
+            return _invalid(
+                "missing_stream_context",
+                "verifier requires a stream-bound challenge but turn has no stream_id",
+            )
+        if turn.stream_id != opts.stream.stream_id:
+            return _invalid(
+                "stream_id_mismatch",
+                "turn stream_id does not match verifier stream context",
+            )
+        expected = opts.stream.last_seen_seq + 1
+        if turn.stream_seq <= opts.stream.last_seen_seq:
+            return _invalid(
+                "stream_seq_replay",
+                f"stream_seq {turn.stream_seq} already seen (last={opts.stream.last_seen_seq})",
+            )
+        if turn.stream_seq != expected:
+            return _invalid(
+                "stream_seq_skip",
+                f"stream_seq {turn.stream_seq} skips expected {expected}",
+            )
+    elif turn.stream_id:
+        return _invalid(
+            "stream_context_unverifiable",
+            "turn has stream_id but verifier did not provide a stream context",
+        )
+
+    # --- Liveness (challenge freshness + hybrid signature) ---
+    challenge_age = now - turn.challenge_at
+    if challenge_age < 0 or challenge_age > CHALLENGE_WINDOW_SECONDS:
+        return _invalid(
+            "stale_challenge",
+            f"challenge is {challenge_age} seconds old (max {CHALLENGE_WINDOW_SECONDS})",
+        )
+    sig_err = verify_challenge_signature_e(
+        turn.challenge,
+        turn.challenge_at,
+        turn.challenge_sig,
+        token.agent_pub_key,
+        turn.session_context,
+        turn.stream_id,
+        turn.stream_seq,
+    )
+    if sig_err is not None:
+        return _invalid(
+            "bad_challenge_sig",
+            f"challenge signature verification failed: {sig_err}",
+        )
+
+    # --- Single-use challenge: atomic consume (SPEC §10 step 9b) ---
+    # The signature has verified. Consume before the scope check so a
+    # denied caller cannot probe authorization with one liveness proof.
+    if opts.challenge_store is not None:
+        if not _challenge_store_allows(
+            opts.challenge_store.consume, turn.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
+
+    # --- Required scope against the token's cached effective scope ---
+    if opts.required_scope and opts.required_scope not in token.granted_scope:
+        return _fail_with_status(
+            "scope_denied",
+            f'required scope "{opts.required_scope}" not in session token granted scope',
+        )
+
+    return VerifyResult(
+        valid=True,
+        identity_status="authorized_agent",
+        human_id=token.human_id,
+        agent_id=token.agent_id,
+        granted_scope=list(token.granted_scope),
+    )
+
+
 def verify_streamed_turn(
     token: SessionToken,
     session_secret: bytes,
@@ -597,6 +780,11 @@ def verify_streamed_turn(
     place of the full cert chain. Checks HMAC, validity window, challenge
     freshness, and hybrid challenge signature against token.agent_pub_key.
     The chain is NOT re-verified — that's the point of the token.
+
+    Presentation checks only — this form cannot enforce a required scope,
+    single-use challenges, or verifier-side session/stream tracking.
+    Prefer :func:`verify_streamed_turn_with_options`, which adds those
+    controls through the same ``VerifyOptions`` used by ``verify_bundle``.
     """
     import time
 

@@ -774,6 +774,45 @@ struct RatifyVerifyResult *ratify_verify_streamed_turn(const char *token_json,
                                                        int64_t now_unix,
                                                        char **err_out);
 
+// Options-object streamed-turn verification (SPEC §5.13).
+//
+// Verifies one turn against a previously issued SessionToken and enforces
+// the verifier-side controls the positional `ratify_verify_streamed_turn`
+// cannot: `opts->required_scope` is checked against the token's cached
+// effective scope (`scope_denied` on miss), `opts->session_context` /
+// `opts->stream` are the verifier-side expectations checked against the
+// presented bindings with the same statuses as full verification, and a
+// non-NULL `store` makes the per-turn challenge single-use with the §10
+// consumption order (validated before signature work, atomically consumed
+// after the challenge signature verifies, before the scope check; store
+// failures normalize to the canonical unknown_challenge result).
+//
+// - `session_context` / `stream_id` / `stream_seq` — the PRESENTED
+//   bindings the agent signed (NULL + 0 = unbound), distinct from the
+//   expectations in `opts`.
+// - `opts` may be NULL for default options; `now` comes from
+//   `opts->now_unix` (0 = system clock).
+// - `store` may be NULL to skip single-use enforcement.
+//
+// Revocation callbacks and constraint context in `opts` are ignored — a
+// streamed turn re-verifies liveness and bindings, not the chain.
+enum RatifyStatus ratify_verify_streamed_turn_opts(const char *token_json,
+                                                   const unsigned char *session_secret,
+                                                   uintptr_t session_secret_len,
+                                                   const unsigned char *challenge,
+                                                   uintptr_t challenge_len,
+                                                   int64_t challenge_at,
+                                                   const char *challenge_sig_json,
+                                                   const unsigned char *session_context,
+                                                   uintptr_t session_context_len,
+                                                   const unsigned char *stream_id,
+                                                   uintptr_t stream_id_len,
+                                                   int64_t stream_seq,
+                                                   const struct RatifyVerifyOptions *opts,
+                                                   const struct RatifyChallengeStore *store,
+                                                   struct RatifyVerifyResult **out,
+                                                   char **err_out);
+
 // Full transaction-receipt verification with explicit valid/error_reason outputs.
 //
 // Writes 1 to `*valid_out` on success, 0 on failure.

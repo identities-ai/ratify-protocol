@@ -3,7 +3,13 @@
 export * from "./types.js";
 export * from "./scope.js";
 export * from "./crypto.js";
-export { verifyBundle, verifyStreamedTurn, verifyTransactionReceipt } from "./verify.js";
+export {
+  verifyBundle,
+  verifyStreamedTurn,
+  verifyStreamedTurnWithOptions,
+  verifyTransactionReceipt,
+  type StreamedTurn,
+} from "./verify.js";
 export {
   bundleHash,
   issuePolicyVerdict,

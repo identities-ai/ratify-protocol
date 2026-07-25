@@ -36,9 +36,10 @@ use ratify_protocol::{
     revocation_sign_bytes, session_token_sign_bytes, sign_transaction_receipt_party,
     transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
     verify_policy_verdict, verify_revocation_list, verify_revocation_push,
-    verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
+    verify_session_token_e, verify_streamed_turn, verify_streamed_turn_with_options,
+    verify_transaction_receipt,
     verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
-    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle,
+    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle, StreamedTurn,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -1357,6 +1358,111 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
     );
 
     Box::into_raw(Box::new(crate::RatifyVerifyResult(result)))
+}
+
+/// Options-object streamed-turn verification (SPEC §5.13).
+///
+/// Verifies one turn against a previously issued SessionToken and enforces
+/// the verifier-side controls the positional `ratify_verify_streamed_turn`
+/// cannot: `opts->required_scope` is checked against the token's cached
+/// effective scope (`scope_denied` on miss), `opts->session_context` /
+/// `opts->stream` are the verifier-side expectations checked against the
+/// presented bindings with the same statuses as full verification, and a
+/// non-NULL `store` makes the per-turn challenge single-use with the §10
+/// consumption order (validated before signature work, atomically consumed
+/// after the challenge signature verifies, before the scope check; store
+/// failures normalize to the canonical unknown_challenge result).
+///
+/// - `session_context` / `stream_id` / `stream_seq` — the PRESENTED
+///   bindings the agent signed (NULL + 0 = unbound), distinct from the
+///   expectations in `opts`.
+/// - `opts` may be NULL for default options; `now` comes from
+///   `opts->now_unix` (0 = system clock).
+/// - `store` may be NULL to skip single-use enforcement.
+///
+/// Revocation callbacks and constraint context in `opts` are ignored — a
+/// streamed turn re-verifies liveness and bindings, not the chain.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_streamed_turn_opts(
+    token_json: *const c_char,
+    session_secret: *const c_uchar,
+    session_secret_len: usize,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    challenge_at: i64,
+    challenge_sig_json: *const c_char,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    stream_id: *const c_uchar,
+    stream_id_len: usize,
+    stream_seq: i64,
+    opts: *const RatifyVerifyOptions,
+    store: *const RatifyChallengeStore,
+    out: *mut *mut crate::RatifyVerifyResult,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if token_json.is_null() || out.is_null() {
+        set_err(err_out, "token_json and out must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let token_str = match cstr_to_string(token_json, "token_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let token: SessionToken = match serde_json::from_str(&token_str) {
+        Ok(t) => t,
+        Err(e) => {
+            set_err(err_out, &format!("token_json: {e}"));
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let chall = match validated_buf(challenge, challenge_len, 1, "challenge", err_out) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let sig_str = match cstr_to_string(challenge_sig_json, "challenge_sig_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let sig: HybridSignature = match serde_json::from_str(&sig_str) {
+        Ok(s) => s,
+        Err(e) => {
+            set_err(err_out, &format!("challenge_sig_json: {e}"));
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let sess_ctx = match validated_buf_opt(session_context, session_context_len, err_out) {
+        Ok(b) => b,
+        Err(status) => return status,
+    };
+    let sid = match validated_buf_opt(stream_id, stream_id_len, err_out) {
+        Ok(b) => b,
+        Err(status) => return status,
+    };
+
+    let mut rust_opts = match checked_build_opts(opts, err_out) {
+        Ok(o) => o,
+        Err(status) => return status,
+    };
+    if !store.is_null() {
+        rust_opts.challenge_store = Some(Box::new(&(*store).0 as &dyn ChallengeStore));
+    }
+
+    let turn = StreamedTurn {
+        challenge: chall.to_vec(),
+        challenge_at,
+        challenge_sig: sig,
+        session_context: sess_ctx.to_vec(),
+        stream_id: sid.to_vec(),
+        stream_seq,
+    };
+    let result = verify_streamed_turn_with_options(&token, secret, &turn, &rust_opts);
+    *out = Box::into_raw(Box::new(crate::RatifyVerifyResult(result)));
+    RatifyStatus::RatifyOk
 }
 
 /// Full transaction-receipt verification with explicit valid/error_reason outputs.

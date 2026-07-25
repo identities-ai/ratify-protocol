@@ -99,6 +99,238 @@ unsafe fn make_bundle() -> (
 }
 
 // ============================================================================
+// Streamed-turn verification with options (SPEC §5.13)
+// ============================================================================
+
+// Build a session token from a verified bundle, plus a fresh signed turn
+// whose challenge came from `store` (or was random when store is null).
+// Returns (token_json, turn_challenge, turn_sig_json) plus the handles to
+// free. The turn signature is extracted from a second ProofBundle built
+// with the same agent — the public C API's way to sign a bare challenge.
+unsafe fn make_token_and_turn(
+    store: *mut ratify_c::RatifyChallengeStore,
+) -> (
+    *mut ratify_c::RatifyHumanRoot,
+    *mut ratify_c::RatifyAgent,
+    *mut ratify_c::RatifyDelegationCert,
+    *mut c_char, // token_json
+    [u8; 32],    // turn challenge
+    String,      // turn challenge_sig JSON
+) {
+    let (root, agent, cert, bundle, bundle_json, result) = make_bundle();
+
+    let mut tok = std::ptr::null_mut();
+    let mut err = std::ptr::null_mut();
+    let s = ratify_session_token_issue(
+        bundle, result, cstr!("sess-opts"),
+        NOW, NOW + 300,
+        SECRET.as_ptr(), SECRET.len(),
+        &mut tok, &mut err,
+    );
+    assert_eq!(s, RatifyStatus::RatifyOk, "issue token: {}", read_str(err));
+    let token_json = ratify_session_token_to_json(tok, &mut err);
+    ratify_session_token_free(tok);
+    ratify_verify_result_free(result);
+    ratify_c::ratify_proof_bundle_free(bundle);
+    ratify_string_free(bundle_json);
+
+    // Fresh per-turn challenge — issued by the store when one is given.
+    let mut turn_challenge = [0u8; 32];
+    if store.is_null() {
+        ratify_challenge_generate(turn_challenge.as_mut_ptr(), 32);
+    } else {
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            turn_challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "store issue: {}", read_str(err));
+    }
+
+    // Sign the turn challenge through the public API: build a bundle and
+    // pull its challenge_sig.
+    let cert_json = ratify_c::ratify_delegation_cert_to_json(cert, &mut err);
+    let mut turn_bundle = std::ptr::null_mut();
+    ratify_proof_bundle_create(agent, cert_json, turn_challenge.as_ptr(), 32, NOW, &mut turn_bundle, &mut err);
+    ratify_string_free(cert_json);
+    let turn_bundle_json = ratify_c::ratify_proof_bundle_to_json(turn_bundle, &mut err);
+    ratify_c::ratify_proof_bundle_free(turn_bundle);
+    let parsed: serde_json::Value = serde_json::from_str(&read_str_keep(turn_bundle_json)).unwrap();
+    ratify_string_free(turn_bundle_json);
+    let sig_json = serde_json::to_string(&parsed["challenge_sig"]).unwrap();
+
+    (root, agent, cert, token_json, turn_challenge, sig_json)
+}
+
+// Read a C string without freeing it (the caller keeps ownership).
+unsafe fn read_str_keep(p: *const c_char) -> String {
+    assert!(!p.is_null());
+    CStr::from_ptr(p).to_string_lossy().into_owned()
+}
+
+unsafe fn streamed_opts_call(
+    token_json: *const c_char,
+    challenge: &[u8],
+    sig_json: &str,
+    scope: *const c_char,
+    store: *const ratify_c::RatifyChallengeStore,
+) -> (bool, String, String) {
+    let opts = RatifyVerifyOptions {
+        required_scope: scope,
+        now_unix: NOW,
+        session_context: std::ptr::null(),
+        session_context_len: 0,
+        revocation_fn: None,
+        revocation_userdata: std::ptr::null_mut(),
+        context: std::ptr::null(),
+        stream: std::ptr::null(),
+    };
+    let sig_c = std::ffi::CString::new(sig_json).unwrap();
+    let mut result = std::ptr::null_mut();
+    let mut err = std::ptr::null_mut();
+    let s = ratify_c::ratify_verify_streamed_turn_opts(
+        token_json,
+        SECRET.as_ptr(), SECRET.len(),
+        challenge.as_ptr(), challenge.len(),
+        NOW,
+        sig_c.as_ptr(),
+        std::ptr::null(), 0, // presented session context: unbound
+        std::ptr::null(), 0, // presented stream id: unbound
+        0,
+        &opts,
+        store,
+        &mut result,
+        &mut err,
+    );
+    assert_eq!(s, RatifyStatus::RatifyOk, "call status: {}", read_str(err));
+    let valid = ratify_verify_result_is_valid(result) == 1;
+    let status = read_str(ratify_c::ratify_verify_result_identity_status(result));
+    let reason = read_str(ratify_c::ratify_verify_result_error_reason(result));
+    ratify_verify_result_free(result);
+    (valid, status, reason)
+}
+
+#[test]
+fn streamed_turn_opts_scope_allowed_and_denied() {
+    unsafe {
+        let (root, agent, cert, token_json, challenge, sig_json) =
+            make_token_and_turn(std::ptr::null_mut());
+
+        let (valid, _, reason) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), std::ptr::null());
+        assert!(valid, "granted scope must verify: {reason}");
+
+        let (valid, status, _) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("files:write"), std::ptr::null());
+        assert!(!valid);
+        assert_eq!(status, "scope_denied");
+
+        ratify_string_free(token_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
+fn streamed_turn_opts_single_use_replay_rejected() {
+    unsafe {
+        let store = ratify_challenge_store_new(16);
+        let (root, agent, cert, token_json, challenge, sig_json) = make_token_and_turn(store);
+
+        let (valid, _, reason) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        assert!(valid, "first presentation must verify: {reason}");
+
+        // Identical second presentation: single-use makes it a replay.
+        let (valid, status, reason) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        assert!(!valid);
+        assert_eq!(status, "invalid");
+        assert!(reason.starts_with("unknown_challenge:"), "{reason}");
+
+        ratify_challenge_store_free(store);
+        ratify_string_free(token_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
+fn streamed_turn_opts_scope_denial_still_consumes() {
+    unsafe {
+        let store = ratify_challenge_store_new(16);
+        let (root, agent, cert, token_json, challenge, sig_json) = make_token_and_turn(store);
+
+        // Cryptographically valid but denied: the challenge is spent anyway.
+        let (valid, status, _) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("files:write"), store);
+        assert!(!valid);
+        assert_eq!(status, "scope_denied");
+
+        let (valid, status, reason) =
+            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        assert!(!valid);
+        assert_eq!(status, "invalid");
+        assert!(reason.starts_with("unknown_challenge:"), "{reason}");
+
+        ratify_challenge_store_free(store);
+        ratify_string_free(token_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
+fn streamed_turn_opts_session_expectation_unmet() {
+    unsafe {
+        let (root, agent, cert, token_json, challenge, sig_json) =
+            make_token_and_turn(std::ptr::null_mut());
+
+        // Verifier expects a session-bound turn; the presented turn is unbound.
+        let ctx = [7u8; 32];
+        let opts = RatifyVerifyOptions {
+            required_scope: std::ptr::null(),
+            now_unix: NOW,
+            session_context: ctx.as_ptr(),
+            session_context_len: 32,
+            revocation_fn: None,
+            revocation_userdata: std::ptr::null_mut(),
+            context: std::ptr::null(),
+            stream: std::ptr::null(),
+        };
+        let sig_c = std::ffi::CString::new(sig_json.as_str()).unwrap();
+        let mut result = std::ptr::null_mut();
+        let mut err = std::ptr::null_mut();
+        let s = ratify_c::ratify_verify_streamed_turn_opts(
+            token_json,
+            SECRET.as_ptr(), SECRET.len(),
+            challenge.as_ptr(), challenge.len(),
+            NOW,
+            sig_c.as_ptr(),
+            std::ptr::null(), 0,
+            std::ptr::null(), 0,
+            0,
+            &opts,
+            std::ptr::null(),
+            &mut result,
+            &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(ratify_verify_result_is_valid(result), 0);
+        let reason = read_str(ratify_c::ratify_verify_result_error_reason(result));
+        assert!(reason.starts_with("missing_session_context"), "{reason}");
+        ratify_verify_result_free(result);
+
+        ratify_string_free(token_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+// ============================================================================
 // Session Token
 // ============================================================================
 

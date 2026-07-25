@@ -320,6 +320,11 @@ Verifiers of a streamed turn MUST check:
 - `mac` equals `HMAC-SHA256(session_secret, SessionTokenSignBytes(token))`.
 - `now` ∈ [`issued_at`, `valid_until`].
 - The fresh `ChallengeSig` verifies against `agent_pub_key` over the canonical challenge signable bytes (§6.4.2).
+- When the verifier requires a scope for the protected action: the required scope ∈ `token.granted_scope` (else `scope_denied`). `granted_scope` stores the verified chain's effective scope lex-sorted for exactly this check — a token is a cache of a chain verification, not a bypass of the scope gate.
+- When the verifier issues challenges (§10 "Challenge single-use"): the per-turn challenge resolves to an unexpired, unconsumed issuance record before signature work and is atomically consumed after `ChallengeSig` verifies, before the scope check — the same two-point order and `unknown_challenge` normalization as §10 steps 2b and 9b.
+- When the turn presents a `session_context` or `stream_id`/`stream_seq` binding (§5.8): the verifier checks it against its own session/stream state with the same statuses as the full verifier (`session_context_mismatch`, `stream_seq_replay`, `stream_seq_skip`, and the `*_unverifiable` rejections for bindings the verifier cannot check).
+
+Reference implementations expose these controls through an options-object form of the streamed-turn verifier that accepts the same `VerifyOptions` (§5.17) as full verification, of which `RequiredScope`, `ChallengeStore`, `SessionContext`, `Stream`, and `Now` are consulted; revocation, policy, constraint, audit, and anchor options do not apply to a token presentation.
 
 On success the verifier returns `identity_status = authorized_agent`, `granted_scope = token.granted_scope`, `agent_id = token.agent_id`, `human_id = token.human_id`. Revocation and expiry of underlying certs are NOT re-checked — callers who need fresh revocation semantics evict tokens when the issuer publishes a new revocation list or when `valid_until` expires.
 
@@ -665,7 +670,8 @@ The Go reference implementation exposes the following public functions, grouped 
 - `VerifyWitnessEntry(*WitnessEntry, HybridPublicKey) error` — verify a witness entry's signature.
 - `VerifySessionToken(*SessionToken, []byte, time.Time) error` — verify a session token's HMAC and temporal validity.
 - `VerifyTransactionReceipt(*TransactionReceipt, VerifyReceiptOptions) TransactionReceiptResult` — full atomic receipt verification (§5.14).
-- `VerifyStreamedTurn(*SessionToken, []byte, []byte, int64, HybridSignature, []byte, []byte, int64, time.Time) VerifyResult` — fast-path streamed-turn verification against a cached session token.
+- `VerifyStreamedTurn(*SessionToken, []byte, []byte, int64, HybridSignature, []byte, []byte, int64, time.Time) VerifyResult` — fast-path streamed-turn verification against a cached session token (presentation checks only; cannot enforce scope, single-use, or verifier-side bindings).
+- `VerifyStreamedTurnWithOptions(*SessionToken, []byte, StreamedTurn, VerifyOptions) VerifyResult` — options-object streamed-turn verification (§5.13). `StreamedTurn` carries the presented challenge, timestamp, signature, and optional session/stream bindings; the consulted `VerifyOptions` fields are `RequiredScope` (checked against `token.granted_scope`), `ChallengeStore` (single-use per §10), `SessionContext`, `Stream`, and `Now`.
 
 **Scope:**
 

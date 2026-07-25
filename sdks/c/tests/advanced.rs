@@ -1196,3 +1196,119 @@ fn verify_with_challenge_store_scope_denied_still_consumes() {
         ratify_human_root_free(root);
     }
 }
+
+// ============================================================================
+// Operation-context / session-context constructions (SPEC §6.4.9)
+// ============================================================================
+// Known-answer vectors duplicated across all five SDK test suites so the
+// implementations provably produce byte-identical hashes.
+
+const KAT_EMPTY_OPERATION_HASH: &str =
+    "d135e239f4a5a5a0ad6385b204d6c81f3c10e6b2f5debfa3cc8079488970f82f";
+const KAT_FULL_OPERATION_HASH: &str =
+    "6b70b5f404f61624ab2379fee2756639d8629141ecb3593b53e5a22346e0c3e5";
+const KAT_SESSION_CONTEXT: &str =
+    "788c692b5dafae52dd896eb5f7580f61d42b8c7a2abeed4d4eea9dcd4d7d4dfd";
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[test]
+fn operation_context_known_answers() {
+    unsafe {
+        let mut err = std::ptr::null_mut();
+
+        // All-NULL operation context.
+        let mut empty_hash = [0u8; 32];
+        let s = ratify_c::ratify_operation_context_hash(
+            std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), 0,
+            empty_hash.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(to_hex(&empty_hash), KAT_EMPTY_OPERATION_HASH);
+
+        // Fully populated operation context.
+        let digest = [0xABu8; 32];
+        let mut full_hash = [0u8; 32];
+        let s = ratify_c::ratify_operation_context_hash(
+            cstr!("files:write"), cstr!("git.push"),
+            cstr!("git:github.com/acme/api"), cstr!("/src/handlers"),
+            digest.as_ptr(), 32,
+            full_hash.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(to_hex(&full_hash), KAT_FULL_OPERATION_HASH);
+
+        // Session context over the full operation hash.
+        let mut session = [0u8; 32];
+        let s = ratify_c::ratify_session_context_build(
+            cstr!("verifier-1"), cstr!("ws-42"), cstr!("agent-7"),
+            cstr!("sess-9"), cstr!("inv-3"),
+            full_hash.as_ptr(), 32,
+            session.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(to_hex(&session), KAT_SESSION_CONTEXT);
+    }
+}
+
+#[test]
+fn operation_context_input_validation() {
+    unsafe {
+        let mut err = std::ptr::null_mut();
+        let mut out = [0u8; 32];
+
+        // 5-byte payload digest is rejected.
+        let bad = [0u8; 5];
+        let s = ratify_c::ratify_operation_context_hash(
+            std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
+            bad.as_ptr(), 5,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_ne!(s, RatifyStatus::RatifyOk, "5-byte digest must fail");
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
+
+        // 16-byte request hash is rejected.
+        let short = [0u8; 16];
+        let s = ratify_c::ratify_session_context_build(
+            std::ptr::null(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), std::ptr::null(),
+            short.as_ptr(), 16,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrBadArgument);
+        ratify_error_free(err);
+    }
+}
+
+#[test]
+fn operation_context_rejects_invalid_utf8() {
+    // §6.4.9: implementations MUST reject ill-formed text. C strings are
+    // arbitrary non-null bytes, so invalid UTF-8 is a real input class.
+    unsafe {
+        let mut err = std::ptr::null_mut();
+        let mut out = [0u8; 32];
+        let bad = CString::new(vec![0xffu8, 0xfe]).unwrap();
+        let s = ratify_c::ratify_operation_context_hash(
+            bad.as_ptr(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), 0,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrEncoding);
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
+
+        let valid_hash = [0x11u8; 32];
+        let s = ratify_c::ratify_session_context_build(
+            bad.as_ptr(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), std::ptr::null(),
+            valid_hash.as_ptr(), 32,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrEncoding);
+        ratify_error_free(err);
+    }
+}

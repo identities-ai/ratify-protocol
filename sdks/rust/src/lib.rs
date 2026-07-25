@@ -19,6 +19,7 @@ extern crate alloc;
 pub mod canonical;
 pub mod challenge_store;
 pub mod constraints;
+pub mod operation_context;
 pub mod crypto;
 pub mod receipts;
 pub mod scope;
@@ -29,6 +30,10 @@ pub use canonical::{base64_std_decode, base64_std_encode, hex_decode, hex_encode
 #[cfg(feature = "std")]
 pub use canonical::canonical_json;
 pub use challenge_store::{ChallengeStore, UNKNOWN_CHALLENGE};
+pub use operation_context::{
+    build_session_context, operation_context_bytes, operation_context_hash,
+    session_context_bytes, OperationContext, SessionContextInputs,
+};
 #[cfg(feature = "std")]
 pub use challenge_store::MemoryChallengeStore;
 pub use crypto::{

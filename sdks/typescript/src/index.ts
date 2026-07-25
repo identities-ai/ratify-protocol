@@ -42,3 +42,11 @@ export {
   UNKNOWN_CHALLENGE,
   type ChallengeStore,
 } from "./challenge_store.js";
+export {
+  operationContextBytes,
+  operationContextHash,
+  sessionContextBytes,
+  buildSessionContext,
+  type OperationContext,
+  type SessionContextInputs,
+} from "./operation_context.js";

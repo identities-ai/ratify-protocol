@@ -67,3 +67,30 @@ fn negative_wire_corpus_is_never_accepted() {
         }
     }
 }
+
+// Exponent notation on a legitimate float field still deserializes — the
+// lexical strictness applies to integer fields only.
+#[test]
+fn float_fields_accept_exponent_form() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let path = manifest
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("testvectors")
+        .join("v1")
+        .join("constraint_geo_circle_inside.json");
+    let fx: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let text = serde_json::to_string(&fx["bundle"]).unwrap();
+    let doc = text.replacen("\"radius_m\":500.0", "\"radius_m\":5e2", 1);
+    let doc = if doc == text {
+        text.replacen("\"radius_m\":500", "\"radius_m\":5e2", 1)
+    } else {
+        doc
+    };
+    assert_ne!(doc, text, "fixture must contain radius_m:500");
+    let bundle: ProofBundle = serde_json::from_str(&doc).expect("exponent float must decode");
+    assert_eq!(bundle.delegations[0].constraints[0].radius_m, 500.0);
+}

@@ -33,8 +33,8 @@ use ratify_c::{
     ratify_witness_entry_to_json, ratify_witness_entry_from_json, ratify_witness_entry_free,
     ratify_key_rotation_issue, ratify_key_rotation_verify,
     ratify_key_rotation_to_json, ratify_key_rotation_from_json, ratify_key_rotation_free,
-    ratify_scope_has, ratify_scope_is_sensitive, ratify_scopes_expand,
-    ratify_scopes_intersect, ratify_scopes_validate,
+    ratify_scope_has, ratify_scope_is_sensitive, ratify_scope_vocabulary,
+    ratify_scopes_expand, ratify_scopes_intersect, ratify_scopes_validate,
     ratify_policy_verdict_issue, ratify_policy_verdict_verify,
     ratify_policy_verdict_to_json, ratify_policy_verdict_from_json, ratify_policy_verdict_free,
     ratify_verifier_context_hash,
@@ -452,6 +452,26 @@ fn scopes_expand_wildcard() {
         let arr = parsed.as_array().unwrap();
         assert!(arr.len() > 1, "wildcard must expand to multiple scopes");
         assert!(arr.iter().any(|v| v.as_str() == Some("meeting:attend")));
+    }
+}
+
+#[test]
+fn scope_vocabulary_matches_go_reference_shape() {
+    unsafe {
+        let out = ratify_scope_vocabulary();
+        assert!(!out.is_null(), "vocabulary returned null");
+        let s = read_str(out);
+        let parsed: serde_json::Value = serde_json::from_str(&s).unwrap();
+        let arr = parsed.as_array().unwrap();
+        assert_eq!(arr.len(), 54, "canonical vocabulary size drift");
+        let scopes: Vec<&str> = arr.iter().map(|v| v.as_str().unwrap()).collect();
+        let mut sorted = scopes.clone();
+        sorted.sort_unstable();
+        assert_eq!(scopes, sorted, "vocabulary must be lex-sorted");
+        assert!(scopes.contains(&"presence:represent"));
+        // Every entry is a valid canonical scope.
+        let verr = ratify_scopes_validate(cstr!(s.as_str()));
+        assert!(verr.is_null(), "vocabulary contains invalid scopes");
     }
 }
 

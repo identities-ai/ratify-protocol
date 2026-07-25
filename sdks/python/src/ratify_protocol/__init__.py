@@ -125,7 +125,9 @@ from .scope import (
     has_scope,
     intersect_scopes,
     is_sensitive,
+    scope_wildcards,
     validate_scopes,
+    vocabulary,
 )
 from .types import (
     CHALLENGE_WINDOW_SECONDS,
@@ -223,6 +225,7 @@ __all__ = [
     "generate_challenge",
     # scope
     "expand_scopes", "intersect_scopes", "has_scope", "is_sensitive", "validate_scopes",
+    "vocabulary", "scope_wildcards",
     # verify
     "verify_bundle", "verify_streamed_turn", "verify_transaction_receipt",
     # canonical / utils

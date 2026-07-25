@@ -232,6 +232,32 @@ const SCOPE_WILDCARDS: Readonly<Record<string, readonly string[]>> = {
   // Representation must always be granted explicitly.
 };
 
+/**
+ * Returns the complete canonical scope vocabulary for v1, sorted
+ * lexicographically. The array is a fresh, frozen copy on every call.
+ * Consumers that present scope choices to users (consoles, policy editors)
+ * should derive their lists from this accessor rather than hardcoding scope
+ * strings, so UI vocabularies cannot drift from the protocol. Mirrors Go's
+ * Vocabulary().
+ */
+export function vocabulary(): readonly string[] {
+  return Object.freeze([...VALID_SCOPES].sort());
+}
+
+/**
+ * Returns the wildcard expansion map: wildcard shorthand to constituent
+ * NON-sensitive scopes (sensitive scopes are never included in wildcards —
+ * they must be granted explicitly). The map and its arrays are fresh,
+ * frozen copies on every call.
+ */
+export function scopeWildcards(): Readonly<Record<string, readonly string[]>> {
+  const out: Record<string, readonly string[]> = {};
+  for (const [wildcard, children] of Object.entries(SCOPE_WILDCARDS)) {
+    out[wildcard] = Object.freeze([...children]);
+  }
+  return Object.freeze(out);
+}
+
 function isCustomScope(s: string): boolean {
   return s.startsWith(CUSTOM_SCOPE_PREFIX) && s.length > CUSTOM_SCOPE_PREFIX.length;
 }

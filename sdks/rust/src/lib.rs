@@ -44,7 +44,8 @@ pub use crypto::{
 #[cfg(feature = "std")]
 pub use crypto::{generate_agent, generate_human_root};
 pub use scope::{
-    expand_scopes, has_scope, intersect_scopes, is_sensitive, validate_scopes, CUSTOM_SCOPE_PREFIX,
+    expand_scopes, has_scope, intersect_scopes, is_sensitive, scope_wildcards, validate_scopes,
+    vocabulary, CUSTOM_SCOPE_PREFIX,
     SCOPE_COMMS_CALENDAR_READ, SCOPE_COMMS_CALENDAR_WRITE, SCOPE_COMMS_EMAIL_DELETE,
     SCOPE_COMMS_EMAIL_READ, SCOPE_COMMS_EMAIL_SEND, SCOPE_COMMS_MESSAGE_DELETE,
     SCOPE_COMMS_MESSAGE_READ, SCOPE_COMMS_MESSAGE_SEND, SCOPE_CONTRACT_READ, SCOPE_CONTRACT_SIGN,

@@ -37,7 +37,8 @@ use ratify_protocol::{
     transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
     verify_policy_verdict, verify_revocation_list, verify_revocation_push,
     verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
-    verify_verification_receipt, verify_witness_entry, vocabulary, witness_entry_sign_bytes,
+    verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
+    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -46,9 +47,9 @@ use ratify_protocol::{
 };
 
 use crate::{
-    set_err, cstr_to_string, new_cstring,
+    set_err, cstr_to_string, new_cstring, checked_build_opts,
     RatifyHumanRoot, RatifyAgent, RatifyProofBundle, RatifyVerifyResult,
-    RatifyStatus, RatifyVerifierContext,
+    RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
 };
 
 // ============================================================================
@@ -63,6 +64,7 @@ pub struct RatifyWitnessEntry(WitnessEntry);
 pub struct RatifyTransactionReceipt(TransactionReceipt);
 pub struct RatifyKeyRotation(KeyRotationStatement);
 pub struct RatifyPolicyVerdict(PolicyVerdict);
+pub struct RatifyChallengeStore(MemoryChallengeStore);
 
 // ============================================================================
 // Helper: validate a secret/hash buffer and return a slice
@@ -1384,4 +1386,220 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify_full(
         set_err(err_out, &result.error_reason);
     }
     RatifyStatus::RatifyOk
+}
+
+// ============================================================================
+// Challenge store (SPEC §10 single-use challenges)
+// ============================================================================
+
+/// Create an in-memory challenge store holding at most `max_size` pending
+/// challenges. The store makes verifier-issued challenges single-use: each
+/// is accepted at most once within its freshness window; consuming a
+/// challenge removes its record, freeing the capacity slot immediately.
+/// Single-process only — deployments spanning processes or hosts need a
+/// store over shared storage with atomic consumption. Returns NULL when
+/// `max_size` is 0. Free with `ratify_challenge_store_free`.
+#[no_mangle]
+pub extern "C" fn ratify_challenge_store_new(max_size: usize) -> *mut RatifyChallengeStore {
+    if max_size == 0 {
+        return std::ptr::null_mut();
+    }
+    Box::into_raw(Box::new(RatifyChallengeStore(MemoryChallengeStore::new(
+        max_size,
+    ))))
+}
+
+/// Free a `RatifyChallengeStore` handle. Safe to call with NULL.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_store_free(store: *mut RatifyChallengeStore) {
+    if !store.is_null() {
+        drop(Box::from_raw(store));
+    }
+}
+
+/// Issue a fresh 32-byte challenge bound to `session_context` (which must
+/// be NULL/0 = unbound, or exactly 32 bytes), valid for `ttl_seconds`
+/// (which must be positive). Invalid inputs return RatifyErrBadArgument.
+///
+/// - `out_challenge` — buffer of at least 32 bytes; receives the challenge.
+/// - `out_expires_at` — optional; receives the expiry (unix seconds).
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_store_issue(
+    store: *const RatifyChallengeStore,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    ttl_seconds: i64,
+    out_challenge: *mut c_uchar,
+    out_expires_at: *mut i64,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if store.is_null() || out_challenge.is_null() {
+        set_err(err_out, "store and out_challenge must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let ctx = match validated_buf_opt(session_context, session_context_len, err_out) {
+        Ok(c) => c,
+        Err(status) => return status,
+    };
+    match (*store).0.issue(ctx, ttl_seconds) {
+        Ok((challenge, expires_at)) => {
+            std::ptr::copy_nonoverlapping(challenge.as_ptr(), out_challenge, challenge.len());
+            if !out_expires_at.is_null() {
+                *out_expires_at = expires_at;
+            }
+            RatifyStatus::RatifyOk
+        }
+        Err(e) => {
+            set_err(err_out, &e);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Report whether `challenge` could be consumed right now — issued,
+/// unexpired, unconsumed, and bound to `session_context` — WITHOUT
+/// consuming it. Returns RatifyOk when consumable; otherwise an error
+/// status with the documented unknown-challenge detail in `*err_out`.
+/// `now_unix` 0 = system clock.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_store_check(
+    store: *const RatifyChallengeStore,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    now_unix: i64,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    challenge_store_op(
+        store, challenge, challenge_len, session_context, session_context_len, now_unix,
+        err_out, false,
+    )
+}
+
+/// Atomically remove the challenge's issuance record. Exactly one consume
+/// of a given challenge may ever succeed; later calls (and calls with a
+/// mismatched `session_context`, which do NOT remove the record) return an
+/// error status with the documented unknown-challenge detail in `*err_out`.
+/// Removal frees the record's capacity slot immediately.
+/// `now_unix` 0 = system clock.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_store_consume(
+    store: *const RatifyChallengeStore,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    now_unix: i64,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    challenge_store_op(
+        store, challenge, challenge_len, session_context, session_context_len, now_unix,
+        err_out, true,
+    )
+}
+
+// Eight parameters mirror the two public wrappers' C ABI argument lists.
+#[allow(clippy::too_many_arguments)]
+unsafe fn challenge_store_op(
+    store: *const RatifyChallengeStore,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    now_unix: i64,
+    err_out: *mut *mut c_char,
+    consume: bool,
+) -> RatifyStatus {
+    if store.is_null() || challenge.is_null() {
+        set_err(err_out, "store and challenge must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let challenge = slice::from_raw_parts(challenge, challenge_len);
+    let ctx = match validated_buf_opt(session_context, session_context_len, err_out) {
+        Ok(c) => c,
+        Err(status) => return status,
+    };
+    let now = if now_unix == 0 { unix_now() } else { now_unix };
+    let result = if consume {
+        (*store).0.consume(challenge, ctx, now)
+    } else {
+        (*store).0.validate(challenge, ctx, now)
+    };
+    match result {
+        Ok(()) => RatifyStatus::RatifyOk,
+        Err(e) => {
+            set_err(err_out, &e);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Verify a ProofBundle with single-use challenge enforcement (SPEC §10).
+///
+/// Identical to `ratify_verify_bundle_opts`, plus: the store is consulted
+/// (without consuming) before any signature work, and the challenge is
+/// atomically consumed after the structural, chain, and challenge-signature
+/// checks pass — before authorization evaluation. A forged or malformed
+/// presentation never consumes a challenge; a cryptographically valid
+/// presentation does, even if authorization is subsequently denied.
+///
+/// The store's session binding is checked against `opts->session_context`.
+/// `opts` may be NULL for default options.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_bundle_opts_with_challenge_store(
+    bundle_json: *const c_char,
+    opts: *const RatifyVerifyOptions,
+    store: *const RatifyChallengeStore,
+    out: *mut *mut RatifyVerifyResult,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if bundle_json.is_null() || store.is_null() || out.is_null() {
+        set_err(err_out, "bundle_json, store, and out must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let mut rust_opts = match checked_build_opts(opts, err_out) {
+        Ok(o) => o,
+        Err(status) => return status,
+    };
+    rust_opts.challenge_store = Some(Box::new(&(*store).0 as &dyn ChallengeStore));
+
+    let bundle_str = match cstr_to_string(bundle_json, "bundle_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let bundle: ProofBundle = match serde_json::from_str(&bundle_str) {
+        Ok(b) => b,
+        Err(e) => {
+            set_err(err_out, &format!("bundle_json: {e}"));
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+
+    let result = verify_bundle(&bundle, &rust_opts);
+    *out = Box::into_raw(Box::new(RatifyVerifyResult(result)));
+    RatifyStatus::RatifyOk
+}
+
+// Validate an optional (ptr, len) byte buffer: NULL+0 = empty.
+unsafe fn validated_buf_opt<'a>(
+    ptr: *const c_uchar,
+    len: usize,
+    err_out: *mut *mut c_char,
+) -> Result<&'a [u8], RatifyStatus> {
+    if ptr.is_null() {
+        if len == 0 {
+            return Ok(&[]);
+        }
+        set_err(err_out, "session_context is null but session_context_len is non-zero");
+        return Err(RatifyStatus::RatifyErrNullPointer);
+    }
+    Ok(slice::from_raw_parts(ptr, len))
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
 }

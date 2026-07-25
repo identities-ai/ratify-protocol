@@ -30,6 +30,22 @@ import {
 import { intersectScopes, validateScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
 import { evaluateConstraints } from "./constraints.js";
 import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
+import { UNKNOWN_CHALLENGE, type ChallengeStore } from "./challenge_store.js";
+
+// Run a ChallengeStore operation fail-closed: a rejection reason OR a
+// thrown exception both come back as "rejected." The store's text is
+// discarded — the public result always carries the canonical
+// UNKNOWN_CHALLENGE detail so no store failure mode is distinguishable.
+// Stores wanting operational detail should log internally.
+async function challengeStoreAllows(
+  op: () => Promise<string | null>,
+): Promise<boolean> {
+  try {
+    return (await op()) === null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Validate a ProofBundle against the Ratify Protocol.
@@ -113,6 +129,20 @@ async function _verifyBundle(
       "session_context_unverifiable",
       "bundle has session_context but verifier did not provide one",
     );
+  }
+
+  // --- Single-use challenge: locate WITHOUT consuming (SPEC §10) ---
+  // An unknown, expired, already-consumed, or wrongly-bound challenge is
+  // rejected before any signature work; the record is not touched, so a
+  // forged presentation cannot burn a legitimate challenge.
+  if (opts.challenge_store) {
+    const store: ChallengeStore = opts.challenge_store;
+    const ok = await challengeStoreAllows(() =>
+      store.validate(bundle.challenge, opts.session_context, now),
+    );
+    if (!ok) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
+    }
   }
 
   // --- v1.1 stream binding checks (SPEC §5.8, §6.4.2) ---
@@ -238,20 +268,16 @@ async function _verifyBundle(
     // pass against the caller-supplied VerifierContext. Fail-closed.
     // Route to the specific identity_status via sentinel prefix in the
     // returned error. Matches Go/Python/Rust — see SPEC §5.9 enum table.
-    const constraintErr = await evaluateConstraints(
-      cert,
-      opts.context ?? {},
-      now,
-      opts.constraint_evaluators,
-    );
-    if (constraintErr !== null) {
-      let status: IdentityStatus = "constraint_denied";
-      if (constraintErr.includes("constraint_unverifiable")) {
-        status = "constraint_unverifiable";
-      } else if (constraintErr.includes("constraint_unknown")) {
-        status = "constraint_unknown";
+    // With a challenge store in play, constraint evaluation is deferred
+    // until after the challenge is consumed (SPEC §10): a
+    // cryptographically valid presentation spends its challenge even when
+    // a constraint subsequently denies it, so denial outcomes cannot be
+    // probed with one liveness proof.
+    if (!opts.challenge_store) {
+      const constraintFailure = await evaluateCertConstraints(cert, i, opts, now);
+      if (constraintFailure !== null) {
+        return constraintFailure;
       }
-      return failWithStatus(status, `cert ${i}: ${constraintErr}`);
     }
 
     // Chain linkage: each cert's subject must match the next cert's issuer
@@ -299,6 +325,34 @@ async function _verifyBundle(
       "bad_challenge_sig",
       `challenge signature verification failed: ${challengeSigErr}`,
     );
+  }
+
+  // --- Single-use challenge: atomic consume (SPEC §10) ---
+  // Structure, chain, and challenge signature have all verified, so this
+  // presentation is cryptographically the agent's. Consume the challenge
+  // now — before authorization evaluation — so a later replay of the same
+  // challenge fails even if this presentation is subsequently denied.
+  if (opts.challenge_store) {
+    const store: ChallengeStore = opts.challenge_store;
+    const consumed = await challengeStoreAllows(() =>
+      store.consume(bundle.challenge, opts.session_context, now),
+    );
+    if (!consumed) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
+    }
+    // Deferred constraint evaluation (skipped in the per-cert loop above
+    // when a store is present).
+    for (let i = 0; i < bundle.delegations.length; i++) {
+      const constraintFailure = await evaluateCertConstraints(
+        bundle.delegations[i]!,
+        i,
+        opts,
+        now,
+      );
+      if (constraintFailure !== null) {
+        return constraintFailure;
+      }
+    }
   }
 
   // --- Effective scope (intersection across chain) ---
@@ -398,6 +452,32 @@ function validateHybridPubKeyLens(
 // ============================================================================
 // Result constructors
 // ============================================================================
+
+// Run one cert's constraint evaluation and map a failure to its identity
+// status; null means the constraints passed.
+async function evaluateCertConstraints(
+  cert: DelegationCert,
+  i: number,
+  opts: VerifyOptions,
+  now: number,
+): Promise<VerifyResult | null> {
+  const constraintErr = await evaluateConstraints(
+    cert,
+    opts.context ?? {},
+    now,
+    opts.constraint_evaluators,
+  );
+  if (constraintErr === null) {
+    return null;
+  }
+  let status: IdentityStatus = "constraint_denied";
+  if (constraintErr.includes("constraint_unverifiable")) {
+    status = "constraint_unverifiable";
+  } else if (constraintErr.includes("constraint_unknown")) {
+    status = "constraint_unknown";
+  }
+  return failWithStatus(status, `cert ${i}: ${constraintErr}`);
+}
 
 function invalid(reason: string, msg: string): VerifyResult {
   return {

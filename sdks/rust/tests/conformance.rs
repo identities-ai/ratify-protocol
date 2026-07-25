@@ -292,6 +292,7 @@ fn run_verify_fixture(fx: &Fixture) {
         policy_verdict: None,
         policy_secret: None,
         anchor_resolver: None,
+        challenge_store: None,
     };
     let got = verify_bundle(&bundle, &opts);
 

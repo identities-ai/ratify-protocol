@@ -17,6 +17,7 @@
 extern crate alloc;
 
 pub mod canonical;
+pub mod challenge_store;
 pub mod constraints;
 pub mod crypto;
 pub mod receipts;
@@ -27,6 +28,9 @@ pub mod verify;
 pub use canonical::{base64_std_decode, base64_std_encode, hex_decode, hex_encode};
 #[cfg(feature = "std")]
 pub use canonical::canonical_json;
+pub use challenge_store::{ChallengeStore, UNKNOWN_CHALLENGE};
+#[cfg(feature = "std")]
+pub use challenge_store::MemoryChallengeStore;
 pub use crypto::{
     chain_hash, challenge_sign_bytes, challenge_sign_bytes_with_session_context,
     challenge_sign_bytes_with_stream, delegation_sign_bytes, derive_id, generate_challenge,

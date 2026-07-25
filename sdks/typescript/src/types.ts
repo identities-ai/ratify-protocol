@@ -556,6 +556,18 @@ export interface VerifyOptions {
    * populates `VerifyResult.anchor`. Resolver errors are non-fatal.
    */
   anchor_resolver?: AnchorResolver;
+  /**
+   * Single-use tracking for verifier-issued challenges (SPEC §10). When
+   * set, the store is consulted (without consuming) before any signature
+   * work, and the challenge is atomically consumed after the structural,
+   * chain, and challenge-signature checks pass — before authorization
+   * evaluation. A forged or malformed presentation never consumes a
+   * challenge; a cryptographically valid presentation does, even if
+   * authorization is subsequently denied. When a store is in use,
+   * constraint evaluation is deferred until after consumption. The
+   * store's session binding is checked against `session_context`.
+   */
+  challenge_store?: import("./challenge_store.js").ChallengeStore;
 }
 
 /**

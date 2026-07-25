@@ -30,3 +30,8 @@ export {
   encodeSessionToken,
   decodeSessionToken,
 } from "./wire.js";
+export {
+  MemoryChallengeStore,
+  UNKNOWN_CHALLENGE,
+  type ChallengeStore,
+} from "./challenge_store.js";

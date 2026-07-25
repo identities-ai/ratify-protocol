@@ -435,6 +435,7 @@ Controls what the verifier checks beyond the cryptographic basics. Passed as the
 | `PolicyVerdict` | `*PolicyVerdict` | `nil` | Fast-path cached policy decision (§17.6). When present AND valid (MAC, freshness, scope, context_hash all match), the live `Policy` hook is skipped. Stale verdicts fall back to live policy without failing the bundle. |
 | `PolicySecret` | `[]byte` | `nil` | HMAC secret used to verify `PolicyVerdict.MAC`. Required when `PolicyVerdict` is non-nil; otherwise ignored. |
 | `AnchorResolver` | `AnchorResolver` | `nil` | Identity-binding resolver (§17.8). When non-nil, the verifier resolves `human_id` → `Anchor` on successful verifications and populates `VerifyResult.Anchor`. Resolver errors are non-fatal. |
+| `ChallengeStore` | `ChallengeStore` | `nil` (freshness-only verification) | Issuance-record store that makes verifier-issued challenges single-use (§10 steps 2b and 9b). When absent, replay protection is bounded by challenge freshness alone. When set, the store is consulted without consuming before any signature work (step 2b) and the challenge is atomically consumed after the challenge signature verifies (step 9b); constraint evaluation (step 7f) is deferred until after consumption. Every store failure is normalized to the canonical `unknown_challenge` result — store-provided error detail MUST NOT reach the public response. |
 
 ---
 
@@ -954,7 +955,7 @@ Examples of physical-agent cert construction are given in §11 (usage patterns) 
 
 ## 10. Verifier algorithm
 
-Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional required scope, current time, revocation callback, force-fresh revocation flag, session context, stream context, and verifier context for constraint evaluation.
+Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional required scope, current time, revocation callback, force-fresh revocation flag, session context, stream context, challenge store (single-use enforcement; absent = freshness-only verification), and verifier context for constraint evaluation.
 
 ```
 1. Basic structure checks:
@@ -972,6 +973,18 @@ Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional requir
                                                      or session_context_mismatch)
    - if bundle.session_context is present but VerifyOptions.session_context is
      absent: reject                                 (else: session_context_unverifiable)
+
+2b. Challenge single-use pre-check (only if VerifyOptions.challenge_store
+    is present):
+   - The presented challenge MUST resolve, WITHOUT being consumed, to an
+     unexpired, unconsumed issuance record whose session binding matches
+     VerifyOptions.session_context             (else: unknown_challenge)
+   - The record is not touched on failure: a presentation under the wrong
+     session binding MUST NOT consume the legitimate record.
+   - Every store failure — missing, expired, consumed, wrong binding, or
+     store backend error — maps to the same public result:
+     `unknown_challenge` with the canonical detail (see "Challenge
+     single-use" below). Store-provided error detail MUST NOT be exposed.
 
 3. Stream binding validation:
    - if bundle.stream_id is present, len(stream_id) == 32
@@ -1025,6 +1038,11 @@ Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional requir
                          cert.signature.ml_dsa_65)      == true
                                                     (else: bad_signature)
    f. Constraint evaluation against VerifierContext (§5.16):
+        CONDITIONALLY DEFERRED: when VerifyOptions.challenge_store is
+        present, this step is NOT evaluated here — it runs inside step 9b,
+        after the challenge is consumed, so a denial outcome cannot be
+        probed without spending the challenge. When no store is present,
+        it runs here as written.
         Each constraint on the cert evaluates against the caller-supplied
         VerifierContext. Three distinct failure outcomes:
           - constraint_denied: the constraint evaluated false (e.g. agent
@@ -1059,6 +1077,18 @@ Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional requir
      against agent_pub_key.{ed25519, ml_dsa_65}.
                                                     (else: bad_challenge_sig)
 
+9b. Atomic challenge consumption + deferred constraint evaluation (only if
+    VerifyOptions.challenge_store is present):
+   - Atomically consume the issuance record: of two concurrent
+     presentations of one challenge, at most one may succeed
+                                                    (else: unknown_challenge)
+   - Every consume failure maps to the same public `unknown_challenge`
+     result with the canonical detail; store-provided error detail MUST
+     NOT be exposed.
+   - Then run constraint evaluation (step 7f) for every cert, deferred
+     from the per-cert loop: a cryptographically valid presentation
+     spends its challenge even when a constraint subsequently denies it.
+
 10. Scope check (if required_scope is set):
     - required_scope ∈ IntersectScopes(certs[0].scope, …, certs[N-1].scope)
                                                     (else: scope_denied)
@@ -1074,6 +1104,19 @@ Input: a `ProofBundle` and a `VerifyOptions` (§5.17) containing optional requir
 ```
 
 **Consistency requirement:** on every failure path that can identify the root (`expired`, `revoked`), `human_id` MUST be `delegations[N-1].issuer_id`. The last cert's issuer is always the human root, whether verification succeeds or fails.
+
+**Challenge single-use.** A verifier that issues challenges MUST accept each challenge at most once within the freshness window (step 8). Single-use is enforced with an issuance record (a challenge store) consulted at the two points integrated into the algorithm above, in this order:
+
+- Step 2b — before any signature verification, the presented challenge MUST resolve to an unexpired, unconsumed issuance record whose session binding matches the presentation; otherwise the verifier rejects (`unknown_challenge`) without touching the record. A presentation under the wrong session binding MUST NOT consume the legitimate record.
+- Step 9b — after the structural, chain, and challenge-signature checks (steps 1–9) pass, the verifier MUST atomically consume the record before evaluating authorization (constraints, scope, policy): of two concurrent presentations of one challenge, at most one may succeed. A malformed or forged presentation therefore never consumes a challenge, while a cryptographically valid presentation consumes it even when authorization is subsequently denied — a denied caller MUST NOT be able to probe authorization outcomes with a single liveness proof. To preserve that property, constraint evaluation (step 7f) is deferred into step 9b when single-use is enforced.
+
+Consuming a record removes it from the store: a store's capacity bounds *pending* (issued, unconsumed, unexpired) challenges, and a consumed challenge frees its slot immediately. A record removed on consumption and a challenge that was never issued produce the same uniform rejection on later presentation.
+
+**Response-level indistinguishability.** The rejection guarantee is scoped to the response: the verifier's public status and error detail MUST be identical whether the presented challenge is missing (never issued), expired, already consumed, or bound to a different session context — one `unknown_challenge` result with one canonical detail string ("challenge was not issued by this verifier or has already been used"). To keep the guarantee under pluggable stores, the verifier MUST normalize every store failure — including custom-store backend errors and, in SDKs where stores can throw, raised exceptions (which MUST be caught and treated as rejection, fail-closed) — to that canonical result. Store-provided error text MUST NOT appear in the public response; implementations MAY log it privately for operations.
+
+This guarantee deliberately does NOT cover timing: step 2b rejects unknown challenges before the (comparatively expensive) hybrid signature checks, so a caller measuring response latency can in principle distinguish "record found" from "record not found." That trade is intentional — the early lookup is what keeps a forged presentation from spending a legitimate record and keeps unknown-challenge floods cheap. Deployments that must also close the timing channel need constant-time-shaped responses at the transport layer; the protocol does not require it.
+
+Verifiers that accept self-issued challenges — the presenting client generates the challenge itself, as in stateless tool-calling integrations — have no issuance record to consume and cannot enforce single-use. For them, freshness (step 8) bounds replay to the challenge window (≤ CHALLENGE_WINDOW_SECONDS) but does not eliminate it; replay protection MUST come from request-level deduplication, session binding (§5.8), or stream sequence numbers (§5.8). Stateless cryptographic verification alone is not replay-safe task acceptance.
 
 ---
 
@@ -1199,7 +1242,7 @@ The following table enumerates the adversaries, their capabilities, and how the 
 
 | # | Adversary | Capability | Attack | Protocol defense | Residual risk |
 |---|-----------|-----------|--------|-----------------|---------------|
-| T1 | **Network eavesdropper** | Observes all traffic between agent and verifier | Capture a `ProofBundle` and replay it later | Challenge freshness (≤300s window) + single-use challenges. Session binding (§5.8) prevents cross-verifier replay. Stream sequence numbers (§5.8) prevent within-stream replay. | Metadata (who talked to whom, when) is visible. Use TLS for transport confidentiality. |
+| T1 | **Network eavesdropper** | Observes all traffic between agent and verifier | Capture a `ProofBundle` and replay it later | Challenge freshness bounds replay to the ≤300s window. A verifier that issues challenges MUST accept each at most once within that window (§10), which eliminates replay at that verifier. Session binding (§5.8) prevents cross-verifier replay. Stream sequence numbers (§5.8) prevent within-stream replay. | Metadata (who talked to whom, when) is visible; use TLS for transport confidentiality. Self-issued challenges have no issuance record: replay within the freshness window is bounded, not eliminated — pair them with request-level deduplication (§10). |
 | T2 | **Quantum adversary** | Runs Shor's algorithm on captured signatures | Break Ed25519 signatures on archived bundles | Hybrid signatures: ML-DSA-65 (lattice-based, believed quantum-resistant) must also verify. Attacker must break both Ed25519 AND ML-DSA-65. | If both Ed25519 and ML-DSA-65 fall simultaneously to a future algorithm, the protocol is broken. This is the industry-standard assumption for hybrid post-quantum schemes. |
 | T3 | **Scope escalation by intermediate** | Holds a delegation cert with limited scope | Issue a sub-delegation with wider scope than received | Effective scope = intersection of every cert's scope in the chain (§9.3). Intermediates cannot grant what they did not receive. `identity:delegate` is sensitive and never rides wildcards. | — |
 | T4 | **Signature forger (classical)** | Unbounded classical compute | Forge a hybrid signature without the private key | Ed25519: 2^128 security. ML-DSA-65: Module-LWE/Module-SIS hardness. Both must verify. Single-component forgery (e.g., forge Ed25519 only) fails the hybrid check. | — |

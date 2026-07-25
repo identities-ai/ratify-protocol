@@ -575,3 +575,14 @@ class VerifyOptions:
     # the verifier populates ``VerifyResult.anchor`` with the human_id's
     # external-identity binding. Resolver errors are non-fatal.
     anchor_resolver: Optional[AnchorResolver] = None
+    # SPEC §10 — single-use tracking for verifier-issued challenges. When
+    # set, the store is consulted (without consuming) before any signature
+    # work, and the challenge is atomically consumed after the structural,
+    # chain, and challenge-signature checks pass — before authorization
+    # evaluation. A forged or malformed presentation never consumes a
+    # challenge; a cryptographically valid presentation does, even if
+    # authorization is subsequently denied. When a store is in use,
+    # constraint evaluation is deferred until after consumption. The
+    # store's session binding is checked against ``session_context``.
+    # Typed loosely to avoid a module cycle; see challenge_store.ChallengeStore.
+    challenge_store: Optional[Any] = None

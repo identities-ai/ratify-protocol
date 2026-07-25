@@ -38,6 +38,11 @@ from .canonical import (
     hex_decode,
     hex_encode,
 )
+from .challenge_store import (
+    UNKNOWN_CHALLENGE,
+    ChallengeStore,
+    MemoryChallengeStore,
+)
 from .crypto import (
     bundle_hash,
     chain_hash,
@@ -235,6 +240,8 @@ __all__ = [
     "encode_delegation_cert", "decode_delegation_cert",
     "encode_proof_bundle", "decode_proof_bundle",
     "encode_session_token", "decode_session_token",
+    # challenge store (SPEC §10 single-use)
+    "ChallengeStore", "MemoryChallengeStore", "UNKNOWN_CHALLENGE",
     # all scope constants
     "SCOPE_MEETING_ATTEND", "SCOPE_MEETING_SPEAK", "SCOPE_MEETING_VIDEO",
     "SCOPE_MEETING_CHAT", "SCOPE_MEETING_SHARE_SCREEN", "SCOPE_MEETING_RECORD",

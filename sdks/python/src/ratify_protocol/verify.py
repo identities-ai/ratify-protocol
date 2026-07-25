@@ -9,6 +9,7 @@ import time
 import warnings
 from typing import Optional
 
+from .challenge_store import UNKNOWN_CHALLENGE
 from .constraints import evaluate_constraints
 from .crypto import (
     transaction_receipt_sign_bytes,
@@ -98,6 +99,19 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
             "session_context_unverifiable",
             "bundle has session_context but verifier did not provide one",
         )
+
+    # --- Single-use challenge: locate WITHOUT consuming (SPEC §10) ---
+    # An unknown, expired, already-consumed, or wrongly-bound challenge is
+    # rejected before any signature work; the record is not touched, so a
+    # forged presentation cannot burn a legitimate challenge. Store
+    # failures — rejection reasons AND raised exceptions — are normalized
+    # to the canonical UNKNOWN_CHALLENGE detail so no failure mode is
+    # distinguishable in the public result (fail closed).
+    if opts.challenge_store is not None:
+        if not _challenge_store_allows(
+            opts.challenge_store.validate, bundle.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
 
     # --- v1.1 stream binding checks (SPEC §5.8, §6.4.2) ---
     if bundle.stream_id and len(bundle.stream_id) != 32:
@@ -209,16 +223,15 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
             return _invalid("bad_signature", f"cert {i}: {sig_err}")
         # Constraint evaluation — each cert's first-class constraints must all
         # pass against the caller-supplied VerifierContext. Fail-closed.
-        constraint_err = evaluate_constraints(
-            cert, opts.context, now, opts.constraint_evaluators
-        )
-        if constraint_err is not None:
-            status = "constraint_denied"
-            if "constraint_unverifiable" in constraint_err:
-                status = "constraint_unverifiable"
-            elif "constraint_unknown" in constraint_err:
-                status = "constraint_unknown"
-            return _fail_with_status(status, f"cert {i}: {constraint_err}")
+        # With a challenge store in play, constraint evaluation is deferred
+        # until after the challenge is consumed (SPEC §10): a
+        # cryptographically valid presentation spends its challenge even
+        # when a constraint subsequently denies it, so denial outcomes
+        # cannot be probed with one liveness proof.
+        if opts.challenge_store is None:
+            constraint_failure = _evaluate_cert_constraints(cert, i, opts, now)
+            if constraint_failure is not None:
+                return constraint_failure
         # Chain linkage
         if i + 1 < len(bundle.delegations):
             nxt = bundle.delegations[i + 1]
@@ -259,6 +272,24 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
     )
     if ch_err is not None:
         return _invalid("bad_challenge_sig", f"challenge signature verification failed: {ch_err}")
+
+    # --- Single-use challenge: atomic consume (SPEC §10) ---
+    # Structure, chain, and challenge signature have all verified, so this
+    # presentation is cryptographically the agent's. Consume the challenge
+    # now — before authorization evaluation — so a later replay of the
+    # same challenge fails even if this presentation is subsequently
+    # denied.
+    if opts.challenge_store is not None:
+        if not _challenge_store_allows(
+            opts.challenge_store.consume, bundle.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
+        # Deferred constraint evaluation (skipped in the per-cert loop
+        # above when a store is present).
+        for i, cert in enumerate(bundle.delegations):
+            constraint_failure = _evaluate_cert_constraints(cert, i, opts, now)
+            if constraint_failure is not None:
+                return constraint_failure
 
     # --- Effective scope ---
     scope_lists = [cert.scope for cert in bundle.delegations]
@@ -336,6 +367,18 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
 # Helpers
 # ----------------------------------------------------------------------
 
+def _challenge_store_allows(op, challenge: bytes, session_context: bytes, now: int) -> bool:
+    """Run a ChallengeStore operation fail-closed: a rejection reason OR a
+    raised exception both come back as "rejected." The store's text is
+    discarded — the caller always reports the canonical UNKNOWN_CHALLENGE
+    detail so no store failure mode is distinguishable. Stores wanting
+    operational detail should log internally."""
+    try:
+        return op(challenge, session_context, now) is None
+    except Exception:
+        return False
+
+
 def _hybrid_pub_key_equal(a: HybridPublicKey, b: HybridPublicKey) -> bool:
     return a.ed25519 == b.ed25519 and a.ml_dsa_65 == b.ml_dsa_65
 
@@ -346,6 +389,22 @@ def _validate_hybrid_pubkey_lens(pub: HybridPublicKey, label: str) -> str | None
     if len(pub.ml_dsa_65) != MLDSA65_PUBLIC_KEY_SIZE:
         return f"{label} ML-DSA-65 public key has wrong length: {len(pub.ml_dsa_65)}"
     return None
+
+
+def _evaluate_cert_constraints(cert, i: int, opts: VerifyOptions, now: int) -> Optional[VerifyResult]:
+    """Run one cert's constraint evaluation and map a failure to its
+    identity status; None means the constraints passed."""
+    constraint_err = evaluate_constraints(
+        cert, opts.context, now, opts.constraint_evaluators
+    )
+    if constraint_err is None:
+        return None
+    status = "constraint_denied"
+    if "constraint_unverifiable" in constraint_err:
+        status = "constraint_unverifiable"
+    elif "constraint_unknown" in constraint_err:
+        status = "constraint_unknown"
+    return _fail_with_status(status, f"cert {i}: {constraint_err}")
 
 
 def _invalid(reason: str, msg: str) -> VerifyResult:

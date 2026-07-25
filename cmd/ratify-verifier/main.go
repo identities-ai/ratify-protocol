@@ -43,52 +43,6 @@ import (
 	ratify "github.com/identities-ai/ratify-protocol"
 )
 
-// challengeStore tracks issued challenges with a 5-minute TTL.
-// Each challenge is single-use: verified-and-consumed in one round trip.
-type challengeStore struct {
-	mu         sync.Mutex
-	challenges map[string]int64 // base64(challenge) -> expires_at
-	maxSize    int
-}
-
-func newChallengeStore(maxSize int) *challengeStore {
-	return &challengeStore{challenges: make(map[string]int64), maxSize: maxSize}
-}
-
-func (s *challengeStore) issue(challenge []byte, ttl time.Duration) (int64, bool) {
-	expiresAt := time.Now().Add(ttl).Unix()
-	key := base64.StdEncoding.EncodeToString(challenge)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.expireLocked()
-	if len(s.challenges) >= s.maxSize {
-		return 0, false
-	}
-	s.challenges[key] = expiresAt
-	return expiresAt, true
-}
-
-func (s *challengeStore) consume(challenge []byte) bool {
-	key := base64.StdEncoding.EncodeToString(challenge)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.expireLocked()
-	_, ok := s.challenges[key]
-	if ok {
-		delete(s.challenges, key)
-	}
-	return ok
-}
-
-func (s *challengeStore) expireLocked() {
-	now := time.Now().Unix()
-	for k, exp := range s.challenges {
-		if exp < now {
-			delete(s.challenges, k)
-		}
-	}
-}
-
 // rateLimiter tracks per-IP request counts in a rolling window.
 type rateLimiter struct {
 	mu      sync.Mutex
@@ -162,7 +116,10 @@ func main() {
 	registryRequirePinned := flag.Bool("registry-require-pinned", false, "pin-plus-registry mode: only accept principals descending from a configured pin (requires -registry-pins)")
 	flag.Parse()
 
-	store := newChallengeStore(*maxChallenges)
+	if *maxChallenges < 1 {
+		log.Fatal("-max-challenges must be >= 1")
+	}
+	store := ratify.NewMemoryChallengeStore(*maxChallenges)
 	limiter := newRateLimiter(*rateLimit)
 
 	var resolver *RegistryResolver
@@ -219,17 +176,16 @@ func main() {
 			return
 		}
 
-		challenge, err := ratify.GenerateChallenge()
-		if err != nil {
-			httpError(w, http.StatusInternalServerError, err)
-			return
-		}
-		expiresAt, ok := store.issue(challenge, 5*time.Minute)
-		if !ok {
+		challenge, expiresAt, err := store.Issue(nil, 5*time.Minute)
+		if errors.Is(err, ratify.ErrChallengeStoreFull) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 				"error": "challenge store full — too many pending challenges",
 			})
 			log.Printf("challenge store full (%d max)", *maxChallenges)
+			return
+		}
+		if err != nil {
+			httpError(w, http.StatusInternalServerError, err)
 			return
 		}
 		resp := challengeResponse{
@@ -263,17 +219,6 @@ func main() {
 		strictDec.DisallowUnknownFields()
 		if err := strictDec.Decode(&bundle); err != nil {
 			httpError(w, http.StatusBadRequest, fmt.Errorf("parse bundle: %w", err))
-			return
-		}
-
-		// Challenge MUST have been issued by this server and not yet consumed.
-		if !store.consume(bundle.Challenge) {
-			writeJSON(w, http.StatusOK, ratify.VerifyResult{
-				Valid:          false,
-				IdentityStatus: "invalid",
-				ErrorReason:    "unknown_challenge: challenge was not issued by this verifier or has already been used",
-			})
-			log.Printf("reject: unknown or consumed challenge")
 			return
 		}
 
@@ -318,7 +263,14 @@ func main() {
 			}
 		}
 
-		result := ratify.Verify(&bundle, ratify.VerifyOptions{RequiredScope: req.RequiredScope})
+		// Challenge MUST have been issued by this server and not yet
+		// consumed. The store hook enforces single-use at the locked point
+		// in the verifier algorithm: a forged presentation cannot burn a
+		// pending challenge, and a valid one spends it even when denied.
+		result := ratify.Verify(&bundle, ratify.VerifyOptions{
+			RequiredScope:  req.RequiredScope,
+			ChallengeStore: store,
+		})
 		writeJSON(w, http.StatusOK, result)
 
 		if result.Valid {

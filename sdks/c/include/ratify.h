@@ -784,6 +784,42 @@ enum RatifyStatus ratify_transaction_receipt_verify_full(const char *receipt_jso
                                                          int *valid_out,
                                                          char **err_out);
 
+// Compute the 32-byte request_hash over the SPEC §6.4.9 operation
+// context: the specific action a presentation authorizes. Every string
+// may be NULL (= empty); `payload_digest` is NULL + 0 (= none) or
+// exactly 32 bytes. Writes 32 bytes to `out_hash`.
+//
+// Feed the result to `ratify_session_context_build` as `request_hash` —
+// binding the session but not the operation would let an intermediary
+// attach a valid proof to the wrong action inside the right session.
+enum RatifyStatus ratify_operation_context_hash(const char *required_scope,
+                                                const char *operation,
+                                                const char *resource_id,
+                                                const char *requested_path,
+                                                const unsigned char *payload_digest,
+                                                uintptr_t payload_digest_len,
+                                                unsigned char *out_hash,
+                                                char **err_out);
+
+// Build the 32-byte session_context over the SPEC §6.4.9 session
+// context: the session a presentation belongs to plus (through
+// `request_hash`) the operation it authorizes. Every string may be NULL
+// (= empty); `request_hash` MUST be exactly 32 bytes — from
+// `ratify_operation_context_hash`, over an all-NULL operation context
+// when the deployment has no operation-specific inputs. Writes 32 bytes
+// to `out_context`, ready for `RatifyVerifyOptions.session_context` and
+// the challenge signing bytes. The Middleware Custody Profile (SPEC
+// §15.2.1) requires all fields populated.
+enum RatifyStatus ratify_session_context_build(const char *verifier_id,
+                                               const char *workspace_id,
+                                               const char *agent_id,
+                                               const char *session_id,
+                                               const char *invocation_id,
+                                               const unsigned char *request_hash,
+                                               uintptr_t request_hash_len,
+                                               unsigned char *out_context,
+                                               char **err_out);
+
 // Create an in-memory challenge store holding at most `max_size` pending
 // challenges. The store makes verifier-issued challenges single-use: each
 // is accepted at most once within its freshness window; consuming a

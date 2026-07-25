@@ -209,7 +209,7 @@ A `Constraint` is a tagged JSON object. `type` identifies the kind; the remainin
 }
 ```
 
-`session_context` is optional and omitted for legacy v1 proof bundles. When present it MUST be exactly 32 bytes and MUST be included in the challenge signing bytes (§6.4.2). It is a verifier-reconstructed hash over verifier/session/request context, for example `SHA-256(verifier_id || session_id || request_hash)`. The exact preimage is application-defined, but both sides must agree on the resulting 32 bytes for a session-bound challenge to verify.
+`session_context` is optional and omitted for legacy v1 proof bundles. When present it MUST be exactly 32 bytes and MUST be included in the challenge signing bytes (§6.4.2). It is a verifier-reconstructed hash over verifier/session/request context. §6.4.9 defines the canonical, length-prefixed, domain-separated construction (RECOMMENDED for all session-bound deployments; REQUIRED under the Middleware Custody Profile, §15.2.1) — raw concatenation preimages are ambiguous and SHOULD NOT be used. Whatever the preimage, both sides must agree on the resulting 32 bytes for a session-bound challenge to verify.
 
 `stream_id` and `stream_seq` are optional and omitted for legacy v1 proof bundles. When either is present, both MUST be present, `stream_id` MUST be exactly 32 bytes, and `stream_seq` MUST be ≥1 and strictly greater than any stream_seq the verifier has previously accepted for the same stream_id. Both are included in the challenge signing bytes (§6.4.2) so a proxy cannot replay, reorder, or omit bundles within a stream without invalidating the signature. A verifier that tracks a stream provides a `StreamContext { stream_id, last_seen_seq }`; the bundle's `stream_seq` MUST equal `last_seen_seq + 1`, otherwise the bundle is rejected (`stream_seq_replay` or `stream_seq_skip`). A verifier that does not track streams MUST reject bundles carrying `stream_id` (`stream_context_unverifiable`), because it cannot reconstruct the signable bytes.
 
@@ -609,6 +609,50 @@ The bytes HMACed to produce `SessionToken.mac`:
 }
 ```
 
+#### 6.4.9 OperationContextBytes and SessionContextBytes (NOT JSON)
+
+The canonical constructions behind the 32-byte `session_context` binding (§5.8). Both are raw binary, domain-separated, and length-prefixed — NOT JSON. Length prefixes exist because raw concatenation is ambiguous (`"ab" || "c"` and `"a" || "bc"` produce identical bytes); domain tags exist so a hash computed for one construction can never collide with the other or with any future construction.
+
+Notation: `lp(x)` = big-endian uint64 byte-length of `x`, followed by the bytes of `x`. Strings encode as UTF-8. Absent fields encode as `lp("")` (an 8-byte zero prefix) — every field position is always present, so no field arrangement is ambiguous.
+
+**OperationContextBytes** binds the specific action a presentation authorizes:
+
+```
+operation_context_bytes =
+  "ratify/operation-context/v1"       // 27 ASCII bytes, raw domain tag
+  || lp(required_scope)               // scope the action requires
+  || lp(operation)                    // action/operation type (e.g. "git.push", "tool.invoke")
+  || lp(resource_id)                  // target resource identity
+  || lp(requested_path)               // path within the resource
+  || lp(payload_digest)               // empty, or exactly 32 bytes: SHA-256 of the
+                                      // canonical request payload, where one exists
+
+request_hash = SHA-256(operation_context_bytes)     // 32 bytes
+```
+
+`payload_digest` MUST be empty or exactly 32 bytes. Which fields are populated is deployment-defined; the construction is total over empty fields, so `request_hash` is always well-defined.
+
+**SessionContextBytes** binds the session a presentation belongs to, and — through `request_hash` — the operation it authorizes:
+
+```
+session_context_bytes =
+  "ratify/session-context/v1"         // 25 ASCII bytes, raw domain tag
+  || lp(verifier_id)                  // the verifier's identity (e.g. its public key ID)
+  || lp(workspace_id)
+  || lp(agent_id)
+  || lp(session_id)
+  || lp(invocation_id)
+  || lp(request_hash)                 // exactly 32 bytes — from OperationContextBytes
+
+session_context = SHA-256(session_context_bytes)    // 32 bytes
+```
+
+`request_hash` MUST be exactly 32 bytes. A deployment with no operation-specific inputs derives it from an all-empty operation context — still well-defined, still domain-separated. Binding the session but not the operation would let an intermediary attach a valid proof to the wrong action inside the right session; the two-layer construction closes that.
+
+The resulting 32-byte `session_context` is what rides in the `ProofBundle` (§5.8), is covered by the challenge signing bytes (§6.4.2), and is compared by the verifier (`session_context_mismatch` on any difference). Verification receipts and audit records bind this hash, never the preimage — the preimage may contain identifiers a receipt should not carry.
+
+These constructions are RECOMMENDED for all session-bound deployments and REQUIRED by the Middleware Custody Profile (§15.2.1).
+
 ### 6.5 Reference API
 
 The Go reference implementation exposes the following public functions, grouped by category.
@@ -651,6 +695,10 @@ The Go reference implementation exposes the following public functions, grouped 
 - `WitnessEntrySignBytes(*WitnessEntry) ([]byte, error)` — §6.4.6.
 - `TransactionReceiptSignBytes(*TransactionReceipt) ([]byte, error)` — §6.4.7.
 - `SessionTokenSignBytes(*SessionToken) ([]byte, error)` — §6.4.8.
+- `OperationContextBytes(OperationContext) ([]byte, error)` — §6.4.9 operation-context preimage; `OperationContext` carries `RequiredScope`, `Operation`, `ResourceID`, `RequestedPath`, `PayloadDigest`.
+- `OperationContextHash(OperationContext) ([]byte, error)` — the 32-byte `request_hash` over the §6.4.9 operation-context bytes.
+- `SessionContextBytes(SessionContextInputs) ([]byte, error)` — §6.4.9 session-context preimage; `SessionContextInputs` carries `VerifierID`, `WorkspaceID`, `AgentID`, `SessionID`, `InvocationID`, `RequestHash`.
+- `BuildSessionContext(SessionContextInputs) ([]byte, error)` — the 32-byte `session_context` over the §6.4.9 session-context bytes, ready for `VerifyOptions.SessionContext` and challenge signing.
 
 **Verification:**
 
@@ -1270,7 +1318,7 @@ A malicious or compromised verifier V_mal can forward a challenge from a legitim
 
 **Defense (v1.1):** the v1.1 `session_context` binding (§5.8, §6.4.2) includes the verifier's identity in the signable bytes. The agent signs `challenge || ts || session_context_V_mal`; V_leg reconstructs `session_context_V_leg` from its own identity, which differs, so the challenge signature fails verification. The fixture `reject_challenge_forwarding` proves this defense end-to-end across all SDK implementations.
 
-Deployments SHOULD include the verifier's public key ID (or a hash over the verifier's identity + session ID + request hash) in the `session_context` preimage so that cross-verifier misdirection is detectable at the cryptographic layer, not only at the transport layer.
+Deployments SHOULD include the verifier's public key ID in the `session_context` preimage so that cross-verifier misdirection is detectable at the cryptographic layer, not only at the transport layer — the canonical §6.4.9 construction carries it as its first field (`verifier_id`).
 
 ### 15.2 Key custody modes
 
@@ -1293,6 +1341,20 @@ The protocol is agnostic to where private keys are stored. Three deployment mode
 - Document the custodial trust model to users — do not claim "keys never leave your device" when the operator holds the key.
 
 **Agent key custody:** Agent private keys are typically held in-process by the agent runtime. The protocol does not mandate agent key storage, but agents SHOULD use process-memory-only keys (never written to disk) where the runtime supports it, and SHOULD rotate keys on restart.
+
+#### 15.2.1 Middleware Custody Profile
+
+A common deployment shape holds agent keys neither on the user's device nor at an enterprise IdP but inside a **platform middleware layer** — an agent-hosting platform, relay, or gateway that signs presentations on behalf of the agents it runs. Middleware custody changes the threat model: the party constructing and signing presentations is also the party routing them, so a compromised or buggy middleware can attach a perfectly valid signature to the wrong session or the wrong action. Signatures alone cannot detect that — the binding has to.
+
+A deployment operating under middleware custody MUST conform to this profile:
+
+- **Every presentation MUST be session-bound.** `session_context` is REQUIRED on every `ProofBundle` (and every streamed turn) the middleware signs; verifiers in the deployment MUST reject unbound presentations from middleware-custody principals.
+- **The binding MUST use the §6.4.9 constructions**, populating at minimum: `verifier_id`, `workspace_id` (or the deployment's tenant equivalent), `agent_id`, `session_id`, `invocation_id`, and `request_hash`.
+- **`request_hash` MUST be derived from the §6.4.9 operation context of the specific action being authorized** — required scope, operation type, resource, path, and payload digest where one exists. Binding the session but not the operation would let the middleware attach a valid proof to the wrong action inside the right session; the operation binding is as load-bearing as the session binding.
+- **Receipts and audit records MUST bind the 32-byte context hash, never the preimage.** The hash already rides in the bundle (and therefore in `bundle_hash` on verification receipts, §17.5); preimages may carry tenant and routing identifiers that receipts must not.
+- **Mismatches surface as the existing statuses** — `session_context_mismatch` (or `missing_session_context` / `session_context_unverifiable`); the profile introduces no new failure vocabulary.
+
+The profile is named so integrations can claim it: "conforms to the Ratify Middleware Custody Profile" is a checkable statement about a platform's presentation-signing path. Deployments where the agent runtime holds its own key MAY adopt the same constructions (they are RECOMMENDED for any session-bound use) but are not bound by this profile's MUSTs — the base verifier cannot know key custody, so the profile binds the deployment, not the wire format.
 
 ### 15.3 Root key compromise and recovery
 

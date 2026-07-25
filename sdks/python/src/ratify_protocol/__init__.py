@@ -43,6 +43,14 @@ from .challenge_store import (
     ChallengeStore,
     MemoryChallengeStore,
 )
+from .operation_context import (
+    OperationContext,
+    SessionContextInputs,
+    build_session_context,
+    operation_context_bytes,
+    operation_context_hash,
+    session_context_bytes,
+)
 from .crypto import (
     bundle_hash,
     chain_hash,
@@ -231,6 +239,10 @@ __all__ = [
     # scope
     "expand_scopes", "intersect_scopes", "has_scope", "is_sensitive", "validate_scopes",
     "vocabulary", "scope_wildcards",
+    # operation/session context (SPEC §6.4.9)
+    "OperationContext", "SessionContextInputs",
+    "operation_context_bytes", "operation_context_hash",
+    "session_context_bytes", "build_session_context",
     # verify
     "verify_bundle", "verify_streamed_turn", "verify_transaction_receipt",
     # canonical / utils

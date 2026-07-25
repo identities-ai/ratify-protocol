@@ -38,7 +38,9 @@ use ratify_protocol::{
     verify_policy_verdict, verify_revocation_list, verify_revocation_push,
     verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
     verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
-    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle,
+    build_session_context, operation_context_hash,
+    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, OperationContext,
+    ProofBundle, SessionContextInputs,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -1386,6 +1388,150 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify_full(
         set_err(err_out, &result.error_reason);
     }
     RatifyStatus::RatifyOk
+}
+
+// ============================================================================
+// Operation-context / session-context constructions (SPEC §6.4.9)
+// ============================================================================
+
+// Read an optional null-terminated UTF-8 string: NULL = empty string.
+unsafe fn opt_utf8(
+    ptr: *const c_char,
+    name: &str,
+    err_out: *mut *mut c_char,
+) -> Result<String, RatifyStatus> {
+    if ptr.is_null() {
+        return Ok(String::new());
+    }
+    match std::ffi::CStr::from_ptr(ptr).to_str() {
+        Ok(s) => Ok(s.to_owned()),
+        Err(_) => {
+            set_err(err_out, &format!("{name} contains invalid UTF-8"));
+            Err(RatifyStatus::RatifyErrEncoding)
+        }
+    }
+}
+
+/// Compute the 32-byte request_hash over the SPEC §6.4.9 operation
+/// context: the specific action a presentation authorizes. Every string
+/// may be NULL (= empty); `payload_digest` is NULL + 0 (= none) or
+/// exactly 32 bytes. Writes 32 bytes to `out_hash`.
+///
+/// Feed the result to `ratify_session_context_build` as `request_hash` —
+/// binding the session but not the operation would let an intermediary
+/// attach a valid proof to the wrong action inside the right session.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_operation_context_hash(
+    required_scope: *const c_char,
+    operation: *const c_char,
+    resource_id: *const c_char,
+    requested_path: *const c_char,
+    payload_digest: *const c_uchar,
+    payload_digest_len: usize,
+    out_hash: *mut c_uchar,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out_hash.is_null() {
+        set_err(err_out, "out_hash must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let digest = match validated_buf_opt(payload_digest, payload_digest_len, err_out) {
+        Ok(b) => b,
+        Err(status) => return status,
+    };
+    let ctx = OperationContext {
+        required_scope: match opt_utf8(required_scope, "required_scope", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        operation: match opt_utf8(operation, "operation", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        resource_id: match opt_utf8(resource_id, "resource_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        requested_path: match opt_utf8(requested_path, "requested_path", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        payload_digest: digest.to_vec(),
+    };
+    match operation_context_hash(&ctx) {
+        Ok(hash) => {
+            std::ptr::copy_nonoverlapping(hash.as_ptr(), out_hash, 32);
+            RatifyStatus::RatifyOk
+        }
+        Err(e) => {
+            set_err(err_out, &e);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Build the 32-byte session_context over the SPEC §6.4.9 session
+/// context: the session a presentation belongs to plus (through
+/// `request_hash`) the operation it authorizes. Every string may be NULL
+/// (= empty); `request_hash` MUST be exactly 32 bytes — from
+/// `ratify_operation_context_hash`, over an all-NULL operation context
+/// when the deployment has no operation-specific inputs. Writes 32 bytes
+/// to `out_context`, ready for `RatifyVerifyOptions.session_context` and
+/// the challenge signing bytes. The Middleware Custody Profile (SPEC
+/// §15.2.1) requires all fields populated.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_session_context_build(
+    verifier_id: *const c_char,
+    workspace_id: *const c_char,
+    agent_id: *const c_char,
+    session_id: *const c_char,
+    invocation_id: *const c_char,
+    request_hash: *const c_uchar,
+    request_hash_len: usize,
+    out_context: *mut c_uchar,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out_context.is_null() {
+        set_err(err_out, "out_context must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if request_hash.is_null() || request_hash_len != 32 {
+        set_err(err_out, "request_hash must point to exactly 32 bytes");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    let inputs = SessionContextInputs {
+        verifier_id: match opt_utf8(verifier_id, "verifier_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        workspace_id: match opt_utf8(workspace_id, "workspace_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        agent_id: match opt_utf8(agent_id, "agent_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        session_id: match opt_utf8(session_id, "session_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        invocation_id: match opt_utf8(invocation_id, "invocation_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        request_hash: slice::from_raw_parts(request_hash, 32).to_vec(),
+    };
+    match build_session_context(&inputs) {
+        Ok(ctx) => {
+            std::ptr::copy_nonoverlapping(ctx.as_ptr(), out_context, 32);
+            RatifyStatus::RatifyOk
+        }
+        Err(e) => {
+            set_err(err_out, &e);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
 }
 
 // ============================================================================

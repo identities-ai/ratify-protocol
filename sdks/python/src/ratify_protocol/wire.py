@@ -6,8 +6,10 @@ optional fields omitted when absent. Encoders emit canonical JSON text
 (via canonical_json), so encode output is exactly the canonical bytes.
 
 Decoders are strict and fail closed:
+  - byte input must be valid UTF-8 with no byte-order mark;
   - malformed or non-canonical base64 is rejected;
-  - required fields and types are validated;
+  - required fields and types are validated; integer fields must lie
+    within the IEEE-754 safe-integer range (SPEC §6.2);
   - cryptographic byte lengths are validated against the protocol constants
     (Ed25519 / ML-DSA-65 key and signature sizes);
   - unknown fields in signed structures (DelegationCert, Constraint,
@@ -48,6 +50,12 @@ from .types import (
 # session_context / stream_id, §6.4.1 challenge, §16.3 SessionToken
 # chain_hash / mac).
 _BINDING_SIZE = 32
+
+# Interoperable integer domain for JSON wire fields (SPEC §6.2): the
+# IEEE-754 safe-integer range. Binary signable representations use 64-bit
+# fields, but a JSON integer outside this range does not survive a
+# double-precision JSON parser, so strict decoders reject it.
+_MAX_SAFE_INTEGER = 2**53 - 1
 
 
 # ============================================================================
@@ -329,10 +337,20 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
 
 
 def _parse(data: str | bytes) -> Any:
-    text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+    # Strict byte decoding: malformed UTF-8 is normalized into the wire
+    # error style rather than escaping as a raw UnicodeDecodeError. A
+    # leading BOM is NOT stripped (this is the plain "utf-8" codec, not
+    # "utf-8-sig"), so it reaches json.loads and is rejected there.
+    if isinstance(data, (bytes, bytearray)):
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise ValueError(f"wire: invalid UTF-8: {e}") from e
+    else:
+        text = data
     try:
         return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+    except json.JSONDecodeError as e:
         raise ValueError(f"wire: invalid JSON: {e}") from e
 
 
@@ -366,6 +384,11 @@ def _get_int(obj: dict, key: str, path: str) -> int:
     v = obj.get(key)
     if isinstance(v, bool) or not isinstance(v, int):
         raise ValueError(f"wire: {path}.{key}: expected integer")
+    if v > _MAX_SAFE_INTEGER or v < -_MAX_SAFE_INTEGER:
+        raise ValueError(
+            f"wire: {path}.{key}: integer outside the safe-integer range "
+            f"[-(2^53-1), 2^53-1]"
+        )
     return v
 
 

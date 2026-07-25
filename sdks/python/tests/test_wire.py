@@ -278,6 +278,49 @@ def test_rejects_non_object_input():
         decode_proof_bundle("not json")
 
 
+# Byte-decoding strictness. Inputs are byte-identical to the TypeScript suite.
+
+def test_rejects_malformed_utf8_bytes():
+    # 0xff is never valid in UTF-8.
+    data = b'{"agent_id":"' + bytes([0xFF]) + b'"}'
+    with pytest.raises(ValueError, match="wire: invalid UTF-8"):
+        decode_proof_bundle(data)
+
+
+def test_rejects_bom_prefixed_json_bytes():
+    # UTF-8 BOM (EF BB BF) is not stripped; U+FEFF is invalid JSON.
+    data = b"\xef\xbb\xbf" + b'{"agent_id":"x"}'
+    with pytest.raises(ValueError, match="wire: invalid JSON"):
+        decode_proof_bundle(data)
+
+
+def test_rejects_string_input_with_leading_bom():
+    with pytest.raises(ValueError, match="wire: invalid JSON"):
+        decode_proof_bundle('\ufeff{"agent_id":"x"}')
+
+
+# Integer-domain boundaries (SPEC §6.2): JSON integer wire fields must
+# lie within the IEEE-754 safe-integer range. Same field (issued_at on a
+# SessionToken) as the TypeScript suite.
+
+def test_accepts_issued_at_at_safe_integer_bounds():
+    for bound in (2**53 - 1, -(2**53 - 1)):
+        raw = _load_token()
+        raw["issued_at"] = bound
+        token = decode_session_token(json.dumps(raw))
+        assert token.issued_at == bound
+
+
+def test_rejects_issued_at_beyond_safe_integer_bounds():
+    for outside in (2**53, -(2**53)):
+        raw = _load_token()
+        raw["issued_at"] = outside
+        with pytest.raises(
+            ValueError, match="issued_at: integer outside the safe-integer range"
+        ):
+            decode_session_token(json.dumps(raw))
+
+
 def test_empty_constraints_stay_an_empty_array():
     raw = _load_bundle("happy_path_depth_1.json")
     encoded = encode_proof_bundle(decode_proof_bundle(json.dumps(raw)))

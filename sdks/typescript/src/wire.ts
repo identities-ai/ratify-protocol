@@ -6,8 +6,10 @@
 // (via canonicalJSON), so encode output is exactly the canonical bytes.
 //
 // Decoders are strict and fail closed:
+//   - byte input must be valid UTF-8 with no byte-order mark;
 //   - malformed or non-canonical base64 is rejected;
-//   - required fields and types are validated;
+//   - required fields and types are validated; integer fields must lie
+//     within the IEEE-754 safe-integer range (SPEC §6.2);
 //   - cryptographic byte lengths are validated against the protocol
 //     constants (Ed25519 / ML-DSA-65 key and signature sizes);
 //   - unknown fields in signed structures (DelegationCert, Constraint,
@@ -370,7 +372,20 @@ function decodeConstraintObj(obj: JsonObj, path: string): Constraint {
 // written with a Unicode escape collide. This matches the Python codec's
 // object_pairs_hook behavior.
 function parseInput(input: string | Uint8Array): unknown {
-  const text = typeof input === "string" ? input : new TextDecoder().decode(input);
+  let text: string;
+  if (typeof input === "string") {
+    text = input;
+  } else {
+    // Strict byte decoding, matching the Python codec: malformed UTF-8 is
+    // rejected (the default TextDecoder would silently substitute U+FFFD),
+    // and a leading BOM is NOT stripped — it reaches JSON.parse and is
+    // rejected as invalid JSON there.
+    try {
+      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(input);
+    } catch (e) {
+      throw new Error(`wire: invalid UTF-8: ${(e as Error).message}`);
+    }
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -495,8 +510,17 @@ function getNumber(obj: JsonObj, key: string, path: string): number {
 
 function getInt(obj: JsonObj, key: string, path: string): number {
   const v = getNumber(obj, key, path);
-  if (!Number.isSafeInteger(v)) {
+  if (!Number.isInteger(v)) {
     throw new Error(`wire: ${path}.${key}: expected integer`);
+  }
+  // Interoperable integer domain for JSON wire fields (SPEC §6.2): the
+  // IEEE-754 safe-integer range. Binary signable representations use
+  // 64-bit fields, but a JSON integer outside this range does not survive
+  // a double-precision JSON parser, so strict decoders reject it.
+  if (!Number.isSafeInteger(v)) {
+    throw new Error(
+      `wire: ${path}.${key}: integer outside the safe-integer range [-(2^53-1), 2^53-1]`,
+    );
   }
   return v;
 }

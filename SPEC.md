@@ -451,7 +451,7 @@ RFC 8785 (JSON Canonicalization Scheme) with the byte-array convention and the U
 1. **Lex-sorted object keys** (byte order on UTF-8). Applies recursively — including the `ed25519` and `ml_dsa_65` fields inside `HybridPublicKey` / `HybridSignature`, which alphabetize correctly.
 2. **No whitespace** between tokens. No trailing newline.
 3. **UTF-8** throughout.
-4. **Shortest decimal integer representation.** No leading zeros, no exponent.
+4. **Shortest decimal integer representation.** No leading zeros, no exponent. JSON integer fields MUST lie within the IEEE-754 safe-integer range [-(2^53-1), 2^53-1], even where binary signable representations use 64-bit fields; a value outside that range does not survive a double-precision JSON parser. Strict wire decoders reject integers outside this range.
 5. **Byte arrays as base64-standard with padding** (`A-Za-z0-9+/=`). Project convention on top of RFC 8785.
 6. **No HTML escaping.** `<`, `>`, `&` pass through unmodified.
 7. **Minimum string escaping** per RFC 8259 (`\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`, and control chars below U+0020 as `\u00XX`).

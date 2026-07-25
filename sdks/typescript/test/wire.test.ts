@@ -321,6 +321,52 @@ test("wire: rejects non-object input", () => {
   assert.throws(() => decodeProofBundle("not json"), /invalid JSON/);
 });
 
+// Byte-decoding strictness. Inputs are byte-identical to the Python suite.
+
+test("wire: rejects malformed UTF-8 bytes", () => {
+  // 0xff is never valid in UTF-8.
+  const bytes = Uint8Array.from([...new TextEncoder().encode('{"agent_id":"'), 0xff, ...new TextEncoder().encode('"}')]);
+  assert.throws(() => decodeProofBundle(bytes), /wire: invalid UTF-8/);
+});
+
+test("wire: rejects BOM-prefixed JSON bytes", () => {
+  // UTF-8 BOM (EF BB BF) is not stripped; U+FEFF is invalid JSON.
+  const bytes = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"agent_id":"x"}')]);
+  assert.throws(() => decodeProofBundle(bytes), /wire: invalid JSON/);
+});
+
+test("wire: rejects string input with a leading U+FEFF", () => {
+  assert.throws(() => decodeProofBundle('\uFEFF{"agent_id":"x"}'), /wire: invalid JSON/);
+});
+
+// Integer-domain boundaries (SPEC §6.2): JSON integer wire fields must
+// lie within the IEEE-754 safe-integer range. Same field (issued_at on a
+// SessionToken) as the Python suite.
+
+test("wire: accepts issued_at at the safe-integer bounds", () => {
+  for (const bound of [9007199254740991, -9007199254740991]) {
+    const raw = loadRawToken();
+    raw.issued_at = bound;
+    const token = decodeSessionToken(JSON.stringify(raw));
+    assert.equal(token.issued_at, bound);
+  }
+});
+
+test("wire: rejects issued_at beyond the safe-integer bounds", () => {
+  for (const outside of ["9007199254740992", "-9007199254740992"]) {
+    const raw = loadRawToken();
+    const doc = JSON.stringify(raw).replace(
+      /"issued_at":\d+/,
+      `"issued_at":${outside}`,
+    );
+    assert.throws(
+      () => decodeSessionToken(doc),
+      /issued_at: integer outside the safe-integer range/,
+      `issued_at=${outside} must be rejected`,
+    );
+  }
+});
+
 test("wire: empty constraints stay an empty array, not absent", () => {
   const raw = loadRawBundle("happy_path_depth_1.json");
   const encoded = encodeProofBundle(decodeProofBundle(JSON.stringify(raw)));

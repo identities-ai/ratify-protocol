@@ -213,6 +213,23 @@ def test_rejects_wrong_session_context_length():
         decode_proof_bundle(json.dumps(raw))
 
 
+def test_rejects_empty_delegations_array():
+    raw = _load_bundle("happy_path_depth_1.json")
+    raw["delegations"] = []
+    with pytest.raises(ValueError, match=r"ProofBundle\.delegations: must contain at least one certificate"):
+        decode_proof_bundle(json.dumps(raw))
+
+
+def test_rejects_duplicate_json_keys():
+    raw = _load_bundle("happy_path_depth_1.json")
+    text = json.dumps(raw)
+    # Splice a second agent_id member into the top-level object.
+    dup = text.replace('"agent_id":', '"agent_id": "shadowed", "agent_id":', 1)
+    assert dup != text
+    with pytest.raises(ValueError, match='duplicate key "agent_id"'):
+        decode_proof_bundle(dup)
+
+
 def test_rejects_non_object_input():
     with pytest.raises(ValueError, match="expected JSON object"):
         decode_proof_bundle("[1,2,3]")

@@ -136,6 +136,10 @@ def decode_proof_bundle(data: str | bytes) -> ProofBundle:
         "stream_seq",
     ), path)
     delegations_raw = _get_array(obj, "delegations", path)
+    if not delegations_raw:
+        raise ValueError(
+            f"wire: {path}.delegations: must contain at least one certificate (SPEC §10)"
+        )
     has_stream_id = "stream_id" in obj
     has_stream_seq = "stream_seq" in obj
     if has_stream_id != has_stream_seq:
@@ -306,10 +310,25 @@ def _decode_constraint_obj(obj: dict, path: str) -> Constraint:
 # Strict field accessors
 # ============================================================================
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
+    """object_pairs_hook that fails closed on duplicated object keys.
+
+    json.loads would otherwise keep the last occurrence silently, letting a
+    document carry two values for the same field where only one survives
+    decoding.
+    """
+    obj: dict = {}
+    for k, v in pairs:
+        if k in obj:
+            raise ValueError(f'wire: duplicate key "{k}" in JSON object')
+        obj[k] = v
+    return obj
+
+
 def _parse(data: str | bytes) -> Any:
     text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise ValueError(f"wire: invalid JSON: {e}") from e
 

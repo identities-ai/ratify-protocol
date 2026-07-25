@@ -266,6 +266,15 @@ test("wire: rejects wrong session_context length", () => {
   );
 });
 
+test("wire: rejects empty delegations array", () => {
+  const raw = loadRawBundle("happy_path_depth_1.json");
+  raw.delegations = [];
+  assert.throws(
+    () => decodeProofBundle(JSON.stringify(raw)),
+    /ProofBundle\.delegations: must contain at least one certificate/,
+  );
+});
+
 test("wire: rejects non-object input", () => {
   assert.throws(() => decodeProofBundle("[1,2,3]"), /expected JSON object/);
   assert.throws(() => decodeProofBundle("not json"), /invalid JSON/);

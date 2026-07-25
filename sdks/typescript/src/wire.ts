@@ -152,6 +152,11 @@ export function decodeProofBundle(input: string | Uint8Array): ProofBundle {
     path,
   );
   const delegationsRaw = getArray(obj, "delegations", path);
+  if (delegationsRaw.length === 0) {
+    throw new Error(
+      `wire: ${path}.delegations: must contain at least one certificate (SPEC §10)`,
+    );
+  }
   const bundle: ProofBundle = {
     agent_id: getString(obj, "agent_id", path),
     agent_pub_key: decodePubKeyObj(obj.agent_pub_key, `${path}.agent_pub_key`),
@@ -353,6 +358,13 @@ function decodeConstraintObj(obj: JsonObj, path: string): Constraint {
 // Strict field accessors
 // ============================================================================
 
+// Known limitation: JSON.parse keeps the LAST occurrence of a duplicated
+// object key and offers no hook to detect duplicates, so this decoder
+// cannot reject them (the Python codec does). Mitigation: signed structures
+// are re-canonicalized for signature verification, so a duplicate-key
+// discrepancy either produces identical canonical bytes (harmless) or fails
+// signature verification (rejected). A duplicate key can never smuggle a
+// second value past the signature check.
 function parseInput(input: string | Uint8Array): unknown {
   const text = typeof input === "string" ? input : new TextDecoder().decode(input);
   try {

@@ -1,10 +1,13 @@
+<!-- GENERATED FILE — do not edit directly.
+     Sources: sdks/readme-src/preamble.md + README.body.md in this directory.
+     Regenerate: python3 scripts/gen-sdk-readmes.py -->
 # Ratify Protocol — Go SDK
 
 **Go reference implementation of the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the TypeScript, Python, Rust, and C reference implementations. Validated against the **63 canonical test vectors** on every CI run.
+Byte-identical interoperability with the TypeScript, Python, Rust, and C/C++ reference implementations. Validated against the **63 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -12,7 +15,7 @@ Ratify is an open cryptographic protocol that answers the question: *"Is this AI
 
 A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
 
-Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), the SessionToken fast path (one hybrid signature verification per turn instead of N+1 — practical for live voice and video), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec, all covered by the 63 canonical fixtures.
+Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), single-use challenge acceptance through a pluggable challenge store (SPEC §10), the SessionToken fast path (one hybrid signature verification per turn instead of N+1 — practical for live voice and video) with scope, single-use, and binding enforcement on the streamed path, canonical operation- and session-context binding for middleware custody deployments (SPEC §6.4.9, §15.2.1), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec.
 
 - Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)

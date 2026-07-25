@@ -187,12 +187,13 @@ old_protocol = "v" + old_npm
 # version references (the alpha ladder in §3.2) that a blanket old→new
 # replacement corrupts — this happened at alpha.11, rewriting the alpha.10
 # ladder entry. Its version examples are illustrative, not release-synced.
+# sdks/*/README.md are generated (scripts/gen-sdk-readmes.py) and carry
+# version placeholders in their README.body.md sources — the regenerate
+# step after this block stamps them from package.json. Do not add the
+# generated READMEs here.
 paths = [
     "README.md",
     "SPEC.md",
-    "sdks/go/README.md",
-    "sdks/rust/README.md",
-    "sdks/typescript/README.md",
     "sdks/typescript/package.json",
     "sdks/typescript/package-lock.json",
 ]
@@ -205,7 +206,6 @@ for path in paths:
 
 py_paths = [
     "README.md",  # root README pins the pip install command in PEP 440 form
-    "sdks/python/README.md",
     "sdks/python/pyproject.toml",
     "sdks/python/src/ratify_protocol/__init__.py",
 ]
@@ -413,6 +413,9 @@ prepare() {
 
   echo "==> Bumping versions to $VERSION"
   bump_versions
+
+  echo "==> Regenerating SDK READMEs with the new version"
+  python3 scripts/gen-sdk-readmes.py
 
   # Stamp the changelog entry for this version, if one is marked unreleased.
   python - "$VERSION" <<'PY'

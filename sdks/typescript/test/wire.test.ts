@@ -266,6 +266,47 @@ test("wire: rejects wrong session_context length", () => {
   );
 });
 
+// Duplicate-key cases. Inputs are IDENTICAL to the Python suite
+// (tests/test_wire.py) so both codecs demonstrably reject the same
+// documents. The pre-scan runs before schema validation, so minimal
+// documents suffice.
+const DUPLICATE_KEY_CASES: [string, string, string][] = [
+  ["top-level field", '{"agent_id":"x","agent_id":"y"}', "agent_id"],
+  [
+    "nested pubkey field",
+    '{"agent_pub_key":{"ed25519":"AA==","ed25519":"BB=="}}',
+    "ed25519",
+  ],
+  [
+    "constraint field",
+    '{"delegations":[{"constraints":[{"type":"geo_circle","type":"geo_circle"}]}]}',
+    "type",
+  ],
+  [
+    "signature field",
+    '{"challenge_sig":{"ml_dsa_65":"AA==","ml_dsa_65":"AA=="}}',
+    "ml_dsa_65",
+  ],
+  // "agent_id" spells "agent_id" with a Unicode escape — same key.
+  ["unicode-escaped key", '{"agent_id":"x","agent\\u005fid":"y"}', "agent_id"],
+];
+
+for (const [name, input, key] of DUPLICATE_KEY_CASES) {
+  test(`wire: rejects duplicate ${name}`, () => {
+    assert.throws(
+      () => decodeProofBundle(input),
+      new RegExp(`duplicate key "${key}" in JSON object`),
+    );
+  });
+}
+
+test("wire: same key in different sibling objects is not a duplicate", () => {
+  // The fixture carries "ed25519" and "ml_dsa_65" in many sibling objects
+  // (agent, issuer, and subject keys; signatures) — that must decode fine.
+  const raw = loadRawBundle("happy_path_depth_1.json");
+  decodeProofBundle(JSON.stringify(raw));
+});
+
 test("wire: rejects empty delegations array", () => {
   const raw = loadRawBundle("happy_path_depth_1.json");
   raw.delegations = [];

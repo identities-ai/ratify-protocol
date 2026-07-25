@@ -230,6 +230,47 @@ def test_rejects_duplicate_json_keys():
         decode_proof_bundle(dup)
 
 
+# Duplicate-key cases. Inputs are IDENTICAL to the TypeScript suite
+# (test/wire.test.ts) so both codecs demonstrably reject the same
+# documents. Rejection happens at parse time, before schema validation,
+# so minimal documents suffice.
+_DUPLICATE_KEY_CASES = [
+    ("top-level field", '{"agent_id":"x","agent_id":"y"}', "agent_id"),
+    (
+        "nested pubkey field",
+        '{"agent_pub_key":{"ed25519":"AA==","ed25519":"BB=="}}',
+        "ed25519",
+    ),
+    (
+        "constraint field",
+        '{"delegations":[{"constraints":[{"type":"geo_circle","type":"geo_circle"}]}]}',
+        "type",
+    ),
+    (
+        "signature field",
+        '{"challenge_sig":{"ml_dsa_65":"AA==","ml_dsa_65":"AA=="}}',
+        "ml_dsa_65",
+    ),
+    # "agent_id" spells "agent_id" with a Unicode escape — same key.
+    ("unicode-escaped key", '{"agent_id":"x","agent\\u005fid":"y"}', "agent_id"),
+]
+
+
+@pytest.mark.parametrize(
+    "name,doc,key", _DUPLICATE_KEY_CASES, ids=[c[0] for c in _DUPLICATE_KEY_CASES]
+)
+def test_rejects_duplicate_key(name: str, doc: str, key: str):
+    with pytest.raises(ValueError, match=f'duplicate key "{key}" in JSON object'):
+        decode_proof_bundle(doc)
+
+
+def test_same_key_in_sibling_objects_is_not_a_duplicate():
+    # The fixture carries "ed25519" and "ml_dsa_65" in many sibling objects
+    # (agent, issuer, and subject keys; signatures) — that must decode fine.
+    raw = _load_bundle("happy_path_depth_1.json")
+    decode_proof_bundle(json.dumps(raw))
+
+
 def test_rejects_non_object_input():
     with pytest.raises(ValueError, match="expected JSON object"):
         decode_proof_bundle("[1,2,3]")

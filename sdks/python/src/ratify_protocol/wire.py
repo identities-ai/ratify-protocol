@@ -13,6 +13,9 @@ Decoders are strict and fail closed:
   - unknown fields in signed structures (DelegationCert, Constraint,
     HybridPublicKey, HybridSignature, ProofBundle, SessionToken) are
     rejected;
+  - duplicated JSON object keys are rejected at every nesting depth
+    (json decodes string escapes before keys are compared, so a
+    Unicode-escaped spelling of a key collides with its literal form);
   - errors name the offending field and the reason.
 
 Round-trip guarantees for canonical inputs:

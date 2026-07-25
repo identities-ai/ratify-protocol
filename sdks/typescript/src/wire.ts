@@ -13,6 +13,9 @@
 //   - unknown fields in signed structures (DelegationCert, Constraint,
 //     HybridPublicKey, HybridSignature, ProofBundle, SessionToken) are
 //     rejected;
+//   - duplicated JSON object keys are rejected at every nesting depth
+//     (escape-decoded, so a Unicode-escaped spelling of a key collides
+//     with its literal form);
 //   - errors name the offending field and the reason.
 //
 // Round-trip guarantees for canonical inputs:
@@ -358,19 +361,104 @@ function decodeConstraintObj(obj: JsonObj, path: string): Constraint {
 // Strict field accessors
 // ============================================================================
 
-// Known limitation: JSON.parse keeps the LAST occurrence of a duplicated
-// object key and offers no hook to detect duplicates, so this decoder
-// cannot reject them (the Python codec does). Mitigation: signed structures
-// are re-canonicalized for signature verification, so a duplicate-key
-// discrepancy either produces identical canonical bytes (harmless) or fails
-// signature verification (rejected). A duplicate key can never smuggle a
-// second value past the signature check.
+// JSON.parse keeps the LAST occurrence of a duplicated object key and
+// offers no hook to detect duplicates, so a document could otherwise carry
+// two values for the same field where only one survives decoding. After
+// JSON.parse validates the syntax, rejectDuplicateKeys re-scans the text
+// and fails closed on any object that repeats a key — at every nesting
+// depth, with string escapes decoded first, so "agent_id" and the same key
+// written with a Unicode escape collide. This matches the Python codec's
+// object_pairs_hook behavior.
 function parseInput(input: string | Uint8Array): unknown {
   const text = typeof input === "string" ? input : new TextDecoder().decode(input);
+  let parsed: unknown;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch (e) {
     throw new Error(`wire: invalid JSON: ${(e as Error).message}`);
+  }
+  rejectDuplicateKeys(text);
+  return parsed;
+}
+
+// Single-pass scan over text already validated by JSON.parse. Tracks
+// object/array nesting; inside an object, the string that opens a member is
+// the key — collect it (escape-decoded) per object and error on a repeat.
+// The same key text in different sibling objects is fine.
+function rejectDuplicateKeys(text: string): void {
+  // One Set per open object; null marks an open array.
+  const frames: Array<Set<string> | null> = [];
+  let expectKey = false; // next string is a member key of the innermost object
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '"') {
+      const [str, next] = scanJSONString(text, i);
+      const keys = frames[frames.length - 1];
+      if (expectKey && keys) {
+        if (keys.has(str)) {
+          throw new Error(`wire: duplicate key "${str}" in JSON object`);
+        }
+        keys.add(str);
+        expectKey = false;
+      }
+      i = next;
+      continue;
+    }
+    switch (c) {
+      case "{":
+        frames.push(new Set());
+        expectKey = true;
+        break;
+      case "[":
+        frames.push(null);
+        expectKey = false;
+        break;
+      case "}":
+      case "]":
+        frames.pop();
+        expectKey = false;
+        break;
+      case ",":
+        expectKey = frames[frames.length - 1] !== null && frames.length > 0;
+        break;
+      default:
+        break; // ':', whitespace, numbers, true/false/null
+    }
+    i++;
+  }
+}
+
+// Scan one JSON string starting at its opening quote; return the
+// escape-decoded value and the index just past the closing quote. The text
+// is known-valid JSON (JSON.parse already accepted it), so escapes are
+// well-formed and the string is terminated.
+function scanJSONString(text: string, start: number): [string, number] {
+  let out = "";
+  let i = start + 1;
+  for (;;) {
+    const c = text[i]!;
+    if (c === '"') return [out, i + 1];
+    if (c === "\\") {
+      const e = text[i + 1]!;
+      if (e === "u") {
+        out += String.fromCharCode(parseInt(text.slice(i + 2, i + 6), 16));
+        i += 6;
+        continue;
+      }
+      switch (e) {
+        case "b": out += "\b"; break;
+        case "f": out += "\f"; break;
+        case "n": out += "\n"; break;
+        case "r": out += "\r"; break;
+        case "t": out += "\t"; break;
+        default: out += e; break; // '"', '\\', '/'
+      }
+      i += 2;
+      continue;
+    }
+    out += c;
+    i++;
   }
 }
 

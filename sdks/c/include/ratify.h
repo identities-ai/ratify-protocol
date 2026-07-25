@@ -592,6 +592,16 @@ char *ratify_scopes_intersect(const char *const *scope_arrays_json,
 // a null-pointer error string.
 char *ratify_scopes_validate(const char *scopes_json);
 
+// Return the complete canonical scope vocabulary for v1 as a JSON array of
+// strings, sorted lexicographically.
+//
+// Consumers that present scope choices to users (consoles, policy editors)
+// should derive their lists from this function rather than hardcoding scope
+// strings, so UI vocabularies cannot drift from the protocol.
+//
+// Free with `ratify_string_free`. Returns NULL only on allocation failure.
+char *ratify_scope_vocabulary(void);
+
 // Issue a HMAC-bound PolicyVerdict — a cached policy decision.
 //
 // After a policy server evaluates a bundle, it can issue a short-lived verdict

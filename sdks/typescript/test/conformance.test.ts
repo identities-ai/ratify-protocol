@@ -28,6 +28,9 @@ import {
   expandScopes,
   hexEncode,
   base64StandardDecode,
+  decodeDelegationCert,
+  decodeProofBundle,
+  decodeSessionToken,
   type DelegationCert,
   type HybridPublicKey,
   type HybridSignature,
@@ -173,48 +176,15 @@ function decodeHybridSignature(raw: JsonHybridSignature): HybridSignature {
   };
 }
 
+// Certs and bundles decode through the public wire codec — the strict
+// fail-closed decoder is itself under conformance test here: every fixture
+// (including every reject_* case) must decode so it can reach the verifier.
 function decodeCert(raw: Record<string, unknown>): DelegationCert {
-  // Constraints round-trip as-is through JSON (they're already the right
-  // shape for the Constraint type — numeric/string fields). Missing or null
-  // becomes an empty array. Decoding them here — not discarding — is how
-  // conformance actually tests the new v1 constraint surface end-to-end.
-  const constraintsRaw = raw.constraints;
-  const constraints = Array.isArray(constraintsRaw)
-    ? (constraintsRaw as DelegationCert["constraints"])
-    : [];
-  return {
-    cert_id: raw.cert_id as string,
-    version: raw.version as number,
-    issuer_id: raw.issuer_id as string,
-    issuer_pub_key: decodeHybridPubKey(raw.issuer_pub_key as JsonHybridPublicKey),
-    subject_id: raw.subject_id as string,
-    subject_pub_key: decodeHybridPubKey(raw.subject_pub_key as JsonHybridPublicKey),
-    scope: raw.scope as string[],
-    constraints,
-    issued_at: raw.issued_at as number,
-    expires_at: raw.expires_at as number,
-    signature: decodeHybridSignature(raw.signature as JsonHybridSignature),
-  };
+  return decodeDelegationCert(JSON.stringify(raw));
 }
 
 function decodeBundle(raw: Record<string, unknown>): ProofBundle {
-  return {
-    agent_id: raw.agent_id as string,
-    agent_pub_key: decodeHybridPubKey(raw.agent_pub_key as JsonHybridPublicKey),
-    delegations: (raw.delegations as Array<Record<string, unknown>>).map(decodeCert),
-    challenge: base64StandardDecode(raw.challenge as string),
-    challenge_at: raw.challenge_at as number,
-    challenge_sig: decodeHybridSignature(raw.challenge_sig as JsonHybridSignature),
-    session_context:
-      typeof raw.session_context === "string"
-        ? base64StandardDecode(raw.session_context)
-        : undefined,
-    stream_id:
-      typeof raw.stream_id === "string"
-        ? base64StandardDecode(raw.stream_id)
-        : undefined,
-    stream_seq: typeof raw.stream_seq === "number" ? raw.stream_seq : undefined,
-  };
+  return decodeProofBundle(JSON.stringify(raw));
 }
 
 function decodeRevocationList(raw: Record<string, unknown>): RevocationList {
@@ -226,19 +196,8 @@ function decodeRevocationList(raw: Record<string, unknown>): RevocationList {
   };
 }
 
-function decodeSessionToken(raw: Record<string, unknown>): SessionToken {
-  return {
-    version: raw.version as number,
-    session_id: raw.session_id as string,
-    agent_id: raw.agent_id as string,
-    agent_pub_key: decodeHybridPubKey(raw.agent_pub_key as JsonHybridPublicKey),
-    human_id: raw.human_id as string,
-    granted_scope: raw.granted_scope as string[],
-    issued_at: raw.issued_at as number,
-    valid_until: raw.valid_until as number,
-    chain_hash: base64StandardDecode(raw.chain_hash as string),
-    mac: base64StandardDecode(raw.mac as string),
-  };
+function decodeToken(raw: Record<string, unknown>): SessionToken {
+  return decodeSessionToken(JSON.stringify(raw));
 }
 
 function hexDecodeStandalone(s: string): Uint8Array {
@@ -456,7 +415,7 @@ async function runRevocationFixture(fx: FixtureFile): Promise<void> {
 async function runSessionTokenFixture(fx: FixtureFile): Promise<void> {
   assert.ok(fx.session_token, "session_token fixture missing session_token block");
   const st = fx.session_token!;
-  const token = decodeSessionToken(st.token);
+  const token = decodeToken(st.token);
 
   // Canonical MAC-input bytes must be byte-identical across SDKs.
   const gotSignHex = hexEncode(sessionTokenSignBytes(token));

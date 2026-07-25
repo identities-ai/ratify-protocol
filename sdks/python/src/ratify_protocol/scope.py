@@ -233,6 +233,30 @@ _SCOPE_WILDCARDS: dict[str, tuple[str, ...]] = {
 }
 
 
+def vocabulary() -> tuple[str, ...]:
+    """Return the complete canonical scope vocabulary for v1, sorted
+    lexicographically.
+
+    The tuple is immutable and freshly built on every call. Consumers that
+    present scope choices to users (consoles, policy editors) should derive
+    their lists from this accessor rather than hardcoding scope strings, so
+    UI vocabularies cannot drift from the protocol. Mirrors Go's
+    Vocabulary().
+    """
+    return tuple(sorted(_VALID_SCOPES))
+
+
+def scope_wildcards() -> dict[str, tuple[str, ...]]:
+    """Return the wildcard expansion map: wildcard shorthand to constituent
+    NON-sensitive scopes.
+
+    Sensitive scopes are never included in wildcards — they must be granted
+    explicitly. The dict is a fresh copy on every call; the values are
+    immutable tuples.
+    """
+    return dict(_SCOPE_WILDCARDS)
+
+
 def _is_custom_scope(s: str) -> bool:
     return s.startswith(CUSTOM_SCOPE_PREFIX) and len(s) > len(CUSTOM_SCOPE_PREFIX)
 

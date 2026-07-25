@@ -37,7 +37,7 @@ use ratify_protocol::{
     transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
     verify_policy_verdict, verify_revocation_list, verify_revocation_push,
     verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
-    verify_verification_receipt, verify_witness_entry, witness_entry_sign_bytes,
+    verify_verification_receipt, verify_witness_entry, vocabulary, witness_entry_sign_bytes,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -862,6 +862,22 @@ pub unsafe extern "C" fn ratify_scopes_validate(
     match validate_scopes(&scopes) {
         None => std::ptr::null_mut(), // valid
         Some(err) => new_cstring(&err),
+    }
+}
+
+/// Return the complete canonical scope vocabulary for v1 as a JSON array of
+/// strings, sorted lexicographically.
+///
+/// Consumers that present scope choices to users (consoles, policy editors)
+/// should derive their lists from this function rather than hardcoding scope
+/// strings, so UI vocabularies cannot drift from the protocol.
+///
+/// Free with `ratify_string_free`. Returns NULL only on allocation failure.
+#[no_mangle]
+pub extern "C" fn ratify_scope_vocabulary() -> *mut c_char {
+    match serde_json::to_string(&vocabulary()) {
+        Ok(out) => new_cstring(&out),
+        Err(_) => std::ptr::null_mut(),
     }
 }
 

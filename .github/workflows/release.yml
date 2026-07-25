@@ -120,6 +120,9 @@ jobs:
       - name: C/C++ API tests
         working-directory: sdks/c
         run: cargo test --test api
+      - name: C/C++ advanced API tests
+        working-directory: sdks/c
+        run: cargo test --test advanced
 
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
       # declared version. The release-sync script already proves cross-SDK

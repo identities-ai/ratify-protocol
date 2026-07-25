@@ -165,6 +165,9 @@ jobs:
       - name: unit tests
         run: cargo test --test api
 
+      - name: advanced API tests
+        run: cargo test --test advanced
+
   dco:
     name: DCO sign-off
     runs-on: ubuntu-latest

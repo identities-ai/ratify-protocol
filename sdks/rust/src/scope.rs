@@ -3,9 +3,12 @@
 //! MUST stay in lock-step with Go's scope.go, TS's scope.ts, and Python's scope.py.
 
 #[cfg(not(feature = "std"))]
-use alloc::{collections::BTreeSet, format, string::String, string::ToString, vec::Vec};
+use alloc::{
+    collections::BTreeMap, collections::BTreeSet, format, string::String, string::ToString,
+    vec::Vec,
+};
 #[cfg(feature = "std")]
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 // --- Meeting scopes ---
 pub const SCOPE_MEETING_ATTEND: &str = "meeting:attend";
@@ -203,6 +206,25 @@ fn valid_scopes() -> &'static [&'static str] {
     ]
 }
 
+// Every wildcard shorthand recognized by `wildcard_expansion`. Kept in
+// lex order; `scope_wildcards()` derives the public map from it.
+const WILDCARD_SCOPES: &[&str] = &[
+    "comms:*",
+    "comms:email:*",
+    "comms:message:*",
+    "data:*",
+    "drone:*",
+    "execute:*",
+    "generate:*",
+    "infrastructure:*",
+    "meeting:*",
+    "payments:*",
+    "physical:*",
+    "robot:*",
+    "transact:*",
+    "vehicle:*",
+];
+
 fn wildcard_expansion(w: &str) -> Option<&'static [&'static str]> {
     match w {
         "meeting:*" => Some(&[
@@ -237,6 +259,31 @@ fn wildcard_expansion(w: &str) -> Option<&'static [&'static str]> {
         // expansion. Representation must always be granted explicitly.
         _ => None,
     }
+}
+
+/// Return the complete canonical scope vocabulary for v1, sorted
+/// lexicographically. The Vec is a fresh copy — callers may modify it
+/// freely. Consumers that present scope choices to users (consoles, policy
+/// editors) should derive their lists from this accessor rather than
+/// hardcoding scope strings, so UI vocabularies cannot drift from the
+/// protocol. Mirrors Go's `Vocabulary()`.
+pub fn vocabulary() -> Vec<&'static str> {
+    let mut out = valid_scopes().to_vec();
+    out.sort_unstable();
+    out
+}
+
+/// Return the wildcard expansion map: wildcard shorthand to constituent
+/// NON-sensitive scopes. Sensitive scopes are never included in wildcards —
+/// they must be granted explicitly. The map is a fresh copy on every call.
+pub fn scope_wildcards() -> BTreeMap<&'static str, &'static [&'static str]> {
+    let mut out = BTreeMap::new();
+    for w in WILDCARD_SCOPES {
+        if let Some(children) = wildcard_expansion(w) {
+            out.insert(*w, children);
+        }
+    }
+    out
 }
 
 fn is_custom_scope(s: &str) -> bool {

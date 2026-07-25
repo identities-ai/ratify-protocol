@@ -21,11 +21,11 @@ import { fileURLToPath } from "node:url";
 
 import {
   bundleHash,
+  decodeProofBundle,
   verifierContextHash,
   policyVerdictSignBytesBuf,
   verificationReceiptSignBytesBuf,
   type PolicyVerdict,
-  type ProofBundle,
   type VerificationReceipt,
   type VerifierContext,
 } from "../src/index.js";
@@ -105,67 +105,10 @@ for (const v of doc.vectors) {
         break;
       }
       case "bundle_hash": {
-        // The input embeds a full canonical ProofBundle; reconstruct it,
-        // hash it, and compare.
+        // The input embeds a full canonical ProofBundle; decode it with the
+        // public wire codec, hash it, and compare.
         const inp = v.input as Record<string, unknown>;
-        const rawBundle = inp.bundle as Record<string, unknown>;
-        const bundle: ProofBundle = {
-          agent_id: rawBundle.agent_id as string,
-          agent_pub_key: {
-            ed25519: fromBase64(
-              (rawBundle.agent_pub_key as { ed25519: string }).ed25519,
-            ),
-            ml_dsa_65: fromBase64(
-              (rawBundle.agent_pub_key as { ml_dsa_65: string }).ml_dsa_65,
-            ),
-          },
-          delegations: (rawBundle.delegations as Record<string, unknown>[]).map(
-            (d) => ({
-              cert_id: d.cert_id as string,
-              version: d.version as number,
-              issuer_id: d.issuer_id as string,
-              issuer_pub_key: {
-                ed25519: fromBase64(
-                  (d.issuer_pub_key as { ed25519: string }).ed25519,
-                ),
-                ml_dsa_65: fromBase64(
-                  (d.issuer_pub_key as { ml_dsa_65: string }).ml_dsa_65,
-                ),
-              },
-              subject_id: d.subject_id as string,
-              subject_pub_key: {
-                ed25519: fromBase64(
-                  (d.subject_pub_key as { ed25519: string }).ed25519,
-                ),
-                ml_dsa_65: fromBase64(
-                  (d.subject_pub_key as { ml_dsa_65: string }).ml_dsa_65,
-                ),
-              },
-              scope: d.scope as string[],
-              constraints: (d.constraints ?? []) as any[],
-              issued_at: d.issued_at as number,
-              expires_at: d.expires_at as number,
-              signature: {
-                ed25519: fromBase64(
-                  (d.signature as { ed25519: string }).ed25519,
-                ),
-                ml_dsa_65: fromBase64(
-                  (d.signature as { ml_dsa_65: string }).ml_dsa_65,
-                ),
-              },
-            }),
-          ),
-          challenge: fromBase64(rawBundle.challenge as string),
-          challenge_at: rawBundle.challenge_at as number,
-          challenge_sig: {
-            ed25519: fromBase64(
-              (rawBundle.challenge_sig as { ed25519: string }).ed25519,
-            ),
-            ml_dsa_65: fromBase64(
-              (rawBundle.challenge_sig as { ml_dsa_65: string }).ml_dsa_65,
-            ),
-          },
-        };
+        const bundle = decodeProofBundle(JSON.stringify(inp.bundle));
         const got = hex(bundleHash(bundle));
         assert.equal(got, v.expected_hash_hex, v.name);
         break;

@@ -109,6 +109,38 @@ for (const { name, raw } of tokens) {
   });
 }
 
+// ----- Negative wire-acceptance corpus (testvectors/wire-negative) -----
+// Shared, byte-identical malformed documents consumed by all five SDKs.
+// The TS codec is fully strict, so every corpus case is a decode error.
+
+interface NegativeCase {
+  name: string;
+  target: "bundle" | "token";
+  doc_b64: string;
+  strictness: string;
+}
+
+const NEGATIVE_CASES = (
+  JSON.parse(
+    readFileSync(join(FIXTURE_DIR, "..", "wire-negative", "cases.json"), "utf8"),
+  ) as { cases: NegativeCase[] }
+).cases;
+
+test("wire negative corpus: is non-trivial", () => {
+  assert.ok(NEGATIVE_CASES.length >= 10, `only ${NEGATIVE_CASES.length} cases`);
+});
+
+for (const c of NEGATIVE_CASES) {
+  test(`wire negative corpus: ${c.name}`, () => {
+    const doc = Uint8Array.from(Buffer.from(c.doc_b64, "base64"));
+    if (c.target === "bundle") {
+      assert.throws(() => decodeProofBundle(doc), /wire: /);
+    } else {
+      assert.throws(() => decodeSessionToken(doc), /wire: /);
+    }
+  });
+}
+
 // ----- Strictness: fail closed with field-specific errors -----
 
 function loadRawBundle(file: string): Record<string, unknown> {
@@ -237,6 +269,31 @@ test("wire: rejects wrong type for timestamps", () => {
     () => decodeSessionToken(JSON.stringify(raw)),
     /SessionToken\.issued_at: expected number/,
   );
+});
+
+test("wire: rejects non-integer lexical forms on integer fields", () => {
+  // JSON.parse normalizes these to plain integers; the pre-scan preserves
+  // the original token form, matching the Python/Go/Rust parsers.
+  for (const lexeme of ["1000.0", "1e3", "20000e-1"]) {
+    const doc = JSON.stringify(loadRawToken()).replace(
+      /"issued_at":\d+/,
+      `"issued_at":${lexeme}`,
+    );
+    assert.throws(
+      () => decodeSessionToken(doc),
+      /issued_at: integer field must use plain decimal form/,
+      `lexeme ${lexeme} must be rejected`,
+    );
+  }
+});
+
+test("wire: float constraint fields still accept fraction and exponent forms", () => {
+  const raw = JSON.parse(
+    readFileSync(join(FIXTURE_DIR, "constraint_geo_circle_inside.json"), "utf8"),
+  ).bundle as Record<string, unknown>;
+  const doc = JSON.stringify(raw).replace(/"radius_m":[0-9.]+/, '"radius_m":5e2');
+  const bundle = decodeProofBundle(doc); // must not throw
+  assert.equal(bundle.delegations[0]!.constraints[0]!.radius_m, 500);
 });
 
 test("wire: rejects stream_id without stream_seq", () => {

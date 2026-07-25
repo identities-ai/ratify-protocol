@@ -34,6 +34,7 @@ pub const MLDSA65_SIGNATURE_SIZE: usize = 3309;
 /// Canonical JSON form (keys in lex order):
 /// `{"ed25519":"<base64-32-bytes>","ml_dsa_65":"<base64-1952-bytes>"}`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HybridPublicKey {
     #[serde(with = "crate::canonical::base64_bytes")]
     pub ed25519: Vec<u8>, // 32 bytes
@@ -45,6 +46,7 @@ pub struct HybridPublicKey {
 ///
 /// Both components MUST verify for the signature to be accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HybridSignature {
     #[serde(with = "crate::canonical::base64_bytes")]
     pub ed25519: Vec<u8>, // 64 bytes
@@ -95,6 +97,7 @@ pub struct AgentIdentity {
 /// when / how much* — first-class bounds evaluated at verify time against a
 /// caller-supplied VerifierContext.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DelegationCert {
     pub cert_id: String,
     pub version: i32,
@@ -107,7 +110,15 @@ pub struct DelegationCert {
     /// are deterministic across issuers.
     #[serde(default)]
     pub constraints: Vec<Constraint>,
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub issued_at: i64,
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub expires_at: i64,
     pub signature: HybridSignature,
 }
@@ -138,8 +149,13 @@ impl DelegationCert {
 // behavior. This closes the v1 zero-as-absence ambiguity: a geo_circle at
 // lat=0, lon=0 now emits lat:0, lon:0 explicitly instead of omitting them.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Constraint {
-    #[serde(default)]
+    #[serde(
+        default,
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub count: i64,
     #[serde(default)]
     pub currency: String,
@@ -175,7 +191,11 @@ pub struct Constraint {
     pub tz: String,
     #[serde(rename = "type")]
     pub kind: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub window_s: i64,
 }
 
@@ -241,7 +261,15 @@ impl Serialize for Constraint {
         for (k, v) in entries {
             match v {
                 FieldValue::F64(x) => m.serialize_entry(k, &x)?,
-                FieldValue::I64(x) => m.serialize_entry(k, &x)?,
+                FieldValue::I64(x) => {
+                    // Encoder side of the wire integer domain (SPEC §6.2).
+                    if !crate::canonical::wire_int::in_domain(x) {
+                        return Err(serde::ser::Error::custom(
+                            "integer outside the safe-integer range [-(2^53-1), 2^53-1]",
+                        ));
+                    }
+                    m.serialize_entry(k, &x)?
+                }
                 FieldValue::Str(x) => m.serialize_entry(k, &x)?,
                 FieldValue::Points(x) => m.serialize_entry(k, &x)?,
             }
@@ -286,12 +314,17 @@ pub struct VerifierContext<'a> {
 /// (SPEC §6.4.2) so replay, reorder, or omission within the stream invalidate
 /// the signature.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProofBundle {
     pub agent_id: String,
     pub agent_pub_key: HybridPublicKey,
     pub delegations: Vec<DelegationCert>,
     #[serde(with = "crate::canonical::base64_bytes")]
     pub challenge: Vec<u8>,
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub challenge_at: i64,
     pub challenge_sig: HybridSignature,
     #[serde(
@@ -306,7 +339,12 @@ pub struct ProofBundle {
         with = "crate::canonical::base64_bytes"
     )]
     pub stream_id: Vec<u8>,
-    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_zero_i64",
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub stream_seq: i64,
 }
 
@@ -437,6 +475,7 @@ pub struct WitnessEntry {
 /// HMAC-SHA256(session_secret, session_token_sign_bytes(token)). The session
 /// secret is private to the verifier and never leaves its trust boundary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SessionToken {
     pub version: i32,
     pub session_id: String,
@@ -444,7 +483,15 @@ pub struct SessionToken {
     pub agent_pub_key: HybridPublicKey,
     pub human_id: String,
     pub granted_scope: Vec<String>,
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub issued_at: i64,
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub valid_until: i64,
     #[serde(with = "crate::canonical::base64_bytes")]
     pub chain_hash: Vec<u8>,

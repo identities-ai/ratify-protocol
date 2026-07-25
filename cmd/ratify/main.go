@@ -286,7 +286,10 @@ func cmdDelegate(args []string) {
 		fatalf("signing failed: %v", err)
 	}
 
-	certJSON, _ := json.MarshalIndent(cert, "", "  ")
+	certJSON, err := ratify.EncodeDelegationCert(cert)
+	if err != nil {
+		fatalf("encode delegation: %v", err)
+	}
 	if err := os.WriteFile(*outFile, certJSON, 0o644); err != nil {
 		fatalf("write delegation: %v", err)
 	}
@@ -318,8 +321,15 @@ func cmdVerify(args []string) {
 	if err != nil {
 		fatalf("read bundle: %v", err)
 	}
+	// Strict wire acceptance: reject duplicated keys, out-of-domain
+	// integers, invalid UTF-8, and unknown fields before verification.
+	if err := ratify.CheckWireJSON(data); err != nil {
+		fatalf("parse bundle: %v", err)
+	}
 	var bundle ratify.ProofBundle
-	if err := json.Unmarshal(data, &bundle); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&bundle); err != nil {
 		fatalf("parse bundle: %v", err)
 	}
 
@@ -602,7 +612,10 @@ func cmdAgentBundle(args []string) {
 		ChallengeSig: sig,
 	}
 
-	bundleJSON, _ := json.MarshalIndent(bundle, "", "  ")
+	bundleJSON, err := ratify.EncodeProofBundle(bundle)
+	if err != nil {
+		fatalf("encode bundle: %v", err)
+	}
 	if err := os.WriteFile(*outFile, bundleJSON, 0o644); err != nil {
 		fatalf("write bundle: %v", err)
 	}

@@ -11,7 +11,9 @@ fields — with errors that name the offending field.
 """
 from __future__ import annotations
 
+import base64
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -86,6 +88,26 @@ def test_token_round_trip(name: str, raw: dict):
     token = decode_session_token(json.dumps(raw))
     assert encode_session_token(token) == canon
     assert decode_session_token(encode_session_token(token)) == token
+
+
+# ----- Negative wire-acceptance corpus (testvectors/wire-negative) -----
+# Shared, byte-identical malformed documents consumed by all five SDKs.
+# The Python codec is fully strict, so every corpus case is a decode error.
+
+_NEGATIVE_CASES = json.loads(
+    (FIXTURE_DIR.parent / "wire-negative" / "cases.json").read_text()
+)["cases"]
+assert len(_NEGATIVE_CASES) >= 10, "negative corpus too small"
+
+
+@pytest.mark.parametrize(
+    "case", _NEGATIVE_CASES, ids=[c["name"] for c in _NEGATIVE_CASES]
+)
+def test_negative_wire_corpus(case: dict):
+    doc = base64.b64decode(case["doc_b64"])
+    decoder = decode_proof_bundle if case["target"] == "bundle" else decode_session_token
+    with pytest.raises(ValueError, match="wire: "):
+        decoder(doc)
 
 
 # ----- Strictness: fail closed with field-specific errors -----
@@ -190,6 +212,23 @@ def test_rejects_wrong_type_for_timestamps():
     raw["issued_at"] = "12345"
     with pytest.raises(ValueError, match=r"SessionToken\.issued_at: expected integer"):
         decode_session_token(json.dumps(raw))
+
+
+def test_rejects_non_integer_lexical_forms_on_integer_fields():
+    # json.loads parses these forms as float, so integer accessors reject
+    # them — the same outcome the TS pre-scan enforces lexically.
+    for lexeme in ("1000.0", "1e3", "20000e-1"):
+        doc = re.sub(r'"issued_at": \d+', f'"issued_at": {lexeme}', json.dumps(_load_token()))
+        with pytest.raises(ValueError, match="issued_at: expected integer"):
+            decode_session_token(doc)
+
+
+def test_float_constraint_fields_still_accept_fraction_and_exponent_forms():
+    with (FIXTURE_DIR / "constraint_geo_circle_inside.json").open() as f:
+        raw = json.load(f)["bundle"]
+    doc = re.sub(r'"radius_m": [0-9.]+', '"radius_m": 5e2', json.dumps(raw))
+    bundle = decode_proof_bundle(doc)  # must not raise
+    assert bundle.delegations[0].constraints[0].radius_m == 500
 
 
 def test_rejects_stream_id_without_stream_seq():

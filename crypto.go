@@ -767,7 +767,10 @@ func VerifySessionToken(token *SessionToken, sessionSecret []byte, now time.Time
 
 // CanonicalJSON marshals v into canonical bytes per the rules above. The
 // single chokepoint for canonical serialization; all three signable-bytes
-// helpers route through it.
+// helpers route through it. Integer fields are bounded by the safe-integer
+// range (SPEC §6.2): an encoder must never emit an integer that strict wire
+// decoders reject, so out-of-domain integers fail here rather than becoming
+// signed bytes no conformant peer will accept.
 func CanonicalJSON(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -775,7 +778,11 @@ func CanonicalJSON(v any) ([]byte, error) {
 	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	out := bytes.TrimRight(buf.Bytes(), "\n")
+	if err := checkWireIntegerDomain(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // delegationSignable is the canonical signable subset of DelegationCert.
@@ -1090,15 +1097,15 @@ type verificationReceiptSignable struct {
 // JSON for the same logical bundle. Verified against
 // `testvectors/v1/cross_sdk_vectors.json`.
 type bundleHashSignable struct {
-	AgentID        string             `json:"agent_id"`
-	AgentPubKey    HybridPublicKey    `json:"agent_pub_key"`
-	Challenge      []byte             `json:"challenge"`
-	ChallengeAt    int64              `json:"challenge_at"`
-	ChallengeSig   HybridSignature    `json:"challenge_sig"`
+	AgentID        string                         `json:"agent_id"`
+	AgentPubKey    HybridPublicKey                `json:"agent_pub_key"`
+	Challenge      []byte                         `json:"challenge"`
+	ChallengeAt    int64                          `json:"challenge_at"`
+	ChallengeSig   HybridSignature                `json:"challenge_sig"`
 	Delegations    []bundleHashDelegationSignable `json:"delegations"`
-	SessionContext []byte             `json:"session_context"`
-	StreamID       []byte             `json:"stream_id"`
-	StreamSeq      int64              `json:"stream_seq"`
+	SessionContext []byte                         `json:"session_context"`
+	StreamID       []byte                         `json:"stream_id"`
+	StreamSeq      int64                          `json:"stream_seq"`
 }
 
 // bundleHashDelegationSignable mirrors DelegationCert with alpha-ordered

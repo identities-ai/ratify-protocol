@@ -109,6 +109,38 @@ for (const { name, raw } of tokens) {
   });
 }
 
+// ----- Negative wire-acceptance corpus (testvectors/wire-negative) -----
+// Shared, byte-identical malformed documents consumed by all five SDKs.
+// The TS codec is fully strict, so every corpus case is a decode error.
+
+interface NegativeCase {
+  name: string;
+  target: "bundle" | "token";
+  doc_b64: string;
+  strictness: string;
+}
+
+const NEGATIVE_CASES = (
+  JSON.parse(
+    readFileSync(join(FIXTURE_DIR, "..", "wire-negative", "cases.json"), "utf8"),
+  ) as { cases: NegativeCase[] }
+).cases;
+
+test("wire negative corpus: is non-trivial", () => {
+  assert.ok(NEGATIVE_CASES.length >= 10, `only ${NEGATIVE_CASES.length} cases`);
+});
+
+for (const c of NEGATIVE_CASES) {
+  test(`wire negative corpus: ${c.name}`, () => {
+    const doc = Uint8Array.from(Buffer.from(c.doc_b64, "base64"));
+    if (c.target === "bundle") {
+      assert.throws(() => decodeProofBundle(doc), /wire: /);
+    } else {
+      assert.throws(() => decodeSessionToken(doc), /wire: /);
+    }
+  });
+}
+
 // ----- Strictness: fail closed with field-specific errors -----
 
 function loadRawBundle(file: string): Record<string, unknown> {

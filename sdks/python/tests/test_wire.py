@@ -11,6 +11,7 @@ fields — with errors that name the offending field.
 """
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -86,6 +87,26 @@ def test_token_round_trip(name: str, raw: dict):
     token = decode_session_token(json.dumps(raw))
     assert encode_session_token(token) == canon
     assert decode_session_token(encode_session_token(token)) == token
+
+
+# ----- Negative wire-acceptance corpus (testvectors/wire-negative) -----
+# Shared, byte-identical malformed documents consumed by all five SDKs.
+# The Python codec is fully strict, so every corpus case is a decode error.
+
+_NEGATIVE_CASES = json.loads(
+    (FIXTURE_DIR.parent / "wire-negative" / "cases.json").read_text()
+)["cases"]
+assert len(_NEGATIVE_CASES) >= 10, "negative corpus too small"
+
+
+@pytest.mark.parametrize(
+    "case", _NEGATIVE_CASES, ids=[c["name"] for c in _NEGATIVE_CASES]
+)
+def test_negative_wire_corpus(case: dict):
+    doc = base64.b64decode(case["doc_b64"])
+    decoder = decode_proof_bundle if case["target"] == "bundle" else decode_session_token
+    with pytest.raises(ValueError, match="wire: "):
+        decoder(doc)
 
 
 # ----- Strictness: fail closed with field-specific errors -----

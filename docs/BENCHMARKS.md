@@ -38,7 +38,7 @@ Verification exercises the full §4 trust equation: structural checks, agent bin
 - **"Under a millisecond"** — holds at every legal chain depth (max `MAX_DELEGATION_CHAIN_DEPTH` = 3) for the Go reference verifier. The worst case exercised — depth-3 — is ~0.83 ms on an M2 Pro. Other SDKs differ; see the per-SDK matrix below.
 - **Dominant cost**: ML-DSA-65 verify, which is a post-quantum lattice-based scheme. Each cert in the chain adds ~220 µs (392 → 614 → 832 µs across depths 1/2/3). ML-DSA-65 verification itself is ~180 µs of that; the remainder is per-cert scope validation, canonicalization, and chain checks.
 - **Constraint cost is negligible**: geo_circle (haversine + radius check) adds ~1 µs. The test set covers geo / time / amount / speed / rate; none move the needle at these depths.
-- **Allocations** scale linearly with chain depth: ~198 allocations and ~55 kB of transient heap per extra cert (197/395/592 allocs at depths 1/2/3). The canonical-JSON serialization of the signable struct and per-cert scope-vocabulary validation are the biggest allocators. A lower-allocation canonical path is a v1.1 candidate but not a launch blocker.
+- **Allocations** scale linearly with chain depth: ~198 allocations and ~55 kB of transient heap per extra cert (197/395/592 allocs at depths 1/2/3). An allocation profile of `BenchmarkVerifyDepth1` attributes ~73% of allocated bytes to ML-DSA-65 public-key unpacking inside the signature library, and essentially all of the remainder to the canonical-JSON encode/decode path for the signable structs. A lower-allocation canonical path is a v1.1 candidate but not a launch blocker.
 
 ## Per-SDK verify latency
 

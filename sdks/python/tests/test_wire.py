@@ -321,6 +321,51 @@ def test_rejects_issued_at_beyond_safe_integer_bounds():
             decode_session_token(json.dumps(raw))
 
 
+# Encoder-side integer domain (mirrors the TypeScript suite): encoders must
+# never emit an integer their own decoder rejects. Same two fields as
+# TypeScript: a top-level timestamp and a nested constraint integer.
+
+_SAFE_BOUNDS = (2**53 - 1, -(2**53 - 1))
+_OUTSIDE_BOUNDS = (2**53, -(2**53))
+
+
+def test_encoder_accepts_issued_at_at_safe_integer_bounds():
+    for bound in _SAFE_BOUNDS:
+        token = decode_session_token(json.dumps(_load_token()))
+        token.issued_at = bound
+        assert f'"issued_at":{bound}' in encode_session_token(token)
+
+
+def test_encoder_rejects_issued_at_beyond_safe_integer_bounds():
+    for outside in _OUTSIDE_BOUNDS:
+        token = decode_session_token(json.dumps(_load_token()))
+        token.issued_at = outside
+        with pytest.raises(
+            ValueError, match="issued_at: integer outside the safe-integer range"
+        ):
+            encode_session_token(token)
+
+
+def test_encoder_accepts_constraint_window_s_at_safe_integer_bounds():
+    for bound in _SAFE_BOUNDS:
+        raw = _load_bundle("constraint_max_rate_denied.json")
+        bundle = decode_proof_bundle(json.dumps(raw))
+        bundle.delegations[0].constraints[0].window_s = bound
+        assert f'"window_s":{bound}' in encode_proof_bundle(bundle)
+
+
+def test_encoder_rejects_constraint_window_s_beyond_safe_integer_bounds():
+    for outside in _OUTSIDE_BOUNDS:
+        raw = _load_bundle("constraint_max_rate_denied.json")
+        bundle = decode_proof_bundle(json.dumps(raw))
+        bundle.delegations[0].constraints[0].window_s = outside
+        with pytest.raises(
+            ValueError,
+            match=r"constraints\[0\]\.window_s: integer outside the safe-integer range",
+        ):
+            encode_proof_bundle(bundle)
+
+
 def test_empty_constraints_stay_an_empty_array():
     raw = _load_bundle("happy_path_depth_1.json")
     encoded = encode_proof_bundle(decode_proof_bundle(json.dumps(raw)))

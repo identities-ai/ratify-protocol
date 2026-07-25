@@ -367,6 +367,64 @@ test("wire: rejects issued_at beyond the safe-integer bounds", () => {
   }
 });
 
+// Encoder-side integer domain (mirrors the Python suite): encoders must
+// never emit an integer their own decoder rejects. Same two fields as
+// Python: a top-level timestamp and a nested constraint integer.
+
+const SAFE_BOUNDS = [9007199254740991, -9007199254740991];
+const OUTSIDE_BOUNDS = [9007199254740992, -9007199254740992];
+
+test("wire: encoder accepts SessionToken.issued_at at the safe-integer bounds", () => {
+  for (const bound of SAFE_BOUNDS) {
+    const token = decodeSessionToken(JSON.stringify(loadRawToken()));
+    token.issued_at = bound;
+    assert.match(encodeSessionToken(token), new RegExp(`"issued_at":${bound}[,}]`));
+  }
+});
+
+test("wire: encoder rejects SessionToken.issued_at beyond the safe-integer bounds", () => {
+  for (const outside of OUTSIDE_BOUNDS) {
+    const token = decodeSessionToken(JSON.stringify(loadRawToken()));
+    token.issued_at = outside;
+    assert.throws(
+      () => encodeSessionToken(token),
+      /issued_at: integer outside the safe-integer range/,
+    );
+  }
+});
+
+test("wire: encoder accepts constraint window_s at the safe-integer bounds", () => {
+  for (const bound of SAFE_BOUNDS) {
+    const raw = loadRawBundle("constraint_max_rate_denied.json");
+    const bundle = decodeProofBundle(JSON.stringify(raw));
+    bundle.delegations[0]!.constraints[0]!.window_s = bound;
+    assert.match(encodeProofBundle(bundle), new RegExp(`"window_s":${bound}[,}]`));
+  }
+});
+
+test("wire: encoder rejects constraint window_s beyond the safe-integer bounds", () => {
+  for (const outside of OUTSIDE_BOUNDS) {
+    const raw = loadRawBundle("constraint_max_rate_denied.json");
+    const bundle = decodeProofBundle(JSON.stringify(raw));
+    bundle.delegations[0]!.constraints[0]!.window_s = outside;
+    assert.throws(
+      () => encodeProofBundle(bundle),
+      /constraints\[0\]\.window_s: integer outside the safe-integer range/,
+    );
+  }
+});
+
+test("wire: encoder rejects bigint values outright", () => {
+  // canonicalJSON would serialize a bigint's digits, silently bypassing the
+  // integer domain — so the codec rejects the type before serialization.
+  const token = decodeSessionToken(JSON.stringify(loadRawToken()));
+  (token as { issued_at: unknown }).issued_at = 2n ** 60n;
+  assert.throws(
+    () => encodeSessionToken(token),
+    /issued_at: bigint is not a wire integer/,
+  );
+});
+
 test("wire: empty constraints stay an empty array, not absent", () => {
   const raw = loadRawBundle("happy_path_depth_1.json");
   const encoded = encodeProofBundle(decodeProofBundle(JSON.stringify(raw)));

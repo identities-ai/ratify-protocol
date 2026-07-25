@@ -58,7 +58,7 @@ type JsonObj = Record<string, unknown>;
 
 /** Encode a DelegationCert as canonical wire JSON (SPEC §5.7). */
 export function encodeDelegationCert(cert: DelegationCert): string {
-  return jsonText(certWireDict(cert));
+  return jsonText(certWireDict(cert, "DelegationCert"));
 }
 
 /** Encode a ProofBundle as canonical wire JSON (SPEC §5.8). */
@@ -67,9 +67,11 @@ export function encodeProofBundle(bundle: ProofBundle): string {
     agent_id: bundle.agent_id,
     agent_pub_key: bundle.agent_pub_key,
     challenge: bundle.challenge,
-    challenge_at: bundle.challenge_at,
+    challenge_at: checkWireInt(bundle.challenge_at, "ProofBundle.challenge_at"),
     challenge_sig: bundle.challenge_sig,
-    delegations: bundle.delegations.map(certWireDict),
+    delegations: bundle.delegations.map((c, i) =>
+      certWireDict(c, `ProofBundle.delegations[${i}]`),
+    ),
   };
   // Optional v1.1 fields carry Go's omitempty semantics: absent or empty
   // values are omitted from the wire form.
@@ -80,7 +82,7 @@ export function encodeProofBundle(bundle: ProofBundle): string {
     dict.stream_id = bundle.stream_id;
   }
   if (bundle.stream_seq !== undefined && bundle.stream_seq !== 0) {
-    dict.stream_seq = bundle.stream_seq;
+    dict.stream_seq = checkWireInt(bundle.stream_seq, "ProofBundle.stream_seq");
   }
   return jsonText(dict);
 }
@@ -93,28 +95,61 @@ export function encodeSessionToken(token: SessionToken): string {
     chain_hash: token.chain_hash,
     granted_scope: token.granted_scope,
     human_id: token.human_id,
-    issued_at: token.issued_at,
+    issued_at: checkWireInt(token.issued_at, "SessionToken.issued_at"),
     mac: token.mac,
     session_id: token.session_id,
-    valid_until: token.valid_until,
-    version: token.version,
+    valid_until: checkWireInt(token.valid_until, "SessionToken.valid_until"),
+    version: checkWireInt(token.version, "SessionToken.version"),
   });
 }
 
-function certWireDict(cert: DelegationCert): JsonObj {
+function certWireDict(cert: DelegationCert, path: string): JsonObj {
   return {
     cert_id: cert.cert_id,
-    constraints: (cert.constraints ?? []).map(canonicalConstraintDict),
-    expires_at: cert.expires_at,
-    issued_at: cert.issued_at,
+    constraints: (cert.constraints ?? []).map((c, i) =>
+      checkedConstraintDict(c, `${path}.constraints[${i}]`),
+    ),
+    expires_at: checkWireInt(cert.expires_at, `${path}.expires_at`),
+    issued_at: checkWireInt(cert.issued_at, `${path}.issued_at`),
     issuer_id: cert.issuer_id,
     issuer_pub_key: cert.issuer_pub_key,
     scope: cert.scope,
     signature: cert.signature,
     subject_id: cert.subject_id,
     subject_pub_key: cert.subject_pub_key,
-    version: cert.version,
+    version: checkWireInt(cert.version, `${path}.version`),
   };
+}
+
+// The only integer-valued constraint fields are max_rate's count and
+// window_s; the remaining constraint numerics are floats and are not
+// subject to the integer domain.
+function checkedConstraintDict(c: Constraint, path: string): Record<string, unknown> {
+  const dict = canonicalConstraintDict(c);
+  if ("count" in dict) checkWireInt(dict.count, `${path}.count`);
+  if ("window_s" in dict) checkWireInt(dict.window_s, `${path}.window_s`);
+  return dict;
+}
+
+// Encoders must never emit an integer their own decoder rejects: JSON
+// integer wire fields are bounded by the IEEE-754 safe-integer range
+// (SPEC §6.2). A bigint is rejected outright — canonicalJSON would happily
+// serialize its digits, silently bypassing the domain check otherwise.
+function checkWireInt(v: unknown, field: string): number {
+  if (typeof v === "bigint") {
+    throw new Error(
+      `wire: ${field}: bigint is not a wire integer; use a number within the safe-integer range`,
+    );
+  }
+  if (typeof v !== "number" || !Number.isInteger(v)) {
+    throw new Error(`wire: ${field}: expected integer`);
+  }
+  if (!Number.isSafeInteger(v)) {
+    throw new Error(
+      `wire: ${field}: integer outside the safe-integer range [-(2^53-1), 2^53-1]`,
+    );
+  }
+  return v;
 }
 
 function jsonText(value: unknown): string {

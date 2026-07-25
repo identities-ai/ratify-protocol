@@ -64,7 +64,7 @@ _MAX_SAFE_INTEGER = 2**53 - 1
 
 def encode_delegation_cert(cert: DelegationCert) -> str:
     """Encode a DelegationCert as canonical wire JSON (SPEC §5.7)."""
-    return canonical_json(_cert_wire_dict(cert)).decode("utf-8")
+    return canonical_json(_cert_wire_dict(cert, "DelegationCert")).decode("utf-8")
 
 
 def encode_proof_bundle(bundle: ProofBundle) -> str:
@@ -73,9 +73,12 @@ def encode_proof_bundle(bundle: ProofBundle) -> str:
         "agent_id": bundle.agent_id,
         "agent_pub_key": bundle.agent_pub_key,
         "challenge": bundle.challenge,
-        "challenge_at": bundle.challenge_at,
+        "challenge_at": _check_wire_int(bundle.challenge_at, "ProofBundle.challenge_at"),
         "challenge_sig": bundle.challenge_sig,
-        "delegations": [_cert_wire_dict(c) for c in bundle.delegations],
+        "delegations": [
+            _cert_wire_dict(c, f"ProofBundle.delegations[{i}]")
+            for i, c in enumerate(bundle.delegations)
+        ],
     }
     # Optional v1.1 fields carry Go's omitempty semantics: empty values are
     # omitted from the wire form.
@@ -84,7 +87,7 @@ def encode_proof_bundle(bundle: ProofBundle) -> str:
     if bundle.stream_id:
         out["stream_id"] = bundle.stream_id
     if bundle.stream_seq:
-        out["stream_seq"] = bundle.stream_seq
+        out["stream_seq"] = _check_wire_int(bundle.stream_seq, "ProofBundle.stream_seq")
     return canonical_json(out).decode("utf-8")
 
 
@@ -96,28 +99,57 @@ def encode_session_token(token: SessionToken) -> str:
         "chain_hash": token.chain_hash,
         "granted_scope": token.granted_scope,
         "human_id": token.human_id,
-        "issued_at": token.issued_at,
+        "issued_at": _check_wire_int(token.issued_at, "SessionToken.issued_at"),
         "mac": token.mac,
         "session_id": token.session_id,
-        "valid_until": token.valid_until,
-        "version": token.version,
+        "valid_until": _check_wire_int(token.valid_until, "SessionToken.valid_until"),
+        "version": _check_wire_int(token.version, "SessionToken.version"),
     }).decode("utf-8")
 
 
-def _cert_wire_dict(cert: DelegationCert) -> dict[str, Any]:
+def _cert_wire_dict(cert: DelegationCert, path: str) -> dict[str, Any]:
     return {
         "cert_id": cert.cert_id,
-        "constraints": [c.to_canonical_dict() for c in (cert.constraints or [])],
-        "expires_at": cert.expires_at,
-        "issued_at": cert.issued_at,
+        "constraints": [
+            _checked_constraint_dict(c, f"{path}.constraints[{i}]")
+            for i, c in enumerate(cert.constraints or [])
+        ],
+        "expires_at": _check_wire_int(cert.expires_at, f"{path}.expires_at"),
+        "issued_at": _check_wire_int(cert.issued_at, f"{path}.issued_at"),
         "issuer_id": cert.issuer_id,
         "issuer_pub_key": cert.issuer_pub_key,
         "scope": cert.scope,
         "signature": cert.signature,
         "subject_id": cert.subject_id,
         "subject_pub_key": cert.subject_pub_key,
-        "version": cert.version,
+        "version": _check_wire_int(cert.version, f"{path}.version"),
     }
+
+
+def _checked_constraint_dict(c: Constraint, path: str) -> dict:
+    """The only integer-valued constraint fields are max_rate's count and
+    window_s; the remaining constraint numerics are floats and are not
+    subject to the integer domain."""
+    out = c.to_canonical_dict()
+    if "count" in out:
+        _check_wire_int(out["count"], f"{path}.count")
+    if "window_s" in out:
+        _check_wire_int(out["window_s"], f"{path}.window_s")
+    return out
+
+
+def _check_wire_int(v: Any, field: str) -> int:
+    """Encoders must never emit an integer their own decoder rejects: JSON
+    integer wire fields are bounded by the IEEE-754 safe-integer range
+    (SPEC §6.2)."""
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError(f"wire: {field}: expected integer")
+    if v > _MAX_SAFE_INTEGER or v < -_MAX_SAFE_INTEGER:
+        raise ValueError(
+            f"wire: {field}: integer outside the safe-integer range "
+            f"[-(2^53-1), 2^53-1]"
+        )
+    return v
 
 
 # ============================================================================

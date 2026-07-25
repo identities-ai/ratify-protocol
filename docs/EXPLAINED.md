@@ -29,6 +29,8 @@ When the agent wants to perform an action, it collects its delegation certs and 
 ### VERIFY: The third party checks the proof.
 The verifier runs the Ratify verifier algorithm on the ProofBundle. If the signatures match, the timestamps are valid, the scopes cover the requested action, and the liveness check (the challenge) passes, the verifier returns a deterministic **YES**.
 
+One distinction worth internalizing: that YES is stateless cryptographic verification, which is not by itself replay-safe task acceptance — within the challenge freshness window, a captured bundle would verify again. A verifier that issues its own challenges makes each one single-use with a challenge store (SPEC §10; every SDK ships one), so a bundle is *accepted* at most once. A verifier that lets clients self-issue challenges keeps only the freshness bound and needs request-level deduplication on top.
+
 ---
 
 ## 3. Hybrid Cryptography: Quantum-Safe by Design

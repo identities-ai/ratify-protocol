@@ -315,6 +315,8 @@ Without freshness, an attacker who steals a valid bundle once could replay it fo
 
 So even if Eve recorded last Tuesday's interaction, she can't replay it today: today's challenge bytes are different.
 
+One caveat that matters in production: stateless cryptographic verification is not, by itself, replay-safe task acceptance. Freshness bounds a replay to the ~5-minute window; within that window a captured bundle would still verify. A verifier that issues challenges closes this by making each challenge single-use — the SDKs ship a `ChallengeStore` for exactly that, and SPEC §10 makes single-use acceptance normative for challenge-issuing verifiers. Verifiers that accept self-issued challenges keep only the freshness bound and should pair it with request-level deduplication.
+
 ### Effective scope of a chain
 
 If Alice delegates `[meeting:*]` to Agent-A, and Agent-A sub-delegates `[meeting:attend, meeting:record]` to Agent-B, the **effective scope** of Agent-B's chain is the *intersection*:

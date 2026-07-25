@@ -166,11 +166,14 @@ export function delegationSignBytes(cert: DelegationCert): Uint8Array {
   return canonicalJSON(signable);
 }
 
-// canonicalConstraintDict returns the object shape the canonical JSON
-// encoder should emit for one Constraint, by kind. Kind-relevant fields
-// are always included (zero values preserved); irrelevant fields are
-// omitted entirely. Mirrors Go's Constraint.MarshalJSON.
-function canonicalConstraintDict(c: Constraint): Record<string, unknown> {
+/**
+ * canonicalConstraintDict returns the object shape the canonical JSON
+ * encoder should emit for one Constraint, by kind. Kind-relevant fields
+ * are always included (zero values preserved); irrelevant fields are
+ * omitted entirely. Mirrors Go's Constraint.MarshalJSON. Exported for the
+ * wire codec (wire.ts), which emits the same canonical constraint shape.
+ */
+export function canonicalConstraintDict(c: Constraint): Record<string, unknown> {
   const out: Record<string, unknown> = { type: c.type };
   switch (c.type) {
     case "geo_circle":

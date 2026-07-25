@@ -22,3 +22,11 @@ export {
   hexEncode,
   hexDecode,
 } from "./canonical.js";
+export {
+  encodeDelegationCert,
+  decodeDelegationCert,
+  encodeProofBundle,
+  decodeProofBundle,
+  encodeSessionToken,
+  decodeSessionToken,
+} from "./wire.js";

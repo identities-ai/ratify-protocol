@@ -269,6 +269,45 @@ test("streamed options: stream state is a caller-owned snapshot", async () => {
   assert.match(replay.error_reason ?? "", /^stream_seq_replay/);
 });
 
+test("streamed options: full-verifier options are rejected, never silently ignored", async () => {
+  // TypeScript's structural typing lets a full VerifyOptions variable be
+  // assigned where StreamedVerifyOptions is expected, so the boundary
+  // must hold at runtime: any options object carrying a
+  // full-verifier-only field fails closed with unsupported_option.
+  const f = await fixture([SCOPE_MEETING_ATTEND]);
+  const turn = await turnFor(f, generateChallenge());
+
+  const fullVerifierOnly: Record<string, unknown>[] = [
+    { force_revocation_check: true },
+    { revocation: { isRevoked: async () => [false, null] } },
+    { is_revoked: () => false },
+    { policy: { evaluatePolicy: async () => true } },
+    { audit: { logVerification: async () => {} } },
+    { context: { requested_amount: 5 } },
+    { constraint_evaluators: {} },
+    { policy_verdict: {} },
+    { policy_secret: new Uint8Array(32) },
+    { anchor_resolver: { resolveAnchor: async () => null } },
+  ];
+  for (const extra of fullVerifierOnly) {
+    const res = await verifyStreamedTurnWithOptions(f.token, f.secret, turn, {
+      required_scope: SCOPE_MEETING_ATTEND,
+      now: f.now,
+      ...extra,
+    } as never);
+    assert.equal(res.valid, false, `option ${Object.keys(extra)[0]} must be rejected`);
+    assert.match(res.error_reason ?? "", /^unsupported_option/);
+  }
+
+  // The same call without the foreign field verifies — proving the
+  // rejection is about the option, not the turn.
+  const ok = await verifyStreamedTurnWithOptions(f.token, f.secret, turn, {
+    required_scope: SCOPE_MEETING_ATTEND,
+    now: f.now,
+  });
+  assert.equal(ok.valid, true, ok.error_reason);
+});
+
 test("streamed options: token checks still apply", async () => {
   const f = await fixture([SCOPE_MEETING_ATTEND]);
   const turn = await turnFor(f, generateChallenge());

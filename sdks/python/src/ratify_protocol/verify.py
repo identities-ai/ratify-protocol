@@ -653,11 +653,28 @@ def verify_streamed_turn_with_options(
     enforces the verifier-side controls in ``StreamedVerifyOptions`` —
     required scope against the token's cached effective scope, single-use
     challenges, and session/stream binding checks.
+
+    ``opts`` MUST be a :class:`StreamedVerifyOptions` (or ``None``).
+    Python annotations are not runtime-enforced, so this function checks:
+    passing a full :class:`VerifyOptions` — whose revocation, policy,
+    constraint, audit, and anchor fields do not apply to a token
+    presentation — is rejected at runtime, fail-closed, rather than
+    having a security-relevant option silently ignored. Run
+    ``verify_bundle`` for those semantics.
     """
     import time
 
     if opts is None:
         opts = StreamedVerifyOptions()
+    elif not isinstance(opts, StreamedVerifyOptions):
+        # Fail closed on any other options type (VerifyOptions included):
+        # a full-verifier option must never be accepted and ignored.
+        return _invalid(
+            "unsupported_option",
+            f"streamed-turn verification takes StreamedVerifyOptions, got "
+            f"{type(opts).__name__} — run verify_bundle for revocation/policy/"
+            f"constraint semantics",
+        )
     now = opts.now if opts.now is not None else int(time.time())
 
     # --- Token authenticity and validity window ---

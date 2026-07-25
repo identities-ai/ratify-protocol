@@ -275,3 +275,43 @@ def test_stream_state_is_caller_owned_snapshot():
         f.token, f.secret, turn2, StreamedVerifyOptions(stream=advanced, now=f.now)
     )
     assert replay.error_reason.startswith("stream_seq_replay")
+
+
+def test_full_verifier_options_are_rejected_never_silently_ignored():
+    # Python annotations are not runtime-enforced, so the boundary must
+    # hold at runtime: passing a full VerifyOptions — whose security
+    # fields (revocation, policy, force_revocation_check, ...) do not
+    # apply to a token presentation — fails closed with
+    # unsupported_option instead of being silently ignored.
+    f = _fixture([SCOPE_MEETING_ATTEND])
+    turn = _turn(f, generate_challenge())
+
+    res = verify_streamed_turn_with_options(
+        f.token, f.secret, turn,
+        VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, force_revocation_check=True, now=f.now),
+    )
+    assert not res.valid
+    assert res.error_reason.startswith("unsupported_option")
+
+    # Even a VerifyOptions carrying only shared fields is rejected — the
+    # type is the boundary, so no future VerifyOptions field can leak
+    # through unenforced.
+    res = verify_streamed_turn_with_options(
+        f.token, f.secret, turn,
+        VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, now=f.now),
+    )
+    assert not res.valid
+    assert res.error_reason.startswith("unsupported_option")
+
+    # Arbitrary duck-typed objects are rejected too.
+    res = verify_streamed_turn_with_options(f.token, f.secret, turn, object())
+    assert not res.valid
+    assert res.error_reason.startswith("unsupported_option")
+
+    # The same call with StreamedVerifyOptions verifies — the rejection
+    # is about the options type, not the turn.
+    ok = verify_streamed_turn_with_options(
+        f.token, f.secret, turn,
+        StreamedVerifyOptions(required_scope=SCOPE_MEETING_ATTEND, now=f.now),
+    )
+    assert ok.valid, ok.error_reason

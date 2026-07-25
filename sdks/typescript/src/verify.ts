@@ -594,12 +594,37 @@ export interface StreamedVerifyOptions {
   now?: number;
 }
 
+// VerifyOptions fields with no StreamedVerifyOptions counterpart.
+// TypeScript's structural typing happily assigns a full VerifyOptions
+// where StreamedVerifyOptions is expected, so the compile-time split is
+// not an enforcement boundary here — the runtime check below is. Any
+// options object carrying one of these fields is rejected fail-closed
+// rather than having a security-relevant option silently ignored.
+const FULL_VERIFIER_ONLY_OPTION_KEYS = [
+  "is_revoked",
+  "revocation",
+  "force_revocation_check",
+  "context",
+  "policy",
+  "audit",
+  "constraint_evaluators",
+  "policy_verdict",
+  "policy_secret",
+  "anchor_resolver",
+] as const;
+
 /**
  * Options-object form of the streamed fast path (SPEC §5.13): verifies one
  * turn against a previously issued SessionToken and enforces the
  * verifier-side controls in StreamedVerifyOptions — required scope against
  * the token's cached effective scope, single-use challenges, and
  * session/stream binding checks.
+ *
+ * Passing a full VerifyOptions (or any object carrying full-verifier-only
+ * fields such as revocation, policy, or force_revocation_check) is
+ * rejected at runtime, fail-closed — those options do not apply to a
+ * token presentation and MUST NOT be silently ignored. Run verifyBundle
+ * for their semantics.
  */
 export async function verifyStreamedTurnWithOptions(
   token: SessionToken,
@@ -607,6 +632,16 @@ export async function verifyStreamedTurnWithOptions(
   turn: StreamedTurn,
   opts: StreamedVerifyOptions = {},
 ): Promise<VerifyResult> {
+  // --- Options-type enforcement (fail closed, never silently ignore) ---
+  for (const key of FULL_VERIFIER_ONLY_OPTION_KEYS) {
+    if ((opts as Record<string, unknown>)[key] !== undefined) {
+      return invalid(
+        "unsupported_option",
+        `full-verifier option "${key}" is not supported by streamed-turn verification — run verifyBundle for revocation/policy/constraint semantics`,
+      );
+    }
+  }
+
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
   // --- Token authenticity and validity window ---

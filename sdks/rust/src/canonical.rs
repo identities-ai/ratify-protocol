@@ -350,21 +350,40 @@ pub mod base64_bytes {
 /// Applied with `#[serde(deserialize_with = ...)]` on the int64 wire
 /// fields; serialization is unchanged.
 pub mod wire_int {
-    use serde::{de::Error, Deserialize, Deserializer};
+    use serde::{de::Error as DeError, ser::Error as SerError, Deserialize, Deserializer, Serializer};
 
     /// Largest integer exactly representable in an IEEE-754 double: 2^53-1.
     pub const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
+
+    /// True iff `v` lies in the interoperable JSON integer domain.
+    pub fn in_domain(v: i64) -> bool {
+        (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&v)
+    }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error>
     where
         D: Deserializer<'de>,
     {
         let v = i64::deserialize(deserializer)?;
-        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&v) {
+        if !in_domain(v) {
             return Err(D::Error::custom(
                 "integer outside the safe-integer range [-(2^53-1), 2^53-1]",
             ));
         }
         Ok(v)
+    }
+
+    /// Encoder side of the same rule: a serializer must never emit an
+    /// integer that strict wire decoders reject.
+    pub fn serialize<S>(v: &i64, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if !in_domain(*v) {
+            return Err(S::Error::custom(
+                "integer outside the safe-integer range [-(2^53-1), 2^53-1]",
+            ));
+        }
+        serializer.serialize_i64(*v)
     }
 }

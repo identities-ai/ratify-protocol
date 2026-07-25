@@ -1140,3 +1140,50 @@ fn negative_wire_corpus_is_never_accepted() {
         }
     }
 }
+
+// ============================================================================
+// Encoder side of the wire integer domain (SPEC §6.2)
+// ============================================================================
+
+// The wire serializer must never emit an integer that strict wire decoders
+// reject: a cert issued with an out-of-domain expiry can be signed, but
+// serializing it to wire JSON fails rather than producing a document no
+// conformant peer will accept.
+#[test]
+fn delegation_cert_to_json_bounds_integer_fields() {
+    const MAX_SAFE: i64 = (1 << 53) - 1;
+    unsafe {
+        let mut root = std::ptr::null_mut();
+        let mut agent = std::ptr::null_mut();
+        ratify_human_root_generate(&mut root);
+        ratify_agent_generate(cstr!("TestBot"), cstr!("custom"), &mut agent);
+
+        // Expiry exactly on the safe-integer bound serializes fine.
+        let mut cert = std::ptr::null_mut();
+        let mut err = std::ptr::null_mut();
+        let s = ratify_delegation_issue(
+            root, agent, cstr!("[\"meeting:attend\"]"), 1, MAX_SAFE, &mut cert, &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk);
+        let json = ratify_delegation_cert_to_json(cert, &mut err);
+        assert!(!json.is_null(), "in-domain expiry must serialize");
+        ratify_string_free(json);
+        ratify_delegation_cert_free(cert);
+
+        // One above the bound: serialization refuses to emit the document.
+        let mut cert2 = std::ptr::null_mut();
+        let s2 = ratify_delegation_issue(
+            root, agent, cstr!("[\"meeting:attend\"]"), 1, MAX_SAFE + 1, &mut cert2, &mut err,
+        );
+        assert_eq!(s2, RatifyStatus::RatifyOk, "issue itself only signs");
+        let mut err2 = std::ptr::null_mut();
+        let json2 = ratify_delegation_cert_to_json(cert2, &mut err2);
+        assert!(json2.is_null(), "out-of-domain expires_at must not serialize");
+        assert!(!err2.is_null(), "serialization failure must set err_out");
+        ratify_error_free(err2);
+        ratify_delegation_cert_free(cert2);
+
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}

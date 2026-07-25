@@ -110,9 +110,15 @@ pub struct DelegationCert {
     /// are deterministic across issuers.
     #[serde(default)]
     pub constraints: Vec<Constraint>,
-    #[serde(deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub issued_at: i64,
-    #[serde(deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub expires_at: i64,
     pub signature: HybridSignature,
 }
@@ -145,7 +151,11 @@ impl DelegationCert {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Constraint {
-    #[serde(default, deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        default,
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub count: i64,
     #[serde(default)]
     pub currency: String,
@@ -181,7 +191,11 @@ pub struct Constraint {
     pub tz: String,
     #[serde(rename = "type")]
     pub kind: String,
-    #[serde(default, deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        default,
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub window_s: i64,
 }
 
@@ -247,7 +261,15 @@ impl Serialize for Constraint {
         for (k, v) in entries {
             match v {
                 FieldValue::F64(x) => m.serialize_entry(k, &x)?,
-                FieldValue::I64(x) => m.serialize_entry(k, &x)?,
+                FieldValue::I64(x) => {
+                    // Encoder side of the wire integer domain (SPEC §6.2).
+                    if !crate::canonical::wire_int::in_domain(x) {
+                        return Err(serde::ser::Error::custom(
+                            "integer outside the safe-integer range [-(2^53-1), 2^53-1]",
+                        ));
+                    }
+                    m.serialize_entry(k, &x)?
+                }
                 FieldValue::Str(x) => m.serialize_entry(k, &x)?,
                 FieldValue::Points(x) => m.serialize_entry(k, &x)?,
             }
@@ -299,7 +321,10 @@ pub struct ProofBundle {
     pub delegations: Vec<DelegationCert>,
     #[serde(with = "crate::canonical::base64_bytes")]
     pub challenge: Vec<u8>,
-    #[serde(deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub challenge_at: i64,
     pub challenge_sig: HybridSignature,
     #[serde(
@@ -317,6 +342,7 @@ pub struct ProofBundle {
     #[serde(
         default,
         skip_serializing_if = "is_zero_i64",
+        serialize_with = "crate::canonical::wire_int::serialize",
         deserialize_with = "crate::canonical::wire_int::deserialize"
     )]
     pub stream_seq: i64,
@@ -457,9 +483,15 @@ pub struct SessionToken {
     pub agent_pub_key: HybridPublicKey,
     pub human_id: String,
     pub granted_scope: Vec<String>,
-    #[serde(deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub issued_at: i64,
-    #[serde(deserialize_with = "crate::canonical::wire_int::deserialize")]
+    #[serde(
+        serialize_with = "crate::canonical::wire_int::serialize",
+        deserialize_with = "crate::canonical::wire_int::deserialize"
+    )]
     pub valid_until: i64,
     #[serde(with = "crate::canonical::base64_bytes")]
     pub chain_hash: Vec<u8>,

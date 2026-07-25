@@ -530,10 +530,290 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 // ============================================================================
 
 /**
+ * The presentation-side inputs of one streamed turn: the fresh challenge
+ * the agent signed and the bindings it signed it under (SPEC §6.4.2).
+ * Presented values, distinct from the verifier-side expectations carried
+ * in VerifyOptions.
+ */
+export interface StreamedTurn {
+  challenge: Uint8Array;
+  challenge_at: number;
+  challenge_sig: HybridSignature;
+  /** Presented session binding (absent = unbound; otherwise 32 bytes). */
+  session_context?: Uint8Array;
+  /** Presented stream binding (absent = unbound; otherwise 32 bytes + seq >= 1). */
+  stream_id?: Uint8Array;
+  stream_seq?: number;
+}
+
+/**
+ * The verifier-side controls that apply to a streamed-turn presentation
+ * (SPEC §5.13). Deliberately NOT the full VerifyOptions: a streamed turn
+ * re-verifies liveness and bindings, not the chain, so revocation, policy,
+ * constraint, audit, and anchor options have no field here and can never
+ * be passed and silently ignored. Callers who need fresh revocation or
+ * policy semantics — including high-value operations the spec directs to
+ * force_revocation_check — MUST run full verifyBundle instead.
+ */
+export interface StreamedVerifyOptions {
+  /**
+   * Must be present in token.granted_scope for the turn to be valid;
+   * absent skips the check. The token stores the verified chain's
+   * effective scope lex-sorted for exactly this check.
+   */
+  required_scope?: string;
+  /**
+   * Makes the per-turn challenge single-use: consulted (without
+   * consuming) after the session token's HMAC authenticates the
+   * presentation and before the per-turn hybrid challenge signature is
+   * verified; the challenge is atomically consumed after that signature
+   * verifies — before the scope check. All store failures normalize to
+   * the canonical unknown_challenge result.
+   */
+  challenge_store?: import("./challenge_store.js").ChallengeStore;
+  /**
+   * Verifier-side session binding; when set, the turn's presented
+   * session_context must match byte-for-byte (same statuses as the full
+   * verifier).
+   */
+  session_context?: Uint8Array;
+  /**
+   * Verifier-side stream state (stream_id match; stream_seq must be
+   * exactly last_seen_seq+1, else stream_seq_replay / stream_seq_skip).
+   *
+   * This is a caller-owned SNAPSHOT: the verifier only reads it and never
+   * advances it. Two concurrent turns carrying distinct valid challenges
+   * and the same stream_seq will BOTH verify against the same snapshot.
+   * Concurrency-safe sequence enforcement is the caller's responsibility:
+   * atomically compare-and-advance your tracked last-seen sequence to
+   * turn.stream_seq when (and only when) verification succeeds, and build
+   * the snapshot from that tracked state.
+   */
+  stream?: import("./types.js").StreamContext;
+  /** Clock override (unix seconds); absent uses Date.now(). */
+  now?: number;
+}
+
+// VerifyOptions fields with no StreamedVerifyOptions counterpart.
+// TypeScript's structural typing happily assigns a full VerifyOptions
+// where StreamedVerifyOptions is expected, so the compile-time split is
+// not an enforcement boundary here — the runtime check below is. Any
+// options object carrying one of these fields is rejected fail-closed
+// rather than having a security-relevant option silently ignored.
+const FULL_VERIFIER_ONLY_OPTION_KEYS = [
+  "is_revoked",
+  "revocation",
+  "force_revocation_check",
+  "context",
+  "policy",
+  "audit",
+  "constraint_evaluators",
+  "policy_verdict",
+  "policy_secret",
+  "anchor_resolver",
+] as const;
+
+/**
+ * Options-object form of the streamed fast path (SPEC §5.13): verifies one
+ * turn against a previously issued SessionToken and enforces the
+ * verifier-side controls in StreamedVerifyOptions — required scope against
+ * the token's cached effective scope, single-use challenges, and
+ * session/stream binding checks.
+ *
+ * Passing a full VerifyOptions (or any object carrying full-verifier-only
+ * fields such as revocation, policy, or force_revocation_check) is
+ * rejected at runtime, fail-closed — those options do not apply to a
+ * token presentation and MUST NOT be silently ignored. Run verifyBundle
+ * for their semantics.
+ */
+export async function verifyStreamedTurnWithOptions(
+  token: SessionToken,
+  sessionSecret: Uint8Array,
+  turn: StreamedTurn,
+  opts: StreamedVerifyOptions = {},
+): Promise<VerifyResult> {
+  // --- Options-type enforcement (fail closed, never silently ignore) ---
+  for (const key of FULL_VERIFIER_ONLY_OPTION_KEYS) {
+    if ((opts as Record<string, unknown>)[key] !== undefined) {
+      return invalid(
+        "unsupported_option",
+        `full-verifier option "${key}" is not supported by streamed-turn verification — run verifyBundle for revocation/policy/constraint semantics`,
+      );
+    }
+  }
+
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+
+  // --- Token authenticity and validity window ---
+  // Deliberately FIRST, before the challenge store is consulted: the HMAC
+  // is a cheap authenticated pre-check that stops unauthenticated callers
+  // from probing the challenge store. This is the documented SPEC §5.13
+  // order — it differs from §10, where no equivalent cheap authenticator
+  // exists ahead of the store lookup.
+  if (!token) return invalid("nil_session_token", "session_token must not be nil");
+  const mac = verifySessionTokenE(token, sessionSecret, now);
+  if (mac !== null) return invalid("session_token_invalid", mac);
+
+  // --- Basic structure ---
+  if (!turn.challenge || turn.challenge.length === 0) {
+    return invalid("no_challenge", "streamed turn contains no challenge");
+  }
+
+  // --- Session context validation (mirrors SPEC §10 step 2) ---
+  const turnCtx = turn.session_context ?? new Uint8Array(0);
+  if (turnCtx.length !== 0 && turnCtx.length !== 32) {
+    return invalid(
+      "invalid_session_context",
+      `session_context must be 32 bytes, got ${turnCtx.length}`,
+    );
+  }
+  if (opts.session_context && opts.session_context.length !== 32) {
+    return invalid(
+      "invalid_session_context",
+      `verify option session_context must be 32 bytes, got ${opts.session_context.length}`,
+    );
+  }
+  if (opts.session_context) {
+    if (turnCtx.length === 0) {
+      return invalid(
+        "missing_session_context",
+        "verifier requires a session-bound challenge but turn has no session_context",
+      );
+    }
+    if (!bytesEqual(turnCtx, opts.session_context)) {
+      return invalid(
+        "session_context_mismatch",
+        "turn session_context does not match verifier context",
+      );
+    }
+  } else if (turnCtx.length !== 0) {
+    return invalid(
+      "session_context_unverifiable",
+      "turn has session_context but verifier did not provide one",
+    );
+  }
+
+  // --- Single-use challenge: locate WITHOUT consuming ---
+  // Before the per-turn hybrid challenge signature is verified, so a
+  // forged turn cannot burn a pending challenge and unknown challenges
+  // are rejected before the expensive signature check.
+  if (opts.challenge_store) {
+    const store: ChallengeStore = opts.challenge_store;
+    const ok = await challengeStoreAllows(() =>
+      store.validate(turn.challenge, opts.session_context, now),
+    );
+    if (!ok) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
+    }
+  }
+
+  // --- Stream binding validation (mirrors SPEC §10 step 3) ---
+  const turnStreamID = turn.stream_id ?? new Uint8Array(0);
+  const turnStreamSeq = turn.stream_seq ?? 0;
+  if (turnStreamID.length !== 0 && turnStreamID.length !== 32) {
+    return invalid("invalid_stream_id", `stream_id must be 32 bytes, got ${turnStreamID.length}`);
+  }
+  if (turnStreamID.length === 0 && turnStreamSeq !== 0) {
+    return invalid("invalid_stream_seq", "stream_seq set without stream_id");
+  }
+  if (turnStreamID.length !== 0 && turnStreamSeq < 1) {
+    return invalid("invalid_stream_seq", `stream_seq must be >=1, got ${turnStreamSeq}`);
+  }
+  if (opts.stream) {
+    if (!opts.stream.stream_id || opts.stream.stream_id.length !== 32) {
+      return invalid(
+        "invalid_stream_id",
+        `verify option stream_id must be 32 bytes, got ${opts.stream.stream_id?.length ?? 0}`,
+      );
+    }
+    if (turnStreamID.length === 0) {
+      return invalid(
+        "missing_stream_context",
+        "verifier requires a stream-bound challenge but turn has no stream_id",
+      );
+    }
+    if (!bytesEqual(turnStreamID, opts.stream.stream_id)) {
+      return invalid("stream_id_mismatch", "turn stream_id does not match verifier stream context");
+    }
+    const expected = opts.stream.last_seen_seq + 1;
+    if (turnStreamSeq <= opts.stream.last_seen_seq) {
+      return invalid(
+        "stream_seq_replay",
+        `stream_seq ${turnStreamSeq} already seen (last=${opts.stream.last_seen_seq})`,
+      );
+    }
+    if (turnStreamSeq !== expected) {
+      return invalid("stream_seq_skip", `stream_seq ${turnStreamSeq} skips expected ${expected}`);
+    }
+  } else if (turnStreamID.length !== 0) {
+    return invalid(
+      "stream_context_unverifiable",
+      "turn has stream_id but verifier did not provide a stream context",
+    );
+  }
+
+  // --- Liveness (challenge freshness + hybrid signature) ---
+  const challengeAge = now - turn.challenge_at;
+  if (challengeAge < 0 || challengeAge > CHALLENGE_WINDOW_SECONDS) {
+    return invalid(
+      "stale_challenge",
+      `challenge is ${challengeAge} seconds old (max ${CHALLENGE_WINDOW_SECONDS})`,
+    );
+  }
+  const sigErr = await verifyChallengeSignatureE(
+    turn.challenge,
+    turn.challenge_at,
+    turn.challenge_sig,
+    token.agent_pub_key,
+    turn.session_context,
+    turn.stream_id,
+    turn.stream_seq,
+  );
+  if (sigErr !== null) {
+    return invalid("bad_challenge_sig", `challenge signature verification failed: ${sigErr}`);
+  }
+
+  // --- Single-use challenge: atomic consume ---
+  // The signature has verified. Consume before the scope check so a
+  // denied caller cannot probe authorization with one liveness proof.
+  if (opts.challenge_store) {
+    const store: ChallengeStore = opts.challenge_store;
+    const consumed = await challengeStoreAllows(() =>
+      store.consume(turn.challenge, opts.session_context, now),
+    );
+    if (!consumed) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
+    }
+  }
+
+  // --- Required scope against the token's cached effective scope ---
+  if (opts.required_scope && !token.granted_scope.includes(opts.required_scope)) {
+    return failWithStatus(
+      "scope_denied",
+      `required scope "${opts.required_scope}" not in session token granted scope`,
+    );
+  }
+
+  return {
+    valid: true,
+    human_id: token.human_id,
+    agent_id: token.agent_id,
+    granted_scope: [...token.granted_scope],
+    identity_status: "authorized_agent",
+  };
+}
+
+/**
  * Fast-path verifier for streamed turns that present a SessionToken in place
  * of the full cert chain. Checks the HMAC, token validity window, challenge
  * freshness, and hybrid challenge signature against the token's agent pubkey.
  * The chain is NOT re-verified — that's the point of the token.
+ *
+ * @deprecated Presentation checks only — this form cannot enforce a
+ * required scope, single-use challenges, or verifier-side session/stream
+ * checks, so a token holder passes it for any protected action. Use
+ * verifyStreamedTurnWithOptions. Retained for compatibility through the
+ * v1.0.0-* releases.
  */
 export async function verifyStreamedTurn(
   token: SessionToken,

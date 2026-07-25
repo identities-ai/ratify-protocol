@@ -183,7 +183,14 @@ from .types import (
     VerifyResult,
     WitnessEntry,
 )
-from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
+from .verify import (
+    StreamedTurn,
+    StreamedVerifyOptions,
+    verify_bundle,
+    verify_streamed_turn,
+    verify_streamed_turn_with_options,
+    verify_transaction_receipt,
+)
 from .wire import (
     decode_delegation_cert,
     decode_proof_bundle,
@@ -244,7 +251,8 @@ __all__ = [
     "operation_context_bytes", "operation_context_hash",
     "session_context_bytes", "build_session_context",
     # verify
-    "verify_bundle", "verify_streamed_turn", "verify_transaction_receipt",
+    "StreamedTurn", "StreamedVerifyOptions", "verify_bundle", "verify_streamed_turn",
+    "verify_streamed_turn_with_options", "verify_transaction_receipt",
     # canonical / utils
     "canonical_json", "base64_standard_encode", "base64_standard_decode",
     "hex_encode", "hex_decode",

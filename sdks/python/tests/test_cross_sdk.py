@@ -22,15 +22,13 @@ from pathlib import Path
 import pytest
 
 from ratify_protocol import (
-    Constraint,
-    DelegationCert,
     HybridPublicKey,
     HybridSignature,
     PolicyVerdict,
-    ProofBundle,
     VerificationReceipt,
     VerifierContext,
     bundle_hash,
+    decode_proof_bundle,
     policy_verdict_sign_bytes,
     verification_receipt_sign_bytes,
     verifier_context_hash,
@@ -83,48 +81,9 @@ def test_cross_sdk_vector(v):
             f"cross-SDK drift for {v['name']}; Python diverged from Go reference"
         )
     elif kind == "bundle_hash":
-        raw = inp["bundle"]
-        bundle = ProofBundle(
-            agent_id=raw["agent_id"],
-            agent_pub_key=HybridPublicKey(
-                ed25519=_b64d(raw["agent_pub_key"]["ed25519"]),
-                ml_dsa_65=_b64d(raw["agent_pub_key"]["ml_dsa_65"]),
-            ),
-            delegations=[
-                DelegationCert(
-                    cert_id=d["cert_id"],
-                    version=d["version"],
-                    issuer_id=d["issuer_id"],
-                    issuer_pub_key=HybridPublicKey(
-                        ed25519=_b64d(d["issuer_pub_key"]["ed25519"]),
-                        ml_dsa_65=_b64d(d["issuer_pub_key"]["ml_dsa_65"]),
-                    ),
-                    subject_id=d["subject_id"],
-                    subject_pub_key=HybridPublicKey(
-                        ed25519=_b64d(d["subject_pub_key"]["ed25519"]),
-                        ml_dsa_65=_b64d(d["subject_pub_key"]["ml_dsa_65"]),
-                    ),
-                    scope=list(d["scope"]),
-                    constraints=[
-                        Constraint(**{k: v for k, v in c.items()})
-                        for c in d.get("constraints", [])
-                    ],
-                    issued_at=d["issued_at"],
-                    expires_at=d["expires_at"],
-                    signature=HybridSignature(
-                        ed25519=_b64d(d["signature"]["ed25519"]),
-                        ml_dsa_65=_b64d(d["signature"]["ml_dsa_65"]),
-                    ),
-                )
-                for d in raw["delegations"]
-            ],
-            challenge=_b64d(raw["challenge"]),
-            challenge_at=raw["challenge_at"],
-            challenge_sig=HybridSignature(
-                ed25519=_b64d(raw["challenge_sig"]["ed25519"]),
-                ml_dsa_65=_b64d(raw["challenge_sig"]["ml_dsa_65"]),
-            ),
-        )
+        # The input embeds a full canonical ProofBundle; decode it with the
+        # public wire codec, hash it, and compare.
+        bundle = decode_proof_bundle(json.dumps(inp["bundle"]))
         got = bundle_hash(bundle).hex()
         assert got == v["expected_hash_hex"], (
             f"cross-SDK drift for {v['name']}"

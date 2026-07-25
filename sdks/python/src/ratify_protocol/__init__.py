@@ -169,6 +169,14 @@ from .types import (
     WitnessEntry,
 )
 from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
+from .wire import (
+    decode_delegation_cert,
+    decode_proof_bundle,
+    decode_session_token,
+    encode_delegation_cert,
+    encode_proof_bundle,
+    encode_session_token,
+)
 
 __version__ = "1.0.0a14"
 
@@ -220,6 +228,10 @@ __all__ = [
     # canonical / utils
     "canonical_json", "base64_standard_encode", "base64_standard_decode",
     "hex_encode", "hex_decode",
+    # wire codec
+    "encode_delegation_cert", "decode_delegation_cert",
+    "encode_proof_bundle", "decode_proof_bundle",
+    "encode_session_token", "decode_session_token",
     # all scope constants
     "SCOPE_MEETING_ATTEND", "SCOPE_MEETING_SPEAK", "SCOPE_MEETING_VIDEO",
     "SCOPE_MEETING_CHAT", "SCOPE_MEETING_SHARE_SCREEN", "SCOPE_MEETING_RECORD",

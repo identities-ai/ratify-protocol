@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from ratify_protocol import (
-    Constraint,
     DelegationCert,
     HybridPublicKey,
     HybridSignature,
@@ -29,6 +28,9 @@ from ratify_protocol import (
     WitnessEntry,
     base64_standard_decode,
     challenge_sign_bytes,
+    decode_delegation_cert,
+    decode_proof_bundle,
+    decode_session_token,
     delegation_sign_bytes,
     expand_scopes,
     hex_encode,
@@ -64,58 +66,15 @@ def _decode_hybrid_sig(raw: dict) -> HybridSignature:
     )
 
 
-def _decode_constraint(raw: dict) -> Constraint:
-    # Build a Constraint from a sparse tagged-JSON object. Unknown keys are
-    # ignored by the dataclass constructor via kwargs filtering below.
-    known = {
-        "type", "lat", "lon", "radius_m", "points", "min_lat", "min_lon",
-        "max_lat", "max_lon", "min_alt_m", "max_alt_m", "start", "end",
-        "tz", "max_mps", "max_amount", "currency", "count", "window_s",
-    }
-    kwargs = {k: v for k, v in raw.items() if k in known}
-    return Constraint(**kwargs)
-
-
+# Certs and bundles decode through the public wire codec — the strict
+# fail-closed decoder is itself under conformance test here: every fixture
+# (including every reject_* case) must decode so it can reach the verifier.
 def _decode_cert(raw: dict) -> DelegationCert:
-    # Constraints round-trip from the fixture JSON; missing / null decodes
-    # to an empty list so non-constraint fixtures keep working.
-    constraints_raw = raw.get("constraints")
-    constraints = [_decode_constraint(c) for c in constraints_raw] if constraints_raw else []
-    return DelegationCert(
-        cert_id=raw["cert_id"],
-        version=raw["version"],
-        issuer_id=raw["issuer_id"],
-        issuer_pub_key=_decode_hybrid_pub(raw["issuer_pub_key"]),
-        subject_id=raw["subject_id"],
-        subject_pub_key=_decode_hybrid_pub(raw["subject_pub_key"]),
-        scope=raw["scope"],
-        constraints=constraints,
-        issued_at=raw["issued_at"],
-        expires_at=raw["expires_at"],
-        signature=_decode_hybrid_sig(raw["signature"]),
-    )
+    return decode_delegation_cert(json.dumps(raw))
 
 
 def _decode_bundle(raw: dict) -> ProofBundle:
-    return ProofBundle(
-        agent_id=raw["agent_id"],
-        agent_pub_key=_decode_hybrid_pub(raw["agent_pub_key"]),
-        delegations=[_decode_cert(c) for c in raw["delegations"]],
-        challenge=base64_standard_decode(raw["challenge"]),
-        challenge_at=raw["challenge_at"],
-        challenge_sig=_decode_hybrid_sig(raw["challenge_sig"]),
-        session_context=(
-            base64_standard_decode(raw["session_context"])
-            if raw.get("session_context")
-            else b""
-        ),
-        stream_id=(
-            base64_standard_decode(raw["stream_id"])
-            if raw.get("stream_id")
-            else b""
-        ),
-        stream_seq=raw.get("stream_seq") or 0,
-    )
+    return decode_proof_bundle(json.dumps(raw))
 
 
 def _decode_revocation(raw: dict) -> RevocationList:
@@ -128,18 +87,7 @@ def _decode_revocation(raw: dict) -> RevocationList:
 
 
 def _decode_session_token(raw: dict) -> SessionToken:
-    return SessionToken(
-        version=raw["version"],
-        session_id=raw["session_id"],
-        agent_id=raw["agent_id"],
-        agent_pub_key=_decode_hybrid_pub(raw["agent_pub_key"]),
-        human_id=raw["human_id"],
-        granted_scope=list(raw["granted_scope"]),
-        issued_at=raw["issued_at"],
-        valid_until=raw["valid_until"],
-        chain_hash=base64_standard_decode(raw["chain_hash"]),
-        mac=base64_standard_decode(raw["mac"]),
-    )
+    return decode_session_token(json.dumps(raw))
 
 
 def _decode_key_rotation(raw: dict) -> KeyRotationStatement:

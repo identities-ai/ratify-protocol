@@ -21,8 +21,9 @@ Placeholders (valid in both preamble and bodies):
 
 The version is read from sdks/typescript/package.json — the same manifest
 scripts/release.sh bumps — so a release bump plus a regenerate keeps every
-README pin correct. scripts/check-readme-sync.sh fails the gate when a
-generated file drifts from its sources; edit the sources, never README.md.
+README pin correct. scripts/check-release-sync.sh runs this script's
+--check mode and fails the gate when a generated file drifts from its
+sources; edit the sources, never README.md.
 
 Usage: python3 scripts/gen-sdk-readmes.py [--check]
   --check  regenerate in memory and exit 1 on drift, changing nothing

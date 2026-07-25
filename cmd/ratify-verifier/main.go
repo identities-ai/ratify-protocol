@@ -28,6 +28,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -251,8 +252,16 @@ func main() {
 			httpError(w, http.StatusBadRequest, fmt.Errorf("decode bundle base64: %w", err))
 			return
 		}
+		// Strict wire acceptance: reject duplicated keys, out-of-domain
+		// integers, invalid UTF-8, and unknown fields before verification.
+		if err := ratify.CheckWireJSON(bundleJSON); err != nil {
+			httpError(w, http.StatusBadRequest, fmt.Errorf("parse bundle: %w", err))
+			return
+		}
 		var bundle ratify.ProofBundle
-		if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
+		strictDec := json.NewDecoder(bytes.NewReader(bundleJSON))
+		strictDec.DisallowUnknownFields()
+		if err := strictDec.Decode(&bundle); err != nil {
 			httpError(w, http.StatusBadRequest, fmt.Errorf("parse bundle: %w", err))
 			return
 		}

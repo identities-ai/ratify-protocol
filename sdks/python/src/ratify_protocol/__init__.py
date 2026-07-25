@@ -200,7 +200,7 @@ from .wire import (
     encode_session_token,
 )
 
-__version__ = "1.0.0a14"
+__version__ = "1.0.0a15"
 
 __all__ = [
     # types

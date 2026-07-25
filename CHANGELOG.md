@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.15 (unreleased)
+## v1.0.0-alpha.15 (2026-07-25)
 
 The "integration readiness" release: everything an integrator needs to adopt the SDKs over a real transport without hand-written glue, driven by the Agent Relay integration spike. No fixture changes — all 63 canonical vectors are byte-identical to alpha.13.
 

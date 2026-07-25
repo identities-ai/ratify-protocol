@@ -368,7 +368,7 @@ jobs:
             tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}/"
             echo "ARCHIVE_FILE=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: c-lib-${{ matrix.archive }}
           path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
@@ -388,7 +388,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download C library artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: c-lib-*
           path: c-artifacts/
@@ -413,7 +413,7 @@ jobs:
             echo "PY_VERSION=$py_version"
           } >> "$GITHUB_ENV"
       - name: create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}   # required for workflow_dispatch (no tag in ref)
           generate_release_notes: true

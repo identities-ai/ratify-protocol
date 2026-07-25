@@ -10,8 +10,9 @@ use ratify_protocol::{
     issue_session_token, sign_challenge, sign_challenge_with_session_context,
     sign_challenge_with_stream, verify_bundle, verify_streamed_turn_with_options, ChallengeStore,
     DelegationCert, HybridPrivateKey, HybridSignature, IdentityStatus, MemoryChallengeStore,
-    ProofBundle, SessionToken, StreamContext, StreamedTurn, VerifyOptions, PROTOCOL_VERSION,
-    SCOPE_FILES_READ, SCOPE_FILES_WRITE, SCOPE_MEETING_ATTEND, UNKNOWN_CHALLENGE,
+    ProofBundle, SessionToken, StreamContext, StreamedTurn, StreamedVerifyOptions, VerifyOptions,
+    PROTOCOL_VERSION, SCOPE_FILES_READ, SCOPE_FILES_WRITE, SCOPE_MEETING_ATTEND,
+    UNKNOWN_CHALLENGE,
 };
 
 fn now_unix() -> i64 {
@@ -116,10 +117,10 @@ fn turn_for(
     }
 }
 
-fn opts_now(f: &Fixture) -> VerifyOptions<'static> {
-    VerifyOptions {
+fn opts_now(f: &Fixture) -> StreamedVerifyOptions<'static> {
+    StreamedVerifyOptions {
         now: Some(f.now),
-        ..VerifyOptions::default()
+        ..StreamedVerifyOptions::default()
     }
 }
 
@@ -326,5 +327,40 @@ fn token_checks_still_apply() {
         expired.error_reason.starts_with("session_token_invalid"),
         "{}",
         expired.error_reason
+    );
+}
+
+#[test]
+fn stream_state_is_caller_owned_snapshot() {
+    // The verifier reads the stream snapshot and never advances it: two
+    // distinct valid challenges carrying the same stream_seq BOTH verify
+    // against the same snapshot (documented caller-owned semantics). The
+    // caller must atomically advance its tracked sequence on success,
+    // after which the same-seq turn is rejected as a replay.
+    let f = fixture(vec![SCOPE_MEETING_ATTEND.to_string()]);
+    let mut stream_id = vec![0u8; 32];
+    stream_id[0] = 5;
+    let turn1 = turn_for(&f, generate_challenge(), vec![], stream_id.clone(), 4);
+    let turn2 = turn_for(&f, generate_challenge(), vec![], stream_id.clone(), 4);
+
+    let mut opts = opts_now(&f);
+    opts.stream = Some(StreamContext {
+        stream_id: stream_id.clone(),
+        last_seen_seq: 3,
+    });
+    let res1 = verify_streamed_turn_with_options(&f.token, &f.secret, &turn1, &opts);
+    let res2 = verify_streamed_turn_with_options(&f.token, &f.secret, &turn2, &opts);
+    assert!(res1.valid, "{}", res1.error_reason);
+    assert!(res2.valid, "{}", res2.error_reason);
+
+    opts.stream = Some(StreamContext {
+        stream_id,
+        last_seen_seq: 4,
+    });
+    let replay = verify_streamed_turn_with_options(&f.token, &f.secret, &turn2, &opts);
+    assert!(
+        replay.error_reason.starts_with("stream_seq_replay"),
+        "{}",
+        replay.error_reason
     );
 }

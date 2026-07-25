@@ -177,6 +177,7 @@ from .types import (
 )
 from .verify import (
     StreamedTurn,
+    StreamedVerifyOptions,
     verify_bundle,
     verify_streamed_turn,
     verify_streamed_turn_with_options,
@@ -238,7 +239,7 @@ __all__ = [
     "expand_scopes", "intersect_scopes", "has_scope", "is_sensitive", "validate_scopes",
     "vocabulary", "scope_wildcards",
     # verify
-    "StreamedTurn", "verify_bundle", "verify_streamed_turn",
+    "StreamedTurn", "StreamedVerifyOptions", "verify_bundle", "verify_streamed_turn",
     "verify_streamed_turn_with_options", "verify_transaction_receipt",
     # canonical / utils
     "canonical_json", "base64_standard_encode", "base64_standard_decode",

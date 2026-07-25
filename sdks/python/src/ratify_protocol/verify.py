@@ -588,7 +588,7 @@ class StreamedTurn:
     """The presentation-side inputs of one streamed turn: the fresh
     challenge the agent signed and the bindings it signed it under (SPEC
     §6.4.2). Presented values, distinct from the verifier-side
-    expectations carried in ``VerifyOptions``."""
+    expectations carried in ``StreamedVerifyOptions``."""
 
     challenge: bytes
     challenge_at: int
@@ -598,35 +598,74 @@ class StreamedTurn:
     stream_seq: int = 0
 
 
+@dataclass
+class StreamedVerifyOptions:
+    """The verifier-side controls that apply to a streamed-turn
+    presentation (SPEC §5.13).
+
+    Deliberately NOT the full ``VerifyOptions``: a streamed turn
+    re-verifies liveness and bindings, not the chain, so revocation,
+    policy, constraint, audit, and anchor options have no field here and
+    can never be passed and silently ignored. Callers who need fresh
+    revocation or policy semantics — including high-value operations the
+    spec directs to ``force_revocation_check`` — MUST run full
+    ``verify_bundle`` instead.
+
+    ``stream`` is a caller-owned SNAPSHOT: the verifier only reads it and
+    never advances it. Two concurrent turns carrying distinct valid
+    challenges and the same ``stream_seq`` will BOTH verify against the
+    same snapshot. Concurrency-safe sequence enforcement is the caller's
+    responsibility: atomically compare-and-advance your tracked last-seen
+    sequence to ``turn.stream_seq`` when (and only when) verification
+    succeeds, and build the snapshot from that tracked state.
+    """
+
+    # Must be present in token.granted_scope for the turn to be valid;
+    # empty skips the check. The token stores the verified chain's
+    # effective scope lex-sorted for exactly this check.
+    required_scope: str = ""
+    # Makes the per-turn challenge single-use: consulted (without
+    # consuming) after the session token's HMAC authenticates the
+    # presentation and before the per-turn hybrid challenge signature is
+    # verified; atomically consumed after that signature verifies —
+    # before the scope check. Store failures normalize to the canonical
+    # unknown_challenge result. Typed loosely to avoid a module cycle;
+    # see challenge_store.ChallengeStore.
+    challenge_store: Optional[Any] = None
+    # Verifier-side session binding; when set, the turn's presented
+    # session_context must match byte-for-byte.
+    session_context: bytes = b""
+    # Verifier-side stream state snapshot (see class docstring).
+    stream: Optional[StreamContext] = None
+    # Clock override (unix seconds); None uses time.time().
+    now: Optional[int] = None
+
+
 def verify_streamed_turn_with_options(
     token: SessionToken,
     session_secret: bytes,
     turn: StreamedTurn,
-    opts: Optional[VerifyOptions] = None,
+    opts: Optional[StreamedVerifyOptions] = None,
 ) -> VerifyResult:
     """Options-object form of the streamed fast path (SPEC §5.13).
 
     Verifies one turn against a previously issued SessionToken and
-    enforces the same verifier-side controls as full ``verify_bundle``
-    where they apply to a token presentation.
-
-    Consulted ``VerifyOptions`` fields: ``required_scope`` (checked
-    against ``token.granted_scope`` — stored lex-sorted for exactly
-    this), ``challenge_store`` (single-use per SPEC §10: validated before
-    signature work, atomically consumed after the challenge signature
-    verifies, before the scope check; all store failures normalize to the
-    canonical unknown_challenge result), ``session_context``, ``stream``,
-    and ``now``. Revocation, policy, constraint, audit, and anchor
-    options are ignored — a streamed turn re-verifies liveness and
-    bindings, not the chain.
+    enforces the verifier-side controls in ``StreamedVerifyOptions`` —
+    required scope against the token's cached effective scope, single-use
+    challenges, and session/stream binding checks.
     """
     import time
 
     if opts is None:
-        opts = VerifyOptions()
+        opts = StreamedVerifyOptions()
     now = opts.now if opts.now is not None else int(time.time())
 
     # --- Token authenticity and validity window ---
+    # Deliberately FIRST, before the challenge store is consulted: the
+    # HMAC is a cheap authenticated pre-check that stops unauthenticated
+    # callers from probing the challenge store. This is the documented
+    # SPEC §5.13 order — it differs from §10, where no equivalent cheap
+    # authenticator exists ahead of the store lookup.
     if token is None:
         return _invalid("nil_session_token", "session_token must not be nil")
     mac_err = verify_session_token_e(token, session_secret, now)
@@ -665,7 +704,10 @@ def verify_streamed_turn_with_options(
             "turn has session_context but verifier did not provide one",
         )
 
-    # --- Single-use challenge: locate WITHOUT consuming (SPEC §10 step 2b) ---
+    # --- Single-use challenge: locate WITHOUT consuming ---
+    # Before the per-turn hybrid challenge signature is verified, so a
+    # forged turn cannot burn a pending challenge and unknown challenges
+    # are rejected before the expensive signature check.
     if opts.challenge_store is not None:
         if not _challenge_store_allows(
             opts.challenge_store.validate, turn.challenge, opts.session_context, now
@@ -740,7 +782,7 @@ def verify_streamed_turn_with_options(
             f"challenge signature verification failed: {sig_err}",
         )
 
-    # --- Single-use challenge: atomic consume (SPEC §10 step 9b) ---
+    # --- Single-use challenge: atomic consume ---
     # The signature has verified. Consume before the scope check so a
     # denied caller cannot probe authorization with one liveness proof.
     if opts.challenge_store is not None:
@@ -781,10 +823,12 @@ def verify_streamed_turn(
     freshness, and hybrid challenge signature against token.agent_pub_key.
     The chain is NOT re-verified — that's the point of the token.
 
-    Presentation checks only — this form cannot enforce a required scope,
-    single-use challenges, or verifier-side session/stream tracking.
-    Prefer :func:`verify_streamed_turn_with_options`, which adds those
-    controls through the same ``VerifyOptions`` used by ``verify_bundle``.
+    .. deprecated::
+        Presentation checks only — this form cannot enforce a required
+        scope, single-use challenges, or verifier-side session/stream
+        checks, so a token holder passes it for any protected action. Use
+        :func:`verify_streamed_turn_with_options`. Retained for
+        compatibility through the v1.0.0-* releases.
     """
     import time
 

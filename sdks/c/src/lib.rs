@@ -292,6 +292,43 @@ pub struct RatifyVerifyOptions {
     pub stream: *const RatifyStreamContext,
 }
 
+/// Verifier-side options for `ratify_verify_streamed_turn_opts` (SPEC §5.13).
+///
+/// Deliberately NOT `RatifyVerifyOptions`: a streamed turn re-verifies
+/// liveness and bindings, not the chain, so revocation callbacks and
+/// constraint context have no field here and can never be passed and
+/// silently ignored. Callers who need fresh revocation or policy semantics
+/// MUST run full bundle verification instead of the token fast path.
+///
+/// Zero-initialise (`{0}`) unused fields.
+#[repr(C)]
+pub struct RatifyStreamedVerifyOptions {
+    /// Scope that must be present in the token's granted scope. NULL or
+    /// empty string = no scope check.
+    pub required_scope: *const c_char,
+
+    /// Fixed Unix timestamp (seconds) for token-window and freshness
+    /// checks. 0 = use the system clock.
+    pub now_unix: i64,
+
+    /// Verifier-side session binding the turn must match. NULL = no
+    /// session binding. When set, `session_context_len` MUST be exactly 32.
+    pub session_context: *const c_uchar,
+    /// Must be 0 (no session binding) or 32.
+    pub session_context_len: usize,
+
+    /// Verifier-side stream state. NULL = no stream validation.
+    ///
+    /// This is a caller-owned SNAPSHOT: the verifier only reads it and
+    /// never advances it. Two concurrent turns carrying distinct valid
+    /// challenges and the same stream_seq will BOTH verify against the
+    /// same snapshot. Concurrency-safe sequence enforcement is the
+    /// caller's responsibility: atomically compare-and-advance your
+    /// tracked last-seen sequence when (and only when) verification
+    /// succeeds, and build the snapshot from that tracked state.
+    pub stream: *const RatifyStreamContext,
+}
+
 // ============================================================================
 // Opaque handle types
 // ============================================================================

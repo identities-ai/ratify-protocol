@@ -174,14 +174,11 @@ unsafe fn streamed_opts_call(
     scope: *const c_char,
     store: *const ratify_c::RatifyChallengeStore,
 ) -> (bool, String, String) {
-    let opts = RatifyVerifyOptions {
+    let opts = ratify_c::RatifyStreamedVerifyOptions {
         required_scope: scope,
         now_unix: NOW,
         session_context: std::ptr::null(),
         session_context_len: 0,
-        revocation_fn: None,
-        revocation_userdata: std::ptr::null_mut(),
-        context: std::ptr::null(),
         stream: std::ptr::null(),
     };
     let sig_c = std::ffi::CString::new(sig_json).unwrap();
@@ -290,14 +287,11 @@ fn streamed_turn_opts_session_expectation_unmet() {
 
         // Verifier expects a session-bound turn; the presented turn is unbound.
         let ctx = [7u8; 32];
-        let opts = RatifyVerifyOptions {
+        let opts = ratify_c::RatifyStreamedVerifyOptions {
             required_scope: std::ptr::null(),
             now_unix: NOW,
             session_context: ctx.as_ptr(),
             session_context_len: 32,
-            revocation_fn: None,
-            revocation_userdata: std::ptr::null_mut(),
-            context: std::ptr::null(),
             stream: std::ptr::null(),
         };
         let sig_c = std::ffi::CString::new(sig_json.as_str()).unwrap();

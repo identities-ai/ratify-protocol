@@ -21,6 +21,7 @@ from ratify_protocol import (
     SessionToken,
     StreamContext,
     StreamedTurn,
+    StreamedVerifyOptions,
     VerifyOptions,
     generate_agent,
     generate_challenge,
@@ -96,12 +97,12 @@ def test_required_scope_allowed_and_denied():
     turn = _turn(f, generate_challenge())
 
     ok = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(required_scope=SCOPE_MEETING_ATTEND, now=f.now)
     )
     assert ok.valid, ok.error_reason
 
     denied = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(required_scope=SCOPE_FILES_WRITE, now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(required_scope=SCOPE_FILES_WRITE, now=f.now)
     )
     assert not denied.valid
     assert denied.identity_status == "scope_denied"
@@ -112,7 +113,7 @@ def test_single_use_replay_is_rejected():
     store = MemoryChallengeStore(max_size=16)
     challenge, _ = store.issue(b"", 300)
     turn = _turn(f, challenge)
-    opts = VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store, now=f.now)
+    opts = StreamedVerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store, now=f.now)
 
     first = verify_streamed_turn_with_options(f.token, f.secret, turn, opts)
     assert first.valid, first.error_reason
@@ -127,7 +128,7 @@ def test_forged_signature_does_not_consume():
     store = MemoryChallengeStore(max_size=16)
     challenge, _ = store.issue(b"", 300)
     turn = _turn(f, challenge)
-    opts = VerifyOptions(challenge_store=store, now=f.now)
+    opts = StreamedVerifyOptions(challenge_store=store, now=f.now)
 
     forged_ed = bytearray(turn.challenge_sig.ed25519)
     forged_ed[0] ^= 0xFF
@@ -154,14 +155,14 @@ def test_scope_denial_still_consumes():
 
     denied = verify_streamed_turn_with_options(
         f.token, f.secret, turn,
-        VerifyOptions(required_scope=SCOPE_FILES_WRITE, challenge_store=store, now=f.now),
+        StreamedVerifyOptions(required_scope=SCOPE_FILES_WRITE, challenge_store=store, now=f.now),
     )
     assert denied.identity_status == "scope_denied"
 
     # The denial happened AFTER consumption: the challenge is spent.
     retry = verify_streamed_turn_with_options(
         f.token, f.secret, turn,
-        VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store, now=f.now),
+        StreamedVerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store, now=f.now),
     )
     assert retry.error_reason == UNKNOWN_REASON
 
@@ -171,7 +172,7 @@ def test_unknown_challenge_rejected_before_crypto():
     store = MemoryChallengeStore(max_size=16)
     turn = _turn(f, generate_challenge())
     res = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(challenge_store=store, now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(challenge_store=store, now=f.now)
     )
     assert res.error_reason == UNKNOWN_REASON
 
@@ -182,24 +183,24 @@ def test_session_binding_checks():
     turn = _turn(f, generate_challenge(), session_context=ctx)
 
     ok = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(session_context=ctx, now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(session_context=ctx, now=f.now)
     )
     assert ok.valid, ok.error_reason
 
     other = b"\x08" + b"\x00" * 31
     mismatch = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(session_context=other, now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(session_context=other, now=f.now)
     )
     assert mismatch.error_reason.startswith("session_context_mismatch")
 
     unverifiable = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(now=f.now)
     )
     assert unverifiable.error_reason.startswith("session_context_unverifiable")
 
     unbound = _turn(f, generate_challenge())
     missing = verify_streamed_turn_with_options(
-        f.token, f.secret, unbound, VerifyOptions(session_context=ctx, now=f.now)
+        f.token, f.secret, unbound, StreamedVerifyOptions(session_context=ctx, now=f.now)
     )
     assert missing.error_reason.startswith("missing_session_context")
 
@@ -211,24 +212,24 @@ def test_stream_tracking_replay_and_skip():
 
     ok = verify_streamed_turn_with_options(
         f.token, f.secret, turn,
-        VerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=3), now=f.now),
+        StreamedVerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=3), now=f.now),
     )
     assert ok.valid, ok.error_reason
 
     replay = verify_streamed_turn_with_options(
         f.token, f.secret, turn,
-        VerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=4), now=f.now),
+        StreamedVerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=4), now=f.now),
     )
     assert replay.error_reason.startswith("stream_seq_replay")
 
     skip = verify_streamed_turn_with_options(
         f.token, f.secret, turn,
-        VerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=1), now=f.now),
+        StreamedVerifyOptions(stream=StreamContext(stream_id=stream_id, last_seen_seq=1), now=f.now),
     )
     assert skip.error_reason.startswith("stream_seq_skip")
 
     unverifiable = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(now=f.now)
+        f.token, f.secret, turn, StreamedVerifyOptions(now=f.now)
     )
     assert unverifiable.error_reason.startswith("stream_context_unverifiable")
 
@@ -238,11 +239,39 @@ def test_token_checks_still_apply():
     turn = _turn(f, generate_challenge())
 
     bad_secret = verify_streamed_turn_with_options(
-        f.token, b"\x99" * 32, turn, VerifyOptions(now=f.now)
+        f.token, b"\x99" * 32, turn, StreamedVerifyOptions(now=f.now)
     )
     assert bad_secret.error_reason.startswith("session_token_invalid")
 
     expired = verify_streamed_turn_with_options(
-        f.token, f.secret, turn, VerifyOptions(now=f.now + 31 * 60)
+        f.token, f.secret, turn, StreamedVerifyOptions(now=f.now + 31 * 60)
     )
     assert expired.error_reason.startswith("session_token_invalid")
+
+
+def test_stream_state_is_caller_owned_snapshot():
+    # The verifier reads the stream snapshot and never advances it: two
+    # distinct valid challenges carrying the same stream_seq BOTH verify
+    # against the same snapshot (documented caller-owned semantics). The
+    # caller must atomically advance its tracked sequence on success,
+    # after which the same-seq turn is rejected as a replay.
+    f = _fixture([SCOPE_MEETING_ATTEND])
+    stream_id = b"\x05" + b"\x00" * 31
+    turn1 = _turn(f, generate_challenge(), stream_id=stream_id, stream_seq=4)
+    turn2 = _turn(f, generate_challenge(), stream_id=stream_id, stream_seq=4)
+    snapshot = StreamContext(stream_id=stream_id, last_seen_seq=3)
+
+    res1 = verify_streamed_turn_with_options(
+        f.token, f.secret, turn1, StreamedVerifyOptions(stream=snapshot, now=f.now)
+    )
+    res2 = verify_streamed_turn_with_options(
+        f.token, f.secret, turn2, StreamedVerifyOptions(stream=snapshot, now=f.now)
+    )
+    assert res1.valid, res1.error_reason
+    assert res2.valid, res2.error_reason
+
+    advanced = StreamContext(stream_id=stream_id, last_seen_seq=4)
+    replay = verify_streamed_turn_with_options(
+        f.token, f.secret, turn2, StreamedVerifyOptions(stream=advanced, now=f.now)
+    )
+    assert replay.error_reason.startswith("stream_seq_replay")

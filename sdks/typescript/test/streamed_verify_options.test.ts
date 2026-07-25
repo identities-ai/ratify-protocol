@@ -237,6 +237,38 @@ test("streamed options: stream tracking replay and skip", async () => {
   assert.match(unverifiable.error_reason ?? "", /^stream_context_unverifiable/);
 });
 
+test("streamed options: stream state is a caller-owned snapshot", async () => {
+  // The verifier reads the stream snapshot and never advances it: two
+  // distinct valid challenges carrying the same stream_seq BOTH verify
+  // against the same snapshot (documented caller-owned semantics). The
+  // caller must atomically advance its tracked sequence on success, after
+  // which the same-seq turn is rejected as a replay.
+  const f = await fixture([SCOPE_MEETING_ATTEND]);
+  const streamID = new Uint8Array(32);
+  streamID[0] = 5;
+  const turn1 = await turnFor(f, generateChallenge(), undefined, streamID, 4);
+  const turn2 = await turnFor(f, generateChallenge(), undefined, streamID, 4);
+  const snapshot = { stream_id: streamID, last_seen_seq: 3 };
+
+  const res1 = await verifyStreamedTurnWithOptions(f.token, f.secret, turn1, {
+    stream: snapshot,
+    now: f.now,
+  });
+  const res2 = await verifyStreamedTurnWithOptions(f.token, f.secret, turn2, {
+    stream: snapshot,
+    now: f.now,
+  });
+  assert.equal(res1.valid, true, res1.error_reason);
+  assert.equal(res2.valid, true, res2.error_reason);
+
+  const advanced = { stream_id: streamID, last_seen_seq: 4 };
+  const replay = await verifyStreamedTurnWithOptions(f.token, f.secret, turn2, {
+    stream: advanced,
+    now: f.now,
+  });
+  assert.match(replay.error_reason ?? "", /^stream_seq_replay/);
+});
+
 test("streamed options: token checks still apply", async () => {
   const f = await fixture([SCOPE_MEETING_ATTEND]);
   const turn = await turnFor(f, generateChallenge());

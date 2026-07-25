@@ -9,6 +9,7 @@ export {
   verifyStreamedTurnWithOptions,
   verifyTransactionReceipt,
   type StreamedTurn,
+  type StreamedVerifyOptions,
 } from "./verify.js";
 export {
   bundleHash,

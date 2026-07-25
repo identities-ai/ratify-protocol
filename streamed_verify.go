@@ -34,39 +34,70 @@ type StreamedTurn struct {
 	StreamSeq int64
 }
 
+// StreamedVerifyOptions carries the verifier-side controls that apply to
+// a streamed-turn presentation (§5.13). It is deliberately NOT the full
+// VerifyOptions: a streamed turn re-verifies liveness and bindings, not
+// the chain, so revocation, policy, constraint, audit, and anchor options
+// have no field here and can never be passed and silently ignored.
+// Callers who need fresh revocation or policy semantics — including
+// high-value operations the spec directs to ForceRevocationCheck — MUST
+// run full Verify instead of the token fast path.
+type StreamedVerifyOptions struct {
+	// RequiredScope must be present in token.GrantedScope for the turn to
+	// be valid; empty string skips the check. The token stores the
+	// verified chain's effective scope lex-sorted for exactly this check.
+	RequiredScope string
+
+	// ChallengeStore, when non-nil, makes the per-turn challenge
+	// single-use: the store is consulted (without consuming) after the
+	// session token's HMAC authenticates the presentation and before the
+	// per-turn hybrid challenge signature is verified, and the challenge
+	// is atomically consumed after that signature verifies — before the
+	// scope check. All store failures normalize to the canonical
+	// unknown_challenge result (ErrUnknownChallenge text).
+	ChallengeStore ChallengeStore
+
+	// SessionContext is the verifier-side session binding; when set, the
+	// turn's presented session_context must match byte-for-byte (same
+	// statuses as the full verifier).
+	SessionContext []byte
+
+	// Stream is the verifier-side stream state used to check the turn's
+	// presented stream binding (stream_id match; stream_seq must be
+	// exactly LastSeenSeq+1, else stream_seq_replay / stream_seq_skip).
+	//
+	// Stream is a caller-owned SNAPSHOT: the verifier only reads it and
+	// never advances it. Two concurrent turns carrying distinct valid
+	// challenges and the same stream_seq will BOTH verify against the
+	// same snapshot. Concurrency-safe sequence enforcement is the
+	// caller's responsibility: atomically compare-and-advance your
+	// tracked last-seen sequence to turn.StreamSeq when (and only when)
+	// this function returns Valid=true, and construct the snapshot from
+	// that tracked state.
+	Stream *StreamContext
+
+	// Now overrides the verification clock; zero value uses time.Now().
+	Now time.Time
+}
+
 // VerifyStreamedTurnWithOptions is the options-object form of the streamed
 // fast path (§5.13): it verifies one turn against a previously issued
-// SessionToken and enforces the same verifier-side controls as the full
-// Verify where they apply to a token presentation.
-//
-// Consulted VerifyOptions fields:
-//
-//   - RequiredScope — must be present in token.GrantedScope, else
-//     scope_denied. The token stores the effective scope sorted for
-//     exactly this check.
-//   - ChallengeStore — makes the per-turn challenge single-use with the
-//     §10 consumption order: validated (without consuming) before any
-//     signature work, atomically consumed after the challenge signature
-//     verifies, before authorization. All store failures normalize to the
-//     canonical unknown_challenge result.
-//   - SessionContext — verifier-side session binding; turn.SessionContext
-//     must match byte-for-byte (same statuses as the full verifier).
-//   - Stream — verifier-side stream tracking; turn.StreamID must match
-//     and turn.StreamSeq must be exactly LastSeenSeq+1 (stream_seq_replay
-//     / stream_seq_skip on violation).
-//   - Now — clock override; zero value uses time.Now().
-//
-// All other VerifyOptions fields (revocation, policy, constraints, audit,
-// anchor resolution) are ignored: a streamed turn re-verifies liveness and
-// bindings, not the chain — that's the point of the token. Callers who
-// need fresh revocation or policy semantics run full Verify instead.
-func VerifyStreamedTurnWithOptions(token *SessionToken, sessionSecret []byte, turn StreamedTurn, opts VerifyOptions) VerifyResult {
+// SessionToken and enforces the verifier-side controls in
+// StreamedVerifyOptions — required scope against the token's cached
+// effective scope, single-use challenges, and session/stream binding
+// checks.
+func VerifyStreamedTurnWithOptions(token *SessionToken, sessionSecret []byte, turn StreamedTurn, opts StreamedVerifyOptions) VerifyResult {
 	now := opts.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
 
 	// --- Token authenticity and validity window ---
+	// Deliberately FIRST, before the challenge store is consulted: the
+	// HMAC is a cheap authenticated pre-check that stops unauthenticated
+	// callers from probing the challenge store. This is the documented
+	// §5.13 order — it differs from §10, where no equivalent cheap
+	// authenticator exists ahead of the store lookup.
 	if token == nil {
 		return invalid("nil_session_token", "session_token must not be nil")
 	}
@@ -97,7 +128,10 @@ func VerifyStreamedTurnWithOptions(token *SessionToken, sessionSecret []byte, tu
 		return invalid("session_context_unverifiable", "turn has session_context but verifier did not provide one")
 	}
 
-	// --- Single-use challenge: locate WITHOUT consuming (§10 step 2b) ---
+	// --- Single-use challenge: locate WITHOUT consuming ---
+	// Before the per-turn hybrid challenge signature is verified, so a
+	// forged turn cannot burn a pending challenge and unknown challenges
+	// are rejected before the expensive signature check.
 	if opts.ChallengeStore != nil {
 		if err := opts.ChallengeStore.Validate(turn.Challenge, opts.SessionContext, now); err != nil {
 			return invalid("unknown_challenge", ErrUnknownChallenge.Error())
@@ -145,7 +179,7 @@ func VerifyStreamedTurnWithOptions(token *SessionToken, sessionSecret []byte, tu
 		return invalid("bad_challenge_sig", fmt.Sprintf("challenge signature verification failed: %v", err))
 	}
 
-	// --- Single-use challenge: atomic consume (§10 step 9b) ---
+	// --- Single-use challenge: atomic consume ---
 	// The signature has verified, so this presentation is
 	// cryptographically the agent's. Consume before the scope check so a
 	// denied caller cannot probe authorization with one liveness proof.
@@ -187,10 +221,11 @@ func VerifyStreamedTurnWithOptions(token *SessionToken, sessionSecret []byte, tu
 // revocation semantics should evict the token when the issuer publishes a
 // new revocation list or when token.ValidUntil expires.
 //
-// This form verifies the presentation only — it cannot enforce a required
-// scope, single-use challenges, or verifier-side session/stream tracking.
-// Prefer VerifyStreamedTurnWithOptions, which adds those controls through
-// the same VerifyOptions used by Verify.
+// Deprecated: This form verifies the presentation only — it cannot
+// enforce a required scope, single-use challenges, or verifier-side
+// session/stream checks, so a token holder passes it for any protected
+// action. Use VerifyStreamedTurnWithOptions. Retained for compatibility
+// through the v1.0.0-* releases.
 func VerifyStreamedTurn(token *SessionToken, sessionSecret []byte, challenge []byte, challengeAt int64, challengeSig HybridSignature, sessionContext, streamID []byte, streamSeq int64, now time.Time) VerifyResult {
 	if token == nil {
 		return invalid("nil_session_token", "session_token must not be nil")

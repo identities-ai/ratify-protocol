@@ -547,29 +547,74 @@ export interface StreamedTurn {
 }
 
 /**
+ * The verifier-side controls that apply to a streamed-turn presentation
+ * (SPEC §5.13). Deliberately NOT the full VerifyOptions: a streamed turn
+ * re-verifies liveness and bindings, not the chain, so revocation, policy,
+ * constraint, audit, and anchor options have no field here and can never
+ * be passed and silently ignored. Callers who need fresh revocation or
+ * policy semantics — including high-value operations the spec directs to
+ * force_revocation_check — MUST run full verifyBundle instead.
+ */
+export interface StreamedVerifyOptions {
+  /**
+   * Must be present in token.granted_scope for the turn to be valid;
+   * absent skips the check. The token stores the verified chain's
+   * effective scope lex-sorted for exactly this check.
+   */
+  required_scope?: string;
+  /**
+   * Makes the per-turn challenge single-use: consulted (without
+   * consuming) after the session token's HMAC authenticates the
+   * presentation and before the per-turn hybrid challenge signature is
+   * verified; the challenge is atomically consumed after that signature
+   * verifies — before the scope check. All store failures normalize to
+   * the canonical unknown_challenge result.
+   */
+  challenge_store?: import("./challenge_store.js").ChallengeStore;
+  /**
+   * Verifier-side session binding; when set, the turn's presented
+   * session_context must match byte-for-byte (same statuses as the full
+   * verifier).
+   */
+  session_context?: Uint8Array;
+  /**
+   * Verifier-side stream state (stream_id match; stream_seq must be
+   * exactly last_seen_seq+1, else stream_seq_replay / stream_seq_skip).
+   *
+   * This is a caller-owned SNAPSHOT: the verifier only reads it and never
+   * advances it. Two concurrent turns carrying distinct valid challenges
+   * and the same stream_seq will BOTH verify against the same snapshot.
+   * Concurrency-safe sequence enforcement is the caller's responsibility:
+   * atomically compare-and-advance your tracked last-seen sequence to
+   * turn.stream_seq when (and only when) verification succeeds, and build
+   * the snapshot from that tracked state.
+   */
+  stream?: import("./types.js").StreamContext;
+  /** Clock override (unix seconds); absent uses Date.now(). */
+  now?: number;
+}
+
+/**
  * Options-object form of the streamed fast path (SPEC §5.13): verifies one
- * turn against a previously issued SessionToken and enforces the same
- * verifier-side controls as full verifyBundle where they apply to a token
- * presentation.
- *
- * Consulted VerifyOptions fields: required_scope (checked against
- * token.granted_scope — stored lex-sorted for exactly this), challenge_store
- * (single-use per SPEC §10: validated before signature work, atomically
- * consumed after the challenge signature verifies, before the scope check;
- * all store failures normalize to the canonical unknown_challenge result),
- * session_context, stream, and now. Revocation, policy, constraint, audit,
- * and anchor options are ignored — a streamed turn re-verifies liveness and
- * bindings, not the chain.
+ * turn against a previously issued SessionToken and enforces the
+ * verifier-side controls in StreamedVerifyOptions — required scope against
+ * the token's cached effective scope, single-use challenges, and
+ * session/stream binding checks.
  */
 export async function verifyStreamedTurnWithOptions(
   token: SessionToken,
   sessionSecret: Uint8Array,
   turn: StreamedTurn,
-  opts: VerifyOptions = {},
+  opts: StreamedVerifyOptions = {},
 ): Promise<VerifyResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
   // --- Token authenticity and validity window ---
+  // Deliberately FIRST, before the challenge store is consulted: the HMAC
+  // is a cheap authenticated pre-check that stops unauthenticated callers
+  // from probing the challenge store. This is the documented SPEC §5.13
+  // order — it differs from §10, where no equivalent cheap authenticator
+  // exists ahead of the store lookup.
   if (!token) return invalid("nil_session_token", "session_token must not be nil");
   const mac = verifySessionTokenE(token, sessionSecret, now);
   if (mac !== null) return invalid("session_token_invalid", mac);
@@ -613,7 +658,10 @@ export async function verifyStreamedTurnWithOptions(
     );
   }
 
-  // --- Single-use challenge: locate WITHOUT consuming (SPEC §10 step 2b) ---
+  // --- Single-use challenge: locate WITHOUT consuming ---
+  // Before the per-turn hybrid challenge signature is verified, so a
+  // forged turn cannot burn a pending challenge and unknown challenges
+  // are rejected before the expensive signature check.
   if (opts.challenge_store) {
     const store: ChallengeStore = opts.challenge_store;
     const ok = await challengeStoreAllows(() =>
@@ -690,7 +738,7 @@ export async function verifyStreamedTurnWithOptions(
     return invalid("bad_challenge_sig", `challenge signature verification failed: ${sigErr}`);
   }
 
-  // --- Single-use challenge: atomic consume (SPEC §10 step 9b) ---
+  // --- Single-use challenge: atomic consume ---
   // The signature has verified. Consume before the scope check so a
   // denied caller cannot probe authorization with one liveness proof.
   if (opts.challenge_store) {
@@ -726,10 +774,11 @@ export async function verifyStreamedTurnWithOptions(
  * freshness, and hybrid challenge signature against the token's agent pubkey.
  * The chain is NOT re-verified — that's the point of the token.
  *
- * Presentation checks only — this form cannot enforce a required scope,
- * single-use challenges, or verifier-side session/stream tracking. Prefer
- * verifyStreamedTurnWithOptions, which adds those controls through the same
- * VerifyOptions used by verifyBundle.
+ * @deprecated Presentation checks only — this form cannot enforce a
+ * required scope, single-use challenges, or verifier-side session/stream
+ * checks, so a token holder passes it for any protected action. Use
+ * verifyStreamedTurnWithOptions. Retained for compatibility through the
+ * v1.0.0-* releases.
  */
 export async function verifyStreamedTurn(
   token: SessionToken,

@@ -23,6 +23,9 @@ echo "==> TypeScript SDK"
 echo "==> Python SDK"
 (cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q)
 
+echo "==> Wire transport (TS <-> Python)"
+"$ROOT/scripts/wire-transport-check.sh"
+
 echo "==> Rust SDK"
 (cd sdks/rust && cargo build --all-targets && cargo test)
 

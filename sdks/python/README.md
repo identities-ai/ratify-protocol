@@ -155,6 +155,60 @@ from ratify_protocol import canonical_json, delegation_sign_bytes, challenge_sig
 
 These produce byte-identical output to the Go / TypeScript / Rust / C/C++ references. If your application needs to sign Ratify artifacts with custom code, always pass through `canonical_json` for the JSON pieces.
 
+## Wire transport
+
+Signed Ratify structures travel as canonical JSON. The wire codec turns typed structures into those bytes and back, so integrators never hand-roll the base64 and byte-length handling.
+
+### Sending a proof bundle
+
+```python
+from ratify_protocol import encode_proof_bundle
+
+body = encode_proof_bundle(bundle)  # canonical JSON string
+requests.post("https://verifier.example.com/verify", data=body,
+              headers={"content-type": "application/json"})
+```
+
+### Receiving a proof bundle
+
+```python
+from ratify_protocol import decode_proof_bundle, verify_bundle, VerifyOptions
+
+bundle = decode_proof_bundle(request_body)  # str or bytes
+result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))
+```
+
+### Session tokens
+
+`SessionToken`s cross the wire the same way (`DelegationCert`s too, via `encode_delegation_cert` / `decode_delegation_cert`):
+
+```python
+from ratify_protocol import encode_session_token, decode_session_token
+
+# Verifier issues the token after the first full verify and sends it out:
+token_json = encode_session_token(token)
+
+# The agent presents it on later turns; the verifier decodes and checks it:
+presented = decode_session_token(token_json)
+```
+
+### Strict decoding
+
+Decoders fail closed. A document is rejected — with a `ValueError` naming the offending field — if it carries malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an empty delegation chain; unpaired stream fields; duplicated JSON keys; or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure.
+
+The strictness applies to the signed structures themselves — `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine — decode `proof_bundle` strictly with `decode_proof_bundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
+
+### Vocabulary discovery
+
+Consoles and policy editors that present scope choices should derive them from the protocol rather than hardcoding strings, so UI vocabularies cannot drift:
+
+```python
+from ratify_protocol import vocabulary, scope_wildcards
+
+vocabulary()       # all 54 canonical scopes, lex-sorted tuple
+scope_wildcards()  # wildcard shorthand -> non-sensitive member scopes
+```
+
 ## Scope vocabulary
 
 ```python

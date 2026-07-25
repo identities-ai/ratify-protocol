@@ -170,6 +170,63 @@ import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identit
 
 These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 63 published test vectors through the TS code and asserts byte-for-byte equivalence.
 
+## Wire transport
+
+Signed Ratify structures travel as canonical JSON. The wire codec turns typed structures into those bytes and back, so integrators never hand-roll the base64 and byte-length handling.
+
+### Sending a proof bundle
+
+```ts
+import { encodeProofBundle } from "@identities-ai/ratify-protocol";
+
+const body = encodeProofBundle(bundle); // canonical JSON string
+await fetch("https://verifier.example.com/verify", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body,
+});
+```
+
+### Receiving a proof bundle
+
+```ts
+import { decodeProofBundle, verifyBundle, SCOPE_MEETING_ATTEND } from "@identities-ai/ratify-protocol";
+
+const bundle = decodeProofBundle(requestBody); // string or Uint8Array
+const result = await verifyBundle(bundle, { required_scope: SCOPE_MEETING_ATTEND });
+```
+
+### Session tokens
+
+`SessionToken`s cross the wire the same way (`DelegationCert`s too, via `encodeDelegationCert` / `decodeDelegationCert`):
+
+```ts
+import { encodeSessionToken, decodeSessionToken } from "@identities-ai/ratify-protocol";
+
+// Verifier issues the token after the first full verify and sends it out:
+const tokenJSON = encodeSessionToken(token);
+
+// The agent presents it on later turns; the verifier decodes and checks it:
+const presented = decodeSessionToken(tokenJSON);
+```
+
+### Strict decoding
+
+Decoders fail closed. A document is rejected — with an error naming the offending field — if it carries malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an empty delegation chain; unpaired stream fields; or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure. One platform limitation: `JSON.parse` keeps the last occurrence of a duplicated object key, so duplicates cannot be detected here; signed structures are re-canonicalized for signature verification, so a duplicate-key discrepancy either produces identical canonical bytes or fails signature verification.
+
+The strictness applies to the signed structures themselves — `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine — decode `proof_bundle` strictly with `decodeProofBundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
+
+### Vocabulary discovery
+
+Consoles and policy editors that present scope choices should derive them from the protocol rather than hardcoding strings, so UI vocabularies cannot drift:
+
+```ts
+import { vocabulary, scopeWildcards } from "@identities-ai/ratify-protocol";
+
+vocabulary();     // all 54 canonical scopes, lex-sorted
+scopeWildcards(); // wildcard shorthand -> non-sensitive member scopes
+```
+
 ## Scope vocabulary
 
 ```ts

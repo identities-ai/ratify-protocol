@@ -5,6 +5,7 @@ use alloc::{format, string::String, string::ToString, vec::Vec};
 
 use alloc::collections::BTreeMap;
 
+use crate::challenge_store::UNKNOWN_CHALLENGE;
 use crate::constraints::evaluate_constraints;
 
 use crate::crypto::{
@@ -101,10 +102,15 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
     // --- Single-use challenge: locate WITHOUT consuming (SPEC §10) ---
     // An unknown, expired, already-consumed, or wrongly-bound challenge is
     // rejected before any signature work; the record is not touched, so a
-    // forged presentation cannot burn a legitimate challenge.
+    // forged presentation cannot burn a legitimate challenge. The store's
+    // error is discarded: the public result always carries the canonical
+    // UNKNOWN_CHALLENGE text so no store failure mode is distinguishable.
     if let Some(store) = &opts.challenge_store {
-        if let Err(store_err) = store.validate(&bundle.challenge, &opts.session_context, now) {
-            return invalid("unknown_challenge", &store_err);
+        if store
+            .validate(&bundle.challenge, &opts.session_context, now)
+            .is_err()
+        {
+            return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
         }
     }
 
@@ -321,8 +327,11 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
     // same challenge fails even if this presentation is subsequently
     // denied.
     if let Some(store) = &opts.challenge_store {
-        if let Err(consume_err) = store.consume(&bundle.challenge, &opts.session_context, now) {
-            return invalid("unknown_challenge", &consume_err);
+        if store
+            .consume(&bundle.challenge, &opts.session_context, now)
+            .is_err()
+        {
+            return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
         }
         // Deferred constraint evaluation (skipped in the per-cert loop
         // above when a store is present).

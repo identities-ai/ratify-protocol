@@ -83,6 +83,41 @@ test("challenge store: capacity cap", async () => {
   await assert.rejects(() => store.issue(undefined, 60), /challenge store full/);
 });
 
+test("challenge store: consume frees capacity immediately", async () => {
+  // Capacity counts PENDING challenges: consuming one frees its slot, so
+  // legitimate traffic cannot wedge issuance until records expire.
+  const store = new MemoryChallengeStore(2);
+  const { challenge } = await store.issue(undefined, 300);
+  await store.issue(undefined, 300);
+  await assert.rejects(() => store.issue(undefined, 300), /challenge store full/);
+  assert.equal(await store.consume(challenge, undefined, NOW()), null);
+  await store.issue(undefined, 300); // must succeed immediately
+});
+
+test("challenge store: wrong session context does not free capacity", async () => {
+  const store = new MemoryChallengeStore(1);
+  const ctx = new Uint8Array(32);
+  ctx[0] = 1;
+  const { challenge } = await store.issue(ctx, 300);
+  assert.equal(await store.consume(challenge, undefined, NOW()), UNKNOWN_CHALLENGE);
+  await assert.rejects(() => store.issue(undefined, 300), /challenge store full/);
+});
+
+test("challenge store: issue validates inputs", async () => {
+  const store = new MemoryChallengeStore(16);
+  await assert.rejects(() => store.issue(new Uint8Array(5), 300), /session context/);
+  await assert.rejects(() => store.issue(undefined, 0), /ttl/);
+  await assert.rejects(() => store.issue(undefined, -60), /ttl/);
+  // 0 and 32 bytes are the two valid session-context lengths.
+  await store.issue(new Uint8Array(0), 60);
+  await store.issue(new Uint8Array(32), 60);
+});
+
+test("challenge store: constructor rejects non-positive capacity", () => {
+  assert.throws(() => new MemoryChallengeStore(0), /maxSize/);
+  assert.throws(() => new MemoryChallengeStore(-1), /maxSize/);
+});
+
 test("challenge store: repeated consume attempts yield exactly one success", async () => {
   // JS is single-threaded, so CAS is exercised as N racing consume calls:
   // exactly one may succeed.
@@ -213,4 +248,122 @@ test("verify with store: unknown challenge rejected before crypto", async () => 
   assert.equal(res.error_reason, UNKNOWN_REASON);
   // The bundle's own store still holds the unconsumed record.
   assert.equal(await store.validate(bundle.challenge, undefined, NOW()), null);
+});
+
+// ----- Store-failure normalization: no custom-store text or exception leaks -----
+
+// Adversarial custom stores whose failures carry backend detail that
+// would distinguish record states. verifyBundle must normalize every one
+// of them — returned strings AND thrown exceptions — to the canonical
+// unknown_challenge result.
+function leakyStore(
+  inner: MemoryChallengeStore,
+  behavior: {
+    validate?: () => Promise<string | null>;
+    consume?: () => Promise<string | null>;
+  },
+) {
+  return {
+    issue: (ctx: Uint8Array | undefined, ttl: number) => inner.issue(ctx, ttl),
+    validate: (c: Uint8Array, ctx: Uint8Array | undefined, now: number) =>
+      behavior.validate ? behavior.validate() : inner.validate(c, ctx, now),
+    consume: (c: Uint8Array, ctx: Uint8Array | undefined, now: number) =>
+      behavior.consume ? behavior.consume() : inner.consume(c, ctx, now),
+  };
+}
+
+test("verify with store: custom-store error strings never reach the public result", async () => {
+  const leaks = [
+    'pg: relation "challenges" does not exist',
+    "record expired 42s ago",
+    "challenge already consumed by request 7f3a",
+    "session binding mismatch: bound to sess-991",
+  ];
+  for (const leak of leaks) {
+    // Failure surfaced at the pre-signature validate step.
+    let sb = await storeBundle([SCOPE_MEETING_ATTEND]);
+    let res = await verifyBundle(sb.bundle, {
+      challenge_store: leakyStore(sb.store, { validate: async () => leak }),
+    });
+    assert.equal(res.valid, false);
+    assert.equal(res.error_reason, UNKNOWN_REASON);
+
+    // Failure surfaced at the post-signature consume step.
+    sb = await storeBundle([SCOPE_MEETING_ATTEND]);
+    res = await verifyBundle(sb.bundle, {
+      challenge_store: leakyStore(sb.store, { consume: async () => leak }),
+    });
+    assert.equal(res.valid, false);
+    assert.equal(res.error_reason, UNKNOWN_REASON);
+  }
+});
+
+test("verify with store: thrown store exceptions fail closed with the uniform result", async () => {
+  // validate throws.
+  let sb = await storeBundle([SCOPE_MEETING_ATTEND]);
+  let res = await verifyBundle(sb.bundle, {
+    challenge_store: leakyStore(sb.store, {
+      validate: async () => {
+        throw new Error("ECONNREFUSED 10.0.0.7:5432");
+      },
+    }),
+  });
+  assert.equal(res.valid, false);
+  assert.equal(res.error_reason, UNKNOWN_REASON);
+
+  // consume throws — after signatures verified.
+  sb = await storeBundle([SCOPE_MEETING_ATTEND]);
+  res = await verifyBundle(sb.bundle, {
+    challenge_store: leakyStore(sb.store, {
+      consume: async () => {
+        throw new Error("deadlock detected on challenges_pkey");
+      },
+    }),
+  });
+  assert.equal(res.valid, false);
+  assert.equal(res.error_reason, UNKNOWN_REASON);
+});
+
+// ----- Policy evaluation happens after consumption -----
+
+test("verify with store: policy-denied still consumes", async () => {
+  const { bundle, store } = await storeBundle([SCOPE_MEETING_ATTEND]);
+  const denied = await verifyBundle(bundle, {
+    required_scope: SCOPE_MEETING_ATTEND,
+    challenge_store: store,
+    policy: { evaluatePolicy: async () => false },
+  });
+  assert.equal(denied.valid, false);
+  assert.equal(denied.identity_status, "scope_denied");
+
+  // Policy denial happened AFTER consumption: retrying without the policy
+  // gate still fails — the challenge is spent.
+  const retry = await verifyBundle(bundle, {
+    required_scope: SCOPE_MEETING_ATTEND,
+    challenge_store: store,
+  });
+  assert.equal(retry.error_reason, UNKNOWN_REASON);
+});
+
+test("verify with store: policy provider error still consumes", async () => {
+  const { bundle, store } = await storeBundle([SCOPE_MEETING_ATTEND]);
+  const res = await verifyBundle(bundle, {
+    required_scope: SCOPE_MEETING_ATTEND,
+    challenge_store: store,
+    policy: {
+      evaluatePolicy: async () => {
+        throw new Error("policy backend unreachable");
+      },
+    },
+  });
+  assert.equal(res.valid, false);
+  assert.match(res.error_reason ?? "", /^policy_error/);
+
+  // The provider error surfaced after the challenge was spent: replay of
+  // the same presentation is still rejected.
+  const retry = await verifyBundle(bundle, {
+    required_scope: SCOPE_MEETING_ATTEND,
+    challenge_store: store,
+  });
+  assert.equal(retry.error_reason, UNKNOWN_REASON);
 });

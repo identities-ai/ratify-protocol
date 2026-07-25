@@ -769,6 +769,100 @@ fn challenge_store_semantics() {
     }
 }
 
+#[test]
+fn challenge_store_consume_frees_capacity() {
+    // Capacity counts PENDING challenges: consuming one frees its slot, so
+    // legitimate traffic cannot wedge issuance until records expire.
+    unsafe {
+        let store = ratify_challenge_store_new(2);
+        let mut first = [0u8; 32];
+        let mut scratch = [0u8; 32];
+        let mut err = std::ptr::null_mut();
+
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            first.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "issue 1: {}", read_str(err));
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "issue 2: {}", read_str(err));
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_ne!(s, RatifyStatus::RatifyOk, "issue at capacity must fail");
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
+
+        let s = ratify_challenge_store_consume(
+            store, first.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "consume: {}", read_str(err));
+
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(
+            s,
+            RatifyStatus::RatifyOk,
+            "issue after consume must succeed immediately: {}",
+            read_str(err)
+        );
+
+        ratify_challenge_store_free(store);
+    }
+}
+
+#[test]
+fn challenge_store_new_rejects_zero_capacity() {
+    let store = ratify_challenge_store_new(0);
+    assert!(store.is_null(), "zero-capacity store must be NULL");
+}
+
+#[test]
+fn challenge_store_issue_validates_inputs() {
+    unsafe {
+        let store = ratify_challenge_store_new(16);
+        let mut challenge = [0u8; 32];
+        let mut err = std::ptr::null_mut();
+
+        // Session context must be empty or exactly 32 bytes.
+        let short_ctx = [7u8; 5];
+        let s = ratify_challenge_store_issue(
+            store, short_ctx.as_ptr(), 5, STORE_TTL,
+            challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrBadArgument);
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
+
+        // TTL must be positive.
+        for ttl in [0i64, -60] {
+            let s = ratify_challenge_store_issue(
+                store, std::ptr::null(), 0, ttl,
+                challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            );
+            assert_eq!(s, RatifyStatus::RatifyErrBadArgument, "ttl {ttl} must fail");
+            ratify_error_free(err);
+            err = std::ptr::null_mut();
+        }
+
+        // A 32-byte session context is valid.
+        let ctx = [7u8; 32];
+        let s = ratify_challenge_store_issue(
+            store, ctx.as_ptr(), 32, STORE_TTL,
+            challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
+
+        ratify_challenge_store_free(store);
+    }
+}
+
 unsafe fn make_bundle_with_store() -> (
     *mut ratify_c::RatifyHumanRoot,
     *mut ratify_c::RatifyAgent,

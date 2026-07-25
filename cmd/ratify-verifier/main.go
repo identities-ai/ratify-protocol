@@ -116,6 +116,9 @@ func main() {
 	registryRequirePinned := flag.Bool("registry-require-pinned", false, "pin-plus-registry mode: only accept principals descending from a configured pin (requires -registry-pins)")
 	flag.Parse()
 
+	if *maxChallenges < 1 {
+		log.Fatal("-max-challenges must be >= 1")
+	}
 	store := ratify.NewMemoryChallengeStore(*maxChallenges)
 	limiter := newRateLimiter(*rateLimit)
 

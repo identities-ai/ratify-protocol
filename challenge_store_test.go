@@ -1,6 +1,7 @@
 package ratify_test
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -99,6 +100,80 @@ func TestChallengeStoreCapacity(t *testing.T) {
 	}
 	if _, _, err := store.Issue(nil, time.Minute); err != ErrChallengeStoreFull {
 		t.Fatalf("Issue at capacity = %v, want ErrChallengeStoreFull", err)
+	}
+}
+
+func TestChallengeStoreConsumeFreesCapacity(t *testing.T) {
+	// Capacity counts PENDING challenges: consuming one frees its slot
+	// immediately, so legitimate traffic cannot wedge issuance until
+	// records expire.
+	store := NewMemoryChallengeStore(2)
+	first, _, err := store.Issue(nil, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("Issue 1: %v", err)
+	}
+	if _, _, err := store.Issue(nil, 5*time.Minute); err != nil {
+		t.Fatalf("Issue 2: %v", err)
+	}
+	if _, _, err := store.Issue(nil, 5*time.Minute); err != ErrChallengeStoreFull {
+		t.Fatalf("Issue at capacity = %v, want ErrChallengeStoreFull", err)
+	}
+	if err := store.Consume(first, nil, time.Now()); err != nil {
+		t.Fatalf("Consume: %v", err)
+	}
+	if _, _, err := store.Issue(nil, 5*time.Minute); err != nil {
+		t.Fatalf("Issue after consume must succeed immediately, got %v", err)
+	}
+}
+
+func TestChallengeStoreWrongContextDoesNotFreeCapacity(t *testing.T) {
+	// The flip side of capacity recovery: a wrong-binding presentation
+	// must NOT remove the record (or free its slot).
+	store := NewMemoryChallengeStore(1)
+	ctx := make([]byte, 32)
+	ctx[0] = 1
+	challenge, _, err := store.Issue(ctx, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	if err := store.Consume(challenge, nil, time.Now()); err == nil {
+		t.Fatal("Consume with wrong session context must fail")
+	}
+	if _, _, err := store.Issue(nil, 5*time.Minute); err != ErrChallengeStoreFull {
+		t.Fatalf("Issue = %v, want ErrChallengeStoreFull (record must survive wrong-binding consume)", err)
+	}
+}
+
+func TestChallengeStoreIssueValidatesInputs(t *testing.T) {
+	store := NewMemoryChallengeStore(16)
+	if _, _, err := store.Issue(make([]byte, 5), 5*time.Minute); err == nil {
+		t.Fatal("Issue with 5-byte session context must fail")
+	}
+	if _, _, err := store.Issue(nil, 0); err == nil {
+		t.Fatal("Issue with zero ttl must fail")
+	}
+	if _, _, err := store.Issue(nil, -time.Minute); err == nil {
+		t.Fatal("Issue with negative ttl must fail")
+	}
+	// 0 and 32 bytes are the two valid session-context lengths.
+	if _, _, err := store.Issue(nil, time.Minute); err != nil {
+		t.Fatalf("Issue with empty session context: %v", err)
+	}
+	if _, _, err := store.Issue(make([]byte, 32), time.Minute); err != nil {
+		t.Fatalf("Issue with 32-byte session context: %v", err)
+	}
+}
+
+func TestNewMemoryChallengeStoreRejectsBadCapacity(t *testing.T) {
+	for _, size := range []int{0, -1} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("NewMemoryChallengeStore(%d) must panic", size)
+				}
+			}()
+			NewMemoryChallengeStore(size)
+		}()
 	}
 }
 
@@ -279,4 +354,108 @@ func TestVerifyWithStoreUnknownChallengeRejectedBeforeCrypto(t *testing.T) {
 	if err := sb.store.Validate(sb.bundle.Challenge, nil, time.Now()); err != nil {
 		t.Fatalf("record must be untouched: %v", err)
 	}
+}
+
+// ----- Store-failure normalization: no custom-store text leaks -----
+
+// leakyStore is an adversarial custom ChallengeStore whose errors carry
+// backend detail that would distinguish record states. Verify must
+// normalize every failure to the canonical unknown_challenge result.
+type leakyStore struct {
+	inner       *MemoryChallengeStore
+	validateErr error
+	consumeErr  error
+}
+
+func (s *leakyStore) Issue(sessionContext []byte, ttl time.Duration) ([]byte, int64, error) {
+	return s.inner.Issue(sessionContext, ttl)
+}
+
+func (s *leakyStore) Validate(challenge, sessionContext []byte, now time.Time) error {
+	if s.validateErr != nil {
+		return s.validateErr
+	}
+	return s.inner.Validate(challenge, sessionContext, now)
+}
+
+func (s *leakyStore) Consume(challenge, sessionContext []byte, now time.Time) error {
+	if s.consumeErr != nil {
+		return s.consumeErr
+	}
+	return s.inner.Consume(challenge, sessionContext, now)
+}
+
+func TestVerifyNormalizesCustomStoreErrors(t *testing.T) {
+	leaks := []error{
+		errors.New("pg: relation \"challenges\" does not exist"),
+		errors.New("record expired 42s ago"),
+		errors.New("challenge already consumed by request 7f3a"),
+		errors.New("session binding mismatch: bound to sess-991"),
+	}
+	for _, leak := range leaks {
+		// Failure surfaced at the pre-signature Validate step.
+		sb := newStoreBundle(t, []string{ScopeMeetingAttend}, nil)
+		store := &leakyStore{inner: sb.store, validateErr: leak}
+		res := Verify(sb.bundle, VerifyOptions{ChallengeStore: store})
+		requireUnknownChallenge(t, res)
+		if strings.Contains(res.ErrorReason, leak.Error()) {
+			t.Fatalf("validate leak %q reached the public result: %s", leak, res.ErrorReason)
+		}
+
+		// Failure surfaced at the post-signature Consume step.
+		sb = newStoreBundle(t, []string{ScopeMeetingAttend}, nil)
+		store = &leakyStore{inner: sb.store, consumeErr: leak}
+		res = Verify(sb.bundle, VerifyOptions{ChallengeStore: store})
+		requireUnknownChallenge(t, res)
+		if strings.Contains(res.ErrorReason, leak.Error()) {
+			t.Fatalf("consume leak %q reached the public result: %s", leak, res.ErrorReason)
+		}
+	}
+}
+
+// ----- Policy evaluation happens after consumption -----
+
+type stubPolicy struct {
+	allow bool
+	err   error
+}
+
+func (p stubPolicy) EvaluatePolicy(*ProofBundle, VerifierContext) (bool, error) {
+	return p.allow, p.err
+}
+
+func TestVerifyWithStorePolicyDeniedStillConsumes(t *testing.T) {
+	sb := newStoreBundle(t, []string{ScopeMeetingAttend}, nil)
+	res := Verify(sb.bundle, VerifyOptions{
+		RequiredScope:  ScopeMeetingAttend,
+		ChallengeStore: sb.store,
+		Policy:         stubPolicy{allow: false},
+	})
+	if res.Valid || res.IdentityStatus != IdentityStatusScopeDenied {
+		t.Fatalf("got %s / %s, want scope_denied", res.IdentityStatus, res.ErrorReason)
+	}
+	// Policy denial happened AFTER consumption: retrying without the
+	// policy gate still fails — the challenge is spent.
+	requireUnknownChallenge(t, Verify(sb.bundle, VerifyOptions{
+		RequiredScope:  ScopeMeetingAttend,
+		ChallengeStore: sb.store,
+	}))
+}
+
+func TestVerifyWithStorePolicyErrorStillConsumes(t *testing.T) {
+	sb := newStoreBundle(t, []string{ScopeMeetingAttend}, nil)
+	res := Verify(sb.bundle, VerifyOptions{
+		RequiredScope:  ScopeMeetingAttend,
+		ChallengeStore: sb.store,
+		Policy:         stubPolicy{err: errors.New("policy backend unreachable")},
+	})
+	if res.Valid || !strings.HasPrefix(res.ErrorReason, "policy_error") {
+		t.Fatalf("got %s / %s, want policy_error", res.IdentityStatus, res.ErrorReason)
+	}
+	// The provider error surfaced after the challenge was spent: replay of
+	// the same presentation is still rejected.
+	requireUnknownChallenge(t, Verify(sb.bundle, VerifyOptions{
+		RequiredScope:  ScopeMeetingAttend,
+		ChallengeStore: sb.store,
+	}))
 }

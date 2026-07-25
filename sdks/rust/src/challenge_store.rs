@@ -20,17 +20,20 @@ use alloc::{string::String, vec::Vec};
 /// The uniform rejection detail for a challenge that cannot be consumed:
 /// never issued, expired, already consumed, or issued under a different
 /// session binding. Deliberately identical across those cases so a
-/// rejection does not reveal whether a challenge exists; matches the
-/// reference verifier's documented error text.
+/// rejection's public detail does not distinguish them. `verify_bundle`
+/// normalizes EVERY store failure — custom-store error strings included —
+/// to this text in the public result, so implementations cannot leak
+/// record state through error strings even accidentally.
 pub const UNKNOWN_CHALLENGE: &str =
     "challenge was not issued by this verifier or has already been used";
 
 /// Tracks verifier-issued challenges so each is accepted at most once
 /// within its freshness window (SPEC §10).
 pub trait ChallengeStore {
-    /// Generate a fresh challenge bound to `session_context` (empty =
-    /// unbound), valid for `ttl_seconds`. Returns the challenge and its
-    /// expiry (unix seconds).
+    /// Generate a fresh challenge bound to `session_context` (which must
+    /// be empty or exactly 32 bytes; empty = unbound), valid for
+    /// `ttl_seconds` (which must be positive). Returns the challenge and
+    /// its expiry (unix seconds).
     fn issue(&self, session_context: &[u8], ttl_seconds: i64) -> Result<(Vec<u8>, i64), String>;
 
     /// Report whether `challenge` could be consumed right now — issued,
@@ -38,10 +41,12 @@ pub trait ChallengeStore {
     /// consuming it. `verify_bundle` calls this before any signature work.
     fn validate(&self, challenge: &[u8], session_context: &[u8], now: i64) -> Result<(), String>;
 
-    /// Atomically mark `challenge` used. Exactly one consume of a given
-    /// challenge may ever succeed; all later calls (and calls with a
-    /// mismatched `session_context`, which do NOT consume the record)
-    /// return an error.
+    /// Atomically remove the challenge's issuance record. Exactly one
+    /// consume of a given challenge may ever succeed; all later calls
+    /// (and calls with a mismatched `session_context`, which do NOT
+    /// remove the record) return an error. Removing the record keeps the
+    /// store's capacity a count of PENDING challenges — a consumed
+    /// challenge frees its slot immediately.
     fn consume(&self, challenge: &[u8], session_context: &[u8], now: i64) -> Result<(), String>;
 }
 
@@ -73,20 +78,32 @@ mod memory {
     struct Record {
         session_context: Vec<u8>,
         expires_at: i64,
-        consumed: bool,
     }
 
     /// In-memory [`ChallengeStore`]: mutex-guarded map with lazy expiry
-    /// and a capacity cap. Suitable for a single verifier process; state
-    /// does not survive restarts (an unconsumed challenge dies with the
-    /// process, which fails closed).
+    /// and a capacity cap. Single-process only — state does not survive
+    /// restarts (an unconsumed challenge dies with the process, which
+    /// fails closed), and replicas sharing verification traffic would
+    /// each accept the same challenge once. Deployments spanning
+    /// processes or hosts need a [`ChallengeStore`] over shared storage
+    /// whose `consume` is atomic (e.g. a single-row DELETE ... RETURNING).
     pub struct MemoryChallengeStore {
         records: Mutex<HashMap<String, Record>>,
         max_size: usize,
     }
 
     impl MemoryChallengeStore {
+        /// Create a store holding at most `max_size` pending challenges.
+        ///
+        /// # Panics
+        ///
+        /// Panics if `max_size` is 0 — a store that can never hold a
+        /// challenge is a misconfiguration, not a policy.
         pub fn new(max_size: usize) -> Self {
+            assert!(
+                max_size > 0,
+                "MemoryChallengeStore max_size must be >= 1, got 0"
+            );
             MemoryChallengeStore {
                 records: Mutex::new(HashMap::new()),
                 max_size,
@@ -109,7 +126,7 @@ mod memory {
             Self::expire(records, now);
             let key = base64_std_encode(challenge);
             match records.get(&key) {
-                Some(r) if !r.consumed && r.session_context == session_context => Some(key),
+                Some(r) if r.session_context == session_context => Some(key),
                 _ => None,
             }
         }
@@ -121,6 +138,18 @@ mod memory {
             session_context: &[u8],
             ttl_seconds: i64,
         ) -> Result<(Vec<u8>, i64), String> {
+            if !session_context.is_empty() && session_context.len() != 32 {
+                return Err(format!(
+                    "session context must be empty or 32 bytes, got {}",
+                    session_context.len()
+                ));
+            }
+            if ttl_seconds <= 0 {
+                return Err(format!(
+                    "challenge ttl must be positive, got {}",
+                    ttl_seconds
+                ));
+            }
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -137,7 +166,6 @@ mod memory {
                 Record {
                     session_context: session_context.to_vec(),
                     expires_at,
-                    consumed: false,
                 },
             );
             Ok((challenge, expires_at))
@@ -156,8 +184,10 @@ mod memory {
             }
         }
 
-        // Check-and-set under one lock: of two concurrent presentations
-        // of the same challenge, exactly one can succeed.
+        // Check-and-remove under one lock: of two concurrent
+        // presentations of the same challenge, exactly one can succeed.
+        // Removal frees the record's capacity slot immediately; a
+        // session-context mismatch leaves the record in place.
         fn consume(
             &self,
             challenge: &[u8],
@@ -167,9 +197,7 @@ mod memory {
             let mut records = self.records.lock().expect("challenge store lock poisoned");
             match Self::lookup(&mut records, challenge, session_context, now) {
                 Some(key) => {
-                    if let Some(r) = records.get_mut(&key) {
-                        r.consumed = true;
-                    }
+                    records.remove(&key);
                     Ok(())
                 }
                 None => Err(UNKNOWN_CHALLENGE.to_string()),

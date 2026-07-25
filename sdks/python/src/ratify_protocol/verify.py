@@ -9,6 +9,7 @@ import time
 import warnings
 from typing import Optional
 
+from .challenge_store import UNKNOWN_CHALLENGE
 from .constraints import evaluate_constraints
 from .crypto import (
     transaction_receipt_sign_bytes,
@@ -102,13 +103,15 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
     # --- Single-use challenge: locate WITHOUT consuming (SPEC §10) ---
     # An unknown, expired, already-consumed, or wrongly-bound challenge is
     # rejected before any signature work; the record is not touched, so a
-    # forged presentation cannot burn a legitimate challenge.
+    # forged presentation cannot burn a legitimate challenge. Store
+    # failures — rejection reasons AND raised exceptions — are normalized
+    # to the canonical UNKNOWN_CHALLENGE detail so no failure mode is
+    # distinguishable in the public result (fail closed).
     if opts.challenge_store is not None:
-        store_err = opts.challenge_store.validate(
-            bundle.challenge, opts.session_context, now
-        )
-        if store_err is not None:
-            return _invalid("unknown_challenge", store_err)
+        if not _challenge_store_allows(
+            opts.challenge_store.validate, bundle.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
 
     # --- v1.1 stream binding checks (SPEC §5.8, §6.4.2) ---
     if bundle.stream_id and len(bundle.stream_id) != 32:
@@ -277,11 +280,10 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
     # same challenge fails even if this presentation is subsequently
     # denied.
     if opts.challenge_store is not None:
-        consume_err = opts.challenge_store.consume(
-            bundle.challenge, opts.session_context, now
-        )
-        if consume_err is not None:
-            return _invalid("unknown_challenge", consume_err)
+        if not _challenge_store_allows(
+            opts.challenge_store.consume, bundle.challenge, opts.session_context, now
+        ):
+            return _invalid("unknown_challenge", UNKNOWN_CHALLENGE)
         # Deferred constraint evaluation (skipped in the per-cert loop
         # above when a store is present).
         for i, cert in enumerate(bundle.delegations):
@@ -364,6 +366,18 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+
+def _challenge_store_allows(op, challenge: bytes, session_context: bytes, now: int) -> bool:
+    """Run a ChallengeStore operation fail-closed: a rejection reason OR a
+    raised exception both come back as "rejected." The store's text is
+    discarded — the caller always reports the canonical UNKNOWN_CHALLENGE
+    detail so no store failure mode is distinguishable. Stores wanting
+    operational detail should log internally."""
+    try:
+        return op(challenge, session_context, now) is None
+    except Exception:
+        return False
+
 
 def _hybrid_pub_key_equal(a: HybridPublicKey, b: HybridPublicKey) -> bool:
     return a.ed25519 == b.ed25519 and a.ml_dsa_65 == b.ml_dsa_65

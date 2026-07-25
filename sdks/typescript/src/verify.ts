@@ -30,6 +30,22 @@ import {
 import { intersectScopes, validateScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
 import { evaluateConstraints } from "./constraints.js";
 import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
+import { UNKNOWN_CHALLENGE, type ChallengeStore } from "./challenge_store.js";
+
+// Run a ChallengeStore operation fail-closed: a rejection reason OR a
+// thrown exception both come back as "rejected." The store's text is
+// discarded — the public result always carries the canonical
+// UNKNOWN_CHALLENGE detail so no store failure mode is distinguishable.
+// Stores wanting operational detail should log internally.
+async function challengeStoreAllows(
+  op: () => Promise<string | null>,
+): Promise<boolean> {
+  try {
+    return (await op()) === null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Validate a ProofBundle against the Ratify Protocol.
@@ -120,13 +136,12 @@ async function _verifyBundle(
   // rejected before any signature work; the record is not touched, so a
   // forged presentation cannot burn a legitimate challenge.
   if (opts.challenge_store) {
-    const storeErr = await opts.challenge_store.validate(
-      bundle.challenge,
-      opts.session_context,
-      now,
+    const store: ChallengeStore = opts.challenge_store;
+    const ok = await challengeStoreAllows(() =>
+      store.validate(bundle.challenge, opts.session_context, now),
     );
-    if (storeErr !== null) {
-      return invalid("unknown_challenge", storeErr);
+    if (!ok) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
     }
   }
 
@@ -318,13 +333,12 @@ async function _verifyBundle(
   // now — before authorization evaluation — so a later replay of the same
   // challenge fails even if this presentation is subsequently denied.
   if (opts.challenge_store) {
-    const consumeErr = await opts.challenge_store.consume(
-      bundle.challenge,
-      opts.session_context,
-      now,
+    const store: ChallengeStore = opts.challenge_store;
+    const consumed = await challengeStoreAllows(() =>
+      store.consume(bundle.challenge, opts.session_context, now),
     );
-    if (consumeErr !== null) {
-      return invalid("unknown_challenge", consumeErr);
+    if (!consumed) {
+      return invalid("unknown_challenge", UNKNOWN_CHALLENGE);
     }
     // Deferred constraint evaluation (skipped in the per-cert loop above
     // when a store is present).

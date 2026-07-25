@@ -123,6 +123,12 @@ type VerifyOptions struct {
 	// use, constraint evaluation is deferred until after consumption so
 	// denial outcomes cannot be probed without spending the challenge.
 	// The store's session binding is checked against SessionContext.
+	//
+	// Every store failure — missing, expired, consumed, wrong binding, or
+	// a custom store's backend error — is normalized to the canonical
+	// unknown_challenge result (ErrUnknownChallenge text); store-provided
+	// error strings never reach the public result. Log store errors inside
+	// the store implementation if operational detail is needed.
 	ChallengeStore ChallengeStore
 }
 
@@ -216,10 +222,12 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	// --- Single-use challenge: locate WITHOUT consuming (§10) ---
 	// An unknown, expired, already-consumed, or wrongly-bound challenge is
 	// rejected before any signature work; the record is not touched, so a
-	// forged presentation cannot burn a legitimate challenge.
+	// forged presentation cannot burn a legitimate challenge. The store's
+	// error is discarded: the public result always carries the canonical
+	// ErrUnknownChallenge text so no store failure mode is distinguishable.
 	if opts.ChallengeStore != nil {
 		if err := opts.ChallengeStore.Validate(bundle.Challenge, opts.SessionContext, now); err != nil {
-			return invalid("unknown_challenge", err.Error())
+			return invalid("unknown_challenge", ErrUnknownChallenge.Error())
 		}
 	}
 
@@ -358,7 +366,7 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	// challenge fails even if this presentation is subsequently denied.
 	if opts.ChallengeStore != nil {
 		if err := opts.ChallengeStore.Consume(bundle.Challenge, opts.SessionContext, now); err != nil {
-			return invalid("unknown_challenge", err.Error())
+			return invalid("unknown_challenge", ErrUnknownChallenge.Error())
 		}
 		// Deferred constraint evaluation (skipped in the per-cert loop
 		// above when a store is present).

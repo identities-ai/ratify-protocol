@@ -90,6 +90,47 @@ def test_capacity_cap():
         store.issue(b"", 60)
 
 
+def test_consume_frees_capacity_immediately():
+    # Capacity counts PENDING challenges: consuming one frees its slot, so
+    # legitimate traffic cannot wedge issuance until records expire.
+    store = MemoryChallengeStore(max_size=2)
+    challenge, _ = store.issue(b"", 300)
+    store.issue(b"", 300)
+    with pytest.raises(RuntimeError, match="challenge store full"):
+        store.issue(b"", 300)
+    assert store.consume(challenge, b"", _now()) is None
+    store.issue(b"", 300)  # must succeed immediately
+
+
+def test_wrong_session_context_does_not_free_capacity():
+    store = MemoryChallengeStore(max_size=1)
+    ctx = b"\x01" + b"\x00" * 31
+    challenge, _ = store.issue(ctx, 300)
+    assert store.consume(challenge, b"", _now()) == UNKNOWN_CHALLENGE
+    with pytest.raises(RuntimeError, match="challenge store full"):
+        store.issue(b"", 300)
+
+
+def test_issue_validates_inputs():
+    store = MemoryChallengeStore(max_size=16)
+    with pytest.raises(ValueError, match="session context"):
+        store.issue(b"\x00" * 5, 300)
+    with pytest.raises(ValueError, match="ttl"):
+        store.issue(b"", 0)
+    with pytest.raises(ValueError, match="ttl"):
+        store.issue(b"", -60)
+    # 0 and 32 bytes are the two valid session-context lengths.
+    store.issue(b"", 60)
+    store.issue(b"\x00" * 32, 60)
+
+
+def test_constructor_rejects_non_positive_capacity():
+    with pytest.raises(ValueError, match="max_size"):
+        MemoryChallengeStore(max_size=0)
+    with pytest.raises(ValueError, match="max_size"):
+        MemoryChallengeStore(max_size=-1)
+
+
 def test_concurrent_consume_is_atomic():
     store = MemoryChallengeStore(max_size=16)
     challenge, _ = store.issue(b"", 300)
@@ -232,3 +273,150 @@ def test_verify_with_store_unknown_challenge_rejected_before_crypto():
     assert res.error_reason == UNKNOWN_REASON
     # The bundle's own store still holds the unconsumed record.
     assert store.validate(bundle.challenge, b"", _now()) is None
+
+
+# ----- Store-failure normalization: no custom-store text or exception leaks -----
+
+class _LeakyStore:
+    """Adversarial custom ChallengeStore whose failures carry backend
+    detail that would distinguish record states. verify_bundle must
+    normalize every one — returned strings AND raised exceptions — to the
+    canonical unknown_challenge result."""
+
+    def __init__(self, inner, validate_result=None, consume_result=None):
+        self._inner = inner
+        self._validate_result = validate_result
+        self._consume_result = consume_result
+
+    def issue(self, session_context, ttl_seconds):
+        return self._inner.issue(session_context, ttl_seconds)
+
+    def validate(self, challenge, session_context, now):
+        if self._validate_result is not None:
+            if isinstance(self._validate_result, Exception):
+                raise self._validate_result
+            return self._validate_result
+        return self._inner.validate(challenge, session_context, now)
+
+    def consume(self, challenge, session_context, now):
+        if self._consume_result is not None:
+            if isinstance(self._consume_result, Exception):
+                raise self._consume_result
+            return self._consume_result
+        return self._inner.consume(challenge, session_context, now)
+
+
+@pytest.mark.parametrize(
+    "leak",
+    [
+        'pg: relation "challenges" does not exist',
+        "record expired 42s ago",
+        "challenge already consumed by request 7f3a",
+        "session binding mismatch: bound to sess-991",
+    ],
+)
+def test_verify_normalizes_custom_store_error_strings(leak):
+    # Failure surfaced at the pre-signature validate step.
+    bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+    res = verify_bundle(
+        bundle, VerifyOptions(challenge_store=_LeakyStore(store, validate_result=leak))
+    )
+    assert not res.valid
+    assert res.error_reason == UNKNOWN_REASON
+
+    # Failure surfaced at the post-signature consume step.
+    bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+    res = verify_bundle(
+        bundle, VerifyOptions(challenge_store=_LeakyStore(store, consume_result=leak))
+    )
+    assert not res.valid
+    assert res.error_reason == UNKNOWN_REASON
+
+
+def test_verify_store_exceptions_fail_closed_with_uniform_result():
+    # validate raises.
+    bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+    res = verify_bundle(
+        bundle,
+        VerifyOptions(
+            challenge_store=_LeakyStore(
+                store, validate_result=ConnectionError("ECONNREFUSED 10.0.0.7:5432")
+            )
+        ),
+    )
+    assert not res.valid
+    assert res.error_reason == UNKNOWN_REASON
+
+    # consume raises — after signatures verified.
+    bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+    res = verify_bundle(
+        bundle,
+        VerifyOptions(
+            challenge_store=_LeakyStore(
+                store, consume_result=RuntimeError("deadlock detected on challenges_pkey")
+            )
+        ),
+    )
+    assert not res.valid
+    assert res.error_reason == UNKNOWN_REASON
+
+
+# ----- Policy evaluation happens after consumption -----
+
+class _StubPolicy:
+    def __init__(self, allow=False, err=None, exc=None):
+        self._allow = allow
+        self._err = err
+        self._exc = exc
+
+    def evaluate_policy(self, bundle, context):
+        if self._exc is not None:
+            raise self._exc
+        return self._allow, self._err
+
+
+def test_verify_with_store_policy_denied_still_consumes():
+    bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+    denied = verify_bundle(
+        bundle,
+        VerifyOptions(
+            required_scope=SCOPE_MEETING_ATTEND,
+            challenge_store=store,
+            policy=_StubPolicy(allow=False),
+        ),
+    )
+    assert not denied.valid
+    assert denied.identity_status == "scope_denied"
+
+    # Policy denial happened AFTER consumption: retrying without the
+    # policy gate still fails — the challenge is spent.
+    retry = verify_bundle(
+        bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store)
+    )
+    assert retry.error_reason == UNKNOWN_REASON
+
+
+def test_verify_with_store_policy_error_still_consumes():
+    for policy in (
+        _StubPolicy(err="policy backend unreachable"),
+        _StubPolicy(exc=ConnectionError("policy backend unreachable")),
+    ):
+        bundle, store = _store_bundle([SCOPE_MEETING_ATTEND])
+        res = verify_bundle(
+            bundle,
+            VerifyOptions(
+                required_scope=SCOPE_MEETING_ATTEND,
+                challenge_store=store,
+                policy=policy,
+            ),
+        )
+        assert not res.valid
+        assert res.error_reason.startswith("policy_error")
+
+        # The provider error surfaced after the challenge was spent: replay
+        # of the same presentation is still rejected.
+        retry = verify_bundle(
+            bundle,
+            VerifyOptions(required_scope=SCOPE_MEETING_ATTEND, challenge_store=store),
+        )
+        assert retry.error_reason == UNKNOWN_REASON

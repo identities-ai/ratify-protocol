@@ -1394,10 +1394,16 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify_full(
 
 /// Create an in-memory challenge store holding at most `max_size` pending
 /// challenges. The store makes verifier-issued challenges single-use: each
-/// is accepted at most once within its freshness window. Free with
-/// `ratify_challenge_store_free`.
+/// is accepted at most once within its freshness window; consuming a
+/// challenge removes its record, freeing the capacity slot immediately.
+/// Single-process only — deployments spanning processes or hosts need a
+/// store over shared storage with atomic consumption. Returns NULL when
+/// `max_size` is 0. Free with `ratify_challenge_store_free`.
 #[no_mangle]
 pub extern "C" fn ratify_challenge_store_new(max_size: usize) -> *mut RatifyChallengeStore {
+    if max_size == 0 {
+        return std::ptr::null_mut();
+    }
     Box::into_raw(Box::new(RatifyChallengeStore(MemoryChallengeStore::new(
         max_size,
     ))))
@@ -1411,8 +1417,9 @@ pub unsafe extern "C" fn ratify_challenge_store_free(store: *mut RatifyChallenge
     }
 }
 
-/// Issue a fresh 32-byte challenge bound to `session_context`
-/// (NULL/0 = unbound), valid for `ttl_seconds`.
+/// Issue a fresh 32-byte challenge bound to `session_context` (which must
+/// be NULL/0 = unbound, or exactly 32 bytes), valid for `ttl_seconds`
+/// (which must be positive). Invalid inputs return RatifyErrBadArgument.
 ///
 /// - `out_challenge` — buffer of at least 32 bytes; receives the challenge.
 /// - `out_expires_at` — optional; receives the expiry (unix seconds).
@@ -1470,10 +1477,11 @@ pub unsafe extern "C" fn ratify_challenge_store_check(
     )
 }
 
-/// Atomically mark `challenge` used. Exactly one consume of a given
-/// challenge may ever succeed; later calls (and calls with a mismatched
-/// `session_context`, which do NOT consume the record) return an error
-/// status with the documented unknown-challenge detail in `*err_out`.
+/// Atomically remove the challenge's issuance record. Exactly one consume
+/// of a given challenge may ever succeed; later calls (and calls with a
+/// mismatched `session_context`, which do NOT remove the record) return an
+/// error status with the documented unknown-challenge detail in `*err_out`.
+/// Removal frees the record's capacity slot immediately.
 /// `now_unix` 0 = system clock.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_challenge_store_consume(

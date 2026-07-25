@@ -68,14 +68,19 @@ test("operation context: ill-formed Unicode is rejected, not replaced", () => {
     assert.throws(() => operationContextHash({ operation: bad }), /well-formed Unicode/);
     assert.throws(() => operationContextHash({ resource_id: bad }), /well-formed Unicode/);
     assert.throws(() => operationContextHash({ requested_path: bad }), /well-formed Unicode/);
-    assert.throws(
-      () => buildSessionContext({ verifier_id: bad, request_hash: operationContextHash({}) }),
-      /well-formed Unicode/,
-    );
-    assert.throws(
-      () => buildSessionContext({ session_id: bad, request_hash: operationContextHash({}) }),
-      /well-formed Unicode/,
-    );
+    const requestHash = operationContextHash({});
+    for (const sessionField of [
+      { verifier_id: bad },
+      { workspace_id: bad },
+      { agent_id: bad },
+      { session_id: bad },
+      { invocation_id: bad },
+    ]) {
+      assert.throws(
+        () => buildSessionContext({ ...sessionField, request_hash: requestHash }),
+        /well-formed Unicode/,
+      );
+    }
   }
   // A valid surrogate PAIR (astral character) is fine.
   const astral = "\u{1F600}";

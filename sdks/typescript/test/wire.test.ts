@@ -271,6 +271,31 @@ test("wire: rejects wrong type for timestamps", () => {
   );
 });
 
+test("wire: rejects non-integer lexical forms on integer fields", () => {
+  // JSON.parse normalizes these to plain integers; the pre-scan preserves
+  // the original token form, matching the Python/Go/Rust parsers.
+  for (const lexeme of ["1000.0", "1e3", "20000e-1"]) {
+    const doc = JSON.stringify(loadRawToken()).replace(
+      /"issued_at":\d+/,
+      `"issued_at":${lexeme}`,
+    );
+    assert.throws(
+      () => decodeSessionToken(doc),
+      /issued_at: integer field must use plain decimal form/,
+      `lexeme ${lexeme} must be rejected`,
+    );
+  }
+});
+
+test("wire: float constraint fields still accept fraction and exponent forms", () => {
+  const raw = JSON.parse(
+    readFileSync(join(FIXTURE_DIR, "constraint_geo_circle_inside.json"), "utf8"),
+  ).bundle as Record<string, unknown>;
+  const doc = JSON.stringify(raw).replace(/"radius_m":[0-9.]+/, '"radius_m":5e2');
+  const bundle = decodeProofBundle(doc); // must not throw
+  assert.equal(bundle.delegations[0]!.constraints[0]!.radius_m, 500);
+});
+
 test("wire: rejects stream_id without stream_seq", () => {
   const raw = loadRawBundle("stream_bound_first_turn.json");
   delete raw.stream_seq;

@@ -398,14 +398,24 @@ function decodeConstraintObj(obj: JsonObj, path: string): Constraint {
 // Strict field accessors
 // ============================================================================
 
-// JSON.parse keeps the LAST occurrence of a duplicated object key and
-// offers no hook to detect duplicates, so a document could otherwise carry
-// two values for the same field where only one survives decoding. After
-// JSON.parse validates the syntax, rejectDuplicateKeys re-scans the text
-// and fails closed on any object that repeats a key — at every nesting
-// depth, with string escapes decoded first, so "agent_id" and the same key
-// written with a Unicode escape collide. This matches the Python codec's
-// object_pairs_hook behavior.
+// JSON.parse keeps the LAST occurrence of a duplicated object key, offers
+// no hook to detect duplicates, and normalizes numeric lexemes ("1000.0"
+// and "1e3" both become 1000) before any accessor can see the original
+// form. After JSON.parse validates the syntax, scanWireText re-scans the
+// text and (a) fails closed on any object that repeats a key — at every
+// nesting depth, with string escapes decoded first, so "agent_id" and the
+// same key written with a Unicode escape collide (matching the Python
+// codec's object_pairs_hook behavior) — and (b) records the path of every
+// numeric token written with a fraction or exponent, so integer field
+// accessors can reject non-integer lexical forms the way Python, Go, and
+// Rust parsers do. Float constraint fields are unaffected.
+//
+// The recorded paths of fraction/exponent numeric lexemes from the most
+// recent parseInput call. Decoding is synchronous and non-reentrant, so a
+// module-level slot is safe: it is replaced at the start of every decode
+// before any accessor runs.
+let floatLexemePaths: ReadonlySet<string> = new Set();
+
 function parseInput(input: string | Uint8Array): unknown {
   let text: string;
   if (typeof input === "string") {
@@ -427,56 +437,117 @@ function parseInput(input: string | Uint8Array): unknown {
   } catch (e) {
     throw new Error(`wire: invalid JSON: ${(e as Error).message}`);
   }
-  rejectDuplicateKeys(text);
+  floatLexemePaths = scanWireText(text);
   return parsed;
 }
 
 // Single-pass scan over text already validated by JSON.parse. Tracks
 // object/array nesting; inside an object, the string that opens a member is
-// the key — collect it (escape-decoded) per object and error on a repeat.
-// The same key text in different sibling objects is fine.
-function rejectDuplicateKeys(text: string): void {
-  // One Set per open object; null marks an open array.
-  const frames: Array<Set<string> | null> = [];
+// the key — collect it (escape-decoded) per object and error on a repeat
+// (the same key text in different sibling objects is fine). Returns the
+// set of root-relative paths (e.g. "delegations[0].issued_at") whose
+// numeric token carries a fraction or exponent.
+function scanWireText(text: string): Set<string> {
+  const floatPaths = new Set<string>();
+  interface Frame {
+    keys: Set<string> | null; // object: seen keys; array: null
+    pendingKey: string; // object: key of the member currently being read
+    index: number; // array: index of the next value
+    seg: string; // this container's path segment within its parent
+  }
+  const frames: Frame[] = [];
   let expectKey = false; // next string is a member key of the innermost object
+
+  const leafSeg = (): string => {
+    const top = frames[frames.length - 1];
+    if (!top) return "";
+    return top.keys ? top.pendingKey : `[${top.index}]`;
+  };
+  const joinSeg = (base: string, seg: string): string =>
+    seg.startsWith("[") ? base + seg : base === "" ? seg : `${base}.${seg}`;
+  const pathTo = (leaf: string): string => {
+    let out = "";
+    for (let i = 1; i < frames.length; i++) {
+      out = joinSeg(out, frames[i]!.seg);
+    }
+    return joinSeg(out, leaf);
+  };
+  // A value just finished: an object expects the next member key; an array
+  // advances to its next index.
+  const valueDone = (): void => {
+    const top = frames[frames.length - 1];
+    if (!top) return;
+    if (top.keys) {
+      expectKey = true;
+    } else {
+      top.index++;
+    }
+  };
+
+  const NUMBER_CHARS = "0123456789+-.eE";
   let i = 0;
   while (i < text.length) {
-    const c = text[i];
+    const c = text[i]!;
     if (c === '"') {
       const [str, next] = scanJSONString(text, i);
-      const keys = frames[frames.length - 1];
+      const keys = frames[frames.length - 1]?.keys;
       if (expectKey && keys) {
         if (keys.has(str)) {
           throw new Error(`wire: duplicate key "${str}" in JSON object`);
         }
         keys.add(str);
+        frames[frames.length - 1]!.pendingKey = str;
         expectKey = false;
+      } else {
+        valueDone(); // string value
       }
       i = next;
       continue;
     }
+    if (c === "-" || (c >= "0" && c <= "9")) {
+      let isFloat = false;
+      let j = i;
+      while (j < text.length && NUMBER_CHARS.includes(text[j]!)) {
+        if (text[j] === "." || text[j] === "e" || text[j] === "E") isFloat = true;
+        j++;
+      }
+      if (isFloat) floatPaths.add(pathTo(leafSeg()));
+      i = j;
+      valueDone();
+      continue;
+    }
     switch (c) {
       case "{":
-        frames.push(new Set());
+        frames.push({ keys: new Set(), pendingKey: "", index: 0, seg: leafSeg() });
         expectKey = true;
         break;
       case "[":
-        frames.push(null);
+        frames.push({ keys: null, pendingKey: "", index: 0, seg: leafSeg() });
         expectKey = false;
         break;
       case "}":
       case "]":
         frames.pop();
-        expectKey = false;
+        valueDone();
         break;
-      case ",":
-        expectKey = frames[frames.length - 1] !== null && frames.length > 0;
+      case "t": // true
+        i += 3;
+        valueDone();
+        break;
+      case "f": // false
+        i += 4;
+        valueDone();
+        break;
+      case "n": // null
+        i += 3;
+        valueDone();
         break;
       default:
-        break; // ':', whitespace, numbers, true/false/null
+        break; // ':', ',', whitespace
     }
     i++;
   }
+  return floatPaths;
 }
 
 // Scan one JSON string starting at its opening quote; return the
@@ -548,6 +619,15 @@ function getInt(obj: JsonObj, key: string, path: string): number {
   if (!Number.isInteger(v)) {
     throw new Error(`wire: ${path}.${key}: expected integer`);
   }
+  // JSON.parse normalizes "1000.0" and "1e3" to 1000 before this accessor
+  // runs; the pre-scan recorded which numeric tokens carried a fraction or
+  // exponent, so non-integer lexical forms are rejected here the way the
+  // Python, Go, and Rust parsers reject them natively.
+  if (floatLexemePaths.has(rootRelativePath(path, key))) {
+    throw new Error(
+      `wire: ${path}.${key}: integer field must use plain decimal form (no fraction or exponent)`,
+    );
+  }
   // Interoperable integer domain for JSON wire fields (SPEC §6.2): the
   // IEEE-754 safe-integer range. Binary signable representations use
   // 64-bit fields, but a JSON integer outside this range does not survive
@@ -558,6 +638,14 @@ function getInt(obj: JsonObj, key: string, path: string): number {
     );
   }
   return v;
+}
+
+// Accessor paths carry a root name ("ProofBundle.delegations[0]"); the
+// pre-scan's paths are root-relative ("delegations[0].issued_at").
+function rootRelativePath(path: string, key: string): string {
+  const dot = path.indexOf(".");
+  const rel = dot === -1 ? "" : path.slice(dot + 1);
+  return rel === "" ? key : `${rel}.${key}`;
 }
 
 function getArray(obj: JsonObj, key: string, path: string): unknown[] {

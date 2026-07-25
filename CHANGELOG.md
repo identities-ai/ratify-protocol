@@ -6,6 +6,38 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.15 (unreleased)
+
+The "integration readiness" release: everything an integrator needs to adopt the SDKs over a real transport without hand-written glue, driven by the Agent Relay integration spike. No fixture changes — all 63 canonical vectors are byte-identical to alpha.13.
+
+### Added — public wire codecs and vocabulary parity (#39, #40)
+
+- TypeScript and Python gain public, strict wire codecs: `encode`/`decode` for `DelegationCert`, `ProofBundle`, and `SessionToken`. Round-trip identity is fixture-tested and cross-SDK transport parity is asserted byte-for-byte in both directions.
+- Strict wire acceptance across all five SDKs: duplicated keys, out-of-domain integers, invalid UTF-8, and unknown fields are rejected before verification, and the normative JSON integer domain is stated in the SPEC.
+- `Vocabulary()` and `ScopeWildcards()` accessors in TypeScript, Python, Rust, and C, matching Go, with a cross-SDK parity vector.
+
+### Added — single-use challenge acceptance (#41)
+
+- `ChallengeStore` interface (`Issue`/`Validate`/`Consume`) with an in-memory implementation in every SDK (C: `ratify_challenge_store_*`). Consume atomically removes the issuance record, so store capacity counts pending challenges only; concurrent consumption admits exactly one winner.
+- SPEC §10 makes single-use acceptance normative for challenge-issuing verifiers (steps 2b and 9b): the store is consulted without consuming before signature work and atomically consumed after the challenge signature verifies, before authorization — so a forged presentation never burns a challenge and a denied caller cannot probe authorization with one liveness proof. Every store failure normalizes to one canonical `unknown_challenge` response (response-level indistinguishability; the timing channel of the early lookup is explicitly out of scope).
+- Threat-model row T1 corrected: freshness alone bounds replay to the window; single-use eliminates it at issuing verifiers; self-issued challenges need request-level deduplication.
+
+### Added — streamed-turn verification with options (#42)
+
+- Options-object streamed-turn verifier in every SDK (Go `VerifyStreamedTurnWithOptions`, C `ratify_verify_streamed_turn_opts`) taking a dedicated `StreamedVerifyOptions`: required scope (checked against `token.granted_scope`), challenge store (single-use on the fast path), session context, stream state, and clock override — and nothing else. Full-verifier options cannot be passed and silently ignored: distinct types at compile time in Go/Rust/C, runtime fail-closed rejection in TypeScript and Python.
+- Stream state is documented as a caller-owned snapshot with an atomic-advance requirement; the token-HMAC-first order is stated normatively in §5.13. The positional streamed verifiers are deprecated (still callable).
+
+### Added — operation-context and session-context constructions (#43)
+
+- SPEC §6.4.9: canonical, domain-separated, length-prefixed constructions. `OperationContextBytes` binds the action (scope, operation, resource, path, payload digest) into a 32-byte `request_hash`; `SessionContextBytes` binds verifier/workspace/agent/session/invocation identifiers plus that hash into the 32-byte `session_context`. Implemented in all five SDKs with shared known-answer vectors proving byte-identical hashes; ill-formed Unicode is rejected everywhere.
+- SPEC §15.2.1: the named **Middleware Custody Profile** for deployments where platform middleware holds agent keys — every presentation session-bound with these constructions, `request_hash` derived from the specific action, receipts binding the hash and never the preimage.
+
+### Changed — documentation accuracy (#44)
+
+- Per-SDK verify-latency matrix and wire-size table in `docs/BENCHMARKS.md`; every sub-millisecond claim is qualified to the Go/Rust/C SDKs; session tokens are repositioned as the default pattern for repeated interactions with accurate one-vs-N+1 signature-count framing (an earlier ~95% claim is corrected everywhere, including per-SDK READMEs and a changelog erratum below); §17.7 gains the type-only extension-constraint limitation note; allocation attribution is profile-backed.
+
+---
+
 ## v1.0.0-alpha.13 (2026-07-06)
 
 ### Added — SPEC §13.1: registry read binding (optional)

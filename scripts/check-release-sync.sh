@@ -232,3 +232,7 @@ for path, needles in scope_needles.items():
 
 print(f"release-sync: ok ({protocol_tag}, {fixture_count} fixtures, {scope_count} scopes)")
 PY
+
+# SDK READMEs are generated from sdks/readme-src/preamble.md + per-SDK
+# README.body.md files; hand-edits to README.md drift and fail here.
+python3 "$(dirname "$0")/gen-sdk-readmes.py" --check

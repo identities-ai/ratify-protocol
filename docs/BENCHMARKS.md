@@ -29,16 +29,16 @@ Numbers below are the median of 3 runs per benchmark. Actual latency on commodit
 | `BenchmarkVerifyDepth3`                | 831 972 | **832 µs** (0.83 ms) | 199 621 | 592       |
 | `BenchmarkVerifyDepth1_WithConstraint` | 397 836 | **398 µs** (0.40 ms) | 90 547  | 270       |
 
-> Numbers refreshed 2026-07-25 (same M2 Pro baseline). The increase over the previously committed table (~0.34/0.70 ms at depth 1/3) is the cost of correctness features added since: scope-vocabulary validation (§9, alpha.12), strict wire acceptance, and the additional verifier checks landed through alpha.15. Still under a millisecond at every legal depth.
+> Numbers refreshed 2026-07-25 (same M2 Pro baseline). The increase over the previously committed table (~0.34/0.70 ms at depth 1/3) is the cost of verifier-path correctness features added since: scope-vocabulary validation (§9, alpha.12) and the additional in-verifier checks landed through alpha.15. (Strict wire acceptance also landed in this window but is NOT a contributor here — the benchmark constructs a typed bundle once and never exercises JSON decoding.) Still under a millisecond at every legal depth.
 
 Verification exercises the full §4 trust equation: structural checks, agent binding, per-cert signature validation (Ed25519 + ML-DSA-65), chain linkage, sub-delegation gate, constraint evaluation, challenge-signature validation, revocation lookup (nil callback here), scope intersection.
 
 ## Interpreting the numbers
 
 - **"Under a millisecond"** — holds at every legal chain depth (max `MAX_DELEGATION_CHAIN_DEPTH` = 3) for the Go reference verifier. The worst case exercised — depth-3 — is ~0.83 ms on an M2 Pro. Other SDKs differ; see the per-SDK matrix below.
-- **Dominant cost**: ML-DSA-65 verify, which is a post-quantum lattice-based scheme. Each cert in the chain adds ~180 µs. The rest (Ed25519, JSON canonicalization, scope math, constraint evaluation) is <15 µs combined.
+- **Dominant cost**: ML-DSA-65 verify, which is a post-quantum lattice-based scheme. Each cert in the chain adds ~220 µs (392 → 614 → 832 µs across depths 1/2/3). ML-DSA-65 verification itself is ~180 µs of that; the remainder is per-cert scope validation, canonicalization, and chain checks.
 - **Constraint cost is negligible**: geo_circle (haversine + radius check) adds ~1 µs. The test set covers geo / time / amount / speed / rate; none move the needle at these depths.
-- **Allocations** scale linearly with chain depth: ~10 allocations per extra cert, roughly 40 kB of transient heap. The canonical-JSON serialization of the signable struct is the biggest allocator. A zero-allocation canonical path is a v1.1 candidate but not a launch blocker.
+- **Allocations** scale linearly with chain depth: ~198 allocations and ~55 kB of transient heap per extra cert (197/395/592 allocs at depths 1/2/3). The canonical-JSON serialization of the signable struct and per-cert scope-vocabulary validation are the biggest allocators. A lower-allocation canonical path is a v1.1 candidate but not a launch blocker.
 
 ## Per-SDK verify latency
 
@@ -55,7 +55,7 @@ The five SDKs implement the same protocol but sit on different cryptographic sta
 Read this table before quoting a latency number for your deployment:
 
 - **"Under a millisecond" is a Go/Rust/C claim.** Python is single-digit milliseconds; TypeScript is tens of milliseconds per full chain verification. All are documented behavior, not defects — pure-JS lattice math is simply slower.
-- **TypeScript deployments should verify on session tokens, not full chains, per turn** (see below): the fast path replaces per-turn chain verification with an HMAC check plus one hybrid challenge-signature verification, which brings TS per-turn cost down by roughly an order of magnitude.
+- **TypeScript deployments should verify on session tokens, not full chains, per turn** (see below): the streamed path replaces the N+1 hybrid signature verifications of a full depth-N verify with one hybrid verification plus an HMAC check. Measured: 4.6 ms per streamed turn in TypeScript (vs 7.4/14.9 ms full at depth 1/3) and 0.21 ms in Go (vs 0.39/0.83 ms full).
 - Numbers scale with single-core performance; commodity x86 cloud hardware is typically within ±30% of this baseline.
 
 ## Wire sizes
@@ -71,11 +71,11 @@ Hybrid signatures are big — ML-DSA-65 signatures are 3 309 bytes and public ke
 | `SessionToken` | ~3.0 kB | — |
 | Per-turn `HybridSignature` (streamed turn) | ~4.5 kB | — |
 
-The practical consequence: a full proof bundle is a per-session artifact, not a per-message one. A streamed turn (challenge + timestamp + hybrid signature against a cached session token) moves ~4.6 kB instead of ~18–51 kB.
+The practical consequence: a full proof bundle is a per-session artifact, not a per-message one. A streamed turn under the §5.13 presentation shape carries the SessionToken plus the fresh challenge, timestamp, and hybrid signature — ~7.6 kB before envelope overhead — versus ~17.6–37.9 kB for a full bundle: roughly 2.3× smaller than a depth-1 bundle and ~5× smaller than depth-3. (A deployment that caches tokens server-side and keys turns by a compact session handle can shrink the per-turn payload to the ~4.6 kB challenge/signature portion, but that cache is an out-of-band integration choice, not the §5.13 presentation shape.)
 
 ## Session tokens are the default for repeated interactions
 
-A full chain verification per turn is the wrong integration shape for anything conversational — voice calls, streams, multi-turn agent sessions. The intended pattern (§5.13) is: verify the full `ProofBundle` once at session start, issue a `SessionToken`, then verify each subsequent turn against the token — an HMAC check plus one fresh hybrid challenge signature, roughly 95% less per-turn cryptographic work and an order-of-magnitude smaller per-turn wire footprint. Since alpha.15, the streamed-turn verifier enforces required scope, single-use challenges, and session/stream bindings on that fast path (§5.13), so choosing it does not mean giving up verification controls. Treat per-turn full-chain verification as the special case (high-stakes actions that demand fresh revocation semantics via full `Verify` + `ForceRevocationCheck`), not the default.
+A full chain verification per turn is the wrong integration shape for anything conversational — voice calls, streams, multi-turn agent sessions. The intended pattern (§5.13) is: verify the full `ProofBundle` once at session start, issue a `SessionToken`, then verify each subsequent turn against the token — an HMAC check plus ONE fresh hybrid challenge-signature verification, instead of the N+1 hybrid verifications of a full depth-N verify. That is a 50% signature-count reduction at depth 1 and 75% at depth 3; measured end-to-end, a streamed turn is 0.21 ms in Go (vs 0.39/0.83 ms full at depth 1/3) and 4.6 ms in TypeScript (vs 7.4/14.9 ms full). The per-turn wire footprint is ~7.6 kB (token + challenge signature) versus ~17.6–37.9 kB for a bundle — roughly 2.3–5× smaller depending on depth. Since alpha.15, the streamed-turn verifier enforces required scope, single-use challenges, and session/stream bindings on that fast path (§5.13), so choosing it does not mean giving up verification controls. Treat per-turn full-chain verification as the special case (high-stakes actions that demand fresh revocation semantics via full `Verify` + `ForceRevocationCheck`), not the default.
 
 ## Where the "<1 ms" claim holds
 

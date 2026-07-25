@@ -71,6 +71,19 @@ def _lp(data: bytes) -> bytes:
     return struct.pack(">Q", len(data)) + data
 
 
+def _utf8(name: str, value: str) -> bytes:
+    """Encode a string field as UTF-8, rejecting ill-formed input
+    (§6.4.9: implementations MUST reject ill-formed text rather than
+    replace or pass it through — a Python ``str`` can carry lone
+    surrogates, e.g. from ``surrogateescape`` decoding). This is
+    distinct from Unicode normalization, which is deliberately not
+    performed."""
+    try:
+        return value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{name} is not well-formed Unicode") from exc
+
+
 def operation_context_bytes(ctx: OperationContext) -> bytes:
     """The SPEC §6.4.9 operation-context preimage: the domain tag
     followed by every field length-prefixed, in canonical order. Raises
@@ -82,10 +95,10 @@ def operation_context_bytes(ctx: OperationContext) -> bytes:
         )
     return (
         _OPERATION_CONTEXT_DOMAIN_TAG
-        + _lp(ctx.required_scope.encode("utf-8"))
-        + _lp(ctx.operation.encode("utf-8"))
-        + _lp(ctx.resource_id.encode("utf-8"))
-        + _lp(ctx.requested_path.encode("utf-8"))
+        + _lp(_utf8("required scope", ctx.required_scope))
+        + _lp(_utf8("operation", ctx.operation))
+        + _lp(_utf8("resource id", ctx.resource_id))
+        + _lp(_utf8("requested path", ctx.requested_path))
         + _lp(bytes(ctx.payload_digest))
     )
 
@@ -109,11 +122,11 @@ def session_context_bytes(inputs: SessionContextInputs) -> bytes:
         )
     return (
         _SESSION_CONTEXT_DOMAIN_TAG
-        + _lp(inputs.verifier_id.encode("utf-8"))
-        + _lp(inputs.workspace_id.encode("utf-8"))
-        + _lp(inputs.agent_id.encode("utf-8"))
-        + _lp(inputs.session_id.encode("utf-8"))
-        + _lp(inputs.invocation_id.encode("utf-8"))
+        + _lp(_utf8("verifier id", inputs.verifier_id))
+        + _lp(_utf8("workspace id", inputs.workspace_id))
+        + _lp(_utf8("agent id", inputs.agent_id))
+        + _lp(_utf8("session id", inputs.session_id))
+        + _lp(_utf8("invocation id", inputs.invocation_id))
         + _lp(bytes(inputs.request_hash))
     )
 

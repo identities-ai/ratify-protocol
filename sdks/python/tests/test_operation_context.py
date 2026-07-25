@@ -98,3 +98,31 @@ def test_every_field_is_load_bearing():
         SessionContextInputs(**{**session_base.__dict__, "request_hash": other_hash}),
     ):
         assert build_session_context(mutated) != base_session
+
+
+def test_ill_formed_unicode_is_rejected_not_replaced():
+    # A Python str can carry lone surrogates (e.g. from surrogateescape
+    # decoding); §6.4.9 requires rejecting ill-formed text explicitly.
+    bad = "\ud800x"
+    for ctx in (
+        OperationContext(required_scope=bad),
+        OperationContext(operation=bad),
+        OperationContext(resource_id=bad),
+        OperationContext(requested_path=bad),
+    ):
+        with pytest.raises(ValueError, match="well-formed Unicode"):
+            operation_context_hash(ctx)
+
+    valid_hash = operation_context_hash(OperationContext())
+    for inputs in (
+        SessionContextInputs(verifier_id=bad, request_hash=valid_hash),
+        SessionContextInputs(workspace_id=bad, request_hash=valid_hash),
+        SessionContextInputs(agent_id=bad, request_hash=valid_hash),
+        SessionContextInputs(session_id=bad, request_hash=valid_hash),
+        SessionContextInputs(invocation_id=bad, request_hash=valid_hash),
+    ):
+        with pytest.raises(ValueError, match="well-formed Unicode"):
+            build_session_context(inputs)
+
+    # Astral characters (valid non-BMP text) are fine.
+    assert len(operation_context_hash(OperationContext(operation="\U0001F600"))) == 32

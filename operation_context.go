@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"unicode/utf8"
 )
 
 // Domain tags for the §6.4.9 canonical constructions. Raw ASCII prefixes:
@@ -79,12 +80,35 @@ func lengthPrefixed(buf []byte, field []byte) []byte {
 	return append(buf, field...)
 }
 
+// validUTF8Fields rejects ill-formed text (§6.4.9: strings encode as
+// UTF-8, and implementations MUST reject ill-formed input rather than
+// replace or pass it through — a Go string is an arbitrary byte
+// sequence, so this must be checked, not assumed). This is distinct from
+// Unicode normalization, which is deliberately not performed.
+func validUTF8Fields(fields map[string]string) error {
+	for name, value := range fields {
+		if !utf8.ValidString(value) {
+			return fmt.Errorf("%s is not well-formed UTF-8", name)
+		}
+	}
+	return nil
+}
+
 // OperationContextBytes returns the §6.4.9 operation-context preimage:
 // the domain tag followed by every field length-prefixed, in canonical
-// order. Errors if PayloadDigest is neither empty nor exactly 32 bytes.
+// order. Errors if PayloadDigest is neither empty nor exactly 32 bytes,
+// or if any string field is not well-formed UTF-8.
 func OperationContextBytes(ctx OperationContext) ([]byte, error) {
 	if len(ctx.PayloadDigest) != 0 && len(ctx.PayloadDigest) != 32 {
 		return nil, fmt.Errorf("payload digest must be empty or 32 bytes, got %d", len(ctx.PayloadDigest))
+	}
+	if err := validUTF8Fields(map[string]string{
+		"required scope": ctx.RequiredScope,
+		"operation":      ctx.Operation,
+		"resource id":    ctx.ResourceID,
+		"requested path": ctx.RequestedPath,
+	}); err != nil {
+		return nil, err
 	}
 	buf := []byte(operationContextDomainTag)
 	buf = lengthPrefixed(buf, []byte(ctx.RequiredScope))
@@ -110,10 +134,20 @@ func OperationContextHash(ctx OperationContext) ([]byte, error) {
 // domain tag followed by every field length-prefixed, in canonical order.
 // Errors unless RequestHash is exactly 32 bytes — use
 // OperationContextHash to derive it, over an all-empty OperationContext
-// when the deployment has no operation-specific inputs.
+// when the deployment has no operation-specific inputs — or if any
+// string field is not well-formed UTF-8.
 func SessionContextBytes(in SessionContextInputs) ([]byte, error) {
 	if len(in.RequestHash) != 32 {
 		return nil, fmt.Errorf("request hash must be exactly 32 bytes, got %d", len(in.RequestHash))
+	}
+	if err := validUTF8Fields(map[string]string{
+		"verifier id":   in.VerifierID,
+		"workspace id":  in.WorkspaceID,
+		"agent id":      in.AgentID,
+		"session id":    in.SessionID,
+		"invocation id": in.InvocationID,
+	}); err != nil {
+		return nil, err
 	}
 	buf := []byte(sessionContextDomainTag)
 	buf = lengthPrefixed(buf, []byte(in.VerifierID))

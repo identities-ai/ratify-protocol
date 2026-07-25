@@ -57,6 +57,31 @@ test("operation context: domain separation between the two constructions", () =>
   assert.notEqual(hex(opHash), hex(session));
 });
 
+test("operation context: ill-formed Unicode is rejected, not replaced", () => {
+  // JS strings are UTF-16; TextEncoder would silently turn a lone
+  // surrogate into U+FFFD, colliding with a literal replacement
+  // character. §6.4.9 requires rejection instead.
+  const loneHigh = "\ud800x";
+  const loneLow = "x\udc00";
+  for (const bad of [loneHigh, loneLow]) {
+    assert.throws(() => operationContextHash({ required_scope: bad }), /well-formed Unicode/);
+    assert.throws(() => operationContextHash({ operation: bad }), /well-formed Unicode/);
+    assert.throws(() => operationContextHash({ resource_id: bad }), /well-formed Unicode/);
+    assert.throws(() => operationContextHash({ requested_path: bad }), /well-formed Unicode/);
+    assert.throws(
+      () => buildSessionContext({ verifier_id: bad, request_hash: operationContextHash({}) }),
+      /well-formed Unicode/,
+    );
+    assert.throws(
+      () => buildSessionContext({ session_id: bad, request_hash: operationContextHash({}) }),
+      /well-formed Unicode/,
+    );
+  }
+  // A valid surrogate PAIR (astral character) is fine.
+  const astral = "\u{1F600}";
+  assert.equal(operationContextHash({ operation: astral }).length, 32);
+});
+
 test("operation context: input validation", () => {
   assert.throws(() => operationContextHash({ payload_digest: new Uint8Array(5) }), /payload digest/);
   assert.throws(

@@ -70,8 +70,28 @@ function lengthPrefixed(chunks: Uint8Array[], field: Uint8Array): void {
   chunks.push(prefix, field);
 }
 
-function utf8(s: string | undefined): Uint8Array {
-  return new TextEncoder().encode(s ?? "");
+// Encode a string field as UTF-8, rejecting ill-formed input (§6.4.9:
+// implementations MUST reject ill-formed text rather than replace or
+// pass it through). JavaScript strings are UTF-16 code-unit sequences,
+// and TextEncoder silently replaces lone surrogates with U+FFFD — which
+// would make malformed input collide with a literal replacement
+// character. Reject instead. This is distinct from Unicode
+// normalization, which is deliberately not performed.
+function utf8(name: string, s: string | undefined): Uint8Array {
+  const value = s ?? "";
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+      if (next < 0xdc00 || next > 0xdfff) {
+        throw new Error(`${name} is not well-formed Unicode (lone high surrogate)`);
+      }
+      i++; // valid surrogate pair
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      throw new Error(`${name} is not well-formed Unicode (lone low surrogate)`);
+    }
+  }
+  return new TextEncoder().encode(value);
 }
 
 function concat(chunks: Uint8Array[]): Uint8Array {
@@ -95,11 +115,11 @@ export function operationContextBytes(ctx: OperationContext): Uint8Array {
   if (digest.length !== 0 && digest.length !== 32) {
     throw new Error(`payload digest must be empty or 32 bytes, got ${digest.length}`);
   }
-  const chunks: Uint8Array[] = [utf8(OPERATION_CONTEXT_DOMAIN_TAG)];
-  lengthPrefixed(chunks, utf8(ctx.required_scope));
-  lengthPrefixed(chunks, utf8(ctx.operation));
-  lengthPrefixed(chunks, utf8(ctx.resource_id));
-  lengthPrefixed(chunks, utf8(ctx.requested_path));
+  const chunks: Uint8Array[] = [new TextEncoder().encode(OPERATION_CONTEXT_DOMAIN_TAG)];
+  lengthPrefixed(chunks, utf8("required scope", ctx.required_scope));
+  lengthPrefixed(chunks, utf8("operation", ctx.operation));
+  lengthPrefixed(chunks, utf8("resource id", ctx.resource_id));
+  lengthPrefixed(chunks, utf8("requested path", ctx.requested_path));
   lengthPrefixed(chunks, digest);
   return concat(chunks);
 }
@@ -123,12 +143,12 @@ export function sessionContextBytes(inputs: SessionContextInputs): Uint8Array {
   if (inputs.request_hash.length !== 32) {
     throw new Error(`request hash must be exactly 32 bytes, got ${inputs.request_hash.length}`);
   }
-  const chunks: Uint8Array[] = [utf8(SESSION_CONTEXT_DOMAIN_TAG)];
-  lengthPrefixed(chunks, utf8(inputs.verifier_id));
-  lengthPrefixed(chunks, utf8(inputs.workspace_id));
-  lengthPrefixed(chunks, utf8(inputs.agent_id));
-  lengthPrefixed(chunks, utf8(inputs.session_id));
-  lengthPrefixed(chunks, utf8(inputs.invocation_id));
+  const chunks: Uint8Array[] = [new TextEncoder().encode(SESSION_CONTEXT_DOMAIN_TAG)];
+  lengthPrefixed(chunks, utf8("verifier id", inputs.verifier_id));
+  lengthPrefixed(chunks, utf8("workspace id", inputs.workspace_id));
+  lengthPrefixed(chunks, utf8("agent id", inputs.agent_id));
+  lengthPrefixed(chunks, utf8("session id", inputs.session_id));
+  lengthPrefixed(chunks, utf8("invocation id", inputs.invocation_id));
   lengthPrefixed(chunks, inputs.request_hash);
   return concat(chunks);
 }

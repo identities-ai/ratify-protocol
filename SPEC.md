@@ -613,7 +613,7 @@ The bytes HMACed to produce `SessionToken.mac`:
 
 The canonical constructions behind the 32-byte `session_context` binding (§5.8). Both are raw binary, domain-separated, and length-prefixed — NOT JSON. Length prefixes exist because raw concatenation is ambiguous (`"ab" || "c"` and `"a" || "bc"` produce identical bytes); domain tags exist so a hash computed for one construction can never collide with the other or with any future construction.
 
-Notation: `lp(x)` = big-endian uint64 byte-length of `x`, followed by the bytes of `x`. Strings encode as UTF-8. Absent fields encode as `lp("")` (an 8-byte zero prefix) — every field position is always present, so no field arrangement is ambiguous.
+Notation: `lp(x)` = big-endian uint64 byte-length of `x`, followed by the bytes of `x`. Strings encode as UTF-8, and implementations MUST reject ill-formed text — invalid UTF-8 byte sequences, lone UTF-16 surrogates — rather than replace it (a silent U+FFFD substitution would make malformed input collide with a literal replacement character) or pass it through. Rejection of ill-formed input is distinct from Unicode normalization, which these constructions deliberately do not perform. Absent fields encode as `lp("")` (an 8-byte zero prefix) — every field position is always present, so no field arrangement is ambiguous.
 
 **OperationContextBytes** binds the specific action a presentation authorizes:
 

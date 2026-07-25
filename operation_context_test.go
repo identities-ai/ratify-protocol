@@ -107,6 +107,41 @@ func TestOperationContextDomainSeparation(t *testing.T) {
 	}
 }
 
+func TestOperationContextRejectsIllFormedUTF8(t *testing.T) {
+	// §6.4.9: strings encode as UTF-8 and implementations MUST reject
+	// ill-formed text. A Go string is an arbitrary byte sequence, so
+	// this is a real input class, not a type-system impossibility.
+	bad := string([]byte{0xff, 0xfe})
+	fields := []OperationContext{
+		{RequiredScope: bad},
+		{Operation: bad},
+		{ResourceID: bad},
+		{RequestedPath: bad},
+	}
+	for i, ctx := range fields {
+		if _, err := OperationContextHash(ctx); err == nil {
+			t.Fatalf("operation field %d with invalid UTF-8 must be rejected", i)
+		}
+	}
+
+	validHash, err := OperationContextHash(OperationContext{})
+	if err != nil {
+		t.Fatalf("empty OperationContextHash: %v", err)
+	}
+	sessionFields := []SessionContextInputs{
+		{VerifierID: bad, RequestHash: validHash},
+		{WorkspaceID: bad, RequestHash: validHash},
+		{AgentID: bad, RequestHash: validHash},
+		{SessionID: bad, RequestHash: validHash},
+		{InvocationID: bad, RequestHash: validHash},
+	}
+	for i, in := range sessionFields {
+		if _, err := BuildSessionContext(in); err == nil {
+			t.Fatalf("session field %d with invalid UTF-8 must be rejected", i)
+		}
+	}
+}
+
 func TestOperationContextInputValidation(t *testing.T) {
 	if _, err := OperationContextHash(OperationContext{PayloadDigest: make([]byte, 5)}); err == nil {
 		t.Fatal("5-byte payload digest must be rejected")

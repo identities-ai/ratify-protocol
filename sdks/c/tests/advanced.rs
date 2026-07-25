@@ -1057,3 +1057,32 @@ fn operation_context_input_validation() {
         ratify_error_free(err);
     }
 }
+
+#[test]
+fn operation_context_rejects_invalid_utf8() {
+    // §6.4.9: implementations MUST reject ill-formed text. C strings are
+    // arbitrary non-null bytes, so invalid UTF-8 is a real input class.
+    unsafe {
+        let mut err = std::ptr::null_mut();
+        let mut out = [0u8; 32];
+        let bad = CString::new(vec![0xffu8, 0xfe]).unwrap();
+        let s = ratify_c::ratify_operation_context_hash(
+            bad.as_ptr(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), 0,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrEncoding);
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
+
+        let valid_hash = [0x11u8; 32];
+        let s = ratify_c::ratify_session_context_build(
+            bad.as_ptr(), std::ptr::null(), std::ptr::null(),
+            std::ptr::null(), std::ptr::null(),
+            valid_hash.as_ptr(), 32,
+            out.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyErrEncoding);
+        ratify_error_free(err);
+    }
+}

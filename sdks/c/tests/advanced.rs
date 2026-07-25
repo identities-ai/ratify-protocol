@@ -35,13 +35,15 @@ use ratify_c::{
     ratify_key_rotation_to_json, ratify_key_rotation_from_json, ratify_key_rotation_free,
     ratify_scope_has, ratify_scope_is_sensitive, ratify_scope_vocabulary,
     ratify_scopes_expand, ratify_scopes_intersect, ratify_scopes_validate,
+    ratify_challenge_store_new, ratify_challenge_store_free, ratify_challenge_store_issue,
+    ratify_challenge_store_check, ratify_challenge_store_consume,
     ratify_policy_verdict_issue, ratify_policy_verdict_verify,
     ratify_policy_verdict_to_json, ratify_policy_verdict_from_json, ratify_policy_verdict_free,
     ratify_verifier_context_hash,
     ratify_transaction_receipt_sign_party,
     ratify_transaction_receipt_from_json, ratify_transaction_receipt_to_json,
     ratify_transaction_receipt_free,
-    RatifyStatus, RatifyVerifierContext,
+    RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
 };
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -710,4 +712,167 @@ fn base64_encode(input: &[u8]) -> String {
         i += 3;
     }
     out
+}
+
+// ============================================================================
+// Challenge store (SPEC §10 single-use challenges)
+// ============================================================================
+
+// The fixed test clock NOW is in the future relative to the wall clock the
+// store uses when issuing, so issue with a TTL long enough that the record
+// is still live at NOW.
+const STORE_TTL: i64 = 400_000_000;
+
+#[test]
+fn challenge_store_semantics() {
+    unsafe {
+        let store = ratify_challenge_store_new(16);
+        let mut challenge = [0u8; 32];
+        let mut expires_at = 0i64;
+        let mut err = std::ptr::null_mut();
+
+        let s = ratify_challenge_store_issue(
+            store, std::ptr::null(), 0, STORE_TTL,
+            challenge.as_mut_ptr(), &mut expires_at, &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
+        assert!(expires_at > NOW, "expiry must be after the test clock");
+
+        // Peek does not consume.
+        let s = ratify_challenge_store_check(
+            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk);
+
+        // Wrong session context fails without consuming.
+        let ctx = [7u8; 32];
+        let s = ratify_challenge_store_consume(
+            store, challenge.as_ptr(), 32, ctx.as_ptr(), 32, NOW, &mut err,
+        );
+        assert_ne!(s, RatifyStatus::RatifyOk, "wrong context must fail");
+        let reason = read_str(err);
+        assert!(reason.contains("was not issued by this verifier"), "{reason}");
+
+        // First consume succeeds; the second fails.
+        let mut err2 = std::ptr::null_mut();
+        let s = ratify_challenge_store_consume(
+            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err2,
+        );
+        assert_eq!(s, RatifyStatus::RatifyOk);
+        let s = ratify_challenge_store_consume(
+            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err2,
+        );
+        assert_ne!(s, RatifyStatus::RatifyOk, "double consume must fail");
+        ratify_error_free(err2);
+
+        ratify_challenge_store_free(store);
+    }
+}
+
+unsafe fn make_bundle_with_store() -> (
+    *mut ratify_c::RatifyHumanRoot,
+    *mut ratify_c::RatifyAgent,
+    *mut ratify_c::RatifyDelegationCert,
+    *mut c_char,
+    *mut ratify_c::RatifyChallengeStore,
+) {
+    let mut root = std::ptr::null_mut();
+    let mut agent = std::ptr::null_mut();
+    ratify_human_root_generate(&mut root);
+    ratify_agent_generate(cstr!("StoreBot"), cstr!("custom"), &mut agent);
+
+    let mut cert = std::ptr::null_mut();
+    let mut err = std::ptr::null_mut();
+    ratify_delegation_issue(root, agent, cstr!("[\"meeting:attend\"]"), NOW, NOW + 3600, &mut cert, &mut err);
+
+    let store = ratify_challenge_store_new(16);
+    let mut challenge = [0u8; 32];
+    let s = ratify_challenge_store_issue(
+        store, std::ptr::null(), 0, STORE_TTL,
+        challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+    );
+    assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
+
+    let cert_json = ratify_c::ratify_delegation_cert_to_json(cert, &mut err);
+    let mut bundle = std::ptr::null_mut();
+    ratify_proof_bundle_create(agent, cert_json, challenge.as_ptr(), 32, NOW, &mut bundle, &mut err);
+    ratify_string_free(cert_json);
+    let bundle_json = ratify_c::ratify_proof_bundle_to_json(bundle, &mut err);
+    ratify_c::ratify_proof_bundle_free(bundle);
+
+    (root, agent, cert, bundle_json, store)
+}
+
+unsafe fn verify_with_store(
+    bundle_json: *const c_char,
+    scope: *const c_char,
+    store: *mut ratify_c::RatifyChallengeStore,
+) -> (bool, String, String) {
+    let opts = RatifyVerifyOptions {
+        required_scope: scope,
+        now_unix: NOW,
+        session_context: std::ptr::null(),
+        session_context_len: 0,
+        revocation_fn: None,
+        revocation_userdata: std::ptr::null_mut(),
+        context: std::ptr::null(),
+        stream: std::ptr::null(),
+    };
+    let mut result = std::ptr::null_mut();
+    let mut err = std::ptr::null_mut();
+    let s = ratify_c::ratify_verify_bundle_opts_with_challenge_store(
+        bundle_json, &opts, store, &mut result, &mut err,
+    );
+    assert_eq!(s, RatifyStatus::RatifyOk, "verify status: {}", read_str(err));
+    let valid = ratify_verify_result_is_valid(result) == 1;
+    let status = read_str(ratify_c::ratify_verify_result_identity_status(result));
+    let reason = read_str(ratify_c::ratify_verify_result_error_reason(result));
+    ratify_verify_result_free(result);
+    (valid, status, reason)
+}
+
+#[test]
+fn verify_with_challenge_store_replay_is_rejected() {
+    unsafe {
+        let (root, agent, cert, bundle_json, store) = make_bundle_with_store();
+
+        let (valid, _, reason) = verify_with_store(bundle_json, cstr!("meeting:attend"), store);
+        assert!(valid, "first presentation must verify: {reason}");
+
+        // Identical second presentation: single-use makes it a replay.
+        let (valid, status, reason) = verify_with_store(bundle_json, cstr!("meeting:attend"), store);
+        assert!(!valid);
+        assert_eq!(status, "invalid");
+        assert!(reason.starts_with("unknown_challenge:"), "{reason}");
+
+        ratify_challenge_store_free(store);
+        ratify_string_free(bundle_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
+fn verify_with_challenge_store_scope_denied_still_consumes() {
+    unsafe {
+        let (root, agent, cert, bundle_json, store) = make_bundle_with_store();
+
+        // Cryptographically valid but denied: the challenge is spent anyway.
+        let (valid, status, _) = verify_with_store(bundle_json, cstr!("files:write"), store);
+        assert!(!valid);
+        assert_eq!(status, "scope_denied");
+
+        // Retrying with the correct scope fails: the challenge is gone.
+        let (valid, status, reason) = verify_with_store(bundle_json, cstr!("meeting:attend"), store);
+        assert!(!valid);
+        assert_eq!(status, "invalid");
+        assert!(reason.starts_with("unknown_challenge:"), "{reason}");
+
+        ratify_challenge_store_free(store);
+        ratify_string_free(bundle_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
 }

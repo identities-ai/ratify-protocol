@@ -44,6 +44,8 @@ typedef enum RatifyStatus {
 
 typedef struct RatifyAgent RatifyAgent;
 
+typedef struct RatifyChallengeStore RatifyChallengeStore;
+
 typedef struct RatifyDelegationCert RatifyDelegationCert;
 
 typedef struct RatifyHumanRoot RatifyHumanRoot;
@@ -781,6 +783,71 @@ enum RatifyStatus ratify_transaction_receipt_verify_full(const char *receipt_jso
                                                          int64_t now_unix,
                                                          int *valid_out,
                                                          char **err_out);
+
+// Create an in-memory challenge store holding at most `max_size` pending
+// challenges. The store makes verifier-issued challenges single-use: each
+// is accepted at most once within its freshness window. Free with
+// `ratify_challenge_store_free`.
+struct RatifyChallengeStore *ratify_challenge_store_new(uintptr_t max_size);
+
+// Free a `RatifyChallengeStore` handle. Safe to call with NULL.
+void ratify_challenge_store_free(struct RatifyChallengeStore *store);
+
+// Issue a fresh 32-byte challenge bound to `session_context`
+// (NULL/0 = unbound), valid for `ttl_seconds`.
+//
+// - `out_challenge` — buffer of at least 32 bytes; receives the challenge.
+// - `out_expires_at` — optional; receives the expiry (unix seconds).
+enum RatifyStatus ratify_challenge_store_issue(const struct RatifyChallengeStore *store,
+                                               const unsigned char *session_context,
+                                               uintptr_t session_context_len,
+                                               int64_t ttl_seconds,
+                                               unsigned char *out_challenge,
+                                               int64_t *out_expires_at,
+                                               char **err_out);
+
+// Report whether `challenge` could be consumed right now — issued,
+// unexpired, unconsumed, and bound to `session_context` — WITHOUT
+// consuming it. Returns RatifyOk when consumable; otherwise an error
+// status with the documented unknown-challenge detail in `*err_out`.
+// `now_unix` 0 = system clock.
+enum RatifyStatus ratify_challenge_store_check(const struct RatifyChallengeStore *store,
+                                               const unsigned char *challenge,
+                                               uintptr_t challenge_len,
+                                               const unsigned char *session_context,
+                                               uintptr_t session_context_len,
+                                               int64_t now_unix,
+                                               char **err_out);
+
+// Atomically mark `challenge` used. Exactly one consume of a given
+// challenge may ever succeed; later calls (and calls with a mismatched
+// `session_context`, which do NOT consume the record) return an error
+// status with the documented unknown-challenge detail in `*err_out`.
+// `now_unix` 0 = system clock.
+enum RatifyStatus ratify_challenge_store_consume(const struct RatifyChallengeStore *store,
+                                                 const unsigned char *challenge,
+                                                 uintptr_t challenge_len,
+                                                 const unsigned char *session_context,
+                                                 uintptr_t session_context_len,
+                                                 int64_t now_unix,
+                                                 char **err_out);
+
+// Verify a ProofBundle with single-use challenge enforcement (SPEC §10).
+//
+// Identical to `ratify_verify_bundle_opts`, plus: the store is consulted
+// (without consuming) before any signature work, and the challenge is
+// atomically consumed after the structural, chain, and challenge-signature
+// checks pass — before authorization evaluation. A forged or malformed
+// presentation never consumes a challenge; a cryptographically valid
+// presentation does, even if authorization is subsequently denied.
+//
+// The store's session binding is checked against `opts->session_context`.
+// `opts` may be NULL for default options.
+enum RatifyStatus ratify_verify_bundle_opts_with_challenge_store(const char *bundle_json,
+                                                                 const struct RatifyVerifyOptions *opts,
+                                                                 const struct RatifyChallengeStore *store,
+                                                                 struct RatifyVerifyResult **out,
+                                                                 char **err_out);
 
 // Register a custom entropy callback for platforms without OS-level RNG.
 //

@@ -13,7 +13,7 @@ use crate::crypto::{
 };
 use crate::scope::{intersect_scopes, validate_scopes, SCOPE_IDENTITY_DELEGATE};
 use crate::types::{
-    HybridPublicKey, HybridSignature, IdentityStatus, ProofBundle, SessionToken,
+    DelegationCert, HybridPublicKey, HybridSignature, IdentityStatus, ProofBundle, SessionToken,
     TransactionReceipt, TransactionReceiptResult, VerifyOptions, VerifyResult,
     CHALLENGE_WINDOW_SECONDS, ED25519_PUBLIC_KEY_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
     MLDSA65_PUBLIC_KEY_SIZE, PROTOCOL_VERSION,
@@ -96,6 +96,16 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
             "session_context_unverifiable",
             "bundle has session_context but verifier did not provide one",
         );
+    }
+
+    // --- Single-use challenge: locate WITHOUT consuming (SPEC §10) ---
+    // An unknown, expired, already-consumed, or wrongly-bound challenge is
+    // rejected before any signature work; the record is not touched, so a
+    // forged presentation cannot burn a legitimate challenge.
+    if let Some(store) = &opts.challenge_store {
+        if let Err(store_err) = store.validate(&bundle.challenge, &opts.session_context, now) {
+            return invalid("unknown_challenge", &store_err);
+        }
     }
 
     // --- v1.1 stream binding checks (SPEC §5.8, §6.4.2) ---
@@ -234,23 +244,15 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
         }
         // Constraint evaluation — each cert's first-class constraints must all
         // pass against the caller-supplied VerifierContext. Fail-closed.
-        if let Err(constraint_err) = evaluate_constraints(
-            cert,
-            &opts.context,
-            now,
-            opts.constraint_evaluators.as_ref(),
-        ) {
-            // Route constraint failures to the specific identity_status so
-            // audit layers can distinguish unverifiable / unknown / denied.
-            // Matches Go/TS/Python.
-            let status = if constraint_err.contains("constraint_unverifiable") {
-                "constraint_unverifiable"
-            } else if constraint_err.contains("constraint_unknown") {
-                "constraint_unknown"
-            } else {
-                "constraint_denied"
-            };
-            return fail_with_status(status, &format!("cert {}: {}", i, constraint_err));
+        // With a challenge store in play, constraint evaluation is deferred
+        // until after the challenge is consumed (SPEC §10): a
+        // cryptographically valid presentation spends its challenge even
+        // when a constraint subsequently denies it, so denial outcomes
+        // cannot be probed with one liveness proof.
+        if opts.challenge_store.is_none() {
+            if let Some(failure) = evaluate_cert_constraints(cert, i, opts, now) {
+                return failure;
+            }
         }
         // Chain linkage
         if i + 1 < bundle.delegations.len() {
@@ -310,6 +312,25 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
             "bad_challenge_sig",
             &format!("challenge signature verification failed: {}", err),
         );
+    }
+
+    // --- Single-use challenge: atomic consume (SPEC §10) ---
+    // Structure, chain, and challenge signature have all verified, so this
+    // presentation is cryptographically the agent's. Consume the challenge
+    // now — before authorization evaluation — so a later replay of the
+    // same challenge fails even if this presentation is subsequently
+    // denied.
+    if let Some(store) = &opts.challenge_store {
+        if let Err(consume_err) = store.consume(&bundle.challenge, &opts.session_context, now) {
+            return invalid("unknown_challenge", &consume_err);
+        }
+        // Deferred constraint evaluation (skipped in the per-cert loop
+        // above when a store is present).
+        for (i, cert) in bundle.delegations.iter().enumerate() {
+            if let Some(failure) = evaluate_cert_constraints(cert, i, opts, now) {
+                return failure;
+            }
+        }
     }
 
     // --- Effective scope ---
@@ -434,6 +455,32 @@ fn validate_hybrid_pubkey_lens(pub_key: &HybridPublicKey, label: &str) -> Option
         ));
     }
     None
+}
+
+/// Run one cert's constraint evaluation and map a failure to its identity
+/// status; None means the constraints passed.
+fn evaluate_cert_constraints(
+    cert: &DelegationCert,
+    i: usize,
+    opts: &VerifyOptions,
+    now: i64,
+) -> Option<VerifyResult> {
+    let constraint_err =
+        evaluate_constraints(cert, &opts.context, now, opts.constraint_evaluators.as_ref()).err()?;
+    // Route constraint failures to the specific identity_status so audit
+    // layers can distinguish unverifiable / unknown / denied.
+    // Matches Go/TS/Python.
+    let status = if constraint_err.contains("constraint_unverifiable") {
+        "constraint_unverifiable"
+    } else if constraint_err.contains("constraint_unknown") {
+        "constraint_unknown"
+    } else {
+        "constraint_denied"
+    };
+    Some(fail_with_status(
+        status,
+        &format!("cert {}: {}", i, constraint_err),
+    ))
 }
 
 fn invalid(reason: &str, msg: &str) -> VerifyResult {

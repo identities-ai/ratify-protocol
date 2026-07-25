@@ -885,39 +885,10 @@ pub unsafe extern "C" fn ratify_verify_bundle_opts(
         return RatifyStatus::RatifyErrNullPointer;
     }
 
-    // Validate before any allocation.
-    if !opts.is_null() {
-        let o = &*opts;
-
-        // session_context_len must be 0 or exactly 32
-        if o.session_context_len != 0 && o.session_context_len != 32 {
-            set_err(err_out, "session_context_len must be 0 or 32");
-            return RatifyStatus::RatifyErrBadArgument;
-        }
-        if o.session_context_len == 32 && o.session_context.is_null() {
-            set_err(err_out, "session_context is null but session_context_len is 32");
-            return RatifyStatus::RatifyErrNullPointer;
-        }
-
-        // Validate stream context if present
-        if !o.stream.is_null() {
-            let s = &*o.stream;
-            if s.stream_id_len != 0 && s.stream_id_len != 32 {
-                set_err(err_out, "stream_id_len must be 0 or 32");
-                return RatifyStatus::RatifyErrBadArgument;
-            }
-            if s.stream_id_len == 32 && s.stream_id.is_null() {
-                set_err(err_out, "stream_id is null but stream_id_len is 32");
-                return RatifyStatus::RatifyErrNullPointer;
-            }
-        }
-
-        // Validate required_scope UTF-8
-        if !o.required_scope.is_null() && CStr::from_ptr(o.required_scope).to_str().is_err() {
-            set_err(err_out, "required_scope contains invalid UTF-8");
-            return RatifyStatus::RatifyErrEncoding;
-        }
-    }
+    let rust_opts = match checked_build_opts(opts, err_out) {
+        Ok(o) => o,
+        Err(status) => return status,
+    };
 
     let bundle_str = match cstr_to_string(bundle_json, "bundle_json", err_out) {
         Some(s) => s, None => return RatifyStatus::RatifyErrJson,
@@ -927,25 +898,62 @@ pub unsafe extern "C" fn ratify_verify_bundle_opts(
         Err(e) => { set_err(err_out, &format!("bundle_json: {e}")); return RatifyStatus::RatifyErrJson; }
     };
 
-    let rust_opts = if opts.is_null() {
-        VerifyOptions::default()
-    } else {
-        let o = &*opts;
-        build_opts(
-            o.required_scope,
-            o.now_unix,
-            o.session_context,
-            o.session_context_len,
-            o.revocation_fn,
-            o.revocation_userdata,
-            o.context,
-            o.stream,
-        )
-    };
-
     let result = verify_bundle(&bundle, &rust_opts);
     *out = Box::into_raw(Box::new(RatifyVerifyResult(result)));
     RatifyStatus::RatifyOk
+}
+
+/// Validate a caller-supplied RatifyVerifyOptions struct and build the Rust
+/// VerifyOptions from it. Shared by `ratify_verify_bundle_opts` and the
+/// challenge-store verify entry point in `advanced.rs`.
+pub(crate) unsafe fn checked_build_opts<'a>(
+    opts: *const RatifyVerifyOptions,
+    err_out: *mut *mut c_char,
+) -> Result<VerifyOptions<'a>, RatifyStatus> {
+    if opts.is_null() {
+        return Ok(VerifyOptions::default());
+    }
+    let o = &*opts;
+
+    // session_context_len must be 0 or exactly 32
+    if o.session_context_len != 0 && o.session_context_len != 32 {
+        set_err(err_out, "session_context_len must be 0 or 32");
+        return Err(RatifyStatus::RatifyErrBadArgument);
+    }
+    if o.session_context_len == 32 && o.session_context.is_null() {
+        set_err(err_out, "session_context is null but session_context_len is 32");
+        return Err(RatifyStatus::RatifyErrNullPointer);
+    }
+
+    // Validate stream context if present
+    if !o.stream.is_null() {
+        let s = &*o.stream;
+        if s.stream_id_len != 0 && s.stream_id_len != 32 {
+            set_err(err_out, "stream_id_len must be 0 or 32");
+            return Err(RatifyStatus::RatifyErrBadArgument);
+        }
+        if s.stream_id_len == 32 && s.stream_id.is_null() {
+            set_err(err_out, "stream_id is null but stream_id_len is 32");
+            return Err(RatifyStatus::RatifyErrNullPointer);
+        }
+    }
+
+    // Validate required_scope UTF-8
+    if !o.required_scope.is_null() && CStr::from_ptr(o.required_scope).to_str().is_err() {
+        set_err(err_out, "required_scope contains invalid UTF-8");
+        return Err(RatifyStatus::RatifyErrEncoding);
+    }
+
+    Ok(build_opts(
+        o.required_scope,
+        o.now_unix,
+        o.session_context,
+        o.session_context_len,
+        o.revocation_fn,
+        o.revocation_userdata,
+        o.context,
+        o.stream,
+    ))
 }
 
 // ============================================================================

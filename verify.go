@@ -112,6 +112,18 @@ type VerifyOptions struct {
 	// Stream binds a verifier-tracked sequence context for v1.1 stream-bound
 	// bundles. Both StreamID and LastSeenSeq must be populated.
 	Stream *StreamContext
+
+	// ChallengeStore, when non-nil, makes verifier-issued challenges
+	// single-use (§10): the store is consulted (without consuming) before
+	// any signature work, and the challenge is atomically consumed after
+	// the structural, chain, and challenge-signature checks pass — before
+	// authorization evaluation. A forged or malformed presentation never
+	// consumes a challenge; a cryptographically valid presentation does,
+	// even if authorization is subsequently denied. When a store is in
+	// use, constraint evaluation is deferred until after consumption so
+	// denial outcomes cannot be probed without spending the challenge.
+	// The store's session binding is checked against SessionContext.
+	ChallengeStore ChallengeStore
 }
 
 // StreamContext tracks the state of an ordered interaction stream.
@@ -199,6 +211,16 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 		}
 	} else if len(bundle.SessionContext) != 0 {
 		return invalid("session_context_unverifiable", "bundle has session_context but verifier did not provide one")
+	}
+
+	// --- Single-use challenge: locate WITHOUT consuming (§10) ---
+	// An unknown, expired, already-consumed, or wrongly-bound challenge is
+	// rejected before any signature work; the record is not touched, so a
+	// forged presentation cannot burn a legitimate challenge.
+	if opts.ChallengeStore != nil {
+		if err := opts.ChallengeStore.Validate(bundle.Challenge, opts.SessionContext, now); err != nil {
+			return invalid("unknown_challenge", err.Error())
+		}
 	}
 
 	// --- v1.1 stream binding checks (SPEC §5.8, §6.4.2) ---
@@ -291,15 +313,15 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 			return invalid("bad_signature", fmt.Sprintf("cert %d: %v", i, err))
 		}
 
-		if err := evaluateConstraints(cert, opts.Context, now, opts.ConstraintEvaluators); err != nil {
-			status := IdentityStatusConstraintDenied
-			switch {
-			case isConstraintUnverifiable(err):
-				status = IdentityStatusConstraintUnverifiable
-			case isConstraintUnknown(err):
-				status = IdentityStatusConstraintUnknown
+		// With a ChallengeStore in play, constraint evaluation is deferred
+		// until after the challenge is consumed (§10): a cryptographically
+		// valid presentation spends its challenge even when a constraint
+		// subsequently denies it, so denial outcomes cannot be probed with
+		// one liveness proof.
+		if opts.ChallengeStore == nil {
+			if res, failed := evaluateCertConstraints(cert, i, opts, now); failed {
+				return res
 			}
-			return failWithStatus(status, fmt.Sprintf("cert %d: %v", i, err))
 		}
 
 		// Chain linkage: each cert's subject must match the next cert's issuer
@@ -327,6 +349,24 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	}
 	if err := verifyBoth(challengeSignBytes(bundle.Challenge, bundle.ChallengeAt, bundle.SessionContext, bundle.StreamID, bundle.StreamSeq), bundle.ChallengeSig, bundle.AgentPubKey); err != nil {
 		return invalid("bad_challenge_sig", fmt.Sprintf("challenge signature verification failed: %v", err))
+	}
+
+	// --- Single-use challenge: atomic consume (§10) ---
+	// Structure, chain, and challenge signature have all verified, so this
+	// presentation is cryptographically the agent's. Consume the challenge
+	// now — before authorization evaluation — so a later replay of the same
+	// challenge fails even if this presentation is subsequently denied.
+	if opts.ChallengeStore != nil {
+		if err := opts.ChallengeStore.Consume(bundle.Challenge, opts.SessionContext, now); err != nil {
+			return invalid("unknown_challenge", err.Error())
+		}
+		// Deferred constraint evaluation (skipped in the per-cert loop
+		// above when a store is present).
+		for i := range bundle.Delegations {
+			if res, failed := evaluateCertConstraints(&bundle.Delegations[i], i, opts, now); failed {
+				return res
+			}
+		}
 	}
 
 	// --- Effective scope (intersection across the chain) ---
@@ -460,6 +500,24 @@ func validateHybridPubKeyLens(pub HybridPublicKey, label string) error {
 // ============================================================================
 // Result constructors
 // ============================================================================
+
+// evaluateCertConstraints runs one cert's constraint evaluation and maps
+// the failure to its identity status. failed=false means the constraints
+// passed.
+func evaluateCertConstraints(cert *DelegationCert, i int, opts VerifyOptions, now time.Time) (VerifyResult, bool) {
+	err := evaluateConstraints(cert, opts.Context, now, opts.ConstraintEvaluators)
+	if err == nil {
+		return VerifyResult{}, false
+	}
+	status := IdentityStatusConstraintDenied
+	switch {
+	case isConstraintUnverifiable(err):
+		status = IdentityStatusConstraintUnverifiable
+	case isConstraintUnknown(err):
+		status = IdentityStatusConstraintUnknown
+	}
+	return failWithStatus(status, fmt.Sprintf("cert %d: %v", i, err)), true
+}
 
 func invalid(reason, msg string) VerifyResult {
 	return VerifyResult{

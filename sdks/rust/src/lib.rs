@@ -76,4 +76,9 @@ pub use types::{
     ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
     MLDSA65_PUBLIC_KEY_SIZE, MLDSA65_SIGNATURE_SIZE, NO_EXPIRY_SENTINEL, PROTOCOL_VERSION,
 };
-pub use verify::{verify_bundle, verify_streamed_turn, verify_transaction_receipt};
+#[allow(deprecated)]
+pub use verify::verify_streamed_turn;
+pub use verify::{
+    verify_bundle, verify_streamed_turn_with_options, verify_transaction_receipt, StreamedTurn,
+    StreamedVerifyOptions,
+};

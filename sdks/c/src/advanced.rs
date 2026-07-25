@@ -27,6 +27,10 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_uchar};
 use std::slice;
 
+// The deprecated positional streamed verifier stays exported through the C
+// ABI for compatibility; its wrapper below documents the deprecation.
+#[allow(deprecated)]
+use ratify_protocol::verify_streamed_turn;
 use ratify_protocol::{
     bundle_hash as sdk_bundle_hash, chain_hash as sdk_chain_hash,
     expand_scopes, has_scope, hex_encode, intersect_scopes, is_sensitive,
@@ -36,9 +40,10 @@ use ratify_protocol::{
     revocation_sign_bytes, session_token_sign_bytes, sign_transaction_receipt_party,
     transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
     verify_policy_verdict, verify_revocation_list, verify_revocation_push,
-    verify_session_token_e, verify_streamed_turn, verify_transaction_receipt,
+    verify_session_token_e, verify_streamed_turn_with_options, verify_transaction_receipt,
     verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
-    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle,
+    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, ProofBundle, StreamedTurn,
+    StreamedVerifyOptions,
     HybridPublicKey, HybridSignature,
     KeyRotationStatement, PolicyVerdict,
     RevocationList, RevocationPush, SessionToken,
@@ -1257,6 +1262,12 @@ pub unsafe extern "C" fn ratify_witness_entry_sig_ml_dsa_65_hex(
 
 /// Verify a single streamed turn against an already-issued session token.
 ///
+/// DEPRECATED: presentation checks only — this form cannot enforce a
+/// required scope, single-use challenges, or verifier-side session/stream
+/// checks, so a token holder passes it for any protected action. Use
+/// `ratify_verify_streamed_turn_opts`. Retained for compatibility through
+/// the v1.0.0-* releases.
+///
 /// This is the fast path for embedded streaming: after a full `verify_bundle`
 /// that issued a session token, each subsequent turn is verified with this
 /// function — no cert chain re-verification needed.
@@ -1350,6 +1361,7 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
         slice::from_raw_parts(stream_id, 32)
     };
 
+    #[allow(deprecated)]
     let result = verify_streamed_turn(
         &token, secret, chall, challenge_at, &sig,
         sess_ctx, sid, stream_seq,
@@ -1357,6 +1369,189 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
     );
 
     Box::into_raw(Box::new(crate::RatifyVerifyResult(result)))
+}
+
+// Validate and convert RatifyStreamedVerifyOptions -> StreamedVerifyOptions.
+unsafe fn checked_build_streamed_opts<'a>(
+    opts: *const crate::RatifyStreamedVerifyOptions,
+    err_out: *mut *mut c_char,
+) -> Result<StreamedVerifyOptions<'a>, RatifyStatus> {
+    if opts.is_null() {
+        return Ok(StreamedVerifyOptions::default());
+    }
+    let o = &*opts;
+
+    if o.session_context_len != 0 && o.session_context_len != 32 {
+        set_err(err_out, "session_context_len must be 0 or 32");
+        return Err(RatifyStatus::RatifyErrBadArgument);
+    }
+    if o.session_context_len == 32 && o.session_context.is_null() {
+        set_err(err_out, "session_context is null but session_context_len is 32");
+        return Err(RatifyStatus::RatifyErrNullPointer);
+    }
+    if !o.stream.is_null() {
+        let s = &*o.stream;
+        if s.stream_id_len != 0 && s.stream_id_len != 32 {
+            set_err(err_out, "stream_id_len must be 0 or 32");
+            return Err(RatifyStatus::RatifyErrBadArgument);
+        }
+        if s.stream_id_len == 32 && s.stream_id.is_null() {
+            set_err(err_out, "stream_id is null but stream_id_len is 32");
+            return Err(RatifyStatus::RatifyErrNullPointer);
+        }
+    }
+    if !o.required_scope.is_null()
+        && std::ffi::CStr::from_ptr(o.required_scope).to_str().is_err()
+    {
+        set_err(err_out, "required_scope contains invalid UTF-8");
+        return Err(RatifyStatus::RatifyErrEncoding);
+    }
+
+    let required_scope = if o.required_scope.is_null() {
+        String::new()
+    } else {
+        std::ffi::CStr::from_ptr(o.required_scope)
+            .to_str()
+            .unwrap_or("")
+            .to_owned()
+    };
+    let session_context = if o.session_context.is_null() || o.session_context_len == 0 {
+        Vec::new()
+    } else {
+        slice::from_raw_parts(o.session_context, o.session_context_len).to_vec()
+    };
+    let stream = if o.stream.is_null() {
+        None
+    } else {
+        let s = &*o.stream;
+        if s.stream_id.is_null() || s.stream_id_len == 0 {
+            None
+        } else {
+            Some(ratify_protocol::StreamContext {
+                stream_id: slice::from_raw_parts(s.stream_id, s.stream_id_len).to_vec(),
+                last_seen_seq: s.last_seen_seq,
+            })
+        }
+    };
+
+    Ok(StreamedVerifyOptions {
+        required_scope,
+        challenge_store: None,
+        session_context,
+        stream,
+        now: if o.now_unix == 0 { None } else { Some(o.now_unix) },
+    })
+}
+
+/// Options-object streamed-turn verification (SPEC §5.13).
+///
+/// Verifies one turn against a previously issued SessionToken and enforces
+/// the verifier-side controls the positional `ratify_verify_streamed_turn`
+/// cannot: `opts->required_scope` is checked against the token's cached
+/// effective scope (`scope_denied` on miss), `opts->session_context` /
+/// `opts->stream` are the verifier-side expectations checked against the
+/// presented bindings with the same statuses as full verification, and a
+/// non-NULL `store` makes the per-turn challenge single-use (consulted,
+/// without consuming, after the session token's HMAC authenticates the
+/// presentation and before the per-turn hybrid challenge signature is
+/// verified; atomically consumed after that signature verifies — before
+/// the scope check; store failures normalize to the canonical
+/// unknown_challenge result).
+///
+/// `opts` is `RatifyStreamedVerifyOptions` — deliberately not the full
+/// `RatifyVerifyOptions`, so revocation callbacks and constraint context
+/// can never be passed and silently ignored. Callers who need fresh
+/// revocation or policy semantics run full bundle verification instead.
+///
+/// - `session_context` / `stream_id` / `stream_seq` — the PRESENTED
+///   bindings the agent signed (NULL + 0 = unbound), distinct from the
+///   expectations in `opts`.
+/// - `opts` may be NULL for default options; `now` comes from
+///   `opts->now_unix` (0 = system clock).
+/// - `store` may be NULL to skip single-use enforcement.
+/// - `opts->stream` is a caller-owned snapshot — see its declaration for
+///   the atomic-advance requirement.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_streamed_turn_opts(
+    token_json: *const c_char,
+    session_secret: *const c_uchar,
+    session_secret_len: usize,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    challenge_at: i64,
+    challenge_sig_json: *const c_char,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    stream_id: *const c_uchar,
+    stream_id_len: usize,
+    stream_seq: i64,
+    opts: *const crate::RatifyStreamedVerifyOptions,
+    store: *const RatifyChallengeStore,
+    out: *mut *mut crate::RatifyVerifyResult,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if token_json.is_null() || out.is_null() {
+        set_err(err_out, "token_json and out must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let token_str = match cstr_to_string(token_json, "token_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let token: SessionToken = match serde_json::from_str(&token_str) {
+        Ok(t) => t,
+        Err(e) => {
+            set_err(err_out, &format!("token_json: {e}"));
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let chall = match validated_buf(challenge, challenge_len, 1, "challenge", err_out) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let sig_str = match cstr_to_string(challenge_sig_json, "challenge_sig_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let sig: HybridSignature = match serde_json::from_str(&sig_str) {
+        Ok(s) => s,
+        Err(e) => {
+            set_err(err_out, &format!("challenge_sig_json: {e}"));
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let sess_ctx = match validated_buf_opt(session_context, session_context_len, err_out) {
+        Ok(b) => b,
+        Err(status) => return status,
+    };
+    let sid = match validated_buf_opt(stream_id, stream_id_len, err_out) {
+        Ok(b) => b,
+        Err(status) => return status,
+    };
+
+    let mut rust_opts = match checked_build_streamed_opts(opts, err_out) {
+        Ok(o) => o,
+        Err(status) => return status,
+    };
+    if !store.is_null() {
+        rust_opts.challenge_store = Some(Box::new(&(*store).0 as &dyn ChallengeStore));
+    }
+
+    let turn = StreamedTurn {
+        challenge: chall.to_vec(),
+        challenge_at,
+        challenge_sig: sig,
+        session_context: sess_ctx.to_vec(),
+        stream_id: sid.to_vec(),
+        stream_seq,
+    };
+    let result = verify_streamed_turn_with_options(&token, secret, &turn, &rust_opts);
+    *out = Box::into_raw(Box::new(crate::RatifyVerifyResult(result)));
+    RatifyStatus::RatifyOk
 }
 
 /// Full transaction-receipt verification with explicit valid/error_reason outputs.

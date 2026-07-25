@@ -2,12 +2,16 @@
 //! canonical test vectors. If this suite passes, the Rust implementation
 //! is byte-identical to the Go reference.
 
+// The deprecated positional streamed verifier stays under conformance
+// coverage for as long as it ships.
+#[allow(deprecated)]
+use ratify_protocol::verify_streamed_turn;
 use ratify_protocol::{
     base64_std_decode, challenge_sign_bytes_with_stream, delegation_sign_bytes, expand_scopes,
     hex_encode, key_rotation_sign_bytes, revocation_push_sign_bytes, revocation_sign_bytes,
     session_token_sign_bytes, transaction_receipt_sign_bytes, verify_bundle,
     verify_key_rotation_statement, verify_revocation_list, verify_revocation_push,
-    verify_streamed_turn, verify_transaction_receipt, verify_witness_entry,
+    verify_transaction_receipt, verify_witness_entry,
     witness_entry_sign_bytes, DelegationCert, HybridPublicKey, IdentityStatus,
     KeyRotationStatement, ProofBundle, RevocationList, RevocationPush, SessionToken, StreamContext,
     TransactionReceipt, VerifierContext, VerifyOptions, WitnessEntry,
@@ -401,6 +405,7 @@ fn run_session_token_fixture(fx: &Fixture) {
     let challenge = base64_std_decode(&st.challenge).expect("decode challenge");
     let challenge_sig: ratify_protocol::HybridSignature =
         serde_json::from_value(st.challenge_sig.clone()).expect("parse challenge_sig");
+    #[allow(deprecated)]
     let result = verify_streamed_turn(
         &token,
         &secret,

@@ -161,6 +161,39 @@ typedef struct RatifyVerifyOptions {
     const struct RatifyStreamContext *stream;
 } RatifyVerifyOptions;
 
+// Verifier-side options for `ratify_verify_streamed_turn_opts` (SPEC §5.13).
+//
+// Deliberately NOT `RatifyVerifyOptions`: a streamed turn re-verifies
+// liveness and bindings, not the chain, so revocation callbacks and
+// constraint context have no field here and can never be passed and
+// silently ignored. Callers who need fresh revocation or policy semantics
+// MUST run full bundle verification instead of the token fast path.
+//
+// Zero-initialise (`{0}`) unused fields.
+typedef struct RatifyStreamedVerifyOptions {
+    // Scope that must be present in the token's granted scope. NULL or
+    // empty string = no scope check.
+    const char *required_scope;
+    // Fixed Unix timestamp (seconds) for token-window and freshness
+    // checks. 0 = use the system clock.
+    int64_t now_unix;
+    // Verifier-side session binding the turn must match. NULL = no
+    // session binding. When set, `session_context_len` MUST be exactly 32.
+    const unsigned char *session_context;
+    // Must be 0 (no session binding) or 32.
+    uintptr_t session_context_len;
+    // Verifier-side stream state. NULL = no stream validation.
+    //
+    // This is a caller-owned SNAPSHOT: the verifier only reads it and
+    // never advances it. Two concurrent turns carrying distinct valid
+    // challenges and the same stream_seq will BOTH verify against the
+    // same snapshot. Concurrency-safe sequence enforcement is the
+    // caller's responsibility: atomically compare-and-advance your
+    // tracked last-seen sequence when (and only when) verification
+    // succeeds, and build the snapshot from that tracked state.
+    const struct RatifyStreamContext *stream;
+} RatifyStreamedVerifyOptions;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -743,6 +776,12 @@ char *ratify_witness_entry_sig_ml_dsa_65_hex(const char *entry_json,
 
 // Verify a single streamed turn against an already-issued session token.
 //
+// DEPRECATED: presentation checks only — this form cannot enforce a
+// required scope, single-use challenges, or verifier-side session/stream
+// checks, so a token holder passes it for any protected action. Use
+// `ratify_verify_streamed_turn_opts`. Retained for compatibility through
+// the v1.0.0-* releases.
+//
 // This is the fast path for embedded streaming: after a full `verify_bundle`
 // that issued a session token, each subsequent turn is verified with this
 // function — no cert chain re-verification needed.
@@ -773,6 +812,51 @@ struct RatifyVerifyResult *ratify_verify_streamed_turn(const char *token_json,
                                                        int64_t stream_seq,
                                                        int64_t now_unix,
                                                        char **err_out);
+
+// Options-object streamed-turn verification (SPEC §5.13).
+//
+// Verifies one turn against a previously issued SessionToken and enforces
+// the verifier-side controls the positional `ratify_verify_streamed_turn`
+// cannot: `opts->required_scope` is checked against the token's cached
+// effective scope (`scope_denied` on miss), `opts->session_context` /
+// `opts->stream` are the verifier-side expectations checked against the
+// presented bindings with the same statuses as full verification, and a
+// non-NULL `store` makes the per-turn challenge single-use (consulted,
+// without consuming, after the session token's HMAC authenticates the
+// presentation and before the per-turn hybrid challenge signature is
+// verified; atomically consumed after that signature verifies — before
+// the scope check; store failures normalize to the canonical
+// unknown_challenge result).
+//
+// `opts` is `RatifyStreamedVerifyOptions` — deliberately not the full
+// `RatifyVerifyOptions`, so revocation callbacks and constraint context
+// can never be passed and silently ignored. Callers who need fresh
+// revocation or policy semantics run full bundle verification instead.
+//
+// - `session_context` / `stream_id` / `stream_seq` — the PRESENTED
+//   bindings the agent signed (NULL + 0 = unbound), distinct from the
+//   expectations in `opts`.
+// - `opts` may be NULL for default options; `now` comes from
+//   `opts->now_unix` (0 = system clock).
+// - `store` may be NULL to skip single-use enforcement.
+// - `opts->stream` is a caller-owned snapshot — see its declaration for
+//   the atomic-advance requirement.
+enum RatifyStatus ratify_verify_streamed_turn_opts(const char *token_json,
+                                                   const unsigned char *session_secret,
+                                                   uintptr_t session_secret_len,
+                                                   const unsigned char *challenge,
+                                                   uintptr_t challenge_len,
+                                                   int64_t challenge_at,
+                                                   const char *challenge_sig_json,
+                                                   const unsigned char *session_context,
+                                                   uintptr_t session_context_len,
+                                                   const unsigned char *stream_id,
+                                                   uintptr_t stream_id_len,
+                                                   int64_t stream_seq,
+                                                   const struct RatifyStreamedVerifyOptions *opts,
+                                                   const struct RatifyChallengeStore *store,
+                                                   struct RatifyVerifyResult **out,
+                                                   char **err_out);
 
 // Full transaction-receipt verification with explicit valid/error_reason outputs.
 //

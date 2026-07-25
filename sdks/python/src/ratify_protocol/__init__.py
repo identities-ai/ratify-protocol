@@ -175,7 +175,14 @@ from .types import (
     VerifyResult,
     WitnessEntry,
 )
-from .verify import verify_bundle, verify_streamed_turn, verify_transaction_receipt
+from .verify import (
+    StreamedTurn,
+    StreamedVerifyOptions,
+    verify_bundle,
+    verify_streamed_turn,
+    verify_streamed_turn_with_options,
+    verify_transaction_receipt,
+)
 from .wire import (
     decode_delegation_cert,
     decode_proof_bundle,
@@ -232,7 +239,8 @@ __all__ = [
     "expand_scopes", "intersect_scopes", "has_scope", "is_sensitive", "validate_scopes",
     "vocabulary", "scope_wildcards",
     # verify
-    "verify_bundle", "verify_streamed_turn", "verify_transaction_receipt",
+    "StreamedTurn", "StreamedVerifyOptions", "verify_bundle", "verify_streamed_turn",
+    "verify_streamed_turn_with_options", "verify_transaction_receipt",
     # canonical / utils
     "canonical_json", "base64_standard_encode", "base64_standard_decode",
     "hex_encode", "hex_decode",

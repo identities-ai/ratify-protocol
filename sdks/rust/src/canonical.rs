@@ -341,14 +341,20 @@ pub mod base64_bytes {
     }
 }
 
-/// Serde deserialization guard for JSON integer wire fields (SPEC §6.2).
+/// Serde guards for JSON integer wire fields (SPEC §6.2), applied with
+/// `#[serde(deserialize_with = ..., serialize_with = ...)]` on the int64
+/// wire fields.
 ///
 /// The interoperable integer domain is the IEEE-754 safe-integer range
 /// [-(2^53-1), 2^53-1]: binary signable representations use 64-bit fields,
 /// but a JSON integer outside that range does not survive a
-/// double-precision JSON parser, so strict wire acceptance rejects it.
-/// Applied with `#[serde(deserialize_with = ...)]` on the int64 wire
-/// fields; serialization is unchanged.
+/// double-precision JSON parser, so strict wire acceptance rejects it on
+/// the way in and guarded wire serialization refuses to emit it on the
+/// way out. Note the boundary being guarded: callers can still construct
+/// structs with out-of-domain values directly, and the infallible
+/// sign-byte helpers keep their API — the guarantee is that such values
+/// never become conforming transport documents, not that they cannot
+/// exist in memory.
 pub mod wire_int {
     use serde::{de::Error as DeError, ser::Error as SerError, Deserialize, Deserializer, Serializer};
 

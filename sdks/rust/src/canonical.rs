@@ -340,3 +340,31 @@ pub mod base64_bytes {
         base64_std_decode(&s).map_err(|e| D::Error::custom(format!("base64 decode: {e}")))
     }
 }
+
+/// Serde deserialization guard for JSON integer wire fields (SPEC §6.2).
+///
+/// The interoperable integer domain is the IEEE-754 safe-integer range
+/// [-(2^53-1), 2^53-1]: binary signable representations use 64-bit fields,
+/// but a JSON integer outside that range does not survive a
+/// double-precision JSON parser, so strict wire acceptance rejects it.
+/// Applied with `#[serde(deserialize_with = ...)]` on the int64 wire
+/// fields; serialization is unchanged.
+pub mod wire_int {
+    use serde::{de::Error, Deserialize, Deserializer};
+
+    /// Largest integer exactly representable in an IEEE-754 double: 2^53-1.
+    pub const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = i64::deserialize(deserializer)?;
+        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&v) {
+            return Err(D::Error::custom(
+                "integer outside the safe-integer range [-(2^53-1), 2^53-1]",
+            ));
+        }
+        Ok(v)
+    }
+}

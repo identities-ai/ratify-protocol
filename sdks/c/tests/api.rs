@@ -13,6 +13,7 @@
 //! - ratify_string_free / ratify_error_free with NULL (must not crash)
 
 use ratify_c::{
+    ratify_session_token_from_json, ratify_session_token_free,
     ratify_agent_free, ratify_agent_generate, ratify_agent_id,
     ratify_challenge_generate, ratify_delegation_cert_free, ratify_delegation_cert_to_json,
     ratify_delegation_issue, ratify_error_free, ratify_human_root_free,
@@ -1061,5 +1062,81 @@ fn verify_bundle_opts_null_opts_behaves_like_simple_verify() {
         ratify_delegation_cert_free(cert);
         ratify_agent_free(agent);
         ratify_human_root_free(root);
+    }
+}
+
+// ============================================================================
+// Negative wire-acceptance corpus (testvectors/wire-negative)
+// ============================================================================
+
+// Documents that the public JSON entry points must never accept as a valid
+// bundle or session token. Contract (testvectors/wire-negative/README.md):
+// strictness "decode" cases must fail parsing; "decode_or_verify" cases may
+// parse structurally but the verify entry point must then report invalid.
+#[test]
+fn negative_wire_corpus_is_never_accepted() {
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let path = manifest
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("testvectors")
+        .join("wire-negative")
+        .join("cases.json");
+    let raw = std::fs::read_to_string(&path).expect("read corpus");
+    let doc: serde_json::Value = serde_json::from_str(&raw).expect("parse corpus");
+    let cases = doc["cases"].as_array().expect("cases array");
+    assert!(cases.len() >= 10, "corpus too small: {} cases", cases.len());
+
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let target = case["target"].as_str().unwrap();
+        let strictness = case["strictness"].as_str().unwrap();
+        let bytes = ratify_protocol::base64_std_decode(case["doc_b64"].as_str().unwrap())
+            .expect("corpus doc_b64");
+        let cjson = CString::new(bytes).expect("corpus docs must not contain NUL");
+        unsafe {
+            match target {
+                "bundle" => {
+                    let mut out = std::ptr::null_mut();
+                    let mut err = std::ptr::null_mut();
+                    let status =
+                        ratify_verify_bundle(cjson.as_ptr(), std::ptr::null(), 0, &mut out, &mut err);
+                    if status == ratify_c::RatifyStatus::RatifyOk {
+                        assert_ne!(
+                            strictness, "decode",
+                            "[{name}] parse accepted a decode-class document"
+                        );
+                        // Structurally parsed; the verdict must be invalid.
+                        assert_eq!(
+                            ratify_verify_result_is_valid(out),
+                            0,
+                            "[{name}] accepted as valid"
+                        );
+                        ratify_verify_result_free(out);
+                    } else {
+                        ratify_error_free(err);
+                    }
+                }
+                "token" => {
+                    let mut tok = std::ptr::null_mut();
+                    let mut err = std::ptr::null_mut();
+                    let status = ratify_session_token_from_json(cjson.as_ptr(), &mut tok, &mut err);
+                    assert_ne!(
+                        status,
+                        ratify_c::RatifyStatus::RatifyOk,
+                        "[{name}] token document must not parse"
+                    );
+                    ratify_error_free(err);
+                    let _ = tok;
+                    // Suppress unused warning when parsing (correctly) fails.
+                    if false {
+                        ratify_session_token_free(tok);
+                    }
+                }
+                other => panic!("unknown corpus target {other:?}"),
+            }
+        }
     }
 }

@@ -24,9 +24,9 @@
 [![npm Downloads](https://img.shields.io/npm/dt/@identities-ai/ratify-protocol?label=npm%20downloads&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 [![C/C++ Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=c%2Fc%2B%2B%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
 
-When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in [under a millisecond](docs/BENCHMARKS.md), across voice, video, API, and Physical AI.
+When a human authorizes an AI agent — or when one agent transacts with another agent — Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. Any party in the conversation can check that proof in [under a millisecond in the Go, Rust, and C SDKs](docs/BENCHMARKS.md) — the per-SDK latency matrix and wire-size table live in the benchmarks doc — across voice, video, API, and Physical AI.
 
-Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in under a millisecond, with no vendor in the path.
+Ratify is not agent login, registration, or credential issuance. Ratify starts where those end: when an agent is about to act, Ratify proves delegated authority, scope, constraints, expiry, and freshness — offline, in milliseconds ([sub-millisecond in the compiled SDKs](docs/BENCHMARKS.md)), with no vendor in the path.
 
 Keep your IAM, OAuth, MCP, A2A, and policy engines — Ratify adds the missing proof; it replaces none of them. IAM authenticates the human. MCP and A2A move the request. Policy engines interpret local rules. **Ratify proves delegated authority before the action.**
 
@@ -71,7 +71,7 @@ Today, when an AI agent shows up — joining a meeting, calling your support lin
 
 Bearer tokens never had to answer these. They were built for an era when a human was present at the keyboard, a known client called a known API, and the session stayed inside one app boundary. Agents break all three assumptions: they act later, call many tools, cross vendor boundaries, and hand work to other agents.
 
-Ratify answers those three questions with a single primitive — a signed delegation certificate paired with a fresh challenge signature — that any verifier can check **offline, in under a millisecond, with no live call to a central authority.**
+Ratify answers those three questions with a single primitive — a signed delegation certificate paired with a fresh challenge signature — that any verifier can check **offline, in milliseconds — [sub-millisecond in the Go, Rust, and C SDKs](docs/BENCHMARKS.md) — with no live call to a central authority.**
 
 Same primitive works for humans authorizing agents *and* agents sub-authorizing other agents. Same verifier algorithm in every direction. That symmetry is what makes Ratify a *protocol* rather than a product.
 
@@ -87,7 +87,7 @@ Same primitive works for humans authorizing agents *and* agents sub-authorizing 
    naming the subject,       and signs a fresh         Both Ed25519 AND
    the scopes, and the       challenge on every        ML-DSA-65 must
    expiration.               interaction.              verify. Yes/no
-                                                       in <1ms. No trust
+                                                       in ms. No trust
    Human → Agent OR          Proves "this key is       relationship with
    Agent → Agent.            live right now."          presenter required.
 ```
@@ -141,7 +141,7 @@ Concrete picture of one full interaction:
                   │   ✓ scope covers requested action │
                   │   ✓ cert not revoked              │
                   │                                   │
-                  │   → YES / NO in <1ms              │
+                  │   → YES / NO in milliseconds      │
                   └───────────────────────────────────┘
 ```
 
@@ -342,7 +342,7 @@ Everything above describes a single delegate → present → verify round trip. 
 |---|---|---|
 | **Session-bound challenges** | A 32-byte `session_context` binds a proof bundle to one verifier, so a bundle presented to Zoom can't be replayed at your bank. Also defeats challenge-forwarding by a malicious verifier. | [§5.8](SPEC.md#58-proofbundle), [§15.1](SPEC.md#151-challenge-forwarding-by-malicious-verifier) |
 | **Stream sequence numbers** | `stream_id` + `stream_seq` in the challenge signable detect replay, reordering, and omission across the turns of a multi-turn conversation. | [§5.8](SPEC.md#58-proofbundle), [§6.4.2](SPEC.md#642-challengesignable-not-json) |
-| **SessionToken fast path** | After one full chain verification, the verifier issues an HMAC-based session token; subsequent turns verify the token plus a fresh challenge signature — roughly 95% less per-turn crypto work. This is what makes per-turn verification practical on live voice calls. | [§5.13](SPEC.md#513-sessiontoken), [§6.4.8](SPEC.md#648-sessiontokensignable) |
+| **SessionToken — the default for repeated interactions** | Verify the full chain once at session start, issue an HMAC-based session token, then verify each turn against the token plus a fresh challenge signature — one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; [measured numbers](docs/BENCHMARKS.md)) and a per-turn payload roughly 2–5× smaller than a full bundle. This is the intended integration pattern for anything multi-turn (voice calls, streams, agent sessions), not an optimization to bolt on later; the streamed-turn verifier enforces scope, single-use challenges, and session/stream bindings on this path. Reserve per-turn full-chain verification for high-stakes actions that need fresh revocation semantics. | [§5.13](SPEC.md#513-sessiontoken), [§6.4.8](SPEC.md#648-sessiontokensignable) |
 | **Push-based revocation** | Signed `RevocationPush` deltas let issuers push revocations to subscribed verifiers in real time, instead of waiting for the next poll. | [§5.11](SPEC.md#511-revocationpush), [§6.4.5](SPEC.md#645-revocationpushsignable) |
 | **Transaction receipts** | A canonical `TransactionReceipt` where every party signs the same bytes (terms + sorted party set + transaction ID). Adding, removing, or altering any party invalidates every signature — no partial-valid state. | [§5.14](SPEC.md#514-transactionreceipt), [§6.4.7](SPEC.md#647-transactionreceiptsignable) |
 | **Witness append-only log** | Signed `WitnessEntry` hash chain for tamper-evident audit logs. Any party can operate a witness. | [§5.12](SPEC.md#512-witnessentry), [§6.4.6](SPEC.md#646-witnessentrysignable) |
@@ -443,7 +443,7 @@ ratify-protocol/
 └── docs/
     ├── EXPLAINED.md           Architecture + threat model + real-time patterns
     ├── AGENT_TO_AGENT.md      A2A patterns (mutual auth, sub-delegation, receipts)
-    ├── BENCHMARKS.md          Measured numbers behind the <1ms claim
+    ├── BENCHMARKS.md          Per-SDK latency matrix + wire sizes behind the performance claims
     ├── ATTRIBUTION.md         Badge program + attribution guidelines
     ├── RELEASES.md            Release process + cross-SDK sync
     ├── REGISTRY_SETUP.md      How the SDK orgs are set up on PyPI/crates.io/npm

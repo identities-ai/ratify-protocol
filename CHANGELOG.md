@@ -227,7 +227,7 @@ Unchanged. v1.0.0-alpha.7 verifiers accept v1.0.0-alpha.6 bundles and vice versa
 **Continuous real-time interactions:**
 - **Session binding** — optional 32-byte `session_context` in the challenge signable binds a bundle to one verifier/session. Prevents stolen bundles from being replayed at a different endpoint.
 - **Stream sequence numbers** — `stream_id` + `stream_seq` in the challenge signable detect replay, reorder, and omission within multi-turn conversations.
-- **Session cert cache** — HMAC-based `SessionToken` lets verifiers skip chain re-verification on subsequent turns (~95% reduction in per-turn crypto work).
+- **Session cert cache** — HMAC-based `SessionToken` lets verifiers skip chain re-verification on subsequent turns (one hybrid signature verification per turn instead of N+1; an earlier revision of this entry overstated the reduction as ~95%).
 - **Push-based revocation** — signed `RevocationPush` delta payload for real-time revocation propagation. `ForceRevocationCheck` verify option for high-stakes endpoints.
 - **Challenge forwarding defense** — session binding defeats cross-verifier challenge relay attacks.
 

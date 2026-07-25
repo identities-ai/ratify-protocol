@@ -18,7 +18,7 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 |---------|------|---------------|----------|
 | **Session binding** | §5.8, §6.4.2 | A 32-byte `session_context` in the challenge signable binds a bundle to one verifier. Prevents stolen bundles from being replayed at a different endpoint. | 2 |
 | **Stream sequence numbers** | §5.8, §6.4.2 | `stream_id` + `stream_seq` in the challenge signable detect replay, reorder, and omission within a multi-turn conversation. | 6 |
-| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature — no chain re-verification. ~95% reduction in per-turn crypto work. | 5 |
+| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature — no chain re-verification: one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; see docs/BENCHMARKS.md). | 5 |
 | **Push-based revocation** | §5.11, §6.4.5 | Signed `RevocationPush` delta payload lets issuers push revocations to subscribed verifiers in real time. `ForceRevocationCheck` option forces a fresh check on high-stakes endpoints. | 1 |
 | **Challenge forwarding defense** | §15.1 | Session binding (above) defeats the attack where a malicious verifier V2 relays V1's challenge to an agent. The agent signs with V2's context; V1 rejects the mismatch. | 1 |
 

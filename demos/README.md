@@ -21,6 +21,27 @@ Each scenario prints what happened and why, so anyone on the team can read the o
 
 ---
 
+## Start here: bounded tool call
+
+The shortest demo follows a portable authorization through a two-agent
+workflow. A human allows a lead agent to call purchasing tools up to $5,000,
+the lead agent narrows a worker agent to $500, and an API verifies the
+resulting chain when the worker calls `place_order`. The demo then rejects an
+over-limit tool call, a tampered limit, and the full chain after upstream
+revocation. Ratify authorizes the tool call; the vendor still processes the
+order through its existing systems.
+
+```bash
+# From repo root
+go run ./demos/bounded-tool-call
+```
+
+This demo is intentionally outcome-first. Use the cross-language lifecycle
+demos below when you want to inspect keys, signatures, expiry, and the same
+verification behavior across SDKs.
+
+---
+
 ## Running each demo
 
 ### Python

@@ -23,22 +23,35 @@ Each scenario prints what happened and why, so anyone on the team can read the o
 
 ## Start here: bounded tool call
 
-The shortest demo follows a portable authorization through a two-agent
-workflow. A human allows a lead agent to call purchasing tools up to $5,000,
-the lead agent narrows a worker agent to $500, and an API verifies the
-resulting chain when the worker calls `place_order`. The demo then rejects an
-over-limit tool call, a tampered limit, and the full chain after upstream
-revocation. Ratify authorizes the tool call; the vendor still processes the
-order through its existing systems.
+The shortest demo follows a portable authorization across an actual HTTP
+boundary. Alice allows Atlas to call `place_order` up to $5,000, Atlas narrows
+Scout to $500, and an independent vendor gateway verifies Scout's proof before
+its tool handler can run.
 
 ```bash
-# From repo root
-go run ./demos/bounded-tool-call
+# Terminal 1: issue the delegation and configure the vendor's trust root
+go run ./demos/bounded-tool-call issue
+go run ./demos/bounded-tool-call serve
+
+# Terminal 2: send real tool requests with vendor-issued challenges
+go run ./demos/bounded-tool-call call --tool place_order --amount 200
+go run ./demos/bounded-tool-call call --tool place_order --amount 2000
+go run ./demos/bounded-tool-call call --tool cancel_order --amount 200
+
+# Optional: synchronize revocation state, then retry the valid call
+go run ./demos/bounded-tool-call revoke
+go run ./demos/bounded-tool-call call --tool place_order --amount 200
 ```
 
-This demo is intentionally outcome-first. Use the cross-language lifecycle
-demos below when you want to inspect keys, signatures, expiry, and the same
-verification behavior across SDKs.
+The gateway pins Alice's public root and issues each single-use challenge
+bound to the exact tool and amount. The agent signs that operation-bound
+challenge, the tool is checked as an exact application scope, and the amount
+is evaluated against the signed constraint. Only an `ALLOW` decision invokes
+the order handler. Ratify authorizes the tool call; the vendor still processes
+the order through its existing systems.
+
+`issue` writes disposable demo keys and state to `.ratify-demo/`, which is
+gitignored. Do not reuse these keys outside the demo.
 
 ---
 

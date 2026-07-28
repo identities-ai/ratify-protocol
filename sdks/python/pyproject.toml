@@ -34,7 +34,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://identities.ai"
+Homepage = "https://ratifyprotocol.com"
 Documentation = "https://docs.identities.ai"
 Source = "https://github.com/identities-ai/ratify-protocol"
 Changelog = "https://github.com/identities-ai/ratify-protocol/blob/main/CHANGELOG.md"

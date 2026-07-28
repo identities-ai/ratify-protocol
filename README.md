@@ -473,7 +473,7 @@ When you build a product on Ratify Protocol, we ask — but don't require — th
 
 **In developer docs / security pages:**
 ```
-Agent authorization powered by Ratify Protocol (https://identities.ai/protocol)
+Agent authorization powered by Ratify Protocol (https://ratifyprotocol.com)
 ```
 
 **In product UIs** (verification results, meeting policy screens, agent consents):
@@ -485,7 +485,7 @@ Agent authorization powered by Ratify Protocol (https://identities.ai/protocol)
 | "Powered by" (dark) | [`assets/badge-powered-dark.svg`](assets/badge-powered-dark.svg) |
 | "Powered by" (light) | [`assets/badge-powered-light.svg`](assets/badge-powered-light.svg) |
 
-Link any badge to `https://identities.ai/protocol`. Full guidelines: [`docs/ATTRIBUTION.md`](docs/ATTRIBUTION.md).
+Link any badge to `https://ratifyprotocol.com`. Full guidelines: [`docs/ATTRIBUTION.md`](docs/ATTRIBUTION.md).
 
 ## License + trademarks + patent
 

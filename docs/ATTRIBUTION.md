@@ -13,7 +13,7 @@ Signal Protocol."
 
 **In your docs or security page:**
 
-> Agent authorization powered by [Ratify Protocol](https://identities.ai/protocol)
+> Agent authorization powered by [Ratify Protocol](https://ratifyprotocol.com)
 
 **In your product UI** (next to verification results):
 
@@ -24,7 +24,7 @@ Signal Protocol."
 | [`assets/badge-powered-dark.svg`](../assets/badge-powered-dark.svg) | Footer / "built with" placement (dark) |
 | [`assets/badge-powered-light.svg`](../assets/badge-powered-light.svg) | Footer / "built with" placement (light) |
 
-Link any badge to `https://identities.ai/protocol`. Don't alter the badge
+Link any badge to `https://ratifyprotocol.com`. Don't alter the badge
 text, colors, or proportions, and don't use it to imply endorsement.
 
 ## Trademark

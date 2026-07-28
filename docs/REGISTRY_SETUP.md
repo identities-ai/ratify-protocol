@@ -48,7 +48,7 @@ API token.
    - **Name:** `identities-ai` (this becomes the URL slug — must match
      across registries; the lowercase hyphenated form mirrors the GitHub org)
    - **Display name:** `Identities AI`
-   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises. https://identities.ai · Patent pending.`
+   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises. https://ratifyprotocol.com · Patent pending.`
    - **Type:** Company (you may need to upgrade or pay a fee for org features
      depending on PyPI's current pricing — at the time of writing,
      Organizations is free during the beta for the company tier).
@@ -188,7 +188,7 @@ The `publish-npm` job in `release.yml` runs on every tagged release (when
    <https://www.npmjs.com/settings/identities-ai/packages>.
 3. Org **Settings → Profile**:
    - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises.`
-   - **URL:** `https://identities.ai`
+   - **URL:** `https://ratifyprotocol.com`
    - **Email:** `hello@identities.ai`
 
 ### 3.2 Configure Trusted Publisher (no token needed)
@@ -231,7 +231,7 @@ These should already match — verify and fix if not:
 
 1. <https://github.com/identities-ai> **profile**:
    - **Display name:** `Identities AI`
-   - **URL:** `https://identities.ai`
+   - **URL:** `https://ratifyprotocol.com`
    - **Description:** `Cryptographic identity and authorization for AI agents. Ratify Protocol™ + Ratify Verify. Patent pending.`
    - **Email:** `hello@identities.ai`
    - **Twitter username:** `IdentitiesAI`

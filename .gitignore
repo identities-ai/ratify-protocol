@@ -27,3 +27,4 @@ dist/
 .DS_Store
 .git_backup
 .memory/
+.ratify-demo/

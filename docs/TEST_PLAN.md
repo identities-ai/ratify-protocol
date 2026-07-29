@@ -43,7 +43,7 @@ Location: `ratify/ratify_test.go` (6 tests shipped; this plan expands to ~35).
 - `broken_chain` — cert[0].IssuerID ≠ cert[1].SubjectID
 - `broken_chain_keys` — issuer key differs from previous subject key
 - Chain depth 0 (empty `Delegations`)
-- Chain depth > 3 (`MaxDelegationChainDepth`)
+- Chain depth > `MaxDelegationChainDepth` (8 as of the alpha.16 spec; 3 through alpha.15)
 - Chain with loop (A → B → A)
 - Chain with duplicate cert (same CertID twice)
 
@@ -174,8 +174,8 @@ All **63 fixtures** present, generated deterministically, and passing conformanc
 |---|---|---|
 | `happy_path_depth_1` | verify | Basic positive case |
 | `happy_path_depth_2` | verify | Chain verification |
-| `happy_path_depth_3` | verify | Max depth |
-| `reject_chain_too_deep` | verify | depth > 3 rejected |
+| `happy_path_depth_3` | verify | Depth 3 (the ceiling through alpha.15; the ceiling is 8 from the alpha.16 spec) |
+| `reject_chain_too_deep` | verify | depth > `MAX_DELEGATION_CHAIN_DEPTH` rejected (currently a depth-4 chain; regenerated at depth 9 when the alpha.16 implementation raises the ceiling to 8) |
 | `reject_expired` | verify | Post-expiry |
 | `reject_not_yet_valid` | verify | Pre-IssuedAt |
 | `reject_stale_challenge` | verify | Challenge > 300s old |

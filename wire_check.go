@@ -103,8 +103,14 @@ func CheckWireJSON(data []byte) error {
 		case json.Delim:
 			switch t {
 			case '{':
+				if len(stack) >= MaxJSONNestingDepth {
+					return fmt.Errorf("wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (%d)", MaxJSONNestingDepth)
+				}
 				stack = append(stack, &frame{keys: map[string]bool{}, expectKey: true})
 			case '[':
+				if len(stack) >= MaxJSONNestingDepth {
+					return fmt.Errorf("wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (%d)", MaxJSONNestingDepth)
+				}
 				stack = append(stack, &frame{})
 			case '}', ']':
 				stack = stack[:len(stack)-1]

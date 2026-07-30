@@ -331,6 +331,10 @@ type verifierContextInput struct {
 	RequestedAmount          *float64 `json:"requested_amount,omitempty"`
 	RequestedCurrency        string   `json:"requested_currency,omitempty"`
 	InvocationsInWindowCount *int     `json:"invocations_in_window_count,omitempty"`
+	// Resource context (SPEC §5.16). Presence of requested_resource_id
+	// implies HasResource=true in each SDK's native context.
+	RequestedResourceID string `json:"requested_resource_id,omitempty"`
+	RequestedPath       string `json:"requested_path,omitempty"`
 }
 
 func intPtr(v int) *int { return &v }
@@ -1242,33 +1246,81 @@ func genRejectMLDSA65OnlyCorrupted() *fixture {
 	)
 }
 
-func genRejectChainTooDeep() *fixture {
+// buildDelegationLadder constructs a chain of `depth` certs from human root
+// to agent, with every non-leaf grant carrying identity:delegate so the
+// ONLY property under test is depth. Certs are returned leaf-first
+// ([leaf, ..., root]) as ProofBundle.Delegations expects. Cert IDs are
+// certIDBase+i (hex) from the root downward.
+func buildDelegationLadder(depth int, certIDBase int, seedBase byte) ([]entity, []ratify.DelegationCert, entity) {
 	human := newEntity("human_root", 0x01)
-	l3 := newEntity("level_3", 0x20)
-	l2 := newEntity("level_2", 0x21)
-	l1 := newEntity("level_1", 0x22)
 	agent := newEntity("agent", 0x02)
+	entities := []entity{human}
 
-	cert3 := buildCert("00000000-0000-0000-0000-000000000016", human, l3,
-		[]string{"meeting:*"}, fixtureIssuedAt, fixtureExpiresAt)
-	cert2 := buildCert("00000000-0000-0000-0000-000000000017", l3, l2,
-		[]string{"meeting:*"}, fixtureIssuedAt, fixtureExpiresAt)
-	cert1 := buildCert("00000000-0000-0000-0000-000000000018", l2, l1,
-		[]string{"meeting:*"}, fixtureIssuedAt, fixtureExpiresAt)
-	cert0 := buildCert("00000000-0000-0000-0000-000000000019", l1, agent,
-		[]string{ratify.ScopeMeetingAttend}, fixtureIssuedAt, fixtureExpiresAt)
+	// Intermediate levels, root side first: level_<depth-1> .. level_1.
+	intermediates := make([]entity, depth-1)
+	for i := range intermediates {
+		level := depth - 1 - i
+		intermediates[i] = newEntity(fmt.Sprintf("level_%d", level), seedBase+byte(i))
+		entities = append(entities, intermediates[i])
+	}
+	entities = append(entities, agent)
+
+	certs := make([]ratify.DelegationCert, depth) // leaf-first
+	prev := human
+	for i := 0; i < depth; i++ {
+		certID := fmt.Sprintf("00000000-0000-0000-0000-%012x", certIDBase+i)
+		var subject entity
+		scope := []string{"meeting:*", ratify.ScopeIdentityDelegate}
+		if i == depth-1 {
+			subject = agent
+			scope = []string{ratify.ScopeMeetingAttend}
+		} else {
+			subject = intermediates[i]
+		}
+		cert := buildCert(certID, prev, subject, scope, fixtureIssuedAt, fixtureExpiresAt)
+		certs[depth-1-i] = cert
+		prev = subject
+	}
+	return entities, certs, agent
+}
+
+func genRejectChainTooDeep() *fixture {
+	// Depth 9 exceeds MaxDelegationChainDepth=8. Every intermediate carries
+	// identity:delegate so depth is the only reason this rejects.
+	entities, certs, agent := buildDelegationLadder(9, 0x32, 0x20)
 
 	challenge := deterministicChallenge("reject_chain_too_deep")
-	bundle := buildBundle(agent, []ratify.DelegationCert{cert0, cert1, cert2, cert3}, challenge, fixtureNow)
+	bundle := buildBundle(agent, certs, challenge, fixtureNow)
 
 	return buildVerifyFixture(
 		"reject_chain_too_deep",
-		"Four-cert chain exceeds MaxDelegationChainDepth=3. Rejected before any "+
-			"signature work is done.",
-		[]entity{human, l3, l2, l1, agent},
-		[]ratify.DelegationCert{cert0, cert1, cert2, cert3},
+		"Nine-cert chain exceeds MaxDelegationChainDepth=8. Rejected before any "+
+			"signature work is done. Every intermediate grants identity:delegate, "+
+			"so depth is the only failing property.",
+		entities,
+		certs,
 		&bundle,
 		ratify.VerifyOptions{Now: unixTime(fixtureNow)},
+	)
+}
+
+func genChainDepth8Accept() *fixture {
+	// Depth 8 is exactly the ceiling: a well-formed chain at maximum depth
+	// verifies. Every intermediate grants identity:delegate.
+	entities, certs, agent := buildDelegationLadder(8, 0x40, 0x50)
+
+	challenge := deterministicChallenge("chain_depth_8_accept")
+	bundle := buildBundle(agent, certs, challenge, fixtureNow)
+
+	return buildVerifyFixture(
+		"chain_depth_8_accept",
+		"Well-formed eight-cert chain at exactly MaxDelegationChainDepth=8, "+
+			"every hop explicitly granting identity:delegate. Verifies as "+
+			"authorized_agent with the leaf's narrowed scope.",
+		entities,
+		certs,
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeMeetingAttend, Now: unixTime(fixtureNow)},
 	)
 }
 
@@ -2644,6 +2696,345 @@ func genRejectTransactionReceiptWrongPartyKey() *fixture {
 // Registry + main
 // ============================================================================
 
+// ============================================================================
+// resource_path constraint fixtures (SPEC §5.7.3)
+// ============================================================================
+
+const (
+	fixtureRepoID      = "git:github.com/acme/widgets" // Git profile v1 normalized form
+	fixtureOtherRepoID = "git:github.com/acme/other"
+)
+
+// buildResourcePathFixture is the shared shape: one cert bearing one
+// resource_path constraint, verified against a caller-supplied resource
+// context.
+func buildResourcePathFixture(name, desc, certID string, constraint ratify.Constraint, requiredScope string, ctx ratify.VerifierContext, ctxCapture *verifierContextInput) *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+
+	cert := buildCertWithConstraints(
+		certID, human, agent,
+		[]string{ratify.ScopeFilesWrite},
+		[]ratify.Constraint{constraint},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge(name)
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	return buildConstraintFixture(
+		name, desc,
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: requiredScope, Now: unixTime(fixtureNow), Context: ctx},
+		ctxCapture,
+	)
+}
+
+func genResourcePathExactAccept() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_exact_accept",
+		"Cert bounds the repository to prefix /docs; the request targets the same "+
+			"resource at exactly /docs. Byte-equal prefix match accepts.",
+		"00000000-0000-0000-0000-000000000060",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"},
+	)
+}
+
+func genResourcePathChildAccept() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/setup/guide.md"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_child_accept",
+		"Prefix /docs authorizes any path at or below it under segment-boundary "+
+			"matching; /docs/setup/guide.md is below it and accepts.",
+		"00000000-0000-0000-0000-000000000061",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/setup/guide.md"},
+	)
+}
+
+func genResourcePathWrongResourceDenied() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureOtherRepoID, RequestedPath: "/docs"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_wrong_repo_denied",
+		"The request targets a different resource than the cert authorizes. "+
+			"resource_id comparison is exact byte equality; constraint_denied.",
+		"00000000-0000-0000-0000-000000000062",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureOtherRepoID, RequestedPath: "/docs"},
+	)
+}
+
+func genResourcePathTextualPrefixDenied() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs-old/a.md"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_textual_prefix_denied",
+		"/docs-old begins with the string /docs but is a different segment. "+
+			"Matching is segment-boundary, not plain string prefix; constraint_denied.",
+		"00000000-0000-0000-0000-000000000063",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs-old/a.md"},
+	)
+}
+
+func genResourcePathTraversalDenied() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/../secrets"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_traversal_denied",
+		"The requested path contains a dot-segment. Dot-segments are rejected "+
+			"outright, never resolved: a supplied-but-invalid path is unacceptable "+
+			"context and fails closed as constraint_denied.",
+		"00000000-0000-0000-0000-000000000064",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/../secrets"},
+	)
+}
+
+func genResourcePathMissingContext() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_missing_context",
+		"The cert bears a resource_path constraint but the caller supplied no "+
+			"resource context. Absent context is constraint_unverifiable, "+
+			"distinct from present-but-unacceptable context (constraint_denied).",
+		"00000000-0000-0000-0000-000000000065",
+		c, ratify.ScopeFilesWrite, ratify.VerifierContext{},
+		&verifierContextInput{},
+	)
+}
+
+func genResourcePathWholeResourceAccept() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/anything/at/all.txt"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_whole_resource_accept",
+		"Absent path_prefix authorizes the entire named resource: absence — "+
+			"never the empty string — is the sole encoding of whole-resource "+
+			"authorization, and any path on the matching resource accepts.",
+		"00000000-0000-0000-0000-000000000066",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/anything/at/all.txt"},
+	)
+}
+
+func genResourcePathPercentLiteralAccept() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/%2e%2e/notes.md"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_percent_literal_accept",
+		"Percent-encoding does not exist inside the path model: %2e%2e is a "+
+			"literal seven-character segment under /docs, not a dot-segment. The "+
+			"path is at or below the authorized prefix and accepts. No component "+
+			"may percent-decode a constructed path during or after matching.",
+		"00000000-0000-0000-0000-000000000067",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs/%2e%2e/notes.md"},
+	)
+}
+
+func genResourcePathRootPrefixAccept() *fixture {
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/src/main.go"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_root_prefix_accept",
+		"The root prefix / matches every valid path on the named resource.",
+		"00000000-0000-0000-0000-000000000068",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/src/main.go"},
+	)
+}
+
+func genResourcePathTrailingSlashAccept() *fixture {
+	// The signed prefix carries a trailing slash; comparison trims at most
+	// one trailing slash on each side, so /docs/ authorizes exactly what
+	// /docs authorizes.
+	c := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs/"}
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"}
+	return buildResourcePathFixture(
+		"constraint_resource_path_trailing_slash_accept",
+		"The signed path_prefix is /docs/ and the request targets /docs. A "+
+			"trailing slash is trimmed before comparison (except the root path), "+
+			"so the two are byte-equal after trimming and the request accepts.",
+		"00000000-0000-0000-0000-000000000069",
+		c, ratify.ScopeFilesWrite, ctx,
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"},
+	)
+}
+
+func genResourcePathChainNarrowingAccept() *fixture {
+	human := newEntity("human_root", 0x01)
+	intermediate := newEntity("intermediate", 0x03)
+	agent := newEntity("agent", 0x02)
+
+	parent := buildCertWithConstraints(
+		"00000000-0000-0000-0000-00000000006a",
+		human, intermediate,
+		[]string{ratify.ScopeFilesWrite, ratify.ScopeIdentityDelegate},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/src"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	child := buildCertWithConstraints(
+		"00000000-0000-0000-0000-00000000006b",
+		intermediate, agent,
+		[]string{ratify.ScopeFilesWrite},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/src/security"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("constraint_resource_path_chain_narrowing_accept")
+	bundle := buildBundle(agent, []ratify.DelegationCert{child, parent}, challenge, fixtureNow)
+
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/src/security/x.go"}
+	return buildConstraintFixture(
+		"constraint_resource_path_chain_narrowing_accept",
+		"Root grants /src; the child narrows to /src/security. Constraint "+
+			"evaluation is conjunctive across the chain, so the request must "+
+			"satisfy every hop simultaneously — /src/security/x.go does, and "+
+			"nested prefixes reduce to the narrowest under AND.",
+		[]entity{human, intermediate, agent},
+		[]ratify.DelegationCert{child, parent},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeFilesWrite, Now: unixTime(fixtureNow), Context: ctx},
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/src/security/x.go"},
+	)
+}
+
+func genResourcePathDownstreamEscapeDenied() *fixture {
+	human := newEntity("human_root", 0x01)
+	intermediate := newEntity("intermediate", 0x03)
+	agent := newEntity("agent", 0x02)
+
+	parent := buildCertWithConstraints(
+		"00000000-0000-0000-0000-00000000006c",
+		human, intermediate,
+		[]string{ratify.ScopeFilesWrite, ratify.ScopeIdentityDelegate},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/src"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	// The child claims a broader bound than its parent granted. That is not
+	// an escape: the parent's constraint still applies conjunctively, so a
+	// request outside /src cannot satisfy every hop.
+	child := buildCertWithConstraints(
+		"00000000-0000-0000-0000-00000000006d",
+		intermediate, agent,
+		[]string{ratify.ScopeFilesWrite},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("constraint_resource_path_downstream_escape_denied")
+	bundle := buildBundle(agent, []ratify.DelegationCert{child, parent}, challenge, fixtureNow)
+
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/etc/passwd"}
+	return buildConstraintFixture(
+		"constraint_resource_path_downstream_escape_denied",
+		"Root grants /src; the child claims the broader prefix /. Downstream "+
+			"certs can only narrow: the parent's /src constraint still evaluates "+
+			"against the request, so /etc/passwd fails constraint_denied. "+
+			"Downstream escape is impossible by construction.",
+		[]entity{human, intermediate, agent},
+		[]ratify.DelegationCert{child, parent},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeFilesWrite, Now: unixTime(fixtureNow), Context: ctx},
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/etc/passwd"},
+	)
+}
+
+func genResourcePathUnsatisfiablePairDenied() *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+
+	// Externally created certificate: conforming issuance APIs reject
+	// different-resource constraint pairs, but decoders MUST accept them
+	// and verification MUST fail them closed. Signed with the unchecked
+	// issuer to produce the shape a non-conforming issuer could emit.
+	cert := ratify.DelegationCert{
+		CertID:        "00000000-0000-0000-0000-00000000006e",
+		Version:       ratify.ProtocolVersion,
+		IssuerID:      human.ID,
+		IssuerPubKey:  human.PublicKey,
+		SubjectID:     agent.ID,
+		SubjectPubKey: agent.PublicKey,
+		Scope:         []string{ratify.ScopeFilesWrite},
+		Constraints: []ratify.Constraint{
+			{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"},
+			{Type: ratify.ConstraintResourcePath, ResourceID: fixtureOtherRepoID, PathPrefix: "/docs"},
+		},
+		IssuedAt:  fixtureIssuedAt,
+		ExpiresAt: fixtureExpiresAt,
+	}
+	if err := ratify.IssueDelegationUnchecked(&cert, human.priv); err != nil {
+		panic(err)
+	}
+	challenge := deterministicChallenge("constraint_resource_path_unsatisfiable_pair_denied")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"}
+	return buildConstraintFixture(
+		"constraint_resource_path_unsatisfiable_pair_denied",
+		"An externally created cert carries resource_path constraints naming "+
+			"two different resources — jointly unsatisfiable, since a single "+
+			"request targets one resource. Decoders accept the cert (wire "+
+			"compatibility is not conditioned on issuance hygiene); verification "+
+			"fails it closed as constraint_denied.",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeFilesWrite, Now: unixTime(fixtureNow), Context: ctx},
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/docs"},
+	)
+}
+
+func genExtParamsUnknownDenied() *fixture {
+	human := newEntity("human_root", 0x01)
+	agent := newEntity("agent", 0x02)
+
+	// A parameterized extension constraint (SPEC §5.7.1): params is part of
+	// the canonical signed bytes. A verifier with no registered evaluator
+	// for the type fails closed with constraint_unknown — params does not
+	// change the fail-closed default.
+	ext := ratify.Constraint{
+		Type: "com.example.max-sessions",
+		Params: map[string]any{
+			"active":     true,
+			"label":      "pilot",
+			"max":        int64(5),
+			"note":       nil,
+			"upper":      "9007199254740993", // beyond 2^53-1: travels as a decimal string
+			"weights":    []any{int64(1), int64(2), int64(3)},
+			"thresholds": map[string]any{"soft": int64(4), "hard": int64(5)},
+		},
+	}
+	cert := buildCertWithConstraints(
+		"00000000-0000-0000-0000-00000000006f",
+		human, agent,
+		[]string{ratify.ScopeMeetingAttend},
+		[]ratify.Constraint{ext},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("constraint_ext_params_unknown_denied")
+	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
+
+	return buildVerifyFixture(
+		"constraint_ext_params_unknown_denied",
+		"An extension constraint carrying a params object spanning the full "+
+			"restricted value model (null, bool, string, safe integers, a "+
+			"beyond-safe-range integer as a decimal string, array, object). "+
+			"The params travel inside the canonical signed bytes; a verifier "+
+			"with no registered evaluator for the type still fails closed with "+
+			"constraint_unknown.",
+		[]entity{human, agent},
+		[]ratify.DelegationCert{cert},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeMeetingAttend, Now: unixTime(fixtureNow)},
+	)
+}
+
 var fixtureGenerators = []func() *fixture{
 	genHappyPathDepth1,
 	genSessionBoundChallenge,
@@ -2672,6 +3063,21 @@ var fixtureGenerators = []func() *fixture{
 	genRejectEd25519OnlyCorrupted,
 	genRejectMLDSA65OnlyCorrupted,
 	genRejectChainTooDeep,
+	genChainDepth8Accept,
+	genResourcePathExactAccept,
+	genResourcePathChildAccept,
+	genResourcePathWrongResourceDenied,
+	genResourcePathTextualPrefixDenied,
+	genResourcePathTraversalDenied,
+	genResourcePathMissingContext,
+	genResourcePathWholeResourceAccept,
+	genResourcePathPercentLiteralAccept,
+	genResourcePathRootPrefixAccept,
+	genResourcePathTrailingSlashAccept,
+	genResourcePathChainNarrowingAccept,
+	genResourcePathDownstreamEscapeDenied,
+	genResourcePathUnsatisfiablePairDenied,
+	genExtParamsUnknownDenied,
 	genRevocationMiddleCert,
 	genWildcardExpansionMeeting,
 	genRejectUnknownScope,

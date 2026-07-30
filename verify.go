@@ -15,8 +15,40 @@ const (
 	// Challenges older than this are rejected to prevent replay attacks.
 	ChallengeWindowSeconds = 300 // 5 minutes
 
-	// MaxDelegationChainDepth is the maximum number of certs in a delegation chain.
-	MaxDelegationChainDepth = 3
+	// MaxDelegationChainDepth is the maximum number of certs in a delegation
+	// chain. The ceiling is a wire-determinism and denial-of-service bound,
+	// not cryptography (SPEC §5.1); raised from 3 to 8 in v1.0.0-alpha.16
+	// for multi-hop agent topologies.
+	MaxDelegationChainDepth = 8
+
+	// Input bounds (SPEC §5.1). Depth alone does not bound parsing or
+	// intersection work; these limits do. Violations route to the existing
+	// `invalid` status with a descriptive error_reason — no new status.
+
+	// MaxProofBundleBytes bounds the encoded size of a ProofBundle. Wire
+	// decoders enforce it BEFORE parsing; an oversized payload is rejected
+	// without ever being parsed.
+	MaxProofBundleBytes = 131072 // 128 KiB
+
+	// MaxScopesPerCert bounds len(DelegationCert.Scope).
+	MaxScopesPerCert = 128
+
+	// MaxConstraintsPerCert bounds len(DelegationCert.Constraints).
+	MaxConstraintsPerCert = 32
+
+	// MaxScopeLengthBytes bounds the UTF-8 byte length of a single scope.
+	MaxScopeLengthBytes = 256
+
+	// MaxIdentifierLengthBytes bounds resource identifiers (resource_path's
+	// resource_id) and other opaque identifier strings.
+	MaxIdentifierLengthBytes = 512
+
+	// MaxAgentNameLengthBytes bounds AgentIdentity.Name.
+	MaxAgentNameLengthBytes = 256
+
+	// MaxJSONNestingDepth bounds JSON container nesting in wire documents,
+	// enforced by the codec during (not after) parse.
+	MaxJSONNestingDepth = 16
 )
 
 // VerifyOptions controls what the verifier checks beyond the cryptographic basics.
@@ -201,6 +233,28 @@ func verify(bundle *ProofBundle, opts VerifyOptions) VerifyResult {
 	}
 	if len(bundle.Challenge) == 0 {
 		return invalid("no_challenge", "proof bundle contains no challenge")
+	}
+	// Input bounds (SPEC §5.1). Codecs enforce these during decode; the
+	// verifier re-enforces them so bundles constructed in-process are held
+	// to the same bounds. Violations are structural: `invalid`, no new status.
+	for i := range bundle.Delegations {
+		cert := &bundle.Delegations[i]
+		if len(cert.Scope) > MaxScopesPerCert {
+			return invalid("invalid", fmt.Sprintf("cert %d carries %d scopes, exceeding MAX_SCOPES_PER_CERT (%d)", i, len(cert.Scope), MaxScopesPerCert))
+		}
+		if len(cert.Constraints) > MaxConstraintsPerCert {
+			return invalid("invalid", fmt.Sprintf("cert %d carries %d constraints, exceeding MAX_CONSTRAINTS_PER_CERT (%d)", i, len(cert.Constraints), MaxConstraintsPerCert))
+		}
+		for _, s := range cert.Scope {
+			if len(s) > MaxScopeLengthBytes {
+				return invalid("invalid", fmt.Sprintf("cert %d carries a scope of %d bytes, exceeding MAX_SCOPE_LENGTH_BYTES (%d)", i, len(s), MaxScopeLengthBytes))
+			}
+		}
+		for j := range cert.Constraints {
+			if id := cert.Constraints[j].ResourceID; len(id) > MaxIdentifierLengthBytes {
+				return invalid("invalid", fmt.Sprintf("cert %d constraint %d resource_id is %d bytes, exceeding MAX_IDENTIFIER_LENGTH_BYTES (%d)", i, j, len(id), MaxIdentifierLengthBytes))
+			}
+		}
 	}
 	if len(bundle.SessionContext) != 0 && len(bundle.SessionContext) != 32 {
 		return invalid("invalid_session_context", fmt.Sprintf("session_context must be 32 bytes, got %d", len(bundle.SessionContext)))

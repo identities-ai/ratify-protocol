@@ -10,13 +10,17 @@ import pytest
 
 from ratify_protocol import (
     MAX_AGENT_NAME_LENGTH_BYTES,
+    MAX_CONSTRAINTS_PER_CERT,
     MAX_IDENTIFIER_LENGTH_BYTES,
     MAX_JSON_NESTING_DEPTH,
     MAX_PROOF_BUNDLE_BYTES,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
     PROTOCOL_VERSION,
     SCOPE_FILES_WRITE,
     Constraint,
     DelegationCert,
+    HybridPublicKey,
     HybridSignature,
     ProofBundle,
     VerificationReceipt,
@@ -309,6 +313,104 @@ def test_decode_rejects_excessive_nesting():
     with pytest.raises(ValueError) as ei:
         decode_proof_bundle(deep)
     assert "MAX_JSON_NESTING_DEPTH" in str(ei.value)
+
+
+# ---------------------------------------------------------------------------
+# §5.1 input-bound boundaries: every bound at exactly the limit (accept) and
+# one past it (reject), through the public decoders. Mirrors Go's
+# TestInputBoundBoundaries. The at-limit ACCEPT cases matter as much as the
+# rejects: an off-by-one that rejected a legal maximum would be a silent
+# availability regression.
+# ---------------------------------------------------------------------------
+
+def _bound_base_cert():
+    """A cert whose bytes decode cleanly (correct key/sig lengths, no bound
+    exceeded). Individual boundary cases mutate one field at a time. Like Go's
+    baseCert, it carries raw zero-valued keys — the decoder checks byte lengths
+    and §5.1 bounds, not signature validity."""
+    return DelegationCert(
+        cert_id="bound", version=PROTOCOL_VERSION,
+        issuer_id="aa",
+        issuer_pub_key=HybridPublicKey(ed25519=bytes(32), ml_dsa_65=bytes(1952)),
+        subject_id="bb",
+        subject_pub_key=HybridPublicKey(ed25519=bytes(32), ml_dsa_65=bytes(1952)),
+        scope=["meeting:attend"], constraints=[],
+        issued_at=1000, expires_at=2000,
+        signature=HybridSignature(ed25519=bytes(64), ml_dsa_65=bytes(3309)),
+    )
+
+
+def _decode_roundtrip(cert):
+    # The encoder applies no §5.1 bound checks (mirrors Go): the bounds are
+    # enforced only on decode, so encoding an over-limit cert must succeed and
+    # decoding it must raise.
+    decode_delegation_cert(encode_delegation_cert(cert))
+
+
+def test_input_bound_boundaries():
+    # MAX_SCOPES_PER_CERT
+    def scopes(n):
+        return [f"custom:com.example:s{i}" for i in range(n)]
+    c = _bound_base_cert()
+    c.scope = scopes(MAX_SCOPES_PER_CERT)
+    _decode_roundtrip(c)  # at limit: must decode
+    c.scope = scopes(MAX_SCOPES_PER_CERT + 1)
+    with pytest.raises(ValueError):
+        _decode_roundtrip(c)
+
+    # MAX_CONSTRAINTS_PER_CERT (geo_circle: no cross-field satisfiability rule
+    # at decode)
+    def geos(n):
+        return [Constraint(type="geo_circle", lat=1, lon=1, radius_m=5)
+                for _ in range(n)]
+    c = _bound_base_cert()
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT)
+    _decode_roundtrip(c)  # at limit: must decode
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT + 1)
+    with pytest.raises(ValueError):
+        _decode_roundtrip(c)
+
+    # MAX_SCOPE_LENGTH_BYTES (a custom: scope so it is vocabulary-valid)
+    def scope_of_len(n):
+        return "custom:x:" + "a" * (n - len("custom:x:"))
+    c = _bound_base_cert()
+    c.scope = [scope_of_len(MAX_SCOPE_LENGTH_BYTES)]
+    _decode_roundtrip(c)  # at limit: must decode
+    c.scope = [scope_of_len(MAX_SCOPE_LENGTH_BYTES + 1)]
+    with pytest.raises(ValueError):
+        _decode_roundtrip(c)
+
+    # MAX_IDENTIFIER_LENGTH_BYTES (resource_path resource_id)
+    def rp_id(n):
+        return [Constraint(type="resource_path", resource_id="r" * n)]
+    c = _bound_base_cert()
+    c.constraints = rp_id(MAX_IDENTIFIER_LENGTH_BYTES)
+    _decode_roundtrip(c)  # at limit: must decode
+    c.constraints = rp_id(MAX_IDENTIFIER_LENGTH_BYTES + 1)
+    with pytest.raises(ValueError):
+        _decode_roundtrip(c)
+
+    # MAX_JSON_NESTING_DEPTH (container nesting, checked in the shared parse
+    # path). Python exports no CheckWireJSON, so the at-limit ACCEPT is
+    # observed indirectly: a bare nested array at exactly the limit clears the
+    # nesting gate in _parse and is then rejected for a NON-nesting reason
+    # (not a JSON object), while one level deeper is rejected AT the gate.
+    at_limit = "[" * MAX_JSON_NESTING_DEPTH + "]" * MAX_JSON_NESTING_DEPTH
+    with pytest.raises(ValueError) as ei:
+        decode_proof_bundle(at_limit)
+    assert "MAX_JSON_NESTING_DEPTH" not in str(ei.value), (
+        "nesting at the limit must clear the depth gate, not be rejected by it"
+    )
+    over_limit = ("[" * (MAX_JSON_NESTING_DEPTH + 1)
+                  + "]" * (MAX_JSON_NESTING_DEPTH + 1))
+    with pytest.raises(ValueError) as ei:
+        decode_proof_bundle(over_limit)
+    assert "MAX_JSON_NESTING_DEPTH" in str(ei.value)
+
+    # MAX_AGENT_NAME_LENGTH_BYTES (construction bound)
+    generate_agent("n" * MAX_AGENT_NAME_LENGTH_BYTES, "custom")  # at limit
+    with pytest.raises(ValueError):
+        generate_agent("n" * (MAX_AGENT_NAME_LENGTH_BYTES + 1), "custom")
 
 
 # ---------------------------------------------------------------------------

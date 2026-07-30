@@ -3,6 +3,7 @@ package ratify
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -222,6 +223,111 @@ func TestDecodeProofBundleLimits(t *testing.T) {
 	deep := strings.Repeat("[", MaxJSONNestingDepth+1) + strings.Repeat("]", MaxJSONNestingDepth+1)
 	if err := CheckWireJSON([]byte(deep)); err == nil || !strings.Contains(err.Error(), "MAX_JSON_NESTING_DEPTH") {
 		t.Fatalf("expected nesting-depth rejection, got %v", err)
+	}
+}
+
+// TestInputBoundBoundaries exercises every §5.1 input bound at exactly the
+// limit (accept) and one past it (reject) through the public decoders. The
+// at-limit accept cases matter as much as the rejects: an off-by-one that
+// rejected a legal maximum would be a silent availability regression.
+func TestInputBoundBoundaries(t *testing.T) {
+	baseCert := func() DelegationCert {
+		return DelegationCert{
+			CertID: "bound", Version: ProtocolVersion,
+			IssuerID: "aa", IssuerPubKey: HybridPublicKey{Ed25519: make([]byte, 32), MLDSA65: make([]byte, 1952)},
+			SubjectID: "bb", SubjectPubKey: HybridPublicKey{Ed25519: make([]byte, 32), MLDSA65: make([]byte, 1952)},
+			Scope: []string{"meeting:attend"}, Constraints: []Constraint{},
+			IssuedAt: 1000, ExpiresAt: 2000,
+			Signature: HybridSignature{Ed25519: make([]byte, 64), MLDSA65: make([]byte, 3309)},
+		}
+	}
+	decodeCert := func(c DelegationCert) error {
+		enc, err := EncodeDelegationCert(&c) // encoder applies no bound checks
+		if err != nil {
+			return err
+		}
+		_, err = DecodeDelegationCert(enc)
+		return err
+	}
+
+	// MAX_SCOPES_PER_CERT
+	scopes := func(n int) []string {
+		s := make([]string, n)
+		for i := range s {
+			s[i] = fmt.Sprintf("custom:com.example:s%d", i)
+		}
+		return s
+	}
+	c := baseCert()
+	c.Scope = scopes(MaxScopesPerCert)
+	if err := decodeCert(c); err != nil {
+		t.Errorf("MAX_SCOPES_PER_CERT at limit (%d) must decode: %v", MaxScopesPerCert, err)
+	}
+	c.Scope = scopes(MaxScopesPerCert + 1)
+	if err := decodeCert(c); err == nil {
+		t.Errorf("MAX_SCOPES_PER_CERT+1 (%d) must be rejected", MaxScopesPerCert+1)
+	}
+
+	// MAX_CONSTRAINTS_PER_CERT (geo_circle: no cross-field satisfiability rule at decode)
+	geos := func(n int) []Constraint {
+		cs := make([]Constraint, n)
+		for i := range cs {
+			cs[i] = Constraint{Type: ConstraintGeoCircle, Lat: 1, Lon: 1, RadiusM: 5}
+		}
+		return cs
+	}
+	c = baseCert()
+	c.Constraints = geos(MaxConstraintsPerCert)
+	if err := decodeCert(c); err != nil {
+		t.Errorf("MAX_CONSTRAINTS_PER_CERT at limit (%d) must decode: %v", MaxConstraintsPerCert, err)
+	}
+	c.Constraints = geos(MaxConstraintsPerCert + 1)
+	if err := decodeCert(c); err == nil {
+		t.Errorf("MAX_CONSTRAINTS_PER_CERT+1 (%d) must be rejected", MaxConstraintsPerCert+1)
+	}
+
+	// MAX_SCOPE_LENGTH_BYTES (a custom: scope so it is vocabulary-valid)
+	scopeOfLen := func(n int) string { return "custom:x:" + strings.Repeat("a", n-len("custom:x:")) }
+	c = baseCert()
+	c.Scope = []string{scopeOfLen(MaxScopeLengthBytes)}
+	if err := decodeCert(c); err != nil {
+		t.Errorf("MAX_SCOPE_LENGTH_BYTES at limit (%d) must decode: %v", MaxScopeLengthBytes, err)
+	}
+	c.Scope = []string{scopeOfLen(MaxScopeLengthBytes + 1)}
+	if err := decodeCert(c); err == nil {
+		t.Errorf("MAX_SCOPE_LENGTH_BYTES+1 (%d) must be rejected", MaxScopeLengthBytes+1)
+	}
+
+	// MAX_IDENTIFIER_LENGTH_BYTES (resource_path resource_id)
+	rpID := func(n int) []Constraint {
+		return []Constraint{{Type: ConstraintResourcePath, ResourceID: strings.Repeat("r", n)}}
+	}
+	c = baseCert()
+	c.Constraints = rpID(MaxIdentifierLengthBytes)
+	if err := decodeCert(c); err != nil {
+		t.Errorf("MAX_IDENTIFIER_LENGTH_BYTES at limit (%d) must decode: %v", MaxIdentifierLengthBytes, err)
+	}
+	c.Constraints = rpID(MaxIdentifierLengthBytes + 1)
+	if err := decodeCert(c); err == nil {
+		t.Errorf("MAX_IDENTIFIER_LENGTH_BYTES+1 (%d) must be rejected", MaxIdentifierLengthBytes+1)
+	}
+
+	// MAX_JSON_NESTING_DEPTH (CheckWireJSON, container nesting)
+	atLimit := strings.Repeat("[", MaxJSONNestingDepth) + strings.Repeat("]", MaxJSONNestingDepth)
+	if err := CheckWireJSON([]byte(atLimit)); err != nil {
+		t.Errorf("MAX_JSON_NESTING_DEPTH at limit (%d) must be accepted: %v", MaxJSONNestingDepth, err)
+	}
+	overLimit := strings.Repeat("[", MaxJSONNestingDepth+1) + strings.Repeat("]", MaxJSONNestingDepth+1)
+	if err := CheckWireJSON([]byte(overLimit)); err == nil {
+		t.Errorf("MAX_JSON_NESTING_DEPTH+1 (%d) must be rejected", MaxJSONNestingDepth+1)
+	}
+
+	// MAX_AGENT_NAME_LENGTH_BYTES (construction bound)
+	if _, _, err := GenerateAgentKeypair(strings.Repeat("n", MaxAgentNameLengthBytes), "custom"); err != nil {
+		t.Errorf("MAX_AGENT_NAME_LENGTH_BYTES at limit (%d) must be accepted: %v", MaxAgentNameLengthBytes, err)
+	}
+	if _, _, err := GenerateAgentKeypair(strings.Repeat("n", MaxAgentNameLengthBytes+1), "custom"); err == nil {
+		t.Errorf("MAX_AGENT_NAME_LENGTH_BYTES+1 (%d) must be rejected", MaxAgentNameLengthBytes+1)
 	}
 }
 

@@ -7,12 +7,14 @@
 use std::collections::BTreeMap;
 
 use ratify_protocol::{
-    decode_delegation_cert, decode_proof_bundle, decode_verification_receipt,
-    encode_verification_receipt, generate_agent, generate_hybrid_keypair, issue_delegation,
-    normalize_resource_path, resource_path_matches, sign_both, sign_challenge, validate_params_value,
-    validate_resource_constraints, verification_receipt_sign_bytes_buf, Constraint, DelegationCert,
-    HybridSignature, ParamsValue, ProofBundle, VerificationReceipt, MAX_AGENT_NAME_LENGTH_BYTES,
-    MAX_IDENTIFIER_LENGTH_BYTES, MAX_JSON_NESTING_DEPTH, MAX_PROOF_BUNDLE_BYTES, PROTOCOL_VERSION,
+    check_json_nesting_depth, decode_delegation_cert, decode_proof_bundle,
+    decode_verification_receipt, encode_verification_receipt, generate_agent,
+    generate_hybrid_keypair, issue_delegation, normalize_resource_path, resource_path_matches,
+    sign_both, sign_challenge, validate_params_value, validate_resource_constraints,
+    verification_receipt_sign_bytes_buf, Constraint, DelegationCert, HybridSignature, ParamsValue,
+    ProofBundle, VerificationReceipt, MAX_AGENT_NAME_LENGTH_BYTES, MAX_CONSTRAINTS_PER_CERT,
+    MAX_IDENTIFIER_LENGTH_BYTES, MAX_JSON_NESTING_DEPTH, MAX_PROOF_BUNDLE_BYTES, MAX_SCOPES_PER_CERT,
+    MAX_SCOPE_LENGTH_BYTES, PROTOCOL_VERSION,
 };
 
 fn rp(id: &str, prefix: Option<&str>) -> Constraint {
@@ -444,6 +446,139 @@ fn decode_proof_bundle_size_and_nesting_bounds() {
     }
     let err = decode_proof_bundle(deep.as_bytes()).unwrap_err();
     assert!(err.contains("MAX_JSON_NESTING_DEPTH"), "got: {err}");
+}
+
+// input_bound_boundaries exercises every SPEC §5.1 input bound at exactly the
+// limit (accept) and one past it (reject) through the public decoders. Mirrors
+// Go's TestInputBoundBoundaries. The at-limit accept cases matter as much as
+// the rejects: an off-by-one that rejected a legal maximum would be a silent
+// availability regression.
+#[test]
+fn input_bound_boundaries() {
+    // A syntactically decodable base cert. Decoders do not verify signatures,
+    // so a real keypair with a placeholder (empty) signature suffices.
+    let (issuer_pub, _issuer_priv) = generate_hybrid_keypair();
+    let (subject_pub, _subject_priv) = generate_hybrid_keypair();
+    let base_cert = || DelegationCert {
+        cert_id: "bound".into(),
+        version: PROTOCOL_VERSION,
+        issuer_id: ratify_protocol::derive_id(&issuer_pub),
+        issuer_pub_key: issuer_pub.clone(),
+        subject_id: ratify_protocol::derive_id(&subject_pub),
+        subject_pub_key: subject_pub.clone(),
+        scope: vec!["meeting:attend".into()],
+        constraints: vec![],
+        issued_at: 1000,
+        expires_at: 2000,
+        signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
+    };
+    // Encode with serde (applies no bound checks), then decode (applies them).
+    let decode_cert = |c: &DelegationCert| -> Result<DelegationCert, String> {
+        let enc = serde_json::to_vec(c).expect("serialize cert");
+        decode_delegation_cert(&enc)
+    };
+
+    // MAX_SCOPES_PER_CERT
+    let scopes = |n: usize| -> Vec<String> {
+        (0..n).map(|i| format!("custom:com.example:s{i}")).collect()
+    };
+    let mut c = base_cert();
+    c.scope = scopes(MAX_SCOPES_PER_CERT);
+    assert!(
+        decode_cert(&c).is_ok(),
+        "MAX_SCOPES_PER_CERT at limit ({MAX_SCOPES_PER_CERT}) must decode"
+    );
+    c.scope = scopes(MAX_SCOPES_PER_CERT + 1);
+    assert!(
+        decode_cert(&c).is_err(),
+        "MAX_SCOPES_PER_CERT+1 ({}) must be rejected",
+        MAX_SCOPES_PER_CERT + 1
+    );
+
+    // MAX_CONSTRAINTS_PER_CERT (geo_circle: no cross-field satisfiability rule
+    // at decode).
+    let geos = |n: usize| -> Vec<Constraint> {
+        (0..n)
+            .map(|_| Constraint {
+                kind: "geo_circle".into(),
+                lat: 1.0,
+                lon: 1.0,
+                radius_m: 5.0,
+                ..Default::default()
+            })
+            .collect()
+    };
+    let mut c = base_cert();
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT);
+    assert!(
+        decode_cert(&c).is_ok(),
+        "MAX_CONSTRAINTS_PER_CERT at limit ({MAX_CONSTRAINTS_PER_CERT}) must decode"
+    );
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT + 1);
+    assert!(
+        decode_cert(&c).is_err(),
+        "MAX_CONSTRAINTS_PER_CERT+1 ({}) must be rejected",
+        MAX_CONSTRAINTS_PER_CERT + 1
+    );
+
+    // MAX_SCOPE_LENGTH_BYTES (a custom: scope so it is vocabulary-valid).
+    let scope_of_len = |n: usize| -> String {
+        let prefix = "custom:x:";
+        format!("{prefix}{}", "a".repeat(n - prefix.len()))
+    };
+    let mut c = base_cert();
+    c.scope = vec![scope_of_len(MAX_SCOPE_LENGTH_BYTES)];
+    assert!(
+        decode_cert(&c).is_ok(),
+        "MAX_SCOPE_LENGTH_BYTES at limit ({MAX_SCOPE_LENGTH_BYTES}) must decode"
+    );
+    c.scope = vec![scope_of_len(MAX_SCOPE_LENGTH_BYTES + 1)];
+    assert!(
+        decode_cert(&c).is_err(),
+        "MAX_SCOPE_LENGTH_BYTES+1 ({}) must be rejected",
+        MAX_SCOPE_LENGTH_BYTES + 1
+    );
+
+    // MAX_IDENTIFIER_LENGTH_BYTES (resource_path resource_id).
+    let rp_id = |n: usize| -> Vec<Constraint> { vec![rp(&"r".repeat(n), None)] };
+    let mut c = base_cert();
+    c.constraints = rp_id(MAX_IDENTIFIER_LENGTH_BYTES);
+    assert!(
+        decode_cert(&c).is_ok(),
+        "MAX_IDENTIFIER_LENGTH_BYTES at limit ({MAX_IDENTIFIER_LENGTH_BYTES}) must decode"
+    );
+    c.constraints = rp_id(MAX_IDENTIFIER_LENGTH_BYTES + 1);
+    assert!(
+        decode_cert(&c).is_err(),
+        "MAX_IDENTIFIER_LENGTH_BYTES+1 ({}) must be rejected",
+        MAX_IDENTIFIER_LENGTH_BYTES + 1
+    );
+
+    // MAX_JSON_NESTING_DEPTH (container nesting via check_json_nesting_depth).
+    let at_limit: String =
+        "[".repeat(MAX_JSON_NESTING_DEPTH) + &"]".repeat(MAX_JSON_NESTING_DEPTH);
+    assert!(
+        check_json_nesting_depth(at_limit.as_bytes()).is_ok(),
+        "MAX_JSON_NESTING_DEPTH at limit ({MAX_JSON_NESTING_DEPTH}) must be accepted"
+    );
+    let over_limit: String =
+        "[".repeat(MAX_JSON_NESTING_DEPTH + 1) + &"]".repeat(MAX_JSON_NESTING_DEPTH + 1);
+    assert!(
+        check_json_nesting_depth(over_limit.as_bytes()).is_err(),
+        "MAX_JSON_NESTING_DEPTH+1 ({}) must be rejected",
+        MAX_JSON_NESTING_DEPTH + 1
+    );
+
+    // MAX_AGENT_NAME_LENGTH_BYTES (construction bound via generate_agent).
+    assert!(
+        generate_agent(&"n".repeat(MAX_AGENT_NAME_LENGTH_BYTES), "custom").is_ok(),
+        "MAX_AGENT_NAME_LENGTH_BYTES at limit ({MAX_AGENT_NAME_LENGTH_BYTES}) must be accepted"
+    );
+    assert!(
+        generate_agent(&"n".repeat(MAX_AGENT_NAME_LENGTH_BYTES + 1), "custom").is_err(),
+        "MAX_AGENT_NAME_LENGTH_BYTES+1 ({}) must be rejected",
+        MAX_AGENT_NAME_LENGTH_BYTES + 1
+    );
 }
 
 // ------------------------------------------------------------------

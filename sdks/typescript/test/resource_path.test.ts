@@ -9,9 +9,12 @@ import assert from "node:assert/strict";
 
 import {
   MAX_AGENT_NAME_LENGTH_BYTES,
+  MAX_CONSTRAINTS_PER_CERT,
   MAX_IDENTIFIER_LENGTH_BYTES,
   MAX_JSON_NESTING_DEPTH,
   MAX_PROOF_BUNDLE_BYTES,
+  MAX_SCOPES_PER_CERT,
+  MAX_SCOPE_LENGTH_BYTES,
   PROTOCOL_VERSION,
   NO_EXPIRY_SENTINEL,
   SCOPE_FILES_WRITE,
@@ -310,6 +313,96 @@ test("decodeProofBundle rejects nesting beyond MAX_JSON_NESTING_DEPTH", () => {
   const deep = "[".repeat(MAX_JSON_NESTING_DEPTH + 1) + "]".repeat(MAX_JSON_NESTING_DEPTH + 1);
   assert.throws(() => decodeProofBundle(deep), /MAX_JSON_NESTING_DEPTH/);
 });
+
+// Mirrors Go's TestInputBoundBoundaries: exercise every §5.1 input bound at
+// exactly the limit (must accept) and one past it (must reject) through the
+// public decoders, using the SDK's exported bound constants so the test
+// tracks the constants. The at-limit ACCEPT cases matter as much as the
+// rejects: an off-by-one that rejected a legal maximum would be a silent
+// availability regression.
+test("input bounds accept at the limit and reject one past it", () => {
+  // A structurally decodable cert with correctly sized (zero-filled) keys and
+  // signature. The encoder applies no bound checks (like Go's), so an
+  // over-limit cert can be encoded and then round-tripped through the decoder
+  // to observe where the decode-time bound (checkCertBounds) rejects it.
+  const baseCert = (): DelegationCert => ({
+    cert_id: "bound",
+    version: PROTOCOL_VERSION,
+    issuer_id: "aa",
+    issuer_pub_key: { ed25519: new Uint8Array(32), ml_dsa_65: new Uint8Array(1952) },
+    subject_id: "bb",
+    subject_pub_key: { ed25519: new Uint8Array(32), ml_dsa_65: new Uint8Array(1952) },
+    scope: ["meeting:attend"],
+    constraints: [],
+    issued_at: 1000,
+    expires_at: 2000,
+    signature: { ed25519: new Uint8Array(64), ml_dsa_65: new Uint8Array(3309) },
+  });
+  const decodeCert = (c: DelegationCert): void => {
+    decodeDelegationCert(encodeDelegationCert(c));
+  };
+
+  // MAX_SCOPES_PER_CERT — vocabulary-valid custom scopes so only the count bound bites.
+  const scopes = (n: number): string[] =>
+    Array.from({ length: n }, (_, i) => `custom:com.example:s${i}`);
+  {
+    const c = baseCert();
+    c.scope = scopes(MAX_SCOPES_PER_CERT);
+    assert.doesNotThrow(() => decodeCert(c), `MAX_SCOPES_PER_CERT at limit (${MAX_SCOPES_PER_CERT}) must decode`);
+    c.scope = scopes(MAX_SCOPES_PER_CERT + 1);
+    assert.throws(() => decodeCert(c), /MAX_SCOPES_PER_CERT/, `MAX_SCOPES_PER_CERT+1 must be rejected`);
+  }
+
+  // MAX_CONSTRAINTS_PER_CERT — geo_circle: no cross-field satisfiability rule at decode.
+  const geos = (n: number): Constraint[] =>
+    Array.from({ length: n }, () => ({ type: "geo_circle", lat: 1, lon: 1, radius_m: 5 }));
+  {
+    const c = baseCert();
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT);
+    assert.doesNotThrow(() => decodeCert(c), `MAX_CONSTRAINTS_PER_CERT at limit (${MAX_CONSTRAINTS_PER_CERT}) must decode`);
+    c.constraints = geos(MAX_CONSTRAINTS_PER_CERT + 1);
+    assert.throws(() => decodeCert(c), /MAX_CONSTRAINTS_PER_CERT/, `MAX_CONSTRAINTS_PER_CERT+1 must be rejected`);
+  }
+
+  // MAX_SCOPE_LENGTH_BYTES — a custom: scope so it is vocabulary-valid.
+  const scopeOfLen = (n: number): string => "custom:x:" + "a".repeat(n - "custom:x:".length);
+  {
+    const c = baseCert();
+    c.scope = [scopeOfLen(MAX_SCOPE_LENGTH_BYTES)];
+    assert.doesNotThrow(() => decodeCert(c), `MAX_SCOPE_LENGTH_BYTES at limit (${MAX_SCOPE_LENGTH_BYTES}) must decode`);
+    c.scope = [scopeOfLen(MAX_SCOPE_LENGTH_BYTES + 1)];
+    assert.throws(() => decodeCert(c), /MAX_SCOPE_LENGTH_BYTES/, `MAX_SCOPE_LENGTH_BYTES+1 must be rejected`);
+  }
+
+  // MAX_IDENTIFIER_LENGTH_BYTES — resource_path resource_id.
+  const rpID = (n: number): Constraint[] => [{ type: "resource_path", resource_id: "r".repeat(n) }];
+  {
+    const c = baseCert();
+    c.constraints = rpID(MAX_IDENTIFIER_LENGTH_BYTES);
+    assert.doesNotThrow(() => decodeCert(c), `MAX_IDENTIFIER_LENGTH_BYTES at limit (${MAX_IDENTIFIER_LENGTH_BYTES}) must decode`);
+    c.constraints = rpID(MAX_IDENTIFIER_LENGTH_BYTES + 1);
+    assert.throws(() => decodeCert(c), /MAX_IDENTIFIER_LENGTH_BYTES/, `MAX_IDENTIFIER_LENGTH_BYTES+1 must be rejected`);
+  }
+
+  // MAX_JSON_NESTING_DEPTH — the SDK's nesting check runs inside the wire
+  // decoder (parseInput/scanWireText); there is no exported standalone
+  // wire-check like Go's CheckWireJSON. So the boundary is observed through
+  // decodeProofBundle: at exactly the limit the nesting check passes (the
+  // decode then fails structurally, NOT with a nesting error), and one past
+  // it the nesting check rejects.
+  const atLimit = "[".repeat(MAX_JSON_NESTING_DEPTH) + "]".repeat(MAX_JSON_NESTING_DEPTH);
+  assert.throws(
+    () => decodeProofBundle(atLimit),
+    (e: Error) => !/MAX_JSON_NESTING_DEPTH/.test(e.message),
+    `MAX_JSON_NESTING_DEPTH at limit (${MAX_JSON_NESTING_DEPTH}) must pass the nesting check`,
+  );
+  const overLimit = "[".repeat(MAX_JSON_NESTING_DEPTH + 1) + "]".repeat(MAX_JSON_NESTING_DEPTH + 1);
+  assert.throws(() => decodeProofBundle(overLimit), /MAX_JSON_NESTING_DEPTH/, `MAX_JSON_NESTING_DEPTH+1 must be rejected`);
+});
+
+// MAX_AGENT_NAME_LENGTH_BYTES is a construction bound (async); kept as its own
+// test to match generateAgent's promise-returning shape. The dedicated
+// generateAgent test below covers the same 256/257 boundary.
 
 // ---- VerificationReceipt codec ----
 

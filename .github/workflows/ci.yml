@@ -168,6 +168,9 @@ jobs:
       - name: advanced API tests
         run: cargo test --test advanced
 
+      - name: input-bound boundary tests
+        run: cargo test --test bounds
+
   dco:
     name: DCO sign-off
     runs-on: ubuntu-latest

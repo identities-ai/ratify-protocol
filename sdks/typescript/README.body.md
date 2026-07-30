@@ -148,7 +148,7 @@ Signed payloads follow Ratify's canonical JSON rules (see [SPEC.md §6.3.1](http
 import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identities-ai/ratify-protocol";
 ```
 
-These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 63 published test vectors through the TS code and asserts byte-for-byte equivalence.
+These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 79 published test vectors through the TS code and asserts byte-for-byte equivalence.
 
 ## Wire transport
 

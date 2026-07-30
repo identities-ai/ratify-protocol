@@ -72,7 +72,7 @@ When the Travel Agent presents the proof to the Airline, the Airline can see the
 
 ## 6. SDK Provider Interfaces
 
-The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal — every conformant SDK implements it identically, and the same 63 fixtures regenerate byte-identical across languages.
+The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal — every conformant SDK implements it identically, and the same 79 fixtures regenerate byte-identical across languages.
 
 But three of the verifier's responsibilities are inherently operational, and a single static spec cannot pin them down:
 
@@ -110,6 +110,6 @@ The protocol's contract stops at the `ProofBundle` wire format and the verifier 
 
 ## 7. Implementation Status
 
-Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, **Rust**, and **C/C++**. The 78 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable. Each SDK also ships a provider-test suite covering the three SPEC §17 hooks.
+Ratify is an open protocol. Reference implementations exist in **Go**, **TypeScript**, **Python**, **Rust**, and **C/C++**. The 79 canonical test vectors in the `testvectors/v1/` suite ensure that any conformant implementation is byte-for-byte interoperable. Each SDK also ships a provider-test suite covering the three SPEC §17 hooks.
 
 For the normative specification, see [`SPEC.md`](../SPEC.md).

@@ -271,7 +271,7 @@ So `/src` matches `/src` and `/src/a.ts`, and **never** matches `/src-old/a.ts` 
 - The constraint carries `path_prefix` and `RequestedPath` does not match → `constraint_denied`.
 - Otherwise the constraint passes.
 
-Evaluation is **conjunctive across the chain** with no new machinery: §10 step 7.f already evaluates every constraint on every cert in the chain against the same `VerifierContext`, so a downstream cert can only *narrow* the upstream bound — the requested resource and path must satisfy every hop's `resource_path` simultaneously, and a child cert claiming a broader or different resource simply adds a constraint the request cannot satisfy. Downstream escape is impossible by construction, not by a new rule. Same-resource constraints reduce under AND to the narrowest prefix **only when their prefixes are nested** (`/src` ∧ `/src/security` → effectively `/src/security`; an absent prefix orders as `/`). Same-resource prefixes that are **incomparable** under the prefix relation (`/src` ∧ `/docs`) are jointly unsatisfiable — no request path lies under both — and fail closed as `constraint_denied`, exactly like constraints naming **different** `resource_id`s. No new status, no special-case rejection rule at verify time.
+Evaluation is **conjunctive across the chain** with no new machinery: §10 step 7.f already evaluates every constraint on every cert in the chain against the same `VerifierContext`, and the request must satisfy every hop's `resource_path` simultaneously. A child cert **cannot widen** the effective authority: a child claiming a *broader* prefix on the *same* resource (parent `/src/security`, child `/src`) leaves the effective bound at the narrower upstream prefix — the request must still satisfy the parent's `/src/security`, so the pair is satisfiable but the child gains nothing. Downstream escape is impossible by construction, not by a new rule. Where the chain's same-resource prefixes are nested they reduce under AND to the narrowest (`/src` ∧ `/src/security` → effectively `/src/security`; an absent prefix orders as `/`). A constraint naming a **different** `resource_id`, or a same-resource prefix that is **incomparable** under the prefix relation (`/src` ∧ `/docs` — no path lies under both), makes the set jointly unsatisfiable and fails closed as `constraint_denied`. No new status, no special-case rejection rule at verify time.
 
 **Canonical serialization.** Per the existing per-kind constraint pattern (§6): keys alphabetical, only kind-relevant fields emitted. `resource_path` emits `path_prefix` (when present), `resource_id`, `type`. **`path_prefix` is omitted when absent.** Every *valid* `path_prefix` begins with `/`, so the empty string can never be a meaningful value: an empty-string `path_prefix` MUST be rejected by issuer helpers, MUST NOT be emitted by canonical serialization, and decoders treat `"path_prefix": ""` as an invalid constraint (fails closed). Absence — not `""`, not `null` — is the sole encoding of "entire resource".
 
@@ -1377,7 +1377,7 @@ The `AnchorResolver` provider interface (§17.8) is unrelated to this binding: i
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (78 fixtures as of v1.0.0-alpha.15):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (79 fixtures as of the v1.0.0-alpha.16 conformance set; alpha.15 had 63):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.
@@ -1544,7 +1544,7 @@ This separation lets the protocol stay neutral and portable while letting commer
 - A conformant SDK MUST expose all three provider hook points (`Revocation`, `Policy`, `Audit`) on its verify-options surface, with consistent naming across languages.
 - A conformant SDK MUST treat any unset hook as a no-op — verification with all hooks `nil` MUST produce the same `VerifyResult` as a verifier with no provider surface at all.
 - Provider invocations MUST NOT modify the `ProofBundle`. They are read-only over signed material. A bundle that re-serializes byte-identically before and after a `Verify` call (with or without providers) is REQUIRED for fixture determinism.
-- Provider implementations are NOT covered by the test-vector conformance suite. The 78 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
+- Provider implementations are NOT covered by the test-vector conformance suite. The 79 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
 
 ### 17.1 RevocationProvider
 

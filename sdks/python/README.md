@@ -7,7 +7,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **78 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -37,7 +37,7 @@ If you cloned the repo and want to run `python -m pytest` against the committed 
 cd sdks/python
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'              # installs ratify-protocol + cryptography + pqcrypto + pytest
-python -m pytest tests/              # runs 78/78 conformance fixtures
+python -m pytest tests/              # runs 79/79 conformance fixtures
 ```
 
 If `pqcrypto` fails to install (typical on older pip), upgrade pip first:
@@ -256,7 +256,7 @@ pip install pytest
 pytest -v
 ```
 
-The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 78 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 79 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## Notes on the ML-DSA-65 library
 

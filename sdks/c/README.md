@@ -7,7 +7,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **78 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **79 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -416,7 +416,7 @@ ratify_error_free(err);         // for err_out parameters
 
 ## Conformance
 
-The C SDK is validated against the same 78 canonical cross-language test
+The C SDK is validated against the same 79 canonical cross-language test
 vectors as the Go, TypeScript, Python, and Rust SDKs.
 
 ```bash
@@ -439,7 +439,7 @@ All canonical fixture kinds pass through the C ABI:
 # Unit tests (all functions, null pointers, malformed JSON, round-trips)
 cargo test --test api
 
-# Conformance tests (78/78 fixtures)
+# Conformance tests (79/79 fixtures)
 cargo test --test conformance
 
 # Cross-architecture via QEMU (requires `cross`)

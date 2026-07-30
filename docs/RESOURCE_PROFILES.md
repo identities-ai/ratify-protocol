@@ -60,8 +60,9 @@ Component rules (v1):
 Construction, after an input matches exactly one grammar:
 
 1. Strip a trailing `.git` from `REPO`, matched **case-insensitively**. This is unambiguous for the v1 host: GitHub forbids repository names ending in `.git` in any case, so a `.git` suffix is always the clone-URL decoration, never part of the name.
-2. Lowercase `HOST`, `OWNER`, and `REPO` (GitHub is case-insensitive).
-3. Join as `git:<host>/<owner>/<repo>`.
+2. **Reject if `REPO` is now empty.** An input whose entire repository component is the `.git` suffix (e.g. `https://github.com/acme/.git`) has no repository name and MUST be rejected, not construct to a trailing-slash `git:github.com/acme/`. The grammar's non-empty-`REPO` rule is checked again *after* stripping, not only before.
+3. Lowercase `HOST`, `OWNER`, and `REPO` (GitHub is case-insensitive).
+4. Join as `git:<host>/<owner>/<repo>`.
 
 Constructors emit only the canonical form. Parsers and verifiers of profile conformance reject non-canonical strings rather than normalizing them (uppercase characters, retained `.git`, embedded scheme, port suffix, trailing dot in the host).
 
@@ -116,6 +117,8 @@ https://user@github.com/acme/widgets             (userinfo)
 https://github.com:443/acme/widgets              (port)
 https://github.com/acme%2Fwidgets                (percent sign anywhere)
 https://github.com//widgets                      (empty owner)
+https://github.com/acme/.git                     (repo is empty after .git stripping)
+https://github.com/acme/.GIT                      (repo is empty after case-insensitive .git stripping)
 git@github.com:acme:widgets                      (ambiguous scp form)
 http://github.com/acme/widgets                   (scheme not in any grammar)
 git@gitlab.com:acme/widgets                      (host not covered by v1)

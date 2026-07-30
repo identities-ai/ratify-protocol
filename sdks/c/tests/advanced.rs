@@ -457,6 +457,65 @@ fn receipt_issue_verify_roundtrip() {
 }
 
 #[test]
+fn receipt_from_json_rejects_malformed_wire() {
+    // SPEC §17.5: ratify_receipt_from_json shares check_receipt_structure with
+    // to_json, so the C ABI must reject every structurally-invalid wire
+    // receipt the other four SDKs reject. Built by mutating a valid receipt's
+    // JSON (never by the encoder). "AAAA" decodes to 3 bytes — a wrong length
+    // for any 32/64/1952/3309-byte hash, key, or signature component.
+    unsafe {
+        let (root, agent, cert, bundle, bundle_json, result) = make_bundle();
+        let mut err = std::ptr::null_mut();
+        let mut receipt = std::ptr::null_mut();
+        let s = ratify_receipt_issue(bundle, result, root, std::ptr::null(), 0, NOW, &mut receipt, &mut err);
+        assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
+        let rjson = ratify_receipt_to_json(receipt, &mut err);
+        let valid = read_str(rjson); // frees rjson
+
+        // Sanity: the unmutated document decodes.
+        {
+            let c = CString::new(valid.clone()).unwrap();
+            let mut r = std::ptr::null_mut();
+            let st = ratify_receipt_from_json(c.as_ptr(), &mut r, &mut err);
+            assert_eq!(st, RatifyStatus::RatifyOk, "valid receipt must decode: {}", read_str(err));
+            ratify_receipt_free(r);
+        }
+
+        type Mut = (&'static str, fn(&mut serde_json::Value));
+        let mutations: &[Mut] = &[
+            ("wrong version", |v| v["version"] = serde_json::json!(2)),
+            ("empty verifier_id", |v| v["verifier_id"] = serde_json::json!("")),
+            ("unknown decision", |v| v["decision"] = serde_json::json!("approved")),
+            ("short bundle_hash", |v| v["bundle_hash"] = serde_json::json!("AAAA")),
+            ("short prev_hash", |v| v["prev_hash"] = serde_json::json!("AAAA")),
+            ("short verifier_pub.ed25519", |v| v["verifier_pub"]["ed25519"] = serde_json::json!("AAAA")),
+            ("short verifier_pub.ml_dsa_65", |v| v["verifier_pub"]["ml_dsa_65"] = serde_json::json!("AAAA")),
+            ("short signature.ed25519", |v| v["signature"]["ed25519"] = serde_json::json!("AAAA")),
+            ("short signature.ml_dsa_65", |v| v["signature"]["ml_dsa_65"] = serde_json::json!("AAAA")),
+        ];
+        for (name, mutate) in mutations {
+            let mut v: serde_json::Value = serde_json::from_str(&valid).unwrap();
+            mutate(&mut v);
+            let doc = CString::new(serde_json::to_string(&v).unwrap()).unwrap();
+            let mut r = std::ptr::null_mut();
+            let mut e = std::ptr::null_mut();
+            let st = ratify_receipt_from_json(doc.as_ptr(), &mut r, &mut e);
+            assert_ne!(st, RatifyStatus::RatifyOk, "from_json accepted malformed receipt: {name}");
+            assert!(r.is_null(), "receipt handle must stay null for: {name}");
+            if !e.is_null() { ratify_error_free(e); }
+        }
+
+        ratify_receipt_free(receipt);
+        ratify_verify_result_free(result);
+        ratify_c::ratify_proof_bundle_free(bundle);
+        ratify_string_free(bundle_json);
+        ratify_delegation_cert_free(cert);
+        ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
 fn bundle_hash_and_chain_hash_are_32_bytes() {
     unsafe {
         let (root, agent, cert, bundle, bundle_json, result) = make_bundle();

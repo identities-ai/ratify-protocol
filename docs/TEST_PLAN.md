@@ -132,7 +132,7 @@ Every output of `ExpandScopes` must satisfy `ValidateScopes` without error.
 
 This is the single highest-leverage test artifact for the open-source launch. Without cross-language test vectors, no JS or Python implementation can be verified correct.
 
-**Status:** ✅ Implemented on `main` — **78 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust). The v1.1 fixtures are not part of a public protocol tag until the next release.
+**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust). The v1.1 fixtures are not part of a public protocol tag until the next release.
 
 ### 3.1 Location
 
@@ -166,7 +166,7 @@ This is the single highest-leverage test artifact for the open-source launch. Wi
 
 ### 3.3 Current vectors
 
-All **78 fixtures** present, generated deterministically, and passing conformance across Go / TypeScript / Python / Rust / C:
+All **79 fixtures** present, generated deterministically, and passing conformance across Go / TypeScript / Python / Rust / C:
 
 **Core v1 — 20 fixtures**
 
@@ -289,11 +289,11 @@ go test -run TestConformanceVectors ./...
 
 ## Layer 4 — Cross-language interop
 
-**Status:** Go ↔ TypeScript ↔ Python ↔ Rust ↔ C all proven. All **78 fixtures** byte-identical across every pairing.
+**Status:** Go ↔ TypeScript ↔ Python ↔ Rust ↔ C all proven. All **79 fixtures** byte-identical across every pairing.
 
 ### 4.1 The NxN conformance matrix
 
-Every SDK must pass the **78 canonical fixtures** when acting as a verifier against bundles produced by every other SDK (including itself). For N implementations the matrix is NxN:
+Every SDK must pass the **79 canonical fixtures** when acting as a verifier against bundles produced by every other SDK (including itself). For N implementations the matrix is NxN:
 
 |   | Go verifier | TS verifier | Python verifier | Rust verifier | C verifier |
 |---|---|---|---|---|---|
@@ -303,9 +303,9 @@ Every SDK must pass the **78 canonical fixtures** when acting as a verifier agai
 | **Rust signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **C signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 78 breaks down by kind as: 61 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 15 verify-kind fixtures (13 resource_path, 1 extension-params, 1 depth-8).
+All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
 
-Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 78 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
+Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 79 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
 
 ### 4.2 The single-component tamper test
 

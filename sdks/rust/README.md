@@ -7,7 +7,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and C/C++ reference implementations. Validated against the **78 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Python, and C/C++ reference implementations. Validated against the **79 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -164,7 +164,7 @@ Custom scopes pass through `expand_scopes` unchanged and are non-sensitive by de
 cargo test
 ```
 
-The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 78 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 79 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## License
 

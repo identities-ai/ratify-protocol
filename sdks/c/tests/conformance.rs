@@ -4,7 +4,7 @@
 //!
 //! Every fixture is loaded and exercised through the C API:
 //!
-//! - "verify"              — proof-bundle verification (46 fixtures)
+//! - "verify"              — proof-bundle verification (62 fixtures)
 //! - "scope"               — scope expansion + validation (2 fixtures)
 //! - "revocation"          — revocation list sign bytes + verify (1 fixture)
 //! - "revocation_push"     — revocation push sign bytes + sig hex + verify (1 fixture)
@@ -13,7 +13,7 @@
 //! - "transaction_receipt" — receipt sign bytes + full verify (5 fixtures)
 //! - "witness_entry"       — witness entry sign bytes + sig hex + verify (1 fixture)
 //!
-//! 63/63 fixtures pass (cross_sdk_vectors.json uses a different schema and is
+//! 79/79 fixtures pass (cross_sdk_vectors.json uses a different schema and is
 //! handled by tests/cross_sdk.rs).
 
 use ratify_c::{

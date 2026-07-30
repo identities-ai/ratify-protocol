@@ -2933,6 +2933,51 @@ func genResourcePathChainNarrowingAccept() *fixture {
 	)
 }
 
+func genResourcePathChildBroaderAccept() *fixture {
+	human := newEntity("human_root", 0x01)
+	intermediate := newEntity("intermediate", 0x03)
+	agent := newEntity("agent", 0x02)
+
+	// Inverse of chain_narrowing: the ROOT grants the narrower /src/security,
+	// and the child claims the BROADER /src. A broader child cannot widen —
+	// the request must still satisfy the root's /src/security — but the set
+	// IS satisfiable when the request lies under both. This locks the
+	// corrected SPEC §5.7.3 algebra: broader-same-resource is not
+	// "unsatisfiable", it simply gains nothing.
+	parent := buildCertWithConstraints(
+		"00000000-0000-0000-0000-000000000070",
+		human, intermediate,
+		[]string{ratify.ScopeFilesWrite, ratify.ScopeIdentityDelegate},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/src/security"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	child := buildCertWithConstraints(
+		"00000000-0000-0000-0000-000000000071",
+		intermediate, agent,
+		[]string{ratify.ScopeFilesWrite},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/src"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	challenge := deterministicChallenge("constraint_resource_path_child_broader_accept")
+	bundle := buildBundle(agent, []ratify.DelegationCert{child, parent}, challenge, fixtureNow)
+
+	ctx := ratify.VerifierContext{HasResource: true, RequestedResourceID: fixtureRepoID, RequestedPath: "/src/security/a.go"}
+	return buildConstraintFixture(
+		"constraint_resource_path_child_broader_accept",
+		"Root grants the narrower /src/security; the child claims the broader "+
+			"/src. Conjunctive evaluation keeps the effective bound at the "+
+			"narrower parent prefix, so the request /src/security/a.go — which "+
+			"lies under BOTH — is authorized. A broader child prefix on the same "+
+			"resource cannot widen authority, but the pair is satisfiable, not "+
+			"unsatisfiable (SPEC §5.7.3).",
+		[]entity{human, intermediate, agent},
+		[]ratify.DelegationCert{child, parent},
+		&bundle,
+		ratify.VerifyOptions{RequiredScope: ratify.ScopeFilesWrite, Now: unixTime(fixtureNow), Context: ctx},
+		&verifierContextInput{RequestedResourceID: fixtureRepoID, RequestedPath: "/src/security/a.go"},
+	)
+}
+
 func genResourcePathDownstreamEscapeDenied() *fixture {
 	human := newEntity("human_root", 0x01)
 	intermediate := newEntity("intermediate", 0x03)
@@ -3101,6 +3146,7 @@ var fixtureGenerators = []func() *fixture{
 	genResourcePathRootPrefixAccept,
 	genResourcePathTrailingSlashAccept,
 	genResourcePathChainNarrowingAccept,
+	genResourcePathChildBroaderAccept,
 	genResourcePathDownstreamEscapeDenied,
 	genResourcePathUnsatisfiablePairDenied,
 	genExtParamsUnknownDenied,

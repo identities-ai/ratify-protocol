@@ -103,7 +103,7 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
-      - name: full test suite (63 fixtures)
+      - name: full test suite (79 fixtures)
         run: pytest -v
 
   rust:
@@ -133,7 +133,7 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: full test suite (63 fixtures)
+      - name: full test suite (79 fixtures)
         run: cargo test
 
   c-sdk:
@@ -159,7 +159,7 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: conformance tests (78 fixtures)
+      - name: conformance tests (79 fixtures)
         run: cargo test --test conformance -- --nocapture
 
       - name: unit tests

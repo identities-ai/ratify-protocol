@@ -4,7 +4,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the {{SIBLINGS}} reference implementations. Validated against the **63 canonical test vectors** on every CI run.
+Byte-identical interoperability with the {{SIBLINGS}} reference implementations. Validated against the **78 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 

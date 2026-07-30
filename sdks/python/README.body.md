@@ -14,7 +14,7 @@ If you cloned the repo and want to run `python -m pytest` against the committed 
 cd sdks/python
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'              # installs ratify-protocol + cryptography + pqcrypto + pytest
-python -m pytest tests/              # runs 63/63 conformance fixtures
+python -m pytest tests/              # runs 78/78 conformance fixtures
 ```
 
 If `pqcrypto` fails to install (typical on older pip), upgrade pip first:
@@ -233,7 +233,7 @@ pip install pytest
 pytest -v
 ```
 
-The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 63 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Python implementation. All 78 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## Notes on the ML-DSA-65 library
 

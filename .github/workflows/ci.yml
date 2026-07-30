@@ -159,7 +159,7 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: conformance tests (63 fixtures)
+      - name: conformance tests (78 fixtures)
         run: cargo test --test conformance -- --nocapture
 
       - name: unit tests

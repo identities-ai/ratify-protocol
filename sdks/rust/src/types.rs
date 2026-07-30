@@ -335,68 +335,130 @@ where
 // canonical per-kind shape rather than the default "skip if zero"
 // behavior. This closes the v1 zero-as-absence ambiguity: a geo_circle at
 // lat=0, lon=0 now emits lat:0, lon:0 explicitly instead of omitting them.
+// Constraint deserializes THROUGH `ConstraintWire` (serde `try_from`) so
+// cross-field wire invariants are enforced at the deserialize boundary — for
+// direct `Constraint` decoding and for cert/bundle decoding alike, matching
+// Go's `Constraint.UnmarshalJSON`. A `resource_id` on a `resource_path` that
+// is absent, empty, null, or non-string is rejected here; strict wire
+// acceptance does not differ by SDK. (`null`/non-string already fail as type
+// errors against the `String` field; the `try_from` also closes absent and
+// empty.)
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ConstraintWire {
+    #[serde(default, deserialize_with = "crate::canonical::wire_int::deserialize")]
+    count: i64,
+    #[serde(default)]
+    currency: String,
+    #[serde(default)]
+    end: String,
+    #[serde(default)]
+    lat: f64,
+    #[serde(default)]
+    lon: f64,
+    #[serde(default)]
+    max_alt_m: f64,
+    #[serde(default)]
+    max_amount: f64,
+    #[serde(default)]
+    max_lat: f64,
+    #[serde(default)]
+    max_lon: f64,
+    #[serde(default)]
+    max_mps: f64,
+    #[serde(default)]
+    min_alt_m: f64,
+    #[serde(default)]
+    min_lat: f64,
+    #[serde(default)]
+    min_lon: f64,
+    #[serde(default)]
+    params: Option<BTreeMap<String, ParamsValue>>,
+    #[serde(default, deserialize_with = "de_path_prefix")]
+    path_prefix: Option<String>,
+    #[serde(default)]
+    points: Vec<[f64; 2]>,
+    #[serde(default)]
+    radius_m: f64,
+    #[serde(default)]
+    resource_id: String,
+    #[serde(default)]
+    start: String,
+    #[serde(default)]
+    tz: String,
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default, deserialize_with = "crate::canonical::wire_int::deserialize")]
+    window_s: i64,
+}
+
+impl TryFrom<ConstraintWire> for Constraint {
+    type Error = String;
+    fn try_from(w: ConstraintWire) -> Result<Self, Self::Error> {
+        if w.kind == "resource_path" && w.resource_id.is_empty() {
+            return Err(
+                "resource_path constraint requires a non-empty resource_id".into(),
+            );
+        }
+        Ok(Constraint {
+            count: w.count,
+            currency: w.currency,
+            end: w.end,
+            lat: w.lat,
+            lon: w.lon,
+            max_alt_m: w.max_alt_m,
+            max_amount: w.max_amount,
+            max_lat: w.max_lat,
+            max_lon: w.max_lon,
+            max_mps: w.max_mps,
+            min_alt_m: w.min_alt_m,
+            min_lat: w.min_lat,
+            min_lon: w.min_lon,
+            params: w.params,
+            path_prefix: w.path_prefix,
+            points: w.points,
+            radius_m: w.radius_m,
+            resource_id: w.resource_id,
+            start: w.start,
+            tz: w.tz,
+            kind: w.kind,
+            window_s: w.window_s,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(try_from = "ConstraintWire")]
 pub struct Constraint {
-    #[serde(
-        default,
-        serialize_with = "crate::canonical::wire_int::serialize",
-        deserialize_with = "crate::canonical::wire_int::deserialize"
-    )]
     pub count: i64,
-    #[serde(default)]
     pub currency: String,
-    #[serde(default)]
     pub end: String,
-    #[serde(default)]
     pub lat: f64,
-    #[serde(default)]
     pub lon: f64,
-    #[serde(default)]
     pub max_alt_m: f64,
-    #[serde(default)]
     pub max_amount: f64,
-    #[serde(default)]
     pub max_lat: f64,
-    #[serde(default)]
     pub max_lon: f64,
-    #[serde(default)]
     pub max_mps: f64,
-    #[serde(default)]
     pub min_alt_m: f64,
-    #[serde(default)]
     pub min_lat: f64,
-    #[serde(default)]
     pub min_lon: f64,
     /// Extension-constraint parameters (SPEC §5.7.1). Permitted ONLY on
     /// non-canonical types under the restricted value model. Canonical types
     /// carrying params are rejected at encode/issue/decode.
-    #[serde(default)]
     pub params: Option<BTreeMap<String, ParamsValue>>,
     /// Optionally narrows a `resource_path` constraint to a path at or below
     /// it under segment-boundary matching (SPEC §5.7.3). Absence (`None`) —
     /// never the empty string — is the sole encoding of "entire resource".
-    #[serde(default, deserialize_with = "de_path_prefix")]
     pub path_prefix: Option<String>,
-    #[serde(default)]
     pub points: Vec<[f64; 2]>,
-    #[serde(default)]
     pub radius_m: f64,
     /// Names the resource a `resource_path` constraint binds to. Opaque
     /// UTF-8; compared byte-for-byte, never dereferenced or normalized.
-    #[serde(default)]
     pub resource_id: String,
-    #[serde(default)]
     pub start: String,
-    #[serde(default)]
     pub tz: String,
-    #[serde(rename = "type")]
     pub kind: String,
-    #[serde(
-        default,
-        serialize_with = "crate::canonical::wire_int::serialize",
-        deserialize_with = "crate::canonical::wire_int::deserialize"
-    )]
     pub window_s: i64,
 }
 

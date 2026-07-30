@@ -141,7 +141,7 @@ Custom scopes pass through `expand_scopes` unchanged and are non-sensitive by de
 cargo test
 ```
 
-The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 63 must pass; any failure means this SDK has drifted from the Go reference.
+The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 78 must pass; any failure means this SDK has drifted from the Go reference.
 
 ## License
 

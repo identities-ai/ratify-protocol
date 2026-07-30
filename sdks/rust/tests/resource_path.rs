@@ -280,6 +280,95 @@ fn decode_rejects_forbidden_path_prefix_in_cert_and_bundle() {
     }
 }
 
+#[test]
+fn resource_id_required_non_empty_at_decode() {
+    // SPEC §5.7.3: resource_id on a resource_path MUST be non-empty. Strict
+    // wire acceptance is uniform across SDKs — this is enforced at the
+    // deserialize boundary (direct Constraint, cert, and bundle), not deferred
+    // to verify. null/non-string already fail as String type errors; absent
+    // and empty are the cases the try_from closes.
+
+    // Direct Constraint deserialization.
+    let ok: Constraint =
+        serde_json::from_str(r#"{"resource_id":"r","type":"resource_path"}"#).unwrap();
+    assert_eq!(ok.resource_id, "r");
+    let bad = [
+        r#"{"type":"resource_path"}"#,                       // absent
+        r#"{"resource_id":"","type":"resource_path"}"#,      // empty
+        r#"{"resource_id":null,"type":"resource_path"}"#,    // null
+        r#"{"resource_id":42,"type":"resource_path"}"#,      // non-string
+    ];
+    for doc in bad {
+        assert!(
+            serde_json::from_str::<Constraint>(doc).is_err(),
+            "direct decode accepted an invalid resource_id: {doc}"
+        );
+    }
+    // A non-resource_path constraint legitimately has no resource_id.
+    let geo: Constraint = serde_json::from_str(
+        r#"{"lat":1.0,"lon":2.0,"radius_m":5.0,"type":"geo_circle"}"#,
+    )
+    .unwrap();
+    assert!(geo.resource_id.is_empty());
+
+    // Same rejection through the cert and bundle decoders. Build a valid
+    // resource-bound cert, then blank its resource_id on the wire.
+    let (root_pub, root_priv) = generate_hybrid_keypair();
+    let (agent_pub, agent_priv) = generate_hybrid_keypair();
+    let root_id = ratify_protocol::derive_id(&root_pub);
+    let agent_id = ratify_protocol::derive_id(&agent_pub);
+    let mut cert = DelegationCert {
+        cert_id: "t-rid-1".into(),
+        version: PROTOCOL_VERSION,
+        issuer_id: root_id,
+        issuer_pub_key: root_pub,
+        subject_id: agent_id.clone(),
+        subject_pub_key: agent_pub.clone(),
+        scope: vec!["files:write".into()],
+        constraints: vec![rp("git:github.com/acme/widgets", Some("/docs"))],
+        issued_at: 1000,
+        expires_at: 4070908799,
+        signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
+    };
+    issue_delegation(&mut cert, &root_priv).unwrap();
+    let cert_json = serde_json::to_string(&cert).unwrap();
+    let blanked = cert_json.replacen(
+        r#""resource_id":"git:github.com/acme/widgets""#,
+        r#""resource_id":"""#,
+        1,
+    );
+    assert_ne!(blanked, cert_json, "mutation not applied");
+    assert!(
+        decode_delegation_cert(blanked.as_bytes()).is_err(),
+        "decode_delegation_cert accepted an empty resource_id"
+    );
+
+    let challenge = vec![9u8; 32];
+    let sig = sign_challenge(&challenge, 2000, &agent_priv);
+    let bundle = ProofBundle {
+        agent_id,
+        agent_pub_key: agent_pub,
+        delegations: vec![cert],
+        challenge,
+        challenge_at: 2000,
+        challenge_sig: sig,
+        session_context: vec![],
+        stream_id: vec![],
+        stream_seq: 0,
+    };
+    let bundle_json = serde_json::to_string(&bundle).unwrap();
+    let blanked_bundle = bundle_json.replacen(
+        r#""resource_id":"git:github.com/acme/widgets""#,
+        r#""resource_id":"""#,
+        1,
+    );
+    assert_ne!(blanked_bundle, bundle_json, "mutation not applied");
+    assert!(
+        decode_proof_bundle(blanked_bundle.as_bytes()).is_err(),
+        "decode_proof_bundle accepted an empty resource_id"
+    );
+}
+
 // ------------------------------------------------------------------
 // Issuance hygiene (SPEC §5.7.1, §5.7.3)
 // ------------------------------------------------------------------

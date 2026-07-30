@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -183,8 +184,16 @@ func TestIssueDelegationRejectsUnsatisfiableAndParamsOnCanonical(t *testing.T) {
 	if err := IssueDelegation(&cert, root.priv); err == nil {
 		t.Fatal("expected rejection of different-resource constraint pair")
 	}
-	if err := IssueDelegationUnchecked(&cert, root.priv); err != nil {
-		t.Fatalf("unchecked issuance should sign anything structurally signable: %v", err)
+	// The same shape signed without issuance hygiene (as a non-conforming
+	// external issuer would) must still be signable and must fail closed
+	// at verification — covered by the unsatisfiable-pair fixture; here we
+	// confirm the internal signer accepts it.
+	data, err := delegationSignBytes(&cert)
+	if err != nil {
+		t.Fatalf("sign bytes for unsatisfiable cert: %v", err)
+	}
+	if _, err := signBoth(data, root.priv); err != nil {
+		t.Fatalf("signing externally shaped cert: %v", err)
 	}
 
 	cert2 := base
@@ -255,21 +264,165 @@ func TestVerificationReceiptCodecRoundTrip(t *testing.T) {
 	if !bytes.Equal(encoded, reEncoded) {
 		t.Fatal("receipt round-trip is not byte-identical")
 	}
+}
 
-	// Negative wire: truncated hash.
-	bad := *r
-	bad.BundleHash = bad.BundleHash[:16]
-	badBytes, err := EncodeVerificationReceipt(&bad)
+func TestVerificationReceiptEncoderRejectsInvalid(t *testing.T) {
+	verifier := testKeypair(t, 0x54)
+	valid := func() *VerificationReceipt {
+		return &VerificationReceipt{
+			Version: ProtocolVersion, VerifierID: verifier.id, VerifierPub: verifier.pub,
+			BundleHash: bytes.Repeat([]byte{1}, 32), Decision: "authorized_agent",
+			VerifiedAt: 1800000000, PrevHash: make([]byte, 32),
+			Signature: HybridSignature{Ed25519: make([]byte, 64), MLDSA65: make([]byte, 3309)},
+		}
+	}
+
+	if _, err := EncodeVerificationReceipt(nil); err == nil {
+		t.Fatal("expected rejection of a nil receipt")
+	}
+	mutations := []struct {
+		name   string
+		mutate func(*VerificationReceipt)
+	}{
+		{"short bundle_hash", func(r *VerificationReceipt) { r.BundleHash = r.BundleHash[:16] }},
+		{"short prev_hash", func(r *VerificationReceipt) { r.PrevHash = r.PrevHash[:31] }},
+		{"unknown decision", func(r *VerificationReceipt) { r.Decision = "approved" }},
+		{"empty verifier_id", func(r *VerificationReceipt) { r.VerifierID = "" }},
+		{"wrong version", func(r *VerificationReceipt) { r.Version = 2 }},
+		{"short ed25519 sig", func(r *VerificationReceipt) { r.Signature.Ed25519 = r.Signature.Ed25519[:63] }},
+		{"short ml_dsa_65 sig", func(r *VerificationReceipt) { r.Signature.MLDSA65 = r.Signature.MLDSA65[:100] }},
+		{"short verifier pub", func(r *VerificationReceipt) { r.VerifierPub.MLDSA65 = r.VerifierPub.MLDSA65[:100] }},
+	}
+	for _, m := range mutations {
+		r := valid()
+		m.mutate(r)
+		if _, err := EncodeVerificationReceipt(r); err == nil {
+			t.Errorf("%s: encoder emitted a document its decoder rejects", m.name)
+		}
+	}
+}
+
+func TestVerificationReceiptDecoderRejectsMalformedWire(t *testing.T) {
+	verifier := testKeypair(t, 0x55)
+	r := &VerificationReceipt{
+		Version: ProtocolVersion, VerifierID: verifier.id, VerifierPub: verifier.pub,
+		BundleHash: bytes.Repeat([]byte{2}, 32), Decision: "authorized_agent",
+		VerifiedAt: 1800000000, PrevHash: make([]byte, 32),
+		Signature: HybridSignature{Ed25519: make([]byte, 64), MLDSA65: make([]byte, 3309)},
+	}
+	encoded, err := EncodeVerificationReceipt(r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeVerificationReceipt(badBytes); err == nil {
-		t.Fatal("expected rejection of a 16-byte bundle_hash")
+
+	// Malformed wire is constructed by mutating valid encoded JSON — never
+	// by asking the encoder to produce an invalid document.
+	mutate := func(old, new string) []byte {
+		out := strings.Replace(string(encoded), old, new, 1)
+		if out == string(encoded) {
+			t.Fatalf("mutation %q not applied", old)
+		}
+		return []byte(out)
+	}
+	cases := map[string][]byte{
+		"unknown field":     mutate(`"version":`, `"versionx":1,"version":`),
+		"wrong version":     mutate(`"version":1`, `"version":2`),
+		"unknown decision":  mutate(`"decision":"authorized_agent"`, `"decision":"approved"`),
+		"null verifier_id":  mutate(`"verifier_id":"`+verifier.id+`"`, `"verifier_id":""`),
+		"truncated hash":    mutate(`"bundle_hash":"`+b64of(t, r.BundleHash)+`"`, `"bundle_hash":"`+b64of(t, r.BundleHash[:16])+`"`),
+		"non-object":        []byte(`[1,2,3]`),
+	}
+	for name, doc := range cases {
+		if _, err := DecodeVerificationReceipt(doc); err == nil {
+			t.Errorf("%s: expected decoder rejection", name)
+		}
+	}
+}
+
+func TestGenerateAgentKeypairNameBound(t *testing.T) {
+	if _, _, err := GenerateAgentKeypair(strings.Repeat("n", MaxAgentNameLengthBytes), "custom"); err != nil {
+		t.Fatalf("name of exactly %d bytes must be accepted: %v", MaxAgentNameLengthBytes, err)
+	}
+	if _, _, err := GenerateAgentKeypair(strings.Repeat("n", MaxAgentNameLengthBytes+1), "custom"); err == nil {
+		t.Fatalf("name of %d bytes must be rejected", MaxAgentNameLengthBytes+1)
+	}
+}
+
+// TestConstraintPathPrefixPresence proves that a present-but-forbidden
+// path_prefix (empty string, null, non-string) is rejected at decode
+// through both DecodeDelegationCert and DecodeProofBundle — it can never
+// silently widen into whole-resource authority. Absence remains the sole
+// encoding of "entire resource".
+func TestConstraintPathPrefixPresence(t *testing.T) {
+	root, agent := testKeypair(t, 0x56), testKeypair(t, 0x57)
+	cert := DelegationCert{
+		CertID: "t-presence-1", Version: ProtocolVersion,
+		IssuerID: root.id, IssuerPubKey: root.pub,
+		SubjectID: agent.id, SubjectPubKey: agent.pub,
+		Scope: []string{ScopeFilesWrite},
+		Constraints: []Constraint{{
+			Type: ConstraintResourcePath, ResourceID: "git:github.com/acme/widgets", PathPrefix: "/docs",
+		}},
+		IssuedAt: 1000, ExpiresAt: 4070908799,
+	}
+	if err := IssueDelegation(&cert, root.priv); err != nil {
+		t.Fatal(err)
+	}
+	certJSON, err := EncodeDelegationCert(&cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Valid form decodes.
+	if _, err := DecodeDelegationCert(certJSON); err != nil {
+		t.Fatalf("valid cert must decode: %v", err)
 	}
 
-	// Negative wire: unknown field.
-	tampered := bytes.Replace(encoded, []byte(`"version":`), []byte(`"versionx":1,"version":`), 1)
-	if _, err := DecodeVerificationReceipt(tampered); err == nil {
-		t.Fatal("expected rejection of an unknown field")
+	forbidden := map[string]string{
+		"empty string": `"path_prefix":""`,
+		"null":         `"path_prefix":null`,
+		"non-string":   `"path_prefix":42`,
 	}
+	for name, replacement := range forbidden {
+		doc := strings.Replace(string(certJSON), `"path_prefix":"/docs"`, replacement, 1)
+		if doc == string(certJSON) {
+			t.Fatalf("%s: mutation not applied", name)
+		}
+		if _, err := DecodeDelegationCert([]byte(doc)); err == nil {
+			t.Errorf("%s: DecodeDelegationCert accepted a forbidden path_prefix — this would widen a malformed restriction into whole-resource authority", name)
+		}
+	}
+
+	// The same forbidden forms inside a full bundle must be rejected by
+	// DecodeProofBundle.
+	challenge := bytes.Repeat([]byte{7}, 32)
+	sig, err := SignChallenge(challenge, 2000, agent.priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := ProofBundle{
+		AgentID: agent.id, AgentPubKey: agent.pub,
+		Delegations: []DelegationCert{cert},
+		Challenge:   challenge, ChallengeAt: 2000, ChallengeSig: sig,
+	}
+	bundleJSON, err := EncodeProofBundle(&bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeProofBundle(bundleJSON); err != nil {
+		t.Fatalf("valid bundle must decode: %v", err)
+	}
+	for name, replacement := range forbidden {
+		doc := strings.Replace(string(bundleJSON), `"path_prefix":"/docs"`, replacement, 1)
+		if doc == string(bundleJSON) {
+			t.Fatalf("%s: mutation not applied", name)
+		}
+		if _, err := DecodeProofBundle([]byte(doc)); err == nil {
+			t.Errorf("%s: DecodeProofBundle accepted a forbidden path_prefix", name)
+		}
+	}
+}
+
+func b64of(t *testing.T, b []byte) string {
+	t.Helper()
+	return base64.StdEncoding.EncodeToString(b)
 }

@@ -114,6 +114,63 @@ func DecodeSessionToken(data []byte) (*SessionToken, error) {
 	return &token, nil
 }
 
+// validReceiptDecisions is the closed identity_status vocabulary a receipt
+// may attest (SPEC §5.9, §17.5). Receipts record verifier decisions;
+// a string outside the enum is structurally invalid on both codec sides.
+var validReceiptDecisions = map[string]bool{
+	IdentityStatusAuthorizedAgent:         true,
+	IdentityStatusVerifiedHuman:           true,
+	IdentityStatusExpired:                 true,
+	IdentityStatusRevoked:                 true,
+	IdentityStatusScopeDenied:             true,
+	IdentityStatusConstraintDenied:        true,
+	IdentityStatusConstraintUnverifiable:  true,
+	IdentityStatusConstraintUnknown:       true,
+	IdentityStatusInvalidScope:            true,
+	IdentityStatusDelegationNotAuthorized: true,
+	IdentityStatusInvalid: true,
+	// "unauthorized" is reserved in the §5.9 enum (never emitted by the
+	// reference verifier); a receipt carrying it is enum-valid on the wire.
+	"unauthorized": true,
+}
+
+// checkReceiptStructure enforces the structural invariants of a wire
+// VerificationReceipt (SPEC §17.5) — shared by the encoder and decoder so
+// the codec pair never emits a document its counterpart rejects.
+func checkReceiptStructure(r *VerificationReceipt) error {
+	if r == nil {
+		return fmt.Errorf("wire: nil verification receipt")
+	}
+	if r.Version != ProtocolVersion {
+		return fmt.Errorf("wire: receipt version %d is not PROTOCOL_VERSION (%d)", r.Version, ProtocolVersion)
+	}
+	if r.VerifierID == "" {
+		return fmt.Errorf("wire: receipt verifier_id must be non-empty")
+	}
+	if !validReceiptDecisions[r.Decision] {
+		return fmt.Errorf("wire: receipt decision %q is not a known identity_status", r.Decision)
+	}
+	if len(r.BundleHash) != 32 {
+		return fmt.Errorf("wire: bundle_hash must be 32 bytes, got %d", len(r.BundleHash))
+	}
+	if len(r.PrevHash) != 32 {
+		return fmt.Errorf("wire: prev_hash must be 32 bytes, got %d", len(r.PrevHash))
+	}
+	if len(r.VerifierPub.Ed25519) != 32 {
+		return fmt.Errorf("wire: verifier_pub.ed25519 must be 32 bytes, got %d", len(r.VerifierPub.Ed25519))
+	}
+	if len(r.VerifierPub.MLDSA65) != 1952 {
+		return fmt.Errorf("wire: verifier_pub.ml_dsa_65 must be 1952 bytes, got %d", len(r.VerifierPub.MLDSA65))
+	}
+	if len(r.Signature.Ed25519) != 64 {
+		return fmt.Errorf("wire: signature.ed25519 must be 64 bytes, got %d", len(r.Signature.Ed25519))
+	}
+	if len(r.Signature.MLDSA65) != 3309 {
+		return fmt.Errorf("wire: signature.ml_dsa_65 must be 3309 bytes, got %d", len(r.Signature.MLDSA65))
+	}
+	return nil
+}
+
 // verificationReceiptWire mirrors VerificationReceipt with fields in
 // alphabetical JSON-key order (Go marshals in declaration order); optional
 // fields are omitted when empty, matching the signable subset's discipline
@@ -135,9 +192,15 @@ type verificationReceiptWire struct {
 
 // EncodeVerificationReceipt marshals a VerificationReceipt into its
 // canonical wire JSON (SPEC §17.5): lex-sorted keys, byte fields as
-// base64-standard strings, optional fields omitted when empty. Integer
-// fields outside the safe-integer domain are an error, never emitted.
+// base64-standard strings, optional fields omitted when empty. A
+// structurally invalid receipt (wrong hash or key lengths, unknown
+// decision, wrong version) is an error, never emitted: the codec pair
+// never produces a document its own decoder rejects. Integer fields
+// outside the safe-integer domain are an error, never emitted.
 func EncodeVerificationReceipt(r *VerificationReceipt) ([]byte, error) {
+	if err := checkReceiptStructure(r); err != nil {
+		return nil, err
+	}
 	w := verificationReceiptWire{
 		AgentID:      r.AgentID,
 		BundleHash:   r.BundleHash,
@@ -156,10 +219,10 @@ func EncodeVerificationReceipt(r *VerificationReceipt) ([]byte, error) {
 }
 
 // DecodeVerificationReceipt parses canonical wire JSON into a
-// VerificationReceipt under strict wire acceptance. Byte-field sizes are
-// validated structurally (bundle_hash and prev_hash must be 32 bytes);
-// signature verification is the caller's job via
-// VerifyVerificationReceipt.
+// VerificationReceipt under strict wire acceptance and the same
+// structural invariants the encoder enforces (hash and key component
+// lengths, known decision, protocol version). Signature verification is
+// the caller's job via VerifyVerificationReceipt.
 func DecodeVerificationReceipt(data []byte) (*VerificationReceipt, error) {
 	if err := CheckWireJSON(data); err != nil {
 		return nil, err
@@ -168,13 +231,7 @@ func DecodeVerificationReceipt(data []byte) (*VerificationReceipt, error) {
 	if err := strictUnmarshal(data, &w); err != nil {
 		return nil, err
 	}
-	if len(w.BundleHash) != 32 {
-		return nil, fmt.Errorf("wire: bundle_hash must be 32 bytes, got %d", len(w.BundleHash))
-	}
-	if len(w.PrevHash) != 32 {
-		return nil, fmt.Errorf("wire: prev_hash must be 32 bytes, got %d", len(w.PrevHash))
-	}
-	return &VerificationReceipt{
+	r := &VerificationReceipt{
 		Version:      w.Version,
 		VerifierID:   w.VerifierID,
 		VerifierPub:  w.VerifierPub,
@@ -187,5 +244,9 @@ func DecodeVerificationReceipt(data []byte) (*VerificationReceipt, error) {
 		VerifiedAt:   w.VerifiedAt,
 		PrevHash:     w.PrevHash,
 		Signature:    w.Signature,
-	}, nil
+	}
+	if err := checkReceiptStructure(r); err != nil {
+		return nil, err
+	}
+	return r, nil
 }

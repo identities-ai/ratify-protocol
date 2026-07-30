@@ -18,6 +18,7 @@
 package ratify
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -252,6 +253,53 @@ func (c Constraint) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("canonical constraint type %q must not carry params", c.Type)
 	}
 	return stdMarshal(m)
+}
+
+// UnmarshalJSON decodes a Constraint while preserving field presence for
+// the cases where presence itself is load-bearing (SPEC §5.7.3):
+//
+//   - `path_prefix` ABSENT      → whole-resource authorization (valid)
+//   - `path_prefix` "" or null  → REJECTED — a malformed path restriction
+//     must never silently widen into whole-resource authority
+//   - `path_prefix` non-string  → REJECTED
+//   - `resource_id` absent/empty/null on a resource_path → REJECTED
+//
+// Plain struct decoding cannot distinguish absent from empty/null, which is
+// exactly the escalation this method exists to close. Unknown fields are
+// rejected here so constraint-level strictness holds regardless of the
+// outer decoder's configuration.
+func (c *Constraint) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if pp, present := raw["path_prefix"]; present {
+		var s string
+		// json.Unmarshal accepts `null` into a string as a no-op, so the
+		// empty check below covers both `""` and `null`.
+		if err := json.Unmarshal(pp, &s); err != nil {
+			return fmt.Errorf("constraint path_prefix must be a string")
+		}
+		if s == "" {
+			return fmt.Errorf("constraint path_prefix must not be empty or null; omit the field to authorize the entire resource")
+		}
+	}
+	type constraintAlias Constraint // drops methods: no recursion
+	var a constraintAlias
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&a); err != nil {
+		return err
+	}
+	if a.Type == ConstraintResourcePath {
+		rid, present := raw["resource_id"]
+		var s string
+		if !present || json.Unmarshal(rid, &s) != nil || s == "" {
+			return fmt.Errorf("resource_path constraint requires a non-empty resource_id string")
+		}
+	}
+	*c = Constraint(a)
+	return nil
 }
 
 // isCanonicalConstraintType reports whether t is one of the canonical v1

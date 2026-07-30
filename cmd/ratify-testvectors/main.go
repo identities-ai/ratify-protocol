@@ -16,6 +16,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -26,8 +27,35 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
+
 	ratify "github.com/identities-ai/ratify-protocol"
 )
+
+// signCertBypassingIssuanceHygiene signs a cert directly with both key
+// components, skipping IssueDelegation's issuance hygiene. It exists ONLY
+// so this generator can produce the externally-created certificate shapes
+// that decoders MUST accept and verification MUST fail closed (e.g. the
+// jointly unsatisfiable resource-constraint pair). It is deliberately not
+// part of the SDK's public API: an exported unchecked issuer would be a
+// production footgun that undermines the issuance boundary.
+func signCertBypassingIssuanceHygiene(cert *ratify.DelegationCert, priv ratify.HybridPrivateKey) {
+	if cert.Constraints == nil {
+		cert.Constraints = []ratify.Constraint{}
+	}
+	data, err := ratify.DelegationSignBytes(cert)
+	if err != nil {
+		panic(fmt.Errorf("sign bytes for %s: %w", cert.CertID, err))
+	}
+	edSig := ed25519.Sign(priv.Ed25519, data)
+	mlSig := make([]byte, mldsa65.SignatureSize)
+	// Deterministic mode, no domain separator — identical to the SDK's
+	// signing path, so fixture bytes are reproducible.
+	if err := mldsa65.SignTo(priv.MLDSA65, data, nil, false, mlSig); err != nil {
+		panic(fmt.Errorf("ML-DSA-65 sign for %s: %w", cert.CertID, err))
+	}
+	cert.Signature = ratify.HybridSignature{Ed25519: edSig, MLDSA65: mlSig}
+}
 
 // Canonical fixed timestamps. 1800000000 is 2027-01-15 08:00:00 UTC — far
 // enough in the future that "now" offsets make sense both forward and back.
@@ -2968,9 +2996,7 @@ func genResourcePathUnsatisfiablePairDenied() *fixture {
 		IssuedAt:  fixtureIssuedAt,
 		ExpiresAt: fixtureExpiresAt,
 	}
-	if err := ratify.IssueDelegationUnchecked(&cert, human.priv); err != nil {
-		panic(err)
-	}
+	signCertBypassingIssuanceHygiene(&cert, human.priv)
 	challenge := deterministicChallenge("constraint_resource_path_unsatisfiable_pair_denied")
 	bundle := buildBundle(agent, []ratify.DelegationCert{cert}, challenge, fixtureNow)
 

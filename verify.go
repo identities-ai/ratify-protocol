@@ -39,11 +39,15 @@ const (
 	// MaxScopeLengthBytes bounds the UTF-8 byte length of a single scope.
 	MaxScopeLengthBytes = 256
 
-	// MaxIdentifierLengthBytes bounds resource identifiers (resource_path's
-	// resource_id) and other opaque identifier strings.
+	// MaxIdentifierLengthBytes bounds resource_path's resource_id in this
+	// release; future constraint types that name opaque identifiers adopt
+	// the same bound (SPEC §5.1).
 	MaxIdentifierLengthBytes = 512
 
-	// MaxAgentNameLengthBytes bounds AgentIdentity.Name.
+	// MaxAgentNameLengthBytes bounds AgentIdentity.Name (UTF-8 bytes),
+	// enforced at construction (GenerateAgentKeypair). AgentIdentity is not
+	// part of any wire document this SDK decodes; implementations that do
+	// decode one (e.g. registries) enforce the same bound there.
 	MaxAgentNameLengthBytes = 256
 
 	// MaxJSONNestingDepth bounds JSON container nesting in wire documents,

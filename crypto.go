@@ -114,7 +114,11 @@ func GenerateHumanRootKeypair() (*HumanRoot, HybridPrivateKey, error) {
 }
 
 // GenerateAgentKeypair creates a fresh AgentIdentity with a hybrid keypair.
+// The name is bounded by MaxAgentNameLengthBytes (UTF-8 bytes, SPEC §5.1).
 func GenerateAgentKeypair(name, agentType string) (*AgentIdentity, HybridPrivateKey, error) {
+	if len(name) > MaxAgentNameLengthBytes {
+		return nil, HybridPrivateKey{}, fmt.Errorf("agent name is %d bytes, exceeding MAX_AGENT_NAME_LENGTH_BYTES (%d)", len(name), MaxAgentNameLengthBytes)
+	}
 	pub, priv, err := GenerateHybridKeypair()
 	if err != nil {
 		return nil, HybridPrivateKey{}, err
@@ -247,28 +251,6 @@ func IssueDelegation(cert *DelegationCert, issuerPriv HybridPrivateKey) error {
 		if len(s) > MaxScopeLengthBytes {
 			return fmt.Errorf("issuing delegation: scope %q is %d bytes, exceeding MAX_SCOPE_LENGTH_BYTES (%d)", s, len(s), MaxScopeLengthBytes)
 		}
-	}
-	data, err := delegationSignBytes(cert)
-	if err != nil {
-		return fmt.Errorf("serializing delegation for signing: %w", err)
-	}
-	sig, err := signBoth(data, issuerPriv)
-	if err != nil {
-		return fmt.Errorf("signing delegation: %w", err)
-	}
-	cert.Signature = sig
-	return nil
-}
-
-// IssueDelegationUnchecked signs a DelegationCert WITHOUT the issuance
-// hygiene checks of IssueDelegation (SPEC §5.7.1, §5.7.3): no rejection of
-// jointly unsatisfiable resource constraint sets, params on canonical
-// types, or bound violations. It exists so conformance tooling can produce
-// the externally-created certificate shapes that decoders MUST accept and
-// verification MUST fail closed. Applications issue with IssueDelegation.
-func IssueDelegationUnchecked(cert *DelegationCert, issuerPriv HybridPrivateKey) error {
-	if cert.Constraints == nil {
-		cert.Constraints = []Constraint{}
 	}
 	data, err := delegationSignBytes(cert)
 	if err != nil {

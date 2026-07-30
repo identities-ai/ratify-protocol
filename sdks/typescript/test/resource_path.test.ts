@@ -304,7 +304,19 @@ test("path_prefix presence: forbidden forms rejected at decode", async () => {
 
 // ---- input bounds ----
 
-test("decodeProofBundle rejects oversized payload before parsing", () => {
+test("decodeProofBundle size bound: both sides", () => {
+  // At exactly the limit the size gate passes and parsing is reached, so the
+  // failure is a parse error that does NOT name the size bound.
+  const atLimit = "x".repeat(MAX_PROOF_BUNDLE_BYTES);
+  let atErr: unknown;
+  try {
+    decodeProofBundle(atLimit);
+  } catch (e) {
+    atErr = e;
+  }
+  assert.ok(atErr, "at-limit input must still fail (parse error)");
+  assert.doesNotMatch(String((atErr as Error).message), /MAX_PROOF_BUNDLE_BYTES/);
+  // One past the limit is rejected before parsing; the error names the bound.
   const oversized = "x".repeat(MAX_PROOF_BUNDLE_BYTES + 1);
   assert.throws(() => decodeProofBundle(oversized), /MAX_PROOF_BUNDLE_BYTES/);
 });

@@ -195,7 +195,7 @@ git clone https://github.com/identities-ai/ratify-protocol
 cd ratify-protocol/sdks/python
 pip install -e '.[dev]'
 pytest
-# → 63 passed
+# → all tests pass
 ```
 
 ### Rust

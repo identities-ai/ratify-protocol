@@ -431,7 +431,13 @@ fn issue_delegation_rejects_unsatisfiable_and_params_on_canonical() {
 
 #[test]
 fn decode_proof_bundle_size_and_nesting_bounds() {
-    // Oversized payload is rejected before parsing; error names the bound.
+    // MAX_PROOF_BUNDLE_BYTES, both sides. At exactly the limit the size gate
+    // passes and parsing is reached, so the error is a parse error and does
+    // NOT name the size bound.
+    let at_limit = vec![b'x'; MAX_PROOF_BUNDLE_BYTES];
+    let at_err = decode_proof_bundle(&at_limit).unwrap_err();
+    assert!(!at_err.contains("MAX_PROOF_BUNDLE_BYTES"), "at-limit must reach parsing, got: {at_err}");
+    // One past the limit is rejected before parsing; error names the bound.
     let oversized = vec![b'x'; MAX_PROOF_BUNDLE_BYTES + 1];
     let err = decode_proof_bundle(&oversized).unwrap_err();
     assert!(err.contains("MAX_PROOF_BUNDLE_BYTES"), "got: {err}");

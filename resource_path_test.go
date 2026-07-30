@@ -211,9 +211,15 @@ func TestIssueDelegationRejectsUnsatisfiableAndParamsOnCanonical(t *testing.T) {
 }
 
 func TestDecodeProofBundleLimits(t *testing.T) {
-	// Oversized payload is rejected before parsing: even garbage bytes of
-	// the right size never reach the JSON parser, and the error names the
-	// bundle limit.
+	// MAX_PROOF_BUNDLE_BYTES, both sides (same technique as the nesting gate:
+	// observe that the size gate fires at limit+1 and not at the limit).
+	// At exactly the limit the size gate passes and parsing is reached, so
+	// the error is a parse error, NOT the size error.
+	atLimit := bytes.Repeat([]byte("x"), MaxProofBundleBytes)
+	if _, err := DecodeProofBundle(atLimit); err == nil || strings.Contains(err.Error(), "MAX_PROOF_BUNDLE_BYTES") {
+		t.Fatalf("at exactly MaxProofBundleBytes the size gate must NOT fire (parsing reached), got %v", err)
+	}
+	// One past the limit is rejected before parsing, and the error names it.
 	oversized := bytes.Repeat([]byte("x"), MaxProofBundleBytes+1)
 	if _, err := DecodeProofBundle(oversized); err == nil || !strings.Contains(err.Error(), "MAX_PROOF_BUNDLE_BYTES") {
 		t.Fatalf("expected pre-parse size rejection, got %v", err)

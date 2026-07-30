@@ -300,8 +300,15 @@ def test_absent_path_prefix_is_whole_resource():
 # Input bounds
 # ---------------------------------------------------------------------------
 
-def test_decode_proof_bundle_rejects_oversized_before_parse():
-    # Garbage bytes over the size limit are rejected before parsing.
+def test_decode_proof_bundle_size_bound_both_sides():
+    # MAX_PROOF_BUNDLE_BYTES, both sides. At exactly the limit the size gate
+    # passes and parsing is reached, so the failure is a parse error that does
+    # NOT name the size bound.
+    at_limit = "x" * MAX_PROOF_BUNDLE_BYTES
+    with pytest.raises(ValueError) as at_ei:
+        decode_proof_bundle(at_limit)
+    assert "MAX_PROOF_BUNDLE_BYTES" not in str(at_ei.value)
+    # One past the limit is rejected before parsing; the error names the bound.
     oversized = "x" * (MAX_PROOF_BUNDLE_BYTES + 1)
     with pytest.raises(ValueError) as ei:
         decode_proof_bundle(oversized)

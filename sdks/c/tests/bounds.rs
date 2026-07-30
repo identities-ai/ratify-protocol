@@ -53,6 +53,7 @@ const MAX_SCOPE_LENGTH_BYTES: usize = 256;
 const MAX_IDENTIFIER_LENGTH_BYTES: usize = 512;
 const MAX_JSON_NESTING_DEPTH: usize = 16;
 const MAX_AGENT_NAME_LENGTH_BYTES: usize = 256;
+const MAX_PROOF_BUNDLE_BYTES: usize = 131_072; // 128 KiB
 
 const NOW: i64 = 1_800_000_000;
 
@@ -353,6 +354,45 @@ fn max_json_nesting_depth_boundary() {
             o.reason.contains("MAX_JSON_NESTING_DEPTH"),
             "one past ({}) must surface the nesting bound; reason={}",
             MAX_JSON_NESTING_DEPTH + 1,
+            o.reason
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Proof-bundle byte size — pre-parse gate in ratify_verify_bundle_opts_v2
+// ---------------------------------------------------------------------------
+
+#[test]
+fn max_proof_bundle_bytes_boundary() {
+    unsafe {
+        // At exactly the limit the size gate passes and parsing is reached; the
+        // bare 'x' string is not a ProofBundle, so parsing fails with
+        // RatifyErrJson — proving the size bound did NOT reject it.
+        let at = "x".repeat(MAX_PROOF_BUNDLE_BYTES);
+        let o = verify(&at);
+        assert_eq!(
+            o.status,
+            RatifyStatus::RatifyErrJson,
+            "at limit ({MAX_PROOF_BUNDLE_BYTES}) the size gate must pass and reach the parser"
+        );
+        assert!(
+            !o.reason.contains("MAX_PROOF_BUNDLE_BYTES"),
+            "at the limit the size bound must NOT fire; reason={}",
+            o.reason
+        );
+
+        // One past the limit: the pre-parse gate fires and surfaces as an
+        // `invalid` VerifyResult naming the bound.
+        let over = "x".repeat(MAX_PROOF_BUNDLE_BYTES + 1);
+        let o = verify(&over);
+        assert_eq!(o.status, RatifyStatus::RatifyOk, "over-limit size surfaces as an invalid result");
+        assert!(o.has_result);
+        assert!(!o.valid);
+        assert!(
+            o.reason.contains("MAX_PROOF_BUNDLE_BYTES"),
+            "one past ({}) must surface the size bound; reason={}",
+            MAX_PROOF_BUNDLE_BYTES + 1,
             o.reason
         );
     }

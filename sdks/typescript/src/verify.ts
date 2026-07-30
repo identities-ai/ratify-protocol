@@ -5,7 +5,11 @@
 import {
   CHALLENGE_WINDOW_SECONDS,
   ED25519_PUBLIC_KEY_SIZE,
+  MAX_CONSTRAINTS_PER_CERT,
   MAX_DELEGATION_CHAIN_DEPTH,
+  MAX_IDENTIFIER_LENGTH_BYTES,
+  MAX_SCOPES_PER_CERT,
+  MAX_SCOPE_LENGTH_BYTES,
   MLDSA65_PUBLIC_KEY_SIZE,
   PROTOCOL_VERSION,
   type DelegationCert,
@@ -28,6 +32,7 @@ import {
   verifyBoth,
 } from "./crypto.js";
 import { intersectScopes, validateScopes, SCOPE_IDENTITY_DELEGATE } from "./scope.js";
+import { utf8ByteLength } from "./resource_path.js";
 import { evaluateConstraints } from "./constraints.js";
 import { verifierContextHash, verifyPolicyVerdict } from "./receipts.js";
 import { UNKNOWN_CHALLENGE, type ChallengeStore } from "./challenge_store.js";
@@ -98,6 +103,46 @@ async function _verifyBundle(
   }
   if (!bundle.challenge || bundle.challenge.length === 0) {
     return invalid("no_challenge", "proof bundle contains no challenge");
+  }
+  // Input bounds (SPEC §5.1). Codecs enforce these during decode; the
+  // verifier re-enforces them so bundles constructed in-process are held to
+  // the same bounds. Violations are structural: `invalid`, no new status.
+  for (let i = 0; i < bundle.delegations.length; i++) {
+    const cert = bundle.delegations[i]!;
+    if (cert.scope.length > MAX_SCOPES_PER_CERT) {
+      return invalid(
+        "invalid",
+        `cert ${i} carries ${cert.scope.length} scopes, exceeding MAX_SCOPES_PER_CERT (${MAX_SCOPES_PER_CERT})`,
+      );
+    }
+    const constraints = cert.constraints ?? [];
+    if (constraints.length > MAX_CONSTRAINTS_PER_CERT) {
+      return invalid(
+        "invalid",
+        `cert ${i} carries ${constraints.length} constraints, exceeding MAX_CONSTRAINTS_PER_CERT (${MAX_CONSTRAINTS_PER_CERT})`,
+      );
+    }
+    for (const s of cert.scope) {
+      const sLen = utf8ByteLength(s);
+      if (sLen > MAX_SCOPE_LENGTH_BYTES) {
+        return invalid(
+          "invalid",
+          `cert ${i} carries a scope of ${sLen} bytes, exceeding MAX_SCOPE_LENGTH_BYTES (${MAX_SCOPE_LENGTH_BYTES})`,
+        );
+      }
+    }
+    for (let j = 0; j < constraints.length; j++) {
+      const id = constraints[j]!.resource_id;
+      if (id !== undefined) {
+        const idLen = utf8ByteLength(id);
+        if (idLen > MAX_IDENTIFIER_LENGTH_BYTES) {
+          return invalid(
+            "invalid",
+            `cert ${i} constraint ${j} resource_id is ${idLen} bytes, exceeding MAX_IDENTIFIER_LENGTH_BYTES (${MAX_IDENTIFIER_LENGTH_BYTES})`,
+          );
+        }
+      }
+    }
   }
   if (bundle.session_context && bundle.session_context.length !== 32) {
     return invalid(

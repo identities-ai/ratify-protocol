@@ -283,6 +283,49 @@ pub unsafe extern "C" fn ratify_session_token_free(handle: *mut RatifySessionTok
 // Verification Receipts
 // ============================================================================
 
+/// Structural invariants of a wire VerificationReceipt (SPEC §17.5),
+/// shared by the encode (`to_json`) and decode (`from_json`) paths so the
+/// codec pair never emits a document its counterpart rejects. Mirrors the
+/// Go reference's `checkReceiptStructure`. Signature *validity* is a
+/// separate concern (`ratify_receipt_verify`); this only checks shape.
+fn check_receipt_structure(r: &VerificationReceipt) -> Result<(), String> {
+    // The closed identity_status vocabulary a receipt may attest (SPEC §5.9).
+    const VALID_DECISIONS: &[&str] = &[
+        "authorized_agent", "verified_human", "expired", "revoked",
+        "scope_denied", "constraint_denied", "constraint_unverifiable",
+        "constraint_unknown", "invalid_scope", "delegation_not_authorized",
+        "invalid", "unauthorized",
+    ];
+    if r.version != 1 {
+        return Err(format!("wire: receipt version {} is not PROTOCOL_VERSION (1)", r.version));
+    }
+    if r.verifier_id.is_empty() {
+        return Err("wire: receipt verifier_id must be non-empty".to_string());
+    }
+    if !VALID_DECISIONS.contains(&r.decision.as_str()) {
+        return Err(format!("wire: receipt decision {:?} is not a known identity_status", r.decision));
+    }
+    if r.bundle_hash.len() != 32 {
+        return Err(format!("wire: bundle_hash must be 32 bytes, got {}", r.bundle_hash.len()));
+    }
+    if r.prev_hash.len() != 32 {
+        return Err(format!("wire: prev_hash must be 32 bytes, got {}", r.prev_hash.len()));
+    }
+    if r.verifier_pub.ed25519.len() != 32 {
+        return Err(format!("wire: verifier_pub.ed25519 must be 32 bytes, got {}", r.verifier_pub.ed25519.len()));
+    }
+    if r.verifier_pub.ml_dsa_65.len() != 1952 {
+        return Err(format!("wire: verifier_pub.ml_dsa_65 must be 1952 bytes, got {}", r.verifier_pub.ml_dsa_65.len()));
+    }
+    if r.signature.ed25519.len() != 64 {
+        return Err(format!("wire: signature.ed25519 must be 64 bytes, got {}", r.signature.ed25519.len()));
+    }
+    if r.signature.ml_dsa_65.len() != 3309 {
+        return Err(format!("wire: signature.ml_dsa_65 must be 3309 bytes, got {}", r.signature.ml_dsa_65.len()));
+    }
+    Ok(())
+}
+
 /// Issue a signed VerificationReceipt for an agent verification event.
 ///
 /// The receipt is hybrid-signed by `verifier`'s keypair and chains to
@@ -400,6 +443,11 @@ pub unsafe extern "C" fn ratify_receipt_to_json(
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
     if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
+    // SPEC §17.5: never emit a document our own decoder rejects.
+    if let Err(e) = check_receipt_structure(&(*handle).0) {
+        set_err(err_out, &e);
+        return std::ptr::null_mut();
+    }
     match serde_json::to_string(&(*handle).0) {
         Ok(s) => new_cstring(&s),
         Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
@@ -416,7 +464,16 @@ pub unsafe extern "C" fn ratify_receipt_from_json(
     if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
     let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
     match serde_json::from_str::<VerificationReceipt>(&s) {
-        Ok(r) => { *out = Box::into_raw(Box::new(RatifyReceipt(r))); RatifyStatus::RatifyOk }
+        Ok(r) => {
+            // SPEC §17.5: reject a structurally-invalid wire receipt (wrong
+            // hash/key lengths, unknown decision, wrong version) here — the
+            // same invariants the encoder enforces.
+            if let Err(e) = check_receipt_structure(&r) {
+                set_err(err_out, &e);
+                return RatifyStatus::RatifyErrJson;
+            }
+            *out = Box::into_raw(Box::new(RatifyReceipt(r))); RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "receipt_from_json", e),
     }
 }
@@ -1118,6 +1175,11 @@ pub unsafe extern "C" fn ratify_verifier_context_hash(
         requested_amount:      if ctx_ref.has_amount   != 0 { Some(ctx_ref.requested_amount) } else { None },
         requested_currency:    if ctx_ref.has_amount   != 0 { currency } else { None },
         invocations_in_window: None, // not needed for hashing
+        // The legacy RatifyVerifierContext carries no resource context
+        // (SPEC §5.16); resource fields are supplied only through the
+        // versioned verify path, not this hashing helper.
+        requested_resource_id: None,
+        requested_path:        None,
     };
     match ratify_protocol::verifier_context_hash(&rust_ctx) {
         Ok(h) => {

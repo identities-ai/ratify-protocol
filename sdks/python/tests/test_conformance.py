@@ -197,6 +197,9 @@ def _run_verify_fixture(fx: dict) -> None:
     context = None
     if ctx_raw is not None:
         inv_count = ctx_raw.get("invocations_in_window_count")
+        # Resource context (SPEC §5.16): presence of requested_resource_id
+        # implies has_resource=True, mirroring the Go fixture harness.
+        req_rid = ctx_raw.get("requested_resource_id")
         context = VerifierContext(
             current_lat=ctx_raw.get("current_lat"),
             current_lon=ctx_raw.get("current_lon"),
@@ -209,6 +212,9 @@ def _run_verify_fixture(fx: dict) -> None:
                 if inv_count is not None
                 else None
             ),
+            requested_resource_id=req_rid or "",
+            requested_path=ctx_raw.get("requested_path") or "",
+            has_resource=bool(req_rid),
         )
 
     stream_opt = None

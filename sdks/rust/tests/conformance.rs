@@ -56,6 +56,10 @@ struct FixtureVerifierContext {
     #[serde(default)]
     requested_currency: String,
     invocations_in_window_count: Option<i64>,
+    #[serde(default)]
+    requested_resource_id: String,
+    #[serde(default)]
+    requested_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -265,6 +269,12 @@ fn run_verify_fixture(fx: &Fixture) {
         }
         if let Some(n) = vc.invocations_in_window_count {
             context.invocations_in_window = Some(Box::new(move |_cid, _w| n));
+        }
+        // Presence of requested_resource_id implies HasResource=true, matching
+        // the Go fixture harness (SPEC §5.16).
+        if !vc.requested_resource_id.is_empty() {
+            context.requested_resource_id = Some(vc.requested_resource_id.clone());
+            context.requested_path = Some(vc.requested_path.clone());
         }
     }
 

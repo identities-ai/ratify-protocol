@@ -22,9 +22,11 @@ pub mod constraints;
 pub mod operation_context;
 pub mod crypto;
 pub mod receipts;
+pub mod resource_path;
 pub mod scope;
 pub mod types;
 pub mod verify;
+pub mod wire;
 
 pub use canonical::{base64_std_decode, base64_std_encode, hex_decode, hex_encode};
 #[cfg(feature = "std")]
@@ -70,16 +72,27 @@ pub use receipts::{
     policy_verdict_sign_bytes_buf, receipt_hash, verification_receipt_sign_bytes_buf,
     verifier_context_hash, verify_policy_verdict, verify_verification_receipt,
 };
+pub use resource_path::{
+    normalize_resource_path, resource_path_matches, validate_constraint_params,
+    validate_params_value, validate_resource_constraints,
+};
+pub use wire::{
+    check_json_nesting_depth, check_receipt_structure, encode_verification_receipt,
+};
+#[cfg(feature = "std")]
+pub use wire::{decode_delegation_cert, decode_proof_bundle, decode_verification_receipt};
 pub use types::{
-    AgentIdentity, Anchor, AnchorResolver, AuditProvider, Constraint, ConstraintEvaluator,
-    DelegationCert, HumanRoot, HybridPrivateKey, HybridPublicKey, HybridSignature, IdentityStatus,
-    KeyRotationStatement, PolicyProvider, PolicyVerdict, ProofBundle, ReceiptParty,
-    ReceiptPartySignature, RevocationList, RevocationProvider, RevocationPush, SessionToken,
-    StreamContext, TransactionReceipt, TransactionReceiptResult, VerificationReceipt,
-    InvocationCounter, VerifierContext, VerifyOptions, VerifyResult, WitnessEntry,
-    CHALLENGE_WINDOW_SECONDS,
-    ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
-    MLDSA65_PUBLIC_KEY_SIZE, MLDSA65_SIGNATURE_SIZE, NO_EXPIRY_SENTINEL, PROTOCOL_VERSION,
+    is_canonical_constraint_type, AgentIdentity, Anchor, AnchorResolver, AuditProvider, Constraint,
+    ConstraintEvaluator, DelegationCert, HumanRoot, HybridPrivateKey, HybridPublicKey,
+    HybridSignature, IdentityStatus, KeyRotationStatement, ParamsValue, PolicyProvider,
+    PolicyVerdict, ProofBundle, ReceiptParty, ReceiptPartySignature, RevocationList,
+    RevocationProvider, RevocationPush, SessionToken, StreamContext, TransactionReceipt,
+    TransactionReceiptResult, VerificationReceipt, InvocationCounter, VerifierContext,
+    VerifyOptions, VerifyResult, WitnessEntry, CHALLENGE_WINDOW_SECONDS, ED25519_PUBLIC_KEY_SIZE,
+    ED25519_SIGNATURE_SIZE, MAX_AGENT_NAME_LENGTH_BYTES, MAX_CONSTRAINTS_PER_CERT,
+    MAX_DELEGATION_CHAIN_DEPTH, MAX_IDENTIFIER_LENGTH_BYTES, MAX_JSON_NESTING_DEPTH,
+    MAX_PROOF_BUNDLE_BYTES, MAX_SCOPES_PER_CERT, MAX_SCOPE_LENGTH_BYTES, MLDSA65_PUBLIC_KEY_SIZE,
+    MLDSA65_SIGNATURE_SIZE, NO_EXPIRY_SENTINEL, PROTOCOL_VERSION,
 };
 #[allow(deprecated)]
 pub use verify::verify_streamed_turn;

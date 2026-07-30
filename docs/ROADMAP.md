@@ -149,7 +149,7 @@ These features require changes to the wire format or new cryptographic primitive
 | **Session-key derivation** | Requires X25519/ML-KEM hybrid key exchange — a new crypto primitive not in v1 | Pair Ratify proof-of-authorization with a hybrid KEX so both sides derive a shared session key in the same round-trip as verification. Analogous to TLS 1.3 combining certs + ECDHE. |
 | **Multi-sig / threshold delegation** | Changes `DelegationCert` wire format — breaks all v1 SDKs | `MultiSigDelegationCert` with a signer list + threshold. At least `threshold` distinct signers must produce valid hybrid signatures. For enterprise 2-of-3 quorum on high-value delegations. |
 | **Transparency log** | Significant operational scope — Certificate-Transparency-style infrastructure | Append-only log of revocation-list updates, operated by the issuer + external witnesses. Clients subscribe to the log and detect divergent views (selective suppression). |
-| **Deeper chains** | Production data needed | Consider lifting `MAX_DELEGATION_CHAIN_DEPTH` from 3 to 5 based on real-world delegation topologies. |
+| **Deeper chains** | Landed in v1.0.0-alpha.16 (spec) | `MAX_DELEGATION_CHAIN_DEPTH` raised from 3 to 8, driven by real multi-hop agent-platform topologies, alongside new byte/count/length input bounds (SPEC §5.1). |
 | **CBOR wire format** | Bandwidth optimization | For mobile, IoT, and bandwidth-sensitive paths. JSON remains canonical for v1. |
 
 v2 will ship with `testvectors/v2/` alongside v1 fixtures. A migration window of at least 12 months will let implementers support both.

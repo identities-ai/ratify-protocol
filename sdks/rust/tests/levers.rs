@@ -24,7 +24,7 @@ fn now() -> i64 {
 
 fn good_bundle() -> (ProofBundle, String, String) {
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("L Bot", "custom");
+    let (agent, agent_priv) = generate_agent("L Bot", "custom").unwrap();
     let n = now();
     let mut cert = DelegationCert {
         cert_id: "lever-cert".into(),
@@ -42,7 +42,7 @@ fn good_bundle() -> (ProofBundle, String, String) {
             ml_dsa_65: Vec::new(),
         },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).unwrap();
     let challenge = generate_challenge();
     let sig = sign_challenge(&challenge, n, &agent_priv);
     let bundle = ProofBundle {
@@ -66,7 +66,7 @@ fn good_bundle() -> (ProofBundle, String, String) {
 #[test]
 fn verification_receipt_roundtrip() {
     let (bundle, _, _) = good_bundle();
-    let (v, v_priv) = generate_agent("v", "verifier");
+    let (v, v_priv) = generate_agent("v", "verifier").unwrap();
     let result = verify_bundle(&bundle, &VerifyOptions::default());
     let r = issue_verification_receipt(
         &bundle, &result, &v.id, &v.public_key, &v_priv, None, now(),
@@ -79,7 +79,7 @@ fn verification_receipt_roundtrip() {
 #[test]
 fn verification_receipt_detects_tampering() {
     let (bundle, _, _) = good_bundle();
-    let (v, v_priv) = generate_agent("v", "verifier");
+    let (v, v_priv) = generate_agent("v", "verifier").unwrap();
     let result = verify_bundle(&bundle, &VerifyOptions::default());
     let mut r = issue_verification_receipt(
         &bundle, &result, &v.id, &v.public_key, &v_priv, None, now(),
@@ -93,7 +93,7 @@ fn verification_receipt_detects_tampering() {
 fn verification_receipt_detects_bundle_substitution() {
     let (b1, _, _) = good_bundle();
     let (b2, _, _) = good_bundle();
-    let (v, v_priv) = generate_agent("v", "verifier");
+    let (v, v_priv) = generate_agent("v", "verifier").unwrap();
     let result = verify_bundle(&b1, &VerifyOptions::default());
     let mut r = issue_verification_receipt(
         &b1, &result, &v.id, &v.public_key, &v_priv, None, now(),
@@ -106,7 +106,7 @@ fn verification_receipt_detects_bundle_substitution() {
 #[test]
 fn verification_receipt_chain_linkage() {
     let (bundle, _, _) = good_bundle();
-    let (v, v_priv) = generate_agent("v", "verifier");
+    let (v, v_priv) = generate_agent("v", "verifier").unwrap();
     let result = verify_bundle(&bundle, &VerifyOptions::default());
     let r1 = issue_verification_receipt(
         &bundle, &result, &v.id, &v.public_key, &v_priv, None, now(),
@@ -308,7 +308,7 @@ fn policy_verdict_falls_back_when_stale() {
 
 fn bundle_with_custom_constraint(kind: &str) -> ProofBundle {
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("C", "custom");
+    let (agent, agent_priv) = generate_agent("C", "custom").unwrap();
     let n = now();
     let mut cert = DelegationCert {
         cert_id: "cc".into(),
@@ -329,7 +329,7 @@ fn bundle_with_custom_constraint(kind: &str) -> ProofBundle {
             ml_dsa_65: Vec::new(),
         },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).unwrap();
     let challenge = generate_challenge();
     let sig = sign_challenge(&challenge, n, &agent_priv);
     ProofBundle {

@@ -151,7 +151,7 @@ Verifier runs Verify():
 
 ### Chain depth limit
 
-`MAX_DELEGATION_CHAIN_DEPTH = 3` in v1. This bounds the chain length and the verify-time cost (each level adds two hybrid signature verifications). v2 may allow deeper chains; for v1, organizations that need more than three levels should flatten (e.g., have the tenant admin directly delegate to leaves rather than passing through intermediate tiers).
+`MAX_DELEGATION_CHAIN_DEPTH = 8` (raised from 3 in v1.0.0-alpha.16 for multi-hop agent topologies). This bounds the chain length and the verify-time cost (each level adds two hybrid signature verifications); the byte and count limits in SPEC §5.1 bound the work that depth alone does not. The ceiling is a wire-determinism and denial-of-service bound, not cryptography. Organizations that want shorter chains than the ceiling should flatten (e.g., have the tenant admin directly delegate to leaves rather than passing through intermediate tiers); a per-delegation `max_delegation_depth` constraint is planned so principals can bound their own chains tighter.
 
 ---
 

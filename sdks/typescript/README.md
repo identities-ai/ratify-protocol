@@ -7,7 +7,7 @@
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
-Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **63 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** on every CI run.
 
 ## What is Ratify Protocol?
 
@@ -171,7 +171,7 @@ Signed payloads follow Ratify's canonical JSON rules (see [SPEC.md §6.3.1](http
 import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identities-ai/ratify-protocol";
 ```
 
-These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 63 published test vectors through the TS code and asserts byte-for-byte equivalence.
+These produce byte-identical output to the Go reference implementation. The `test/conformance.test.ts` suite runs the 79 published test vectors through the TS code and asserts byte-for-byte equivalence.
 
 ## Wire transport
 

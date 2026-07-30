@@ -9,7 +9,13 @@ import math
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .types import Constraint, DelegationCert, VerifierContext
+from .resource_path import normalize_resource_path, resource_path_matches
+from .types import (
+    MAX_IDENTIFIER_LENGTH_BYTES,
+    Constraint,
+    DelegationCert,
+    VerifierContext,
+)
 
 
 def evaluate_constraints(
@@ -58,6 +64,41 @@ def _evaluate_constraint(
     now_sec: int,
 ) -> str | None:
     t = c.type
+    if t == "resource_path":
+        # SPEC §5.7.3. Absent context -> constraint_unverifiable; present but
+        # unacceptable context (mismatch, invalid path) -> constraint_denied.
+        # Byte-exact comparison throughout: no normalization, no decoding.
+        if not ctx.has_resource or ctx.requested_resource_id == "":
+            return "constraint_unverifiable: no requested resource in context"
+        if c.resource_id == "":
+            return "malformed resource_path: resource_id is required"
+        if len(c.resource_id.encode("utf-8")) > MAX_IDENTIFIER_LENGTH_BYTES:
+            return "malformed resource_path: resource_id exceeds MAX_IDENTIFIER_LENGTH_BYTES"
+        if ctx.requested_resource_id != c.resource_id:
+            return "requested resource does not match the authorized resource"
+        if c.path_prefix == "":
+            # Absent path_prefix authorizes the entire named resource.
+            return None
+        try:
+            normalize_resource_path(c.path_prefix)
+        except ValueError as e:
+            # Externally created cert with an invalid prefix: fail closed as
+            # constraint_denied (SPEC §5.7.3).
+            return f"malformed path_prefix: {e}"
+        if ctx.requested_path == "":
+            return "constraint_unverifiable: no requested path in context"
+        try:
+            normalize_resource_path(ctx.requested_path)
+        except ValueError as e:
+            # Supplied-but-invalid context is unacceptable, not absent.
+            return f"invalid requested path: {e}"
+        if not resource_path_matches(c.path_prefix, ctx.requested_path):
+            return (
+                f'requested path "{ctx.requested_path}" is outside the '
+                f'authorized prefix "{c.path_prefix}"'
+            )
+        return None
+
     if t == "geo_circle":
         if ctx.current_lat is None or ctx.current_lon is None:
             return "constraint_unverifiable: no current location in context"

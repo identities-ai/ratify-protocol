@@ -17,7 +17,11 @@
 //     revoked + scope intersection valid + challenge fresh.
 package ratify
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
 
 // ProtocolVersion is the current wire format version. v1 mandates hybrid
 // Ed25519 + ML-DSA-65 signing on every signed object.
@@ -157,12 +161,26 @@ type Constraint struct {
 	MinAltM   float64        `json:"min_alt_m,omitempty"`
 	MinLat    float64        `json:"min_lat,omitempty"`
 	MinLon    float64        `json:"min_lon,omitempty"`
-	Points    [][2]float64   `json:"points,omitempty"` // [[lat,lon], ...]
-	RadiusM   float64        `json:"radius_m,omitempty"`
-	Start     string         `json:"start,omitempty"` // "HH:MM"
-	Type      ConstraintType `json:"type"`
-	TZ        string         `json:"tz,omitempty"` // IANA zone
-	WindowS   int64          `json:"window_s,omitempty"`
+	// Params carries extension-constraint parameters (SPEC §5.7.1).
+	// Permitted ONLY on non-canonical constraint types, under the
+	// restricted value model enforced by ValidateParamsValue: null, bool,
+	// string, safe integer, and arrays/objects of these. Canonical types
+	// carrying Params are rejected at encode time.
+	Params map[string]any `json:"params,omitempty"`
+	// PathPrefix optionally narrows a resource_path constraint to a path
+	// at or below it, under segment-boundary matching (SPEC §5.7.3).
+	// Absent (empty) authorizes the entire named resource.
+	PathPrefix string       `json:"path_prefix,omitempty"`
+	Points     [][2]float64 `json:"points,omitempty"` // [[lat,lon], ...]
+	RadiusM    float64      `json:"radius_m,omitempty"`
+	// ResourceID names the resource a resource_path constraint binds to.
+	// Opaque UTF-8; compared byte-for-byte, never dereferenced or
+	// normalized (SPEC §5.7.3).
+	ResourceID string         `json:"resource_id,omitempty"`
+	Start      string         `json:"start,omitempty"` // "HH:MM"
+	Type       ConstraintType `json:"type"`
+	TZ         string         `json:"tz,omitempty"` // IANA zone
+	WindowS    int64          `json:"window_s,omitempty"`
 }
 
 // MarshalJSON emits the canonical per-kind shape. Keys are alphabetical —
@@ -207,11 +225,93 @@ func (c Constraint) MarshalJSON() ([]byte, error) {
 	case ConstraintMaxRate:
 		m["count"] = c.Count
 		m["window_s"] = c.WindowS
+	case ConstraintResourcePath:
+		if c.ResourceID == "" {
+			return nil, fmt.Errorf("resource_path constraint requires a non-empty resource_id")
+		}
+		m["resource_id"] = c.ResourceID
+		// path_prefix is omitted when absent (SPEC §5.7.3): absence — not
+		// "" — is the sole encoding of "entire resource". Every valid
+		// prefix begins with "/", so "" can never be a meaningful value.
+		if c.PathPrefix != "" {
+			m["path_prefix"] = c.PathPrefix
+		}
 	default:
-		// Unknown kind — emit only the tag. Verifier returns
-		// constraint_unknown on this shape.
+		// Extension kind — emit the tag plus params when present
+		// (SPEC §5.7.1). Values outside the restricted model are an
+		// encode error, never emitted. A verifier without a registered
+		// evaluator returns constraint_unknown on this shape.
+		if c.Params != nil {
+			if err := ValidateParamsValue(c.Params, 0); err != nil {
+				return nil, fmt.Errorf("extension constraint %q params: %w", c.Type, err)
+			}
+			m["params"] = c.Params
+		}
+	}
+	if c.Type != "" && c.Params != nil && isCanonicalConstraintType(c.Type) {
+		// params is permitted only on non-canonical types (SPEC §5.7.1).
+		return nil, fmt.Errorf("canonical constraint type %q must not carry params", c.Type)
 	}
 	return stdMarshal(m)
+}
+
+// UnmarshalJSON decodes a Constraint while preserving field presence for
+// the cases where presence itself is load-bearing (SPEC §5.7.3):
+//
+//   - `path_prefix` ABSENT      → whole-resource authorization (valid)
+//   - `path_prefix` "" or null  → REJECTED — a malformed path restriction
+//     must never silently widen into whole-resource authority
+//   - `path_prefix` non-string  → REJECTED
+//   - `resource_id` absent/empty/null on a resource_path → REJECTED
+//
+// Plain struct decoding cannot distinguish absent from empty/null, which is
+// exactly the escalation this method exists to close. Unknown fields are
+// rejected here so constraint-level strictness holds regardless of the
+// outer decoder's configuration.
+func (c *Constraint) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if pp, present := raw["path_prefix"]; present {
+		var s string
+		// json.Unmarshal accepts `null` into a string as a no-op, so the
+		// empty check below covers both `""` and `null`.
+		if err := json.Unmarshal(pp, &s); err != nil {
+			return fmt.Errorf("constraint path_prefix must be a string")
+		}
+		if s == "" {
+			return fmt.Errorf("constraint path_prefix must not be empty or null; omit the field to authorize the entire resource")
+		}
+	}
+	type constraintAlias Constraint // drops methods: no recursion
+	var a constraintAlias
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&a); err != nil {
+		return err
+	}
+	if a.Type == ConstraintResourcePath {
+		rid, present := raw["resource_id"]
+		var s string
+		if !present || json.Unmarshal(rid, &s) != nil || s == "" {
+			return fmt.Errorf("resource_path constraint requires a non-empty resource_id string")
+		}
+	}
+	*c = Constraint(a)
+	return nil
+}
+
+// isCanonicalConstraintType reports whether t is one of the canonical v1
+// constraint kinds (SPEC §5.7.2).
+func isCanonicalConstraintType(t ConstraintType) bool {
+	switch t {
+	case ConstraintGeoCircle, ConstraintGeoPolygon, ConstraintGeoBBox,
+		ConstraintTimeWindow, ConstraintMaxSpeedMps, ConstraintMaxAmount,
+		ConstraintMaxRate, ConstraintResourcePath:
+		return true
+	}
+	return false
 }
 
 // stdMarshal is a trampoline so test code can override if needed; normally
@@ -247,6 +347,12 @@ const (
 	// exercises of this cert are allowed. Verifier requires a rate-counter
 	// callback in context.
 	ConstraintMaxRate ConstraintType = "max_rate"
+	// ConstraintResourcePath — the operation must target the resource named
+	// by ResourceID and, when PathPrefix is set, a path at or below it under
+	// segment-boundary prefix matching (SPEC §5.7.3). ResourceID is opaque:
+	// compared byte-for-byte, never dereferenced or normalized. Verifier
+	// requires (RequestedResourceID, RequestedPath) in context.
+	ConstraintResourcePath ConstraintType = "resource_path"
 )
 
 // VerifierContext carries the application-supplied inputs needed to evaluate
@@ -275,6 +381,20 @@ type VerifierContext struct {
 	// InvocationsInWindow looks up how many times this cert has been
 	// exercised in the most recent `window` seconds. Required by max_rate.
 	InvocationsInWindow func(certID string, windowS int64) int
+
+	// RequestedResourceID / RequestedPath — the resource and path the
+	// operation targets. Required by resource_path (SPEC §5.16). The
+	// resource ID is compared byte-exactly against the constraint's
+	// resource_id; the path follows the logical path model of §5.7.3.
+	// Callers MUST apply every decoding and normalization step (URL
+	// decoding, Unicode NFC, case folding, separator conversion) BEFORE
+	// populating these fields; the verifier never transforms them.
+	RequestedResourceID string
+	RequestedPath       string
+	// HasResource must be true for resource_path constraints to evaluate;
+	// false causes constraint_unverifiable. When true, RequestedResourceID
+	// must be non-empty.
+	HasResource bool
 }
 
 // ProofBundle is what an agent presents to a verifier. The challenge

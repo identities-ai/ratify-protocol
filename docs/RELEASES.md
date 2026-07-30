@@ -19,7 +19,7 @@ All reference implementations live in this single repository:
 ```
 ratify-protocol/
 ├── SPEC.md              ← the spec
-├── testvectors/v1/      ← 63 canonical fixtures
+├── testvectors/v1/      ← 79 canonical fixtures
 ├── *.go (at root)       ← Go reference
 ├── cmd/ratify-testvectors/  ← the generator; anyone can reproduce fixtures from seeds
 └── sdks/
@@ -254,7 +254,7 @@ Critical security fixes (e.g., a verifier algorithm bug that accepts forgeries) 
 
 A release cycle is considered stable when:
 
-- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 63 fixtures (by kind: 46 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry).
+- All five SDKs (Go, TS, Python, Rust, C/C++) pass all 79 fixtures (by kind: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry).
 - Determinism check passes (regen = zero diff).
 - The generator itself hasn't changed since the last release, OR its change is reviewed and new fixtures have been committed.
 - CI is green on main.
@@ -371,9 +371,9 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 3. `go mod tidy` produces no diff
 4. Test vectors regenerate byte-identical to committed
 5. `scripts/check-release-sync.sh` confirms package versions, lockfiles, docs, and SDK constants are all aligned
-6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 63 fixtures
-7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 63 fixtures
-8. Rust `cargo build --all-targets` clean, conformance tests pass against all 63 fixtures
+6. TypeScript `tsc --noEmit` clean, conformance tests pass against all 79 fixtures
+7. Python `pip install -e '.[dev]'` cold install succeeds, conformance tests pass against all 79 fixtures
+8. Rust `cargo build --all-targets` clean, conformance tests pass against all 79 fixtures
 9. C/C++ conformance and API tests pass through the C ABI
 10. Pushed tag matches every SDK's declared version (PEP 440 normalization included for Python)
 

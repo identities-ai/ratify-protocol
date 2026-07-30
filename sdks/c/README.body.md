@@ -393,7 +393,7 @@ ratify_error_free(err);         // for err_out parameters
 
 ## Conformance
 
-The C SDK is validated against the same 63 canonical cross-language test
+The C SDK is validated against the same 79 canonical cross-language test
 vectors as the Go, TypeScript, Python, and Rust SDKs.
 
 ```bash
@@ -416,7 +416,7 @@ All canonical fixture kinds pass through the C ABI:
 # Unit tests (all functions, null pointers, malformed JSON, round-trips)
 cargo test --test api
 
-# Conformance tests (63/63 fixtures)
+# Conformance tests (79/79 fixtures)
 cargo test --test conformance
 
 # Cross-architecture via QEMU (requires `cross`)

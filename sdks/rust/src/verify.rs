@@ -1,7 +1,7 @@
 //! Verify — the core verifier. Mirrors the Go reference verify.go exactly.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, string::ToString, vec::Vec};
+use alloc::{boxed::Box, format, string::String, string::ToString, vec::Vec};
 
 use alloc::collections::BTreeMap;
 
@@ -16,8 +16,9 @@ use crate::scope::{intersect_scopes, validate_scopes, SCOPE_IDENTITY_DELEGATE};
 use crate::types::{
     DelegationCert, HybridPublicKey, HybridSignature, IdentityStatus, ProofBundle, SessionToken,
     StreamContext, TransactionReceipt, TransactionReceiptResult, VerifyOptions, VerifyResult,
-    CHALLENGE_WINDOW_SECONDS, ED25519_PUBLIC_KEY_SIZE, MAX_DELEGATION_CHAIN_DEPTH,
-    MLDSA65_PUBLIC_KEY_SIZE, PROTOCOL_VERSION,
+    CHALLENGE_WINDOW_SECONDS, ED25519_PUBLIC_KEY_SIZE, MAX_CONSTRAINTS_PER_CERT,
+    MAX_DELEGATION_CHAIN_DEPTH, MAX_IDENTIFIER_LENGTH_BYTES, MAX_SCOPES_PER_CERT,
+    MAX_SCOPE_LENGTH_BYTES, MLDSA65_PUBLIC_KEY_SIZE, PROTOCOL_VERSION,
 };
 
 /// `verify_bundle` is the entry point. Audit hook (SPEC §17.3) wraps the
@@ -60,6 +61,60 @@ fn verify_bundle_inner(bundle: &ProofBundle, opts: &VerifyOptions) -> VerifyResu
     }
     if bundle.challenge.is_empty() {
         return invalid("no_challenge", "proof bundle contains no challenge");
+    }
+    // Input bounds (SPEC §5.1). Wire codecs enforce these during decode; the
+    // verifier re-enforces them so bundles constructed in-process are held to
+    // the same bounds. Violations are structural: `invalid`, no new status.
+    for (i, cert) in bundle.delegations.iter().enumerate() {
+        if cert.scope.len() > MAX_SCOPES_PER_CERT {
+            return invalid(
+                "invalid",
+                &format!(
+                    "cert {} carries {} scopes, exceeding MAX_SCOPES_PER_CERT ({})",
+                    i,
+                    cert.scope.len(),
+                    MAX_SCOPES_PER_CERT
+                ),
+            );
+        }
+        if cert.constraints.len() > MAX_CONSTRAINTS_PER_CERT {
+            return invalid(
+                "invalid",
+                &format!(
+                    "cert {} carries {} constraints, exceeding MAX_CONSTRAINTS_PER_CERT ({})",
+                    i,
+                    cert.constraints.len(),
+                    MAX_CONSTRAINTS_PER_CERT
+                ),
+            );
+        }
+        for s in &cert.scope {
+            if s.len() > MAX_SCOPE_LENGTH_BYTES {
+                return invalid(
+                    "invalid",
+                    &format!(
+                        "cert {} carries a scope of {} bytes, exceeding MAX_SCOPE_LENGTH_BYTES ({})",
+                        i,
+                        s.len(),
+                        MAX_SCOPE_LENGTH_BYTES
+                    ),
+                );
+            }
+        }
+        for (j, c) in cert.constraints.iter().enumerate() {
+            if c.resource_id.len() > MAX_IDENTIFIER_LENGTH_BYTES {
+                return invalid(
+                    "invalid",
+                    &format!(
+                        "cert {} constraint {} resource_id is {} bytes, exceeding MAX_IDENTIFIER_LENGTH_BYTES ({})",
+                        i,
+                        j,
+                        c.resource_id.len(),
+                        MAX_IDENTIFIER_LENGTH_BYTES
+                    ),
+                );
+            }
+        }
     }
     if !bundle.session_context.is_empty() && bundle.session_context.len() != 32 {
         return invalid(

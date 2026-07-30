@@ -6,7 +6,10 @@
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, format, string::String, string::ToString};
 
-use crate::types::{Constraint, ConstraintEvaluator, DelegationCert, VerifierContext};
+use crate::resource_path::{normalize_resource_path, resource_path_matches};
+use crate::types::{
+    Constraint, ConstraintEvaluator, DelegationCert, VerifierContext, MAX_IDENTIFIER_LENGTH_BYTES,
+};
 
 use alloc::collections::BTreeMap;
 use chrono::{DateTime, Utc};
@@ -48,6 +51,56 @@ fn evaluate_constraint(
     now_sec: i64,
 ) -> Result<(), String> {
     match c.kind.as_str() {
+        "resource_path" => {
+            // SPEC §5.7.3. Absent context → constraint_unverifiable; present
+            // but unacceptable context (mismatch, invalid path) →
+            // constraint_denied. Byte-exact comparison throughout.
+            let requested_id = match ctx.requested_resource_id.as_deref() {
+                Some(id) if !id.is_empty() => id,
+                _ => {
+                    return Err(
+                        "constraint_unverifiable: no requested resource in context".into(),
+                    )
+                }
+            };
+            if c.resource_id.is_empty() {
+                return Err("malformed resource_path: resource_id is required".into());
+            }
+            if c.resource_id.len() > MAX_IDENTIFIER_LENGTH_BYTES {
+                return Err(
+                    "malformed resource_path: resource_id exceeds MAX_IDENTIFIER_LENGTH_BYTES"
+                        .into(),
+                );
+            }
+            if requested_id != c.resource_id {
+                return Err("requested resource does not match the authorized resource".into());
+            }
+            let prefix = match &c.path_prefix {
+                // Absent path_prefix authorizes the entire named resource.
+                None => return Ok(()),
+                Some(p) => p,
+            };
+            if let Err(e) = normalize_resource_path(prefix) {
+                // Externally created cert with an invalid prefix: fail closed
+                // as constraint_denied (SPEC §5.7.3).
+                return Err(format!("malformed path_prefix: {}", e));
+            }
+            let requested_path = ctx.requested_path.as_deref().unwrap_or("");
+            if requested_path.is_empty() {
+                return Err("constraint_unverifiable: no requested path in context".into());
+            }
+            if let Err(e) = normalize_resource_path(requested_path) {
+                // Supplied-but-invalid context is unacceptable, not absent.
+                return Err(format!("invalid requested path: {}", e));
+            }
+            if !resource_path_matches(prefix, requested_path) {
+                return Err(format!(
+                    "requested path \"{}\" is outside the authorized prefix \"{}\"",
+                    requested_path, prefix
+                ));
+            }
+            Ok(())
+        }
         "geo_circle" => {
             let (lat, lon) = match (ctx.current_lat, ctx.current_lon) {
                 (Some(a), Some(b)) => (a, b),

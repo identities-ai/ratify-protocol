@@ -88,13 +88,24 @@ All structures are JSON objects serialized in canonical form (see §6).
 | Name | Value |
 |---|---|
 | `PROTOCOL_VERSION` | `1` |
-| `MAX_DELEGATION_CHAIN_DEPTH` | `3` |
+| `MAX_DELEGATION_CHAIN_DEPTH` | `8` |
 | `CHALLENGE_WINDOW_SECONDS` | `300` |
 | `NO_EXPIRY_SENTINEL` | `4070908799` (2099-12-31 23:59:59 UTC) — see §5.7 |
 | `ED25519_PUBLIC_KEY_SIZE` | `32` bytes |
 | `ED25519_SIGNATURE_SIZE` | `64` bytes |
 | `MLDSA65_PUBLIC_KEY_SIZE` | `1952` bytes (FIPS 204) |
 | `MLDSA65_SIGNATURE_SIZE` | `3309` bytes (FIPS 204) |
+| `MAX_PROOF_BUNDLE_BYTES` | `131072` (128 KiB) |
+| `MAX_SCOPES_PER_CERT` | `128` |
+| `MAX_CONSTRAINTS_PER_CERT` | `32` |
+| `MAX_SCOPE_LENGTH_BYTES` | `256` |
+| `MAX_IDENTIFIER_LENGTH_BYTES` | `512` |
+| `MAX_AGENT_NAME_LENGTH_BYTES` | `256` |
+| `MAX_JSON_NESTING_DEPTH` | `16` |
+
+**Input-bound enforcement.** The size and count limits above bound parsing and verification work; the depth ceiling alone does not, which is why they exist alongside it. `MAX_PROOF_BUNDLE_BYTES` is enforced by the wire codecs **before** JSON parsing — an oversized payload is rejected without ever being parsed. `MAX_JSON_NESTING_DEPTH` is enforced by the codec **during** parse. Count and length limits are enforced during decode. `MAX_IDENTIFIER_LENGTH_BYTES` bounds `resource_path.resource_id` in this release; future constraint types that name opaque identifiers adopt the same bound. `MAX_AGENT_NAME_LENGTH_BYTES` bounds `AgentIdentity.name` at construction and decode. Violations route to the existing `invalid` status (§5.9) with a descriptive `error_reason` (e.g. `invalid: proof bundle exceeds MAX_PROOF_BUNDLE_BYTES`); no new status is introduced.
+
+**Depth ceiling semantics.** `MAX_DELEGATION_CHAIN_DEPTH` is the protocol ceiling — a wire-determinism and denial-of-service bound, not a cryptographic limit. Principals who want shorter chains bound them per-delegation; a future canonical `max_delegation_depth` constraint is planned for that purpose. (The ceiling was 3 through v1.0.0-alpha.15; multi-hop agent topologies motivated raising it to 8.)
 
 ### 5.2 HybridPublicKey
 
@@ -181,6 +192,21 @@ A `Constraint` is a tagged JSON object. `type` identifies the kind; the remainin
 }
 ```
 
+**Extension-constraint parameters (`params`).** A constraint whose `type` is not one of the canonical types in §5.7.2 MAY carry a single generic parameter object:
+
+```
+{
+  "type":   "<ConstraintType>",   // non-canonical (extension) kind
+  "params": { ... }               // optional; extension parameters
+}
+```
+
+- `params` is permitted **only** on non-canonical constraint types. A canonical type (§5.7.2) carrying `params` MUST be rejected as malformed (`invalid`).
+- When present, `params` is part of the canonical signed bytes (§6): the `params` key sorts alphabetically among the constraint's keys, and object keys inside `params` sort per RFC 8785. An extension constraint without `params` serializes exactly as before — `{"type":"<name>"}` — so certificates signed under earlier releases remain byte-stable.
+- **Restricted value model**, so canonical bytes are deterministic across languages. Permitted values: `null`, booleans, strings, safe integers (|n| ≤ 2^53 − 1), and arrays and objects of these. Prohibited: floats and any non-integer numbers, `NaN`/`Infinity`, raw bytes, and duplicate object keys. Integers beyond 2^53 − 1 MUST be carried as decimal strings. Nesting depth is bounded by `MAX_JSON_NESTING_DEPTH` (§5.1); total size participates in the ordinary `MAX_PROOF_BUNDLE_BYTES` limit.
+- Encoders MUST reject a `params` value outside this model at construction time; decoders MUST reject it as malformed (`invalid`).
+- Evaluation of extension constraints is unchanged: a verifier without a registered evaluator for the type fails closed with `constraint_unknown` (§17.7), whether or not `params` is present. Verifiers MUST be upgraded before issuers begin emitting new constraint types.
+
 ### 5.7.2 Canonical constraint types (v1)
 
 | `type` | Required fields | Verifier context input | Semantics |
@@ -192,6 +218,79 @@ A `Constraint` is a tagged JSON object. `type` identifies the kind; the remainin
 | `max_speed_mps` | `max_mps` | agent current speed (m/s) | Agent speed must not exceed `max_mps`. Verifier requires speed input; SI units chosen to avoid unit ambiguity. |
 | `max_amount` | `max_amount`, `currency` (ISO 4217) | requested amount + currency | Requested amount must not exceed `max_amount`; currencies must match. |
 | `max_rate` | `count`, `window_s` | per-cert invocation counter | Across a rolling `window_s` seconds, at most `count` exercises of this cert are allowed. **Verifier-local policy, not byte-identical canonical protocol behavior.** The counter is supplied by the caller via `VerifierContext.invocations_in_window(certID, window_s)` and backed by whatever the operator chooses (an in-memory ring, a cache, a shared service). Two verifiers observing the same agent can disagree depending on clock skew, replication lag, and counter backend semantics. Operators requiring globally-consistent rate accounting must route through a single verifier or share a central counter. |
+| `resource_path` | `resource_id` (opt: `path_prefix`) | requested resource ID + requested path | The operation must target the named resource and, when `path_prefix` is present, a path at or below `path_prefix` under segment-boundary prefix matching (§5.7.3). `resource_id` is an opaque string compared byte-for-byte; the verifier never dereferences, fetches, or normalizes it. Absent `path_prefix` authorizes the entire named resource. |
+
+### 5.7.3 The `resource_path` constraint
+
+`resource_path` binds a delegation to a specific resource — a repository, a workspace, a channel, a device — and optionally to a path prefix within that resource's own namespace. It answers *where* an agent's scope applies: `files:write` says the agent may write files; `files:write` plus `resource_path{repo R, /docs}` says it may write files only in `/docs` of repository R.
+
+**Wire shape.**
+
+```
+{
+  "type":        "resource_path",
+  "resource_id": "<string>",          // required, non-empty
+  "path_prefix": "<string>"           // optional; absent = entire resource
+}
+```
+
+**`resource_id` semantics.**
+
+- `resource_id` is an **opaque UTF-8 string**. Verifiers compare it to the caller-supplied `RequestedResourceID` (§5.16) by **exact byte equality** — no case folding, no percent-decoding, no scheme interpretation, no network dereference, no normalization of any kind.
+- `resource_id` MUST be non-empty and MUST NOT exceed `MAX_IDENTIFIER_LENGTH_BYTES` (§5.1).
+- The spec recommends URI/URN-shaped identifiers for readability but requires no particular scheme. Interoperability — issuer and verifier constructing the same bytes for the same real-world resource — is delegated to **resource-identifier profiles** (§5.7.4), which are normative for parties that adopt them but are not part of the core constraint semantics. A verifier that has never heard of a profile still verifies correctly, because it only ever compares bytes.
+
+**Path model** (applies to `path_prefix` and to the caller-supplied `RequestedPath`). Paths are **absolute logical POSIX-style paths**: they name a location inside the resource's own namespace (e.g. a path within a repository), not filesystem paths on any particular machine. A path is valid iff all of the following hold:
+
+- It begins with `/`, and `/` is the **only** separator.
+- It contains no NUL (U+0000) byte and no backslash (`\`) — backslash is rejected, not translated.
+- No segment is `.` or `..`. Dot-segments are rejected outright, never resolved.
+- No interior segment is empty (`/a//b` is invalid). The root path `/` is valid.
+- A trailing `/` is trimmed before comparison, except for the root path `/` itself (`/docs/` ≡ `/docs`).
+
+Issuer helpers MUST reject an invalid `path_prefix` at construction time. A verifier that encounters an externally created cert whose `path_prefix` is invalid MUST fail the constraint closed with `constraint_denied`. A supplied `RequestedPath` that is invalid likewise fails with `constraint_denied`: the context was supplied and is unacceptable. `constraint_unverifiable` is reserved for context that is *absent*.
+
+**Unicode.** The verifier compares path and resource bytes exactly; it performs no Unicode normalization and no normalization-form validation. Issuers and adapters MUST pre-normalize paths and resource identifiers to Unicode NFC before constructing constraints and verifier context. The consequences of violating that obligation are asymmetric and must be understood precisely: a **mixed** pair (one side NFC, the other not) fails closed — the grant never matches, costing availability, never an unintended grant — while parties that consistently supply the **same** non-NFC bytes on both sides will verify, because the protocol treats those bytes as a distinct, valid identity. Byte identity, not visual identity, is the security boundary.
+
+**Percent-encoding does not exist inside the path model.** `%` is an ordinary literal byte once `RequestedPath` or `path_prefix` has been constructed: `/docs/%2e%2e/secrets` names a path whose second segment is the literal characters `%2e%2e`, not a dot-segment. An adapter receiving an encoded external representation MUST perform any required percent-decoding before constructing `RequestedPath`. No component may percent-decode `RequestedPath` or the verified path during or after matching.
+
+**No post-verification transformation.** Byte-level matching is a security boundary only while the bytes remain unchanged. After verification, no component may percent-decode, case-fold, Unicode-normalize, convert separators, or otherwise transform the verified path before acting on it — a transformation applied downstream can turn an authorized logical path into a traversal the verifier never saw. Every such step (URL decoding, platform Unicode normalization, case folding, separator conversion, path cleanup) MUST occur **before** constructing `RequestedPath`, so the bytes the verifier compares are exactly the bytes the execution layer uses.
+
+**Matching semantics — segment-boundary prefix, not glob.** `path_prefix` matches `RequestedPath` iff, after trailing-slash trimming, either:
+
+1. the two are byte-equal, or
+2. `RequestedPath` begins with `path_prefix` followed immediately by `/` (special case: `path_prefix` `/` matches every valid path).
+
+So `/src` matches `/src` and `/src/a.ts`, and **never** matches `/src-old/a.ts` or `/srcx`. Plain string-prefix matching is non-conformant. **This is not glob matching**: there are no wildcards, character classes, or `**` operators. A prefix of `/docs` covers everything a `/docs/**` glob would cover, so the whole-subtree case needs no glob syntax. Finer patterns (e.g. `/src/**/*.test.ts`) are **not expressible** in `resource_path` v1 and remain application-side enforcement *inside* the authorized prefix: the certificate proves the operation is confined to `/src`; the application decides which files within `/src` it will actually touch.
+
+**Evaluation** (within §10 step 7.f, fail-closed):
+
+- The context carries no requested resource (`HasResource` false / fields absent) → `constraint_unverifiable`.
+- `RequestedResourceID` is not byte-equal to `resource_id` → `constraint_denied`.
+- The constraint carries `path_prefix` and the context carries no `RequestedPath` → `constraint_unverifiable`.
+- The constraint carries `path_prefix` and `RequestedPath` does not match → `constraint_denied`.
+- Otherwise the constraint passes.
+
+Evaluation is **conjunctive across the chain** with no new machinery: §10 step 7.f already evaluates every constraint on every cert in the chain against the same `VerifierContext`, and the request must satisfy every hop's `resource_path` simultaneously. A child cert **cannot widen** the effective authority: a child claiming a *broader* prefix on the *same* resource (parent `/src/security`, child `/src`) leaves the effective bound at the narrower upstream prefix — the request must still satisfy the parent's `/src/security`, so the pair is satisfiable but the child gains nothing. Downstream escape is impossible by construction, not by a new rule. Where the chain's same-resource prefixes are nested they reduce under AND to the narrowest (`/src` ∧ `/src/security` → effectively `/src/security`; an absent prefix orders as `/`). A constraint naming a **different** `resource_id`, or a same-resource prefix that is **incomparable** under the prefix relation (`/src` ∧ `/docs` — no path lies under both), makes the set jointly unsatisfiable and fails closed as `constraint_denied`. No new status, no special-case rejection rule at verify time.
+
+**Canonical serialization.** Per the existing per-kind constraint pattern (§6): keys alphabetical, only kind-relevant fields emitted. `resource_path` emits `path_prefix` (when present), `resource_id`, `type`. **`path_prefix` is omitted when absent.** Every *valid* `path_prefix` begins with `/`, so the empty string can never be a meaningful value: an empty-string `path_prefix` MUST be rejected by issuer helpers, MUST NOT be emitted by canonical serialization, and decoders treat `"path_prefix": ""` as an invalid constraint (fails closed). Absence — not `""`, not `null` — is the sole encoding of "entire resource".
+
+**Issuance rule — one satisfiable resource bound per certificate.** Conforming issuance APIs MUST **reject** (error, not warn) a certificate whose `resource_path` constraints are jointly unsatisfiable: multiple constraints naming **different** `resource_id`s, and multiple constraints naming the **same** `resource_id` whose prefixes do not form a nested chain under the prefix relation (an absent prefix orders as `/`). Nested same-resource prefixes are permitted — they reduce to the narrowest. An unsatisfiable cert is a footgun, not a grant. Decoders MUST still accept externally created certificates containing unsatisfiable sets — wire compatibility is not conditioned on issuance hygiene — and verification denies them as unsatisfiable.
+
+**One resource per verification.** A verification evaluates one operation on one resource: `VerifierContext` carries a single `RequestedResourceID` and a single `RequestedPath`. Multi-resource operations ("read repo A and write repo B") are separate operations and MUST be presented as separate verifications, with separate certs where the grants differ. Future OR-expressiveness, if demand shows, arrives as a resource list *inside one constraint* — never as OR-across-constraints, which would break the conjunctive algebra of §10 step 7.f.
+
+**What `resource_path` attests.** The verified constraint is **lexical** authorization over a logical path — it is not filesystem confinement. A receiving system that maps logical paths onto a real filesystem MUST add its own confinement layer (path resolution against a fixed root, symlink and traversal rejection, containment re-checks after create/rename, sandboxing); see §15.7. Ratify proves authorization for a canonical logical resource and path; the adapter attests context; the execution layer enforces filesystem confinement.
+
+### 5.7.4 Resource-identifier profiles
+
+A resource-identifier profile is a deterministic recipe both issuer and verifier follow to construct the same `resource_id` bytes for the same real-world resource. Profiles are versioned documents maintained outside this specification; they are normative for parties that adopt them and invisible to everyone else — the core constraint semantics (§5.7.3) never change, and byte-equality remains the only comparison.
+
+| Profile | Resource kinds | Document |
+|---|---|---|
+| Git v1 | Git repositories (repository identity; not branches, commits, or checkouts) | `docs/RESOURCE_PROFILES.md` |
+| Platform-authored profiles | Resource kinds defined by the authoring platform (e.g. workspaces, channels, conversations, compute nodes) | Authored and versioned by the platform that owns the resource semantics; referenced from `docs/RESOURCE_PROFILES.md` when published |
+
+A profile MUST define: one canonical byte-identical representation per resource; a deterministic construction algorithm requiring no heuristic name normalization; type separation (the same underlying ID must not be interpretable as more than one resource kind); lifecycle rules (rename, archive, delete, recreate — identifiers must not silently transfer authority to a newly created resource); a no-secrets guarantee (identifiers appear in signed certificates, receipts, logs, and public test vectors); versioning from first release; and known-answer plus negative vectors.
 
 ### 5.8 ProofBundle
 
@@ -235,12 +334,12 @@ A `Constraint` is a tagged JSON object. `type` identifies the kind; the remainin
 | `expired` | A cert in the chain is past its `expires_at`. |
 | `revoked` | A cert in the chain appears in a signed revocation list. |
 | `scope_denied` | Required scope not present in the effective (chain-intersected) grant. |
-| `constraint_denied` | A first-class `Constraint` (geo, time, speed, amount, rate) evaluated false against the caller-supplied `VerifierContext`. |
+| `constraint_denied` | A first-class `Constraint` (geo, time, speed, amount, rate, resource) evaluated false against the caller-supplied `VerifierContext`. |
 | `constraint_unverifiable` | A constraint required a context field the caller did not supply. Fail-closed. |
 | `constraint_unknown` | A cert carried a `Constraint` with a `type` the verifier does not recognize. Fail-closed — prevents silently ignoring an unknown type that a future verifier version might treat as meaningful. |
 | `invalid_scope` | A cert in the chain grants a scope that is not canonical, not a wildcard, and not a `custom:` extension (§9). Fail-closed — invalid vocabulary is rejected as malformed before any effective-scope arithmetic, so unknown strings can never become effective grants. |
 | `delegation_not_authorized` | A non-root cert was issued by a subject whose parent cert did not explicitly grant `identity:delegate`. |
-| `invalid` | Catch-all for structural or cryptographic failures (bad signature, malformed chain, bad key length, wrong version, bad challenge signature, etc.). |
+| `invalid` | Catch-all for structural or cryptographic failures (bad signature, malformed chain, bad key length, wrong version, bad challenge signature, input-bound violations per §5.1 — oversized bundle, excess scopes/constraints, over-length strings, excessive JSON nesting — etc.). |
 | `unauthorized` | Reserved for future use. Not currently emitted by the reference verifier. |
 
 For failures with their own status, `error_reason` begins with the status name followed by `: ` and a human-readable detail (e.g. `"scope_denied: required scope \"files:write\" not in effective delegation scope"`). Audit layers should prefer the status enum over parsing the text.
@@ -419,8 +518,11 @@ Application-supplied inputs for evaluating first-class constraints at verify tim
 | `RequestedCurrency` | `string` | `max_amount` | ISO 4217 currency code of the transaction. Must match the constraint's `currency`. |
 | `HasAmount` | `bool` | `max_amount` | Must be true for amount constraints to evaluate; false causes `constraint_unverifiable`. |
 | `InvocationsInWindow` | `func(certID string, windowS int64) int` | `max_rate` | Callback returning how many times this cert has been exercised in the most recent `windowS` seconds. Must be non-nil for rate constraints to evaluate; nil causes `constraint_unverifiable`. |
+| `RequestedResourceID` | `string` | `resource_path` | Opaque identifier of the resource the operation targets. Compared byte-exactly against the constraint's `resource_id` (§5.7.3). |
+| `RequestedPath` | `string` | `resource_path` (when the constraint carries `path_prefix`) | Absolute logical path the operation targets, per the path model in §5.7.3. May be empty for whole-resource operations; a `path_prefix`-bearing constraint evaluated against an empty `RequestedPath` fails `constraint_unverifiable`. |
+| `HasResource` | `bool` | `resource_path` | Must be true for resource constraints to evaluate; false causes `constraint_unverifiable`. When true, `RequestedResourceID` MUST be non-empty. |
 
-Constraint evaluation proves that the verifier's decision was consistent with the context it supplied — it does not prove that the supplied context was true in the world. See §15.7 for what constraints do and do not attest.
+Constraint evaluation proves that the verifier's decision was consistent with the context it supplied — it does not prove that the supplied context was true in the world. See §15.7 for what constraints do and do not attest. For `resource_path` this caveat is load-bearing: the adapter supplying `RequestedResourceID` and `RequestedPath` asserts what the operation targets, and the execution layer must confine the operation to what was asserted (§5.7.3, §15.7).
 
 ### 5.17 VerifyOptions
 
@@ -1275,7 +1377,7 @@ The `AnchorResolver` provider interface (§17.8) is unrelated to this binding: i
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (63 fixtures as of v1.0.0-alpha.15):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (79 fixtures as of the v1.0.0-alpha.16 conformance set; alpha.15 had 63):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.
@@ -1425,6 +1527,7 @@ Consequences:
 - Constraints defend the **principal** against agent overreach at an honest verifier. They do not defend anyone against a dishonest or compromised verifier, which can trivially supply satisfying context (see also threat T8 — the malicious-verifier row — and §10: the verifier is the party running the algorithm; it can also simply skip it).
 - A third party auditing a transaction after the fact cannot independently confirm constraint context from the protocol artifacts alone. Deployments that need auditable constraint claims SHOULD bind the evaluated context into a signed artifact — include it in the `VerificationReceipt` (§17.5) or in `TransactionReceipt.terms` (§5.14) — so the claim is at least signed and attributable to the verifier that made it.
 - Where context must be *proven* rather than asserted (regulated geofencing, financial limits), the context source itself needs attestation — signed GNSS fixes, platform attestation, or a co-signing oracle — which is outside the protocol. The `ConstraintEvaluator` extension point (§17.7) is where such attested evaluators plug in.
+- A verified `resource_path` constraint (§5.7.3) is **lexical** authorization over a logical path, not filesystem confinement. A receiving system that maps logical paths onto a real filesystem MUST enforce confinement itself: apply every decoding and normalization step (URL decoding, platform Unicode normalization, case folding, separator conversion, path cleanup) **before** constructing `RequestedPath` and never transform the verified path afterward (§5.7.3); resolve the confinement root once at startup and operate on the resolved root; resolve each requested path's nearest existing parent and verify containment before any create or write; reject symlinked components between root and target; prefer directory-relative open APIs over path-string concatenation; re-check containment after create and rename operations; and run the executing worker inside a sandbox whose filesystem view is the confinement root. The cryptographic guarantee and the confinement guarantee are separate layers and should be reported separately: Ratify proves authorization for a canonical logical resource and path; the adapter attests context; the execution layer enforces filesystem confinement.
 
 ---
 
@@ -1441,7 +1544,7 @@ This separation lets the protocol stay neutral and portable while letting commer
 - A conformant SDK MUST expose all three provider hook points (`Revocation`, `Policy`, `Audit`) on its verify-options surface, with consistent naming across languages.
 - A conformant SDK MUST treat any unset hook as a no-op — verification with all hooks `nil` MUST produce the same `VerifyResult` as a verifier with no provider surface at all.
 - Provider invocations MUST NOT modify the `ProofBundle`. They are read-only over signed material. A bundle that re-serializes byte-identically before and after a `Verify` call (with or without providers) is REQUIRED for fixture determinism.
-- Provider implementations are NOT covered by the test-vector conformance suite. The 63 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
+- Provider implementations are NOT covered by the test-vector conformance suite. The 79 fixtures in `testvectors/v1/` exercise the deterministic core; provider behavior is an SDK-level concern verified by unit tests in each language.
 
 ### 17.1 RevocationProvider
 
@@ -1605,9 +1708,9 @@ The verify function:
 
 ### 17.7 ConstraintEvaluator — extension constraint types
 
-The built-in constraint types in §5.7.2 (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`) are the universal vocabulary every conformant SDK must implement byte-identically. Real deployments routinely need additional types (`max_concurrent_sessions`, `max_daily_spend`, `region_allowlist`, etc.) that don't belong in the universal spec.
+The built-in constraint types in §5.7.2 (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`) are the universal vocabulary every conformant SDK must implement byte-identically. Real deployments routinely need additional types (`max_concurrent_sessions`, `max_daily_spend`, `region_allowlist`, etc.) that don't belong in the universal spec.
 
-**Wire-format limitation (honesty note).** Extension constraint types are currently **type-only on the wire**. A `Constraint` (§5.7.1) carries `type` plus the kind-specific fields of the seven canonical types — there is no generic parameter field, and conformant decoders reject unknown fields (strict wire acceptance). So an extension evaluator can key off the `type` string and reuse a built-in field whose semantics genuinely fit, but a parameterized extension like `max_concurrent_sessions: 5` or `max_daily_spend: 200` **cannot be represented in a signed certificate today**. Deployments needing parameterized extension semantics must encode the parameter in the type string itself (e.g. `com.example.max-sessions-5` — clumsy, but signed) or enforce the parameter as verifier-local policy outside the certificate (§17.2), which is not delegation-bound. A canonical `params` value model that puts extension parameters inside the signable bytes is planned for the next protocol release; until it ships, documentation and integrations MUST NOT describe parameterized extension constraints as available.
+**Parameters.** An extension constraint carries its parameters in the generic `params` object (§5.7.1): `params` is part of the canonical signed bytes, so parameterized extensions like `max_concurrent_sessions` or `max_daily_spend` are delegation-bound — signed by the principal, not merely enforced as verifier-local policy. The evaluator receives the full `Constraint` and reads its parameters from `params`. The value model is restricted (§5.7.1) so canonical bytes stay deterministic across languages; a type-only extension constraint (no `params`) serializes exactly as in earlier releases. Because every unregistered type fails closed as `constraint_unknown`, verifiers MUST be upgraded to a `params`-aware release before issuers begin emitting parameterized extension constraints. (Through v1.0.0-alpha.15, extension types were type-only on the wire and parameterized extensions could not be represented in a signed certificate; `params` removed that limitation.)
 
 The `ConstraintEvaluator` interface is the pluggable layer: callers register evaluators keyed by constraint type. The resolution order is:
 

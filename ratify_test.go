@@ -592,6 +592,8 @@ type fixtureVerifierContext struct {
 	RequestedAmount          *float64 `json:"requested_amount,omitempty"`
 	RequestedCurrency        string   `json:"requested_currency,omitempty"`
 	InvocationsInWindowCount *int     `json:"invocations_in_window_count,omitempty"`
+	RequestedResourceID      string   `json:"requested_resource_id,omitempty"`
+	RequestedPath            string   `json:"requested_path,omitempty"`
 }
 
 type fixtureEntity struct {
@@ -801,6 +803,11 @@ func runVerifyFixture(t *testing.T, fx *fixtureFile) {
 		if vc.InvocationsInWindowCount != nil {
 			n := *vc.InvocationsInWindowCount
 			opts.Context.InvocationsInWindow = func(_ string, _ int64) int { return n }
+		}
+		if vc.RequestedResourceID != "" {
+			opts.Context.RequestedResourceID = vc.RequestedResourceID
+			opts.Context.RequestedPath = vc.RequestedPath
+			opts.Context.HasResource = true
 		}
 	}
 

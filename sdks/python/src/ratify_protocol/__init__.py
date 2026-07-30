@@ -142,11 +142,25 @@ from .scope import (
     validate_scopes,
     vocabulary,
 )
+from .resource_path import (
+    is_canonical_constraint_type,
+    normalize_resource_path,
+    resource_path_matches,
+    validate_params_value,
+    validate_resource_constraints,
+)
 from .types import (
     CHALLENGE_WINDOW_SECONDS,
     ED25519_PUBLIC_KEY_SIZE,
     ED25519_SIGNATURE_SIZE,
+    MAX_AGENT_NAME_LENGTH_BYTES,
+    MAX_CONSTRAINTS_PER_CERT,
     MAX_DELEGATION_CHAIN_DEPTH,
+    MAX_IDENTIFIER_LENGTH_BYTES,
+    MAX_JSON_NESTING_DEPTH,
+    MAX_PROOF_BUNDLE_BYTES,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
     MLDSA65_PUBLIC_KEY_SIZE,
     MLDSA65_SIGNATURE_SIZE,
     NO_EXPIRY_SENTINEL,
@@ -195,9 +209,11 @@ from .wire import (
     decode_delegation_cert,
     decode_proof_bundle,
     decode_session_token,
+    decode_verification_receipt,
     encode_delegation_cert,
     encode_proof_bundle,
     encode_session_token,
+    encode_verification_receipt,
 )
 
 __version__ = "1.0.0a15"
@@ -206,6 +222,10 @@ __all__ = [
     # types
     "PROTOCOL_VERSION", "NO_EXPIRY_SENTINEL",
     "MAX_DELEGATION_CHAIN_DEPTH", "CHALLENGE_WINDOW_SECONDS",
+    "MAX_PROOF_BUNDLE_BYTES", "MAX_SCOPES_PER_CERT",
+    "MAX_CONSTRAINTS_PER_CERT", "MAX_SCOPE_LENGTH_BYTES",
+    "MAX_IDENTIFIER_LENGTH_BYTES", "MAX_AGENT_NAME_LENGTH_BYTES",
+    "MAX_JSON_NESTING_DEPTH",
     "ED25519_PUBLIC_KEY_SIZE", "ED25519_SIGNATURE_SIZE",
     "MLDSA65_PUBLIC_KEY_SIZE", "MLDSA65_SIGNATURE_SIZE",
     "HybridPublicKey", "HybridSignature", "HybridPrivateKey",
@@ -256,10 +276,15 @@ __all__ = [
     # canonical / utils
     "canonical_json", "base64_standard_encode", "base64_standard_decode",
     "hex_encode", "hex_decode",
+    # resource_path constraint helpers (SPEC §5.7.1, §5.7.3)
+    "normalize_resource_path", "resource_path_matches",
+    "validate_resource_constraints", "validate_params_value",
+    "is_canonical_constraint_type",
     # wire codec
     "encode_delegation_cert", "decode_delegation_cert",
     "encode_proof_bundle", "decode_proof_bundle",
     "encode_session_token", "decode_session_token",
+    "encode_verification_receipt", "decode_verification_receipt",
     # challenge store (SPEC §10 single-use)
     "ChallengeStore", "MemoryChallengeStore", "UNKNOWN_CHALLENGE",
     # all scope constants

@@ -61,6 +61,43 @@ func evaluateConstraints(cert *DelegationCert, ctx VerifierContext, now time.Tim
 
 func evaluateConstraint(c Constraint, certID string, ctx VerifierContext, now time.Time) error {
 	switch c.Type {
+	case ConstraintResourcePath:
+		// SPEC §5.7.3. Absent context → constraint_unverifiable; present but
+		// unacceptable context (mismatch, invalid path) → constraint_denied.
+		// Byte-exact comparison throughout: no normalization, no decoding.
+		if !ctx.HasResource || ctx.RequestedResourceID == "" {
+			return errConstraintUnverifiable("no requested resource in context")
+		}
+		if c.ResourceID == "" {
+			return fmt.Errorf("malformed resource_path: resource_id is required")
+		}
+		if len(c.ResourceID) > MaxIdentifierLengthBytes {
+			return fmt.Errorf("malformed resource_path: resource_id exceeds MAX_IDENTIFIER_LENGTH_BYTES")
+		}
+		if ctx.RequestedResourceID != c.ResourceID {
+			return fmt.Errorf("requested resource does not match the authorized resource")
+		}
+		if c.PathPrefix == "" {
+			// Absent path_prefix authorizes the entire named resource.
+			return nil
+		}
+		if _, err := NormalizeResourcePath(c.PathPrefix); err != nil {
+			// Externally created cert with an invalid prefix: fail closed
+			// as constraint_denied (SPEC §5.7.3).
+			return fmt.Errorf("malformed path_prefix: %v", err)
+		}
+		if ctx.RequestedPath == "" {
+			return errConstraintUnverifiable("no requested path in context")
+		}
+		if _, err := NormalizeResourcePath(ctx.RequestedPath); err != nil {
+			// Supplied-but-invalid context is unacceptable, not absent.
+			return fmt.Errorf("invalid requested path: %v", err)
+		}
+		if !ResourcePathMatches(c.PathPrefix, ctx.RequestedPath) {
+			return fmt.Errorf("requested path %s is outside the authorized prefix %s", fmtQuoted(ctx.RequestedPath), fmtQuoted(c.PathPrefix))
+		}
+		return nil
+
 	case ConstraintGeoCircle:
 		if !ctx.HasLocation {
 			return errConstraintUnverifiable("no current location in context")

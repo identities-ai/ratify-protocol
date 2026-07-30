@@ -161,6 +161,38 @@ typedef struct RatifyVerifyOptions {
     const struct RatifyStreamContext *stream;
 } RatifyVerifyOptions;
 
+// Resource context for `resource_path` constraints (SPEC §5.16).
+//
+// Deliberately a NEW struct paired with a NEW symbol
+// (`ratify_verify_bundle_opts_v2`) rather than new fields on
+// `RatifyVerifyOptions` / `RatifyVerifierContext`: appending to those
+// ABI-visible structs would break every caller that `{0}`-initialises them
+// against the old layout. This follows the versioned-options precedent set
+// by `ratify_verify_bundle_opts` (SPEC §5.16). The existing symbols keep
+// their exact behaviour — a bundle whose cert bears a `resource_path`
+// constraint verified without this context fails closed as
+// `constraint_unverifiable`.
+//
+// Both fields are null-terminated UTF-8, or NULL when absent. The verifier
+// compares `requested_resource_id` byte-for-byte against the constraint's
+// `resource_id` and matches `requested_path` under the logical path model
+// of §5.7.3. Callers MUST apply every decoding/normalisation step (URL
+// decode, Unicode NFC, case folding, separator conversion) BEFORE
+// populating these — the verifier never transforms them.
+//
+// ```c
+// RatifyResourceContext rc = {0};
+// rc.requested_resource_id = "git:github.com/acme/widgets";
+// rc.requested_path        = "/docs/setup/guide.md";
+// ```
+typedef struct RatifyResourceContext {
+    // Null-terminated resource identifier the operation targets. NULL =
+    // absent (any `resource_path` constraint fails `constraint_unverifiable`).
+    const char *requested_resource_id;
+    // Null-terminated logical path the operation targets. NULL = absent.
+    const char *requested_path;
+} RatifyResourceContext;
+
 // Verifier-side options for `ratify_verify_streamed_turn_opts` (SPEC §5.13).
 //
 // Deliberately NOT `RatifyVerifyOptions`: a streamed turn re-verifies
@@ -329,6 +361,24 @@ enum RatifyStatus ratify_verify_bundle_opts(const char *bundle_json,
                                             const struct RatifyVerifyOptions *opts,
                                             struct RatifyVerifyResult **out,
                                             char **err_out);
+
+// Verify a ProofBundle JSON string with the full option set PLUS the
+// `resource_path` resource context (SPEC §5.16).
+//
+// Identical to `ratify_verify_bundle_opts`, plus a `resource` pointer
+// carrying the resource/path the operation targets. `resource` may be NULL
+// (equivalent to the v1 symbol). This is the versioned entry point that
+// extends the ABI without breaking the existing `RatifyVerifyOptions`
+// layout: callers built against the older header keep working unchanged.
+//
+// The `MAX_PROOF_BUNDLE_BYTES` (128 KiB) input bound is enforced BEFORE
+// parsing (SPEC §5.1); an oversized payload yields an `invalid` result
+// rather than being parsed.
+enum RatifyStatus ratify_verify_bundle_opts_v2(const char *bundle_json,
+                                               const struct RatifyVerifyOptions *opts,
+                                               const struct RatifyResourceContext *resource,
+                                               struct RatifyVerifyResult **out,
+                                               char **err_out);
 
 // Returns 1 if the verification result is valid, 0 if invalid or handle is NULL.
 int ratify_verify_result_is_valid(const struct RatifyVerifyResult *handle);

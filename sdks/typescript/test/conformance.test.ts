@@ -137,6 +137,8 @@ interface FixtureVerifierContext {
   requested_amount?: number;
   requested_currency?: string;
   invocations_in_window_count?: number;
+  requested_resource_id?: string;
+  requested_path?: string;
 }
 
 interface FixtureFile {
@@ -227,7 +229,7 @@ function decodeKeyRotation(raw: Record<string, unknown>): KeyRotationStatement {
 const fixtureFiles = readdirSync(FIXTURE_DIR)
   .filter((f) => f.endsWith(".json"))
   // cross_sdk_vectors.json has a different schema and is loaded by
-  // cross_sdk.test.ts. Skipping here keeps the conformance loop on the 63
+  // cross_sdk.test.ts. Skipping here keeps the conformance loop on the 79
   // wire-format fixtures.
   .filter((f) => f !== "cross_sdk_vectors.json")
   .sort();
@@ -361,6 +363,12 @@ async function runVerifyFixture(fx: FixtureFile): Promise<void> {
                 return () => n;
               })()
             : undefined,
+        // Resource context (SPEC §5.16): presence of requested_resource_id
+        // implies has_resource=true, mirroring the Go harness.
+        requested_resource_id: vc.requested_resource_id,
+        requested_path: vc.requested_path,
+        has_resource:
+          vc.requested_resource_id !== undefined && vc.requested_resource_id !== "",
       }
     : undefined;
 

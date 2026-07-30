@@ -114,7 +114,11 @@ func GenerateHumanRootKeypair() (*HumanRoot, HybridPrivateKey, error) {
 }
 
 // GenerateAgentKeypair creates a fresh AgentIdentity with a hybrid keypair.
+// The name is bounded by MaxAgentNameLengthBytes (UTF-8 bytes, SPEC §5.1).
 func GenerateAgentKeypair(name, agentType string) (*AgentIdentity, HybridPrivateKey, error) {
+	if len(name) > MaxAgentNameLengthBytes {
+		return nil, HybridPrivateKey{}, fmt.Errorf("agent name is %d bytes, exceeding MAX_AGENT_NAME_LENGTH_BYTES (%d)", len(name), MaxAgentNameLengthBytes)
+	}
 	pub, priv, err := GenerateHybridKeypair()
 	if err != nil {
 		return nil, HybridPrivateKey{}, err
@@ -218,6 +222,35 @@ func verifyBoth(msg []byte, sig HybridSignature, pub HybridPublicKey) error {
 func IssueDelegation(cert *DelegationCert, issuerPriv HybridPrivateKey) error {
 	if cert.Constraints == nil {
 		cert.Constraints = []Constraint{}
+	}
+	// Issuance hygiene (SPEC §5.7.1, §5.7.3): reject jointly unsatisfiable
+	// resource constraint sets, malformed resource_path fields, params on
+	// canonical types, and params values outside the restricted model.
+	// Decoders deliberately do NOT enforce this — wire compatibility is not
+	// conditioned on issuance hygiene; verification fails such certs closed.
+	if err := ValidateResourceConstraints(cert.Constraints); err != nil {
+		return fmt.Errorf("issuing delegation: %w", err)
+	}
+	for i, c := range cert.Constraints {
+		if c.Params != nil {
+			if isCanonicalConstraintType(c.Type) {
+				return fmt.Errorf("issuing delegation: constraint[%d]: canonical constraint type %q must not carry params", i, c.Type)
+			}
+			if err := ValidateParamsValue(c.Params, 0); err != nil {
+				return fmt.Errorf("issuing delegation: constraint[%d] params: %w", i, err)
+			}
+		}
+	}
+	if len(cert.Scope) > MaxScopesPerCert {
+		return fmt.Errorf("issuing delegation: %d scopes exceeds MAX_SCOPES_PER_CERT (%d)", len(cert.Scope), MaxScopesPerCert)
+	}
+	if len(cert.Constraints) > MaxConstraintsPerCert {
+		return fmt.Errorf("issuing delegation: %d constraints exceeds MAX_CONSTRAINTS_PER_CERT (%d)", len(cert.Constraints), MaxConstraintsPerCert)
+	}
+	for _, s := range cert.Scope {
+		if len(s) > MaxScopeLengthBytes {
+			return fmt.Errorf("issuing delegation: scope %q is %d bytes, exceeding MAX_SCOPE_LENGTH_BYTES (%d)", s, len(s), MaxScopeLengthBytes)
+		}
 	}
 	data, err := delegationSignBytes(cert)
 	if err != nil {

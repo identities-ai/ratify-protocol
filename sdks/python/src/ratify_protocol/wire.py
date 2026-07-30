@@ -33,17 +33,26 @@ import json
 from typing import Any
 
 from .canonical import canonical_json
+from .resource_path import is_canonical_constraint_type, validate_params_value
 from .types import (
     ED25519_PUBLIC_KEY_SIZE,
     ED25519_SIGNATURE_SIZE,
+    MAX_CONSTRAINTS_PER_CERT,
+    MAX_IDENTIFIER_LENGTH_BYTES,
+    MAX_JSON_NESTING_DEPTH,
+    MAX_PROOF_BUNDLE_BYTES,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
     MLDSA65_PUBLIC_KEY_SIZE,
     MLDSA65_SIGNATURE_SIZE,
+    PROTOCOL_VERSION,
     Constraint,
     DelegationCert,
     HybridPublicKey,
     HybridSignature,
     ProofBundle,
     SessionToken,
+    VerificationReceipt,
 )
 
 # Fixed size for the 32-byte binding/digest fields on the wire (SPEC §5.8
@@ -130,6 +139,16 @@ def _checked_constraint_dict(c: Constraint, path: str) -> dict:
     """The only integer-valued constraint fields are max_rate's count and
     window_s; the remaining constraint numerics are floats and are not
     subject to the integer domain."""
+    # params is permitted only on non-canonical types and only under the
+    # restricted value model (SPEC §5.7.1) — mirror Go's Constraint.MarshalJSON
+    # so the encoder never emits what its own decoder would reject.
+    if c.params is not None:
+        if is_canonical_constraint_type(c.type):
+            raise ValueError(
+                f"wire: {path}: canonical constraint type {c.type!r} must not "
+                f"carry params"
+            )
+        validate_params_value(c.params, 0)
     out = c.to_canonical_dict()
     if "count" in out:
         _check_wire_int(out["count"], f"{path}.count")
@@ -156,22 +175,66 @@ def _check_wire_int(v: Any, field: str) -> int:
 # Decoders
 # ============================================================================
 
+def _check_cert_bounds(cert: DelegationCert, path: str) -> None:
+    """Per-cert count and length limits (SPEC §5.1), enforced during decode.
+
+    Does NOT enforce issuance hygiene (jointly-satisfiable resource
+    constraints): decoders accept what issuance rejects — wire compatibility
+    is not conditioned on issuance hygiene — and verification fails
+    unsatisfiable sets closed.
+    """
+    if len(cert.scope) > MAX_SCOPES_PER_CERT:
+        raise ValueError(
+            f"wire: {path}: {len(cert.scope)} scopes exceeds "
+            f"MAX_SCOPES_PER_CERT ({MAX_SCOPES_PER_CERT})"
+        )
+    if len(cert.constraints) > MAX_CONSTRAINTS_PER_CERT:
+        raise ValueError(
+            f"wire: {path}: {len(cert.constraints)} constraints exceeds "
+            f"MAX_CONSTRAINTS_PER_CERT ({MAX_CONSTRAINTS_PER_CERT})"
+        )
+    for s in cert.scope:
+        n = len(s.encode("utf-8"))
+        if n > MAX_SCOPE_LENGTH_BYTES:
+            raise ValueError(
+                f"wire: {path}: scope of {n} bytes exceeds "
+                f"MAX_SCOPE_LENGTH_BYTES ({MAX_SCOPE_LENGTH_BYTES})"
+            )
+    for c in cert.constraints:
+        n = len(c.resource_id.encode("utf-8"))
+        if n > MAX_IDENTIFIER_LENGTH_BYTES:
+            raise ValueError(
+                f"wire: {path}: resource_id of {n} bytes exceeds "
+                f"MAX_IDENTIFIER_LENGTH_BYTES ({MAX_IDENTIFIER_LENGTH_BYTES})"
+            )
+
+
 def decode_delegation_cert(data: str | bytes) -> DelegationCert:
     """Decode a DelegationCert from wire JSON.
 
-    Strict: rejects unknown fields, malformed base64, and wrong
-    cryptographic byte lengths.
+    Strict: rejects unknown fields, malformed base64, wrong cryptographic
+    byte lengths, and SPEC §5.1 per-cert count/length bounds.
     """
-    return _decode_cert_obj(_as_object(_parse(data), "DelegationCert"), "DelegationCert")
+    cert = _decode_cert_obj(_as_object(_parse(data), "DelegationCert"), "DelegationCert")
+    _check_cert_bounds(cert, "DelegationCert")
+    return cert
 
 
 def decode_proof_bundle(data: str | bytes) -> ProofBundle:
     """Decode a ProofBundle from wire JSON.
 
     Strict: rejects unknown fields, malformed base64, wrong cryptographic
-    byte lengths, and unpaired v1.1 stream fields.
+    byte lengths, and unpaired v1.1 stream fields. The MAX_PROOF_BUNDLE_BYTES
+    check (SPEC §5.1) runs BEFORE any parsing: an oversized payload is
+    rejected without being parsed at all.
     """
     path = "ProofBundle"
+    raw_len = len(data) if isinstance(data, (bytes, bytearray)) else len(data.encode("utf-8"))
+    if raw_len > MAX_PROOF_BUNDLE_BYTES:
+        raise ValueError(
+            f"wire: proof bundle of {raw_len} bytes exceeds "
+            f"MAX_PROOF_BUNDLE_BYTES ({MAX_PROOF_BUNDLE_BYTES})"
+        )
     obj = _as_object(_parse(data), path)
     _check_keys(obj, (
         "agent_id", "agent_pub_key", "challenge", "challenge_at",
@@ -196,7 +259,7 @@ def decode_proof_bundle(data: str | bytes) -> ProofBundle:
         stream_seq = _get_int(obj, "stream_seq", path)
         if stream_seq < 1:
             raise ValueError(f"wire: {path}.stream_seq: must be >= 1, got {stream_seq}")
-    return ProofBundle(
+    bundle = ProofBundle(
         agent_id=_get_string(obj, "agent_id", path),
         agent_pub_key=_decode_pub_key_obj(obj.get("agent_pub_key"), f"{path}.agent_pub_key"),
         delegations=[
@@ -216,6 +279,14 @@ def decode_proof_bundle(data: str | bytes) -> ProofBundle:
         stream_id=stream_id,
         stream_seq=stream_seq,
     )
+    # Per-cert count/length bounds (SPEC §5.1). Chain-depth is enforced by the
+    # verifier (verify_bundle), not here — see the Python-divergence note: the
+    # conformance harness routes the over-depth fixture through this decoder,
+    # so depth must reach the verifier to yield the expected chain_too_deep
+    # result rather than a decode error.
+    for i, cert in enumerate(bundle.delegations):
+        _check_cert_bounds(cert, f"{path}.delegations[{i}]")
+    return bundle
 
 
 def decode_session_token(data: str | bytes) -> SessionToken:
@@ -343,9 +414,45 @@ def _decode_constraint_obj(obj: dict, path: str) -> Constraint:
         _check_keys(obj, ("count", "type", "window_s"), path)
         kwargs["count"] = _get_int(obj, "count", path)
         kwargs["window_s"] = _get_int(obj, "window_s", path)
+    elif ctype == "resource_path":
+        # SPEC §5.7.3. resource_id is required and non-empty; path_prefix is
+        # optional but, when the KEY is present, its value must be a non-empty
+        # string. A present-but-empty ("") / null / non-string path_prefix is
+        # REJECTED — a malformed path restriction must NEVER silently widen
+        # into whole-resource authority. Absence of the key (distinguished
+        # here by membership test, since json maps null -> None) is the sole
+        # encoding of "entire resource".
+        _check_keys(obj, ("path_prefix", "resource_id", "type"), path)
+        rid = obj.get("resource_id")
+        if not isinstance(rid, str) or rid == "":
+            raise ValueError(
+                f"wire: {path}: resource_path constraint requires a non-empty "
+                f"resource_id string"
+            )
+        kwargs["resource_id"] = rid
+        if "path_prefix" in obj:
+            pp = obj["path_prefix"]
+            if not isinstance(pp, str) or pp == "":
+                raise ValueError(
+                    f"wire: {path}.path_prefix: must be a non-empty string; "
+                    f"omit the field to authorize the entire resource"
+                )
+            kwargs["path_prefix"] = pp
     else:
-        # Unknown kind: the canonical form carries only the tag.
-        _check_keys(obj, ("type",), path)
+        # Extension kind (SPEC §5.7.1): the canonical form carries the tag plus
+        # an optional params object under the restricted value model. Unknown
+        # constraint types must decode so they can reach the verifier, which
+        # rejects them with constraint_unknown.
+        _check_keys(obj, ("params", "type"), path)
+        if "params" in obj:
+            params = obj["params"]
+            if not isinstance(params, dict):
+                raise ValueError(f"wire: {path}.params: expected JSON object")
+            try:
+                validate_params_value(params, 0)
+            except ValueError as e:
+                raise ValueError(f"wire: {path}.params: {e}") from e
+            kwargs["params"] = params
     return Constraint(**kwargs)
 
 
@@ -381,9 +488,27 @@ def _parse(data: str | bytes) -> Any:
     else:
         text = data
     try:
-        return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+        parsed = json.loads(text, object_pairs_hook=_reject_duplicate_keys)
     except json.JSONDecodeError as e:
         raise ValueError(f"wire: invalid JSON: {e}") from e
+    # JSON container nesting is bounded (SPEC §5.1). Go enforces this during
+    # parse via CheckWireJSON; Python's json has no per-parse hook for depth,
+    # so we walk the parsed structure — semantically identical for
+    # acceptance/rejection. The root container counts as depth 1.
+    _check_nesting_depth(parsed, 0)
+    return parsed
+
+
+def _check_nesting_depth(v: Any, depth: int) -> None:
+    if isinstance(v, (dict, list)):
+        if depth + 1 > MAX_JSON_NESTING_DEPTH:
+            raise ValueError(
+                f"wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH "
+                f"({MAX_JSON_NESTING_DEPTH})"
+            )
+        children = v.values() if isinstance(v, dict) else v
+        for child in children:
+            _check_nesting_depth(child, depth + 1)
 
 
 def _as_object(v: Any, path: str) -> dict:
@@ -473,3 +598,129 @@ def _decode_base64_strict(s: str, path: str, expected_len: int) -> bytes:
     if len(raw) != expected_len:
         raise ValueError(f"wire: {path}: expected {expected_len} bytes, got {len(raw)}")
     return raw
+
+
+# ============================================================================
+# VerificationReceipt codec (SPEC §17.5)
+# ============================================================================
+
+# The closed identity_status vocabulary a receipt may attest (SPEC §5.9,
+# §17.5). Receipts record verifier decisions; a string outside the enum is
+# structurally invalid on both codec sides. "unauthorized" is reserved in the
+# §5.9 enum (never emitted by the reference verifier) but is enum-valid on the
+# wire.
+_VALID_RECEIPT_DECISIONS = frozenset({
+    "authorized_agent", "verified_human", "expired", "revoked",
+    "scope_denied", "constraint_denied", "constraint_unverifiable",
+    "constraint_unknown", "invalid_scope", "delegation_not_authorized",
+    "invalid", "unauthorized",
+})
+
+
+def _check_receipt_structure(r: VerificationReceipt | None) -> None:
+    """Structural invariants of a wire VerificationReceipt (SPEC §17.5),
+    shared by encoder and decoder so the codec pair never emits a document its
+    counterpart rejects. Raises ValueError on violation."""
+    if r is None:
+        raise ValueError("wire: nil verification receipt")
+    if r.version != PROTOCOL_VERSION:
+        raise ValueError(
+            f"wire: receipt version {r.version} is not PROTOCOL_VERSION "
+            f"({PROTOCOL_VERSION})"
+        )
+    if not r.verifier_id:
+        raise ValueError("wire: receipt verifier_id must be non-empty")
+    if r.decision not in _VALID_RECEIPT_DECISIONS:
+        raise ValueError(
+            f"wire: receipt decision {r.decision!r} is not a known identity_status"
+        )
+    if len(r.bundle_hash) != _BINDING_SIZE:
+        raise ValueError(
+            f"wire: bundle_hash must be {_BINDING_SIZE} bytes, got {len(r.bundle_hash)}"
+        )
+    if len(r.prev_hash) != _BINDING_SIZE:
+        raise ValueError(
+            f"wire: prev_hash must be {_BINDING_SIZE} bytes, got {len(r.prev_hash)}"
+        )
+    if len(r.verifier_pub.ed25519) != ED25519_PUBLIC_KEY_SIZE:
+        raise ValueError(
+            f"wire: verifier_pub.ed25519 must be {ED25519_PUBLIC_KEY_SIZE} bytes, "
+            f"got {len(r.verifier_pub.ed25519)}"
+        )
+    if len(r.verifier_pub.ml_dsa_65) != MLDSA65_PUBLIC_KEY_SIZE:
+        raise ValueError(
+            f"wire: verifier_pub.ml_dsa_65 must be {MLDSA65_PUBLIC_KEY_SIZE} bytes, "
+            f"got {len(r.verifier_pub.ml_dsa_65)}"
+        )
+    if len(r.signature.ed25519) != ED25519_SIGNATURE_SIZE:
+        raise ValueError(
+            f"wire: signature.ed25519 must be {ED25519_SIGNATURE_SIZE} bytes, "
+            f"got {len(r.signature.ed25519)}"
+        )
+    if len(r.signature.ml_dsa_65) != MLDSA65_SIGNATURE_SIZE:
+        raise ValueError(
+            f"wire: signature.ml_dsa_65 must be {MLDSA65_SIGNATURE_SIZE} bytes, "
+            f"got {len(r.signature.ml_dsa_65)}"
+        )
+
+
+def encode_verification_receipt(r: VerificationReceipt) -> str:
+    """Encode a VerificationReceipt as canonical wire JSON (SPEC §17.5):
+    lex-sorted keys, byte fields as base64-standard strings, optional fields
+    omitted when empty. A structurally invalid receipt (wrong hash or key
+    lengths, unknown decision, wrong version) is an error, never emitted — the
+    codec pair never produces a document its own decoder rejects. Integer
+    fields outside the safe-integer domain are an error, never emitted."""
+    _check_receipt_structure(r)
+    out: dict[str, Any] = {
+        "bundle_hash": r.bundle_hash,
+        "decision": r.decision,
+        "prev_hash": r.prev_hash,
+        "signature": r.signature,
+        "verified_at": _check_wire_int(r.verified_at, "VerificationReceipt.verified_at"),
+        "verifier_id": r.verifier_id,
+        "verifier_pub": r.verifier_pub,
+        "version": _check_wire_int(r.version, "VerificationReceipt.version"),
+    }
+    if r.agent_id:
+        out["agent_id"] = r.agent_id
+    if r.error_reason:
+        out["error_reason"] = r.error_reason
+    if r.granted_scope:
+        out["granted_scope"] = r.granted_scope
+    if r.human_id:
+        out["human_id"] = r.human_id
+    return canonical_json(out).decode("utf-8")
+
+
+def decode_verification_receipt(data: str | bytes) -> VerificationReceipt:
+    """Decode a VerificationReceipt from wire JSON under strict wire
+    acceptance and the same structural invariants the encoder enforces (hash
+    and key component lengths, known decision, protocol version). Signature
+    verification is the caller's job via verify_verification_receipt."""
+    path = "VerificationReceipt"
+    obj = _as_object(_parse(data), path)
+    _check_keys(obj, (
+        "agent_id", "bundle_hash", "decision", "error_reason",
+        "granted_scope", "human_id", "prev_hash", "signature",
+        "verified_at", "verifier_id", "verifier_pub", "version",
+    ), path)
+    r = VerificationReceipt(
+        version=_get_int(obj, "version", path),
+        verifier_id=_get_string(obj, "verifier_id", path),
+        verifier_pub=_decode_pub_key_obj(obj.get("verifier_pub"), f"{path}.verifier_pub"),
+        bundle_hash=_get_bytes(obj, "bundle_hash", path, _BINDING_SIZE),
+        decision=_get_string(obj, "decision", path),
+        human_id=_get_string(obj, "human_id", path) if "human_id" in obj else "",
+        agent_id=_get_string(obj, "agent_id", path) if "agent_id" in obj else "",
+        granted_scope=(
+            _get_string_array(obj, "granted_scope", path)
+            if "granted_scope" in obj else []
+        ),
+        error_reason=_get_string(obj, "error_reason", path) if "error_reason" in obj else "",
+        verified_at=_get_int(obj, "verified_at", path),
+        prev_hash=_get_bytes(obj, "prev_hash", path, _BINDING_SIZE),
+        signature=_decode_signature_obj(obj.get("signature"), f"{path}.signature"),
+    )
+    _check_receipt_structure(r)
+    return r

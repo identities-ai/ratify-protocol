@@ -168,7 +168,7 @@ fn store_bundle(
     constraints: Vec<Constraint>,
 ) -> (ProofBundle, MemoryChallengeStore) {
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("Store Bot", "custom");
+    let (agent, agent_priv) = generate_agent("Store Bot", "custom").unwrap();
     let n = now();
     let mut cert = DelegationCert {
         cert_id: "store-cert-001".to_string(),
@@ -186,7 +186,7 @@ fn store_bundle(
             ml_dsa_65: Vec::new(),
         },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).unwrap();
 
     let store = MemoryChallengeStore::new(16);
     let (challenge, _) = store.issue(&[], 300).unwrap();

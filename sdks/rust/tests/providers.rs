@@ -28,7 +28,7 @@ fn now() -> i64 {
 /// Build a known-good (bundle, cert_id) fixture.
 fn good_bundle() -> (ProofBundle, String) {
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("Provider Bot", "custom");
+    let (agent, agent_priv) = generate_agent("Provider Bot", "custom").unwrap();
     let n = now();
     let mut cert = DelegationCert {
         cert_id: "provider-cert-001".to_string(),
@@ -46,7 +46,7 @@ fn good_bundle() -> (ProofBundle, String) {
             ml_dsa_65: Vec::new(),
         },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).unwrap();
 
     let challenge = generate_challenge();
     let sig = sign_challenge(&challenge, n, &agent_priv);

@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional, Protocol, Tuple, runtime_checkable
 
+from .canonical import wrap_json_nulls as _wrap_nulls
+
 
 PROTOCOL_VERSION: int = 1
 
@@ -27,8 +29,39 @@ PROTOCOL_VERSION: int = 1
 # such certs. See SPEC §5.7.
 NO_EXPIRY_SENTINEL: int = 4070908799
 
-MAX_DELEGATION_CHAIN_DEPTH: int = 3
+# MaxDelegationChainDepth is the maximum number of certs in a delegation
+# chain. The ceiling is a wire-determinism and denial-of-service bound, not
+# cryptography (SPEC §5.1); raised from 3 to 8 in v1.0.0-alpha.16 for
+# multi-hop agent topologies.
+MAX_DELEGATION_CHAIN_DEPTH: int = 8
 CHALLENGE_WINDOW_SECONDS: int = 300
+
+# Input bounds (SPEC §5.1). Depth alone does not bound parsing or
+# intersection work; these limits do. Violations route to the existing
+# ``invalid`` status with a descriptive error_reason — no new status.
+#
+# MAX_PROOF_BUNDLE_BYTES bounds the encoded size of a ProofBundle. Wire
+# decoders enforce it BEFORE parsing; an oversized payload is rejected
+# without ever being parsed.
+MAX_PROOF_BUNDLE_BYTES: int = 131072  # 128 KiB
+# MAX_SCOPES_PER_CERT bounds len(DelegationCert.scope).
+MAX_SCOPES_PER_CERT: int = 128
+# MAX_CONSTRAINTS_PER_CERT bounds len(DelegationCert.constraints).
+MAX_CONSTRAINTS_PER_CERT: int = 32
+# MAX_SCOPE_LENGTH_BYTES bounds the UTF-8 byte length of a single scope.
+MAX_SCOPE_LENGTH_BYTES: int = 256
+# MAX_IDENTIFIER_LENGTH_BYTES bounds resource_path's resource_id in this
+# release; future constraint types that name opaque identifiers adopt the
+# same bound (SPEC §5.1).
+MAX_IDENTIFIER_LENGTH_BYTES: int = 512
+# MAX_AGENT_NAME_LENGTH_BYTES bounds AgentIdentity.name (UTF-8 bytes),
+# enforced at construction (generate_agent). AgentIdentity is not part of any
+# wire document this SDK decodes; implementations that do decode one (e.g.
+# registries) enforce the same bound there.
+MAX_AGENT_NAME_LENGTH_BYTES: int = 256
+# MAX_JSON_NESTING_DEPTH bounds JSON container nesting in wire documents,
+# enforced by the codec during parse.
+MAX_JSON_NESTING_DEPTH: int = 16
 
 ED25519_PUBLIC_KEY_SIZE: int = 32
 ED25519_SIGNATURE_SIZE: int = 64
@@ -109,6 +142,7 @@ class Constraint:
     """
     type: str  # "geo_circle" | "geo_polygon" | "geo_bbox" | "time_window"
                # | "max_speed_mps" | "max_amount" | "max_rate"
+               # | "resource_path"
 
     # Geo.
     lat: float = 0.0
@@ -135,6 +169,22 @@ class Constraint:
     # Rate.
     count: int = 0
     window_s: int = 0
+
+    # Resource-bound authority (SPEC §5.7.3). resource_id names the resource a
+    # resource_path constraint binds to (opaque UTF-8, compared byte-for-byte);
+    # path_prefix optionally narrows to a path at or below it under
+    # segment-boundary matching. An absent (empty) path_prefix authorizes the
+    # entire named resource — absence, never "", is that encoding.
+    resource_id: str = ""
+    path_prefix: str = ""
+
+    # Extension-constraint parameters (SPEC §5.7.1). Permitted ONLY on
+    # non-canonical constraint types, under the restricted value model
+    # enforced by validate_params_value: null, bool, string, safe integer,
+    # and arrays/objects of these. None means "no params" (the field is
+    # omitted from canonical JSON); a JSON null *inside* params is a real
+    # value and is preserved.
+    params: Optional[dict] = None
 
     def to_canonical_dict(self) -> dict:
         """Return the canonical per-kind dict for this Constraint.
@@ -175,7 +225,26 @@ class Constraint:
         elif self.type == "max_rate":
             out["count"] = self.count
             out["window_s"] = self.window_s
-        # Unknown type: tag only. Verifier returns constraint_unknown.
+        elif self.type == "resource_path":
+            # path_prefix is omitted when absent (SPEC §5.7.3): absence — not
+            # "" — is the sole encoding of "entire resource". Every valid
+            # prefix begins with "/", so "" can never be a meaningful value.
+            if not self.resource_id:
+                raise ValueError(
+                    "resource_path constraint requires a non-empty resource_id"
+                )
+            out["resource_id"] = self.resource_id
+            if self.path_prefix:
+                out["path_prefix"] = self.path_prefix
+        else:
+            # Extension kind (SPEC §5.7.1): emit the tag plus params when
+            # present. A JSON null inside params is preserved via _wrap_nulls
+            # (canonical_json otherwise drops None as omitempty). Values
+            # outside the restricted model are validated at encode/issue time,
+            # not here. A verifier with no registered evaluator returns
+            # constraint_unknown on this shape.
+            if self.params is not None:
+                out["params"] = _wrap_nulls(self.params)
         return out
 
 
@@ -200,6 +269,18 @@ class VerifierContext:
 
     # Rate counter — required by max_rate. (cert_id, window_s) -> count
     invocations_in_window: Optional[Callable[[str, int], int]] = None
+
+    # Resource — required by resource_path (SPEC §5.16). requested_resource_id
+    # is compared byte-exactly against the constraint's resource_id;
+    # requested_path follows the logical path model of §5.7.3. Callers MUST
+    # apply every decoding and normalization step (URL decoding, Unicode NFC,
+    # case folding, separator conversion) BEFORE populating these; the
+    # verifier never transforms them. has_resource must be True for
+    # resource_path to evaluate; False causes constraint_unverifiable. When
+    # True, requested_resource_id must be non-empty.
+    requested_resource_id: str = ""
+    requested_path: str = ""
+    has_resource: bool = False
 
 
 @dataclass

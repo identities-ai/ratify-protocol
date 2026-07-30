@@ -280,12 +280,68 @@ pub fn encode_constraint(c: &crate::types::Constraint, out: &mut String) {
             out.push_str(",\"window_s\":");  encode_i64(c.window_s, out);
             out.push('}');
         }
-        // Unknown kind: emit only the type tag, matching the Serialize impl.
+        "resource_path" => {
+            // keys: path_prefix (only when present), resource_id, type.
+            out.push('{');
+            if let Some(prefix) = &c.path_prefix {
+                out.push_str("\"path_prefix\":");  encode_string(prefix, out);
+                out.push(',');
+            }
+            out.push_str("\"resource_id\":");  encode_string(&c.resource_id, out);
+            out.push_str(",\"type\":");  encode_string(&c.kind, out);
+            out.push('}');
+        }
+        // Extension kind: emit params (when present) plus the type tag,
+        // matching the Serialize impl. "params" sorts before "type".
         _ => {
             out.push('{');
+            if let Some(params) = &c.params {
+                out.push_str("\"params\":");  encode_params_object(params, out);
+                out.push(',');
+            }
             out.push_str("\"type\":");  encode_string(&c.kind, out);
             out.push('}');
         }
+    }
+}
+
+/// Write a canonical `params` object (SPEC §5.7.1). Keys are held in a
+/// `BTreeMap` so iteration is byte-lex order (RFC 8785) with no extra sort.
+pub fn encode_params_object(
+    map: &alloc::collections::BTreeMap<String, crate::types::ParamsValue>,
+    out: &mut String,
+) {
+    out.push('{');
+    for (i, (k, v)) in map.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        encode_string(k, out);
+        out.push(':');
+        encode_params_value(v, out);
+    }
+    out.push('}');
+}
+
+/// Write a canonical `params` value under the restricted value model.
+pub fn encode_params_value(v: &crate::types::ParamsValue, out: &mut String) {
+    use crate::types::ParamsValue;
+    match v {
+        ParamsValue::Null => out.push_str("null"),
+        ParamsValue::Bool(b) => encode_bool(*b, out),
+        ParamsValue::Int(n) => encode_i64(*n, out),
+        ParamsValue::Str(s) => encode_string(s, out),
+        ParamsValue::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                encode_params_value(item, out);
+            }
+            out.push(']');
+        }
+        ParamsValue::Object(map) => encode_params_object(map, out),
     }
 }
 

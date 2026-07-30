@@ -121,8 +121,17 @@ use std::slice;
 use ratify_protocol::{
     generate_agent, generate_challenge, generate_human_root, issue_delegation, sign_challenge,
     verify_bundle, AgentIdentity, DelegationCert, HumanRoot, HybridPrivateKey, HybridSignature,
-    ProofBundle, RevocationProvider, VerifierContext, VerifyOptions, VerifyResult,
+    IdentityStatus, ProofBundle, RevocationProvider, VerifierContext, VerifyOptions, VerifyResult,
 };
+
+// Input bounds (SPEC §5.1). Defined locally so the C ABI layer does not
+// couple to the underlying crate's re-export surface; these are fixed
+// protocol constants (mirrors the Go reference, verify.go).
+
+/// Bounds the encoded size of a ProofBundle. Enforced BEFORE parsing.
+/// (The agent-name bound, SPEC §5.1, is enforced by the underlying crate's
+/// `generate_agent`, which now returns an error for an over-long name.)
+const MAX_PROOF_BUNDLE_BYTES: usize = 131072; // 128 KiB
 
 // ============================================================================
 // Status codes
@@ -290,6 +299,39 @@ pub struct RatifyVerifyOptions {
 
     /// Stream context for v1.1 stream-bound bundles. NULL = no stream validation.
     pub stream: *const RatifyStreamContext,
+}
+
+/// Resource context for `resource_path` constraints (SPEC §5.16).
+///
+/// Deliberately a NEW struct paired with a NEW symbol
+/// (`ratify_verify_bundle_opts_v2`) rather than new fields on
+/// `RatifyVerifyOptions` / `RatifyVerifierContext`: appending to those
+/// ABI-visible structs would break every caller that `{0}`-initialises them
+/// against the old layout. This follows the versioned-options precedent set
+/// by `ratify_verify_bundle_opts` (SPEC §5.16). The existing symbols keep
+/// their exact behaviour — a bundle whose cert bears a `resource_path`
+/// constraint verified without this context fails closed as
+/// `constraint_unverifiable`.
+///
+/// Both fields are null-terminated UTF-8, or NULL when absent. The verifier
+/// compares `requested_resource_id` byte-for-byte against the constraint's
+/// `resource_id` and matches `requested_path` under the logical path model
+/// of §5.7.3. Callers MUST apply every decoding/normalisation step (URL
+/// decode, Unicode NFC, case folding, separator conversion) BEFORE
+/// populating these — the verifier never transforms them.
+///
+/// ```c
+/// RatifyResourceContext rc = {0};
+/// rc.requested_resource_id = "git:github.com/acme/widgets";
+/// rc.requested_path        = "/docs/setup/guide.md";
+/// ```
+#[repr(C)]
+pub struct RatifyResourceContext {
+    /// Null-terminated resource identifier the operation targets. NULL =
+    /// absent (any `resource_path` constraint fails `constraint_unverifiable`).
+    pub requested_resource_id: *const c_char,
+    /// Null-terminated logical path the operation targets. NULL = absent.
+    pub requested_path: *const c_char,
 }
 
 /// Verifier-side options for `ratify_verify_streamed_turn_opts` (SPEC §5.13).
@@ -519,6 +561,12 @@ unsafe fn build_opts<'a>(
             requested_amount:      if ctx.has_amount   != 0 { Some(ctx.requested_amount) } else { None },
             requested_currency:    if ctx.has_amount   != 0 { currency } else { None },
             invocations_in_window: invocations,
+            // Resource context (SPEC §5.16) is not carried by the legacy
+            // RatifyVerifierContext; it is supplied via RatifyResourceContext
+            // through ratify_verify_bundle_opts_v2 and set on the built
+            // options afterward. Absent here = whole-resource-unaware.
+            requested_resource_id: None,
+            requested_path:        None,
         }
     };
 
@@ -638,7 +686,12 @@ pub unsafe extern "C" fn ratify_agent_generate(
         Ok(s) => s,
         Err(_) => return RatifyStatus::RatifyErrEncoding,
     };
-    let (identity, priv_key) = generate_agent(name, agent_type);
+    // generate_agent enforces the agent-name bound (SPEC §5.1); an over-long
+    // name (> MAX_AGENT_NAME_LENGTH_BYTES) is a bad argument.
+    let (identity, priv_key) = match generate_agent(name, agent_type) {
+        Ok(pair) => pair,
+        Err(_) => return RatifyStatus::RatifyErrBadArgument,
+    };
     *out = Box::into_raw(Box::new(RatifyAgent(identity, priv_key)));
     RatifyStatus::RatifyOk
 }
@@ -726,9 +779,14 @@ pub unsafe extern "C" fn ratify_delegation_issue(
         signature: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
     };
 
-    // issue_delegation is documented infallible in the Rust SDK; the signature
-    // field is fully overwritten before we box the cert.
-    issue_delegation(&mut cert, &issuer_ref.1);
+    // issue_delegation enforces issuance hygiene (SPEC §5.7.1, §5.7.3): a
+    // jointly-unsatisfiable resource-constraint set, params on a canonical
+    // type, or a scope/constraint count/length over the SPEC §5.1 bounds is
+    // a bad argument. On success the signature field is fully overwritten.
+    if let Err(e) = issue_delegation(&mut cert, &issuer_ref.1) {
+        set_err(err_out, &e);
+        return RatifyStatus::RatifyErrBadArgument;
+    }
 
     *out = Box::into_raw(Box::new(RatifyDelegationCert(cert)));
     RatifyStatus::RatifyOk
@@ -917,19 +975,113 @@ pub unsafe extern "C" fn ratify_verify_bundle_opts(
     out: *mut *mut RatifyVerifyResult,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
+    // Unchanged behaviour: no resource context. A cert bearing a
+    // resource_path constraint fails closed as constraint_unverifiable.
+    ratify_verify_bundle_opts_v2(bundle_json, opts, std::ptr::null(), out, err_out)
+}
+
+/// Verify a ProofBundle JSON string with the full option set PLUS the
+/// `resource_path` resource context (SPEC §5.16).
+///
+/// Identical to `ratify_verify_bundle_opts`, plus a `resource` pointer
+/// carrying the resource/path the operation targets. `resource` may be NULL
+/// (equivalent to the v1 symbol). This is the versioned entry point that
+/// extends the ABI without breaking the existing `RatifyVerifyOptions`
+/// layout: callers built against the older header keep working unchanged.
+///
+/// The `MAX_PROOF_BUNDLE_BYTES` (128 KiB) input bound is enforced BEFORE
+/// parsing (SPEC §5.1); an oversized payload yields an `invalid` result
+/// rather than being parsed.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_bundle_opts_v2(
+    bundle_json: *const c_char,
+    opts: *const RatifyVerifyOptions,
+    resource: *const RatifyResourceContext,
+    out: *mut *mut RatifyVerifyResult,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
     if bundle_json.is_null() || out.is_null() {
         set_err(err_out, "bundle_json and out must be non-null");
         return RatifyStatus::RatifyErrNullPointer;
     }
 
-    let rust_opts = match checked_build_opts(opts, err_out) {
+    let mut rust_opts = match checked_build_opts(opts, err_out) {
         Ok(o) => o,
         Err(status) => return status,
     };
 
+    // Resource context (SPEC §5.16). Owned copies; presence is Some(_).
+    if !resource.is_null() {
+        let r = &*resource;
+        if !r.requested_resource_id.is_null() {
+            match CStr::from_ptr(r.requested_resource_id).to_str() {
+                Ok(s) => rust_opts.context.requested_resource_id = Some(s.to_owned()),
+                Err(_) => {
+                    set_err(err_out, "requested_resource_id contains invalid UTF-8");
+                    return RatifyStatus::RatifyErrEncoding;
+                }
+            }
+        }
+        if !r.requested_path.is_null() {
+            match CStr::from_ptr(r.requested_path).to_str() {
+                Ok(s) => rust_opts.context.requested_path = Some(s.to_owned()),
+                Err(_) => {
+                    set_err(err_out, "requested_path contains invalid UTF-8");
+                    return RatifyStatus::RatifyErrEncoding;
+                }
+            }
+        }
+    }
+
     let bundle_str = match cstr_to_string(bundle_json, "bundle_json", err_out) {
         Some(s) => s, None => return RatifyStatus::RatifyErrJson,
     };
+
+    // Input bound (SPEC §5.1): reject an oversized payload BEFORE parsing.
+    // A structural violation surfaces as the existing `invalid` status,
+    // never a new status (mirrors Go's DecodeProofBundle).
+    if bundle_str.len() > MAX_PROOF_BUNDLE_BYTES {
+        let result = VerifyResult {
+            valid: false,
+            identity_status: IdentityStatus::Invalid,
+            human_id: String::new(),
+            agent_id: String::new(),
+            agent_name: String::new(),
+            agent_type: String::new(),
+            granted_scope: Vec::new(),
+            error_reason: format!(
+                "invalid: proof bundle of {} bytes exceeds MAX_PROOF_BUNDLE_BYTES ({})",
+                bundle_str.len(),
+                MAX_PROOF_BUNDLE_BYTES
+            ),
+            anchor: None,
+        };
+        *out = Box::into_raw(Box::new(RatifyVerifyResult(result)));
+        return RatifyStatus::RatifyOk;
+    }
+
+    // Input bound (SPEC §5.1): reject JSON nested beyond MAX_JSON_NESTING_DEPTH
+    // before parsing. serde_json's own recursion limit (128) is looser than
+    // the protocol's 16, so without this an over-nested params value would be
+    // accepted here while every other SDK rejects it. Uses the shared crate
+    // scanner so the rule is byte-identical cross-SDK; surfaces as `invalid`,
+    // consistent with the size bound above.
+    if let Err(e) = ratify_protocol::wire::check_json_nesting_depth(bundle_str.as_bytes()) {
+        let result = VerifyResult {
+            valid: false,
+            identity_status: IdentityStatus::Invalid,
+            human_id: String::new(),
+            agent_id: String::new(),
+            agent_name: String::new(),
+            agent_type: String::new(),
+            granted_scope: Vec::new(),
+            error_reason: format!("invalid: {e}"),
+            anchor: None,
+        };
+        *out = Box::into_raw(Box::new(RatifyVerifyResult(result)));
+        return RatifyStatus::RatifyOk;
+    }
+
     let bundle: ProofBundle = match serde_json::from_str(&bundle_str) {
         Ok(b) => b,
         Err(e) => { set_err(err_out, &format!("bundle_json: {e}")); return RatifyStatus::RatifyErrJson; }

@@ -35,7 +35,7 @@ struct Fixture {
 
 fn fixture(scope: Vec<String>) -> Fixture {
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("Turn Bot", "custom");
+    let (agent, agent_priv) = generate_agent("Turn Bot", "custom").unwrap();
     let n = now_unix();
     let mut cert = DelegationCert {
         cert_id: "turn-cert-001".to_string(),
@@ -53,7 +53,7 @@ fn fixture(scope: Vec<String>) -> Fixture {
             ml_dsa_65: Vec::new(),
         },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).unwrap();
     let challenge = generate_challenge();
     let sig = sign_challenge(&challenge, n, &agent_priv);
     let bundle = ProofBundle {

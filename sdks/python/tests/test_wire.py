@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from ratify_protocol.canonical import wrap_json_nulls
 from ratify_protocol import (
     canonical_json,
     decode_delegation_cert,
@@ -32,7 +33,13 @@ FIXTURE_DIR = Path(__file__).resolve().parents[3] / "testvectors" / "v1"
 
 
 def _canonical_text(value) -> str:
-    return canonical_json(value).decode("utf-8")
+    # Fixture raw dicts come straight from Go's canonical JSON, so the only
+    # JSON null they contain is a genuine value inside extension-constraint
+    # params (SPEC §5.7.1) — never an omitempty field (those are absent, not
+    # null). wrap_json_nulls preserves such genuine nulls so this reference
+    # matches the SDK encoder (and Go's signed bytes); it is a no-op for every
+    # null-free fixture.
+    return canonical_json(wrap_json_nulls(value)).decode("utf-8")
 
 
 # ----- Collect every bundle / cert / token in the fixture corpus -----

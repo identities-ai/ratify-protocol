@@ -31,7 +31,16 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from pqcrypto.sign import ml_dsa_65
 
 from .canonical import canonical_json, hex_encode
+from .resource_path import (
+    is_canonical_constraint_type,
+    validate_params_value,
+    validate_resource_constraints,
+)
 from .types import (
+    MAX_AGENT_NAME_LENGTH_BYTES,
+    MAX_CONSTRAINTS_PER_CERT,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
     AgentIdentity,
     DelegationCert,
     HumanRoot,
@@ -143,8 +152,17 @@ def generate_human_root() -> tuple[HumanRoot, HybridPrivateKey]:
 
 
 def generate_agent(name: str, agent_type: str) -> tuple[AgentIdentity, HybridPrivateKey]:
-    """Fresh AgentIdentity."""
+    """Fresh AgentIdentity.
+
+    The name is bounded by MAX_AGENT_NAME_LENGTH_BYTES (UTF-8 bytes, SPEC §5.1).
+    """
     import time
+    name_len = len(name.encode("utf-8"))
+    if name_len > MAX_AGENT_NAME_LENGTH_BYTES:
+        raise ValueError(
+            f"agent name is {name_len} bytes, exceeding "
+            f"MAX_AGENT_NAME_LENGTH_BYTES ({MAX_AGENT_NAME_LENGTH_BYTES})"
+        )
     pub, priv = generate_hybrid_keypair()
     return AgentIdentity(
         id=derive_id(pub),
@@ -286,7 +304,51 @@ def verify_both(
 # ----------------------------------------------------------------------
 
 def issue_delegation(cert: DelegationCert, issuer_priv: HybridPrivateKey) -> None:
-    """Populate cert.signature with a hybrid signature over the canonical bytes."""
+    """Populate cert.signature with a hybrid signature over the canonical bytes.
+
+    Issuance hygiene (SPEC §5.7.1, §5.7.3): reject jointly unsatisfiable
+    resource constraint sets, malformed resource_path fields, params on
+    canonical types, and params values outside the restricted model, plus the
+    SPEC §5.1 count/length bounds. Decoders deliberately do NOT enforce this —
+    wire compatibility is not conditioned on issuance hygiene; verification
+    fails such certs closed. There is intentionally no public unchecked-issuer
+    API: an exported unchecked issuer would undermine the issuance boundary.
+    """
+    constraints = cert.constraints or []
+    try:
+        validate_resource_constraints(constraints)
+    except ValueError as e:
+        raise ValueError(f"issuing delegation: {e}") from e
+    for i, c in enumerate(constraints):
+        if c.params is not None:
+            if is_canonical_constraint_type(c.type):
+                raise ValueError(
+                    f"issuing delegation: constraint[{i}]: canonical constraint "
+                    f"type {c.type!r} must not carry params"
+                )
+            try:
+                validate_params_value(c.params, 0)
+            except ValueError as e:
+                raise ValueError(
+                    f"issuing delegation: constraint[{i}] params: {e}"
+                ) from e
+    if len(cert.scope) > MAX_SCOPES_PER_CERT:
+        raise ValueError(
+            f"issuing delegation: {len(cert.scope)} scopes exceeds "
+            f"MAX_SCOPES_PER_CERT ({MAX_SCOPES_PER_CERT})"
+        )
+    if len(constraints) > MAX_CONSTRAINTS_PER_CERT:
+        raise ValueError(
+            f"issuing delegation: {len(constraints)} constraints exceeds "
+            f"MAX_CONSTRAINTS_PER_CERT ({MAX_CONSTRAINTS_PER_CERT})"
+        )
+    for s in cert.scope:
+        n = len(s.encode("utf-8"))
+        if n > MAX_SCOPE_LENGTH_BYTES:
+            raise ValueError(
+                f"issuing delegation: scope {s!r} is {n} bytes, exceeding "
+                f"MAX_SCOPE_LENGTH_BYTES ({MAX_SCOPE_LENGTH_BYTES})"
+            )
     cert.signature = sign_both(delegation_sign_bytes(cert), issuer_priv)
 
 

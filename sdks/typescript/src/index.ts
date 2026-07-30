@@ -36,7 +36,16 @@ export {
   decodeProofBundle,
   encodeSessionToken,
   decodeSessionToken,
+  encodeVerificationReceipt,
+  decodeVerificationReceipt,
 } from "./wire.js";
+export {
+  normalizeResourcePath,
+  resourcePathMatches,
+  validateResourceConstraints,
+  validateParamsValue,
+  isCanonicalConstraintType,
+} from "./resource_path.js";
 export {
   MemoryChallengeStore,
   UNKNOWN_CHALLENGE,

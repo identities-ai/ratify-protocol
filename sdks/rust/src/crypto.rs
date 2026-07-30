@@ -20,13 +20,15 @@ use crate::canonical::{
     encode_bytes_b64, encode_constraints, encode_hybrid_pub_key, encode_i32, encode_i64,
     encode_str, encode_str_array,
 };
+use crate::resource_path::{validate_constraint_params, validate_resource_constraints};
 use crate::types::{
     DelegationCert, HybridPrivateKey, HybridPublicKey, HybridSignature, KeyRotationStatement,
     ProofBundle, ReceiptPartySignature, RevocationList, RevocationPush, SessionToken,
-    TransactionReceipt, VerifyResult, WitnessEntry,
+    TransactionReceipt, VerifyResult, WitnessEntry, MAX_CONSTRAINTS_PER_CERT, MAX_SCOPES_PER_CERT,
+    MAX_SCOPE_LENGTH_BYTES,
 };
 #[cfg(feature = "std")]
-use crate::types::{AgentIdentity, HumanRoot};
+use crate::types::{AgentIdentity, HumanRoot, MAX_AGENT_NAME_LENGTH_BYTES};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -95,11 +97,23 @@ pub fn generate_human_root() -> (HumanRoot, HybridPrivateKey) {
 /// Only available with the `std` feature (uses `SystemTime::now()` for
 /// `created_at`). In no_std environments, build the struct directly and
 /// supply your own timestamp.
+/// The `name` is bounded by [`MAX_AGENT_NAME_LENGTH_BYTES`] (UTF-8 bytes,
+/// SPEC §5.1); an over-long name is rejected.
 #[cfg(feature = "std")]
-pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPrivateKey) {
+pub fn generate_agent(
+    name: &str,
+    agent_type: &str,
+) -> Result<(AgentIdentity, HybridPrivateKey), String> {
+    if name.len() > MAX_AGENT_NAME_LENGTH_BYTES {
+        return Err(format!(
+            "agent name is {} bytes, exceeding MAX_AGENT_NAME_LENGTH_BYTES ({})",
+            name.len(),
+            MAX_AGENT_NAME_LENGTH_BYTES
+        ));
+    }
     let (pub_key, priv_key) = generate_hybrid_keypair();
     let id = derive_id(&pub_key);
-    (
+    Ok((
         AgentIdentity {
             id,
             public_key: pub_key,
@@ -108,7 +122,7 @@ pub fn generate_agent(name: &str, agent_type: &str) -> (AgentIdentity, HybridPri
             created_at: now_unix(),
         },
         priv_key,
-    )
+    ))
 }
 
 /// Current time as Unix seconds. Only available with the `std` feature.
@@ -303,8 +317,49 @@ pub fn verify_both(
 // High-level sign/verify helpers
 // ----------------------------------------------------------------------
 
-pub fn issue_delegation(cert: &mut DelegationCert, issuer_priv: &HybridPrivateKey) {
+/// Sign a delegation cert after enforcing issuance hygiene (SPEC §5.7.1,
+/// §5.7.3, §5.1): jointly unsatisfiable resource-constraint sets, malformed
+/// `resource_path` fields, params on canonical types, params values outside
+/// the restricted model, and the per-cert count/length bounds are all
+/// rejected. Decoders deliberately do NOT enforce this — wire compatibility
+/// is not conditioned on issuance hygiene; verification fails such certs
+/// closed. There is intentionally no public unchecked-issuer API.
+pub fn issue_delegation(
+    cert: &mut DelegationCert,
+    issuer_priv: &HybridPrivateKey,
+) -> Result<(), String> {
+    validate_resource_constraints(&cert.constraints)
+        .map_err(|e| format!("issuing delegation: {}", e))?;
+    for (i, c) in cert.constraints.iter().enumerate() {
+        validate_constraint_params(c)
+            .map_err(|e| format!("issuing delegation: constraint[{}]: {}", i, e))?;
+    }
+    if cert.scope.len() > MAX_SCOPES_PER_CERT {
+        return Err(format!(
+            "issuing delegation: {} scopes exceeds MAX_SCOPES_PER_CERT ({})",
+            cert.scope.len(),
+            MAX_SCOPES_PER_CERT
+        ));
+    }
+    if cert.constraints.len() > MAX_CONSTRAINTS_PER_CERT {
+        return Err(format!(
+            "issuing delegation: {} constraints exceeds MAX_CONSTRAINTS_PER_CERT ({})",
+            cert.constraints.len(),
+            MAX_CONSTRAINTS_PER_CERT
+        ));
+    }
+    for s in &cert.scope {
+        if s.len() > MAX_SCOPE_LENGTH_BYTES {
+            return Err(format!(
+                "issuing delegation: scope \"{}\" is {} bytes, exceeding MAX_SCOPE_LENGTH_BYTES ({})",
+                s,
+                s.len(),
+                MAX_SCOPE_LENGTH_BYTES
+            ));
+        }
+    }
     cert.signature = sign_both(&delegation_sign_bytes(cert), issuer_priv);
+    Ok(())
 }
 
 pub fn verify_delegation_signature(cert: &DelegationCert) -> bool {

@@ -1,0 +1,475 @@
+//! Unit tests for the alpha.16 resource-bound authority surface — mirrors
+//! Go's resource_path_test.go. Covers the path model, segment-boundary
+//! matching, the params value model, issuance hygiene, the path_prefix
+//! presence rule (SECURITY CRITICAL), the VerificationReceipt codec, the
+//! wire input bounds, and the agent-name boundary.
+
+use std::collections::BTreeMap;
+
+use ratify_protocol::{
+    decode_delegation_cert, decode_proof_bundle, decode_verification_receipt,
+    encode_verification_receipt, generate_agent, generate_hybrid_keypair, issue_delegation,
+    normalize_resource_path, resource_path_matches, sign_both, sign_challenge, validate_params_value,
+    validate_resource_constraints, verification_receipt_sign_bytes_buf, Constraint, DelegationCert,
+    HybridSignature, ParamsValue, ProofBundle, VerificationReceipt, MAX_AGENT_NAME_LENGTH_BYTES,
+    MAX_IDENTIFIER_LENGTH_BYTES, MAX_JSON_NESTING_DEPTH, MAX_PROOF_BUNDLE_BYTES, PROTOCOL_VERSION,
+};
+
+fn rp(id: &str, prefix: Option<&str>) -> Constraint {
+    Constraint {
+        kind: "resource_path".into(),
+        resource_id: id.into(),
+        path_prefix: prefix.map(|s| s.into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn normalize_resource_path_valid_and_invalid() {
+    let valid = [
+        ("/", "/"),
+        ("/docs", "/docs"),
+        ("/docs/", "/docs"),
+        ("/docs/setup/g.md", "/docs/setup/g.md"),
+        ("/docs/%2e%2e/notes", "/docs/%2e%2e/notes"), // % is a literal byte
+        ("/a b/c", "/a b/c"),
+        ("/UPPER/Case", "/UPPER/Case"), // byte-exact; no case folding
+    ];
+    for (input, want) in valid {
+        let got = normalize_resource_path(input)
+            .unwrap_or_else(|e| panic!("normalize({input:?}) unexpected error {e}"));
+        assert_eq!(got, want, "normalize({input:?})");
+    }
+
+    let invalid = [
+        "",             // empty
+        "docs",         // no leading slash
+        "docs/",        // no leading slash
+        "/docs/../x",   // dot-segment
+        "/./x",         // dot-segment
+        "/..",          // dot-segment
+        "/a//b",        // empty interior segment
+        "/docs//",      // empty segment after one-trailing-slash trim
+        "//",           // empty segment
+        "/a\\b",        // backslash
+        "\\docs",       // backslash, no leading slash
+        "/a\0b",        // NUL
+        "/docs/./g.md", // dot-segment mid-path
+    ];
+    for input in invalid {
+        assert!(
+            normalize_resource_path(input).is_err(),
+            "normalize({input:?}) expected error"
+        );
+    }
+}
+
+#[test]
+fn resource_path_matches_segment_boundary() {
+    let cases = [
+        ("/docs", "/docs", true),
+        ("/docs", "/docs/a.md", true),
+        ("/docs/", "/docs", true),      // trailing slash trims
+        ("/docs", "/docs/", true),      // both directions
+        ("/", "/anything", true),       // root matches everything
+        ("/", "/", true),               // root matches root
+        ("/docs", "/docs-old", false),  // segment boundary, not string prefix
+        ("/docs", "/docsx/a", false),   // segment boundary
+        ("/docs", "/doc", false),       // shorter
+        ("/docs", "/", false),          // parent of prefix
+        ("/src/security", "/src", false), // narrower prefix does not match wider path
+        ("/docs", "/docs/../x", false), // invalid path never matches
+        ("/docs/../x", "/docs", false), // invalid prefix never matches
+    ];
+    for (prefix, path, want) in cases {
+        assert_eq!(
+            resource_path_matches(prefix, path),
+            want,
+            "matches({prefix:?}, {path:?})"
+        );
+    }
+}
+
+#[test]
+fn validate_resource_constraints_issuance_rule() {
+    let ok: Vec<Vec<Constraint>> = vec![
+        vec![],
+        vec![rp("git:github.com/acme/widgets", Some("/docs"))],
+        vec![rp("git:github.com/acme/widgets", None)], // whole resource
+        vec![
+            rp("git:github.com/acme/widgets", Some("/src")),
+            rp("git:github.com/acme/widgets", Some("/src/security")),
+        ], // nested
+        vec![
+            rp("git:github.com/acme/widgets", None),
+            rp("git:github.com/acme/widgets", Some("/docs")),
+        ], // absent orders as /
+        vec![Constraint {
+            kind: "geo_circle".into(),
+            lat: 1.0,
+            lon: 1.0,
+            radius_m: 5.0,
+            ..Default::default()
+        }], // non-resource untouched
+    ];
+    for (i, cs) in ok.iter().enumerate() {
+        assert!(
+            validate_resource_constraints(cs).is_ok(),
+            "ok case {i}: unexpected rejection"
+        );
+    }
+
+    let big_id = "x".repeat(MAX_IDENTIFIER_LENGTH_BYTES + 1);
+    let bad: Vec<Vec<Constraint>> = vec![
+        vec![rp("", Some("/docs"))],       // empty resource_id
+        vec![rp(&big_id, None)],           // oversized id
+        vec![rp("git:github.com/acme/widgets", Some("docs"))], // invalid prefix
+        vec![
+            rp("git:github.com/acme/widgets", Some("/docs")),
+            rp("git:github.com/acme/other", Some("/docs")),
+        ], // different resources
+        vec![
+            rp("git:github.com/acme/widgets", Some("/src")),
+            rp("git:github.com/acme/widgets", Some("/docs")),
+        ], // incomparable prefixes
+    ];
+    for (i, cs) in bad.iter().enumerate() {
+        assert!(
+            validate_resource_constraints(cs).is_err(),
+            "bad case {i}: expected rejection"
+        );
+    }
+}
+
+#[test]
+fn validate_params_value_model() {
+    let obj: BTreeMap<String, ParamsValue> = {
+        let mut m = BTreeMap::new();
+        m.insert("a".to_string(), ParamsValue::Int(1));
+        m.insert("b".to_string(), ParamsValue::Array(vec![ParamsValue::Bool(true)]));
+        m
+    };
+    let ok = [
+        ParamsValue::Null,
+        ParamsValue::Bool(true),
+        ParamsValue::Str("s".into()),
+        ParamsValue::Int(5),
+        ParamsValue::Int(-9007199254740991),
+        ParamsValue::Array(vec![
+            ParamsValue::Int(1),
+            ParamsValue::Str("two".into()),
+            ParamsValue::Null,
+        ]),
+        ParamsValue::Object(obj),
+    ];
+    for (i, v) in ok.iter().enumerate() {
+        assert!(validate_params_value(v, 0).is_ok(), "ok params case {i}");
+    }
+
+    let bad = [
+        ParamsValue::Int(9007199254740992),  // beyond safe range
+        ParamsValue::Int(-9007199254740992), // beyond safe range (negative)
+    ];
+    for (i, v) in bad.iter().enumerate() {
+        assert!(validate_params_value(v, 0).is_err(), "bad params case {i}");
+    }
+
+    // Nesting bound: a chain of arrays deeper than MAX_JSON_NESTING_DEPTH.
+    let mut deep = ParamsValue::Str("leaf".into());
+    for _ in 0..(MAX_JSON_NESTING_DEPTH + 1) {
+        deep = ParamsValue::Array(vec![deep]);
+    }
+    assert!(
+        validate_params_value(&deep, 0).is_err(),
+        "expected nesting-depth rejection"
+    );
+}
+
+// ------------------------------------------------------------------
+// path_prefix presence — SECURITY CRITICAL (SPEC §5.7.3)
+// ------------------------------------------------------------------
+
+#[test]
+fn constraint_path_prefix_presence() {
+    // Absent path_prefix → None (whole resource); the constraint decodes.
+    let absent: Constraint =
+        serde_json::from_str(r#"{"resource_id":"r","type":"resource_path"}"#).unwrap();
+    assert_eq!(absent.path_prefix, None);
+
+    // A present, non-empty string decodes to Some.
+    let present: Constraint =
+        serde_json::from_str(r#"{"path_prefix":"/docs","resource_id":"r","type":"resource_path"}"#)
+            .unwrap();
+    assert_eq!(present.path_prefix.as_deref(), Some("/docs"));
+
+    // Present-but-forbidden forms MUST be rejected: a malformed restriction
+    // must never silently widen into whole-resource authority.
+    let forbidden = [
+        r#"{"path_prefix":"","resource_id":"r","type":"resource_path"}"#, // empty string
+        r#"{"path_prefix":null,"resource_id":"r","type":"resource_path"}"#, // null
+        r#"{"path_prefix":42,"resource_id":"r","type":"resource_path"}"#, // non-string
+    ];
+    for doc in forbidden {
+        assert!(
+            serde_json::from_str::<Constraint>(doc).is_err(),
+            "accepted a forbidden path_prefix: {doc}"
+        );
+    }
+}
+
+#[test]
+fn decode_rejects_forbidden_path_prefix_in_cert_and_bundle() {
+    let (root_pub, root_priv) = generate_hybrid_keypair();
+    let (agent_pub, agent_priv) = generate_hybrid_keypair();
+    let root_id = ratify_protocol::derive_id(&root_pub);
+    let agent_id = ratify_protocol::derive_id(&agent_pub);
+
+    let mut cert = DelegationCert {
+        cert_id: "t-presence-1".into(),
+        version: PROTOCOL_VERSION,
+        issuer_id: root_id,
+        issuer_pub_key: root_pub,
+        subject_id: agent_id.clone(),
+        subject_pub_key: agent_pub.clone(),
+        scope: vec!["files:write".into()],
+        constraints: vec![rp("git:github.com/acme/widgets", Some("/docs"))],
+        issued_at: 1000,
+        expires_at: 4070908799,
+        signature: HybridSignature {
+            ed25519: vec![],
+            ml_dsa_65: vec![],
+        },
+    };
+    issue_delegation(&mut cert, &root_priv).unwrap();
+    let cert_json = serde_json::to_string(&cert).unwrap();
+    assert!(decode_delegation_cert(cert_json.as_bytes()).is_ok());
+
+    let forbidden = [r#""path_prefix":"""#, r#""path_prefix":null"#, r#""path_prefix":42"#];
+    for repl in forbidden {
+        let doc = cert_json.replacen(r#""path_prefix":"/docs""#, repl, 1);
+        assert_ne!(doc, cert_json, "mutation not applied: {repl}");
+        assert!(
+            decode_delegation_cert(doc.as_bytes()).is_err(),
+            "decode_delegation_cert accepted forbidden {repl}"
+        );
+    }
+
+    // Same forms inside a full bundle must be rejected by decode_proof_bundle.
+    let challenge = vec![7u8; 32];
+    let sig = sign_challenge(&challenge, 2000, &agent_priv);
+    let bundle = ProofBundle {
+        agent_id,
+        agent_pub_key: agent_pub,
+        delegations: vec![cert],
+        challenge,
+        challenge_at: 2000,
+        challenge_sig: sig,
+        session_context: vec![],
+        stream_id: vec![],
+        stream_seq: 0,
+    };
+    let bundle_json = serde_json::to_string(&bundle).unwrap();
+    assert!(decode_proof_bundle(bundle_json.as_bytes()).is_ok());
+    for repl in forbidden {
+        let doc = bundle_json.replacen(r#""path_prefix":"/docs""#, repl, 1);
+        assert_ne!(doc, bundle_json, "mutation not applied: {repl}");
+        assert!(
+            decode_proof_bundle(doc.as_bytes()).is_err(),
+            "decode_proof_bundle accepted forbidden {repl}"
+        );
+    }
+}
+
+// ------------------------------------------------------------------
+// Issuance hygiene (SPEC §5.7.1, §5.7.3)
+// ------------------------------------------------------------------
+
+#[test]
+fn issue_delegation_rejects_unsatisfiable_and_params_on_canonical() {
+    let (root_pub, root_priv) = generate_hybrid_keypair();
+    let (agent_pub, _agent_priv) = generate_hybrid_keypair();
+    let base = |constraints: Vec<Constraint>| DelegationCert {
+        cert_id: "t-issue-1".into(),
+        version: PROTOCOL_VERSION,
+        issuer_id: ratify_protocol::derive_id(&root_pub),
+        issuer_pub_key: root_pub.clone(),
+        subject_id: ratify_protocol::derive_id(&agent_pub),
+        subject_pub_key: agent_pub.clone(),
+        scope: vec!["files:write".into()],
+        constraints,
+        issued_at: 1000,
+        expires_at: 2000,
+        signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
+    };
+
+    // Different-resource pair → jointly unsatisfiable.
+    let mut c1 = base(vec![rp("r1", Some("/docs")), rp("r2", Some("/docs"))]);
+    assert!(issue_delegation(&mut c1, &root_priv).is_err());
+
+    // Params on a canonical type → rejected.
+    let mut params = BTreeMap::new();
+    params.insert("x".to_string(), ParamsValue::Int(1));
+    let mut c2 = base(vec![Constraint {
+        kind: "geo_circle".into(),
+        lat: 1.0,
+        lon: 1.0,
+        radius_m: 5.0,
+        params: Some(params),
+        ..Default::default()
+    }]);
+    assert!(issue_delegation(&mut c2, &root_priv).is_err());
+
+    // Out-of-range params integer on an extension type → rejected.
+    let mut big = BTreeMap::new();
+    big.insert("max".to_string(), ParamsValue::Int(9007199254740992));
+    let mut c3 = base(vec![Constraint {
+        kind: "com.example.limit".into(),
+        params: Some(big),
+        ..Default::default()
+    }]);
+    assert!(issue_delegation(&mut c3, &root_priv).is_err());
+
+    // A valid single resource_path constraint issues fine.
+    let mut ok = base(vec![rp("git:github.com/acme/widgets", Some("/docs"))]);
+    assert!(issue_delegation(&mut ok, &root_priv).is_ok());
+}
+
+// ------------------------------------------------------------------
+// Wire input bounds
+// ------------------------------------------------------------------
+
+#[test]
+fn decode_proof_bundle_size_and_nesting_bounds() {
+    // Oversized payload is rejected before parsing; error names the bound.
+    let oversized = vec![b'x'; MAX_PROOF_BUNDLE_BYTES + 1];
+    let err = decode_proof_bundle(&oversized).unwrap_err();
+    assert!(err.contains("MAX_PROOF_BUNDLE_BYTES"), "got: {err}");
+
+    // Nesting beyond MAX_JSON_NESTING_DEPTH is rejected during the scan.
+    let mut deep = String::new();
+    for _ in 0..(MAX_JSON_NESTING_DEPTH + 1) {
+        deep.push('[');
+    }
+    for _ in 0..(MAX_JSON_NESTING_DEPTH + 1) {
+        deep.push(']');
+    }
+    let err = decode_proof_bundle(deep.as_bytes()).unwrap_err();
+    assert!(err.contains("MAX_JSON_NESTING_DEPTH"), "got: {err}");
+}
+
+// ------------------------------------------------------------------
+// VerificationReceipt codec (SPEC §17.5)
+// ------------------------------------------------------------------
+
+fn signed_receipt(decision: &str) -> VerificationReceipt {
+    let (v_pub, v_priv) = generate_hybrid_keypair();
+    let mut r = VerificationReceipt {
+        version: PROTOCOL_VERSION,
+        verifier_id: ratify_protocol::derive_id(&v_pub),
+        verifier_pub: v_pub,
+        bundle_hash: vec![0xAB; 32],
+        decision: decision.into(),
+        human_id: String::new(),
+        agent_id: "b4a4c71795d676b69f454881a8300000".into(),
+        granted_scope: vec![],
+        error_reason: String::new(),
+        verified_at: 1_800_000_000,
+        prev_hash: vec![0u8; 32],
+        signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
+    };
+    let signable = verification_receipt_sign_bytes_buf(&r).unwrap();
+    r.signature = sign_both(&signable, &v_priv);
+    r
+}
+
+#[test]
+fn verification_receipt_codec_round_trip() {
+    let r = signed_receipt("revoked");
+    let encoded = encode_verification_receipt(&r).unwrap();
+    let decoded = decode_verification_receipt(&encoded).unwrap();
+    let re_encoded = encode_verification_receipt(&decoded).unwrap();
+    assert_eq!(encoded, re_encoded, "receipt round-trip not byte-identical");
+}
+
+#[test]
+fn verification_receipt_encoder_rejects_invalid() {
+    // Valid receipt encodes.
+    let valid = signed_receipt("authorized_agent");
+    assert!(encode_verification_receipt(&valid).is_ok());
+
+    let mut short_hash = valid.clone();
+    short_hash.bundle_hash.truncate(16);
+    assert!(encode_verification_receipt(&short_hash).is_err());
+
+    let mut short_prev = valid.clone();
+    short_prev.prev_hash.truncate(31);
+    assert!(encode_verification_receipt(&short_prev).is_err());
+
+    let mut bad_decision = valid.clone();
+    bad_decision.decision = "approved".into();
+    assert!(encode_verification_receipt(&bad_decision).is_err());
+
+    let mut empty_verifier = valid.clone();
+    empty_verifier.verifier_id = String::new();
+    assert!(encode_verification_receipt(&empty_verifier).is_err());
+
+    let mut wrong_version = valid.clone();
+    wrong_version.version = 2;
+    assert!(encode_verification_receipt(&wrong_version).is_err());
+
+    let mut short_sig = valid.clone();
+    short_sig.signature.ed25519.truncate(63);
+    assert!(encode_verification_receipt(&short_sig).is_err());
+}
+
+#[test]
+fn verification_receipt_decoder_rejects_malformed_wire() {
+    let r = signed_receipt("authorized_agent");
+    let encoded = encode_verification_receipt(&r).unwrap();
+    let text = String::from_utf8(encoded).unwrap();
+
+    let mutate = |old: &str, new: &str| -> String {
+        let out = text.replacen(old, new, 1);
+        assert_ne!(out, text, "mutation {old:?} not applied");
+        out
+    };
+
+    let cases = vec![
+        mutate(r#""version":"#, r#""versionx":1,"version":"#), // unknown field
+        mutate(r#""version":1"#, r#""version":2"#),            // wrong version
+        mutate(
+            r#""decision":"authorized_agent""#,
+            r#""decision":"approved""#,
+        ), // unknown decision
+        mutate(
+            &format!(r#""verifier_id":"{}""#, r.verifier_id),
+            r#""verifier_id":"""#,
+        ), // empty verifier_id
+        "[1,2,3]".to_string(), // non-object
+    ];
+    for doc in cases {
+        assert!(
+            decode_verification_receipt(doc.as_bytes()).is_err(),
+            "decoder accepted malformed wire: {doc}"
+        );
+    }
+}
+
+// ------------------------------------------------------------------
+// Agent-name boundary (SPEC §5.1)
+// ------------------------------------------------------------------
+
+#[test]
+fn generate_agent_name_bound() {
+    let at_limit = "n".repeat(MAX_AGENT_NAME_LENGTH_BYTES);
+    assert!(
+        generate_agent(&at_limit, "custom").is_ok(),
+        "name of exactly {MAX_AGENT_NAME_LENGTH_BYTES} bytes must be accepted"
+    );
+    let over_limit = "n".repeat(MAX_AGENT_NAME_LENGTH_BYTES + 1);
+    assert!(
+        generate_agent(&over_limit, "custom").is_err(),
+        "name of {} bytes must be rejected",
+        MAX_AGENT_NAME_LENGTH_BYTES + 1
+    );
+}

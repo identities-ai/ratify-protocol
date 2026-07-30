@@ -23,7 +23,11 @@ from .scope import SCOPE_IDENTITY_DELEGATE, intersect_scopes, validate_scopes
 from .types import (
     CHALLENGE_WINDOW_SECONDS,
     ED25519_PUBLIC_KEY_SIZE,
+    MAX_CONSTRAINTS_PER_CERT,
     MAX_DELEGATION_CHAIN_DEPTH,
+    MAX_IDENTIFIER_LENGTH_BYTES,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
     MLDSA65_PUBLIC_KEY_SIZE,
     PROTOCOL_VERSION,
     HybridPublicKey,
@@ -74,6 +78,38 @@ def _verify_bundle_inner(bundle: ProofBundle, opts: VerifyOptions) -> VerifyResu
         return _invalid("chain_too_deep", "delegation chain exceeds maximum depth")
     if not bundle.challenge:
         return _invalid("no_challenge", "proof bundle contains no challenge")
+    # Input bounds (SPEC §5.1). Codecs enforce these during decode; the
+    # verifier re-enforces them so bundles constructed in-process are held to
+    # the same bounds. Violations are structural: `invalid`, no new status.
+    for i, cert in enumerate(bundle.delegations):
+        if len(cert.scope) > MAX_SCOPES_PER_CERT:
+            return _invalid(
+                "invalid",
+                f"cert {i} carries {len(cert.scope)} scopes, exceeding "
+                f"MAX_SCOPES_PER_CERT ({MAX_SCOPES_PER_CERT})",
+            )
+        if len(cert.constraints) > MAX_CONSTRAINTS_PER_CERT:
+            return _invalid(
+                "invalid",
+                f"cert {i} carries {len(cert.constraints)} constraints, exceeding "
+                f"MAX_CONSTRAINTS_PER_CERT ({MAX_CONSTRAINTS_PER_CERT})",
+            )
+        for s in cert.scope:
+            n = len(s.encode("utf-8"))
+            if n > MAX_SCOPE_LENGTH_BYTES:
+                return _invalid(
+                    "invalid",
+                    f"cert {i} carries a scope of {n} bytes, exceeding "
+                    f"MAX_SCOPE_LENGTH_BYTES ({MAX_SCOPE_LENGTH_BYTES})",
+                )
+        for c in cert.constraints:
+            n = len(c.resource_id.encode("utf-8"))
+            if n > MAX_IDENTIFIER_LENGTH_BYTES:
+                return _invalid(
+                    "invalid",
+                    f"cert {i} constraint resource_id is {n} bytes, exceeding "
+                    f"MAX_IDENTIFIER_LENGTH_BYTES ({MAX_IDENTIFIER_LENGTH_BYTES})",
+                )
     if bundle.session_context and len(bundle.session_context) != 32:
         return _invalid(
             "invalid_session_context",

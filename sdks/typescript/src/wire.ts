@@ -31,18 +31,28 @@ import {
   base64StandardDecode,
 } from "./canonical.js";
 import { canonicalConstraintDict } from "./crypto.js";
+import { utf8ByteLength, validateParamsValue } from "./resource_path.js";
 import {
   ED25519_PUBLIC_KEY_SIZE,
   ED25519_SIGNATURE_SIZE,
+  MAX_CONSTRAINTS_PER_CERT,
+  MAX_IDENTIFIER_LENGTH_BYTES,
+  MAX_JSON_NESTING_DEPTH,
+  MAX_PROOF_BUNDLE_BYTES,
+  MAX_SCOPES_PER_CERT,
+  MAX_SCOPE_LENGTH_BYTES,
   MLDSA65_PUBLIC_KEY_SIZE,
   MLDSA65_SIGNATURE_SIZE,
+  PROTOCOL_VERSION,
   type Constraint,
   type ConstraintType,
   type DelegationCert,
   type HybridPublicKey,
   type HybridSignature,
+  type IdentityStatus,
   type ProofBundle,
   type SessionToken,
+  type VerificationReceipt,
 } from "./types.js";
 
 // Fixed sizes for the 32-byte binding/digest fields on the wire
@@ -174,6 +184,14 @@ export function decodeDelegationCert(input: string | Uint8Array): DelegationCert
  * stream fields.
  */
 export function decodeProofBundle(input: string | Uint8Array): ProofBundle {
+  // Input bound (SPEC §5.1): an oversized payload is rejected BEFORE any
+  // parsing — even garbage bytes of the right size never reach the parser.
+  const nbytes = typeof input === "string" ? utf8ByteLength(input) : input.length;
+  if (nbytes > MAX_PROOF_BUNDLE_BYTES) {
+    throw new Error(
+      `wire: proof bundle of ${nbytes} bytes exceeds MAX_PROOF_BUNDLE_BYTES (${MAX_PROOF_BUNDLE_BYTES})`,
+    );
+  }
   const obj = asObject(parseInput(input), "ProofBundle");
   const path = "ProofBundle";
   checkKeys(
@@ -265,6 +283,138 @@ export function decodeSessionToken(input: string | Uint8Array): SessionToken {
   };
 }
 
+// ============================================================================
+// VerificationReceipt codec (SPEC §17.5)
+// ============================================================================
+
+// The closed identity_status vocabulary a receipt may attest (SPEC §5.9,
+// §17.5). Receipts record verifier decisions; a string outside the enum is
+// structurally invalid on both codec sides. "unauthorized" is reserved in the
+// §5.9 enum (never emitted by the reference verifier) but enum-valid on wire.
+const VALID_RECEIPT_DECISIONS: ReadonlySet<string> = new Set([
+  "authorized_agent",
+  "verified_human",
+  "expired",
+  "revoked",
+  "scope_denied",
+  "constraint_denied",
+  "constraint_unverifiable",
+  "constraint_unknown",
+  "invalid_scope",
+  "delegation_not_authorized",
+  "invalid",
+  "unauthorized",
+]);
+
+// Enforce the structural invariants of a wire VerificationReceipt
+// (SPEC §17.5) — shared by encoder and decoder so the codec pair never emits
+// a document its counterpart rejects.
+function checkReceiptStructure(r: VerificationReceipt | null | undefined): void {
+  if (r === null || r === undefined) {
+    throw new Error("wire: nil verification receipt");
+  }
+  if (r.version !== PROTOCOL_VERSION) {
+    throw new Error(`wire: receipt version ${r.version} is not PROTOCOL_VERSION (${PROTOCOL_VERSION})`);
+  }
+  if (!r.verifier_id) {
+    throw new Error("wire: receipt verifier_id must be non-empty");
+  }
+  if (!VALID_RECEIPT_DECISIONS.has(r.decision)) {
+    throw new Error(`wire: receipt decision "${r.decision}" is not a known identity_status`);
+  }
+  if (r.bundle_hash.length !== 32) {
+    throw new Error(`wire: bundle_hash must be 32 bytes, got ${r.bundle_hash.length}`);
+  }
+  if (r.prev_hash.length !== 32) {
+    throw new Error(`wire: prev_hash must be 32 bytes, got ${r.prev_hash.length}`);
+  }
+  if (r.verifier_pub.ed25519.length !== ED25519_PUBLIC_KEY_SIZE) {
+    throw new Error(`wire: verifier_pub.ed25519 must be ${ED25519_PUBLIC_KEY_SIZE} bytes, got ${r.verifier_pub.ed25519.length}`);
+  }
+  if (r.verifier_pub.ml_dsa_65.length !== MLDSA65_PUBLIC_KEY_SIZE) {
+    throw new Error(`wire: verifier_pub.ml_dsa_65 must be ${MLDSA65_PUBLIC_KEY_SIZE} bytes, got ${r.verifier_pub.ml_dsa_65.length}`);
+  }
+  if (r.signature.ed25519.length !== ED25519_SIGNATURE_SIZE) {
+    throw new Error(`wire: signature.ed25519 must be ${ED25519_SIGNATURE_SIZE} bytes, got ${r.signature.ed25519.length}`);
+  }
+  if (r.signature.ml_dsa_65.length !== MLDSA65_SIGNATURE_SIZE) {
+    throw new Error(`wire: signature.ml_dsa_65 must be ${MLDSA65_SIGNATURE_SIZE} bytes, got ${r.signature.ml_dsa_65.length}`);
+  }
+}
+
+/**
+ * Encode a VerificationReceipt into its canonical wire JSON (SPEC §17.5):
+ * lex-sorted keys, byte fields as base64-standard strings, optional fields
+ * omitted when empty. A structurally invalid receipt (wrong hash/key lengths,
+ * unknown decision, wrong version) is an error, never emitted — the codec
+ * pair never produces a document its own decoder rejects.
+ */
+export function encodeVerificationReceipt(r: VerificationReceipt): string {
+  checkReceiptStructure(r);
+  const dict: JsonObj = {
+    bundle_hash: r.bundle_hash,
+    decision: r.decision,
+    prev_hash: r.prev_hash,
+    signature: r.signature,
+    verified_at: checkWireInt(r.verified_at, "VerificationReceipt.verified_at"),
+    verifier_id: r.verifier_id,
+    verifier_pub: r.verifier_pub,
+    version: checkWireInt(r.version, "VerificationReceipt.version"),
+  };
+  // Optional fields carry Go's omitempty semantics.
+  if (r.agent_id) dict.agent_id = r.agent_id;
+  if (r.error_reason) dict.error_reason = r.error_reason;
+  if (r.granted_scope !== undefined && r.granted_scope.length > 0) {
+    dict.granted_scope = r.granted_scope;
+  }
+  if (r.human_id) dict.human_id = r.human_id;
+  return jsonText(dict);
+}
+
+/**
+ * Decode a VerificationReceipt from wire JSON under strict wire acceptance and
+ * the same structural invariants the encoder enforces. Signature verification
+ * is the caller's job via verifyVerificationReceipt.
+ */
+export function decodeVerificationReceipt(input: string | Uint8Array): VerificationReceipt {
+  const obj = asObject(parseInput(input), "VerificationReceipt");
+  const path = "VerificationReceipt";
+  checkKeys(
+    obj,
+    [
+      "agent_id",
+      "bundle_hash",
+      "decision",
+      "error_reason",
+      "granted_scope",
+      "human_id",
+      "prev_hash",
+      "signature",
+      "verified_at",
+      "verifier_id",
+      "verifier_pub",
+      "version",
+    ],
+    path,
+  );
+  const r: VerificationReceipt = {
+    version: getInt(obj, "version", path),
+    verifier_id: getString(obj, "verifier_id", path),
+    verifier_pub: decodePubKeyObj(obj.verifier_pub, `${path}.verifier_pub`),
+    bundle_hash: getBytes(obj, "bundle_hash", path, BINDING_SIZE),
+    decision: getString(obj, "decision", path) as IdentityStatus,
+    verified_at: getInt(obj, "verified_at", path),
+    prev_hash: getBytes(obj, "prev_hash", path, BINDING_SIZE),
+    signature: decodeSignatureObj(obj.signature, `${path}.signature`),
+  };
+  if (obj.human_id !== undefined) r.human_id = getString(obj, "human_id", path);
+  if (obj.agent_id !== undefined) r.agent_id = getString(obj, "agent_id", path);
+  if (obj.granted_scope !== undefined) r.granted_scope = getStringArray(obj, "granted_scope", path);
+  if (obj.error_reason !== undefined) r.error_reason = getString(obj, "error_reason", path);
+  checkReceiptStructure(r);
+  return r;
+}
+
 // ----- Nested structures -----
 
 function decodeCertObj(obj: JsonObj, path: string): DelegationCert {
@@ -286,7 +436,7 @@ function decodeCertObj(obj: JsonObj, path: string): DelegationCert {
     path,
   );
   const constraintsRaw = getArray(obj, "constraints", path);
-  return {
+  const cert: DelegationCert = {
     cert_id: getString(obj, "cert_id", path),
     version: getInt(obj, "version", path),
     issuer_id: getString(obj, "issuer_id", path),
@@ -304,6 +454,8 @@ function decodeCertObj(obj: JsonObj, path: string): DelegationCert {
     expires_at: getInt(obj, "expires_at", path),
     signature: decodeSignatureObj(obj.signature, `${path}.signature`),
   };
+  checkCertBounds(cert, path);
+  return cert;
 }
 
 function decodePubKeyObj(raw: unknown, path: string): HybridPublicKey {
@@ -386,12 +538,88 @@ function decodeConstraintObj(obj: JsonObj, path: string): Constraint {
       c.count = getInt(obj, "count", path);
       c.window_s = getInt(obj, "window_s", path);
       break;
-    default:
-      // Unknown kind: the canonical form carries only the tag.
-      checkKeys(obj, ["type"], path);
+    case "resource_path": {
+      // path_prefix PRESENCE is load-bearing (SPEC §5.7.3): ABSENT means the
+      // entire named resource; PRESENT as "" / null / non-string is REJECTED
+      // — a malformed restriction must never silently widen into
+      // whole-resource authority.
+      if ("path_prefix" in obj) {
+        const pp = obj.path_prefix;
+        if (typeof pp !== "string" || pp === "") {
+          throw new Error(
+            `wire: ${path}.path_prefix: must be a non-empty string; omit the field to authorize the entire resource`,
+          );
+        }
+      }
+      checkKeys(obj, ["path_prefix", "resource_id", "type"], path);
+      const resourceID = getString(obj, "resource_id", path);
+      if (resourceID === "") {
+        throw new Error(
+          `wire: ${path}.resource_id: resource_path constraint requires a non-empty resource_id`,
+        );
+      }
+      c.resource_id = resourceID;
+      if ("path_prefix" in obj) c.path_prefix = obj.path_prefix as string;
       break;
+    }
+    default: {
+      // Extension kind (SPEC §5.7.1): the canonical form carries the tag and
+      // optionally a params object under the restricted value model.
+      // Canonical types never reach this branch, so params here can never
+      // widen a canonical type. The verifier rejects unknown types with
+      // constraint_unknown, but they must decode so they reach the verifier.
+      checkKeys(obj, ["params", "type"], path);
+      if ("params" in obj) {
+        const params = obj.params;
+        if (params === null || typeof params !== "object" || Array.isArray(params)) {
+          throw new Error(`wire: ${path}.params: expected object`);
+        }
+        try {
+          validateParamsValue(params, 0);
+        } catch (e) {
+          throw new Error(`wire: ${path}.params: ${(e as Error).message}`);
+        }
+        c.params = params as Record<string, unknown>;
+      }
+      break;
+    }
   }
   return c;
+}
+
+// Enforce the per-cert count and length limits of SPEC §5.1 during decode. It
+// does NOT enforce issuance hygiene (validateResourceConstraints) — decoders
+// accept what issuance rejects; verification fails unsatisfiable sets closed.
+function checkCertBounds(cert: DelegationCert, path: string): void {
+  if (cert.scope.length > MAX_SCOPES_PER_CERT) {
+    throw new Error(
+      `wire: ${path}: ${cert.scope.length} scopes exceeds MAX_SCOPES_PER_CERT (${MAX_SCOPES_PER_CERT})`,
+    );
+  }
+  const constraints = cert.constraints ?? [];
+  if (constraints.length > MAX_CONSTRAINTS_PER_CERT) {
+    throw new Error(
+      `wire: ${path}: ${constraints.length} constraints exceeds MAX_CONSTRAINTS_PER_CERT (${MAX_CONSTRAINTS_PER_CERT})`,
+    );
+  }
+  for (const s of cert.scope) {
+    const sLen = utf8ByteLength(s);
+    if (sLen > MAX_SCOPE_LENGTH_BYTES) {
+      throw new Error(
+        `wire: ${path}: scope of ${sLen} bytes exceeds MAX_SCOPE_LENGTH_BYTES (${MAX_SCOPE_LENGTH_BYTES})`,
+      );
+    }
+  }
+  for (const c of constraints) {
+    if (c.resource_id !== undefined) {
+      const idLen = utf8ByteLength(c.resource_id);
+      if (idLen > MAX_IDENTIFIER_LENGTH_BYTES) {
+        throw new Error(
+          `wire: ${path}: resource_id of ${idLen} bytes exceeds MAX_IDENTIFIER_LENGTH_BYTES (${MAX_IDENTIFIER_LENGTH_BYTES})`,
+        );
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -518,10 +746,22 @@ function scanWireText(text: string): Set<string> {
     }
     switch (c) {
       case "{":
+        // Input bound (SPEC §5.1): reject nesting beyond MAX_JSON_NESTING_DEPTH
+        // during (not after) parse, matching Go's CheckWireJSON.
+        if (frames.length >= MAX_JSON_NESTING_DEPTH) {
+          throw new Error(
+            `wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (${MAX_JSON_NESTING_DEPTH})`,
+          );
+        }
         frames.push({ keys: new Set(), pendingKey: "", index: 0, seg: leafSeg() });
         expectKey = true;
         break;
       case "[":
+        if (frames.length >= MAX_JSON_NESTING_DEPTH) {
+          throw new Error(
+            `wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (${MAX_JSON_NESTING_DEPTH})`,
+          );
+        }
         frames.push({ keys: null, pendingKey: "", index: 0, seg: leafSeg() });
         expectKey = false;
         break;

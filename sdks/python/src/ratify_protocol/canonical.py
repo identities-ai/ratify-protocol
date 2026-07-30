@@ -20,6 +20,38 @@ from dataclasses import is_dataclass, fields
 from typing import Any
 
 
+class _JsonNull:
+    """Sentinel for an explicit JSON null that MUST survive canonicalization.
+
+    ``_encode_object`` drops Python ``None`` to match Go's ``omitempty`` for
+    optional struct fields. But inside extension-constraint ``params``
+    (SPEC §5.7.1) a JSON ``null`` is a real value carried in the signed bytes,
+    not an absent field, so it must be emitted. Wrapping such values in this
+    sentinel keeps the omitempty behavior for struct fields while preserving
+    genuine nulls.
+    """
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "JSON_NULL"
+
+
+JSON_NULL = _JsonNull()
+
+
+def wrap_json_nulls(v: Any) -> Any:
+    """Recursively replace ``None`` with :data:`JSON_NULL` inside a value so
+    genuine JSON nulls survive canonical serialization. Returns a transient
+    copy; the caller's original object is untouched."""
+    if v is None:
+        return JSON_NULL
+    if isinstance(v, dict):
+        return {k: wrap_json_nulls(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [wrap_json_nulls(x) for x in v]
+    return v
+
+
 _ESCAPE_MAP = {
     ord('"'): b'\\"',
     ord('\\'): b'\\\\',
@@ -38,7 +70,7 @@ def canonical_json(value: Any) -> bytes:
 
 
 def _encode(v: Any) -> str:
-    if v is None:
+    if v is None or isinstance(v, _JsonNull):
         return "null"
     if v is True:
         return "true"

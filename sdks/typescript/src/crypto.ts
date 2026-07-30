@@ -13,6 +13,13 @@ import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 import { sha256 } from "@noble/hashes/sha2";
 import { hmac } from "@noble/hashes/hmac";
 import { canonicalJSON, hexEncode } from "./canonical.js";
+import { MAX_AGENT_NAME_LENGTH_BYTES, MAX_CONSTRAINTS_PER_CERT, MAX_SCOPES_PER_CERT, MAX_SCOPE_LENGTH_BYTES } from "./types.js";
+import {
+  isCanonicalConstraintType,
+  utf8ByteLength,
+  validateParamsValue,
+  validateResourceConstraints,
+} from "./resource_path.js";
 import type {
   AgentIdentity,
   Constraint,
@@ -122,6 +129,13 @@ export async function generateAgent(
   name: string,
   agentType: string,
 ): Promise<{ agent: AgentIdentity; privateKey: HybridPrivateKey }> {
+  // The name is bounded by MAX_AGENT_NAME_LENGTH_BYTES (UTF-8 bytes, SPEC §5.1).
+  const nameLen = utf8ByteLength(name);
+  if (nameLen > MAX_AGENT_NAME_LENGTH_BYTES) {
+    throw new Error(
+      `agent name is ${nameLen} bytes, exceeding MAX_AGENT_NAME_LENGTH_BYTES (${MAX_AGENT_NAME_LENGTH_BYTES})`,
+    );
+  }
   const { publicKey, privateKey } = await generateHybridKeypair();
   return {
     agent: {
@@ -210,7 +224,32 @@ export function canonicalConstraintDict(c: Constraint): Record<string, unknown> 
       out.count = c.count ?? 0;
       out.window_s = c.window_s ?? 0;
       break;
-    // Unknown kind — emit only the tag; verifier returns constraint_unknown.
+    case "resource_path": {
+      // SPEC §5.7.3. resource_id is required; path_prefix is omitted when
+      // absent — absence (not "") is the sole encoding of "entire resource".
+      if (!c.resource_id) {
+        throw new Error("resource_path constraint requires a non-empty resource_id");
+      }
+      out.resource_id = c.resource_id;
+      if (c.path_prefix !== undefined && c.path_prefix !== "") {
+        out.path_prefix = c.path_prefix;
+      }
+      break;
+    }
+    default:
+      // Extension kind (SPEC §5.7.1) — emit the tag plus params when present.
+      // Values outside the restricted model are an encode error, never
+      // emitted. A verifier without a registered evaluator returns
+      // constraint_unknown on this shape.
+      if (c.params !== undefined && c.params !== null) {
+        validateParamsValue(c.params, 0);
+        out.params = c.params;
+      }
+      break;
+  }
+  // params is permitted only on non-canonical types (SPEC §5.7.1).
+  if (c.type !== undefined && (c.params !== undefined && c.params !== null) && isCanonicalConstraintType(c.type)) {
+    throw new Error(`canonical constraint type "${c.type}" must not carry params`);
   }
   return out;
 }
@@ -356,6 +395,50 @@ export async function issueDelegation(
   cert: DelegationCert,
   issuerPrivateKey: HybridPrivateKey,
 ): Promise<void> {
+  if (!cert.constraints) cert.constraints = [];
+  // Issuance hygiene (SPEC §5.7.1, §5.7.3): reject jointly unsatisfiable
+  // resource constraint sets, malformed resource_path fields, params on
+  // canonical types, and params values outside the restricted model. Decoders
+  // deliberately do NOT enforce this — wire compatibility is not conditioned
+  // on issuance hygiene; verification fails such certs closed.
+  try {
+    validateResourceConstraints(cert.constraints);
+  } catch (e: any) {
+    throw new Error(`issuing delegation: ${e?.message ?? e}`);
+  }
+  for (let i = 0; i < cert.constraints.length; i++) {
+    const c = cert.constraints[i]!;
+    if (c.params !== undefined && c.params !== null) {
+      if (isCanonicalConstraintType(c.type)) {
+        throw new Error(
+          `issuing delegation: constraint[${i}]: canonical constraint type "${c.type}" must not carry params`,
+        );
+      }
+      try {
+        validateParamsValue(c.params, 0);
+      } catch (e: any) {
+        throw new Error(`issuing delegation: constraint[${i}] params: ${e?.message ?? e}`);
+      }
+    }
+  }
+  if (cert.scope.length > MAX_SCOPES_PER_CERT) {
+    throw new Error(
+      `issuing delegation: ${cert.scope.length} scopes exceeds MAX_SCOPES_PER_CERT (${MAX_SCOPES_PER_CERT})`,
+    );
+  }
+  if (cert.constraints.length > MAX_CONSTRAINTS_PER_CERT) {
+    throw new Error(
+      `issuing delegation: ${cert.constraints.length} constraints exceeds MAX_CONSTRAINTS_PER_CERT (${MAX_CONSTRAINTS_PER_CERT})`,
+    );
+  }
+  for (const s of cert.scope) {
+    const sLen = utf8ByteLength(s);
+    if (sLen > MAX_SCOPE_LENGTH_BYTES) {
+      throw new Error(
+        `issuing delegation: scope "${s}" is ${sLen} bytes, exceeding MAX_SCOPE_LENGTH_BYTES (${MAX_SCOPE_LENGTH_BYTES})`,
+      );
+    }
+  }
   cert.signature = await signBoth(delegationSignBytes(cert), issuerPrivateKey);
 }
 

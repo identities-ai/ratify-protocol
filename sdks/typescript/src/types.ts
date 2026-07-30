@@ -22,8 +22,33 @@ export const PROTOCOL_VERSION = 1;
  */
 export const NO_EXPIRY_SENTINEL = 4070908799;
 
-export const MAX_DELEGATION_CHAIN_DEPTH = 3;
+/**
+ * MAX_DELEGATION_CHAIN_DEPTH is the maximum number of certs in a delegation
+ * chain. The ceiling is a wire-determinism and denial-of-service bound, not
+ * cryptography (SPEC §5.1); raised from 3 to 8 in v1.0.0-alpha.16 for
+ * multi-hop agent topologies.
+ */
+export const MAX_DELEGATION_CHAIN_DEPTH = 8;
 export const CHALLENGE_WINDOW_SECONDS = 300;
+
+// Input bounds (SPEC §5.1). Depth alone does not bound parsing or
+// intersection work; these limits do. Violations route to the existing
+// `invalid` status with a descriptive error_reason — no new status.
+
+/** Bounds the encoded byte size of a ProofBundle; decoders enforce it BEFORE parsing. */
+export const MAX_PROOF_BUNDLE_BYTES = 131072; // 128 KiB
+/** Bounds DelegationCert.scope length. */
+export const MAX_SCOPES_PER_CERT = 128;
+/** Bounds DelegationCert.constraints length. */
+export const MAX_CONSTRAINTS_PER_CERT = 32;
+/** Bounds the UTF-8 byte length of a single scope. */
+export const MAX_SCOPE_LENGTH_BYTES = 256;
+/** Bounds resource_path's resource_id (UTF-8 bytes). */
+export const MAX_IDENTIFIER_LENGTH_BYTES = 512;
+/** Bounds AgentIdentity.name (UTF-8 bytes), enforced at construction. */
+export const MAX_AGENT_NAME_LENGTH_BYTES = 256;
+/** Bounds JSON container nesting in wire documents, enforced during parse. */
+export const MAX_JSON_NESTING_DEPTH = 16;
 
 // Algorithm component byte sizes.
 export const ED25519_PUBLIC_KEY_SIZE = 32;
@@ -155,6 +180,29 @@ export interface Constraint {
   // Rate.
   count?: number;
   window_s?: number;
+
+  // Resource-bound authority (SPEC §5.7.3).
+  /**
+   * ResourceID names the resource a resource_path constraint binds to.
+   * Opaque UTF-8; compared byte-for-byte, never dereferenced or normalized.
+   */
+  resource_id?: string;
+  /**
+   * PathPrefix optionally narrows a resource_path constraint to a path at or
+   * below it, under segment-boundary matching. Absent (undefined) authorizes
+   * the entire named resource — the empty string is NOT a valid encoding and
+   * is rejected on the wire.
+   */
+  path_prefix?: string;
+
+  /**
+   * Extension-constraint parameters (SPEC §5.7.1). Permitted ONLY on
+   * non-canonical constraint types, under the restricted value model
+   * enforced by validateParamsValue: null, bool, string, safe integer, and
+   * arrays/objects of these. Canonical types carrying params are rejected at
+   * encode time.
+   */
+  params?: Record<string, unknown>;
 }
 
 export type ConstraintType =
@@ -164,7 +212,8 @@ export type ConstraintType =
   | "time_window"
   | "max_speed_mps"
   | "max_amount"
-  | "max_rate";
+  | "max_rate"
+  | "resource_path";
 
 /**
  * Application-supplied inputs needed to evaluate first-class constraints.
@@ -186,6 +235,21 @@ export interface VerifierContext {
 
   // Rate — required by max_rate.
   invocations_in_window?: (certID: string, windowS: number) => number;
+
+  // Resource — required by resource_path (SPEC §5.16). The resource ID is
+  // compared byte-exactly against the constraint's resource_id; the path
+  // follows the logical path model of §5.7.3. Callers MUST apply every
+  // decoding and normalization step (URL decoding, Unicode NFC, case
+  // folding, separator conversion) BEFORE populating these fields; the
+  // verifier never transforms them.
+  requested_resource_id?: string;
+  requested_path?: string;
+  /**
+   * Must be true for resource_path constraints to evaluate; false (or
+   * absent) causes constraint_unverifiable. When true, requested_resource_id
+   * must be non-empty.
+   */
+  has_resource?: boolean;
 }
 
 /**

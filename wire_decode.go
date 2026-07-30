@@ -90,9 +90,13 @@ func DecodeProofBundle(data []byte) (*ProofBundle, error) {
 	if err := strictUnmarshal(data, &bundle); err != nil {
 		return nil, err
 	}
-	if len(bundle.Delegations) > MaxDelegationChainDepth {
-		return nil, fmt.Errorf("wire: delegation chain of depth %d exceeds MAX_DELEGATION_CHAIN_DEPTH (%d)", len(bundle.Delegations), MaxDelegationChainDepth)
-	}
+	// Chain depth is NOT enforced here: it is a verify-time semantic ceiling
+	// (§10 step 1 → chain_too_deep), not a wire-structural bound. The byte
+	// limit above already caps pre-parse work (each cert is ~11 KiB, so depth
+	// is inherently bounded well under the ceiling within MaxProofBundleBytes),
+	// and an over-deep chain must reach Verify to produce its documented
+	// identity_status. Keeping the decoder free of the depth check makes every
+	// SDK's public decoder behave identically: decode succeeds, Verify rejects.
 	for i := range bundle.Delegations {
 		if err := checkCertBounds(&bundle.Delegations[i]); err != nil {
 			return nil, err

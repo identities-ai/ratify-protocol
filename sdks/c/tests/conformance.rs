@@ -1,5 +1,6 @@
 //! C API conformance tests — validates the C FFI layer against the same
-//! 63 canonical test vectors used by Go, TypeScript, Python, and Rust.
+//! canonical test vectors used by Go, TypeScript, Python, and Rust
+//! (78 as of alpha.16: adds resource_path, extension params, depth-8).
 //!
 //! Every fixture is loaded and exercised through the C API:
 //!
@@ -17,7 +18,7 @@
 
 use ratify_c::{
     ratify_error_free, ratify_string_free,
-    ratify_verify_bundle_opts, ratify_verify_result_free,
+    ratify_verify_bundle_opts_v2, ratify_verify_result_free,
     ratify_verify_result_identity_status, ratify_verify_result_is_valid,
     ratify_scopes_expand, ratify_scopes_validate,
     ratify_revocation_list_sign_bytes_hex, ratify_revocation_list_verify,
@@ -31,8 +32,8 @@ use ratify_c::{
     ratify_witness_entry_sign_bytes_hex,
     ratify_witness_entry_sig_ed25519_hex, ratify_witness_entry_sig_ml_dsa_65_hex,
     ratify_witness_entry_verify,
-    RatifyStatus, RatifyStreamContext, RatifyVerifierContext, RatifyVerifyOptions,
-    RatifyVerifyResult,
+    RatifyResourceContext, RatifyStatus, RatifyStreamContext, RatifyVerifierContext,
+    RatifyVerifyOptions, RatifyVerifyResult,
 };
 use serde::Deserialize;
 use std::ffi::{CStr, CString};
@@ -53,6 +54,12 @@ struct FixtureVerifierContext {
     #[serde(default)]
     requested_currency: String,
     invocations_in_window_count: Option<i64>,
+    // Resource context (SPEC §5.16); presence of requested_resource_id
+    // drives the resource_path constraint's has-resource semantics.
+    #[serde(default)]
+    requested_resource_id: String,
+    #[serde(default)]
+    requested_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -360,9 +367,31 @@ unsafe fn run_verify_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> b
         stream: stream_ctx.as_ref().map_or(std::ptr::null(), |s| s as *const _),
     };
 
+    // Resource context (SPEC §5.16) threaded through the versioned symbol.
+    let rid_cstr: Option<CString> = fixture.verifier_context.as_ref().and_then(|v| {
+        if v.requested_resource_id.is_empty() { None }
+        else { CString::new(v.requested_resource_id.clone()).ok() }
+    });
+    let rpath_cstr: Option<CString> = fixture.verifier_context.as_ref().and_then(|v| {
+        if v.requested_path.is_empty() { None }
+        else { CString::new(v.requested_path.clone()).ok() }
+    });
+    let resource_ctx = if rid_cstr.is_some() || rpath_cstr.is_some() {
+        Some(RatifyResourceContext {
+            requested_resource_id: rid_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+            requested_path: rpath_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        })
+    } else { None };
+
     let mut result: *mut RatifyVerifyResult = std::ptr::null_mut();
     let mut err: *mut std::os::raw::c_char = std::ptr::null_mut();
-    let status = ratify_verify_bundle_opts(bundle_c.as_ptr(), &opts_c, &mut result, &mut err);
+    let status = ratify_verify_bundle_opts_v2(
+        bundle_c.as_ptr(),
+        &opts_c,
+        resource_ctx.as_ref().map_or(std::ptr::null(), |r| r as *const _),
+        &mut result,
+        &mut err,
+    );
 
     if matches!(status, RatifyStatus::RatifyErrJson) {
         failures.push(format!("[{}] JSON error", fixture.name));

@@ -2,12 +2,18 @@
 // Every semantic must produce the same verdict for the same inputs, or
 // cross-language conformance fails.
 
+import { MAX_IDENTIFIER_LENGTH_BYTES } from "./types.js";
 import type {
   Constraint,
   ConstraintEvaluator,
   DelegationCert,
   VerifierContext,
 } from "./types.js";
+import {
+  normalizeResourcePath,
+  resourcePathMatches,
+  utf8ByteLength,
+} from "./resource_path.js";
 
 /**
  * Run every Constraint on cert against the caller-supplied VerifierContext.
@@ -57,6 +63,52 @@ function evaluateConstraint(
   nowSec: number,
 ): string | null {
   switch (c.type) {
+    case "resource_path": {
+      // SPEC §5.7.3. Absent context → constraint_unverifiable; present but
+      // unacceptable context (mismatch, invalid path) → constraint_denied.
+      // Byte-exact comparison throughout: no normalization, no decoding.
+      if (
+        !ctx.has_resource ||
+        ctx.requested_resource_id === undefined ||
+        ctx.requested_resource_id === ""
+      ) {
+        return "constraint_unverifiable: no requested resource in context";
+      }
+      if (c.resource_id === undefined || c.resource_id === "") {
+        return "malformed resource_path: resource_id is required";
+      }
+      if (utf8ByteLength(c.resource_id) > MAX_IDENTIFIER_LENGTH_BYTES) {
+        return "malformed resource_path: resource_id exceeds MAX_IDENTIFIER_LENGTH_BYTES";
+      }
+      if (ctx.requested_resource_id !== c.resource_id) {
+        return "requested resource does not match the authorized resource";
+      }
+      if (c.path_prefix === undefined || c.path_prefix === "") {
+        // Absent path_prefix authorizes the entire named resource.
+        return null;
+      }
+      try {
+        normalizeResourcePath(c.path_prefix);
+      } catch (e: any) {
+        // Externally created cert with an invalid prefix: fail closed
+        // as constraint_denied (SPEC §5.7.3).
+        return `malformed path_prefix: ${e?.message ?? e}`;
+      }
+      if (ctx.requested_path === undefined || ctx.requested_path === "") {
+        return "constraint_unverifiable: no requested path in context";
+      }
+      try {
+        normalizeResourcePath(ctx.requested_path);
+      } catch (e: any) {
+        // Supplied-but-invalid context is unacceptable, not absent.
+        return `invalid requested path: ${e?.message ?? e}`;
+      }
+      if (!resourcePathMatches(c.path_prefix, ctx.requested_path)) {
+        return `requested path "${ctx.requested_path}" is outside the authorized prefix "${c.path_prefix}"`;
+      }
+      return null;
+    }
+
     case "geo_circle": {
       if (ctx.current_lat === undefined || ctx.current_lon === undefined) {
         return "constraint_unverifiable: no current location in context";

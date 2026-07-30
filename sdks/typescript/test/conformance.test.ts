@@ -137,6 +137,8 @@ interface FixtureVerifierContext {
   requested_amount?: number;
   requested_currency?: string;
   invocations_in_window_count?: number;
+  requested_resource_id?: string;
+  requested_path?: string;
 }
 
 interface FixtureFile {
@@ -361,6 +363,12 @@ async function runVerifyFixture(fx: FixtureFile): Promise<void> {
                 return () => n;
               })()
             : undefined,
+        // Resource context (SPEC §5.16): presence of requested_resource_id
+        // implies has_resource=true, mirroring the Go harness.
+        requested_resource_id: vc.requested_resource_id,
+        requested_path: vc.requested_path,
+        has_resource:
+          vc.requested_resource_id !== undefined && vc.requested_resource_id !== "",
       }
     : undefined;
 

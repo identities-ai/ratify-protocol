@@ -4,10 +4,13 @@
 //! component and one ML-DSA-65 (FIPS 204) component. Both must verify.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, format, string::String, string::ToString, vec, vec::Vec};
 
-use serde::ser::{SerializeMap, Serializer};
-use serde::{Deserialize, Serialize};
+use alloc::collections::BTreeMap;
+use serde::de::{Error as DeError, MapAccess, SeqAccess, Visitor};
+use serde::ser::{SerializeMap, SerializeSeq, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
+use core::fmt;
 
 pub const PROTOCOL_VERSION: i32 = 1;
 
@@ -21,8 +24,31 @@ pub const PROTOCOL_VERSION: i32 = 1;
 /// the temporal check passes; revocation is the sole termination mechanism
 /// for such certs. See SPEC §5.7.
 pub const NO_EXPIRY_SENTINEL: i64 = 4070908799;
-pub const MAX_DELEGATION_CHAIN_DEPTH: usize = 3;
+/// Maximum number of certs in a delegation chain. A wire-determinism and
+/// denial-of-service bound, not cryptography (SPEC §5.1); raised from 3 to 8
+/// in v1.0.0-alpha.16 for multi-hop agent topologies.
+pub const MAX_DELEGATION_CHAIN_DEPTH: usize = 8;
 pub const CHALLENGE_WINDOW_SECONDS: i64 = 300;
+
+// Input bounds (SPEC §5.1). The depth ceiling alone does not bound parsing or
+// intersection work; these limits do. Violations route to the existing
+// `invalid` status with a descriptive error_reason — no new status.
+
+/// Bounds the encoded size of a ProofBundle. Wire decoders enforce it BEFORE
+/// parsing; an oversized payload is rejected without ever being parsed.
+pub const MAX_PROOF_BUNDLE_BYTES: usize = 131072; // 128 KiB
+/// Bounds `len(DelegationCert.scope)`.
+pub const MAX_SCOPES_PER_CERT: usize = 128;
+/// Bounds `len(DelegationCert.constraints)`.
+pub const MAX_CONSTRAINTS_PER_CERT: usize = 32;
+/// Bounds the UTF-8 byte length of a single scope.
+pub const MAX_SCOPE_LENGTH_BYTES: usize = 256;
+/// Bounds `resource_path`'s `resource_id` (SPEC §5.1).
+pub const MAX_IDENTIFIER_LENGTH_BYTES: usize = 512;
+/// Bounds `AgentIdentity.name` (UTF-8 bytes), enforced at construction.
+pub const MAX_AGENT_NAME_LENGTH_BYTES: usize = 256;
+/// Bounds JSON container nesting in wire documents, enforced during parse.
+pub const MAX_JSON_NESTING_DEPTH: usize = 16;
 
 pub const ED25519_PUBLIC_KEY_SIZE: usize = 32;
 pub const ED25519_SIGNATURE_SIZE: usize = 64;
@@ -133,6 +159,167 @@ impl DelegationCert {
     }
 }
 
+/// Extension-constraint parameter value under the restricted value model
+/// (SPEC §5.7.1): null, booleans, strings, safe integers (|n| ≤ 2^53−1), and
+/// arrays/objects of these. Floats and non-integer numbers are prohibited;
+/// integers beyond the safe range travel as decimal strings. Object keys are
+/// held in a `BTreeMap` so canonical serialization emits them in byte-lex
+/// order (RFC 8785) with no extra sort.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParamsValue {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Str(String),
+    Array(Vec<ParamsValue>),
+    Object(BTreeMap<String, ParamsValue>),
+}
+
+impl Serialize for ParamsValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ParamsValue::Null => serializer.serialize_unit(),
+            ParamsValue::Bool(b) => serializer.serialize_bool(*b),
+            ParamsValue::Int(n) => {
+                if !crate::canonical::wire_int::in_domain(*n) {
+                    return Err(serde::ser::Error::custom(
+                        "params integer exceeds the safe-integer range; carry it as a decimal string",
+                    ));
+                }
+                serializer.serialize_i64(*n)
+            }
+            ParamsValue::Str(s) => serializer.serialize_str(s),
+            ParamsValue::Array(items) => {
+                let mut seq = serializer.serialize_seq(Some(items.len()))?;
+                for item in items {
+                    seq.serialize_element(item)?;
+                }
+                seq.end()
+            }
+            ParamsValue::Object(map) => {
+                // BTreeMap iterates in sorted key order → canonical.
+                let mut m = serializer.serialize_map(Some(map.len()))?;
+                for (k, v) in map {
+                    m.serialize_entry(k, v)?;
+                }
+                m.end()
+            }
+        }
+    }
+}
+
+struct ParamsValueVisitor;
+
+impl<'de> Visitor<'de> for ParamsValueVisitor {
+    type Value = ParamsValue;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("a restricted params value (null, bool, string, safe integer, array, or object)")
+    }
+
+    fn visit_bool<E: DeError>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Bool(v))
+    }
+    fn visit_i64<E: DeError>(self, v: i64) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Int(v))
+    }
+    fn visit_u64<E: DeError>(self, v: u64) -> Result<Self::Value, E> {
+        if v > i64::MAX as u64 {
+            return Err(E::custom(
+                "params integer exceeds the safe-integer range; carry it as a decimal string",
+            ));
+        }
+        Ok(ParamsValue::Int(v as i64))
+    }
+    fn visit_f64<E: DeError>(self, v: f64) -> Result<Self::Value, E> {
+        // JSON numbers reach here as f64. Integral values within the safe
+        // range are wire integers; anything else is outside the value model.
+        if !v.is_finite() || v.fract() != 0.0 {
+            return Err(E::custom(
+                "params values must be safe integers, not floats (carry non-integers as strings)",
+            ));
+        }
+        let max = crate::canonical::wire_int::MAX_SAFE_INTEGER as f64;
+        if v.abs() > max {
+            return Err(E::custom(
+                "params integer exceeds the safe-integer range; carry it as a decimal string",
+            ));
+        }
+        Ok(ParamsValue::Int(v as i64))
+    }
+    fn visit_str<E: DeError>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Str(v.to_string()))
+    }
+    fn visit_string<E: DeError>(self, v: String) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Str(v))
+    }
+    fn visit_none<E: DeError>(self) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Null)
+    }
+    fn visit_unit<E: DeError>(self) -> Result<Self::Value, E> {
+        Ok(ParamsValue::Null)
+    }
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let mut out = Vec::new();
+        while let Some(item) = seq.next_element()? {
+            out.push(item);
+        }
+        Ok(ParamsValue::Array(out))
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut out: BTreeMap<String, ParamsValue> = BTreeMap::new();
+        while let Some((k, v)) = map.next_entry::<String, ParamsValue>()? {
+            if out.insert(k, v).is_some() {
+                // Duplicate object keys are prohibited (SPEC §5.7.1).
+                return Err(A::Error::custom("params contains a duplicate object key"));
+            }
+        }
+        Ok(ParamsValue::Object(out))
+    }
+}
+
+impl<'de> Deserialize<'de> for ParamsValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(ParamsValueVisitor)
+    }
+}
+
+/// Reports whether `t` is one of the canonical v1 constraint kinds
+/// (SPEC §5.7.2). `params` is permitted only on non-canonical types.
+pub fn is_canonical_constraint_type(t: &str) -> bool {
+    matches!(
+        t,
+        "geo_circle"
+            | "geo_polygon"
+            | "geo_bbox"
+            | "time_window"
+            | "max_speed_mps"
+            | "max_amount"
+            | "max_rate"
+            | "resource_path"
+    )
+}
+
+// Deserialize helper for `path_prefix`: presence is load-bearing (SPEC
+// §5.7.3). Serde only invokes a `deserialize_with` when the key is PRESENT,
+// so an ABSENT field falls through to `#[serde(default)]` = None (whole
+// resource). A present `null`, present `""`, or non-string value reaches
+// this function and is REJECTED — a malformed path restriction must never
+// silently widen into whole-resource authority.
+fn de_path_prefix<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // `String::deserialize` rejects `null` and non-strings by type.
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(D::Error::custom(
+            "constraint path_prefix must not be empty or null; omit the field to authorize the entire resource",
+        ));
+    }
+    Ok(Some(s))
+}
+
 /// First-class bound on when/where/how much an agent may exercise its scopes.
 ///
 /// Wire format is a tagged JSON object. `type` discriminates the kind;
@@ -181,10 +368,24 @@ pub struct Constraint {
     pub min_lat: f64,
     #[serde(default)]
     pub min_lon: f64,
+    /// Extension-constraint parameters (SPEC §5.7.1). Permitted ONLY on
+    /// non-canonical types under the restricted value model. Canonical types
+    /// carrying params are rejected at encode/issue/decode.
+    #[serde(default)]
+    pub params: Option<BTreeMap<String, ParamsValue>>,
+    /// Optionally narrows a `resource_path` constraint to a path at or below
+    /// it under segment-boundary matching (SPEC §5.7.3). Absence (`None`) —
+    /// never the empty string — is the sole encoding of "entire resource".
+    #[serde(default, deserialize_with = "de_path_prefix")]
+    pub path_prefix: Option<String>,
     #[serde(default)]
     pub points: Vec<[f64; 2]>,
     #[serde(default)]
     pub radius_m: f64,
+    /// Names the resource a `resource_path` constraint binds to. Opaque
+    /// UTF-8; compared byte-for-byte, never dereferenced or normalized.
+    #[serde(default)]
+    pub resource_id: String,
     #[serde(default)]
     pub start: String,
     #[serde(default)]
@@ -204,6 +405,13 @@ pub struct Constraint {
 // Keys are emitted in alphabetical order, matching the other SDKs.
 impl Serialize for Constraint {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // params is permitted only on non-canonical types (SPEC §5.7.1).
+        if self.params.is_some() && is_canonical_constraint_type(&self.kind) {
+            return Err(serde::ser::Error::custom(format!(
+                "canonical constraint type \"{}\" must not carry params",
+                self.kind
+            )));
+        }
         // Count fields up front so serde's map writer knows the length.
         // Doing this the verbose way rather than with serialize_struct
         // because the per-kind shape is dynamic, not a fixed struct.
@@ -254,8 +462,34 @@ impl Serialize for Constraint {
                 ("type", FieldValue::Str(self.kind.clone())),
                 ("window_s", FieldValue::I64(self.window_s)),
             ],
-            // Unknown kind: emit only the tag. Verifier returns constraint_unknown.
-            _ => vec![("type", FieldValue::Str(self.kind.clone()))],
+            "resource_path" => {
+                // keys: path_prefix (only when present), resource_id, type.
+                // Absence — not "" — is the sole encoding of whole-resource
+                // authorization (SPEC §5.7.3).
+                if self.resource_id.is_empty() {
+                    return Err(serde::ser::Error::custom(
+                        "resource_path constraint requires a non-empty resource_id",
+                    ));
+                }
+                let mut v = Vec::new();
+                if let Some(prefix) = &self.path_prefix {
+                    v.push(("path_prefix", FieldValue::Str(prefix.clone())));
+                }
+                v.push(("resource_id", FieldValue::Str(self.resource_id.clone())));
+                v.push(("type", FieldValue::Str(self.kind.clone())));
+                v
+            }
+            // Extension kind — emit params (when present) plus the tag
+            // (SPEC §5.7.1). "params" sorts before "type". Verifier without a
+            // registered evaluator returns constraint_unknown on this shape.
+            _ => {
+                let mut v = Vec::new();
+                if let Some(params) = &self.params {
+                    v.push(("params", FieldValue::Params(params.clone())));
+                }
+                v.push(("type", FieldValue::Str(self.kind.clone())));
+                v
+            }
         };
         let mut m = serializer.serialize_map(Some(entries.len()))?;
         for (k, v) in entries {
@@ -272,6 +506,7 @@ impl Serialize for Constraint {
                 }
                 FieldValue::Str(x) => m.serialize_entry(k, &x)?,
                 FieldValue::Points(x) => m.serialize_entry(k, &x)?,
+                FieldValue::Params(x) => m.serialize_entry(k, &x)?,
             }
         }
         m.end()
@@ -285,6 +520,7 @@ enum FieldValue {
     I64(i64),
     Str(String),
     Points(Vec<[f64; 2]>),
+    Params(BTreeMap<String, ParamsValue>),
 }
 
 /// Callback answering "how many invocations of this cert in this window?"
@@ -304,6 +540,15 @@ pub struct VerifierContext<'a> {
     pub requested_currency: Option<String>,
     /// (cert_id, window_s) -> invocation count
     pub invocations_in_window: Option<InvocationCounter<'a>>,
+    /// The resource the operation targets (SPEC §5.16). Required by
+    /// `resource_path`; `None` (or empty) → `constraint_unverifiable`.
+    /// Compared byte-exactly against the constraint's `resource_id`.
+    pub requested_resource_id: Option<String>,
+    /// The path the operation targets, following the logical path model of
+    /// §5.7.3. Callers MUST apply every decoding/normalization step (URL
+    /// decode, Unicode NFC, case folding, separator conversion) BEFORE
+    /// populating this; the verifier never transforms it.
+    pub requested_path: Option<String>,
 }
 
 /// Proof an agent presents to a verifier.

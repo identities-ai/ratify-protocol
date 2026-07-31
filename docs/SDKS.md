@@ -64,31 +64,7 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 **Why:** Android, JVM agent services, and enterprise middleware. A Kotlin-first SDK covers Android wallet work and Java backends without forcing those deployments through FFI.
 
-**Target:** Maven Central. Crypto via mainstream Ed25519 and ML-DSA-65 libraries or a tightly-audited native binding. Must pass all 79 fixtures.
-
-### Completed: Python
-
-**Why:** the AI/agent ecosystem is Python-heavy. LangChain, AutoGen, CrewAI, every major agent framework has Python bindings. Voice-agent platforms run Python on their backends. MCP server reference impls exist in both Python and TypeScript. A Python SDK unlocks the largest single ecosystem of agent authors.
-
-**Status:** Implemented in `sdks/python/` and passing all 79 fixtures. Note: the `pqcrypto` ML-DSA-65 library does not support deterministic keygen from seeds, so Python is a verification-only SDK for fixture conformance — it cannot regenerate the canonical test fixtures. See `sdks/python/README.md` for details.
-
-### Completed: Rust
-
-**Why:** edge verifiers. Cloudflare Workers, Fastly, Vercel Edge all run WebAssembly workloads. A Rust implementation compiles to WASM and lets enterprises drop Ratify verification into their edge gateway config. Rust also covers embedded, IoT, and systems programming use cases where Go/Python aren't appropriate.
-
-**Status:** Implemented in `sdks/rust/` and passing all 79 fixtures.
-
-### Enterprise-pulled: Java / Kotlin
-
-**Why:** Android wallet depends on Kotlin. Large enterprise shops run on JVM. Salesforce, Oracle, SAP, many large banks — if they embed Ratify server-side, they want a JVM SDK.
-
-**Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (has Ed25519 and is getting ML-DSA support) or a direct Java port.
-
-### C / C++ via C ABI — shipped in v1.0.0-alpha.8, full conformance in v1.0.0-alpha.10
-
-**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, Swift, Zig, embedded environments, and vendor firmware all benefit.
-
-**Implementation:** wraps the Rust SDK via `cbindgen`-generated C ABI. Ships as `libratify_c.a` (static) and `libratify_c.so`/`.dylib`/`.dll` (shared) with a committed `ratify.h` header. Pre-built archives for common targets are published as GitHub Release assets — no Rust toolchain required to consume the SDK. See `sdks/c/` for full details.
+**Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (Ed25519, plus ML-DSA support as of BC 1.78+) or a direct Java port. Must pass all 79 fixtures. Rationale is enterprise pull: Android wallet depends on Kotlin, and large JVM shops (Salesforce, Oracle, SAP, many banks) want a JVM SDK if they embed Ratify server-side.
 
 ## 4. The conformance contract
 

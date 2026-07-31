@@ -34,7 +34,7 @@ from ratify_protocol import (
     DelegationCert, ProofBundle, VerifyOptions,
     PROTOCOL_VERSION, SCOPE_MEETING_ATTEND,
     issue_delegation, sign_challenge, generate_challenge,
-    derive_id, verify_bundle, HybridSignature,
+    verify_bundle, HybridSignature,
 )
 import time
 
@@ -152,7 +152,7 @@ requests.post("https://verifier.example.com/verify", data=body,
 ### Receiving a proof bundle
 
 ```python
-from ratify_protocol import decode_proof_bundle, verify_bundle, VerifyOptions
+from ratify_protocol import decode_proof_bundle, verify_bundle, VerifyOptions, SCOPE_MEETING_ATTEND
 
 bundle = decode_proof_bundle(request_body)  # str or bytes
 result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))

@@ -75,7 +75,7 @@ A verifier accepts a `ProofBundle` if and only if every one of the following che
 5. **Revocation** — none of the certs appear in the signed revocation list.
 6. **Constraint evaluation** — every `Constraint` on every cert in the chain evaluates true against the caller-supplied `VerifierContext`. A constraint whose required context field is absent from the context fails with `constraint_unverifiable`. An unknown constraint `type` fails with `constraint_unknown`.
 
-Any failure causes immediate rejection. The failure type (`expired`, `revoked`, `invalid`, `unauthorized`, `constraint_denied`, `constraint_unverifiable`, `constraint_unknown`) is returned deterministically. A single component-signature failure (e.g. Ed25519 passes but ML-DSA-65 fails, or vice versa) fails the whole signature — fail-closed is the v1 semantics.
+Any failure causes immediate rejection. The failure type (`expired`, `revoked`, `scope_denied`, `constraint_denied`, `constraint_unverifiable`, `constraint_unknown`, `invalid_scope`, `delegation_not_authorized`, `invalid`) is returned deterministically. A single component-signature failure (e.g. Ed25519 passes but ML-DSA-65 fails, or vice versa) fails the whole signature — fail-closed is the v1 semantics.
 
 ---
 
@@ -893,7 +893,7 @@ Pure ML-DSA-65 would be a single point of cryptographic failure against future a
 
 54 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension — at issuance via `ValidateScopes`, and at verification: the verifier rejects any cert granting invalid vocabulary with `invalid_scope` (§5.9, §10 step 7.a2) before any effective-scope arithmetic.
 
-The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3.5, §3.6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
+The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3 principle 6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
 
 ### 9.1 Canonical scopes
 
@@ -1701,7 +1701,7 @@ The verify function:
 - Returns `"policy_verdict_denied: ..."` on cached **deny** (MAC valid but `allow=false`).
 - Returns any other error if the verdict is unusable (bad MAC, expired, scope mismatch, etc).
 
-**Verifier fast-path semantics (§5.7.2):** when `VerifyOptions.PolicyVerdict` and `VerifyOptions.PolicySecret` are both set, the verifier consults the verdict BEFORE the `Policy` provider:
+**Verifier fast-path semantics (§5.17):** when `VerifyOptions.PolicyVerdict` and `VerifyOptions.PolicySecret` are both set, the verifier consults the verdict BEFORE the `Policy` provider:
 - Cached allow → live policy is **not called**; return success.
 - Cached deny → live policy is **not called**; return `scope_denied`.
 - Verdict unusable (expired / wrong MAC / scope mismatch) → fall through to live `Policy` provider. A stale verdict MUST NOT cause a verification failure on its own.
@@ -1716,7 +1716,7 @@ The `ConstraintEvaluator` interface is the pluggable layer: callers register eva
 
 1. Built-in evaluators handle the universal types (always, by the SDK directly).
 2. For any type the built-in evaluators do not recognize, the registry is consulted.
-3. If no entry matches, the verifier fails closed with `identity_status="constraint_unknown"` (per §5.16).
+3. If no entry matches, the verifier fails closed with `identity_status="constraint_unknown"` (per §5.9).
 
 **Interface:**
 

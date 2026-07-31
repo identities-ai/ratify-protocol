@@ -247,7 +247,7 @@ Total alpha.7 test additions: **134 tests**, all green; **59/59 canonical fixtur
 
 ### Spec changes
 
-- **§5.7.2 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit`, `ConstraintEvaluators`, `PolicyVerdict`, `PolicySecret`, and `AnchorResolver` fields, with precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
+- **§5.17 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit`, `ConstraintEvaluators`, `PolicyVerdict`, `PolicySecret`, and `AnchorResolver` fields, with precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
 - **§17 (new section)** — Provider Interfaces, including:
   - §17.0 conformance and wire-format invariance
   - §17.1–§17.3 the three core providers

@@ -133,7 +133,7 @@ let mut stmt = KeyRotationStatement {
     old_pub_key: old_root.public_key.clone(),
     new_id: new_root.id.clone(),
     new_pub_key: new_root.public_key.clone(),
-    rotated_at: now_unix(),
+    rotated_at: 1_700_000_000, // current unix seconds
     reason: "routine".into(),
     signature_old: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
     signature_new: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
@@ -151,7 +151,7 @@ Ratify v1 ships 54 canonical scopes plus 14 wildcards and a `custom:` extension 
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 
 ```rust
-use ratify_protocol::{validate_scopes, CUSTOM_SCOPE_PREFIX};
+use ratify_protocol::validate_scopes;
 
 assert!(validate_scopes(&["custom:acme:inventory:read".into()]).is_none());
 ```

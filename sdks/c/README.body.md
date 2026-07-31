@@ -263,8 +263,8 @@ ratify_string_free(agent_id);
 RatifyDelegationCert *cert = NULL;
 char *err = NULL;
 
-// Delegate "physical:enter" to the agent; 0 = no expiry (signs as 2099-12-31)
-ratify_delegation_issue(root, agent, "[\"physical:enter\"]", 0, &cert, &err);
+// Delegate "physical:enter" to the agent; expires_at 0 = no expiry (until revoked)
+ratify_delegation_issue(root, agent, "[\"physical:enter\"]", 0 /* issued_at */, 0 /* expires_at: 0 = no-expiry sentinel */, &cert, &err);
 
 char *cert_json = ratify_delegation_cert_to_json(cert, &err);
 // Send cert_json to the agent over your transport layer
@@ -276,11 +276,11 @@ ratify_string_free(cert_json);
 ```c
 // Agent side: receive the cert JSON and a fresh challenge
 uint8_t challenge[32];
-ratify_challenge_generate(challenge);
+ratify_challenge_generate(challenge, 32);
 
 RatifyProofBundle *bundle = NULL;
 int64_t now = (int64_t)time(NULL);
-ratify_proof_bundle_create(agent, cert_json, challenge, now, &bundle, &err);
+ratify_proof_bundle_create(agent, cert_json, challenge, 32, now, &bundle, &err);
 
 char *bundle_json = ratify_proof_bundle_to_json(bundle, &err);
 // Send bundle_json to the verifier
@@ -338,6 +338,7 @@ The core paths above cover one-shot verification. The full v1.1 surface is expor
 
 | Family | Symbols | What it does |
 |---|---|---|
+| Resource-path verification | `ratify_verify_bundle_opts_v2` (`RatifyResourceContext`) | Carries the `requested_resource_id` / `requested_path` needed to evaluate a `resource_path` constraint (SPEC §5.16); `ratify_verify_bundle_opts` remains the non-resource path |
 | Session tokens | `ratify_session_token_issue` / `_verify` / `_to_json` / `_from_json` | The streamed fast path: verify the chain once, verify each turn against an HMAC token |
 | Streamed verification | `ratify_verify_streamed_turn_opts` | Per-turn verification with required scope, single-use challenges, and session/stream binding enforcement (`RatifyStreamedVerifyOptions`) |
 | Challenge store | `ratify_challenge_store_new` / `_issue` / `_check` / `_consume` | Single-use challenge acceptance (SPEC §10); `ratify_verify_bundle_opts_with_challenge_store` wires it into full verification |
@@ -413,8 +414,15 @@ All canonical fixture kinds pass through the C ABI:
 ## Testing
 
 ```bash
-# Unit tests (all functions, null pointers, malformed JSON, round-trips)
+# Unit tests (all functions, null pointers, malformed JSON, round-trips; 44 tests)
 cargo test --test api
+
+# Advanced surface (session tokens, streaming, challenge store, receipts,
+# revocation, witness/key-rotation, scopes, policy verdicts, context builders; 33 tests)
+cargo test --test advanced
+
+# Protocol input bounds (max scopes, constraints, lengths, JSON nesting, bundle bytes; 7 tests)
+cargo test --test bounds
 
 # Conformance tests (79/79 fixtures)
 cargo test --test conformance

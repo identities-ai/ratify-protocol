@@ -6,7 +6,7 @@ Ratify is symmetric in both directions: the same data structures and verifier al
 
 **Prerequisites:** familiarity with [`SPEC.md`](../SPEC.md) §5 (data structures), §8 (hybrid cryptography), §9 (scope vocabulary), and §10 (verifier algorithm).
 
-**Companion reference:** [`EXPLAINED.md`](EXPLAINED.md) §11 covers the performance envelope and when to apply each pattern in real-time vs. continuous workflows.
+**Companion reference:** [`BENCHMARKS.md`](BENCHMARKS.md) covers the performance envelope (per-SDK verify latency, session-token fast path) that informs when to apply each pattern in real-time vs. continuous workflows.
 
 ---
 

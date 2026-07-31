@@ -31,6 +31,14 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 | **Witness append-only log** | §5.12, §6.4.6 | Signed `WitnessEntry` defines the hash-chain shape for append-only audit logs. Any party can operate a witness. v1.1 defines the shape; operating a scalable witness is a deployment concern. | 1 |
 | **Key rotation statement** | §5.15, §6.4.4 | `KeyRotationStatement` signed by both old and new root keys. Auditors and registries can verify identity continuity across key rotations. | 2 |
 
+### Resource-bound authority and deeper chains (v1.0.0-alpha.16, spec merged, release unpublished)
+
+| Feature | Spec | What it solves | Fixtures |
+|---------|------|---------------|----------|
+| **Resource-bound authority** | §5.7.3 | `resource_path` constraint (the 8th constraint type) binds a delegation to a specific resource plus an optional segment-boundary path prefix. Authority narrows down the chain to an exact resource; downstream certs can only narrow, never widen. | 14 |
+| **Extension constraint params** | §5.7 | Constraints may carry an extension `params` object inside the canonical signed bytes. A verifier with no registered evaluator for the type still fails closed with `constraint_unknown`. | 1 |
+| **Deeper delegation chains** | §5.1 | `MAX_DELEGATION_CHAIN_DEPTH` raised from 3 to 8, driven by real multi-hop agent-platform topologies, alongside new byte/count/length input bounds. | 1 |
+
 ---
 
 ## What v1.0 already guarantees (baseline)
@@ -149,7 +157,6 @@ These features require changes to the wire format or new cryptographic primitive
 | **Session-key derivation** | Requires X25519/ML-KEM hybrid key exchange — a new crypto primitive not in v1 | Pair Ratify proof-of-authorization with a hybrid KEX so both sides derive a shared session key in the same round-trip as verification. Analogous to TLS 1.3 combining certs + ECDHE. |
 | **Multi-sig / threshold delegation** | Changes `DelegationCert` wire format — breaks all v1 SDKs | `MultiSigDelegationCert` with a signer list + threshold. At least `threshold` distinct signers must produce valid hybrid signatures. For enterprise 2-of-3 quorum on high-value delegations. |
 | **Transparency log** | Significant operational scope — Certificate-Transparency-style infrastructure | Append-only log of revocation-list updates, operated by the issuer + external witnesses. Clients subscribe to the log and detect divergent views (selective suppression). |
-| **Deeper chains** | Landed in v1.0.0-alpha.16 (spec) | `MAX_DELEGATION_CHAIN_DEPTH` raised from 3 to 8, driven by real multi-hop agent-platform topologies, alongside new byte/count/length input bounds (SPEC §5.1). |
 | **CBOR wire format** | Bandwidth optimization | For mobile, IoT, and bandwidth-sensitive paths. JSON remains canonical for v1. |
 
 v2 will ship with `testvectors/v2/` alongside v1 fixtures. A migration window of at least 12 months will let implementers support both.

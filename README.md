@@ -32,7 +32,7 @@ Keep your IAM, OAuth, MCP, A2A, and policy engines — Ratify adds the missing p
 
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 
-JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
+JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec under CC-BY-4.0.
 
 **Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 79 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
@@ -408,7 +408,7 @@ ratify-protocol/
 ├── types.go               Data structures (DelegationCert, ProofBundle, …)
 ├── crypto.go              Hybrid Ed25519 + ML-DSA-65 primitives + canonical JSON
 ├── scope.go               Canonical 54-scope vocabulary + intersect/expand
-├── constraints.go         Geo, time, version constraints
+├── constraints.go         Geo, time, speed, amount, rate, and resource-path constraints
 ├── verify.go              The verifier algorithm
 ├── streamed_verify.go     SessionToken fast path — multi-turn verification (§5.13)
 ├── receipt_verify.go      TransactionReceipt verification (§5.14)

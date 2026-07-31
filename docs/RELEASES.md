@@ -57,16 +57,20 @@ v1.0.0-alpha.12 →  no-expiry sentinel, presence:represent (54th scope),
 v1.0.0-alpha.13 →  SPEC §13.1 registry read binding + reference resolver
                    (registry-mode key discovery, pin-plus-registry);
                    two-phase release flow, ratify-c publish pipeline fixed
+v1.0.0-alpha.14 →  canonical tagline in all registry metadata, corrected
+                   npm install pin, clippy-clean Rust crates, hardened
+                   release path (checksum gate, convergent break-glass
+                   publish); 63 fixtures, byte-identical to alpha.13
 v1.0.0-alpha.15 →  integration readiness: public wire codecs (TS/Python) +
                    strict acceptance, ChallengeStore + normative single-use
                    (§10), streamed-turn options verification (§5.13),
                    operation/session-context constructions + Middleware
                    Custody Profile (§6.4.9, §15.2.1), per-SDK benchmark and
                    wire-size docs; 63 fixtures, byte-identical to alpha.13
-v1.0.0-alpha.14 →  canonical tagline in all registry metadata, corrected
-                   npm install pin, clippy-clean Rust crates, hardened
-                   release path (checksum gate, convergent break-glass
-                   publish); 63 fixtures, byte-identical to alpha.13
+v1.0.0-alpha.16 →  resource-bound authority (resource_path constraint),
+                   extension constraint params, new input bounds, and
+                   MAX_DELEGATION_CHAIN_DEPTH raised 3→8 (SPEC §5.1, §5.7.3);
+                   79 fixtures (merged, unpublished)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

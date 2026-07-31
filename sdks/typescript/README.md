@@ -70,7 +70,6 @@ await issueDelegation(cert, alicePriv);
 ```ts
 import {
   signChallenge,
-  generateChallenge,
   type ProofBundle,
 } from "@identities-ai/ratify-protocol";
 

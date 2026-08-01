@@ -136,7 +136,12 @@ async function main() {
   banner("REVOCATION  Alice revokes the cert");
   result = await verifyBundle(bundle, {
     required_scope: SCOPE_MEETING_ATTEND,
-    is_revoked: (cid: string) => cid === cert.cert_id,
+    revocation: {
+      // Minimal RevocationProvider (SPEC §17.1) for the demo.
+      async isRevoked(cid: string): Promise<[boolean, Error | null]> {
+        return [cid === cert.cert_id, null];
+      },
+    },
   });
   console.log(`  ❌  REJECTED as expected: ${result.identity_status}: ${result.error_reason}`);
   kv("Why:", "Verifier's revocation list now contains this cert_id.");

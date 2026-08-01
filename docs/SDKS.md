@@ -41,12 +41,14 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 | x86-64 | `x86_64-unknown-linux-gnu` | Intel/AMD server, Linux PC |
 | ARM64 | `aarch64-unknown-linux-gnu` | Raspberry Pi 4, embedded Linux, Apple Silicon |
 | ARM32 | `armv7-unknown-linux-gnueabihf` | Raspberry Pi 2/3, older embedded Linux |
-| ARM Cortex-M4/M7 | `thumbv7em-none-eabihf` | STM32, NXP — FreeRTOS, Zephyr |
+| ARM Cortex-M4/M7 (with RTOS) | `thumbv7em-none-eabihf` + std shim | STM32, NXP running FreeRTOS or Zephyr |
 | RISC-V 64 | `riscv64gc-unknown-linux-gnu` | SiFive, emerging IoT |
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
 | Windows x86-64 | `x86_64-pc-windows-msvc` | Native Windows |
 
-**Conformance:** All 79 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus the API test suite (44 tests) and 33 advanced-surface tests. Full parity with Go, TypeScript, Python, and Rust.
+**std requirement:** the C SDK wraps the Rust SDK, whose JSON wire codec (`serde_json`) requires Rust `std` and a heap. It therefore targets hosted platforms (embedded Linux on any architecture, macOS, Windows) and RTOS environments that supply a std shim (FreeRTOS via an `embedded-std` shim, Zephyr's std support). Bare-metal Cortex-M with no OS and no heap is out of scope for the C SDK: use the Rust SDK directly (`#[no_std]` + `alloc`) for that.
+
+**Conformance:** All 79 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus the API test suite (44 tests), 33 advanced-surface tests, and 7 input-bound boundary tests. The C SDK proves conformance through this shared 79-fixture set; the cross-SDK byte-equivalence corpus (`testvectors/v1/cross_sdk_vectors.json`, checked hub-and-spoke against the Go reference) is consumed by Go, TypeScript, Python, and Rust, not by C.
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
@@ -64,31 +66,7 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 **Why:** Android, JVM agent services, and enterprise middleware. A Kotlin-first SDK covers Android wallet work and Java backends without forcing those deployments through FFI.
 
-**Target:** Maven Central. Crypto via mainstream Ed25519 and ML-DSA-65 libraries or a tightly-audited native binding. Must pass all 79 fixtures.
-
-### Completed: Python
-
-**Why:** the AI/agent ecosystem is Python-heavy. LangChain, AutoGen, CrewAI, every major agent framework has Python bindings. Voice-agent platforms run Python on their backends. MCP server reference impls exist in both Python and TypeScript. A Python SDK unlocks the largest single ecosystem of agent authors.
-
-**Status:** Implemented in `sdks/python/` and passing all 79 fixtures. Note: the `pqcrypto` ML-DSA-65 library does not support deterministic keygen from seeds, so Python is a verification-only SDK for fixture conformance — it cannot regenerate the canonical test fixtures. See `sdks/python/README.md` for details.
-
-### Completed: Rust
-
-**Why:** edge verifiers. Cloudflare Workers, Fastly, Vercel Edge all run WebAssembly workloads. A Rust implementation compiles to WASM and lets enterprises drop Ratify verification into their edge gateway config. Rust also covers embedded, IoT, and systems programming use cases where Go/Python aren't appropriate.
-
-**Status:** Implemented in `sdks/rust/` and passing all 79 fixtures.
-
-### Enterprise-pulled: Java / Kotlin
-
-**Why:** Android wallet depends on Kotlin. Large enterprise shops run on JVM. Salesforce, Oracle, SAP, many large banks — if they embed Ratify server-side, they want a JVM SDK.
-
-**Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (has Ed25519 and is getting ML-DSA support) or a direct Java port.
-
-### C / C++ via C ABI — shipped in v1.0.0-alpha.8, full conformance in v1.0.0-alpha.10
-
-**Why:** any language that does not have a native SDK can link against a C shared library via FFI. Elixir, Ruby, Lua, Swift, Zig, embedded environments, and vendor firmware all benefit.
-
-**Implementation:** wraps the Rust SDK via `cbindgen`-generated C ABI. Ships as `libratify_c.a` (static) and `libratify_c.so`/`.dylib`/`.dll` (shared) with a committed `ratify.h` header. Pre-built archives for common targets are published as GitHub Release assets — no Rust toolchain required to consume the SDK. See `sdks/c/` for full details.
+**Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (Ed25519, plus ML-DSA support as of BC 1.78+) or a direct Java port. Must pass all 79 fixtures. Rationale is enterprise pull: Android wallet depends on Kotlin, and large JVM shops (Salesforce, Oracle, SAP, many banks) want a JVM SDK if they embed Ratify server-side.
 
 ## 4. The conformance contract
 
@@ -141,10 +119,15 @@ Every implementation MUST export these primitives with equivalent semantics:
 | `DeriveID(HybridPublicKey) -> string` | 16-byte hex ID from SHA-256(ed25519 \|\| ml_dsa_65). |
 | `HybridKeypairFromSeeds(edSeed, mlSeed) -> (pub, priv)` | Deterministic keygen from two 32-byte seeds. |
 | `GenerateHybridKeypair() -> (pub, priv)` | Random hybrid keypair from OS RNG. |
+| `GenerateChallenge() -> []byte` | Cryptographically random 32-byte challenge. |
 | `DelegationSignBytes(cert) -> []byte` | Canonical signable bytes for a cert. |
 | `ChallengeSignBytes(challenge, ts) -> []byte` | Raw binary `challenge \|\| BE u64(ts)`. |
 | `ChallengeSignBytesWithSessionContext(challenge, ts, sessionContext) -> []byte` | v1.1 session-bound `challenge \|\| BE u64(ts) \|\| session_context`; SDKs may expose this as an optional argument where idiomatic. |
 | `ChallengeSignBytesWithStream(challenge, ts, sessionContext, streamID, streamSeq) -> []byte` | v1.1 stream-bound challenge bytes with optional session context plus `stream_id` and `stream_seq`. |
+| `OperationContextBytes(ctx) -> []byte` | alpha.16 operation-context preimage (§6.4.9): required scope, operation, resource ID, requested path, payload digest. |
+| `OperationContextHash(ctx) -> []byte` | 32-byte `request_hash` over the operation-context bytes. |
+| `SessionContextBytes(inputs) -> []byte` | alpha.16 session-context preimage (§6.4.9): verifier/workspace/agent/session/invocation IDs plus the 32-byte `request_hash`. |
+| `BuildSessionContext(inputs) -> []byte` | 32-byte `session_context` over the session-context bytes, ready for `VerifyOptions.SessionContext` and challenge signing. |
 | `RevocationSignBytes(list) -> []byte` | Canonical signable bytes for a revocation list. |
 | `KeyRotationSignBytes(statement) -> []byte` | Canonical signable bytes for root-key rotation statements. |
 | `RevocationPushSignBytes(push) -> []byte` | Canonical signable bytes for revocation push notifications. |
@@ -169,9 +152,11 @@ Every implementation MUST export these primitives with equivalent semantics:
 | `VerifySessionToken(token, secret, now) -> bool/error` | Verifies verifier-local token MAC and validity window. |
 | `SignTransactionReceiptParty(receipt, partyID, priv) -> ReceiptPartySignature` | Produces one party signature over the canonical receipt signable. |
 | `VerifyTransactionReceipt(receipt, options) -> TransactionReceiptResult` | Verifies receipt envelope atomicity, party proofs, and party signatures. |
+| `VerifyStreamedTurnWithOptions(token, secret, turn, options) -> VerifyResult` | Options-object streamed-turn verification against a verifier-local session token (§5.13). |
 | `ExpandScopes([]string) -> []string` | Sort the deduplicated expansion. |
 | `IntersectScopes(lists...) -> []string` | Chain intersection, sorted. |
 | `HasScope(granted, required) -> bool` | Membership after expansion. |
+| `IsSensitive(scope) -> bool` | True if a scope requires explicit grant (never introduced by wildcard expansion). |
 | `ValidateScopes([]string) -> error?` | Reject unknown. |
 | `Verify(bundle, options) -> VerifyResult` | The full verifier algorithm (§10 of SPEC). |
 
@@ -183,31 +168,23 @@ Naming conventions and capitalization follow the idioms of each language (`camel
 |---|---|---|
 | Go | stdlib `crypto/ed25519` | `github.com/cloudflare/circl/sign/mldsa/mldsa65` |
 | TypeScript | `@noble/ed25519` | `@noble/post-quantum` (ml-dsa-65) |
-| Python | `cryptography` or `pynacl` | `dilithium-py`, `pqcrypto`, or liboqs-python |
-| Rust | `ed25519-dalek` | `pqcrypto-mldsa` or `oqs-rs` |
+| Python | `cryptography` (shipped SDK) | `pqcrypto` (shipped SDK) |
+| Rust | `ed25519-dalek` (shipped SDK) | `fips204` (shipped SDK) |
 | Swift | Apple `CryptoKit` | liboqs-swift wrapper (or port) |
 | Java / Kotlin | Bouncy Castle | Bouncy Castle (ML-DSA support is current as of BC 1.78+) |
-| C | libsodium | liboqs |
+| C | `ed25519-dalek` via the Rust SDK | `fips204` via the Rust SDK |
 
 SDK authors MUST use audited, mainstream implementations. Rolling your own Ed25519 or ML-DSA-65 is not acceptable for a Ratify SDK.
 
-## 5. Interop matrix
+## 5. Interop
 
-As more implementations ship, we maintain a cross-implementation interop matrix in CI. Every (signer, verifier) pair runs the full fixture suite:
+Interop is proven through a hub-and-spoke corpus, not an N×N grid.
 
-```
-                 verifier →
-signer ↓    Go      TS     Python   Rust     ...
-   Go       ✅      ✅     [soon]   [soon]
-   TS       ✅      ✅     [soon]   [soon]
-   Python   [soon]  [soon] ✅       [soon]
-   Rust     [soon]  [soon] [soon]   ✅
-   ...
-```
+The Go reference implementation generates a byte-equivalence corpus (`testvectors/v1/cross_sdk_vectors.json`) covering the canonical hashing and signable-bytes constructions (`verifier_context_hash`, `bundle_hash`, `policy_verdict_sign_bytes`, `verification_receipt_sign_bytes`). The TypeScript, Python, and Rust SDKs each load that corpus and assert byte-identical output against the Go reference. Because all three match the same reference bytes, they are transitively byte-identical to Go and to one another, without maintaining a quadratic set of pairwise assertions.
 
-Any red cell means two implementations have drifted. Drift is always a bug in at least one of them, not a spec ambiguity — the test vectors are the spec.
+On top of the corpus, all five SDKs (Go, TypeScript, Python, Rust, and C) load the 79 canonical fixtures at `testvectors/v1/` and execute each fixture through the API appropriate to its kind, checking the expected result, which gives 79 × 5 fixture executions across the five SDKs. Of the 79, 62 exercise bundle verification; the rest exercise the scope, session-token, transaction-receipt, key-rotation, revocation, and witness APIs. The C SDK proves conformance through those 79 fixtures; it does not consume the cross-SDK byte-equivalence corpus.
 
-When a new SDK PR is opened, CI runs all existing implementations as verifiers against bundles produced by the new one, and the new one as a verifier against all existing implementations' bundles. 79 × (signer_count) × (verifier_count) total assertions per CI run at full matrix.
+Any divergence from the Go reference bytes is canonical-serialization drift: a bug in the diverging implementation, not a spec ambiguity. The reference bytes are the spec in runnable form.
 
 ## 6. Contributing a new SDK
 
@@ -227,7 +204,7 @@ The `sdks/typescript/` directory is the reference template for what a mature SDK
 
 SDKs MAY live in this monorepo under `sdks/<language>/` (the recommended path for actively-maintained implementations), OR in their own repositories (if the maintainer prefers independent release cadence). Either is conformant as long as the fixture contract is met on every release.
 
-Package names SHOULD follow the pattern `@identities-ai/ratify-protocol` (JS scope), `identitiesai-ratify-protocol` (Python/PyPI), `ratify-protocol` (Rust crate), etc. Namespace squatting or confusingly-similar names on public registries are not acceptable.
+Package names SHOULD follow the pattern `@identities-ai/ratify-protocol` (JS scope), `ratify-protocol` (Python/PyPI), `ratify-protocol` (Rust crate), etc. Namespace squatting or confusingly-similar names on public registries are not acceptable.
 
 When transfer to a foundation (Linux Foundation, OpenSSF, etc.) happens in the future, SDK trademarks follow the protocol's naming convention and ownership moves accordingly.
 

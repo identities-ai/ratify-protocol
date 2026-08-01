@@ -29,7 +29,7 @@ Numbers below are the median of 3 runs per benchmark. Actual latency on commodit
 | `BenchmarkVerifyDepth3`                | 831 972 | **832 µs** (0.83 ms) | 199 621 | 592       |
 | `BenchmarkVerifyDepth1_WithConstraint` | 397 836 | **398 µs** (0.40 ms) | 90 547  | 270       |
 
-> Numbers refreshed 2026-07-25 (same M2 Pro baseline). The increase over the previously committed table (~0.34/0.70 ms at depth 1/3) is the cost of verifier-path correctness features added since: scope-vocabulary validation (§9, alpha.12) and the additional in-verifier checks landed through alpha.15. (Strict wire acceptance also landed in this window but is NOT a contributor here — the benchmark constructs a typed bundle once and never exercises JSON decoding.) Still under a millisecond at every legal depth.
+> Numbers refreshed 2026-07-25 (same M2 Pro baseline). The increase over the previously committed table (~0.34/0.70 ms at depth 1/3) is the cost of verifier-path correctness features added since: scope-vocabulary validation (§9, alpha.12) and the additional in-verifier checks landed through alpha.15. (Strict wire acceptance also landed in this window but is NOT a contributor here — the benchmark constructs a typed bundle once and never exercises JSON decoding.) Under a millisecond at every depth measured (1 through 3); depths 4 through 8 are projected, see below.
 
 Verification exercises the full §4 trust equation: structural checks, agent binding, per-cert signature validation (Ed25519 + ML-DSA-65), chain linkage, sub-delegation gate, constraint evaluation, challenge-signature validation, revocation lookup (nil callback here), scope intersection.
 

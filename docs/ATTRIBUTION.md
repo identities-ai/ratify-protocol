@@ -13,7 +13,7 @@ Signal Protocol."
 
 **In your docs or security page:**
 
-> Agent authorization powered by [Ratify Protocol](https://ratifyprotocol.com)
+> Delegated-authority proofs powered by [Ratify Protocol](https://ratifyprotocol.com)
 
 **In your product UI** (next to verification results):
 

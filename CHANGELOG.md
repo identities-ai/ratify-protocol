@@ -12,7 +12,7 @@ The "resource-bound authority" release: delegations can now name *where* a scope
 
 ### Added — specification (implementation follows in the same release)
 
-- **`resource_path` constraint** (SPEC §5.7.2, §5.7.3): binds a delegation to an opaque `resource_id` (exact byte equality, never dereferenced or normalized) and an optional `path_prefix` under segment-boundary matching — deliberately a prefix, not a glob. Absolute logical POSIX-style path model with dot-segments, backslashes, and empty interior segments rejected outright; percent-encoding does not exist in the path model, and post-verification path transformation is forbidden. NFC pre-normalization is the issuer's obligation; the verifier compares bytes exactly (a mixed-form pair fails closed; byte identity, not visual identity, is the boundary). Chain evaluation is conjunctive: a downstream cert can only narrow the upstream bound, and jointly unsatisfiable constraint sets — different resources, or same-resource prefixes that don't nest — must be rejected at issuance (decoders still accept them; verification fails closed).
+- **`resource_path` constraint** (SPEC §5.7.2, §5.7.3): binds a delegation to an opaque `resource_id` (exact byte equality, never dereferenced or normalized) and an optional `path_prefix` under segment-boundary matching — deliberately a prefix, not a glob. Absolute logical POSIX-style path model with dot-segments, backslashes, and empty interior segments rejected outright; percent-encoding does not exist in the path model, and post-verification path transformation is forbidden. NFC pre-normalization is the issuer's obligation; the verifier compares bytes exactly (a mixed-form pair fails closed; byte identity, not visual identity, is the boundary). Chain evaluation is conjunctive: effective authority can stay the same or narrow but never widen (a child may carry a broader prefix on the same resource and still verify, gaining nothing because every upstream constraint still applies), and jointly unsatisfiable constraint sets — different resources, or same-resource prefixes that don't nest — must be rejected at issuance (decoders still accept them; verification fails closed).
 - **Resource-identifier profiles** (SPEC §5.7.4, `docs/RESOURCE_PROFILES.md`): the shared recipes that make an opaque `resource_id` interoperable. Git profile v1 (repository identity — never a branch, commit, or checkout; renames and transfers fail closed) with known-answer and negative vectors. Profiles for platform-owned resources are authored by the platforms themselves and linked when published.
 - **Extension-constraint `params`** (SPEC §5.7.1, §17.7): parameterized extension constraints are now representable in signed certificates under a restricted, cross-language-deterministic value model. Type-only extension constraints serialize exactly as before; existing signed certs remain byte-stable. Closes the wire-format limitation documented in alpha.15.
 - **Input bounds** (SPEC §5.1): `MAX_PROOF_BUNDLE_BYTES` (128 KiB, enforced before parsing), `MAX_JSON_NESTING_DEPTH`, and per-cert scope/constraint count and length limits. Violations route to the existing `invalid` status.
@@ -102,7 +102,7 @@ The "integration readiness" release: everything an integrator needs to adopt the
 ### Changed — release process: no more direct pushes to main
 
 - The single-step `make release` (which committed the version bump directly to main via a ruleset bypass) is removed. Releases are now two-phase: `make release-prepare VERSION=…` creates a `release/<version>` branch, bumps versions, runs the full cross-SDK gate, and opens a PR; after it merges through the normal path (CI + DCO), `make release-tag VERSION=…` verifies main carries the bump and pushes the coordinated tags. See `docs/RELEASES.md` §4.
-- `release.sh` pushes the protocol tag on its own before the `sdk-*` tags: GitHub creates no push event when more than three tags arrive in one push, which had silently prevented the tag-triggered Release workflow from ever firing (§5.3.1).
+- `release.sh` pushes the protocol tag on its own before the `sdk-*` tags: GitHub creates no push event when more than three tags arrive in one push, which had silently prevented the tag-triggered Release workflow from ever firing (see `docs/RELEASES.md` §5.3.1).
 - `release-prepare` now stamps the `(unreleased)` changelog entry with the release date.
 
 ---
@@ -247,7 +247,7 @@ Total alpha.7 test additions: **134 tests**, all green; **59/59 canonical fixtur
 
 ### Spec changes
 
-- **§5.7.2 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit`, `ConstraintEvaluators`, `PolicyVerdict`, `PolicySecret`, and `AnchorResolver` fields, with precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
+- **§5.17 VerifyOptions** — table extended with `Revocation`, `Policy`, `Audit`, `ConstraintEvaluators`, `PolicyVerdict`, `PolicySecret`, and `AnchorResolver` fields, with precedence rules between the legacy `IsRevoked` closure and the new `Revocation` provider.
 - **§17 (new section)** — Provider Interfaces, including:
   - §17.0 conformance and wire-format invariance
   - §17.1–§17.3 the three core providers

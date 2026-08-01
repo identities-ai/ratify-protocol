@@ -34,7 +34,7 @@ cd sdks/python && python -m venv .venv && source .venv/bin/activate && \
 cd sdks/rust && cargo test --quiet && cd ../..
 
 # C / C++
-cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
+cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cargo test --test advanced && cargo test --test bounds && cd ../..
 ```
 
 **Pass criterion:** all five print green, all 79 fixtures pass in every language.
@@ -60,7 +60,7 @@ cd demos/typescript && npm install && npm run demo && cd ../..
 cd demos/rust && cargo run && cd ../..
 ```
 
-**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all five languages (only random IDs differ).
+**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all four narrative demos (Go, TypeScript, Python, Rust; only random IDs differ). C is exercised through the conformance fixtures, not a narrative demo.
 
 ---
 
@@ -196,7 +196,7 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 - **Deployment / scale.** No production load testing yet. Allocated for `TEST_PLAN.md` §8 with k6/vegeta; gated on first production deployment.
 - **Adversarial security audit.** External audit (Trail of Bits / NCC / Cure53) scheduled before v1.0.0 stable — see `RELEASES.md`.
 - **Interop with third-party agent platforms.** Third-party platform integrations are gated on design partner engagement; meanwhile, cross-language interop across our five SDKs is a reasonable proxy.
-- **Long-term session / streaming properties.** See `ROADMAP.md` §2 for v1.1 gaps (session binding, sequence numbers, session cert cache).
+- **Long-term session / streaming properties.** Session binding, sequence numbers, and the session cert cache are shipped v1.1 capabilities (see `ROADMAP.md`, Shipped); production-scale streaming behavior over long-lived sessions is exercised in pilots, not here.
 
 ---
 
@@ -209,7 +209,7 @@ go test ./... && \
   cd sdks/typescript && npm test && cd ../.. && \
   cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../.. && \
   cd sdks/rust && cargo test --quiet && cd ../.. && \
-  cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cd ../..
+  cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cargo test --test advanced && cargo test --test bounds && cd ../..
 ```
 
 If all five are green, your change doesn't drift the protocol. That's the contract.

@@ -34,7 +34,7 @@ from ratify_protocol import (
     DelegationCert, ProofBundle, VerifyOptions,
     PROTOCOL_VERSION, SCOPE_MEETING_ATTEND,
     issue_delegation, sign_challenge, generate_challenge,
-    derive_id, verify_bundle, HybridSignature,
+    verify_bundle, HybridSignature,
 )
 import time
 
@@ -152,7 +152,7 @@ requests.post("https://verifier.example.com/verify", data=body,
 ### Receiving a proof bundle
 
 ```python
-from ratify_protocol import decode_proof_bundle, verify_bundle, VerifyOptions
+from ratify_protocol import decode_proof_bundle, verify_bundle, VerifyOptions, SCOPE_MEETING_ATTEND
 
 bundle = decode_proof_bundle(request_body)  # str or bytes
 result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))
@@ -242,6 +242,18 @@ This SDK uses `pqcrypto` which wraps PQClean's ML-DSA-65 implementation. Two thi
 **Randomized signing.** `pqcrypto`'s default signing mode is randomized (two signings of the same message produce different bytes). This does NOT affect interop: signatures produced here verify correctly in Go, TypeScript, Rust, and C/C++ implementations, and vice versa. The canonical signable bytes (what gets fed into the signature function) are what must match across languages — those do match byte-for-byte.
 
 **Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API — `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only — it verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
+
+## API added on main (ships in alpha.16, release unpublished)
+
+The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; install from `main` to use it ahead of the release.
+
+- **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a `Constraint`'s `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id`, `requested_path`, and `has_resource` on `VerifierContext` (SPEC §5.16); `verify_bundle(bundle, VerifyOptions(context=...))` evaluates them. Helpers: `normalize_resource_path`, `resource_path_matches`, `validate_resource_constraints`.
+- **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operation_context_bytes`, `operation_context_hash`, `session_context_bytes`, and `build_session_context`; `verifier_context_hash` produces the canonical hash bound into a `VerificationReceipt`.
+- **VerificationReceipt wire codecs.** `encode_verification_receipt` and `decode_verification_receipt`.
+- **Streamed-turn verify options.** `StreamedTurn` and `StreamedVerifyOptions`, with `verify_streamed_turn_with_options` (the options-object streamed fast path, SPEC §5.13).
+- **Extension-constraint params.** A `Constraint`'s `params` carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validate_params_value`; `is_canonical_constraint_type` guards which types may carry them.
+- **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
+- **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
 
 ## License
 

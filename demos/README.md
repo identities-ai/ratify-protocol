@@ -1,6 +1,6 @@
 # Ratify Protocol — Runnable Demos
 
-**End-to-end narrative demos in every supported language. Run one, see the full protocol lifecycle happen in front of you.**
+**End-to-end narrative demos in four languages (Go, Python, Rust, TypeScript). Run one, see the full protocol lifecycle happen in front of you.**
 
 Each demo walks through:
 
@@ -101,20 +101,22 @@ If any two languages disagree on *what* happens (identity_status values, whether
 
 ## What this proves
 
-- Every SDK implements the same verifier algorithm (per `SPEC.md` §10).
-- Every SDK produces canonical sign bytes that match byte-for-byte.
-- Hybrid Ed25519 + ML-DSA-65 signing works correctly in every language.
-- The attack-rejection paths are consistent across implementations.
+- Each of the four narrative demos (Go, TypeScript, Python, Rust) runs the same verifier algorithm (per `SPEC.md` §10).
+- Each demo successfully signs and verifies protocol objects using its SDK's canonical serialization.
+- Hybrid Ed25519 + ML-DSA-65 signing works correctly in each of the four demo languages.
+- The attack-rejection paths are consistent across those implementations.
 - You can demo the protocol to a skeptical audience in ~15 seconds of scrolling.
+- Full five-SDK conformance, including C, is established by the canonical fixture suites below, not by these demos.
 
 ## What this does NOT test
 
 These demos are narrative, not exhaustive. For the rigorous validation:
 
-- `testvectors/v1/` — 20 canonical fixtures, every SDK passes byte-identical.
+- `testvectors/v1/` — 79 canonical fixtures, every SDK passes byte-identical.
 - Go unit tests: `go test ./...`
 - TS conformance: `cd sdks/typescript && npm test`
 - Python conformance: `cd sdks/python && pytest`
 - Rust conformance: `cd sdks/rust && cargo test`
+- C conformance: `cd sdks/c && cargo test --test conformance`
 
 See `docs/TEST_PLAN.md` for the full testing methodology.

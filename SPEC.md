@@ -75,7 +75,7 @@ A verifier accepts a `ProofBundle` if and only if every one of the following che
 5. **Revocation** — none of the certs appear in the signed revocation list.
 6. **Constraint evaluation** — every `Constraint` on every cert in the chain evaluates true against the caller-supplied `VerifierContext`. A constraint whose required context field is absent from the context fails with `constraint_unverifiable`. An unknown constraint `type` fails with `constraint_unknown`.
 
-Any failure causes immediate rejection. The failure type (`expired`, `revoked`, `invalid`, `unauthorized`, `constraint_denied`, `constraint_unverifiable`, `constraint_unknown`) is returned deterministically. A single component-signature failure (e.g. Ed25519 passes but ML-DSA-65 fails, or vice versa) fails the whole signature — fail-closed is the v1 semantics.
+Any failure causes immediate rejection. The failure type (`expired`, `revoked`, `scope_denied`, `constraint_denied`, `constraint_unverifiable`, `constraint_unknown`, `invalid_scope`, `delegation_not_authorized`, `invalid`) is returned deterministically. A single component-signature failure (e.g. Ed25519 passes but ML-DSA-65 fails, or vice versa) fails the whole signature — fail-closed is the v1 semantics.
 
 ---
 
@@ -367,7 +367,7 @@ For failures with their own status, `error_reason` begins with the status name f
 }
 ```
 
-`RevocationPush` is a v1.1 optional signed notification that a revocation-list issuer sends to subscribed verifiers in real time (ROADMAP §2.4). The payload carries a delta — cert IDs added to the revocation list since the previous push — and is hybrid-signed by the issuer so a verifier can trust it without re-fetching the full list.
+`RevocationPush` is a v1.1 optional signed notification that a revocation-list issuer sends to subscribed verifiers in real time (ROADMAP, Continuous real-time interactions). The payload carries a delta — cert IDs added to the revocation list since the previous push — and is hybrid-signed by the issuer so a verifier can trust it without re-fetching the full list.
 
 `seq_no` is monotonically increasing per issuer (first push is 1). Receivers MUST detect gaps (missed pushes) and fall back to a full revocation-list fetch when a gap is detected. `entries` is always serialized as an array (`[]` when empty), never as `null`.
 
@@ -385,7 +385,7 @@ The push subscription endpoint (WebSocket, SSE, gRPC stream, etc.) is an operato
 }
 ```
 
-`WitnessEntry` is a v1.1 spec-defined element in a hash-chain append-only log (ROADMAP §3.2). Any party may operate a Witness: Identities AI, an enterprise's own audit system, a third-party notary, or a blockchain-anchored system. Multiple witnesses MAY independently log the same events (redundancy).
+`WitnessEntry` is a v1.1 spec-defined element in a hash-chain append-only log (ROADMAP, Tamper-evident transaction streams). Any party may operate a Witness: Identities AI, an enterprise's own audit system, a third-party notary, or a blockchain-anchored system. Multiple witnesses MAY independently log the same events (redundancy).
 
 v1.1 defines the shape and the signing semantics only. Operating a scalable witness is an implementation/product concern; the spec does not mandate deployment topology, storage backend, or consistency model. The fixture `witness_entry_valid` proves cross-SDK byte-identicality of the signable and signature.
 
@@ -406,7 +406,7 @@ v1.1 defines the shape and the signing semantics only. Operating a scalable witn
 }
 ```
 
-`SessionToken` is a v1.1 backward-compatible signed credential that caches the result of a full chain verification. After a successful `Verify(ProofBundle)`, the verifier MAY issue a SessionToken binding the verified chain to its session. Subsequent turns in the same session present the token plus a fresh `ChallengeSig`; the verifier checks the token's HMAC and challenge signature without re-verifying the delegation chain. This is the session cert cache of ROADMAP §2.3.
+`SessionToken` is a v1.1 backward-compatible signed credential that caches the result of a full chain verification. After a successful `Verify(ProofBundle)`, the verifier MAY issue a SessionToken binding the verified chain to its session. Subsequent turns in the same session present the token plus a fresh `ChallengeSig`; the verifier checks the token's HMAC and challenge signature without re-verifying the delegation chain. This is the session cert cache of ROADMAP's Continuous real-time interactions.
 
 `chain_hash` is the 32-byte SHA-256 of the concatenated `DelegationSignBytes` of each cert in the verified chain. Any change to any cert in the chain changes `chain_hash`, invalidating tokens issued against the old chain.
 
@@ -466,7 +466,7 @@ ReceiptPartySignature:
   "signature": <HybridSignature>
 ```
 
-`TransactionReceipt` is a v1.1 canonical multi-party transaction envelope (ROADMAP §3.1 / §3.3). Ratify does not interpret `terms_canonical_json` — the application owns the business terms schema. `terms_schema_uri` identifies which schema a specialized verifier dispatches on. Ratify guarantees envelope atomicity and party signatures.
+`TransactionReceipt` is a v1.1 canonical multi-party transaction envelope (ROADMAP, Tamper-evident transaction streams). Ratify does not interpret `terms_canonical_json` — the application owns the business terms schema. `terms_schema_uri` identifies which schema a specialized verifier dispatches on. Ratify guarantees envelope atomicity and party signatures.
 
 The signable bytes for every party's signature (§6.4.7) include `version`, `transaction_id`, `created_at`, `terms_schema_uri`, `terms_canonical_json`, and the full sorted `parties` set (sorted lex by `party_id`; each party projected to `{agent_id, agent_pub_key, party_id, role}` — `proof_bundle` is excluded since it is verified independently). Because every party's signature covers the same sorted party set, adding, removing, or altering any party invalidates every existing signature — there is no partial-valid receipt state.
 
@@ -893,7 +893,7 @@ Pure ML-DSA-65 would be a single point of cryptographic failure against future a
 
 54 canonical scope strings organized by domain, plus 14 wildcards, plus one extension pattern (`custom:…`) for application-specific scopes outside the canonical vocabulary. Implementations MUST reject scopes that are not canonical, not a wildcard, and not a `custom:` extension — at issuance via `ValidateScopes`, and at verification: the verifier rejects any cert granting invalid vocabulary with `invalid_scope` (§5.9, §10 step 7.a2) before any effective-scope arithmetic.
 
-The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3.5, §3.6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
+The vocabulary covers both software agents (meetings, comms, files, transactions, execution, generation) and embodied agents (physical actions, robots, drones, vehicles, infrastructure, generic actuation). Ratify is channel-agnostic by construction (§3 principle 6) — the same cert/bundle/verify semantics authorize a software agent in a video meeting and a drone at a delivery address.
 
 ### 9.1 Canonical scopes
 
@@ -1709,7 +1709,7 @@ The verify function:
 - Returns `"policy_verdict_denied: ..."` on cached **deny** (MAC valid but `allow=false`).
 - Returns any other error if the verdict is unusable (bad MAC, expired, scope mismatch, etc).
 
-**Verifier fast-path semantics (§5.7.2):** when `VerifyOptions.PolicyVerdict` and `VerifyOptions.PolicySecret` are both set, the verifier consults the verdict BEFORE the `Policy` provider:
+**Verifier fast-path semantics (§5.17):** when `VerifyOptions.PolicyVerdict` and `VerifyOptions.PolicySecret` are both set, the verifier consults the verdict BEFORE the `Policy` provider:
 - Cached allow → live policy is **not called**; return success.
 - Cached deny → live policy is **not called**; return `scope_denied`.
 - Verdict unusable (expired / wrong MAC / scope mismatch) → fall through to live `Policy` provider. A stale verdict MUST NOT cause a verification failure on its own.
@@ -1724,7 +1724,7 @@ The `ConstraintEvaluator` interface is the pluggable layer: callers register eva
 
 1. Built-in evaluators handle the universal types (always, by the SDK directly).
 2. For any type the built-in evaluators do not recognize, the registry is consulted.
-3. If no entry matches, the verifier fails closed with `identity_status="constraint_unknown"` (per §5.16).
+3. If no entry matches, the verifier fails closed with `identity_status="constraint_unknown"` (per §5.9).
 
 **Interface:**
 

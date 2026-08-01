@@ -14,7 +14,7 @@ Every profile must define: one canonical byte-identical representation per resou
 
 | Profile | Version | Resource kinds | Status |
 |---|---|---|---|
-| Git | v1 (this document) | Git repositories | Draft — under adversarial review for v1.0.0-alpha.16 |
+| Git | v1 (this document) | Git repositories | v1, merged in v1.0.0-alpha.16 (release unpublished) |
 | Platform-authored profiles | — | Defined by the authoring platform (e.g. workspaces, channels, conversations, compute nodes) | Linked here when published |
 
 ---

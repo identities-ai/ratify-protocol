@@ -102,7 +102,7 @@ The "integration readiness" release: everything an integrator needs to adopt the
 ### Changed — release process: no more direct pushes to main
 
 - The single-step `make release` (which committed the version bump directly to main via a ruleset bypass) is removed. Releases are now two-phase: `make release-prepare VERSION=…` creates a `release/<version>` branch, bumps versions, runs the full cross-SDK gate, and opens a PR; after it merges through the normal path (CI + DCO), `make release-tag VERSION=…` verifies main carries the bump and pushes the coordinated tags. See `docs/RELEASES.md` §4.
-- `release.sh` pushes the protocol tag on its own before the `sdk-*` tags: GitHub creates no push event when more than three tags arrive in one push, which had silently prevented the tag-triggered Release workflow from ever firing (§5.3.1).
+- `release.sh` pushes the protocol tag on its own before the `sdk-*` tags: GitHub creates no push event when more than three tags arrive in one push, which had silently prevented the tag-triggered Release workflow from ever firing (see `docs/RELEASES.md` §5.3.1).
 - `release-prepare` now stamps the `(unreleased)` changelog entry with the release date.
 
 ---

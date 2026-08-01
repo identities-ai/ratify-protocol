@@ -45,7 +45,8 @@ fn main() {
 
     // Step 2
     banner("STEP 2  Agent (Alice's scheduler) generates its own hybrid keypair");
-    let (agent, agent_priv) = generate_agent("Alice's Scheduler", "voice_agent");
+    let (agent, agent_priv) =
+        generate_agent("Alice's Scheduler", "voice_agent").expect("agent generation");
     kv("Agent ID:", &agent.id);
     kv("Agent type:", &agent.agent_type);
     kv(

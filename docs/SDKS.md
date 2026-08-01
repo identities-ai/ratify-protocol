@@ -182,7 +182,7 @@ Interop is proven through a hub-and-spoke corpus, not an N×N grid.
 
 The Go reference implementation generates a byte-equivalence corpus (`testvectors/v1/cross_sdk_vectors.json`) covering the canonical hashing and signable-bytes constructions (`verifier_context_hash`, `bundle_hash`, `policy_verdict_sign_bytes`, `verification_receipt_sign_bytes`). The TypeScript, Python, and Rust SDKs each load that corpus and assert byte-identical output against the Go reference. Because all three match the same reference bytes, they are transitively byte-identical to Go and to one another, without maintaining a quadratic set of pairwise assertions.
 
-On top of the corpus, all five SDKs (Go, TypeScript, Python, Rust, and C) load the 79 canonical fixtures at `testvectors/v1/` and assert their `Verify` output matches each fixture's expected result, giving 79 × 5 conformance assertions across the five SDKs. The C SDK proves conformance through those 79 fixtures; it does not consume the cross-SDK byte-equivalence corpus.
+On top of the corpus, all five SDKs (Go, TypeScript, Python, Rust, and C) load the 79 canonical fixtures at `testvectors/v1/` and execute each fixture through the API appropriate to its kind, checking the expected result, which gives 79 × 5 fixture executions across the five SDKs. Of the 79, 62 exercise bundle verification; the rest exercise the scope, session-token, transaction-receipt, key-rotation, revocation, and witness APIs. The C SDK proves conformance through those 79 fixtures; it does not consume the cross-SDK byte-equivalence corpus.
 
 Any divergence from the Go reference bytes is canonical-serialization drift: a bug in the diverging implementation, not a spec ambiguity. The reference bytes are the spec in runnable form.
 

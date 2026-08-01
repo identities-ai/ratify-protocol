@@ -347,7 +347,7 @@ Byte-level cross-language equivalence is proven separately by the hub-and-spoke 
 
 Two mechanisms together give cross-language assurance:
 
-1. **Shared fixtures (all five SDKs).** Go, TypeScript, Python, Rust, and C each load the **79 canonical fixtures** at `testvectors/v1/` and assert that, for every one of the 79 fixtures, the verifier output matches the fixture's expected result. The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
+1. **Shared fixtures (all five SDKs).** Go, TypeScript, Python, Rust, and C each load the **79 canonical fixtures** at `testvectors/v1/` and assert that, for every one of the 79 fixtures, executing it through the API appropriate to its kind yields the expected result (62 of the 79 exercise bundle verification; the rest exercise the scope, session-token, transaction-receipt, key-rotation, revocation, and witness APIs). The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
 2. **Byte-equivalence corpus (hub-and-spoke, four SDKs).** The Go reference generates `testvectors/v1/cross_sdk_vectors.json` (canonical hashing and signable-bytes constructions). TypeScript, Python, and Rust each assert byte-identical output against the Go reference. Matching a single reference transitively proves the four are pairwise byte-identical without an N×N grid of assertions. C validates through the shared fixtures only; it does not consume this corpus.
 
 Any divergence from the Go reference bytes is canonical-serialization drift: a bug in the diverging implementation, and the fix is always to make it produce identical signable bytes.
@@ -569,7 +569,7 @@ The `ratify_verification_log` table already exists. Build dashboards from it.
 - **Cert age distribution:** IssuedAt → verification time
 - **Revocation hit rate:** % of verifies that hit a revoked cert
 - **Challenge-to-verify latency:** time from challenge issuance to verified bundle
-- **Chain depth distribution:** % at depth 1, 2, 3
+- **Chain depth distribution:** % by depth bucket (1, 2, 3, 4 through 8)
 
 ### 11.2 Alerts
 

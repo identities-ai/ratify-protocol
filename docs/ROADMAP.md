@@ -107,7 +107,7 @@ An earlier draft proposed a boolean `requires_disclosure` constraint (default `t
 
 | Feature | Spec | What it solves | Fixtures |
 |---------|------|---------------|----------|
-| **Resource-bound authority** | §5.7.3 | `resource_path` constraint (the 8th constraint type) binds a delegation to a specific resource plus an optional segment-boundary path prefix. Authority narrows down the chain to an exact resource; downstream certs can only narrow, never widen. | 14 |
+| **Resource-bound authority** | §5.7.3 | `resource_path` constraint (the 8th constraint type) binds a delegation to a specific resource plus an optional segment-boundary path prefix. Effective authority narrows or stays the same down the chain, never widens; a child may carry a broader prefix but gains no authority because every upstream constraint still applies. | 14 |
 | **Extension constraint params** | §5.7 | Constraints may carry an extension `params` object inside the canonical signed bytes. A verifier with no registered evaluator for the type still fails closed with `constraint_unknown`. | 1 |
 | **Deeper delegation chains** | §5.1 | `MAX_DELEGATION_CHAIN_DEPTH` raised from 3 to 8, driven by real multi-hop agent-platform topologies, alongside new byte/count/length input bounds. | 1 |
 

@@ -29,6 +29,9 @@ echo "==> Wire transport (TS <-> Python)"
 echo "==> Rust SDK"
 (cd sdks/rust && cargo build --all-targets && cargo test)
 
+echo "==> Rust narrative demo (standalone cargo project, not in the SDK workspace)"
+(cd demos/rust && cargo build)
+
 echo "==> C/C++ SDK"
 (cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api && cargo test --test advanced && cargo test --test bounds)
 

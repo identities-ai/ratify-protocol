@@ -110,12 +110,11 @@ library cannot link into bare-metal firmware with no heap at all. Targets suppor
 
 | Target | Works? | Notes |
 |---|---|---|
-| Linux (any arch) | ✅ | Raspberry Pi, BeagleBone, embedded Linux SBCs |
-| FreeRTOS + std shim | ✅ | Use `cargo-embassy` or `embedded-std` shim |
-| Zephyr RTOS | ✅ | Zephyr's Rust support includes std |
-| Bare-metal Cortex-M (no OS) | ❌ | No heap, no std — use Rust SDK directly |
+| Linux (any arch) | ✅ | Raspberry Pi, BeagleBone, embedded Linux SBCs; built and tested in CI |
+| FreeRTOS / Zephyr with a std shim | ⚠️ Unverified | Requires a custom toolchain and sysroot that provide a Rust `std` distribution (the crate imports `std` unconditionally). No reproducible RTOS build is gated yet, so treat this as unverified until you complete a target integration build |
+| Bare-metal (no OS, no heap) | ❌ | No heap, no std; use the Rust SDK directly with `#[no_std]` + `alloc` |
 
-For bare-metal Cortex-M with no OS, use the Rust SDK directly with `#[no_std]` + `alloc`.
+RTOS targets are not covered by CI. Before relying on one, stand up the custom toolchain and run a full integration build; the tables below list the target triples but do not imply a gated, reproducible build for the non-Linux entries.
 
 ## Supported targets
 
@@ -124,7 +123,7 @@ For bare-metal Cortex-M with no OS, use the Rust SDK directly with `#[no_std]` +
 | x86-64 | `x86_64-unknown-linux-gnu` | Intel/AMD server, Linux PC |
 | ARM64 | `aarch64-unknown-linux-gnu` | Raspberry Pi 4, embedded Linux, Apple Silicon |
 | ARM32 | `armv7-unknown-linux-gnueabihf` | Raspberry Pi 2/3, older embedded Linux |
-| ARM Cortex-M4/M7 | `thumbv7em-none-eabihf` | STM32, NXP: FreeRTOS/Zephyr with a std shim (not bare-metal) |
+| ARM Cortex-M4/M7 (RTOS, unverified) | `thumbv7em-none-eabihf` is a bare `none` triple with no upstream Rust `std`; an RTOS build needs a custom `std`-providing toolchain and is not gated in CI | STM32, NXP running FreeRTOS/Zephyr |
 | x86-32 | `i686-unknown-linux-gnu` | Legacy industrial, 32-bit Linux |
 | RISC-V 64 | `riscv64gc-unknown-linux-gnu` | SiFive, emerging IoT |
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
@@ -378,12 +377,15 @@ The core paths above cover one-shot verification. The full v1.1 surface is expor
 
 The following are merged to `main` and covered by the test suites now. They ship
 in alpha.16, which is not yet published. Every symbol below is declared
-in `include/ratify.h`.
+in `include/ratify.h`. The call snippets in this section are abbreviated and omit
+the `RatifyStatus` error checking shown in the complete example above; check every
+returned status in real code.
 
 - **Resource-bound verification.** `ratify_verify_bundle_opts_v2` takes a
   `const RatifyResourceContext *` (fields `requested_resource_id` and
   `requested_path`) alongside `RatifyVerifyOptions`, supplying the context a
-  `resource_path` constraint (the 8th constraint type, SPEC §5.16) needs.
+  `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) needs; the
+  verifier context fields are defined in SPEC §5.16.
   Passing `NULL` for `resource` is equivalent to `ratify_verify_bundle_opts`; a
   bundle whose cert bears a `resource_path` constraint verified without this
   context fails closed as `constraint_unverifiable`.
@@ -405,7 +407,8 @@ in `include/ratify.h`.
   `constraint_unknown` when the constraint type is unrecognized (no dedicated C
   symbol).
 - **Chain-depth ceiling.** The maximum delegation-chain depth is now 8 (raised
-  from 3); a deeper chain fails closed as `delegation_not_authorized`.
+  from 3); a deeper chain fails closed as `invalid`, with `error_reason`
+  beginning `chain_too_deep`.
 - **Input bounds (SPEC §5.1).** Enforced before signature work.
   `MAX_PROOF_BUNDLE_BYTES` (131072, i.e. 128 KiB) is checked before parsing, and
   an oversized payload yields an `invalid` result rather than being parsed.
@@ -448,12 +451,12 @@ ratify_error_free(err);         // for err_out parameters
 | `expired` | Delegation cert has expired |
 | `revoked` | Cert was revoked (revocation callback or signed revocation list) |
 | `scope_denied` | Required scope not in the effective delegation |
-| `constraint_denied` | A constraint (geo, speed, amount, rate, resource path) was violated |
+| `constraint_denied` | A constraint (geo, time, speed, amount, rate, resource path) was violated |
 | `constraint_unverifiable` | Constraint present but no context to evaluate it |
 | `constraint_unknown` | Unknown constraint type |
-| `delegation_not_authorized` | Chain depth or signing authority violation |
+| `delegation_not_authorized` | A non-root issuer lacks `identity:delegate` (signing-authority violation) |
 | `invalid_scope` | A cert grants a scope that is not canonical, not a wildcard, and not a `custom:` extension |
-| `invalid` | Generic failure: tampered bundle, bad signature, stale or unknown challenge, session/stream binding failure, or a revocation lookup error |
+| `invalid` | Generic failure: tampered bundle, bad signature, a chain deeper than the depth ceiling (`error_reason` begins `chain_too_deep`), stale or unknown challenge, session/stream binding failure, or a revocation lookup error |
 
 `verified_human` and `unauthorized` are part of the status vocabulary but are not
 emitted by proof-bundle verification through this SDK.

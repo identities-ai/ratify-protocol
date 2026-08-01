@@ -43,7 +43,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     // 1. DELEGATE
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("Alice's Assistant", "voice_agent");
+    let (agent, agent_priv) =
+        generate_agent("Alice's Assistant", "voice_agent").expect("agent generation");
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
     let mut cert = DelegationCert {

@@ -60,7 +60,7 @@ cd demos/typescript && npm install && npm run demo && cd ../..
 cd demos/rust && cargo run && cd ../..
 ```
 
-**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all five languages (only random IDs differ).
+**Pass criterion:** `STEP 5` prints `✅ VALID` with the correct human/agent IDs and granted scope. Each `ATTACK N` prints `❌ REJECTED` with the specific deterministic reason. Output is essentially identical across all four narrative demos (Go, TypeScript, Python, Rust; only random IDs differ). C is exercised through the conformance fixtures, not a narrative demo.
 
 ---
 

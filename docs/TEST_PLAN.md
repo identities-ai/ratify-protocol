@@ -2,7 +2,7 @@
 
 **Companion to [`SPEC.md`](../SPEC.md) and [`SDKS.md`](SDKS.md). Defines how Ratify v1 is validated — from unit tests through external audit, and how every new language SDK proves it is conformant with the reference.**
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-07-31
 **Scope:** Ratify Protocol v1 (hybrid Ed25519 + ML-DSA-65 delegation, JSON wire format)
 
 ---
@@ -20,7 +20,7 @@
 
 ## Layer 1 — Unit Tests (Go)
 
-Location: `ratify/ratify_test.go` (6 tests shipped; this plan expands to ~35).
+Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is planning-era, and this plan expands to ~35).
 
 ### 1.1 Happy path — extend current `TestDelegationRoundTrip`
 
@@ -74,7 +74,7 @@ Location: `ratify/ratify_test.go` (6 tests shipped; this plan expands to ~35).
 
 - `TestScopeRejection` (current)
 - `TestScopeWildcard` (current — meeting:* expansion)
-- All four wildcard expansions (`meeting:*`, `comms:*`, `comms:message:*`, `comms:email:*`)
+- The four comms/meeting wildcard expansions (`meeting:*`, `comms:*`, `comms:message:*`, `comms:email:*`), a subset of the 14 wildcards in the vocabulary
 - Sensitive scope in a wildcard (must be rejected — `meeting:record` must not ride `meeting:*`)
 - Unknown scope string (`ValidateScopes` rejects)
 - Empty scope list with non-empty required scope (reject)
@@ -88,8 +88,10 @@ Location: `ratify/ratify_test.go` (6 tests shipped; this plan expands to ~35).
 
 ### 1.9 DeriveID
 
+`DeriveID(HybridPublicKey) string` returns `hex(SHA-256(ed25519_pub || ml_dsa_65_pub)[:16])` (SPEC §7).
+
 - Same pubkey → same ID
-- 32-byte input → 32-char hex output (16 bytes of SHA-256)
+- `HybridPublicKey` input (32-byte Ed25519 || 1952-byte ML-DSA-65) → 32-char hex output (first 16 bytes of the SHA-256 digest)
 - Different pubkeys → different IDs (basic collision sanity)
 
 ---
@@ -132,7 +134,7 @@ Every output of `ExpandScopes` must satisfy `ValidateScopes` without error.
 
 This is the single highest-leverage test artifact for the open-source launch. Without cross-language test vectors, no JS or Python implementation can be verified correct.
 
-**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust). The v1.1 fixtures are not part of a public protocol tag until the next release.
+**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
 
 ### 3.1 Location
 
@@ -270,6 +272,48 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `witness_entry_valid` | Signed witness log entry verifies against witness key. |
 | `reject_challenge_forwarding` | Session-context verifier binding rejects forwarded challenges. |
 
+**Hybrid single-component and scope-poisoning (3 fixtures, all verify kind)**
+
+| Name | Purpose |
+|---|---|
+| `reject_ed25519_only_corrupted` | Valid ML-DSA-65 but corrupted Ed25519 component; both components MUST verify, so rejected with `bad_signature`. |
+| `reject_mldsa65_only_corrupted` | Valid Ed25519 but corrupted ML-DSA-65 component; the post-quantum half must also verify, so rejected with `bad_signature`. |
+| `reject_unknown_scope_cert` | Signed cert grants a scope outside the vocabulary; rejected as malformed with `invalid_scope` before any effective-scope arithmetic (verify-layer counterpart of `reject_unknown_scope`). |
+
+**Alpha.12 additions (3 fixtures, all verify kind)**
+
+| Name | Purpose |
+|---|---|
+| `no_expiry_cert` | No-expiry sentinel `expires_at = 4070908799` verifies normally; MUST NOT be displayed or policy-evaluated as a real 2099 expiry (SPEC §5.7). |
+| `presence_represent_allowed` | `presence:represent` (sensitive) granted explicitly alongside `identity:prove`; no scope implication (SPEC §9.1). |
+| `reject_presence_sensitive_wildcard` | No `presence:*` wildcard exists; a sensitive scope is never introduced by wildcard expansion, so `presence:*` is rejected as `invalid_scope`. |
+
+**Resource-bound authority (`resource_path`), 14 fixtures (alpha.16, all verify kind)**
+
+| Name | Purpose |
+|---|---|
+| `constraint_resource_path_exact_accept` | Byte-equal prefix match on the same resource accepts. |
+| `constraint_resource_path_child_accept` | Prefix `/docs` authorizes any path at or below it under segment-boundary matching. |
+| `constraint_resource_path_child_broader_accept` | A broader child prefix cannot widen authority, but the pair is satisfiable; request under both prefixes accepts. |
+| `constraint_resource_path_root_prefix_accept` | Root prefix `/` matches every valid path on the named resource. |
+| `constraint_resource_path_whole_resource_accept` | Absent `path_prefix` authorizes the entire named resource (absence, not empty string). |
+| `constraint_resource_path_trailing_slash_accept` | Trailing slash trimmed before comparison (except root); `/docs/` and `/docs` match. |
+| `constraint_resource_path_percent_literal_accept` | No percent-decoding; `%2e%2e` is a literal segment, at or below the prefix, accepts. |
+| `constraint_resource_path_chain_narrowing_accept` | Conjunctive across the chain; nested prefixes reduce to the narrowest under AND. |
+| `constraint_resource_path_traversal_denied` | Dot-segment in the requested path is rejected outright as `constraint_denied`. |
+| `constraint_resource_path_textual_prefix_denied` | `/docs-old` is a different segment from `/docs`; segment-boundary matching, `constraint_denied`. |
+| `constraint_resource_path_wrong_repo_denied` | Different `resource_id` (exact byte equality); `constraint_denied`. |
+| `constraint_resource_path_downstream_escape_denied` | Child claims a broader prefix; parent constraint still evaluates, so escape fails `constraint_denied`. |
+| `constraint_resource_path_unsatisfiable_pair_denied` | Two constraints naming different resources are jointly unsatisfiable; fails closed as `constraint_denied`. |
+| `constraint_resource_path_missing_context` | Constraint present but no resource context supplied; `constraint_unverifiable` (distinct from `constraint_denied`). |
+
+**Deeper chains and extension constraints (2 fixtures, alpha.16, all verify kind)**
+
+| Name | Purpose |
+|---|---|
+| `chain_depth_8_accept` | Well-formed eight-cert chain at exactly `MaxDelegationChainDepth=8` (raised from 3); verifies as `authorized_agent`. |
+| `constraint_ext_params_unknown_denied` | Extension constraint carrying a `params` object inside the signed bytes; verifier with no evaluator fails closed with `constraint_unknown`. |
+
 ### 3.4 Test vector generator
 
 `cmd/ratify-testvectors/main.go` — regenerates all vectors from fixed 32-byte seeds (`0x01…` for human root, `0x02…` for agent, etc.). Timestamps are fixed (`1800000000` = 2027-01-15 UTC). Challenges are SHA-256 of the fixture name. **Determinism is a required property:** `go run ./cmd/ratify-testvectors` produces byte-identical output to committed fixtures; any drift fails the conformance test.
@@ -283,40 +327,41 @@ go test -run TestConformanceVectors ./...
 
 ### 3.5 Cross-language harness
 
-`testvectors/run.sh` accepts a language binary (go, js, py) and runs every vector through it, comparing outputs. Part of the open-source repo.
+There is no single driver script. Each SDK owns its conformance harness and loads the fixtures directly from `testvectors/v1/`:
+
+- Go: `TestConformanceVectors` in `ratify_test.go`.
+- TypeScript: `sdks/typescript/test/conformance.test.ts`.
+- Python: `sdks/python/tests/test_conformance.py`.
+- Rust: `sdks/rust/tests/conformance.rs`.
+- C: `sdks/c/tests/conformance.rs` (through the C ABI).
+
+Byte-level cross-language equivalence is proven separately by the hub-and-spoke corpus `testvectors/v1/cross_sdk_vectors.json`: Go generates the reference bytes, and TypeScript, Python, and Rust each assert byte-identity against them (`test/cross_sdk.test.ts`, `tests/test_cross_sdk.py`, `tests/cross_sdk.rs`). See §4.
 
 ---
 
 ## Layer 4 — Cross-language interop
 
-**Status:** Go ↔ TypeScript ↔ Python ↔ Rust ↔ C all proven. All **79 fixtures** byte-identical across every pairing.
+**Status:** All five SDKs (Go, TypeScript, Python, Rust, C) pass the 79 canonical fixtures. Byte-level equivalence is proven for Go, TypeScript, Python, and Rust through the hub-and-spoke corpus (§4.1).
 
-### 4.1 The NxN conformance matrix
+### 4.1 Cross-language conformance (hub-and-spoke)
 
-Every SDK must pass the **79 canonical fixtures** when acting as a verifier against bundles produced by every other SDK (including itself). For N implementations the matrix is NxN:
+Two mechanisms together give cross-language assurance:
 
-|   | Go verifier | TS verifier | Python verifier | Rust verifier | C verifier |
-|---|---|---|---|---|---|
-| **Go signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **TS signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Python signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Rust signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **C signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+1. **Shared fixtures (all five SDKs).** Go, TypeScript, Python, Rust, and C each load the **79 canonical fixtures** at `testvectors/v1/` and assert that, for every one of the 79 fixtures, executing it through the API appropriate to its kind yields the expected result (62 of the 79 exercise bundle verification; the rest exercise the scope, session-token, transaction-receipt, key-rotation, revocation, and witness APIs). The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
+2. **Byte-equivalence corpus (hub-and-spoke, four SDKs).** The Go reference generates `testvectors/v1/cross_sdk_vectors.json` (canonical hashing and signable-bytes constructions). TypeScript, Python, and Rust each assert byte-identical output against the Go reference. Matching a single reference transitively proves the four are pairwise byte-identical without an N×N grid of assertions. C validates through the shared fixtures only; it does not consume this corpus.
 
-All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
-
-Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 79 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
+Any divergence from the Go reference bytes is canonical-serialization drift: a bug in the diverging implementation, and the fix is always to make it produce identical signable bytes.
 
 ### 4.2 The single-component tamper test
 
 Hybrid signatures introduce a new failure mode: a bundle where the Ed25519 component is valid but the ML-DSA-65 component is tampered (or vice versa). The fixture `reject_bad_challenge_sig` flips the last byte of both components; the verifier rejects with `bad_challenge_sig`. Every SDK MUST also pass targeted tests where:
 
-- Only the Ed25519 component of `cert.signature` is tampered → verifier rejects with "Ed25519 signature invalid".
-- Only the ML-DSA-65 component of `cert.signature` is tampered → verifier rejects with "ML-DSA-65 signature invalid".
+- Only the Ed25519 component of `cert.signature` is tampered → verifier rejects with `bad_signature: cert 0: Ed25519 signature invalid`.
+- Only the ML-DSA-65 component of `cert.signature` is tampered → verifier rejects with `bad_signature: cert 0: ML-DSA-65 signature invalid`.
 - Only the Ed25519 component of `challenge_sig` is tampered → verifier rejects.
 - Only the ML-DSA-65 component of `challenge_sig` is tampered → verifier rejects.
 
-These tests are not yet canonical fixtures but SHOULD be added to each SDK's local test suite. A future v1.x fixture expansion should add these as shipped fixtures.
+The two `cert.signature` cases now ship as canonical fixtures (`reject_ed25519_only_corrupted`, `reject_mldsa65_only_corrupted`), so every SDK exercises them through the shared vector set. The two `challenge_sig` cases remain SDK-local tests; a future fixture expansion should promote them to shipped fixtures.
 
 ### 4.3 Determinism regression test
 
@@ -331,12 +376,16 @@ diff -rq testvectors/v1/ /tmp/regen/        # MUST be empty
 
 The `.github/workflows/ci.yml` in this repo runs the following on every push and PR:
 
-- Go vet + go test.
-- Determinism check (generator rerun + diff).
-- TypeScript typecheck + conformance suite.
-- DCO sign-off enforcement on all commits.
+- Go: `go vet` + `go test -race` + `go mod tidy` cleanliness.
+- Test-vector determinism (generator rerun + `diff` against committed fixtures).
+- Release-metadata sync check.
+- TypeScript: typecheck + full suite (conformance + cross-SDK corpus + levers + providers).
+- Python: clean-venv install + `pqcrypto` import check + pytest (79 fixtures + cross-SDK corpus + levers).
+- Rust: build + `clippy -D warnings` + `cargo test` (conformance + providers + levers + cross-SDK corpus).
+- C: build + `clippy -D warnings` + conformance (79) + api (44) + advanced (33) + bounds (7).
+- DCO sign-off enforcement on all non-merge commits (pull requests).
 
-When Python / Rust / other SDKs land, their CI jobs append to the same workflow, and cross-implementation assertions expand to fill the NxN matrix above.
+New SDK jobs append to the same workflow and adopt the same two-mechanism check: the shared fixtures for every SDK, plus the hub-and-spoke byte-equivalence corpus where the SDK consumes it.
 
 ---
 
@@ -520,7 +569,7 @@ The `ratify_verification_log` table already exists. Build dashboards from it.
 - **Cert age distribution:** IssuedAt → verification time
 - **Revocation hit rate:** % of verifies that hit a revoked cert
 - **Challenge-to-verify latency:** time from challenge issuance to verified bundle
-- **Chain depth distribution:** % at depth 1, 2, 3
+- **Chain depth distribution:** % by depth bucket (1, 2, 3, 4 through 8)
 
 ### 11.2 Alerts
 

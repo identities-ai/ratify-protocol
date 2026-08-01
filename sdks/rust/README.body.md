@@ -20,7 +20,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     // 1. DELEGATE
     let (root, root_priv) = generate_human_root();
-    let (agent, agent_priv) = generate_agent("Alice's Assistant", "voice_agent");
+    let (agent, agent_priv) =
+        generate_agent("Alice's Assistant", "voice_agent").expect("agent generation");
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
     let mut cert = DelegationCert {
@@ -36,7 +37,7 @@ fn main() {
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).expect("delegation issuance");
 
     // 2. PRESENT
     let challenge = generate_challenge();
@@ -110,7 +111,7 @@ let mut stmt = KeyRotationStatement {
     old_pub_key: old_root.public_key.clone(),
     new_id: new_root.id.clone(),
     new_pub_key: new_root.public_key.clone(),
-    rotated_at: now_unix(),
+    rotated_at: 1_700_000_000, // current unix seconds
     reason: "routine".into(),
     signature_old: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
     signature_new: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
@@ -128,7 +129,7 @@ Ratify v1 ships 54 canonical scopes plus 14 wildcards and a `custom:` extension 
 For app-specific needs not covered by the canonical vocabulary, use the `custom:` prefix:
 
 ```rust
-use ratify_protocol::{validate_scopes, CUSTOM_SCOPE_PREFIX};
+use ratify_protocol::validate_scopes;
 
 assert!(validate_scopes(&["custom:acme:inventory:read".into()]).is_none());
 ```
@@ -142,6 +143,18 @@ cargo test
 ```
 
 The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 79 must pass; any failure means this SDK has drifted from the Go reference.
+
+## API added on main (ships in alpha.16, release unpublished)
+
+The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; depend on `main` (git) to use it ahead of the release.
+
+- **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a `Constraint`'s `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id` and `requested_path` on `VerifierContext` (SPEC §5.16); `verify_bundle(&bundle, &VerifyOptions { context, ..Default::default() })` evaluates them. Helpers: `normalize_resource_path`, `resource_path_matches`, `validate_resource_constraints`.
+- **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operation_context_bytes`, `operation_context_hash`, `session_context_bytes`, and `build_session_context`; `verifier_context_hash` produces the canonical hash bound into a `VerificationReceipt`.
+- **VerificationReceipt wire codecs.** `encode_verification_receipt`; `decode_verification_receipt` requires the `std` feature.
+- **Streamed-turn verify options.** `StreamedTurn` and `StreamedVerifyOptions`, with `verify_streamed_turn_with_options` (the options-object streamed fast path, SPEC §5.13).
+- **Extension-constraint params.** A `Constraint`'s `params` (typed `ParamsValue`) carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validate_params_value` and `validate_constraint_params`; `is_canonical_constraint_type` guards which types may carry them.
+- **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
+- **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
 
 ## License
 

@@ -24,7 +24,7 @@ The flow:
      • Go tests
      • Test vectors regenerate byte-identical
      • Release metadata stays in sync
-     • TypeScript / Python / Rust SDK conformance (59 fixtures each)
+     • SDK conformance across Go, TypeScript, Python, Rust, and C (79 fixtures each)
      • DCO sign-off
 6. Address review feedback. Every inline comment thread must be resolved.
 7. If `main` moved while the PR was open: click "Update branch" — strict
@@ -83,7 +83,7 @@ npm install
 npm test
 ```
 
-All 59 fixtures must pass in every SDK. If a change breaks the TS conformance but passes Go, or vice versa, the implementations have drifted — fix the divergence before the PR is merged.
+All 79 fixtures must pass in every SDK (Go, TypeScript, Python, Rust, C). If a change breaks the TS conformance but passes Go, or vice versa, the implementations have drifted — fix the divergence before the PR is merged.
 
 ## Canonical serialization
 
@@ -96,7 +96,7 @@ The canonicalizer in `crypto.go` (Go) and `sdks/typescript/src/canonical.ts` (TS
 ## Style
 
 - **Go:** standard `go fmt`, idiomatic Go. No framework-style abstraction layers. Prefer plain structs and functions.
-- **TypeScript:** strict mode (already enforced by `tsconfig.json`). No runtime dependencies beyond `@noble/ed25519` and `@noble/hashes`.
+- **TypeScript:** strict mode (already enforced by `tsconfig.json`). No runtime dependencies beyond `@noble/ed25519`, `@noble/hashes`, and `@noble/post-quantum` (ML-DSA-65).
 - **Documentation:** if a change affects protocol behavior, update `SPEC.md` and `docs/EXPLAINED.md` in the same PR.
 - **Commit messages:** conventional commit prefixes preferred (`fix:`, `feat:`, `spec:`, `docs:`). The first line under 72 characters. Body wrapped to 72. A new commit, never `--amend --force-push` to shared branches.
 

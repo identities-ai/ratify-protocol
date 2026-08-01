@@ -50,6 +50,16 @@ def kv(label: str, value: str) -> None:
     print(f"  {label:20s} {value}")
 
 
+class _DemoRevocation:
+    """Minimal RevocationProvider (SPEC §17.1) for the demo."""
+
+    def __init__(self, revoked_id: str) -> None:
+        self._revoked_id = revoked_id
+
+    def is_revoked(self, cert_id: str) -> tuple[bool, str | None]:
+        return (cert_id == self._revoked_id, None)
+
+
 def run() -> None:
     # -----------------------------------------------------------------
     # Step 1: Alice creates her root identity
@@ -185,7 +195,7 @@ def run() -> None:
         bundle,
         VerifyOptions(
             required_scope=SCOPE_MEETING_ATTEND,
-            is_revoked=lambda cid: cid == cert.cert_id,
+            revocation=_DemoRevocation(cert.cert_id),
         ),
     )
     print(f"  ❌  REJECTED as expected: {r.identity_status}: {r.error_reason}")

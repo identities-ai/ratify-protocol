@@ -32,7 +32,7 @@ Keep your IAM, OAuth, MCP, A2A, and policy engines — Ratify adds the missing p
 
 **Quantum-safe by design.** Every signature is hybrid: Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify. Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist.
 
-JSON wire format. No blockchain. No tokens. No central issuer. Open spec under CC-BY-4.0.
+JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec under CC-BY-4.0.
 
 **Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 79 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
@@ -347,6 +347,7 @@ Everything above describes a single delegate → present → verify round trip. 
 | **Transaction receipts** | A canonical `TransactionReceipt` where every party signs the same bytes (terms + sorted party set + transaction ID). Adding, removing, or altering any party invalidates every signature — no partial-valid state. | [§5.14](SPEC.md#514-transactionreceipt), [§6.4.7](SPEC.md#647-transactionreceiptsignable) |
 | **Witness append-only log** | Signed `WitnessEntry` hash chain for tamper-evident audit logs. Any party can operate a witness. | [§5.12](SPEC.md#512-witnessentry), [§6.4.6](SPEC.md#646-witnessentrysignable) |
 | **Key rotation statements** | `KeyRotationStatement` signed by both the old and new root keys, so auditors and registries can verify identity continuity across rotations. | [§5.15](SPEC.md#515-keyrotationstatement), [§6.4.4](SPEC.md#644-keyrotationsignable) |
+| **Resource-bound authority** | The `resource_path` constraint scopes a delegation to one resource (an opaque `resource_id` compared byte-for-byte) and, optionally, to a `path_prefix` within it under segment-boundary matching, so a broad grant like `files:write` can be pinned to `/docs` of a single repository. Down a sub-delegation chain, effective authority can stay the same or narrow but never widen: a child may carry a broader prefix on the same resource and still verify, yet gains no authority because every upstream constraint still applies, so downstream escape is impossible by construction. This is the eighth canonical constraint type, alongside `geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, and `max_rate`. | [§5.7.3](SPEC.md#573-the-resource_path-constraint), [§5.16](SPEC.md#516-verifiercontext) |
 
 The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these compose for agent-to-agent patterns (mutual authorization, sub-delegation, receipts), and [`docs/TRANSACTION_RECEIPTS.md`](docs/TRANSACTION_RECEIPTS.md) has the receipt envelope design rationale.
 
@@ -408,7 +409,7 @@ ratify-protocol/
 ├── types.go               Data structures (DelegationCert, ProofBundle, …)
 ├── crypto.go              Hybrid Ed25519 + ML-DSA-65 primitives + canonical JSON
 ├── scope.go               Canonical 54-scope vocabulary + intersect/expand
-├── constraints.go         Geo, time, version constraints
+├── constraints.go         Geo, time, speed, amount, rate, and resource-path constraints
 ├── verify.go              The verifier algorithm
 ├── streamed_verify.go     SessionToken fast path — multi-turn verification (§5.13)
 ├── receipt_verify.go      TransactionReceipt verification (§5.14)

@@ -102,7 +102,7 @@ If any two languages disagree on *what* happens (identity_status values, whether
 ## What this proves
 
 - Each of the four narrative demos (Go, TypeScript, Python, Rust) runs the same verifier algorithm (per `SPEC.md` §10).
-- Each produces canonical sign bytes that match byte-for-byte.
+- Each demo successfully signs and verifies protocol objects using its SDK's canonical serialization.
 - Hybrid Ed25519 + ML-DSA-65 signing works correctly in each of the four demo languages.
 - The attack-rejection paths are consistent across those implementations.
 - You can demo the protocol to a skeptical audience in ~15 seconds of scrolling.

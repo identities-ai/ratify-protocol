@@ -23,6 +23,13 @@ func kv(label, value string) {
 	fmt.Printf("  %-20s %s\n", label, value)
 }
 
+// demoRevocation is a minimal RevocationProvider (SPEC §17.1) for the demo.
+type demoRevocation struct{ revokedID string }
+
+func (d demoRevocation) IsRevoked(certID string) (bool, error) {
+	return certID == d.revokedID, nil
+}
+
 func main() {
 	// Step 1
 	banner("STEP 1  Alice generates a hybrid root identity")
@@ -125,7 +132,7 @@ func main() {
 	banner("REVOCATION  Alice revokes the cert")
 	r = ratify.Verify(bundle, ratify.VerifyOptions{
 		RequiredScope: ratify.ScopeMeetingAttend,
-		IsRevoked:     func(certID string) bool { return certID == cert.CertID },
+		Revocation:    demoRevocation{revokedID: cert.CertID},
 	})
 	fmt.Printf("  ❌  REJECTED as expected: %s: %s\n", r.IdentityStatus, r.ErrorReason)
 	kv("Why:", "Verifier's revocation list now contains this cert_id.")

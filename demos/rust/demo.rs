@@ -70,7 +70,7 @@ fn main() {
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
     };
-    issue_delegation(&mut cert, &alice_priv);
+    issue_delegation(&mut cert, &alice_priv).expect("delegation issuance");
     kv("Cert ID:", &cert.cert_id);
     kv("Scope:", &cert.scope.join(", "));
     kv("Expires:", &format!("unix {}", cert.expires_at));

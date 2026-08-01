@@ -60,7 +60,7 @@ fn main() {
         expires_at: now + 7 * 24 * 3600,
         signature: HybridSignature { ed25519: vec![], ml_dsa_65: vec![] },
     };
-    issue_delegation(&mut cert, &root_priv);
+    issue_delegation(&mut cert, &root_priv).expect("delegation issuance");
 
     // 2. PRESENT
     let challenge = generate_challenge();

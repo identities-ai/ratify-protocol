@@ -43,7 +43,7 @@ Once v1.0.0 stable is released, the support policy will specify which major/mino
 
 - Vulnerabilities in third-party dependencies that are already known and patched upstream. Report to the dependency, then open a PR here to bump the version.
 - Operational issues at any Identities AI-hosted service (Registry, Verify API). Those are reported via `security@identities.ai` with the service name in the subject line — a separate handling path.
-- Attacks against out-of-protocol concerns listed in `docs/EXPLAINED.md` §5.2 (endpoint malware, social engineering of delegators, etc.). These are real risks but are not protocol defects.
+- Attacks against out-of-protocol concerns listed in `SPEC.md` §15.0 under "Out of scope" (private key theft at endpoints, social engineering of principals, agent-platform compromise, etc.). These are real risks but are not protocol defects.
 
 ## Responsible disclosure examples
 

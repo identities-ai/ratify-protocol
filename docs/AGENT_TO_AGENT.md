@@ -151,7 +151,7 @@ Verifier runs Verify():
 
 ### Chain depth limit
 
-`MAX_DELEGATION_CHAIN_DEPTH = 8` (raised from 3 in v1.0.0-alpha.16 for multi-hop agent topologies). This bounds the chain length and the verify-time cost (each level adds two hybrid signature verifications); the byte and count limits in SPEC §5.1 bound the work that depth alone does not. The ceiling is a wire-determinism and denial-of-service bound, not cryptography. Organizations that want shorter chains than the ceiling should flatten (e.g., have the tenant admin directly delegate to leaves rather than passing through intermediate tiers); a per-delegation `max_delegation_depth` constraint is planned so principals can bound their own chains tighter.
+`MAX_DELEGATION_CHAIN_DEPTH = 8` (raised from 3 in v1.0.0-alpha.16 for multi-hop agent topologies). This bounds the chain length and the verify-time cost (each additional cert adds one hybrid signature verification, itself an Ed25519 check plus an ML-DSA-65 check); the byte and count limits in SPEC §5.1 bound the work that depth alone does not. The ceiling is a wire-determinism and denial-of-service bound, not cryptography. Organizations that want shorter chains than the ceiling should flatten (e.g., have the tenant admin directly delegate to leaves rather than passing through intermediate tiers); a per-delegation `max_delegation_depth` constraint is planned so principals can bound their own chains tighter.
 
 ---
 
@@ -237,7 +237,7 @@ Six months after the transaction, either party can produce this artifact and a t
 
 - **Defined:** `HybridSignature` is the authoritative signature primitive for any receipt. `CanonicalJSON(terms)` gives deterministic signable bytes regardless of which language produced the `terms` object. Applications that hash the terms will get the same bytes across implementations.
 - **v1.1 envelope:** [`TRANSACTION_RECEIPTS.md`](TRANSACTION_RECEIPTS.md) defines a canonical receipt envelope that binds the transaction ID, schema URI, terms bytes, party set, and every party signature.
-- **NOT defined in tagged v1:** the schema of `terms` itself. That's application-specific — a compute-purchase receipt looks different from a calendar-booking receipt. v1 deliberately leaves this open until receipt fixtures and SDK APIs ship.
+- **NOT defined in tagged v1:** the schema of `terms` itself. That's application-specific (a compute-purchase receipt looks different from a calendar-booking receipt). The receipt envelope, its canonical fixtures, and the SDK sign/verify APIs have shipped (v1.0.0-alpha.6); only the `terms` schema stays application-defined.
 
 ### When to use
 
@@ -264,7 +264,7 @@ If Alice rotates her root key while Agent A is mid-interaction with Agent B, Age
 
 ### Multi-party agreements
 
-Ratify v1 is pairwise. For three-party agreements (A, B, and C all commit to the same terms), the v1 approach is to produce three pairwise receipts (A-B, A-C, B-C) sharing the same `terms` bytes. A v2 extension may add a native *group signature* construct; until then, three pairwise receipts are the canonical pattern.
+Ratify v1 supports N-party agreements natively. A single `TransactionReceipt` (SPEC §5.14) binds the full sorted party set, and every party signs the same signable bytes (transaction ID, terms, schema URI, and the complete party set). Because the whole party set is inside each signature, adding, removing, or altering any party invalidates every existing party signature (party-set atomicity). For a three-party agreement (A, B, and C all committing to the same terms), one envelope lists all three parties and carries all three signatures: there is no need to fan out into pairwise receipts, and no v2 group-signature construct is required for basic multi-party agreement. See [`TRANSACTION_RECEIPTS.md`](TRANSACTION_RECEIPTS.md) for the envelope and its fixtures.
 
 ### Privacy of counterparty identities
 

@@ -32,9 +32,10 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 | A Python script, ML pipeline, data tool | [Python SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python) |
 | A Rust service or high-performance binary | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) — use directly, no FFI overhead |
 | **C or C++ code** | **This SDK** |
-| **Firmware, RTOS, hardware driver** | **This SDK** (static library, `libratify_c.a`) |
+| **RTOS firmware with a std shim** (FreeRTOS, Zephyr) | **This SDK** (requires std/heap; see Embedded deployment guide) |
 | **A language that FFIs to C** (Swift, Zig, Julia, Lua, etc.) | **This SDK** |
-| **Air-gapped embedded device** (no OS, no runtime) | **This SDK** (static library, no OS dependencies) |
+| **Air-gapped Linux or RTOS device** | **This SDK** (static library `libratify_c.a`, verifies offline) |
+| **Bare-metal / no-OS firmware** (no heap, no std) | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) with `no_std` + `alloc` (the C SDK requires std/heap) |
 
 The C SDK wraps the Rust SDK via a C ABI. If you're writing Rust, use the Rust SDK directly — the C SDK adds an FFI boundary with no benefit in a Rust context.
 
@@ -123,7 +124,7 @@ For bare-metal Cortex-M with no OS, use the Rust SDK directly with `#[no_std]` +
 | x86-64 | `x86_64-unknown-linux-gnu` | Intel/AMD server, Linux PC |
 | ARM64 | `aarch64-unknown-linux-gnu` | Raspberry Pi 4, embedded Linux, Apple Silicon |
 | ARM32 | `armv7-unknown-linux-gnueabihf` | Raspberry Pi 2/3, older embedded Linux |
-| ARM Cortex-M4/M7 | `thumbv7em-none-eabihf` | STM32, NXP — FreeRTOS, Zephyr |
+| ARM Cortex-M4/M7 | `thumbv7em-none-eabihf` | STM32, NXP: FreeRTOS/Zephyr with a std shim (not bare-metal) |
 | x86-32 | `i686-unknown-linux-gnu` | Legacy industrial, 32-bit Linux |
 | RISC-V 64 | `riscv64gc-unknown-linux-gnu` | SiFive, emerging IoT |
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon Mac |
@@ -157,10 +158,6 @@ cross build --release --target aarch64-unknown-linux-gnu
 
 # ARM32 (Raspberry Pi 2/3)
 cross build --release --target armv7-unknown-linux-gnueabihf
-
-# ARM Cortex-M4 bare metal (no OS)
-rustup target add thumbv7em-none-eabihf
-cargo build --release --target thumbv7em-none-eabihf
 
 # RISC-V 64
 cross build --release --target riscv64gc-unknown-linux-gnu
@@ -262,7 +259,13 @@ public:
 
 ## API overview
 
-### Key generation (infallible)
+### Key generation
+
+Key generation returns a `RatifyStatus` (check it for null-pointer and argument
+errors). On a standard OS target it has no recoverable failure mode, because the
+operating system supplies entropy. It is not truly infallible on embedded targets:
+if no entropy source is configured, the library halts (panics) rather than
+returning an error. See the Embedded deployment guide.
 
 ```c
 // Generate a HumanRoot keypair (the delegating principal)
@@ -371,6 +374,45 @@ The core paths above cover one-shot verification. The full v1.1 surface is expor
 | Multi-party + audit | `ratify_transaction_receipt_*`, `ratify_witness_entry_*`, `ratify_key_rotation_*` | Transaction receipts (§5.14), witness logs (§5.12), key rotation (§5.15) |
 | Scope utilities | `ratify_scope_*`, `ratify_scopes_*`, `ratify_scope_vocabulary` | Expansion, intersection, validation, and vocabulary discovery |
 
+### Available on main; ships in alpha.16 (release unpublished)
+
+The following are merged to `main` and covered by the test suites now. They ship
+in alpha.16, which is not yet published. Every symbol below is declared
+in `include/ratify.h`.
+
+- **Resource-bound verification.** `ratify_verify_bundle_opts_v2` takes a
+  `const RatifyResourceContext *` (fields `requested_resource_id` and
+  `requested_path`) alongside `RatifyVerifyOptions`, supplying the context a
+  `resource_path` constraint (the 8th constraint type, SPEC §5.16) needs.
+  Passing `NULL` for `resource` is equivalent to `ratify_verify_bundle_opts`; a
+  bundle whose cert bears a `resource_path` constraint verified without this
+  context fails closed as `constraint_unverifiable`.
+- **Streamed-turn verify options.** `ratify_verify_streamed_turn_opts` with
+  `RatifyStreamedVerifyOptions` (`required_scope`, `now_unix`, `session_context`
+  / `session_context_len`, `stream`) enforces required scope, single-use
+  challenges (via a `RatifyChallengeStore`), and session/stream binding on each
+  turn. It supersedes the deprecated positional `ratify_verify_streamed_turn`.
+- **Operation and session context.** `ratify_operation_context_hash` and
+  `ratify_session_context_build` produce the canonical SPEC §6.4.9 32-byte
+  hashes for operation and session binding (and the Middleware Custody Profile,
+  SPEC §15.2.1).
+- **VerificationReceipt wire codecs.** `ratify_receipt_to_json` and
+  `ratify_receipt_from_json` round-trip a `RatifyReceipt` through the strict JSON
+  wire form (a decoded receipt carrying an unknown `identity_status` is
+  rejected); `ratify_receipt_hash` computes its canonical 32-byte chain hash.
+- **Extension-constraint params.** Certs may carry extension constraints with
+  typed parameters. These evaluate through the normal verify path and route to
+  `constraint_unknown` when the constraint type is unrecognized (no dedicated C
+  symbol).
+- **Chain-depth ceiling.** The maximum delegation-chain depth is now 8 (raised
+  from 3); a deeper chain fails closed as `delegation_not_authorized`.
+- **Input bounds (SPEC §5.1).** Enforced before signature work.
+  `MAX_PROOF_BUNDLE_BYTES` (131072, i.e. 128 KiB) is checked before parsing, and
+  an oversized payload yields an `invalid` result rather than being parsed.
+  Further limits cap scopes per cert (128), constraints per cert (32), scope
+  length (256 bytes), identifier length (512 bytes), agent-name length (256
+  bytes), and JSON nesting depth (16).
+
 ### Memory management
 
 Every function that returns a heap-allocated value documents which `_free`
@@ -402,16 +444,19 @@ ratify_error_free(err);         // for err_out parameters
 
 | `identity_status` | Meaning |
 |---|---|
-| `authorized_agent` | Valid — agent is authorized |
+| `authorized_agent` | Valid: agent is authorized |
 | `expired` | Delegation cert has expired |
-| `revoked` | Cert was revoked by the RevocationProvider |
+| `revoked` | Cert was revoked (revocation callback or signed revocation list) |
 | `scope_denied` | Required scope not in the effective delegation |
-| `constraint_denied` | A constraint (geo, speed, amount) was violated |
+| `constraint_denied` | A constraint (geo, speed, amount, rate, resource path) was violated |
 | `constraint_unverifiable` | Constraint present but no context to evaluate it |
 | `constraint_unknown` | Unknown constraint type |
-| `delegation_not_authorized` | Chain depth / signing authority violation |
-| `invalid` | Generic failure (tampered bundle, bad signature, lookup error) |
-| `unauthorized` | Challenge freshness or session binding failure |
+| `delegation_not_authorized` | Chain depth or signing authority violation |
+| `invalid_scope` | A cert grants a scope that is not canonical, not a wildcard, and not a `custom:` extension |
+| `invalid` | Generic failure: tampered bundle, bad signature, stale or unknown challenge, session/stream binding failure, or a revocation lookup error |
+
+`verified_human` and `unauthorized` are part of the status vocabulary but are not
+emitted by proof-bundle verification through this SDK.
 
 ---
 

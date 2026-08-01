@@ -141,7 +141,7 @@ await issueKeyRotationStatement(stmt, oldCustodialPrivateKey, newPrivateKey);
 
 ## Canonical serialization
 
-Signed payloads follow Ratify's canonical JSON rules (see [SPEC.md §6.3.1](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)). The SDK exposes:
+Signed payloads follow Ratify's canonical JSON rules (see [SPEC.md §6](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)). The SDK exposes:
 
 ```ts
 import { canonicalJSON, delegationSignBytes, challengeSignBytes } from "@identities-ai/ratify-protocol";
@@ -264,6 +264,18 @@ A single failure means TypeScript and the Go reference have drifted.
 - **WebCrypto** for secure random (32-byte challenges).
 
 No network code in this package. HTTP concerns (challenge issuance, revocation list fetching, API auth) live one layer up.
+
+## API added on main (ships in alpha.16, release unpublished)
+
+The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; install from `main` to use it ahead of the release.
+
+- **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a constraint's `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id`, `requested_path`, and `has_resource` on `VerifierContext` (SPEC §5.16); `verifyBundle(bundle, { context })` evaluates them. Helpers: `normalizeResourcePath`, `resourcePathMatches`, `validateResourceConstraints`.
+- **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operationContextBytes`, `operationContextHash`, `sessionContextBytes`, and `buildSessionContext`; `verifierContextHash` produces the canonical hash bound into a `VerificationReceipt`.
+- **VerificationReceipt wire codecs.** `encodeVerificationReceipt` and `decodeVerificationReceipt`.
+- **Streamed-turn verify options.** `StreamedTurn` and `StreamedVerifyOptions`, with `verifyStreamedTurnWithOptions` (the options-object streamed fast path, SPEC §5.13).
+- **Extension-constraint params.** A constraint's `params` carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validateParamsValue`; `isCanonicalConstraintType` guards which types may carry them.
+- **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
+- **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
 
 ## License
 

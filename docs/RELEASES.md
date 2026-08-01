@@ -212,9 +212,9 @@ The release logic lives in:
 
 ## 6. Continuous integration
 
-Every push and every pull request runs a matrix across all five SDKs (Go, TypeScript, Python, Rust, C/C++). `.github/workflows/ci.yml` already defines the Go + determinism + TS jobs; Python and Rust are added now.
+Every push and every pull request runs `.github/workflows/ci.yml`, which fans out into a per-SDK conformance job for each of the five implementations (Go, TypeScript, Python, Rust, C/C++), plus a determinism job (regenerate the fixtures and diff against the committed `testvectors/v1/`) and a release-metadata sync check.
 
-Every PR must pass the full conformance grid before merge. The NxN interop matrix (see [`SDKS.md`](SDKS.md) §5) is enforced — a bundle produced by any implementation must verify in every implementation.
+Every PR must pass the full conformance grid before merge. Cross-language agreement is hub-and-spoke, not a full N×N matrix: the Go reference generates the canonical fixture bytes, the determinism job proves they regenerate byte-identical, and the TypeScript, Python, Rust, and C/C++ SDKs each assert against those same committed reference vectors. Because every implementation is checked against the Go reference bytes, they transitively agree with one another, which is what keeps signatures verifying across languages.
 
 ## 7. Fixture versioning
 

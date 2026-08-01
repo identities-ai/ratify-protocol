@@ -1,6 +1,6 @@
 # Ratify Protocol — Runnable Demos
 
-**End-to-end narrative demos in every supported language. Run one, see the full protocol lifecycle happen in front of you.**
+**End-to-end narrative demos in four languages (Go, Python, Rust, TypeScript). Run one, see the full protocol lifecycle happen in front of you.**
 
 Each demo walks through:
 
@@ -111,7 +111,7 @@ If any two languages disagree on *what* happens (identity_status values, whether
 
 These demos are narrative, not exhaustive. For the rigorous validation:
 
-- `testvectors/v1/` — 20 canonical fixtures, every SDK passes byte-identical.
+- `testvectors/v1/` — 79 canonical fixtures, every SDK passes byte-identical.
 - Go unit tests: `go test ./...`
 - TS conformance: `cd sdks/typescript && npm test`
 - Python conformance: `cd sdks/python && pytest`

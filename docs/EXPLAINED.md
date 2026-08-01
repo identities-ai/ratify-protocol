@@ -56,6 +56,11 @@ Alice's agent needs to hire a specialized "Travel Agent" to book a flight. Alice
 ### Multi-hop Verifiability
 When the Travel Agent presents the proof to the Airline, the Airline can see the entire chain. They don't just know that Alice's agent authorized the Travel Agent; they can cryptographically verify that *Alice herself* authorized the root agent to begin with.
 
+### Resource-bound authority (the `resource_path` constraint)
+Scopes answer *what* an agent may do; the `resource_path` constraint answers *where*. It binds a delegation to one resource (a repository, workspace, channel, or device) named by an opaque `resource_id`, and optionally to a `path_prefix` inside that resource. A scope of `files:write` grants file writes anywhere; `files:write` paired with `resource_path{repo R, /docs}` grants writes only under `/docs` of repository R.
+
+Two properties make it safe to hand down a sub-delegation chain. The `resource_id` is compared **byte-for-byte** (the verifier never fetches, decodes, or normalizes it), and `path_prefix` matches only on **segment boundaries**, so `/src` covers `/src` and `/src/a.ts` but never `/src-old`. Because verification evaluates every cert's constraints against the same requested resource, a child link can only ever *narrow* the bound: a child naming a broader prefix, or a different resource, gains nothing, since the request must still satisfy every hop upstream. Downstream escape is impossible by construction, not by a special rule. `resource_path` is one of the eight canonical constraint types (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`); the verifier receives the requested resource and path through its `VerifierContext`.
+
 ---
 
 ## 5. Threat Model & Defenses

@@ -10,7 +10,7 @@ This roadmap has three buckets: **shipped** (in the current release), **planned*
 
 ## Shipped
 
-All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.5; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++ — see [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.4; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++ — see [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
 
 ### Continuous real-time interactions
 
@@ -30,6 +30,78 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 | **Multi-party receipt atomicity** | §5.14, §6.4.7 | Because the signable includes the full sorted party set, adding, removing, or changing any party invalidates every existing signature. No partial-valid state. | (same) |
 | **Witness append-only log** | §5.12, §6.4.6 | Signed `WitnessEntry` defines the hash-chain shape for append-only audit logs. Any party can operate a witness. v1.1 defines the shape; operating a scalable witness is a deployment concern. | 1 |
 | **Key rotation statement** | §5.15, §6.4.4 | `KeyRotationStatement` signed by both old and new root keys. Auditors and registries can verify identity continuity across key rotations. | 2 |
+
+### v1.0.0-alpha.11: docs and spec hardening (released 2026-07-06; no wire change, no protocol or SDK code change)
+
+- README truth pass: representative demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
+- SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
+- Local test gate (`scripts/test-all.sh`) now runs the C/C++ SDK, matching what CI and `docs/RELEASES.md` already claimed.
+- All 59 canonical fixtures (the count at the time) byte-identical to alpha.10.
+
+### v1.0.0-alpha.12: protocol additions (released 2026-07-06)
+
+The two items below are scopes and features identified through production adapter design. No wire format change required: new `scope.go` entries, updated SPEC §9/§4, and new test fixtures. Adding fixtures changes the canonical fixture count; the release includes a full sweep of the documented count plus a fixture-count check in `scripts/check-release-sync.sh`.
+
+#### No-expiry sentinel: `ExpiresAt = 4070908799`
+
+**Status:** Shipped in v1.0.0-alpha.12. Normative in SPEC §5.1 + §5.7; fixture `no_expiry_cert`; no-expiry sentinel constant + helper in every SDK (Go `NoExpirySentinel`/`IsNoExpiry()`, TS `NO_EXPIRY_SENTINEL`/`isNoExpiry()`, Python/Rust `NO_EXPIRY_SENTINEL`/`is_no_expiry()`, C `ratify_no_expiry_sentinel()`/`ratify_expires_at_is_no_expiry()`).
+
+**Problem:** `DelegationCert.ExpiresAt` is `int64` (Unix timestamp). The struct has no null/optional representation. Users of the Ratify Verify managed platform can grant delegations with "no expiry (until revoked)," which the platform stores as `NULL` in the database. The cert that gets signed must still have a finite `ExpiresAt` value for protocol compliance.
+
+**Current implementation:** The Ratify platform uses `4070908799` (2099-12-31 23:59:59 UTC) as a sentinel for "no expiry" in the signed cert. The platform layer:
+- Writes `NULL` in `ratify_delegation_certs.expires_at` (the canonical no-expiry signal)
+- Writes `ExpiresAt = 4070908799` in the signed `DelegationCert` struct
+- Treats `expires_at IS NULL` as "never expires" for verification liveness
+
+**Problem for SDK consumers:** Offline verifiers using only the protocol SDK see `ExpiresAt = 4070908799` and have no way to distinguish "no expiry" from a cert that legitimately expires in 2099. They may apply organizational policy caps incorrectly.
+
+**Normalization (shipped in v1.0.0-alpha.12):**
+1. `4070908799` is a normative sentinel: `NO_EXPIRY_SENTINEL` in SPEC §5.1, display/policy behavior in §5.7.
+2. Conformant SDKs MUST treat `ExpiresAt == NO_EXPIRY_SENTINEL` as "no expiry (until revoked)" in display and policy evaluation, not as a literal 2099 expiry. Constant + helper in every SDK (Go `IsNoExpiry()`, TS `isNoExpiry()`, Python/Rust `is_no_expiry()`, C `ratify_expires_at_is_no_expiry()`).
+3. Conformance fixture `no_expiry_cert.json` pins the verify behavior.
+
+**Alternative not taken:** `NoExpiry bool` or `ExpiresAt *int64` on `DelegationCert` would be wire-breaking; if the sentinel ever proves insufficient it belongs in v2.0.
+
+#### `presence:represent`: agent representation of a human
+
+**Status:** Shipped in v1.0.0-alpha.12. SPEC §9.1; fixtures `presence_represent_allowed` + `reject_presence_sensitive_wildcard`.
+
+**Problem it solved:**
+
+The current scope vocabulary covers what an agent *does* (attend a meeting, speak, record). It does not cover what an agent *is* in a given context, specifically an agent that is attending and interacting *as a proxy for* a named human principal, not merely alongside them.
+
+Three scenarios, all requiring a distinct scope:
+
+| Scenario | Current scopes | Gap |
+|---|---|---|
+| **Attendee bot** (Otter joins Marcus's meeting, takes notes) | `meeting:attend`, `meeting:speak` | No gap (covered) |
+| **Representative agent** (Marcus's AI agent attends on his behalf, speaks and acts as his representative; does not look like him) | `meeting:attend` + `meeting:speak` | No scope asserts "this agent IS Marcus's representative" |
+| **Likeness agent** (Tavus agent that looks, sounds, and responds like Marcus, trained on his knowledge) | `generate:deepfake` + `meeting:video` + `meeting:speak` | `generate:deepfake` covers content generation, not real-time identity representation. A verifier cannot tell from scopes alone that this agent is presenting as Marcus. |
+
+**Why `generate:deepfake` is not sufficient:**
+
+`generate:deepfake` means "generate content imitating a real person." It is a content-creation scope. Representation is a presence and identity scope: it describes the agent's relationship to the principal in a real-time interaction, not the content it generates. An agent could hold `generate:deepfake` without representing the principal in a meeting, and could represent the principal without generating likeness content.
+
+**Proposed scope:**
+
+```
+presence:represent   (sensitive)
+```
+
+Semantics: "This agent is authorized to attend and interact as a direct representative of the principal. Other parties in the interaction may be interacting with this agent as if it were the principal."
+
+Sensitive by design: requires explicit human confirmation beyond standard delegation, because the scope asserts identity representation, not just task execution.
+
+**Companion disclosure flag, considered and rejected (2026-07-06):**
+
+An earlier draft proposed a boolean `requires_disclosure` constraint (default `true`) on certs carrying this scope, with the protocol defining the constraint and applications enforcing it. Rejected (see the locked decisions below): a verify-time constraint cannot verify that disclosure actually happened, so it would assert an obligation the protocol is structurally unable to check. Disclosure is platform policy, carried in the SPEC as a non-normative expectation.
+
+**Wire impact:** None. New scope string + `sensitiveScopes` entry + `validScopes` entry. Fully backward-compatible. v1.0 verifiers that don't know this scope treat it as unknown and may reject it (correct fail-closed behavior for unknown sensitive scopes).
+
+**Design decisions (locked 2026-07-06):**
+- **No implication.** `presence:represent` does NOT imply `identity:prove`. Issuers grant both explicitly when both are needed. Scope lists stay literal: effective authority is exactly the chain intersection, with no hidden expansion table for verifiers or auditors to consult.
+- **One scope, no sub-qualifiers.** `presence:represent:voice` / `presence:represent:likeness` are deferred until real adapter pressure proves the distinction is needed at the protocol layer. Fidelity distinctions live in platform-layer constraints for now. Adding sub-qualifier scopes later is a backward-compatible minor version; retiring a wrongly guessed one is not, and no scope-deprecation process exists yet.
+- **Disclosure is platform policy, not a protocol constraint.** A `requires_disclosure` constraint would assert an obligation the verifier cannot verify at verify time: disclosure happens in the application UI after verification. The SPEC scope entry will carry a non-normative note that verifiers accepting this scope are expected to surface the representation relationship to other participants. If disclosure ever needs protocol-level teeth, the right mechanism is a disclosure attestation in the receipt/audit layer, designed against an actual compliance requirement.
 
 ### Resource-bound authority and deeper chains (v1.0.0-alpha.16, spec merged, release unpublished)
 
@@ -55,84 +127,6 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 ---
 
 ## Planned — next releases (backward-compatible)
-
-### v1.0.0-alpha.11 — docs & spec hardening (RELEASED 2026-07-06; no wire change, no protocol or SDK code change)
-
-- README truth pass: representative demo transcript, surface the shipped v1.1 feature set, accurate repository layout.
-- SPEC additions: §15.4 trust anchors and public-key discovery, §15.5 revocation freshness, §15.6 verifier clock discipline, §15.7 constraint attestation limits, threat T12 (key substitution), SessionToken lifetime and multi-instance guidance (§5.13), crypto-agility note (§12).
-- Local test gate (`scripts/test-all.sh`) now runs the C/C++ SDK, matching what CI and `docs/RELEASES.md` already claimed.
-- All 59 canonical fixtures (the count at the time) byte-identical to alpha.10.
-
-### v1.0.0-alpha.12 — protocol additions (below)
-
-The two items below are scopes and features identified through production adapter design. No wire format change required — new `scope.go` entries, updated SPEC §9/§4, and new test fixtures. Adding fixtures changes the canonical fixture count; the release includes a full sweep of the documented count plus a fixture-count check in `scripts/check-release-sync.sh`.
-
----
-
-### No-expiry sentinel — `ExpiresAt = 4070908799`
-
-**Status:** Implemented — ships in v1.0.0-alpha.12. Normative in SPEC §5.1 + §5.7; fixture `no_expiry_cert`; no-expiry sentinel constant + helper in every SDK (Go `NoExpirySentinel`/`IsNoExpiry()`, TS `NO_EXPIRY_SENTINEL`/`isNoExpiry()`, Python/Rust `NO_EXPIRY_SENTINEL`/`is_no_expiry()`, C `ratify_no_expiry_sentinel()`/`ratify_expires_at_is_no_expiry()`).
-
-**Problem:** `DelegationCert.ExpiresAt` is `int64` (Unix timestamp). The struct has no null/optional representation. Users of the Ratify Verify managed platform can grant delegations with "no expiry (until revoked)," which the platform stores as `NULL` in the database. The cert that gets signed must still have a finite `ExpiresAt` value for protocol compliance.
-
-**Current implementation:** The Ratify platform uses `4070908799` (2099-12-31 23:59:59 UTC) as a sentinel for "no expiry" in the signed cert. The platform layer:
-- Writes `NULL` in `ratify_delegation_certs.expires_at` (the canonical no-expiry signal)
-- Writes `ExpiresAt = 4070908799` in the signed `DelegationCert` struct
-- Treats `expires_at IS NULL` as "never expires" for verification liveness
-
-**Problem for SDK consumers:** Offline verifiers using only the protocol SDK see `ExpiresAt = 4070908799` and have no way to distinguish "no expiry" from a cert that legitimately expires in 2099. They may apply organizational policy caps incorrectly.
-
-**Normalization (shipped in v1.0.0-alpha.12):**
-1. `4070908799` is a normative sentinel — `NO_EXPIRY_SENTINEL` in SPEC §5.1, display/policy behavior in §5.7.
-2. Conformant SDKs MUST treat `ExpiresAt == NO_EXPIRY_SENTINEL` as "no expiry (until revoked)" in display and policy evaluation — not as a literal 2099 expiry. Constant + helper in every SDK (Go `IsNoExpiry()`, TS `isNoExpiry()`, Python/Rust `is_no_expiry()`, C `ratify_expires_at_is_no_expiry()`).
-3. Conformance fixture `no_expiry_cert.json` pins the verify behavior.
-
-**Alternative not taken:** `NoExpiry bool` or `ExpiresAt *int64` on `DelegationCert` would be wire-breaking; if the sentinel ever proves insufficient it belongs in v2.0.
-
----
-
-### `presence:represent` — agent representation of a human
-
-**Status:** Implemented — ships in v1.0.0-alpha.12. SPEC §9.1; fixtures `presence_represent_allowed` + `reject_presence_sensitive_wildcard`.
-
-**Problem it solves:**
-
-The current scope vocabulary covers what an agent *does* (attend a meeting, speak, record). It does not cover what an agent *is* in a given context — specifically, an agent that is attending and interacting *as a proxy for* a named human principal, not merely alongside them.
-
-Three scenarios, all requiring a distinct scope:
-
-| Scenario | Current scopes | Gap |
-|---|---|---|
-| **Attendee bot** — Otter joins Marcus's meeting, takes notes | `meeting:attend`, `meeting:speak` | No gap — covered |
-| **Representative agent** — Marcus's AI agent attends on his behalf, speaks and acts as his representative (does not look like him) | `meeting:attend` + `meeting:speak` | No scope asserts "this agent IS Marcus's representative" |
-| **Likeness agent** — Tavus agent that looks, sounds, and responds like Marcus, trained on his knowledge | `generate:deepfake` + `meeting:video` + `meeting:speak` | `generate:deepfake` covers content generation, not real-time identity representation. A verifier cannot tell from scopes alone that this agent is presenting as Marcus. |
-
-**Why `generate:deepfake` is not sufficient:**
-
-`generate:deepfake` means "generate content imitating a real person." It is a content-creation scope. Representation is a presence and identity scope — it describes the agent's relationship to the principal in a real-time interaction, not the content it generates. An agent could hold `generate:deepfake` without representing the principal in a meeting, and could represent the principal without generating likeness content.
-
-**Proposed scope:**
-
-```
-presence:represent   (sensitive)
-```
-
-Semantics: "This agent is authorized to attend and interact as a direct representative of the principal. Other parties in the interaction may be interacting with this agent as if it were the principal."
-
-Sensitive by design — requires explicit human confirmation beyond standard delegation, because the scope asserts identity representation, not just task execution.
-
-**Companion disclosure flag — considered and rejected (2026-07-06):**
-
-An earlier draft proposed a boolean `requires_disclosure` constraint (default `true`) on certs carrying this scope, with the protocol defining the constraint and applications enforcing it. Rejected — see the locked decisions below: a verify-time constraint cannot verify that disclosure actually happened, so it would assert an obligation the protocol is structurally unable to check. Disclosure is platform policy, carried in the SPEC as a non-normative expectation.
-
-**Wire impact:** None. New scope string + `sensitiveScopes` entry + `validScopes` entry. Fully backward-compatible. v1.0 verifiers that don't know this scope treat it as unknown and may reject it (correct fail-closed behavior for unknown sensitive scopes).
-
-**Design decisions (locked 2026-07-06):**
-- **No implication.** `presence:represent` does NOT imply `identity:prove`. Issuers grant both explicitly when both are needed. Scope lists stay literal — effective authority is exactly the chain intersection, with no hidden expansion table for verifiers or auditors to consult.
-- **One scope, no sub-qualifiers.** `presence:represent:voice` / `presence:represent:likeness` are deferred until real adapter pressure proves the distinction is needed at the protocol layer. Fidelity distinctions live in platform-layer constraints for now. Adding sub-qualifier scopes later is a backward-compatible minor version; retiring a wrongly guessed one is not, and no scope-deprecation process exists yet.
-- **Disclosure is platform policy, not a protocol constraint.** A `requires_disclosure` constraint would assert an obligation the verifier cannot verify at verify time — disclosure happens in the application UI after verification. The SPEC scope entry will carry a non-normative note that verifiers accepting this scope are expected to surface the representation relationship to other participants. If disclosure ever needs protocol-level teeth, the right mechanism is a disclosure attestation in the receipt/audit layer, designed against an actual compliance requirement.
-
----
 
 ### Agent-to-agent in real-time meeting surfaces
 

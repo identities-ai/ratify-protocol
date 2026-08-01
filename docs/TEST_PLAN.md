@@ -88,8 +88,10 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 
 ### 1.9 DeriveID
 
+`DeriveID(HybridPublicKey) string` returns `hex(SHA-256(ed25519_pub || ml_dsa_65_pub)[:16])` (SPEC §7).
+
 - Same pubkey → same ID
-- 32-byte input → 32-char hex output (16 bytes of SHA-256)
+- `HybridPublicKey` input (32-byte Ed25519 || 1952-byte ML-DSA-65) → 32-char hex output (first 16 bytes of the SHA-256 digest)
 - Different pubkeys → different IDs (basic collision sanity)
 
 ---
@@ -132,7 +134,7 @@ Every output of `ExpandScopes` must satisfy `ValidateScopes` without error.
 
 This is the single highest-leverage test artifact for the open-source launch. Without cross-language test vectors, no JS or Python implementation can be verified correct.
 
-**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust). The v1.1 fixtures are not part of a public protocol tag until the next release.
+**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
 
 ### 3.1 Location
 
@@ -325,29 +327,30 @@ go test -run TestConformanceVectors ./...
 
 ### 3.5 Cross-language harness
 
-`testvectors/run.sh` accepts a language binary (go, js, py) and runs every vector through it, comparing outputs. Part of the open-source repo.
+There is no single driver script. Each SDK owns its conformance harness and loads the fixtures directly from `testvectors/v1/`:
+
+- Go: `TestConformanceVectors` in `ratify_test.go`.
+- TypeScript: `sdks/typescript/test/conformance.test.ts`.
+- Python: `sdks/python/tests/test_conformance.py`.
+- Rust: `sdks/rust/tests/conformance.rs`.
+- C: `sdks/c/tests/conformance.rs` (through the C ABI).
+
+Byte-level cross-language equivalence is proven separately by the hub-and-spoke corpus `testvectors/v1/cross_sdk_vectors.json`: Go generates the reference bytes, and TypeScript, Python, and Rust each assert byte-identity against them (`test/cross_sdk.test.ts`, `tests/test_cross_sdk.py`, `tests/cross_sdk.rs`). See §4.
 
 ---
 
 ## Layer 4 — Cross-language interop
 
-**Status:** Go ↔ TypeScript ↔ Python ↔ Rust ↔ C all proven. All **79 fixtures** byte-identical across every pairing.
+**Status:** All five SDKs (Go, TypeScript, Python, Rust, C) pass the 79 canonical fixtures. Byte-level equivalence is proven for Go, TypeScript, Python, and Rust through the hub-and-spoke corpus (§4.1).
 
-### 4.1 The NxN conformance matrix
+### 4.1 Cross-language conformance (hub-and-spoke)
 
-Every SDK must pass the **79 canonical fixtures** when acting as a verifier against bundles produced by every other SDK (including itself). For N implementations the matrix is NxN:
+Two mechanisms together give cross-language assurance:
 
-|   | Go verifier | TS verifier | Python verifier | Rust verifier | C verifier |
-|---|---|---|---|---|---|
-| **Go signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **TS signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Python signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Rust signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **C signer** | ✅ | ✅ | ✅ | ✅ | ✅ |
+1. **Shared fixtures (all five SDKs).** Go, TypeScript, Python, Rust, and C each load the **79 canonical fixtures** at `testvectors/v1/` and assert that, for every one of the 79 fixtures, the verifier output matches the fixture's expected result. The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
+2. **Byte-equivalence corpus (hub-and-spoke, four SDKs).** The Go reference generates `testvectors/v1/cross_sdk_vectors.json` (canonical hashing and signable-bytes constructions). TypeScript, Python, and Rust each assert byte-identical output against the Go reference. Matching a single reference transitively proves the four are pairwise byte-identical without an N×N grid of assertions. C validates through the shared fixtures only; it does not consume this corpus.
 
-All five SDKs produce byte-identical canonical JSON and parse each other's fixtures without drift. The fixture count of 79 breaks down by kind as: 62 verify + 2 scope + 5 session-token + 5 transaction-receipt + 2 key-rotation + 1 revocation-list + 1 revocation-push + 1 witness-entry. Alpha.16 added 16 verify-kind fixtures (14 resource_path, 1 extension-params, 1 depth-8).
-
-Each cell assertion: *given a signer in language A and a verifier in language B, for every one of the 79 fixtures, the verifier's `VerifyResult` matches the fixture's expected result byte-for-byte.* Any failure is canonical-serialization drift — the fix is always to make the two implementations produce identical signable bytes.
+Any divergence from the Go reference bytes is canonical-serialization drift: a bug in the diverging implementation, and the fix is always to make it produce identical signable bytes.
 
 ### 4.2 The single-component tamper test
 
@@ -373,12 +376,16 @@ diff -rq testvectors/v1/ /tmp/regen/        # MUST be empty
 
 The `.github/workflows/ci.yml` in this repo runs the following on every push and PR:
 
-- Go vet + go test.
-- Determinism check (generator rerun + diff).
-- TypeScript typecheck + conformance suite.
-- DCO sign-off enforcement on all commits.
+- Go: `go vet` + `go test -race` + `go mod tidy` cleanliness.
+- Test-vector determinism (generator rerun + `diff` against committed fixtures).
+- Release-metadata sync check.
+- TypeScript: typecheck + full suite (conformance + cross-SDK corpus + levers + providers).
+- Python: clean-venv install + `pqcrypto` import check + pytest (79 fixtures + cross-SDK corpus + levers).
+- Rust: build + `clippy -D warnings` + `cargo test` (conformance + providers + levers + cross-SDK corpus).
+- C: build + `clippy -D warnings` + conformance (79) + api (44) + advanced (33) + bounds (7).
+- DCO sign-off enforcement on all non-merge commits (pull requests).
 
-When Python / Rust / other SDKs land, their CI jobs append to the same workflow, and cross-implementation assertions expand to fill the NxN matrix above.
+New SDK jobs append to the same workflow and adopt the same two-mechanism check: the shared fixtures for every SDK, plus the hub-and-spoke byte-equivalence corpus where the SDK consumes it.
 
 ---
 

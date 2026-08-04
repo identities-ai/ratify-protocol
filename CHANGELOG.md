@@ -24,6 +24,10 @@ The "resource-bound authority" release: delegations can now name *where* a scope
 
 - **`MAX_DELEGATION_CHAIN_DEPTH` raised from 3 to 8** (SPEC §5.1) for multi-hop agent topologies. The ceiling is a wire-determinism and denial-of-service bound, not cryptography; the new byte/count/length limits bound the work that depth alone does not.
 
+### Fixed
+
+- **Cross-SDK constrained-bundle hashing**: `bundle_hash` serialized a delegation's constraints in their raw in-memory form instead of the canonical per-kind wire form, so any bundle whose cert carried a constraint (for example a `resource_path` constraint) produced a digest that diverged from the Go reference. Python diverged on every constrained bundle; TypeScript carried the same issue latently, surfacing only for a programmatically constructed constraint. Both SDKs now map constraints through the canonical per-kind form (`to_canonical_dict` / `canonicalConstraintDict`), and a constrained cross-SDK byte-equivalence vector plus a TypeScript raw-object regression test prevent recurrence. Identity verification and signature validity were unaffected; Go, Rust, and C were already correct.
+
 ---
 
 ## v1.0.0-alpha.15 (2026-07-25)

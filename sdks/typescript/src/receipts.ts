@@ -17,7 +17,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import { hmac } from "@noble/hashes/hmac";
 
 import { canonicalJSON } from "./canonical.js";
-import { signBoth, verifyBoth } from "./crypto.js";
+import { canonicalConstraintDict, signBoth, verifyBoth } from "./crypto.js";
 import type {
   HybridPrivateKey,
   HybridPublicKey,
@@ -46,7 +46,7 @@ import type {
 export function bundleHash(bundle: ProofBundle): Uint8Array {
   const delegations = bundle.delegations.map((d) => ({
     cert_id: d.cert_id,
-    constraints: d.constraints ?? [],
+    constraints: (d.constraints ?? []).map(canonicalConstraintDict),
     expires_at: d.expires_at,
     issued_at: d.issued_at,
     issuer_id: d.issuer_id,

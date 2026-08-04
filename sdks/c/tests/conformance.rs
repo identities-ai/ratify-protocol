@@ -13,8 +13,10 @@
 //! - "transaction_receipt" — receipt sign bytes + full verify (5 fixtures)
 //! - "witness_entry"       — witness entry sign bytes + sig hex + verify (1 fixture)
 //!
-//! 79/79 fixtures pass (cross_sdk_vectors.json uses a different schema and is
-//! handled by tests/cross_sdk.rs).
+//! 79/79 fixtures pass. cross_sdk_vectors.json is a separate byte-equivalence
+//! corpus with a different schema; it is skipped here and exercised by the Go,
+//! TypeScript, Python, and Rust suites (the C FFI does not expose the
+//! bundle-hash-from-JSON entry point those cross-SDK checks need).
 
 use ratify_c::{
     ratify_error_free, ratify_string_free,
@@ -182,7 +184,8 @@ fn load_fixtures() -> Vec<Fixture> {
     for entry in entries {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) != Some("json") { continue; }
-        // cross_sdk_vectors.json uses a different schema — handled by tests/cross_sdk.rs
+        // cross_sdk_vectors.json is a separate byte-equivalence corpus (different
+        // schema), exercised by the Go/TS/Python/Rust suites rather than the C FFI.
         if path.file_name().and_then(|n| n.to_str()) == Some("cross_sdk_vectors.json") { continue; }
         let raw = fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {path:?}: {e}"));

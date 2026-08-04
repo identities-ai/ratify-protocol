@@ -127,6 +127,29 @@ test("bundleHash deterministic", async () => {
   assert.equal(bundleHash(bundle).length, 32);
 });
 
+test("bundleHash canonicalizes constraints by kind, not by raw object shape", async () => {
+  const { bundle } = await goodBundle();
+  // A resource_path constraint carries only type/resource_id/path_prefix on the
+  // wire. The Constraint interface permits kind-irrelevant properties (e.g. lat);
+  // bundleHash must canonicalize by kind and drop them, matching the wire encoder
+  // and every other SDK. Regression for a raw-object hashing bug: hashing the
+  // struct as-is would include the irrelevant field and diverge cross-SDK.
+  const sparse: Constraint = {
+    type: "resource_path",
+    resource_id: "git:github.com/acme/widgets",
+    path_prefix: "/docs",
+  };
+  bundle.delegations[0].constraints = [sparse];
+  const hashSparse = bundleHash(bundle);
+  bundle.delegations[0].constraints = [{ ...sparse, lat: 0 } as Constraint];
+  const hashWithIrrelevant = bundleHash(bundle);
+  assert.deepEqual(
+    hashWithIrrelevant,
+    hashSparse,
+    "bundleHash must ignore kind-irrelevant constraint fields (canonicalize by kind)",
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Lever 2: PolicyVerdict
 // ---------------------------------------------------------------------------

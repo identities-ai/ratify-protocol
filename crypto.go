@@ -154,14 +154,13 @@ func DeriveID(pub HybridPublicKey) string {
 // the same canonical bytes and the corresponding public components; either
 // failure rejects the entire signature.
 //
-// ML-DSA signing in v1 uses the deterministic mode (FIPS 204 §3.4 without
-// additional randomness). This gives:
-//   - Reproducible test vectors: regeneration of fixtures produces byte-
-//     identical output.
-//   - Deterministic audit trails: a principal replaying the same cert
-//     parameters produces the same signature bytes.
-// Future versions may add a hedged-randomization option for side-channel
-// hardening in hostile environments.
+// This Go implementation is the reference fixture generator and signs ML-DSA-65
+// deterministically (FIPS 204 §3.4 without additional randomness) so the
+// conformance corpus regenerates byte-identically from fixed seeds. The signature
+// mode is not fixed by the protocol: the other SDKs sign with hedged randomization,
+// and a deterministic and a hedged signature over identical canonical bytes are
+// interchangeable to any verifier (SPEC §8.3). Hedged signing is side-channel
+// hardening that depends on trustworthy host entropy.
 // ============================================================================
 
 // signBoth signs msg with both component private keys and returns a

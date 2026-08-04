@@ -338,8 +338,13 @@ export function keyRotationSignBytes(stmt: KeyRotationStatement): Uint8Array {
 
 /**
  * Produce a hybrid signature over `msg` with both component private keys.
- * Both components sign identical bytes. ML-DSA-65 uses FIPS 204's canonical
- * (non-hedged) variant — matches the Go reference's SignTo(randomized=false).
+ * Both components sign identical canonical bytes. ML-DSA-65 signing here is
+ * hedged (randomized) — @noble/post-quantum's default — so two signatures over
+ * the same input differ. This does not affect interop: the canonical signable
+ * bytes and the verification outcome are what must match across SDKs, and a
+ * hedged signature is interchangeable with the Go reference's deterministic one
+ * to any verifier (SPEC §8.3). Only the Go reference generator signs
+ * deterministically, for reproducible fixtures.
  */
 export async function signBoth(
   msg: Uint8Array,
@@ -347,7 +352,8 @@ export async function signBoth(
 ): Promise<HybridSignature> {
   const edSig = await ed.signAsync(msg, priv.ed25519);
   // @noble/post-quantum: sign(msg, secretKey, opts?) — message FIRST.
-  // Default opts → deterministic signing (matches Go's SignTo(randomized=false)).
+  // Hedged (randomized) by default; { extraEntropy: false } would make it
+  // deterministic. We keep the hedged default; see SPEC §8.3.
   const mlSig = ml_dsa65.sign(msg, priv.ml_dsa_65);
   return { ed25519: edSig, ml_dsa_65: mlSig };
 }

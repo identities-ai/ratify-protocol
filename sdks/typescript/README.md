@@ -288,6 +288,8 @@ A single failure means TypeScript and the Go reference have drifted.
 
 No network code in this package. HTTP concerns (challenge issuance, revocation list fetching, API auth) live one layer up.
 
+**Signing mode.** `@noble/post-quantum` signs ML-DSA-65 with hedged randomization by default, so two signings of the same message produce different bytes. This does NOT affect interop: the signatures verify in Go, Python, Rust, and C/C++, and vice versa. What must match across languages is the canonical signable bytes (SPEC §8.3), and those match byte-for-byte. Only the Go reference generator signs deterministically, so that fixtures regenerate reproducibly; passing `{ extraEntropy: false }` would make this SDK deterministic too, but hedged signing is side-channel hardening and is kept as the default.
+
 ## API added on main (ships in alpha.16, release unpublished)
 
 The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; install from `main` to use it ahead of the release.

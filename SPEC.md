@@ -389,7 +389,7 @@ The push subscription endpoint (WebSocket, SSE, gRPC stream, etc.) is an operato
 
 `WitnessEntry` is a v1.1 spec-defined element in a hash-chain append-only log (ROADMAP, Tamper-evident transaction streams). Any party may operate a Witness: Identities AI, an enterprise's own audit system, a third-party notary, or a blockchain-anchored system. Multiple witnesses MAY independently log the same events (redundancy).
 
-v1.1 defines the shape and the signing semantics only. Operating a scalable witness is an implementation/product concern; the spec does not mandate deployment topology, storage backend, or consistency model. The fixture `witness_entry_valid` proves cross-SDK byte-identicality of the signable and signature.
+v1.1 defines the shape and the signing semantics only. Operating a scalable witness is an implementation/product concern; the spec does not mandate deployment topology, storage backend, or consistency model. The fixture `witness_entry_valid` proves cross-SDK byte-identical signable bytes; the supplied reference signature is preserved and verifies in every SDK (signature bytes are not independently regenerated outside the Go reference; see §8.3).
 
 ### 5.13 SessionToken
 
@@ -868,13 +868,12 @@ To verify a `HybridSignature` against a `HybridPublicKey` over the same `msg`:
 2. `ML-DSA-65.Verify(pub.ml_dsa_65, msg, sig.ml_dsa_65)` MUST return true.
 3. If either fails, the hybrid verification fails. **Fail-closed.**
 
-### 8.3 Determinism
+### 8.3 Signature mode
 
-v1 uses **deterministic** ML-DSA-65 signing (FIPS 204 §3.4 without hedged randomization). Rationale:
+Implementations MAY use deterministic or hedged ML-DSA-65 signing (FIPS 204 §3.4). Independently generated signature bytes are not required to match across SDKs; the canonical signable bytes and the verification outcome MUST match. Because both components are verified against the same canonical bytes, a deterministic signature and a hedged signature over identical input are interchangeable to any verifier.
 
-- Reproducible test vectors and audit trails.
-- Same security properties as Ed25519's determinism under the lattice assumptions.
-- A future version MAY add a hedged-randomization mode for side-channel hardening in hostile environments; v1 does not.
+- The reference fixture generator (Go) uses deterministic signing solely to make fixture regeneration reproducible: the conformance corpus regenerates byte-for-byte from fixed seeds.
+- The TypeScript, Python, Rust, and C SDKs sign with hedged randomization, the default of their ML-DSA-65 libraries. Hedged signing is side-channel hardening that depends on trustworthy host entropy; deterministic signing removes that dependence. Neither is categorically safer, and both produce valid, interchangeable signatures.
 
 ### 8.4 Key generation
 
@@ -1411,7 +1410,7 @@ The following table enumerates the adversaries, their capabilities, and how the 
 | T7 | **Stolen root private key** | Holds a human's root private key | Issue rogue delegations, competing rotation statements | Revocation of all certs issued by the compromised key. `KeyRotationStatement` (§5.15) to move to a new key. Registry policy for out-of-band verification. See §15.3. | Attacker can issue a competing `KeyRotationStatement`. Resolution requires registry/operator trust — see §15.3. |
 | T8 | **Malicious verifier** | Legitimate verifier that acts dishonestly | Forward V1's challenge to the agent, replay the bundle at V1 | Session context binding (§5.8, §15.1): agent signs with the verifier's context. Cross-verifier replay fails because contexts differ. | Requires the agent to include session_context. Legacy unbound bundles are vulnerable on non-TLS transports. |
 | T9 | **Rogue registry operator** (custodial mode) | Holds envelope-encrypted user keys | Decrypt keys and issue unauthorized delegations | Envelope encryption (DEK + KEK via KMS) limits blast radius. Self-custody mode (§15.2) eliminates this adversary entirely. Self-custody upgrade path via `KeyRotationStatement`. | In custodial mode, the operator IS trusted. This is documented in §15.2. Self-custody is the mitigation. |
-| T10 | **Side-channel attacker** | Observes timing/power during signing on shared infrastructure | Extract private key material via side-channel analysis | Use well-audited crypto libraries. v1 uses deterministic ML-DSA-65 signing; future versions MAY add hedged-randomization for hostile environments. | Deterministic signing on shared VMs is a known industry-wide risk. See §8.3. |
+| T10 | **Side-channel attacker** | Observes timing/power during signing on shared infrastructure | Extract private key material via side-channel analysis | Use well-audited crypto libraries. ML-DSA-65 signing MAY be deterministic or hedged (§8.3); the Go reference generator is deterministic, while the other SDKs sign with hedged randomization, which hardens against this side channel when host entropy is trustworthy. | Deterministic signing on shared VMs is a known industry-wide risk; hedged signing mitigates it given trustworthy entropy. See §8.3. |
 | T11 | **Clock-skew attacker** | Manipulate the verifier's or agent's clock | Accept expired certs or stale challenges | Temporal checks use the verifier's clock. Clock skew beyond the challenge window (300s) causes rejection. See §15.6 for clock discipline requirements. | If the verifier's clock is compromised, temporal checks are meaningless. This is a deployment concern. |
 | T12 | **Key-substitution attacker** | Controls or spoofs the channel a verifier uses to obtain principal public keys | Present a chain rooted in an attacker-generated key labeled "Alice" — every signature verifies, because the signatures are genuine over the attacker's key | None at the wire layer. Signature verification proves possession of a private key, not that the key belongs to the claimed principal. Trust bootstrap is a REQUIRED deployment decision — see §15.4. | Verification is only as strong as the verifier's key-discovery channel. A verifier that accepts principal keys from an unauthenticated source is fully spoofable regardless of the cryptography. |
 

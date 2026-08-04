@@ -112,7 +112,7 @@ If any two languages disagree on *what* happens (identity_status values, whether
 
 These demos are narrative, not exhaustive. For the rigorous validation:
 
-- `testvectors/v1/` — 79 canonical fixtures, every SDK passes byte-identical.
+- `testvectors/v1/` — 79 canonical fixtures; every SDK reproduces the canonical signable bytes and hashes byte-identically and verifies the reference signatures (signature bytes themselves are not regenerated outside the Go reference; see SPEC §8.3).
 - Go unit tests: `go test ./...`
 - TS conformance: `cd sdks/typescript && npm test`
 - Python conformance: `cd sdks/python && pytest`

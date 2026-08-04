@@ -1,6 +1,6 @@
 //! C API conformance tests — validates the C FFI layer against the same
 //! canonical test vectors used by Go, TypeScript, Python, and Rust
-//! (78 as of alpha.16: adds resource_path, extension params, depth-8).
+//! (79 as of alpha.16: adds resource_path, extension params, depth-8).
 //!
 //! Every fixture is loaded and exercised through the C API:
 //!

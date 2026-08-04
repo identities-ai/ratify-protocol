@@ -191,6 +191,31 @@ func bundleHashVectors() ([]crossSDKVector, error) {
 	if err := json.Unmarshal(bundleJSON, &bundleMap); err != nil {
 		return nil, err
 	}
+	// Constrained variant guards against an SDK serializing a constraint as its
+	// raw struct (emitting irrelevant zero-valued fields) instead of the
+	// canonical per-kind wire form; a constraint-free bundle cannot catch that.
+	rpCert := buildCertWithConstraints(
+		"cross-sdk-bundle-hash-resource-path-cert",
+		human, agent,
+		[]string{ratify.ScopeFilesWrite},
+		[]ratify.Constraint{{Type: ratify.ConstraintResourcePath, ResourceID: fixtureRepoID, PathPrefix: "/docs"}},
+		fixtureIssuedAt, fixtureExpiresAt,
+	)
+	rpChallenge := deterministicChallenge("cross_sdk_bundle_hash_resource_path")
+	rpBundle := buildBundle(agent, []ratify.DelegationCert{rpCert}, rpChallenge, fixtureNow)
+	rpHash, err := ratify.BundleHash(&rpBundle)
+	if err != nil {
+		return nil, fmt.Errorf("bundle_hash resource_path: %w", err)
+	}
+	rpBundleJSON, err := json.Marshal(rpBundle)
+	if err != nil {
+		return nil, err
+	}
+	var rpBundleMap map[string]interface{}
+	if err := json.Unmarshal(rpBundleJSON, &rpBundleMap); err != nil {
+		return nil, err
+	}
+
 	return []crossSDKVector{
 		{
 			Kind:            "bundle_hash",
@@ -198,6 +223,13 @@ func bundleHashVectors() ([]crossSDKVector, error) {
 			Description:     "SHA-256 of canonical JSON of a depth-1 ProofBundle. SDKs must produce identical hash.",
 			Input:           map[string]interface{}{"bundle": bundleMap},
 			ExpectedHashHex: hex.EncodeToString(h),
+		},
+		{
+			Kind:            "bundle_hash",
+			Name:            "bundle_hash_resource_path_depth1",
+			Description:     "SHA-256 of a depth-1 ProofBundle whose cert carries a resource_path constraint. SDKs must canonicalize the constraint by kind, not emit its raw struct fields.",
+			Input:           map[string]interface{}{"bundle": rpBundleMap},
+			ExpectedHashHex: hex.EncodeToString(rpHash),
 		},
 	}, nil
 }

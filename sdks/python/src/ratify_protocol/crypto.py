@@ -675,7 +675,7 @@ def bundle_hash(bundle: ProofBundle) -> bytes:
     for d in bundle.delegations:
         delegations.append({
             "cert_id": d.cert_id,
-            "constraints": d.constraints or [],
+            "constraints": [c.to_canonical_dict() for c in (d.constraints or [])],
             "expires_at": d.expires_at,
             "issued_at": d.issued_at,
             "issuer_id": d.issuer_id,

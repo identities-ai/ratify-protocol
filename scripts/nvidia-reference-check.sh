@@ -54,7 +54,26 @@ trap 'rm -rf "$WORKDIR"' EXIT
 echo "==> venv ($("$PY" -V))"
 "$PY" -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip
-"$VENV/bin/pip" install --quiet -e ./sdks/python
+
+# Where the Ratify SDK comes from. `local` installs this checkout and is correct
+# for development and for every pre-release run: it is what proves the reference
+# against the code in the tree. `published` installs the release artifact and is
+# what the *final* evidence must use, because otherwise the evidence proves the
+# checkout rather than the package a reader will install.
+#
+# RELEASE GATE: switch to published once v1.0.0-alpha.16 is tagged and on PyPI.
+#   RATIFY_SDK=published ./scripts/nvidia-reference-check.sh
+# The reference needs alpha.16's resource_path constraint, so a published run
+# cannot succeed against alpha.15.
+RATIFY_SDK="${RATIFY_SDK:-local}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a16}"
+case "$RATIFY_SDK" in
+  local)
+      "$VENV/bin/pip" install --quiet -e ./sdks/python ;;
+  published)
+      "$VENV/bin/pip" install --quiet "ratify-protocol==${RATIFY_SDK_VERSION}" ;;
+  *)  echo "RATIFY_SDK must be 'local' or 'published', got '$RATIFY_SDK'" >&2; exit 2 ;;
+esac
 "$VENV/bin/pip" install --quiet \
     pytest \
     "mcp==${MCP_VERSION}" \
@@ -62,11 +81,37 @@ echo "==> venv ($("$PY" -V))"
     "nooa==${NOOA_VERSION}"
 
 echo "==> versions"
-"$VENV/bin/python" - <<'EOF'
+RATIFY_SDK="$RATIFY_SDK" "$VENV/bin/python" - <<'EOF'
 import importlib.metadata as md
+import os
 import sys
 
 print("  python           ", sys.version.split()[0])
+# Where ratify_protocol was actually imported from. An editable install resolves
+# into the repository, a published one into site-packages, and the difference is
+# the whole provenance claim: printing it means the final gate cannot silently
+# prove the checkout while reporting the release.
+import pathlib
+
+import ratify_protocol
+
+module_path = pathlib.Path(ratify_protocol.__file__).resolve()
+repo_root = pathlib.Path.cwd().resolve()
+inside_repo = repo_root in module_path.parents
+print("  ratify module     ", module_path)
+print("  ratify source     ", "repository checkout" if inside_repo else "installed package")
+expected = os.environ.get("RATIFY_SDK", "local")
+if expected == "published" and inside_repo:
+    sys.exit(
+        "RATIFY_SDK=published but ratify_protocol resolved inside the repository "
+        f"at {module_path}; the final gate must import the published package"
+    )
+if expected == "local" and not inside_repo:
+    sys.exit(
+        "RATIFY_SDK=local but ratify_protocol resolved outside the repository "
+        f"at {module_path}; an unexpected package is shadowing the checkout"
+    )
+
 for dist in ("ratify-protocol", "mcp", "uvicorn", "nooa", "pytest"):
     try:
         print(f"  {dist:<17}", md.version(dist))

@@ -39,6 +39,9 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
+from mcp_refund_client import (  # noqa: E402
+    CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS,
+)
 from openshell_cases import (  # noqa: E402
     GROUPS,
     GROUP_G_SHAPES,
@@ -87,6 +90,44 @@ OVERSIZED_PROOF_BYTES = 400_000
 #: envelope stays under the 262,144-byte policy bound: the only window in
 #: which the receiver's own limit is independently observable.
 OVER_RECEIVER_PROOF_BYTES = 150_000
+
+
+def clock_skew_verdict(brackets: list[tuple[float, float]], margin: int) -> dict:
+    """Does the sandbox's clock lead this host's by more than the safety margin?
+
+    Each bracket is ``(lower, upper)`` for one sample: the sandbox read its clock
+    somewhere between two host readings, so the offset is bounded rather than
+    known. ``lead_at_least`` is the largest lower bound observed, which is the
+    only figure a fail-fast decision may rest on: it is the amount by which the
+    sandbox certainly leads.
+
+    The margin is diagnostic, never a substitute for backdating the presenter's
+    timestamp. If the sandbox leads by more than the margin, backdating can no
+    longer guarantee a non-negative challenge age and the run would fail
+    somewhere in the matrix with a confusing stale_challenge; this says so up
+    front instead.
+    """
+    if not brackets:
+        return {"result": "FAIL", "detail": "no clock samples were taken",
+                "samples": 0, "margin_seconds": margin}
+    lead_at_least = max(lower for lower, _ in brackets)
+    lead_at_most = min(upper for _, upper in brackets)
+    ok = lead_at_least <= margin
+    return {
+        "result": "PASS" if ok else "FAIL",
+        "samples": len(brackets),
+        "margin_seconds": margin,
+        "sandbox_lead_at_least_seconds": round(lead_at_least, 4),
+        "sandbox_lead_at_most_seconds": round(lead_at_most, 4),
+        "detail": (
+            f"sandbox clock leads the host by at least {lead_at_least:+.3f}s, which "
+            f"exceeds the {margin}s presenter safety margin; fix clock discipline "
+            "on the container runtime (SPEC 15.6)"
+        ) if not ok else (
+            f"sandbox clock offset within [{lead_at_least:+.3f}, {lead_at_most:+.3f}]s "
+            f"against a {margin}s presenter safety margin"
+        ),
+    }
 
 
 class Timeout(Exception):
@@ -615,6 +656,32 @@ class Runner:
             self.error("snapshot_unavailable",
                        f"the control plane snapshot failed: {type(exc).__name__}")
             return None
+
+    def measure_clock_skew(self, samples: int = 3) -> dict:
+        """Bracket the sandbox clock against this host's, before the matrix runs.
+
+        Read through ``SANDBOX_PYTHON``, the same interpreter and the same
+        ``time.time()`` the unified client uses to stamp ``challenge_at``, so the
+        number measured is the number that matters.
+        """
+        brackets: list[tuple[float, float]] = []
+        for _ in range(samples):
+            before = time.time()
+            record = self._os("exec", "sandbox", "exec", "--no-tty", "-n", self.sandbox,
+                              "--", SANDBOX_PYTHON, "-c",
+                              "import time;print(f'{time.time():.6f}')")
+            after = time.time()
+            for line in (record.get("stdout") or "").splitlines():
+                try:
+                    sandbox_now = float(line.strip())
+                except ValueError:
+                    continue
+                brackets.append((sandbox_now - after, sandbox_now - before))
+                break
+        verdict = clock_skew_verdict(brackets, CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS)
+        if verdict["result"] != "PASS":
+            self.error("clock_discipline", verdict["detail"])
+        return verdict
 
     def _check_window(self, before, after, group: str, case: str | None = None) -> None:
         """A case's before/after pair must exist and must not run backwards.
@@ -1303,6 +1370,10 @@ def main() -> int:
         "fragment_file": work / "proof_fragment.json",
     }
 
+    # Before anything is judged: the in-sandbox presenter stamps challenge_at from
+    # the container's clock, and the receiver verifies against this host's.
+    ctx["clock_skew"] = runner.measure_clock_skew()
+
     fragment_file = ctx["fragment_file"]
     for group in GROUPS:
         if group == "nooa_full_path":
@@ -1443,6 +1514,13 @@ def main() -> int:
                   f"receipt={(authorized.get('decision') or {}).get('receipt_id')}",
         "deltas": {},
     })
+    skew = ctx.get("clock_skew") or {}
+    gates.append({
+        "name": "sandbox_clock_within_presenter_safety_margin",
+        "result": skew.get("result", "FAIL"),
+        "detail": str(skew.get("detail", "no clock measurement"))[:200],
+        "deltas": {},
+    })
     gates.append({
         "name": "no_tested_canaries_in_inspected_logs",
         "result": "PASS" if not leaked else "FAIL",
@@ -1518,6 +1596,7 @@ def main() -> int:
         "log_sources_inspected": canary_report,
         "group_g": group_g,
         "parser_coverage": coverage,
+        "clock_skew": skew,
         "unified_execution_model": {
             "nooa_module_loads_in_suite_process": module_loads,
             "nooa_module_loads_measured": suite_report.get("nooa_imports_measured"),

@@ -20,6 +20,14 @@ dist/
 .env.*
 !.env.example
 
+# Python caches, demo suites are run from the repo root
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# OpenShell profile artifacts are per-run evidence, not source
+/openshell-profile-*.json
+
 # Build artifacts at repo root
 /ratify
 /ratify-verifier

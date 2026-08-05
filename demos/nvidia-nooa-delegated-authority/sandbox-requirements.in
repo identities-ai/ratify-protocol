@@ -15,8 +15,16 @@ nooa==0.0.8
 mcp==2.0.0
 uvicorn==0.52.1
 
-# The Ratify Python SDK is installed separately with --no-deps, from this
-# checkout until alpha.16 is published. Its own runtime requirements are listed
-# here so they are locked rather than resolved at build time.
+# The Ratify Python SDK. Until v1.0.0-alpha.16 is published it is installed
+# separately from this checkout with --no-deps, so it is deliberately absent from
+# this file; its own runtime requirements are listed below so they are locked
+# rather than resolved at build time.
+#
+# RELEASE GATE: once alpha.16 is on PyPI, uncomment the pin below and regenerate
+# the lock with ./stage-lock.sh. The final evidence has to be produced from the
+# published package, because an image built from the checkout proves the checkout
+# and not the artifact a reader installs.
+#
+# ratify-protocol==1.0.0a16
 cryptography>=44.0
 pqcrypto>=0.3.4

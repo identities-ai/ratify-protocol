@@ -70,7 +70,7 @@ v1.0.0-alpha.15 →  integration readiness: public wire codecs (TS/Python) +
 v1.0.0-alpha.16 →  resource-bound authority (resource_path constraint),
                    extension constraint params, new input bounds, and
                    MAX_DELEGATION_CHAIN_DEPTH raised 3→8 (SPEC §5.1, §5.7.3);
-                   79 fixtures (merged, unpublished)
+                   79 fixtures (published 2026-08-05)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

@@ -38,7 +38,39 @@ Everything this contribution adds or changes, in one place, so a reviewer can se
 
 **134 total.** The authoritative gate is `scripts/nvidia-reference-check.sh`, which requires Python 3.12 or 3.13, installs exact pins, and **fails on any skip**. An ordinary pytest invocation on Python 3.11 reported "91 passed, 1 skipped" and exited 0 while the entire 34-test MCP module had not run; that loophole is closed by `RATIFY_REQUIRE_MCP=1`.
 
-> **Not yet send-ready.** The unified NOOA path (`nooa_full_path`, `Dockerfile.nooa-sandbox`, `mcp_refund_client.py`, `nooa_openshell_client.py`) has executed end to end but is not a stable gate: consecutive `nooa` imports exhaust a single sandbox. One sandbox per NOOA case is the remedy and is unimplemented. No retained evidence artifact is committed yet, and the branch is not yet integrated with current `origin/main`.
+> **Not yet send-ready, for one remaining reason: release provenance.** The
+> reference is functionally complete and stable. The unified NOOA path is a stable
+> gate: it imports `nooa` exactly once in a single process, which is measured
+> rather than declared, and it has passed sequentially and concurrently. What is
+> not yet true is the provenance of the evidence. Every artifact so far was
+> produced with the Ratify SDK built from this checkout, and each one says so in
+> its own `evidence_status` field. The reference needs alpha.16's `resource_path`
+> constraint, and alpha.16 is merged but not yet tagged or published, so the
+> published package cannot be installed yet.
+>
+> **Release transition, once `v1.0.0-alpha.16` is tagged and on PyPI.** The switch
+> is implemented and defaults to the checkout, so nothing changes until it is
+> taken deliberately:
+>
+> 1. Uncomment the `ratify-protocol==1.0.0a16` pin in
+>    `demos/nvidia-nooa-delegated-authority/sandbox-requirements.in` and
+>    regenerate the lock with `./stage-lock.sh`.
+> 2. Run the authoritative gate as `RATIFY_SDK=published
+>    ./scripts/nvidia-reference-check.sh`. It asserts that `ratify_protocol`
+>    resolves outside the repository, so a published run cannot silently prove the
+>    checkout.
+> 3. Run the profile as `RATIFY_SDK=published ./run-openshell-profile.sh`. The
+>    checkout is not mounted at all in that mode, the package comes from the
+>    hash-verified lock, and the run fails if the version in the built image is not
+>    the expected one.
+> 4. Rebuild the sandbox image and regenerate every artifact. The evidence must be
+>    regenerated rather than reused: upstream commit `4925538` canonicalises
+>    constraints in `bundle_hash`, every delegation here carries constraints, so
+>    receipt and proof hashes change even though no authorization outcome does.
+> 5. Re-run release-sync, which currently still reports alpha.15.
+>
+> Counts and send-readiness claims in this document and the README are updated only
+> from post-publication results.
 
 ## New: documentation
 

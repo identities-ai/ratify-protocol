@@ -1557,6 +1557,10 @@ def main() -> int:
 
     artifact = {
         "run_id": environment.get("run_id"),
+        # Carried through from the environment: whether this run was built from the
+        # published Ratify package or from the checkout. An artifact that does not
+        # say which one it is can be mistaken for final evidence.
+        "evidence_status": environment.get("evidence_status"),
         "components": environment.get("components", {}),
         "platform": environment.get("platform", {}),
         "ports": environment.get("ports", {}),

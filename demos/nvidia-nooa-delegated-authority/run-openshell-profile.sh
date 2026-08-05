@@ -219,21 +219,46 @@ mkdir -p "$DEPS_DIR"
 # deliberately by ./stage-lock.sh, never as a side effect of a run.
 LOCK="$HERE/sandbox-requirements.lock"
 [ -f "$LOCK" ] || fail_now "sandbox-requirements.lock is missing; run ./stage-lock.sh"
+
+# Where the Ratify SDK in the sandbox image comes from. `local` builds it from this
+# checkout, which is what every pre-release run has used and what proves the
+# reference against the code in the tree. `published` takes it from the lock, which
+# is what the *final* evidence must use: an image built from the checkout proves the
+# checkout, not the package a reader installs.
+#
+# RELEASE GATE: after v1.0.0-alpha.16 is tagged and on PyPI, uncomment the pin in
+# sandbox-requirements.in, run ./stage-lock.sh, then
+#   RATIFY_SDK=published ./run-openshell-profile.sh
+RATIFY_SDK="${RATIFY_SDK:-local}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a16}"
+case "$RATIFY_SDK" in
+  local)
+      SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro")
+      # Built from the checkout and installed without dependencies, since its
+      # runtime requirements are already in the lock.
+      SDK_INSTALL='cp -r /src /build && rm -rf /build/*.egg-info /build/src/*.egg-info
+uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /build' ;;
+  published)
+      grep -qi "^ratify-protocol==${RATIFY_SDK_VERSION}" "$LOCK" || fail_now \
+        "RATIFY_SDK=published needs ratify-protocol==${RATIFY_SDK_VERSION} in the lock; uncomment it in sandbox-requirements.in and run ./stage-lock.sh"
+      SDK_MOUNT=()
+      # Nothing to do: the lock install below already placed the published,
+      # hash-verified package. No checkout is mounted at all.
+      SDK_INSTALL='true' ;;
+  *)  fail_now "RATIFY_SDK must be 'local' or 'published', got '$RATIFY_SDK'" ;;
+esac
+note "ratify sdk source=$RATIFY_SDK"
 LOCK_SHA="$("$PYBIN" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$LOCK")"
 note "dependency lock sha256=$LOCK_SHA"
 if ! docker run --rm --user 0 --entrypoint /bin/sh \
-  -v "$REPO/sdks/python:/src:ro" -v "$DEPS_DIR:/out" -v "$LOCK:/lock:ro" "$SANDBOX_IMAGE" \
+  "${SDK_MOUNT[@]}" -v "$DEPS_DIR:/out" -v "$LOCK:/lock:ro" "$SANDBOX_IMAGE" \
   -c 'set -e
 export UV_PYTHON_DOWNLOADS=never
-# A writable copy: building the sdist writes egg-info, which a read-only mount
-# refuses.
-cp -r /src /build && rm -rf /build/*.egg-info /build/src/*.egg-info
 # --require-hashes makes every distribution hash-verified and refuses any
-# dependency the lock does not name. --no-deps on the SDK keeps it from pulling an
-# unlocked transitive tree of its own; its runtime requirements are in the lock.
+# dependency the lock does not name.
 uv pip install -q --python /usr/bin/python3 --target /out/site \
   --require-hashes -r /lock
-uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /build
+'"$SDK_INSTALL"'
 find /out/site -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 # uv writes its own install bookkeeping into each dist-info. It has no runtime
 # purpose, and for the locally built SDK wheel its length varies between builds,
@@ -271,6 +296,14 @@ grep -q IMAGE_DEPS_OK "$WORK/image-deps.txt" || {
 }
 note "NOOA sandbox image $NOOA_IMAGE"
 note "image deps: $(grep -o 'IMAGE_DEPS_OK.*' "$WORK/image-deps.txt")"
+IMAGE_RATIFY_PATH="$(grep -o 'IMAGE_DEPS_OK.*' "$WORK/image-deps.txt" | awk '{print $5}')"
+IMAGE_RATIFY_VERSION="$(grep -o 'IMAGE_DEPS_OK.*' "$WORK/image-deps.txt" | awk '{print $4}')"
+# A published run must carry the published version, and must not have been
+# assembled from the checkout. Checked here rather than trusted, because this is
+# the provenance the final evidence rests on.
+if [ "$RATIFY_SDK" = "published" ] && [ "$IMAGE_RATIFY_VERSION" != "$RATIFY_SDK_VERSION" ]; then
+  fail_now "RATIFY_SDK=published expected ratify-protocol $RATIFY_SDK_VERSION in the image, found $IMAGE_RATIFY_VERSION"
+fi
 
 # --- 3. render config safely ------------------------------------------------
 openssl genpkey -algorithm ed25519 -out "$WORK/gw/jwt/signing.pem" 2>/dev/null
@@ -542,6 +575,9 @@ json.dump({
                                          "not published to any registry",
         "staged_deps_content_sha256": "$DEPS_SHA",
         "dependency_lock_sha256": "$LOCK_SHA",
+        "ratify_sdk_source": "$RATIFY_SDK",
+        "ratify_sdk_expected_version": "$RATIFY_SDK_VERSION",
+        "ratify_module_in_image": "$IMAGE_RATIFY_PATH",
         "dependency_lock": "demos/nvidia-nooa-delegated-authority/sandbox-requirements.lock",
     },
     "platform": {
@@ -552,6 +588,12 @@ json.dump({
     },
     "ports": {"gateway": $GW_PORT, "gateway_health": $GW_HEALTH,
               "mcp": $MCP_PORT, "control": $CTRL_PORT},
+    "evidence_status": (
+        "final: built from the published Ratify package"
+        if "$RATIFY_SDK" == "published"
+        else "pre-release: Ratify SDK built from the repository checkout, not the "
+             "published package; superseded once v1.0.0-alpha.16 is published"
+    ),
     "hashes": {"rendered_policy_sha256": "$POLICY_SHA",
                "gateway_config_sha256": "$GATEWAY_SHA"},
     "network": {"mcp_bind": "$MCP_BIND", "mcp_host": "$MCP_HOST",

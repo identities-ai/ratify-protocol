@@ -106,6 +106,26 @@ jobs:
       - name: full test suite (79 fixtures)
         run: pytest -v
 
+  nooa-reference:
+    name: NVIDIA NOOA reference (integration required, not skipped)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          # nooa declares requires-python >=3.12,<3.14.
+          python-version: '3.12'
+
+      - name: NVIDIA reference gate (authoritative; fails on any skip)
+        # One script owns the environment, the pins, and the counts, so CI and a
+        # local run cannot drift apart. It sets RATIFY_REQUIRE_NOOA=1 and
+        # RATIFY_REQUIRE_MCP=1, so a missing optional dependency is a failure
+        # rather than a skip: an ordinary pytest run on 3.11 reported
+        # "91 passed, 1 skipped" and exited 0 while the whole MCP module had not
+        # run.
+        run: ./scripts/nvidia-reference-check.sh
+
   rust:
     name: Rust SDK conformance
     runs-on: ubuntu-latest

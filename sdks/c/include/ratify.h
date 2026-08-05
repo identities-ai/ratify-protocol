@@ -1,6 +1,6 @@
 /*
  * Ratify Protocol — C/C++ bindings
- * Version: 1.0.0-alpha.15
+ * Version: 1.0.0-alpha.16
  *
  * Cryptographic authorization for AI agents.
  * Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204).

@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## Unreleased — v1.0.0-alpha.16 (in progress)
+## v1.0.0-alpha.16 (2026-08-05)
 
 The "resource-bound authority" release: delegations can now name *where* a scope applies, not just *what* it permits.
 

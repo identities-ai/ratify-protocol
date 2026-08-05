@@ -1063,3 +1063,133 @@ async def test_header_and_body_must_name_the_same_method_and_tool(mcp_world):
     assert "error" in payload, "header/body disagreement must not be dispatched"
     assert mcp_world.service.receipts == []
     assert mcp_world.service.refunded_total == 0.0
+
+
+# ---------------------------------------------------------------------------
+# The presenter's clock safety margin
+#
+# MCPRefundClient is the only presenter in the reference that signs inside the
+# OpenShell sandbox, so it is the only one whose clock is the container's rather
+# than the receiver's. SPEC §10 requires 0 <= (now - challenge_at) with no
+# tolerance below zero, correctly, since T11 is a clock-skew attacker. A
+# concurrent profile run was refused once with "challenge is -1 seconds old"
+# because the container's clock led the host's. The presenter therefore backdates
+# its own timestamp by a measured margin. Nothing in the verifier changed.
+# ---------------------------------------------------------------------------
+
+from mcp_refund_client import (  # noqa: E402
+    CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS as MARGIN,
+)
+from ratify_protocol import CHALLENGE_WINDOW_SECONDS  # noqa: E402
+from ratify_protocol.crypto import verify_challenge_signature_e  # noqa: E402
+
+
+def test_the_safety_margin_is_a_small_fraction_of_the_freshness_window():
+    """WHY: backdating spends freshness. The margin has to be large enough to
+    cover measured host/guest skew (+0.228s at most, bracketed over six samples
+    on the executed platform) and small enough that the presentation is still
+    obviously fresh."""
+    assert MARGIN >= 1
+    assert MARGIN < CHALLENGE_WINDOW_SECONDS / 100
+
+
+@pytest.mark.anyio
+async def test_a_backdated_presentation_is_accepted_and_stays_fresh(mcp_world):
+    """WHY: the property the margin exists for. A presentation stamped in the
+    recent past must still authorize, and its age at the receiver must land
+    inside the freshness window rather than merely being non-negative."""
+    order = "ord-1"
+    async with _session(mcp_world.url) as session:
+        prepared = await _prepare(session, order, 25.0, mcp_world.agent.id)
+        challenge = base64.b64decode(prepared["challenge"])
+        session_context = base64.b64decode(prepared["session_context"])
+        signed_at = int(time.time()) - MARGIN
+        bundle = build_bundle(
+            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
+            [mcp_world.cert], challenge, session_context, at=signed_at,
+        )
+        result = await session.call_tool(
+            "refund.execute", {"challenge": prepared["challenge"]},
+            meta=_proof_meta(bundle),
+        )
+
+    decision = json.loads(result.content[0].text)
+    assert decision["decision"] == "authorized", decision
+    age = int(time.time()) - signed_at
+    assert 0 <= age <= CHALLENGE_WINDOW_SECONDS
+    assert age >= MARGIN
+
+
+def test_the_agent_signature_covers_the_backdated_timestamp(mcp_world):
+    """WHY: the margin must not create an unsigned or forgeable field. The
+    timestamp is inside the signed bytes, so a bundle whose challenge_at is
+    altered after signing must fail signature verification."""
+    challenge = b"\x11" * 32
+    session_context = b"\x22" * 32
+    signed_at = int(time.time()) - MARGIN
+    bundle = build_bundle(
+        mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
+        [mcp_world.cert], challenge, session_context, at=signed_at,
+    )
+    assert verify_challenge_signature_e(
+        bundle.challenge, bundle.challenge_at, bundle.challenge_sig,
+        bundle.agent_pub_key, session_context,
+    ) is None
+    # Same signature, timestamp moved: the signature must no longer verify.
+    assert verify_challenge_signature_e(
+        bundle.challenge, bundle.challenge_at + 1, bundle.challenge_sig,
+        bundle.agent_pub_key, session_context,
+    ) is not None
+
+
+@pytest.mark.anyio
+async def test_a_genuinely_stale_challenge_is_still_denied(mcp_world):
+    """WHY: the margin must not become a hole. Backdating by seconds is a clock
+    accommodation; a presentation older than the freshness window is a liveness
+    failure and must still be refused by Ratify on its own terms."""
+    async with _session(mcp_world.url) as session:
+        prepared = await _prepare(session, "ord-1", 25.0, mcp_world.agent.id)
+        bundle = build_bundle(
+            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
+            [mcp_world.cert], base64.b64decode(prepared["challenge"]),
+            base64.b64decode(prepared["session_context"]),
+            at=int(time.time()) - CHALLENGE_WINDOW_SECONDS - 60,
+        )
+        result = await session.call_tool(
+            "refund.execute", {"challenge": prepared["challenge"]},
+            meta=_proof_meta(bundle),
+        )
+
+    decision = json.loads(result.content[0].text)
+    assert decision["decision"] == "denied"
+    assert decision["status"] == "invalid"
+    assert "stale_challenge" in decision["reason"]
+
+
+@pytest.mark.anyio
+async def test_a_refused_presentation_is_not_retried(mcp_world):
+    """WHY: a retry would turn a refusal into a race that sometimes succeeds, and
+    would let a clock problem hide behind a second attempt. One presentation, one
+    decision, whatever the decision is."""
+    before = mcp_world.service.execute_count if hasattr(
+        mcp_world.service, "execute_count") else None
+    async with _session(mcp_world.url) as session:
+        prepared = await _prepare(session, "ord-1", 25.0, mcp_world.agent.id)
+        bundle = build_bundle(
+            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
+            [mcp_world.cert], base64.b64decode(prepared["challenge"]),
+            base64.b64decode(prepared["session_context"]),
+            at=int(time.time()) - CHALLENGE_WINDOW_SECONDS - 60,
+        )
+        result = await session.call_tool(
+            "refund.execute", {"challenge": prepared["challenge"]},
+            meta=_proof_meta(bundle),
+        )
+        decision = json.loads(result.content[0].text)
+        assert decision["decision"] == "denied"
+        # The challenge is single-use. If anything had retried the presentation,
+        # the second attempt would have been refused as a spent challenge and the
+        # receipt count would show two decisions for one request.
+        assert len(mcp_world.service.receipts) == 1
+    if before is not None:
+        assert mcp_world.service.execute_count == before + 1

@@ -30,10 +30,10 @@ UVICORN_VERSION="${UVICORN_VERSION:-0.52.1}"
 # Expected counts, per module. Stated rather than derived: a count that is read
 # from the run it is meant to check cannot detect a module that vanished.
 EXPECT_RECEIVER="${EXPECT_RECEIVER:-54}"
-EXPECT_TRANSPORT="${EXPECT_TRANSPORT:-34}"
-EXPECT_ADJUDICATOR="${EXPECT_ADJUDICATOR:-76}"
+EXPECT_TRANSPORT="${EXPECT_TRANSPORT:-39}"
+EXPECT_ADJUDICATOR="${EXPECT_ADJUDICATOR:-80}"
 EXPECT_NOOA="${EXPECT_NOOA:-4}"
-EXPECT_TOTAL="${EXPECT_TOTAL:-168}"
+EXPECT_TOTAL="${EXPECT_TOTAL:-177}"
 
 PY="${PYTHON:-python3}"
 "$PY" - <<'EOF'

@@ -1074,3 +1074,48 @@ def test_an_unknown_group_is_recorded_rather_than_raising(tmp_path):
     r = driver(tmp_path)
     r.run_group("group_that_does_not_exist", {})
     assert kinds(r) == ["unknown_group"]
+
+
+# -- clock-skew preflight ---------------------------------------------------
+#
+# The in-sandbox presenter backdates its challenge_at by a safety margin. The
+# preflight is the diagnostic that says when that margin is no longer enough,
+# so a run fails with a clock-discipline error up front instead of a confusing
+# stale_challenge somewhere in the middle of the matrix.
+
+from openshell_driver import (  # noqa: E402
+    CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS as MARGIN,
+    clock_skew_verdict,
+)
+
+
+def test_measured_platform_skew_passes_the_preflight():
+    """WHY: the baseline, using the figures actually measured on the executed
+    platform: the sandbox container's clock led the host's by +0.018 to +0.228s
+    across six brackets. A preflight that failed on that would block every run."""
+    v = clock_skew_verdict([(0.018, 0.228), (0.021, 0.194), (0.019, 0.201)], MARGIN)
+    assert v["result"] == "PASS"
+    assert v["sandbox_lead_at_least_seconds"] == 0.021
+
+
+def test_a_lead_beyond_the_margin_fails_with_a_clock_discipline_message():
+    """WHY: past the margin, backdating can no longer guarantee a non-negative
+    challenge age, so the run would fail somewhere in the matrix for a reason
+    that looks like a protocol refusal. It has to be named as what it is."""
+    v = clock_skew_verdict([(0.1, 0.4), (MARGIN + 0.5, MARGIN + 0.9)], MARGIN)
+    assert v["result"] == "FAIL"
+    assert "clock discipline" in v["detail"]
+
+
+def test_the_verdict_rests_on_the_certain_lead_not_the_optimistic_one():
+    """WHY: each sample is a bracket, because the sandbox read its clock somewhere
+    between two host readings. Only the largest lower bound is a lead the host can
+    be certain of; deciding on the upper bound would fail runs for latency."""
+    v = clock_skew_verdict([(0.05, MARGIN + 5.0)], MARGIN)
+    assert v["result"] == "PASS"
+    assert v["sandbox_lead_at_least_seconds"] == 0.05
+
+
+def test_no_clock_samples_fails_closed():
+    """WHY: absence of evidence is not evidence of a synchronised clock."""
+    assert clock_skew_verdict([], MARGIN)["result"] == "FAIL"

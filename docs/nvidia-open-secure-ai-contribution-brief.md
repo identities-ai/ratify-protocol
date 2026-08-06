@@ -23,8 +23,10 @@ The implementation and its validation are complete. What remains is placement.
 
 ## The authorization question
 
-NVIDIA's stack provides orchestration, tracing, guardrails, workload identity, and
-runtime isolation. A separate question arises when an agent crosses a tool,
+NVIDIA's Secure Agent Workspace design separates sponsor, workspace, agent, and
+tool-call identity, and describes ODIS as an open interoperability standard for
+identity and delegation. Ratify offers a running, independently verified profile
+that can be evaluated against that direction when an agent crosses a tool,
 service, or organizational boundary:
 
 **Who authorized this agent to perform this specific action, and under what
@@ -41,7 +43,8 @@ self-reported claim.
 |---|---|
 | NOOA | Where is the agent invocation presented? |
 | OpenShell | Which destination, MCP method, and tool may the runtime reach? |
-| Ratify Protocol | Who authorized the action, for which resource, within what limits? |
+| ODIS / enterprise IAM | How are sponsor and agent identities delegated? |
+| Ratify profile | Can an independent receiver verify that authority for this action? |
 | Receiver | Does the presented authority permit this specific action? |
 
 OpenShell and Ratify are independent and conjunctive. OpenShell does not evaluate
@@ -84,11 +87,11 @@ A service that cannot verify an agent's authority has two choices: refuse the
 action, or accept unbounded liability. Most refuse, which limits agent deployment
 at exactly the boundaries where autonomous systems start being useful.
 
-Ratify contributes an open, portable authorization artifact that separates which
-workload is calling, what the runtime permits, and what a principal actually
-authorized. That separation lets a receiver make a deterministic allow or deny
-decision without depending on a proprietary product or a shared organizational
-trust domain.
+Ratify contributes an open, portable implementation and adversarial test profile
+for delegated authority crossing an independent action boundary. It separates
+which workload is calling, what the runtime permits, and what a principal actually
+authorized. That gives NVIDIA and Alliance engineers a concrete artifact to
+evaluate against ODIS, revise through feedback, and potentially upstream.
 
 ## Next step
 
@@ -107,7 +110,7 @@ repository is modified.
 Every result above comes from executions recorded in the profile's own artifact,
 on the single platform recorded there: arm64 macOS with Docker. linux/amd64 and
 Podman are compatibility targets, not results. Full evidence:
-[`docs/evidence/nvidia-reference-evidence.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/evidence/nvidia-reference-evidence.md).
+[`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
 
 - https://github.com/identities-ai/ratify-protocol
-- https://docs.identities.ai
+- https://ratifyprotocol.com

@@ -16,7 +16,7 @@ I'm Chuks Onwuneme, founder of Ratify Protocol, an NVIDIA Inception member. I to
 
 We built an open NOOA reference showing an agent carrying a principal-signed, bounded delegation to an independent service, which verifies the agent's authority before acting. Over-scoped, expired, revoked, replayed, and amplified delegations are denied. The adversarial cases are executable tests, not slides, and the whole path runs end to end through a pinned OpenShell gateway.
 
-Could you connect me with the Alliance technical owner for identity and permissions, and the appropriate NOOA lead, to evaluate the integration seam and potential upstream path?
+Could you connect me with the owner for Secure Agent Workspace or ODIS identity and delegation, plus the appropriate NOOA/OpenShell technical lead, to evaluate the interoperability seam and potential upstream path?
 
 I've attached a short brief. The working reference and engineering appendix are ready.
 
@@ -36,7 +36,7 @@ NVIDIA's stack covers orchestration, guardrails, tracing, and runtime isolation,
 
 We built a working NOOA reference. An independent service verifies the delegation before acting, and denies over-scoped, expired, revoked, replayed, and amplified delegations. Each authenticated decision produces a verifier-signed receipt. Deterministic, no LLM required, and the composition through OpenShell runtime policy is executed rather than described.
 
-We'd like one working session with the Alliance identity and permissions owner and a NOOA engineer.
+We'd like one working session with the Secure Agent Workspace or ODIS owner and a NOOA/OpenShell engineer.
 
 ---
 

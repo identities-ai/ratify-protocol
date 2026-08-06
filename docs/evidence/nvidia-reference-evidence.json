@@ -1,7 +1,9 @@
 {
   "executed_date": "2026-08-05",
   "branch": "feat/nvidia-nooa-reference",
-  "commit": "37b378b",
+  "tested_source_commit": "37b378b",
+  "documentation_commit": "141f429",
+  "provenance_note": "every run in this document was executed against 37b378b. 141f429 is one commit later and touches only prose (README, docs/, this evidence summary) with zero changes to the driver, adjudicator, tests, Dockerfile, or profile script; diffed and confirmed before this note was written. The evidence is not stale relative to 141f429.",
   "commit_base": "f5a1522 (v1.0.0-alpha.16 published in the RELEASES ladder)",
   "ratify_protocol": {
     "published_version": "1.0.0a16",

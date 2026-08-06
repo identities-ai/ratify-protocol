@@ -32,45 +32,15 @@ Everything this contribution adds or changes, in one place, so a reviewer can se
 | File | Count | What it covers |
 |---|---|---|
 | `test_verification.py` | 54 | Receiver security. No NOOA, no LLM, no container runtime. |
-| `test_mcp_transport.py` | 34 | MCP transport, proof carriage, size boundaries. |
-| `test_adjudicator.py` | 42 | That the adjudicator cannot be fooled. Each test feeds evidence of one violation and asserts FAIL. |
+| `test_mcp_transport.py` | 39 | MCP transport, proof carriage, size boundaries, the presenter's clock safety margin. |
+| `test_adjudicator.py` | 84 | That the adjudicator cannot be fooled. Each test feeds evidence of one violation and asserts FAIL. |
 | `test_nooa_presentation.py` | 4 | Against released `nooa==0.0.8`. Required to run, not permitted to skip. |
 
-**134 total.** The authoritative gate is `scripts/nvidia-reference-check.sh`, which requires Python 3.12 or 3.13, installs exact pins, and **fails on any skip**. An ordinary pytest invocation on Python 3.11 reported "91 passed, 1 skipped" and exited 0 while the entire 34-test MCP module had not run; that loophole is closed by `RATIFY_REQUIRE_MCP=1`.
+**181 total, zero skips.** The authoritative gate is `scripts/nvidia-reference-check.sh`, which requires Python 3.12 or 3.13, installs exact pins, and **fails on any skip**. An ordinary pytest invocation on Python 3.11 reported "91 passed, 1 skipped" and exited 0 while the entire 34-test MCP module had not run; that loophole is closed by `RATIFY_REQUIRE_MCP=1`.
 
-> **Not yet send-ready, for one remaining reason: release provenance.** The
-> reference is functionally complete and stable. The unified NOOA path is a stable
-> gate: it imports `nooa` exactly once in a single process, which is measured
-> rather than declared, and it has passed sequentially and concurrently. What is
-> not yet true is the provenance of the evidence. Every artifact so far was
-> produced with the Ratify SDK built from this checkout, and each one says so in
-> its own `evidence_status` field. The reference needs alpha.16's `resource_path`
-> constraint, and alpha.16 is merged but not yet tagged or published, so the
-> published package cannot be installed yet.
->
-> **Release transition, once `v1.0.0-alpha.16` is tagged and on PyPI.** The switch
-> is implemented and defaults to the checkout, so nothing changes until it is
-> taken deliberately:
->
-> 1. Uncomment the `ratify-protocol==1.0.0a16` pin in
->    `demos/nvidia-nooa-delegated-authority/sandbox-requirements.in` and
->    regenerate the lock with `./stage-lock.sh`.
-> 2. Run the authoritative gate as `RATIFY_SDK=published
->    ./scripts/nvidia-reference-check.sh`. It asserts that `ratify_protocol`
->    resolves outside the repository, so a published run cannot silently prove the
->    checkout.
-> 3. Run the profile as `RATIFY_SDK=published ./run-openshell-profile.sh`. The
->    checkout is not mounted at all in that mode, the package comes from the
->    hash-verified lock, and the run fails if the version in the built image is not
->    the expected one.
-> 4. Rebuild the sandbox image and regenerate every artifact. The evidence must be
->    regenerated rather than reused: upstream commit `4925538` canonicalises
->    constraints in `bundle_hash`, every delegation here carries constraints, so
->    receipt and proof hashes change even though no authorization outcome does.
-> 5. Re-run release-sync, which currently still reports alpha.15.
->
-> Counts and send-readiness claims in this document and the README are updated only
-> from post-publication results.
+The live OpenShell profile drives 52 required cases across 7 isolated groups, judged by 64 gates, and has passed twice sequentially and twice concurrently against the published SDK. Full evidence: [`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
+
+**Release provenance.** `v1.0.0-alpha.16` is tagged and published on PyPI. Every gate and every live profile run cited in this document was executed as `RATIFY_SDK=published`, which does not mount this repository's SDK source at all: the package comes from `sandbox-requirements.lock`, hash-verified, and the authoritative gate asserts `ratify_protocol` resolves outside the repository before it will report success. Every retained artifact carries its own `evidence_status` field recording this.
 
 ## New: documentation
 
@@ -84,7 +54,7 @@ Everything this contribution adds or changes, in one place, so a reviewer can se
 
 ## Changed: existing repository files
 
-Three files, additive only, 33 inserted lines and no deletions.
+Three files, additive only, no deletions.
 
 | File | Change | Why |
 |---|---|---|
@@ -99,7 +69,7 @@ New helpers: `scripts/nvidia-reference-check.sh` (the authoritative, skip-proof 
 - Modify any NVIDIA repository, fork NOOA, or use a private hook.
 - Add a dependency to the Ratify Protocol SDKs. The receiver uses only the Python standard library; `mcp` and `uvicorn` are test-environment pins for the transport suite and the profile.
 - Change protocol semantics, wire format, or any SDK. The reference consumes alpha.16 as published.
-- Require a container runtime for its core claim. The profile needs Docker; the 125 hermetic tests do not.
+- Require a container runtime for its core claim. The profile needs Docker; the 177 hermetic tests do not.
 
 One reference-application constant changed during this work: the receiver's `MAX_PROOF_BYTES` moved from 196,608 to 131,072. The reasoning is in appendix section 15.2. It is an application-level ceiling, not a protocol bound.
 

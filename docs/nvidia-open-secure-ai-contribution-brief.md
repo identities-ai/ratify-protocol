@@ -107,7 +107,7 @@ repository is modified.
 Every result above comes from executions recorded in the profile's own artifact,
 on the single platform recorded there: arm64 macOS with Docker. linux/amd64 and
 Podman are compatibility targets, not results. Full evidence:
-[`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
+[`docs/evidence/nvidia-reference-evidence.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/evidence/nvidia-reference-evidence.md).
 
 - https://github.com/identities-ai/ratify-protocol
 - https://docs.identities.ai

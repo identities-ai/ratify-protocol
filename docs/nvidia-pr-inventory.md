@@ -38,7 +38,7 @@ Everything this contribution adds or changes, in one place, so a reviewer can se
 
 **181 total, zero skips.** The authoritative gate is `scripts/nvidia-reference-check.sh`, which requires Python 3.12 or 3.13, installs exact pins, and **fails on any skip**. An ordinary pytest invocation on Python 3.11 reported "91 passed, 1 skipped" and exited 0 while the entire 34-test MCP module had not run; that loophole is closed by `RATIFY_REQUIRE_MCP=1`.
 
-The live OpenShell profile drives 52 required cases across 7 isolated groups, judged by 64 gates, and has passed twice sequentially and twice concurrently against the published SDK. Full evidence: [`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
+The live OpenShell profile drives 52 required cases across 7 isolated groups, judged by 64 gates, and has passed twice sequentially and twice concurrently against the published SDK. Full evidence: [`docs/evidence/nvidia-reference-evidence.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/evidence/nvidia-reference-evidence.md).
 
 **Release provenance.** `v1.0.0-alpha.16` is tagged and published on PyPI. Every gate and every live profile run cited in this document was executed as `RATIFY_SDK=published`, which does not mount this repository's SDK source at all: the package comes from `sandbox-requirements.lock`, hash-verified, and the authoritative gate asserts `ratify_protocol` resolves outside the repository before it will report success. Every retained artifact carries its own `evidence_status` field recording this.
 

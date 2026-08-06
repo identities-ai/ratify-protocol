@@ -1119,3 +1119,80 @@ def test_the_verdict_rests_on_the_certain_lead_not_the_optimistic_one():
 def test_no_clock_samples_fails_closed():
     """WHY: absence of evidence is not evidence of a synchronised clock."""
     assert clock_skew_verdict([], MARGIN)["result"] == "FAIL"
+
+
+# -- bounded download retry --------------------------------------------------
+#
+# Two concurrent-profile runs each hit one `sandbox download` that exited 1 and
+# succeeded on an immediate second attempt, distinct from every exec and upload,
+# which never did across the whole engagement. A download only re-reads a file
+# the sandbox already finished writing, so retrying it cannot touch anything a
+# case gate judges. exec and upload are never retried, because they can reach the
+# presentation boundary.
+
+def fake_op(sequence):
+    """A stand-in Op whose .run() returns each dict in `sequence` in order,
+    ignoring retries/kind/argv, so the retry policy can be tested without a real
+    subprocess or a real flake to reproduce."""
+    calls = []
+
+    class FakeOp:
+        def run(self, kind, argv, stdin_devnull=True, retries=0, retry_delay=0.0):
+            calls.append({"kind": kind, "retries": retries})
+            attempt = 0
+            for record in sequence:
+                attempt += 1
+                if record.get("returncode") == 0 or attempt > retries:
+                    return {**record, "attempts": attempt}
+            return {**sequence[-1], "attempts": attempt}
+
+    return FakeOp(), calls
+
+
+def test_a_download_that_fails_once_then_succeeds_is_not_a_driver_error(tmp_path):
+    """WHY: the exact shape observed twice under concurrency. A transient exit-1
+    that self-heals on retry must not be reported as a harness failure, because no
+    case's evidence was ever unattributed."""
+    r = driver(tmp_path)
+    r.op, _ = fake_op([{"returncode": 1}, {"returncode": 0}])
+    r.download("remote", tmp_path / "local")
+    assert r.errors == []
+    assert r.retried_operations == [{"stage": "download", "attempts": 2}]
+
+
+def test_a_download_that_never_recovers_still_records_a_driver_error(tmp_path):
+    """WHY: the retry is bounded and must not become a way to hide a genuine
+    failure. Exhausting both retries has to reach driver_errors exactly as an
+    unretried failure would."""
+    r = driver(tmp_path)
+    r.op, _ = fake_op([{"returncode": 1}, {"returncode": 1}, {"returncode": 1}])
+    r.download("remote", tmp_path / "local")
+    assert kinds(r) == ["operation_failed"]
+    assert r.retried_operations == []
+
+
+def test_exec_and_upload_are_never_retried(tmp_path):
+    """WHY: exec drives the client that presents to the receiver, and upload
+    places the job it reads. Retrying either could re-attempt something
+    security-relevant; only download, which reads back a file that already
+    exists, is ever given retries."""
+    r = driver(tmp_path)
+    r.op, calls = fake_op([{"returncode": 1}, {"returncode": 0}])
+    r.exec("anything")
+    r.op, calls2 = fake_op([{"returncode": 1}, {"returncode": 0}])
+    r.upload(tmp_path / "local", "remote")
+    assert calls[0]["retries"] == 0
+    assert calls2[0]["retries"] == 0
+    # Both fail, since the fake only returns success on a retried second call and
+    # neither operation is given one.
+    assert {e["kind"] for e in r.errors} == {"operation_failed"}
+
+
+def test_a_download_that_succeeds_first_try_is_not_recorded_as_retried(tmp_path):
+    """WHY: the negative control. Every ordinary download must not show up in
+    retried_operations, or the field stops meaning anything."""
+    r = driver(tmp_path)
+    r.op, _ = fake_op([{"returncode": 0}])
+    r.download("remote", tmp_path / "local")
+    assert r.errors == []
+    assert r.retried_operations == []

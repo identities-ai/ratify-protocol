@@ -260,14 +260,18 @@ v0.0.96 states that "tool argument matching is not supported yet; allowed tools 
 
 ### 15.2 What execution established
 
-> **Scope of the claim.** Groups A to G are stable and repeatable. Group H, the
-> unified NOOA path, has executed end to end and is asserted by its own gate,
-> but is not yet reliably repeatable: consecutive `nooa` imports exhaust a
-> single sandbox. One sandbox per NOOA case is the remedy, and is not yet
-> implemented. Nothing below should be read as a stable-gate claim for Group H.
+All seven groups, including the unified NOOA path, are stable and repeatable
+against the published `ratify-protocol==1.0.0a16`: 52 required cases, 64 gates,
+zero skips, twice sequentially and twice concurrently, on `RATIFY_SDK=published`.
+The unified path's early instability, four consecutive `nooa` imports exhausting
+one sandbox, was resolved by importing `nooa` exactly once in a single suite
+process rather than by isolating each case into its own sandbox; the import
+count is measured by a `sys.addaudithook` on the `import` audit event, not
+declared. Full run-by-run evidence, including a disclosed bounded retry added
+for a transient `sandbox download` flake observed twice under concurrent load:
+[`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
 
-
-48 cases in seven isolated groups, 54 gates, all passing, twice sequentially and twice concurrently. Each case declares an expected outcome and every boundary delta it may produce, and is judged against control-plane snapshots taken immediately either side of it. A missing case, missing snapshot, stale sequence, partial result, or unexplained event is a failure, never a skip.
+Each case declares an expected outcome and every boundary delta it may produce, and is judged against control-plane snapshots taken immediately either side of it. A missing case, missing snapshot, stale sequence, partial result, or unexplained event is a failure, never a skip.
 
 - **Proof carriage is measured, not asserted.** The proof travels in `_meta` under `ai.identities.ratify/proof`. The receiver records the SHA-256 and length of the exact inbound base64 string, the runner records the same for what it signed, and the two are compared. The proof itself is never written anywhere.
 - **A maximum-depth chain crosses inline.** Eight certificates, 88,990 raw bytes, 118,656 base64, 118,940 as a complete MCP body, admitted by the policy and authorized by the receiver. No compression, no detached retrieval.
@@ -295,14 +299,14 @@ Entirely within the Ratify Protocol repository. **No NVIDIA repository is modifi
 
 - `demos/nvidia-nooa-delegated-authority/`, principal, receiving service, presentation adapter, scenario driver
 - Hermetic verification suites, no LLM, no network beyond loopback, no NOOA dependency, no container runtime
-- A reproducible OpenShell profile: one command, pinned by immutable digest, 48 cases, machine-readable artifact
+- A reproducible OpenShell profile: one command, pinned by immutable digest, 52 cases across 64 gates, machine-readable artifact
 - One real NOOA integration test against released `nooa==0.0.8`, hermetic via NOOA's own `FakeLLMClient`
 - This proposal
 - A README for engineers, with a five-minute path from clone to observed denials
 
 Dependencies are held to the existing floor: the receiving service uses only the Python standard library. No web framework is introduced for a protocol reference.
 
-**Protocol version.** The reference requires Ratify Protocol v1.0.0-alpha.16 or later and is verified against it: all 134 tests pass with `nooa==0.0.8` on Python 3.12 under `scripts/nvidia-reference-check.sh`, which fails on any skip. The dependency is real rather than nominal. The reference uses alpha.16's `resource_path` constraint to bind a refund to one tenant-qualified order, and those tests fail on alpha.15 because the constraint type does not exist there.
+**Protocol version.** The reference requires Ratify Protocol v1.0.0-alpha.16, published and installed from PyPI, and is verified against it: all 181 tests pass with `nooa==0.0.8` on Python 3.12 under `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository rather than from the checkout. The dependency is real rather than nominal. The reference uses alpha.16's `resource_path` constraint to bind a refund to one tenant-qualified order, and those tests fail on alpha.15 because the constraint type does not exist there.
 
 ## 17. Evaluation plan
 

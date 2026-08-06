@@ -1,0 +1,150 @@
+{
+  "executed_date": "2026-08-05",
+  "branch": "feat/nvidia-nooa-reference",
+  "commit": "37b378b",
+  "commit_base": "f5a1522 (v1.0.0-alpha.16 published in the RELEASES ladder)",
+  "ratify_protocol": {
+    "published_version": "1.0.0a16",
+    "registry": "PyPI",
+    "installed_and_verified_outside_repository": true,
+    "sandbox_module_path": "/opt/ratify-nooa/site/ratify_protocol",
+    "evidence_status": "final: built from the published Ratify package"
+  },
+  "platform": {
+    "executed_on": { "os": "Darwin", "release": "25.6.0", "arch": "arm64" },
+    "container_runtime": "Docker 29.2.1",
+    "compatibility_targets_not_executed": ["linux/amd64", "Podman"]
+  },
+  "components": {
+    "openshell_cli": "0.0.96",
+    "gateway_image_digest": "sha256:329adb1784989705a33c51f81df22eca33e2dc527675642364f013c5b8b79a67",
+    "sandbox_base_image_digest": "sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e",
+    "supervisor_image_digest": "sha256:523e0565f8957362d8f3c70c6ef7a221d92b10f32b96fbc76821febfb01bae8e",
+    "sandbox_python": "CPython 3.12.3 (from the pinned sandbox base image)",
+    "nooa": "0.0.8",
+    "mcp": "2.0.0",
+    "uvicorn": "0.52.1",
+    "mcp_protocol": "2026-07-28"
+  },
+  "dockerfile_sha256": "9b128c9d2744ac6c671c1f51422df0c26d9e054952dd550d33886799e0e61f6e",
+  "dependency_lock": {
+    "path": "demos/nvidia-nooa-delegated-authority/sandbox-requirements.lock",
+    "sha256": "74172610bfd265b992a944059f33325b3fdc778ab112b81d0a09eefa3634d76b",
+    "pinned_distributions": 75,
+    "hashes_recorded": 1927,
+    "install_mode": "--require-hashes"
+  },
+  "staged_dependency_tree_sha256": "ead8506e3017c1cf4f658bbecdd5f5cdacfe79f34fe30873db2975c344cd1475",
+  "staged_tree_reproducibility": {
+    "builds_compared": 2,
+    "byte_identical_tree": true,
+    "note": "image IDs differ between builds (build-timestamp metadata); the staged tree content hash and the image tag do not"
+  },
+  "authoritative_python_gate": {
+    "command": "RATIFY_SDK=published ./scripts/nvidia-reference-check.sh",
+    "total": 181,
+    "skipped": 0,
+    "breakdown": { "receiver_security": 54, "mcp_transport": 39, "adjudicator": 84, "nooa_integration": 4 }
+  },
+  "live_openshell_profile": {
+    "required_cases": 52,
+    "gates": 64,
+    "sandbox_memory": "512Mi",
+    "sandbox_memory_selection": {
+      "method": "bounded search, cgroup v2 memory.peak (true high-water mark, not a sampled maximum)",
+      "true_peak_observed_mib": 208,
+      "lowest_passing_rung_mib": 256,
+      "highest_failing_rung_mib": 192,
+      "highest_failing_rung_failure_mode": "kernel memcg OOM kill",
+      "selected_mib": 512,
+      "selected_headroom_over_true_peak": "2.46x"
+    },
+    "runs": [
+      { "label": "sequential-1", "result": "PASS", "gates": "64/64", "artifact_sha256": "258ef940dca9e5a45471c8aa49a7d6e74b589c7909701016bc352190d3aafa6a" },
+      { "label": "sequential-2", "result": "PASS", "gates": "64/64", "artifact_sha256": "f790caab5d0bd38f06d51bf47f60bf1ea6d61139e0dc18112a8f9db27d9419b6" },
+      { "label": "concurrent-A", "result": "PASS", "gates": "64/64", "artifact_sha256": "1ed0778d10b3242f9eabd38296396d2bf7794514da74507412f20d017d0fad9d" },
+      { "label": "concurrent-B", "result": "PASS", "gates": "64/64", "artifact_sha256": "9358067e6b68fae2a4b6b0d9c6b0a4ab7c0a7a88fe53e32c7a10c8d2b87f2b13" },
+      { "label": "intentional-policy-failure", "result": "FAIL (expected, exit 1)", "gates": "36/64", "artifact_sha256": "f48a3b324566a22c0fb18b4717d20ee0a7527a02a7d49d4cc18e22d1a6df9481" }
+    ],
+    "common_to_every_passing_run": {
+      "not_executed": [],
+      "driver_errors": [],
+      "timeouts": [],
+      "residue_containers": 0,
+      "refund_total": 375.0,
+      "receipts": 16,
+      "nooa_module_loads_in_suite_process": 1,
+      "nooa_module_loads_measured": true,
+      "processes_that_import_nooa": 1,
+      "event_attribution": "22/22"
+    },
+    "concurrency_observation": {
+      "gateway_bootstrap_serialized": true,
+      "reason": "OpenShell v0.0.96 names its supervisor-extraction container with a fixed name; two gateways bootstrapping concurrently against one container runtime collide with a Docker 409",
+      "measured_bootstrap_window_seconds": 4.0,
+      "measured_fully_concurrent_execution_seconds": 63.0,
+      "per_run_isolated": ["ports", "data_home", "compose_project", "network", "sandbox", "work_dir", "artifact"]
+    },
+    "transient_operational_note": {
+      "observation": "under concurrent load, sandbox download exited 1 twice across the engagement (out of >150 download operations) and succeeded on an immediate retry both times",
+      "response": "a bounded, disclosed retry (max 2 extra attempts) was added to download operations only, never to exec or upload; every attempt is recorded, and an exhausted retry still reaches driver_errors",
+      "why_this_is_safe": "a download only re-reads a file the sandbox already finished writing; it cannot touch the presentation or authorization boundary"
+    },
+    "intentional_failure_verification": {
+      "injection": "removed the refund.execute allow rule from the OpenShell policy",
+      "policy_restored_byte_identical": true,
+      "exit_code": 1,
+      "refund_total": 0,
+      "receipts": 0,
+      "not_executed": [],
+      "parser_safety": "PASS (15/15)",
+      "parser_coverage": "FAIL (0/10 admitted; the safety invariant held under a deny-all policy while coverage correctly did not)"
+    }
+  },
+  "proof_carriage": {
+    "proofs_measured": 16,
+    "measurement": "SHA-256 and byte length only; no proof body, delegation body, or certificate retained in this summary"
+  },
+  "policy_and_config_hashes": {
+    "rendered_openshell_policy_sha256_example": "5ddacb2cc9bd2d9006ba70f5a89ad1c786ac25d0373944ffee2c81d7fbc4d950",
+    "gateway_config_sha256_example": "169583c9441c091514083d3cea3b71b303e1cf628288f019032f524fcdf8e93e",
+    "note": "each run renders and hashes its own policy and gateway config; the injected-failure run's policy template hash was 0d5d337a971701f1c150eadf9454009f852ba272e604804afd33d664580f7466, restored to 3f039a5b28547f2647612b56656d11e65dc7f0f6e8dc4a40a3e42f6d31f84e78"
+  },
+  "canary_log_audit": {
+    "component_sources_checked": ["gateway_compose", "gateway_container", "supervisor", "openshell_audit", "mcp_receiver"],
+    "component_source_hits": 0,
+    "harness_source_hits": "nonzero, expected: the harness's own report of what it sent necessarily contains those values"
+  },
+  "non_docker_sweep": {
+    "go_tests": "pass (4 packages)",
+    "python_sdk_tests": 464,
+    "typescript_tests": { "pass": 416, "fail": 0, "skipped": 0 },
+    "test_vector_determinism": "byte-identical",
+    "release_sync": "ok (v1.0.0-alpha.16, 79 fixtures, 54 scopes)",
+    "shell_syntax": "clean",
+    "python_compile": "clean",
+    "yaml_files_checked": 8,
+    "toml_files_checked": 5,
+    "ci_yaml_parse": "ok, nooa-reference job present",
+    "git_diff_check": "clean",
+    "secret_scan": "clean",
+    "markdown_relative_links_checked": 1,
+    "markdown_relative_links_broken": 0
+  },
+  "known_limitations": [
+    "linux/amd64 execution not performed; only arm64 macOS/Docker is a result",
+    "Podman as the container runtime not performed",
+    "verifier-side missing resource context (has_resource=False) is unreachable through the MCP path by construction; covered hermetically in test_verification.py instead",
+    "genuinely duplicated HTTP header fields: urllib folds repeated header names, so duplicate-header probes send one folded value",
+    "concurrent OpenShell gateway bootstrap is serialized by a fixed supervisor-extraction container name in v0.0.96; only bootstrap is serialized, not the measured matrix",
+    "TLS, OIDC, or mTLS in front of the gateway not exercised; the profile runs a local single-player gateway on loopback with plaintext, unauthenticated access"
+  ],
+  "raw_artifact_sha256": {
+    "note": "raw artifacts (full JSON, per-operation logs) are retained outside this repository and are not distributed with it",
+    "sequential_1": "258ef940dca9e5a45471c8aa49a7d6e74b589c7909701016bc352190d3aafa6a",
+    "sequential_2": "f790caab5d0bd38f06d51bf47f60bf1ea6d61139e0dc18112a8f9db27d9419b6",
+    "concurrent_A": "1ed0778d10b3242f9eabd38296396d2bf7794514da74507412f20d017d0fad9d",
+    "concurrent_B": "9358067e6b68fae2a4b6b0d9c6b0a4ab7c0a7a88fe53e32c7a10c8d2b87f2b13",
+    "intentional_failure": "f48a3b324566a22c0fb18b4717d20ee0a7527a02a7d49d4cc18e22d1a6df9481"
+  }
+}

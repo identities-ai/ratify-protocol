@@ -120,7 +120,7 @@ Each denial is asserted against a specific reason code, so none of them can pass
 | NaN, infinite, negative, or zero amount | `400` before a challenge is issued |
 | Malformed JSON, array body, bad base64, wrong types | deterministic `4xx` |
 
-**129 tests: 125 hermetic and 4 mandatory NOOA integration tests.** The hermetic suite needs neither NOOA nor an LLM nor a container runtime, so the security claims are verifiable in one command from a clean checkout. The NOOA tests exercise the real released middleware API, and they are required to run rather than permitted to skip in `scripts/nooa-integration-check.sh`.
+**181 tests: 177 hermetic and 4 mandatory NOOA integration tests.** The hermetic suite needs neither NOOA nor an LLM nor a container runtime, so the security claims are verifiable in one command from a clean checkout. The NOOA tests exercise the real released middleware API, and they are required to run rather than permitted to skip in `scripts/nooa-integration-check.sh`.
 
 ## The live OpenShell profile
 
@@ -128,26 +128,21 @@ Each denial is asserted against a specific reason code, so none of them can pass
 
 > NOOA agent → proof-carrying MCP Streamable HTTP → OpenShell destination, method, and tool enforcement → an independent MCP receiver → Ratify semantic authorization → consequential action → signed receipt
 
-One command from a clean checkout brings the gateway up on dynamic ports from immutable image digests, renders the sandbox policy, drives **48 cases in seven isolated groups** from inside an OpenShell sandbox, audits every log source for per-run canaries, writes a machine-readable artifact, and removes exactly what it created. It needs Docker and takes roughly ninety seconds. It is deliberately **not** part of the five-minute claim; the hermetic suites are.
+One command from a clean checkout brings the gateway up on dynamic ports from immutable image digests, renders the sandbox policy, drives **52 cases in seven isolated groups** from inside an OpenShell sandbox, audits every log source for per-run canaries, writes a machine-readable artifact, and removes exactly what it created. It needs Docker and takes two to four minutes. It is deliberately **not** part of the five-minute claim; the hermetic suites are.
 
 | Group | What it establishes |
 |---|---|
 | `positive_and_replay` | The one path that may move money, and that replaying the same presentation cannot move it again |
-| `ratify_semantic_denials` | Fourteen denials OpenShell cannot see and is not asked to: amount, resource, tenant, expiry, revocation, revocation failure, wrong key, untrusted root, scope and constraint amplification, cross-request proof movement, invalid challenge, malformed proof, observer failure after the decision |
+| `ratify_semantic_denials` | Thirteen denials OpenShell cannot see and is not asked to (amount, resource, tenant, expiry, revocation, revocation failure, wrong key, untrusted root, scope and constraint amplification, cross-request proof movement, invalid challenge, malformed proof), plus two authorize controls that isolate what is actually causing them |
 | `maximum_depth` | An eight-certificate alpha.16 chain, 88,990 bytes, carried inline in `_meta` and authorized |
 | `size_boundaries` | Three independent limits, each enforced by a different component against a different quantity |
-| `parser_differentials` | Fifteen probes of one invariant: admitted as X, never dispatched as Y |
+| `parser_differentials` | Fifteen probes of one invariant: admitted as X, never dispatched as Y. A separate coverage gate requires the matrix to have actually exercised both the admission and the denial branch, since the invariant alone is satisfiable by a policy that denies everything |
 | `destination_path_port` | Unauthorized destination, wrong port, wrong path, unlisted tool, disallowed method, and the control endpoint, all refused before MCP ingress |
-| `log_canaries` | Each shape of traffic exercised so the canary search has something of every kind to find |
+| `nooa_full_path` | The composed path: one NOOA capability call, carried over MCP through an OpenShell policy to an independent receiver, authorized by Ratify, in a single process that imports `nooa` exactly once — measured by an import audit hook, not declared |
 
+`log_canaries` is a separate, non-adjudicated pass: it re-exercises cases from the groups above so the log audit has each shape of traffic to search against. The gate is the canary search, not a per-case verdict.
 
-> **Stability status.** The unified NOOA path is implemented and has executed
-> end to end, asserted by the
-> `one_execution_traversed_nooa_mcp_openshell_receiver_ratify` gate. It is not
-> yet a stable gate: consecutive `nooa` imports exhaust a single sandbox, so
-> whichever cases run later in the group can fail with the sandbox dropping to
-> `Provisioning`. One sandbox per NOOA case is the identified remedy and is not
-> yet implemented. Every other group is stable and repeatable.
+**Stability.** All seven groups are stable and repeatable: 64/64 gates, twice sequentially and twice concurrently, against the published `ratify-protocol==1.0.0a16`. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the full run-by-run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
 
 **How a case is judged.** Each case declares its expected outcome (`authorize`, `deny_at_openshell`, `admit_as:<tool>`, or `deny_at_ratify:<status>`) and every boundary delta it may produce. The runner takes a snapshot of the receiver's counters immediately before and immediately after that case, from a loopback control endpoint the sandbox cannot reach, and compares. A missing case, a missing snapshot, a stale sequence number, a partial result, or an event the deltas do not account for is a **failure**, never a skip. No gate can pass because a record merely exists: `test_adjudicator.py` feeds the adjudicator evidence of each violation in turn and asserts it says FAIL.
 
@@ -212,7 +207,7 @@ A reference that overstates itself is worse than no reference, so the limits are
 
 ## Environment
 
-Requires Ratify Protocol v1.0.0-alpha.16 or later, and is verified against it: all 134 tests pass with `nooa==0.0.8` on Python 3.12 via `scripts/nvidia-reference-check.sh`, which fails on any skip. The live profile's stable groups pass; see the stability note above for the unified NOOA group. The dependency is real rather than nominal. The resource-bound scenario uses alpha.16's `resource_path` constraint, and those tests fail on alpha.15. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
+Requires Ratify Protocol v1.0.0-alpha.16, published and installed from PyPI: all 181 tests pass with `nooa==0.0.8` on Python 3.12 via `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository. The live profile passes 64/64, twice sequentially and twice concurrently, against the same published package. The dependency is real rather than nominal: the resource-bound scenario uses alpha.16's `resource_path` constraint, and those tests fail on alpha.15 because the constraint type does not exist there. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
 
 ## Beyond this reference
 
@@ -224,6 +219,6 @@ Two directions extend the same receiver-side pattern. Neither is implemented her
 
 ---
 
-Architecture, threat model, and open questions for NVIDIA engineers: [`docs/nvidia-open-secure-ai-reference-proposal.md`](../../docs/nvidia-open-secure-ai-reference-proposal.md).
+Architecture, threat model, and open questions for NVIDIA engineers: [`docs/nvidia-open-secure-ai-reference-proposal.md`](../../docs/nvidia-open-secure-ai-reference-proposal.md). Full evidence, hashes, and known limitations: [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md).
 
-Ratify Protocol is published by Identities.AI, Inc., and is a member of NVIDIA Inception. This is an independent reference implementation. It is not an NVIDIA partnership, not an approved or official integration, not an NVIDIA reference architecture, and not an Open Secure AI Alliance membership artifact. No NVIDIA repository is modified by this contribution.
+Ratify Protocol is published by Identities.AI, Inc., and is a member of NVIDIA Inception. This is an independent reference implementation. It is not an NVIDIA partnership, not an approved or official integration, not an NVIDIA reference architecture, and not an Open Secure AI Alliance membership artifact. No NVIDIA repository is modified by this contribution. Every result above comes from executions recorded in the profile's own artifact, on the single platform recorded there: arm64 macOS with Docker. linux/amd64 and Podman are compatibility targets, not results.

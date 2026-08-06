@@ -146,43 +146,63 @@ class Op:
         self.log_path = log_path
         self.records: list[dict] = []
 
-    def run(self, kind: str, argv: list[str], stdin_devnull: bool = True) -> dict:
-        started = time.monotonic()
-        record = {"kind": kind, "argv_len": sum(len(a) for a in argv), "argc": len(argv)}
-        try:
-            proc = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                timeout=TIMEOUTS.get(kind, 120),
-                stdin=subprocess.DEVNULL if stdin_devnull else None,
-                check=False,
-            )
-            record.update(
-                returncode=proc.returncode,
-                stdout=proc.stdout,
-                stderr=proc.stderr,
-                timed_out=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            record.update(
-                returncode=None,
-                stdout=(exc.stdout or b"").decode(errors="replace")
-                if isinstance(exc.stdout, bytes) else (exc.stdout or ""),
-                stderr=(exc.stderr or b"").decode(errors="replace")
-                if isinstance(exc.stderr, bytes) else (exc.stderr or ""),
-                timed_out=True,
-                stage=kind,
-            )
-        except OSError as exc:
-            record.update(returncode=None, stdout="", stderr=f"{type(exc).__name__}: {exc}",
-                          timed_out=False)
-        record["seconds"] = round(time.monotonic() - started, 3)
-        self.records.append(record)
-        with self.log_path.open("a") as fh:
-            fh.write(json.dumps({k: v for k, v in record.items()
-                                 if k not in ("stdout", "stderr")}) + "\n")
-        return record
+    def run(self, kind: str, argv: list[str], stdin_devnull: bool = True,
+            retries: int = 0, retry_delay: float = 0.5) -> dict:
+        """One attempt, or several for a caller-declared-safe operation.
+
+        ``retries`` is 0 for every operation except ``download``, and it stays
+        that way deliberately: a download only re-reads a file the sandbox
+        already finished writing, so retrying it cannot touch the presentation
+        or authorization boundary. Retrying an ``exec`` or ``upload`` could
+        re-attempt something security-relevant and is never done here. Every
+        attempt is recorded, not just the last, so a self-healed retry is
+        visible in operations.jsonl rather than disappearing into a single
+        clean-looking record.
+        """
+        attempt = 0
+        while True:
+            attempt += 1
+            started = time.monotonic()
+            record = {"kind": kind, "argv_len": sum(len(a) for a in argv),
+                      "argc": len(argv), "attempt": attempt}
+            try:
+                proc = subprocess.run(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    timeout=TIMEOUTS.get(kind, 120),
+                    stdin=subprocess.DEVNULL if stdin_devnull else None,
+                    check=False,
+                )
+                record.update(
+                    returncode=proc.returncode,
+                    stdout=proc.stdout,
+                    stderr=proc.stderr,
+                    timed_out=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                record.update(
+                    returncode=None,
+                    stdout=(exc.stdout or b"").decode(errors="replace")
+                    if isinstance(exc.stdout, bytes) else (exc.stdout or ""),
+                    stderr=(exc.stderr or b"").decode(errors="replace")
+                    if isinstance(exc.stderr, bytes) else (exc.stderr or ""),
+                    timed_out=True,
+                    stage=kind,
+                )
+            except OSError as exc:
+                record.update(returncode=None, stdout="", stderr=f"{type(exc).__name__}: {exc}",
+                              timed_out=False)
+            record["seconds"] = round(time.monotonic() - started, 3)
+            self.records.append(record)
+            with self.log_path.open("a") as fh:
+                fh.write(json.dumps({k: v for k, v in record.items()
+                                     if k not in ("stdout", "stderr")}) + "\n")
+            ok = record.get("returncode") == 0 and not record.get("timed_out")
+            if ok or attempt > retries:
+                record["attempts"] = attempt
+                return record
+            time.sleep(retry_delay)
 
 
 class Control:
@@ -599,6 +619,10 @@ class Runner:
         self.evidence: dict[str, dict] = {}
         self.timeouts: list[dict] = []
         self.errors: list[dict] = []
+        #: Operations that failed at least once but succeeded on retry. Disclosed
+        #: in the artifact rather than folded into driver_errors, because a
+        #: self-healed download did not leave any case unattributed.
+        self.retried_operations: list[dict] = []
 
     def error(self, kind: str, detail: str, **context) -> None:
         """Record a driver-level failure, structured so the artifact says what broke.
@@ -616,22 +640,38 @@ class Runner:
 
     # -- sandbox operations ------------------------------------------------
 
-    def _os(self, kind: str, *argv: str) -> dict:
-        record = self.op.run(kind, [self.osbin, "--gateway-endpoint", self.gateway, *argv])
+    def _os(self, kind: str, *argv: str, retries: int = 0) -> dict:
+        record = self.op.run(kind, [self.osbin, "--gateway-endpoint", self.gateway, *argv],
+                             retries=retries)
         # Every OpenShell operation this profile issues is expected to succeed: a
         # refusal under test is carried in the client's *result*, not in the CLI's
         # exit status. Five consecutive passing runs recorded 242 operations each
         # with zero non-zero exits, so a non-zero exit is an anomaly and is
         # recorded as one rather than being left for a case gate to imply.
-        if record.get("timed_out"):
+        #
+        # A download that needed a retry is the one exception. Under concurrent
+        # profiles, `sandbox download` was twice observed to exit 1 once and
+        # succeed on an immediate second attempt, distinct from every exec and
+        # upload, which never did. It re-reads a file the sandbox already
+        # finished writing, so a retry cannot touch anything the case gates
+        # judge; the attempt count is still carried into the artifact so it is
+        # visible rather than silently smoothed over.
+        if record["attempts"] > 1 and record.get("returncode") == 0:
+            self.retried_operations.append({"stage": kind, "attempts": record["attempts"]})
+        elif record.get("timed_out"):
             self.timeouts.append({"stage": kind, "argv": list(argv)[:3],
                                   "stderr": (record.get("stderr") or "")[:200]})
             self.error("operation_timeout",
-                       f"{kind} exceeded its {TIMEOUTS.get(kind, 120)}s bound", stage=kind)
+                       f"{kind} exceeded its {TIMEOUTS.get(kind, 120)}s bound "
+                       f"after {record['attempts']} attempt(s)", stage=kind)
         elif record.get("returncode") is None:
-            self.error("operation_not_launched", f"{kind} could not be launched", stage=kind)
+            self.error("operation_not_launched",
+                       f"{kind} could not be launched after {record['attempts']} attempt(s)",
+                       stage=kind)
         elif record["returncode"] != 0:
-            self.error("operation_failed", f"{kind} exited {record['returncode']}", stage=kind)
+            self.error("operation_failed",
+                       f"{kind} exited {record['returncode']} after "
+                       f"{record['attempts']} attempt(s)", stage=kind)
         return record
 
     def upload(self, local: pathlib.Path, remote: str) -> dict:
@@ -645,7 +685,8 @@ class Runner:
         return self._os("exec", "sandbox", "exec", "--no-tty", "-n", self.sandbox, "--", *argv)
 
     def download(self, remote: str, local: pathlib.Path) -> dict:
-        return self._os("download", "sandbox", "download", self.sandbox, remote, str(local))
+        return self._os("download", "sandbox", "download", self.sandbox, remote, str(local),
+                        retries=2)
 
     # -- evidence ----------------------------------------------------------
 
@@ -1627,6 +1668,9 @@ def main() -> int:
             "timeouts": runner.timeouts,
             "slowest_seconds": max((r["seconds"] for r in runner.op.records), default=0),
             "max_argv_bytes": max((r["argv_len"] for r in runner.op.records), default=0),
+            # Downloads only: an attempt count above 1 with a final success. Never
+            # exec or upload, and never masked into driver_errors.
+            "retried_operations": runner.retried_operations,
         },
         "driver_errors": runner.errors,
         "gates": gates,

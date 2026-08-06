@@ -250,8 +250,13 @@ esac
 note "ratify sdk source=$RATIFY_SDK"
 LOCK_SHA="$("$PYBIN" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$LOCK")"
 note "dependency lock sha256=$LOCK_SHA"
+# The `+` form, not a bare "${SDK_MOUNT[@]}": macOS ships bash 3.2, and 3.2
+# raises "unbound variable" under `set -u` when an array with zero elements is
+# expanded, which `published` mode hits every time (SDK_MOUNT=()). This was
+# caught by the first published-mode run, which failed in 17 seconds with
+# exactly that error before any container started.
 if ! docker run --rm --user 0 --entrypoint /bin/sh \
-  "${SDK_MOUNT[@]}" -v "$DEPS_DIR:/out" -v "$LOCK:/lock:ro" "$SANDBOX_IMAGE" \
+  "${SDK_MOUNT[@]+"${SDK_MOUNT[@]}"}" -v "$DEPS_DIR:/out" -v "$LOCK:/lock:ro" "$SANDBOX_IMAGE" \
   -c 'set -e
 export UV_PYTHON_DOWNLOADS=never
 # --require-hashes makes every distribution hash-verified and refuses any

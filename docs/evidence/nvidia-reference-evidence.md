@@ -2,8 +2,16 @@
 
 Machine-readable form: [`nvidia-reference-evidence.json`](./nvidia-reference-evidence.json).
 
-**Executed 2026-08-05.** Branch `feat/nvidia-nooa-reference` at `37b378b`, rebased
-onto `origin/main` at `f5a1522` (the commit marking `v1.0.0-alpha.16` published).
+**Executed 2026-08-05.** Branch `feat/nvidia-nooa-reference`, rebased onto
+`origin/main` at `f5a1522` (the commit marking `v1.0.0-alpha.16` published).
+
+- **`tested_source_commit: 37b378b`** — every run cited in this document
+  executed against this exact commit.
+- **`documentation_commit: 141f429`** — one commit later, prose only (README,
+  `docs/`, this file). Diffed against `37b378b` before this note was written:
+  zero changes to the driver, adjudicator, tests, Dockerfile, or profile script.
+  The evidence below is not stale relative to it.
+
 This is the first evidence produced after alpha.16's publication; every run in
 this document installs `ratify-protocol==1.0.0a16` from PyPI rather than this
 repository's own checkout, and every artifact's own `evidence_status` field says

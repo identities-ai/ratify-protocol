@@ -269,7 +269,7 @@ process rather than by isolating each case into its own sandbox; the import
 count is measured by a `sys.addaudithook` on the `import` audit event, not
 declared. Full run-by-run evidence, including a disclosed bounded retry added
 for a transient `sandbox download` flake observed twice under concurrent load:
-[`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
+[`docs/evidence/nvidia-reference-evidence.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/evidence/nvidia-reference-evidence.md).
 
 Each case declares an expected outcome and every boundary delta it may produce, and is judged against control-plane snapshots taken immediately either side of it. A missing case, missing snapshot, stale sequence, partial result, or unexplained event is a failure, never a skip.
 

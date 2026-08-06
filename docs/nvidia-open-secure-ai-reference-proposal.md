@@ -12,6 +12,13 @@
 
 **Relationship disclosure.** Ratify Protocol is an NVIDIA Inception member. This document is an unsolicited, independent proposal. It is not an NVIDIA partnership, not an NVIDIA-approved or official integration, not an Open Secure AI Alliance membership artifact, and not an NVIDIA reference architecture. No NVIDIA repository is modified by this contribution. Every claim about NOOA and OpenShell below is cited to public source at a pinned version.
 
+**Current NVIDIA alignment.** NVIDIA's Secure Agent Workspace materials describe a
+layered identity surface, per-engagement delegation records, and ODIS as an open
+interoperability standard for agent identity and delegation. This reference is
+therefore proposed as an executable interoperability and conformance profile to
+evaluate against that direction, not as a claim that NVIDIA lacks or should adopt
+Ratify's delegation model.
+
 ---
 
 ## 1. Executive summary
@@ -269,7 +276,7 @@ process rather than by isolating each case into its own sandbox; the import
 count is measured by a `sys.addaudithook` on the `import` audit event, not
 declared. Full run-by-run evidence, including a disclosed bounded retry added
 for a transient `sandbox download` flake observed twice under concurrent load:
-[`docs/evidence/nvidia-reference-evidence.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/evidence/nvidia-reference-evidence.md).
+[`docs/evidence/nvidia-reference-evidence.md`](evidence/nvidia-reference-evidence.md).
 
 Each case declares an expected outcome and every boundary delta it may produce, and is judged against control-plane snapshots taken immediately either side of it. A missing case, missing snapshot, stale sequence, partial result, or unexplained event is a failure, never a skip.
 

@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+# SPDX-License-Identifier: Apache-2.0
+#
+# A sandbox image for the unified NOOA path, and only for that.
+#
+# Why this exists at all. The unified path needs nooa==0.0.8 running *inside*
+# the OpenShell-governed sandbox, and the sandbox has no egress once its policy
+# is active, so the dependencies have to be present before the test starts.
+# Delivering them with the released `openshell sandbox upload` was tried first
+# and does not hold: a single 63-76 MB transfer failed with "error reading a
+# body from connection ... broken pipe", and splitting it into 8 MB chunks still
+# failed intermittently, across several runs. Baking the tree into an image
+# removes every runtime transfer, which is the difference between a profile that
+# usually passes and one that does.
+#
+# What this image is not. It is not a redistribution, not published to any
+# registry, and not required by any other part of the reference. Every other
+# group in the profile runs on the unmodified pinned community sandbox image.
+#
+# FROM is pinned by immutable digest, so the supervisor injection contract, the
+# interpreter, and the filesystem layout are exactly the base the rest of the
+# profile uses. /usr/bin/python3 in that base is CPython 3.12.3, which is inside
+# nooa's declared >=3.12,<3.14 range; the default `python3` on PATH is 3.14 from
+# a uv venv and cannot run nooa, which is why the profile always names the
+# interpreter by absolute path.
+ARG SANDBOX_BASE=ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e
+FROM ${SANDBOX_BASE}
+
+# The dependency tree, resolved by uv against this same base image's
+# /usr/bin/python3 so the compiled wheels are ones that interpreter can load.
+# Built by run-openshell-profile.sh into a staging directory; nothing is
+# fetched here, so the build needs no network.
+#
+# Contains no keys, no proofs, no JWTs, no delegations, and no test vectors. It
+# is third-party libraries and the Ratify Python SDK from this checkout, and
+# nothing else.
+#
+# Owned by root and left at its copied modes, which is already read-only to the
+# unprivileged `sandbox` user the policy runs as. An explicit `RUN chmod` was
+# tried and fails: the base image's default user is not root, so the build step
+# cannot alter root-owned files, and the chmod added nothing that ownership had
+# not already established.
+COPY --chown=root:root site /opt/ratify-nooa/site

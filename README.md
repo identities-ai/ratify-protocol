@@ -375,6 +375,14 @@ If you're implementing a new language port, **start from the fixtures, not the s
 
 ## Where to go next
 
+[`references/`](references/README.md) is the open-source home for executable
+integrations with agent frameworks, transports, and runtimes. These profiles
+prove interoperability and document the receiver-side trust boundary. They do
+not replace **Ratify Verify**, the managed commercial surface for production
+trust configuration, revocation, policy, audit, observability, availability,
+and supported deployment adapters. Both use the same portable protocol and
+verification semantics—there is no managed-only wire format.
+
 | You want to… | Go to |
 |---|---|
 | **Run the demo and see the protocol work** | [`demos/README.md`](demos/README.md) |

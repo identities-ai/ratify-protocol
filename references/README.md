@@ -5,6 +5,14 @@ transport, runtime, or platform without changing the Ratify verifier contract.
 They are larger and more platform-specific than the small examples in
 [`demos/`](../demos/README.md).
 
+These are open-source interoperability references, not hosted services or
+production support commitments. They make the integration pattern inspectable,
+portable, and reproducible. **Ratify Verify** is the separate managed commercial
+surface for operating the same protocol at scale: managed trust configuration,
+revocation, policy, audit retention, observability, availability, and supported
+deployment adapters. The proof bytes and verifier semantics remain portable;
+customers choose whether to operate them themselves or use the managed service.
+
 Every accepted profile should contain:
 
 - an explicit trust boundary and layer-separation statement;
@@ -20,7 +28,7 @@ Every accepted profile should contain:
 
 | Profile | Status | Ratify version | Platform version | Gate |
 |---|---|---|---|---|
-| [Google ADK](google-adk/README.md) | Independent draft; 16/16 gate green | `1.0.0a16` | `google-adk==2.6.3` | `./scripts/google-adk-reference-check.sh` |
+| [Google ADK](google-adk/README.md) | Independent draft; 17/17 gate green | `1.0.0a16` | `google-adk==2.6.3` | `./scripts/google-adk-reference-check.sh` |
 
 ## Lifecycle
 

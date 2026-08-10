@@ -1,41 +1,48 @@
-# Proof-Carrying Delegated Authority for NVIDIA's Open Agent-Security Stack
+# Receiver-Verifiable Delegated Authority: An Executable Interoperability Profile for ODIS
 
 A proposed open reference from Ratify Protocol, an NVIDIA Inception member.
 
 ## Proposal
 
-Ratify Protocol proposes an open reference showing how an agent carries a
+Ratify Protocol proposes an open reference for evaluation against NVIDIA's ODIS
+direction, showing how an agent carries a
 principal-signed, resource-bound delegation to an independent action boundary. The
 receiver verifies who authorized the agent, what it may do, and whether the
 request stays within those limits before it acts.
+
+The reference does not claim ODIS conformance. It makes one trust-boundary choice
+executable so NVIDIA engineers can determine whether it is compatible with the
+ODIS delegation contract.
 
 ## Request
 
 We are asking NVIDIA to:
 
-1. Connect us with the appropriate technical owner for identity, permissions, or
-   delegated authority within the Open Secure AI Alliance.
-2. Convene one working session with the relevant NOOA and OpenShell engineers.
-3. Advise on the appropriate upstream, interoperability, or technical-publication
-   path.
+1. Connect us with the appropriate technical owner for Secure Agent Workspace and
+   the ODIS delegation contract.
+2. Convene one 45-minute architecture-mapping session with that owner and the
+   relevant NOOA and OpenShell engineers.
+3. Give the work a disposition: useful as an interoperability, conformance, or
+   threat-model artifact; relevant elsewhere; or redundant with planned ODIS work.
 
 The implementation and its validation are complete. What remains is placement.
 
 ## The authorization question
 
-NVIDIA's Secure Agent Workspace design separates sponsor, workspace, agent, and
-tool-call identity, and describes ODIS as an open interoperability standard for
-identity and delegation. Ratify offers a running, independently verified profile
-that can be evaluated against that direction when an agent crosses a tool,
-service, or organizational boundary:
+NVIDIA's Secure Agent Workspace design describes ODIS as covering identity,
+delegation, scoped authority, revocation, and audit context. Ratify does not claim
+that delegation is missing. It offers a running profile that makes one
+trust-boundary choice testable when an agent crosses a tool, service, or
+organizational boundary:
 
-**Who authorized this agent to perform this specific action, and under what
-constraints?**
+**Should ODIS-style authority also be independently verifiable by the receiver
+when an agent crosses an organizational boundary?**
 
-A principal may authorize an agent to issue refunds up to $100, for 24 hours, for
-one tenant and one order. A receiving service elsewhere has to verify that
-authority independently, rather than trusting an API key, an agent log, or a
-self-reported claim.
+Runtime enforcement can present ordinary service credentials downstream. This
+profile tests the complementary case: the receiver bears the consequence, does
+not trust the originating runtime, and verifies the principal's bounded authority
+itself. A principal authorizes refunds up to $100, for 24 hours, for one tenant
+and one order; a receiving service elsewhere verifies those bounds before acting.
 
 ## How the layers compose
 
@@ -43,9 +50,9 @@ self-reported claim.
 |---|---|
 | NOOA | Where is the agent invocation presented? |
 | OpenShell | Which destination, MCP method, and tool may the runtime reach? |
-| ODIS / enterprise IAM | How are sponsor and agent identities delegated? |
-| Ratify profile | Can an independent receiver verify that authority for this action? |
-| Receiver | Does the presented authority permit this specific action? |
+| ODIS | How are identity and delegation contracts made interoperable? |
+| Ratify profile | How can receiver-verifiable authority be made executable and tested? |
+| Receiver | Does the verified authority and local policy permit this action? |
 
 OpenShell and Ratify are independent and conjunctive. OpenShell does not evaluate
 refund amount, tenant, order, expiry, revocation, or delegation semantics. Ratify
@@ -90,15 +97,16 @@ at exactly the boundaries where autonomous systems start being useful.
 Ratify contributes an open, portable implementation and adversarial test profile
 for delegated authority crossing an independent action boundary. It separates
 which workload is calling, what the runtime permits, and what a principal actually
-authorized. That gives NVIDIA and Alliance engineers a concrete artifact to
-evaluate against ODIS, revise through feedback, and potentially upstream.
+authorized. That gives NVIDIA engineers a concrete artifact to map against ODIS
+and either adopt, revise, place elsewhere, or identify as redundant.
 
 ## Next step
 
-We would value one technical working session covering the NOOA presentation seam,
-OpenShell MCP policy composition, receiver-side authority verification, audit and
-trace correlation, and the appropriate upstream or Alliance contribution path. We
-can incorporate agreed feedback within days.
+We would value one 45-minute architecture-mapping session covering the NOOA
+presentation seam, OpenShell MCP policy composition, receiver-side authority
+verification, and ODIS compatibility. The desired outcome is a disposition:
+interoperability, conformance, or threat-model artifact; relevant elsewhere; or
+redundant with planned ODIS work.
 
 ## Disclosure
 

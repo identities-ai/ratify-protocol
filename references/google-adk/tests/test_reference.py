@@ -4,6 +4,10 @@ import time
 
 import pytest
 from google.adk.agents import LlmAgent
+from google.adk.models.base_llm import BaseLlm
+from google.adk.models.llm_response import LlmResponse
+from google.adk.runners import InMemoryRunner
+from google.genai import types
 from ratify_protocol import encode_proof_bundle, generate_agent, sign_challenge
 
 from authority_reference import (
@@ -194,3 +198,64 @@ def test_real_adk_function_tool_executes_the_receiver_gated_path():
     assert allowed["decision"] == "allow"
     assert denied["decision"] == "deny"
     assert receiver.tool_invocations == 1
+
+
+class _ScriptedToolCallingModel(BaseLlm):
+    """Deterministic model double; ADK still owns the agent/tool event loop."""
+
+    turn: int = 0
+
+    async def generate_content_async(self, llm_request, stream=False):
+        self.turn += 1
+        if self.turn == 1:
+            yield LlmResponse(
+                content=types.Content(
+                    role="model",
+                    parts=[types.Part(function_call=types.FunctionCall(
+                        id="call-1",
+                        name="provision_cloud_node",
+                        args={
+                            "request_id": "runner-allow",
+                            "region": "us-central1",
+                            "instance_type": "n2-standard-4",
+                            "count": 1,
+                        },
+                    ))],
+                )
+            )
+        else:
+            yield LlmResponse(
+                content=types.Content(
+                    role="model",
+                    parts=[types.Part(text="Receiver allowed one node.")],
+                )
+            )
+
+
+def test_real_adk_runner_selects_and_executes_receiver_gated_tool():
+    _, authority, receiver = setup_reference()
+    agent = build_adk_agent(
+        receiver,
+        authority,
+        model=_ScriptedToolCallingModel(model="scripted-reference-model"),
+    )
+    runner = InMemoryRunner(agent=agent, app_name="ratify_adk_reference")
+    session = runner.session_service.create_session_sync(
+        app_name="ratify_adk_reference", user_id="reference-user"
+    )
+
+    events = list(runner.run(
+        user_id="reference-user",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user", parts=[types.Part(text="Provision one node.")]
+        ),
+    ))
+
+    assert receiver.tool_invocations == 1
+    assert any(
+        part.function_response
+        and part.function_response.response["decision"] == "allow"
+        for event in events
+        for part in (event.content.parts if event.content else [])
+    )

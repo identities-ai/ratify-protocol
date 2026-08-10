@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 
+import httpx
 import pytest
 from google.adk.agents import LlmAgent
 from google.adk.models.base_llm import BaseLlm
@@ -50,11 +52,13 @@ def running_http_receiver(authority):
     """Receiver operator starts the service; the ADK client receives only its URL."""
     with tempfile.TemporaryDirectory() as directory:
         config = Path(directory) / "receiver-trust.json"
+        transport_token = "test-transport-token-with-sufficient-entropy"
         config.write_text(json.dumps({
             "trusted_root_id": authority.root_id,
             "trusted_agent_id": authority.specialist_id,
             "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
             "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
+            "transport_token": transport_token,
         }), encoding="utf-8")
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
@@ -81,7 +85,7 @@ def running_http_receiver(authority):
                 time.sleep(0.05)
             else:
                 raise RuntimeError("MCP receiver did not become ready")
-            yield f"http://127.0.0.1:{port}/mcp"
+            yield f"http://127.0.0.1:{port}/mcp", transport_token
         finally:
             process.terminate()
             process.wait(timeout=5)
@@ -323,8 +327,10 @@ def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url = receiver_context.__enter__()
-        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
+        receiver_url, token = receiver_context.__enter__()
+        toolset = build_mcp_toolset(
+            authority, receiver_url=receiver_url, transport_token=token
+        )
         try:
             tools = await toolset.get_tools()
             declaration = tools[0]._get_declaration()
@@ -366,8 +372,10 @@ def test_real_adk_runner_executes_native_mcp_toolset():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url = receiver_context.__enter__()
-        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
+        receiver_url, token = receiver_context.__enter__()
+        toolset = build_mcp_toolset(
+            authority, receiver_url=receiver_url, transport_token=token
+        )
         agent = LlmAgent(
             name="ratify_mcp_specialist",
             model=_ScriptedToolCallingModel(model="scripted-mcp-model"),
@@ -406,11 +414,15 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url = receiver_context.__enter__()
-        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
+        receiver_url, token = receiver_context.__enter__()
+        toolset = build_mcp_toolset(
+            authority, receiver_url=receiver_url, transport_token=token
+        )
         try:
             tool = (await toolset.get_tools())[0]
-            session = await tool._mcp_session_manager.create_session()
+            session = await tool._mcp_session_manager.create_session(headers={
+                "Authorization": f"Bearer {token}"
+            })
             original = {
                 "request_id": "mcp-bound",
                 "region": "us-central1",
@@ -438,15 +450,16 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
             )
             assert _result_object(altered)["status"] == "operation_binding_failed"
 
-            replay_proof = await presentation_for(original)
+            replay_request = {**original, "request_id": "mcp-replay"}
+            replay_proof = await presentation_for(replay_request)
             first = _result_object(await session.call_tool(
                 "provision_cloud_node",
-                arguments={**original, "presentation": replay_proof},
+                arguments={**replay_request, "presentation": replay_proof},
             ))
-            await presentation_for(original)
+            await presentation_for(replay_request)
             replay = _result_object(await session.call_tool(
                 "provision_cloud_node",
-                arguments={**original, "presentation": replay_proof},
+                arguments={**replay_request, "presentation": replay_proof},
             ))
             assert first["decision"] == "allow"
             assert replay["decision"] == "deny"
@@ -458,13 +471,15 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
     asyncio.run(exercise())
 
 
-def test_remote_receiver_rejects_presenter_selected_trust_root_and_agent():
+def test_remote_receiver_rejects_presenter_selected_agent():
     async def exercise():
         _, accepted, _ = setup_reference()
         attacker = issue_authority(now=int(time.time()) - 1)
         receiver_context = running_http_receiver(accepted)
-        receiver_url = receiver_context.__enter__()
-        toolset = build_mcp_toolset(attacker, receiver_url=receiver_url)
+        receiver_url, token = receiver_context.__enter__()
+        toolset = build_mcp_toolset(
+            attacker, receiver_url=receiver_url, transport_token=token
+        )
         try:
             tool = (await toolset.get_tools())[0]
             result = await tool.run_async(
@@ -484,3 +499,133 @@ def test_remote_receiver_rejects_presenter_selected_trust_root_and_agent():
             receiver_context.__exit__(None, None, None)
 
     asyncio.run(exercise())
+
+
+def test_remote_receiver_rejects_spoofed_agent_under_hostile_root():
+    async def exercise():
+        _, accepted, _ = setup_reference()
+        attacker = issue_authority(now=int(time.time()) - 1)
+        context = running_http_receiver(accepted)
+        url, token = context.__enter__()
+        toolset = build_mcp_toolset(
+            attacker, receiver_url=url, transport_token=token
+        )
+        try:
+            tool = (await toolset.get_tools())[0]
+            session = await tool._mcp_session_manager.create_session(headers={
+                "Authorization": f"Bearer {token}"
+            })
+            request = {
+                "request_id": "hostile-root", "region": "us-central1",
+                "instance_type": "n2-standard-4", "count": 1,
+            }
+            grant = _result_object(await session.call_tool(
+                "issue_authority_challenge", arguments=request
+            ))
+            bundle = attacker.present(
+                challenge=base64_standard_decode(grant["challenge"]),
+                session_context=base64_standard_decode(grant["session_context"]),
+            )
+            bundle.agent_id = accepted.specialist_id
+            result = _result_object(await session.call_tool(
+                "provision_cloud_node",
+                arguments={**request, "presentation": encode_proof_bundle(bundle)},
+            ))
+            assert result["status"] == "untrusted_root"
+            assert result["tool_invocations"] == 0
+        finally:
+            await toolset.close()
+            context.__exit__(None, None, None)
+    asyncio.run(exercise())
+
+
+def test_adk_confirmation_gate_is_preserved_before_mcp_execution():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        context = running_http_receiver(authority)
+        url, token = context.__enter__()
+        toolset = build_mcp_toolset(
+            authority, receiver_url=url, transport_token=token,
+            require_confirmation=True,
+        )
+        requested = []
+        tool_context = SimpleNamespace(
+            tool_confirmation=None,
+            request_confirmation=lambda **kwargs: requested.append(kwargs),
+        )
+        try:
+            tool = (await toolset.get_tools())[0]
+            result = await tool.run_async(args={
+                "request_id": "needs-confirmation", "region": "us-central1",
+                "instance_type": "n2-standard-4", "count": 1,
+            }, tool_context=tool_context)
+            assert "requires confirmation" in result["error"]
+            assert requested
+        finally:
+            await toolset.close()
+            context.__exit__(None, None, None)
+    asyncio.run(exercise())
+
+
+def test_prefix_and_malformed_model_output_remain_structured():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        context = running_http_receiver(authority)
+        url, token = context.__enter__()
+        toolset = build_mcp_toolset(
+            authority, receiver_url=url, transport_token=token,
+            tool_name_prefix="infra",
+        )
+        try:
+            tool = (await toolset.get_tools_with_prefix())[0]
+            assert tool.name.startswith("infra")
+            allowed = await tool.run_async(args={
+                "request_id": "prefixed", "region": "us-central1",
+                "instance_type": "n2-standard-4", "count": 1,
+            }, tool_context=None)
+            malformed = await tool.run_async(args={
+                "request_id": "malformed", "region": "US-CENTRAL1",
+                "instance_type": "n2_standard_4", "count": 1,
+            }, tool_context=None)
+            assert allowed["decision"] == "allow"
+            assert malformed["decision"] == "deny"
+            assert malformed["status"] in {"challenge_rejected", "mcp_error"}
+        finally:
+            await toolset.close()
+            context.__exit__(None, None, None)
+    asyncio.run(exercise())
+
+
+def test_unauthenticated_transport_cannot_reach_challenge_tool():
+    _, authority, _ = setup_reference()
+    with running_http_receiver(authority) as (url, _):
+        response = httpx.post(url, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "issue_authority_challenge", "arguments": {}},
+        })
+        assert response.status_code == 401
+
+
+def test_junk_presentation_does_not_cancel_honest_pending_operation():
+    now, authority, receiver = setup_reference()
+    request = OperationRequest("not-cancelled", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, request, now=now)
+    junk = receiver.execute(request, "not-a-bundle", now=now)
+    honest = receiver.execute(request, bundle, now=now)
+    assert junk["status"] == "invalid_presentation"
+    assert honest["decision"] == "allow"
+
+
+def test_pending_capacity_fails_structurally_and_is_bounded():
+    _, authority, receiver = setup_reference()
+    for index in range(128):
+        receiver.issue_challenge(
+            OperationRequest(f"capacity-{index}", "us-central1", "n2-standard-4", 1),
+            expected_agent_id=authority.specialist_id,
+        )
+    with pytest.raises(ValueError, match="receiver_pending_capacity"):
+        receiver.issue_challenge(
+            OperationRequest("capacity-overflow", "us-central1", "n2-standard-4", 1),
+            expected_agent_id=authority.specialist_id,
+        )
+    assert len(receiver._pending) == 128

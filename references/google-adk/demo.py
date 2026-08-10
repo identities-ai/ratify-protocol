@@ -12,7 +12,7 @@ import tempfile
 import time
 
 from authority_reference import build_mcp_toolset, issue_authority
-from authority_reference.deployment_config import write_configs
+from authority_reference.deployment_config import load_transport_token, write_configs
 
 
 async def run() -> None:
@@ -29,13 +29,19 @@ async def run() -> None:
             "--trust-config", str(receiver_config), "--port", str(port),
         ])
         try:
+            ready = False
             for _ in range(200):
                 with socket.socket() as probe:
                     if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        ready = True
                         break
                 time.sleep(0.05)
+            if not ready:
+                raise RuntimeError("HTTP MCP receiver did not become ready")
             toolset = build_mcp_toolset(
-                authority, receiver_url=f"http://127.0.0.1:{port}/mcp"
+                authority,
+                receiver_url=f"http://127.0.0.1:{port}/mcp",
+                transport_token=load_transport_token(str(presenter_config)),
             )
             try:
                 tool = (await toolset.get_tools())[0]

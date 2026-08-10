@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
@@ -8,15 +9,22 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from ratify_protocol import encode_proof_bundle, generate_agent, sign_challenge
+from ratify_protocol import (
+    base64_standard_decode,
+    encode_proof_bundle,
+    generate_agent,
+    sign_challenge,
+)
 
 from authority_reference import (
     InfrastructureReceiver,
     OperationRequest,
     build_adk_agent,
+    build_mcp_toolset,
     build_provision_tool,
     issue_authority,
 )
+from authority_reference.adk_mcp import _result_object
 
 
 def setup_reference(**authority_options):
@@ -259,3 +267,136 @@ def test_real_adk_runner_selects_and_executes_receiver_gated_tool():
         for event in events
         for part in (event.content.parts if event.content else [])
     )
+
+
+def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        toolset = build_mcp_toolset(authority)
+        try:
+            tools = await toolset.get_tools()
+            declaration = tools[0]._get_declaration()
+            properties = declaration.parameters_json_schema["properties"]
+            assert set(properties) == {
+                "request_id", "region", "instance_type", "count"
+            }
+
+            allowed = await tools[0].run_async(
+                args={
+                    "request_id": "mcp-allow",
+                    "region": "us-central1",
+                    "instance_type": "n2-standard-4",
+                    "count": 1,
+                },
+                tool_context=None,
+            )
+            denied = await tools[0].run_async(
+                args={
+                    "request_id": "mcp-deny",
+                    "region": "us-central1",
+                    "instance_type": "n2-standard-4",
+                    "count": 3,
+                },
+                tool_context=None,
+            )
+            assert allowed["decision"] == "allow"
+            assert allowed["tool_invocations"] == 1
+            assert denied["decision"] == "deny"
+            assert denied["tool_invocations"] == 1
+        finally:
+            await toolset.close()
+
+    asyncio.run(exercise())
+
+
+def test_real_adk_runner_executes_native_mcp_toolset():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        toolset = build_mcp_toolset(authority)
+        agent = LlmAgent(
+            name="ratify_mcp_specialist",
+            model=_ScriptedToolCallingModel(model="scripted-mcp-model"),
+            instruction="Provision only through the receiver-gated MCP tool.",
+            tools=[toolset],
+        )
+        runner = InMemoryRunner(agent=agent, app_name="ratify_adk_mcp")
+        try:
+            session = await runner.session_service.create_session(
+                app_name="ratify_adk_mcp", user_id="reference-user"
+            )
+            events = [
+                event
+                async for event in runner.run_async(
+                    user_id="reference-user",
+                    session_id=session.id,
+                    new_message=types.Content(
+                        role="user", parts=[types.Part(text="Provision one node.")]
+                    ),
+                )
+            ]
+            assert any(
+                part.function_response
+                and part.function_response.response["decision"] == "allow"
+                for event in events
+                for part in (event.content.parts if event.content else [])
+            )
+        finally:
+            await runner.close()
+
+    asyncio.run(exercise())
+
+
+def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        toolset = build_mcp_toolset(authority)
+        try:
+            tool = (await toolset.get_tools())[0]
+            session = await tool._mcp_session_manager.create_session()
+            original = {
+                "request_id": "mcp-bound",
+                "region": "us-central1",
+                "instance_type": "n2-standard-4",
+                "count": 1,
+            }
+
+            async def presentation_for(args):
+                result = await session.call_tool(
+                    "issue_authority_challenge",
+                    arguments={
+                        **args,
+                        "expected_agent_id": authority.specialist_id,
+                    },
+                )
+                grant = _result_object(result)
+                return encode_proof_bundle(authority.present(
+                    challenge=base64_standard_decode(grant["challenge"]),
+                    session_context=base64_standard_decode(
+                        grant["session_context"]
+                    ),
+                ))
+
+            altered_proof = await presentation_for(original)
+            altered = await session.call_tool(
+                "provision_cloud_node",
+                arguments={**original, "count": 2, "presentation": altered_proof},
+            )
+            assert _result_object(altered)["status"] == "operation_binding_failed"
+
+            replay_proof = await presentation_for(original)
+            first = _result_object(await session.call_tool(
+                "provision_cloud_node",
+                arguments={**original, "presentation": replay_proof},
+            ))
+            await presentation_for(original)
+            replay = _result_object(await session.call_tool(
+                "provision_cloud_node",
+                arguments={**original, "presentation": replay_proof},
+            ))
+            assert first["decision"] == "allow"
+            assert replay["decision"] == "deny"
+            assert replay["tool_invocations"] == 1
+        finally:
+            await toolset.close()
+
+    asyncio.run(exercise())

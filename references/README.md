@@ -28,7 +28,7 @@ Every accepted profile should contain:
 
 | Profile | Status | Ratify version | Platform version | Gate |
 |---|---|---|---|---|
-| [Google ADK](google-adk/README.md) | Independent draft; 17/17 gate green | `1.0.0a16` | `google-adk==2.6.3` | `./scripts/google-adk-reference-check.sh` |
+| [Google ADK](google-adk/README.md) | Independent draft; 20/20 gate green | `1.0.0a16` | `google-adk==2.6.3` | `./scripts/google-adk-reference-check.sh` |
 
 ## Lifecycle
 

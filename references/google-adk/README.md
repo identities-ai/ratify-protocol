@@ -67,7 +67,7 @@ Google ADK native McpToolset
   signs it with the specialist key and injects the proof
                   |
                   v
-Separate stdio MCP receiver process
+Independent Streamable HTTP MCP receiver
   pins the accepted principal root out of band
   reconstructs the operation and payload digest
   binds the challenge to verifier, workspace, agent, session, invocation,
@@ -132,7 +132,19 @@ same ADK tool interactively:
 ```bash
 cd references/google-adk
 source .venv/bin/activate
+python bootstrap_live.py
+python -m authority_reference.mcp_server \
+  --trust-config .local/receiver-trust.json --port 8765
+```
+
+In a second shell:
+
+```bash
+cd references/google-adk
+source .venv/bin/activate
 export GOOGLE_API_KEY=your_key
+export RATIFY_PRESENTER_CONFIG=.local/presenter.json
+export RATIFY_MCP_RECEIVER_URL=http://127.0.0.1:8765/mcp
 adk run adk_app
 ```
 
@@ -153,7 +165,7 @@ adds no authorization guarantee beyond the deterministic receiver tests.
 |---|---|---|
 | Receiver verification | Yes | Cryptographic and local-policy allow/deny matrix |
 | ADK `FunctionTool` | Yes | Baseline in-process composition |
-| Native ADK `McpToolset` | Yes | Ordinary schema; hidden proof injection; separate receiver process |
+| Native ADK `McpToolset` | Yes | Ordinary schema; hidden proof injection; independent HTTP receiver |
 | ADK runner loop | Yes | Model turn → MCP function call → gated receiver → function response |
 | Gemini 3.6 Flash | Configuration-ready | Requires an operator API key; not part of recorded evidence |
 | A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
@@ -171,9 +183,14 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   execution layer must still ensure the real cloud operation matches it.
 - This reference composes with Agent Identity conceptually but does not deploy
   to Vertex AI Agent Engine or exercise preview IAM Agent Identity APIs.
-- The executed draft uses the real ADK runner and native `McpToolset` across a
-  separately spawned stdio MCP receiver process. It does not yet execute A2A,
-  remote HTTP MCP, Agent Engine, or Agent Identity deployment.
+- Proof injection uses a small pinned-version `McpTool` adapter because ADK does
+  not expose operation-specific hidden MCP metadata as a stable public hook.
+  The adapter is isolated and tested, but should be mapped with the ADK team
+  before claiming forward compatibility.
+- The executed draft uses the real ADK runner and native `McpToolset` across an
+  independently started Streamable HTTP MCP receiver with receiver-owned trust
+  configuration. It does not yet execute A2A, TLS workload authentication,
+  Agent Engine, or Agent Identity deployment.
 
 ## Sources
 

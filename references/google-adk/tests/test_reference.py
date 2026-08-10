@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+import json
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import tempfile
 import time
 
 import pytest
@@ -11,6 +18,7 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 from ratify_protocol import (
     base64_standard_decode,
+    base64_standard_encode,
     encode_proof_bundle,
     generate_agent,
     sign_challenge,
@@ -35,6 +43,48 @@ def setup_reference(**authority_options):
         trusted_root_public_key=authority.root_public_key,
     )
     return now, authority, receiver
+
+
+@contextmanager
+def running_http_receiver(authority):
+    """Receiver operator starts the service; the ADK client receives only its URL."""
+    with tempfile.TemporaryDirectory() as directory:
+        config = Path(directory) / "receiver-trust.json"
+        config.write_text(json.dumps({
+            "trusted_root_id": authority.root_id,
+            "trusted_agent_id": authority.specialist_id,
+            "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
+            "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
+        }), encoding="utf-8")
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        process = subprocess.Popen(
+            [
+                sys.executable, "-m", "authority_reference.mcp_server",
+                "--trust-config", str(config), "--port", str(port),
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    raise RuntimeError(process.stderr.read())
+                with socket.socket() as probe:
+                    probe.settimeout(0.1)
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError("MCP receiver did not become ready")
+            yield f"http://127.0.0.1:{port}/mcp"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
 
 
 def present(authority, receiver, request, *, now):
@@ -272,7 +322,9 @@ def test_real_adk_runner_selects_and_executes_receiver_gated_tool():
 def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
     async def exercise():
         _, authority, _ = setup_reference()
-        toolset = build_mcp_toolset(authority)
+        receiver_context = running_http_receiver(authority)
+        receiver_url = receiver_context.__enter__()
+        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
         try:
             tools = await toolset.get_tools()
             declaration = tools[0]._get_declaration()
@@ -305,6 +357,7 @@ def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
             assert denied["tool_invocations"] == 1
         finally:
             await toolset.close()
+            receiver_context.__exit__(None, None, None)
 
     asyncio.run(exercise())
 
@@ -312,7 +365,9 @@ def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
 def test_real_adk_runner_executes_native_mcp_toolset():
     async def exercise():
         _, authority, _ = setup_reference()
-        toolset = build_mcp_toolset(authority)
+        receiver_context = running_http_receiver(authority)
+        receiver_url = receiver_context.__enter__()
+        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
         agent = LlmAgent(
             name="ratify_mcp_specialist",
             model=_ScriptedToolCallingModel(model="scripted-mcp-model"),
@@ -342,6 +397,7 @@ def test_real_adk_runner_executes_native_mcp_toolset():
             )
         finally:
             await runner.close()
+            receiver_context.__exit__(None, None, None)
 
     asyncio.run(exercise())
 
@@ -349,7 +405,9 @@ def test_real_adk_runner_executes_native_mcp_toolset():
 def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
     async def exercise():
         _, authority, _ = setup_reference()
-        toolset = build_mcp_toolset(authority)
+        receiver_context = running_http_receiver(authority)
+        receiver_url = receiver_context.__enter__()
+        toolset = build_mcp_toolset(authority, receiver_url=receiver_url)
         try:
             tool = (await toolset.get_tools())[0]
             session = await tool._mcp_session_manager.create_session()
@@ -363,10 +421,7 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
             async def presentation_for(args):
                 result = await session.call_tool(
                     "issue_authority_challenge",
-                    arguments={
-                        **args,
-                        "expected_agent_id": authority.specialist_id,
-                    },
+                    arguments=args,
                 )
                 grant = _result_object(result)
                 return encode_proof_bundle(authority.present(
@@ -398,5 +453,34 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
             assert replay["tool_invocations"] == 1
         finally:
             await toolset.close()
+            receiver_context.__exit__(None, None, None)
+
+    asyncio.run(exercise())
+
+
+def test_remote_receiver_rejects_presenter_selected_trust_root_and_agent():
+    async def exercise():
+        _, accepted, _ = setup_reference()
+        attacker = issue_authority(now=int(time.time()) - 1)
+        receiver_context = running_http_receiver(accepted)
+        receiver_url = receiver_context.__enter__()
+        toolset = build_mcp_toolset(attacker, receiver_url=receiver_url)
+        try:
+            tool = (await toolset.get_tools())[0]
+            result = await tool.run_async(
+                args={
+                    "request_id": "attacker-root",
+                    "region": "us-central1",
+                    "instance_type": "n2-standard-4",
+                    "count": 1,
+                },
+                tool_context=None,
+            )
+            assert result["decision"] == "deny"
+            assert result["status"] == "agent_binding_failed"
+            assert result["tool_invocations"] == 0
+        finally:
+            await toolset.close()
+            receiver_context.__exit__(None, None, None)
 
     asyncio.run(exercise())

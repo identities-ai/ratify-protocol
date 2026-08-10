@@ -8,21 +8,16 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
-import os
-from pathlib import Path
-import sys
 from typing import Any
 
 from google.adk.tools.mcp_tool.mcp_session_manager import (
-    StdioConnectionParams,
-    StdioServerParameters,
+    StreamableHTTPConnectionParams,
 )
 from google.adk.tools.mcp_tool.mcp_tool import McpTool
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.genai.types import FunctionDeclaration
 from ratify_protocol import (
     base64_standard_decode,
-    base64_standard_encode,
     encode_proof_bundle,
 )
 
@@ -51,7 +46,7 @@ class ProofInjectingMcpTool(McpTool):
         session = await self._mcp_session_manager.create_session()
         grant_result = await session.call_tool(
             "issue_authority_challenge",
-            arguments={**args, "expected_agent_id": self._authority.specialist_id},
+            arguments=args,
         )
         grant = _result_object(grant_result)
         bundle = self._authority.present(
@@ -82,30 +77,14 @@ class RatifyMcpToolset(McpToolset):
         ]
 
 
-def build_mcp_toolset(authority: AuthorityFixture) -> RatifyMcpToolset:
-    root = Path(__file__).resolve().parents[1]
-    env = dict(os.environ)
-    env.update(
-        {
-            "PYTHONPATH": str(root),
-            "RATIFY_TRUSTED_ROOT_ID": authority.root_id,
-            "RATIFY_ROOT_ED25519": base64_standard_encode(
-                authority.root_public_key.ed25519
-            ),
-            "RATIFY_ROOT_ML_DSA_65": base64_standard_encode(
-                authority.root_public_key.ml_dsa_65
-            ),
-        }
-    )
+def build_mcp_toolset(authority: AuthorityFixture, *, receiver_url: str) -> RatifyMcpToolset:
+    """Connect to an independently operated receiver; never configures its trust."""
     return RatifyMcpToolset(
         authority=authority,
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command=sys.executable,
-                args=["-m", "authority_reference.mcp_server"],
-                cwd=root,
-                env=env,
-            )
+        connection_params=StreamableHTTPConnectionParams(
+            url=receiver_url,
+            timeout=5,
+            sse_read_timeout=30,
         ),
         tool_filter=["provision_cloud_node"],
     )

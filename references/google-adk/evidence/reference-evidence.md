@@ -29,13 +29,13 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 ## Recorded result
 
 ```text
-pins: google-adk==2.6.3 ratify-protocol==1.0.0a16
+pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a16
 ....................                                                     [100%]
-20 passed, 15 warnings
-ALLOW across ADK MCP -> tool invoked once
+21 passed, 17 warnings
+ALLOW across ADK HTTP MCP -> tool invoked once
 DENY excessive count -> no additional invocation
 DENY wrong region -> no additional invocation
-GOOGLE ADK MCP AUTHORITY REFERENCE PASSED
+GOOGLE ADK HTTP MCP AUTHORITY REFERENCE PASSED
 ```
 
 The warnings came from Google ADK and transitive dependency deprecations or
@@ -47,8 +47,8 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
   `google.adk.tools.FunctionTool`.
 - A deterministic model double drives the real ADK runner through model turn,
   function call, gated tool execution, function response, and final response.
-- Native ADK `McpToolset` discovers the public tool from a separately spawned
-  stdio MCP receiver process.
+- Native ADK `McpToolset` discovers the public tool from an independently
+  started Streamable HTTP MCP receiver.
 - The model-visible MCP declaration contains only business arguments. The
   adapter acquires the challenge and injects the proof after tool selection.
 - Altered operations and replayed presentations are denied across the MCP
@@ -69,8 +69,8 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
   stable `gemini-3.6-flash` path, but model judgment is not part of the
   authorization guarantee.
 - No Vertex AI Agent Engine deployment or preview Agent Identity API was used.
-- Stdio MCP was executed. Remote HTTP MCP, A2A, Agent Engine, and Agent Identity
-  deployment were not.
+- Streamable HTTP MCP was executed over loopback. A2A, TLS workload
+  authentication, Agent Engine, and Agent Identity deployment were not.
 - No real Google Cloud resource was provisioned.
 - Only the platform and versions above were executed. Other operating systems,
   architectures, Python versions, and ADK versions remain compatibility

@@ -1,0 +1,3 @@
+google-adk==2.6.3
+ratify-protocol==1.0.0a16
+pytest==8.4.1

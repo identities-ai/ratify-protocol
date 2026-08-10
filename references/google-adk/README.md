@@ -195,6 +195,12 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   that arbitrary MCP schemas can be wrapped without an explicit authority map.
 - Dependencies are version-pinned but not installed with artifact hashes; the
   evidence records the requirements file hash, not a supply-chain attestation.
+- The local profile uses one static transport token. Any holder can consume the
+  bounded 128-operation pending capacity until its five-minute TTL expires;
+  production deployments need per-workload authentication and rate limits.
+- Protected execution is at-most-once, not exactly-once. If the response is
+  lost after execution, replay is denied; a production tool needs an
+  idempotency/result ledger before an operator retries the business action.
 - The executed draft uses the real ADK runner and native `McpToolset` across an
   independently started Streamable HTTP MCP receiver with receiver-owned trust
   configuration. It does not yet execute A2A, TLS workload authentication,

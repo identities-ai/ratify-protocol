@@ -21,14 +21,14 @@ from .authority import AuthorityFixture
 
 def write_configs(authority: AuthorityFixture, receiver_path: Path, presenter_path: Path) -> None:
     transport_token = secrets.token_urlsafe(32)
-    receiver_path.write_text(json.dumps({
+    receiver_payload = json.dumps({
         "trusted_root_id": authority.root_id,
         "trusted_agent_id": authority.specialist_id,
         "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
         "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
         "transport_token": transport_token,
-    }), encoding="utf-8")
-    payload = json.dumps({
+    })
+    presenter_payload = json.dumps({
         "root_id": authority.root_id,
         "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
         "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
@@ -38,7 +38,12 @@ def write_configs(authority: AuthorityFixture, receiver_path: Path, presenter_pa
         "delegations": [encode_delegation_cert(cert) for cert in authority.delegations],
         "transport_token": transport_token,
     })
-    descriptor = os.open(presenter_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    _write_secret(receiver_path, receiver_payload)
+    _write_secret(presenter_path, presenter_payload)
+
+
+def _write_secret(path: Path, payload: str) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as output:
         output.write(payload)
 

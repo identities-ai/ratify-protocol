@@ -30,8 +30,8 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 
 ```text
 pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a16
-....................                                                     [100%]
-29 passed, 23 warnings
+...............................                                          [100%]
+31 passed, 37 warnings
 ALLOW across ADK HTTP MCP -> tool invoked once
 DENY excessive count -> no additional invocation
 DENY wrong region -> no additional invocation
@@ -55,8 +55,8 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
   process boundary without an additional protected-handler invocation.
 - ADK confirmation and tool-name prefixing remain intact; ordinary malformed
   model output returns a structured denial instead of crashing the agent loop.
-- Bearer authentication blocks unauthenticated challenge calls, hostile roots
-  fail over HTTP, junk presentations cannot cancel honest pending operations,
+- A dedicated transport-token header blocks unauthenticated challenge calls,
+  hostile roots fail over HTTP, junk presentations cannot cancel honest pending operations,
   and pending capacity fails structurally at its enforced bound.
 - Concurrent duplicate request IDs produce exactly one pending operation, and
   an unavailable receiver fails within the configured timeout rather than

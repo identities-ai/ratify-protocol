@@ -13,6 +13,13 @@ import time
 from types import SimpleNamespace
 
 import httpx
+from fastapi.openapi.models import HTTPBearer
+from google.adk.auth.auth_credential import (
+    AuthCredential,
+    AuthCredentialTypes,
+    HttpAuth,
+    HttpCredentials,
+)
 import pytest
 from google.adk.agents import LlmAgent
 from google.adk.models.base_llm import BaseLlm
@@ -36,6 +43,7 @@ from authority_reference import (
     issue_authority,
 )
 from authority_reference.adk_mcp import _result_object
+from authority_reference.deployment_config import write_configs
 
 
 def setup_reference(**authority_options):
@@ -422,7 +430,7 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
         try:
             tool = (await toolset.get_tools())[0]
             session = await tool._mcp_session_manager.create_session(headers={
-                "Authorization": f"Bearer {token}"
+                "X-Ratify-Transport-Token": token
             })
             original = {
                 "request_id": "mcp-bound",
@@ -514,7 +522,7 @@ def test_remote_receiver_rejects_spoofed_agent_under_hostile_root():
         try:
             tool = (await toolset.get_tools())[0]
             session = await tool._mcp_session_manager.create_session(headers={
-                "Authorization": f"Bearer {token}"
+                "X-Ratify-Transport-Token": token
             })
             request = {
                 "request_id": "hostile-root", "region": "us-central1",
@@ -668,3 +676,45 @@ def test_unavailable_receiver_fails_without_agent_loop_hang():
         finally:
             await toolset.close()
     asyncio.run(exercise())
+
+
+def test_transport_token_does_not_collide_with_adk_authorization_header():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        context = running_http_receiver(authority)
+        url, token = context.__enter__()
+        credential = AuthCredential(
+            auth_type=AuthCredentialTypes.HTTP,
+            http=HttpAuth(
+                scheme="bearer",
+                credentials=HttpCredentials(token="adk-native-credential"),
+            ),
+        )
+        toolset = build_mcp_toolset(
+            authority,
+            receiver_url=url,
+            transport_token=token,
+            auth_scheme=HTTPBearer(bearerFormat="JWT"),
+            auth_credential=credential,
+        )
+        try:
+            tool = (await toolset.get_tools())[0]
+            result = await tool.run_async(args={
+                "request_id": "dual-auth", "region": "us-central1",
+                "instance_type": "n2-standard-4", "count": 1,
+            }, tool_context=None)
+            assert result["decision"] == "allow"
+        finally:
+            await toolset.close()
+            context.__exit__(None, None, None)
+    asyncio.run(exercise())
+
+
+def test_both_secret_bearing_configs_are_created_mode_0600():
+    _, authority, _ = setup_reference()
+    with tempfile.TemporaryDirectory() as directory:
+        receiver_path = Path(directory) / "receiver.json"
+        presenter_path = Path(directory) / "presenter.json"
+        write_configs(authority, receiver_path, presenter_path)
+        assert receiver_path.stat().st_mode & 0o777 == 0o600
+        assert presenter_path.stat().st_mode & 0o777 == 0o600

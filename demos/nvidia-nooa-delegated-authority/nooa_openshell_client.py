@@ -60,7 +60,7 @@ for _path in ("/opt/ratify-nooa/site", str(_HERE / "site"), str(_HERE)):
 
 # litellm, imported transitively by nooa, fetches a model-cost map from
 # raw.githubusercontent at import time. This policy refuses that request, and
-# the refusal was observed to close the v0.0.96 exec relay, after which the
+# the refusal was observed to close the v0.0.102 exec relay, after which the
 # sandbox fell back to Provisioning and every later case produced no result.
 # Set before nooa is imported anywhere, because it is read at import time.
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")

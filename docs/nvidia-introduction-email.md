@@ -71,6 +71,6 @@ Ratify Protocol
 - Do not claim every request produces a signed receipt. Only authenticated authorization decisions do.
 - No em dashes in outbound copy.
 - The OpenShell claims are executed results, recorded in the profile artifact. Do not soften them into intentions, and do not extend them past the one architecture that was executed.
-- The unified NOOA-through-OpenShell path is now a stable, repeatable gate: 64/64, twice sequentially and twice concurrently, against the published `ratify-protocol==1.0.0a16` package. "Our end-to-end profile passes on every run" is accurate as of 2026-08-05; do not understate it back into a hedge.
-- Six observations about OpenShell v0.0.96 are written up in appendix section 15.3. They are reported as observations of a pinned version, never as defects. If an engineer engages, that section is the most useful thing to send next.
+- The unified NOOA-through-OpenShell path passed 64/64 in one full v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a16` package. The earlier v0.0.96 campaign passed twice sequentially and twice concurrently. Keep those version-separated rather than implying four v0.0.102 runs.
+- Six observations from the OpenShell v0.0.96 campaign are written up in appendix section 15.3. They are reported as historical observations of that pinned version, never as defects or automatically attributed to v0.0.102. If an engineer engages, that section is useful supporting context.
 - Do not describe the work as an OpenShell integration or an NVIDIA-approved composition. It composes with OpenShell as an external operator would, using released commands and no forks.

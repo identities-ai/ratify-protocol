@@ -1,8 +1,8 @@
 # OpenShell gateway configuration template for the reproducible profile.
 #
-# Derived from deploy/docker/gateway.toml at OpenShell v0.0.96, with one
+# Derived from deploy/docker/gateway.toml at OpenShell v0.0.102, with one
 # addition: the [openshell.gateway.gateway_jwt] block. The shipped file omits
-# it, and a v0.0.96 gateway refuses to create Docker sandboxes without it
+# it, and a v0.0.102 gateway refuses to create Docker sandboxes without it
 # ("docker sandboxes require gateway JWT auth"). The runner generates an
 # ephemeral ed25519 keypair under its temporary directory and deletes it at
 # teardown.

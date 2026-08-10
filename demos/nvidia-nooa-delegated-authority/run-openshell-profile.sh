@@ -5,7 +5,7 @@
 #
 #   ./demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh
 #
-# Brings up a pinned OpenShell v0.0.96 gateway on dynamic ports, renders the
+# Brings up a pinned OpenShell v0.0.102 gateway on dynamic ports, renders the
 # sandbox policy, starts the MCP receiver and its loopback control plane,
 # drives every case group from inside an OpenShell sandbox, audits each log
 # source for this run's canaries, writes a machine-readable artifact, and tears
@@ -34,10 +34,10 @@ REPO="$(cd "$HERE/../.." && pwd)"
 # index digests, so one value covers linux/amd64 and linux/arm64. The resolved
 # platform digest for the architecture actually executed is recorded in the
 # artifact alongside the index digest.
-OPENSHELL_CLI_VERSION="0.0.96"
-GATEWAY_IMAGE="ghcr.io/nvidia/openshell/gateway@sha256:329adb1784989705a33c51f81df22eca33e2dc527675642364f013c5b8b79a67"
+OPENSHELL_CLI_VERSION="0.0.102"
+GATEWAY_IMAGE="ghcr.io/nvidia/openshell/gateway@sha256:47f5ca7b3c368841fe0ab8ef33d409ffedc6b937019d2a187b0cc4380f8ad976"
 SANDBOX_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e"
-SUPERVISOR_IMAGE="ghcr.io/nvidia/openshell/supervisor@sha256:523e0565f8957362d8f3c70c6ef7a221d92b10f32b96fbc76821febfb01bae8e"
+SUPERVISOR_IMAGE="ghcr.io/nvidia/openshell/supervisor@sha256:5e33ec485b9e05a00431a23faabf4a49376b8351d90664d585922e148fb18fa4"
 UVICORN_PIN="uvicorn==0.52.1"
 MCP_PIN="mcp==2.0.0"
 
@@ -78,7 +78,7 @@ s.close()'
 note() { printf '  %s\n' "$*"; }
 
 # --- gateway bootstrap lock --------------------------------------------------
-# OpenShell v0.0.96 creates its supervisor-extraction container under a FIXED
+# OpenShell v0.0.102 creates its supervisor-extraction container under a FIXED
 # name, "openshell-supervisor-extract-1-0". Two gateways starting concurrently
 # against the same container runtime therefore collide:
 #
@@ -175,9 +175,13 @@ echo "  work dir: $WORK"
 # --- 1. prerequisites -------------------------------------------------------
 command -v docker >/dev/null || fail_now "docker not found"
 docker info >/dev/null 2>&1 || fail_now "docker daemon not reachable"
-command -v openssl >/dev/null || fail_now "openssl not found"
+OPENSSL="${OPENSSL_BIN:-$(command -v openssl || true)}"
+[ -n "$OPENSSL" ] || fail_now "openssl not found"
+if ! "$OPENSSL" genpkey -algorithm ed25519 -out /dev/null >/dev/null 2>&1; then
+  fail_now "openssl at $OPENSSL does not support Ed25519; set OPENSSL_BIN to OpenSSL 3"
+fi
 
-OS="$(command -v openshell || true)"
+OS="${OPENSHELL_BIN:-$(command -v openshell || true)}"
 if [ -z "$OS" ] && [ -x "$HOME/.local/bin/openshell" ]; then OS="$HOME/.local/bin/openshell"; fi
 [ -n "$OS" ] || fail_now "openshell CLI not found; install: uv tool install openshell==$OPENSHELL_CLI_VERSION"
 CLI_V="$("$OS" --version 2>/dev/null | awk '{print $2}')"
@@ -311,8 +315,8 @@ if [ "$RATIFY_SDK" = "published" ] && [ "$IMAGE_RATIFY_VERSION" != "$RATIFY_SDK_
 fi
 
 # --- 3. render config safely ------------------------------------------------
-openssl genpkey -algorithm ed25519 -out "$WORK/gw/jwt/signing.pem" 2>/dev/null
-openssl pkey -in "$WORK/gw/jwt/signing.pem" -pubout -out "$WORK/gw/jwt/public.pem" 2>/dev/null
+"$OPENSSL" genpkey -algorithm ed25519 -out "$WORK/gw/jwt/signing.pem" 2>/dev/null
+"$OPENSSL" pkey -in "$WORK/gw/jwt/signing.pem" -pubout -out "$WORK/gw/jwt/public.pem" 2>/dev/null
 printf '%s' "$RUN_ID" > "$WORK/gw/jwt/kid"
 # A signing key is never world-readable, ephemeral or not.
 chmod 700 "$WORK" "$WORK/gw" "$WORK/gw/jwt"
@@ -606,7 +610,7 @@ json.dump({
                 "control_in_policy": False},
     "concurrency": {
         "gateway_bootstrap_serialized": True,
-        "reason": "OpenShell v0.0.96 names its supervisor-extraction container "
+        "reason": "OpenShell v0.0.102 names its supervisor-extraction container "
                   "openshell-supervisor-extract-1-0, a fixed name, so two gateways "
                   "bootstrapping concurrently against one container runtime collide "
                   "with a Docker 409. Only bootstrap is serialized; the measured "

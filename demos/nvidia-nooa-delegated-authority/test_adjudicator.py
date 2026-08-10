@@ -775,7 +775,7 @@ def test_the_expected_branch_table_covers_exactly_the_parser_group():
 
 
 def test_the_normal_parser_matrix_passes_coverage():
-    """WHY: the baseline. Measured against v0.0.96 the matrix admits ten probes
+    """WHY: the baseline. Measured against v0.0.102 the matrix admits ten probes
     and denies five; if that cannot pass, every failure below proves nothing."""
     c = parser_coverage(branch_deltas(PARSER_EXPECTED_BRANCH))
     assert c["result"] == "PASS"

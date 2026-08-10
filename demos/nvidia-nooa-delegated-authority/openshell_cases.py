@@ -288,7 +288,7 @@ GROUP_E: dict[str, Expect] = {
 }
 
 #: Which branch each parser probe must actually exercise under the ordinary
-#: policy, measured against OpenShell v0.0.96.
+#: policy, measured against OpenShell v0.0.102.
 #:
 #: This exists because ``or_deny=True`` is the right setting for the safety
 #: invariant and the wrong one for coverage. Safety here is "admitted as X, never
@@ -421,7 +421,7 @@ GROUP_H: dict[str, Expect] = {
         outcome="deny_at_ratify", status="constraint_denied", tool=REFUND_EXECUTE,
         ingress=HANDSHAKE_INGRESS + 2, dispatch=(REFUND_PREPARE, REFUND_EXECUTE),
         prepare=1, execute=1, receipts=1, proof_observed=1,
-        notes="OpenShell admits it, because v0.0.96 cannot see an amount; "
+        notes="OpenShell admits it, because v0.0.102 cannot see an amount; "
               "Ratify denies it on the principal's ceiling",
     ),
     "nooa_unlisted_tool_denied_by_openshell": Expect(

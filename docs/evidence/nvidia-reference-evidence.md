@@ -1,16 +1,41 @@
-# NVIDIA NOOA delegated-authority reference — final evidence
+# NVIDIA NOOA delegated-authority reference — execution evidence
 
 Machine-readable form: [`nvidia-reference-evidence.json`](./nvidia-reference-evidence.json).
 
-**Executed 2026-08-05.** Branch `feat/nvidia-nooa-reference`, rebased onto
+**Main stability campaign executed 2026-08-05. Latest-version compatibility
+run executed 2026-08-10.** Branch `feat/nvidia-nooa-reference`, rebased onto
 `origin/main` at `f5a1522` (the commit marking `v1.0.0-alpha.16` published).
 
-- **`tested_source_commit: 37b378b`** — every run cited in this document
+- **`tested_source_commit: 37b378b`** — the 2026-08-05 stability campaign
   executed against this exact commit.
 - **`documentation_commit: 141f429`** — one commit later, prose only (README,
   `docs/`, this file). Diffed against `37b378b` before this note was written:
   zero changes to the driver, adjudicator, tests, Dockerfile, or profile script.
-  The evidence below is not stale relative to it.
+  The 2026-08-05 evidence below is not stale relative to it.
+
+## OpenShell v0.0.102 compatibility validation
+
+The complete live profile was rerun on 2026-08-10 after updating the reference
+to NVIDIA's latest OpenShell release, **v0.0.102**. It passed **64/64 gates**,
+executed all **52 required cases**, and reported zero failures, skips, driver
+errors, timeouts, or leftover containers. The sandbox contained NOOA 0.0.8 and
+the published `ratify-protocol==1.0.0a16`; the run's `evidence_status` is
+`final: built from the published Ratify package`.
+
+| Component | v0.0.102 run |
+|---|---|
+| OpenShell CLI | 0.0.102 |
+| Gateway image | `sha256:47f5ca7b3c368841fe0ab8ef33d409ffedc6b937019d2a187b0cc4380f8ad976` |
+| Supervisor image | `sha256:5e33ec485b9e05a00431a23faabf4a49376b8351d90664d585922e148fb18fa4` |
+| Sandbox base image | `sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e` |
+| Rendered policy | `sha256:677750dbc9062a58fa82146d9da342ee3861e64490ed934017171a67c0df96a9` |
+| Gateway configuration | `sha256:66d86577c9e084dacd0ea82d4d329099c3231042354920ca202360f910167495` |
+| Raw artifact | `sha256:4a06f935d86e8e87ea9ccbf6a5e4f08f7427f87a41ff6b97447ee8ada3f69263` |
+
+This is one full latest-version compatibility run, not a claim that the earlier
+two sequential, two concurrent, and intentional-failure runs were retroactively
+executed on v0.0.102. Those remain the v0.0.96 stability campaign documented
+below.
 
 This is the first evidence produced after alpha.16's publication; every run in
 this document installs `ratify-protocol==1.0.0a16` from PyPI rather than this
@@ -34,7 +59,7 @@ Executed on arm64 macOS with Docker 29.2.1. **linux/amd64 and Podman are
 compatibility targets, not results** — nothing in this document establishes
 their behavior.
 
-## Component versions and digests
+## 2026-08-05 stability-campaign component versions and digests
 
 | Component | Version / digest |
 |---|---|
@@ -68,7 +93,7 @@ and is never described as registry-pinned.
 skips**: 54 receiver-security, 39 MCP transport, 84 adjudicator, 4 mandatory NOOA
 integration.
 
-## Live OpenShell profile
+## v0.0.96 stability campaign
 
 52 required cases, judged by **64 gates**. `SANDBOX_MEMORY=512Mi`.
 

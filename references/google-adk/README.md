@@ -61,12 +61,13 @@ ADK commander
         extension constraint: max_nodes = 1
                   |
                   v
-Google ADK FunctionTool
-  asks the independent receiver for an operation-bound challenge
-  signs that challenge with the specialist key
+Google ADK native McpToolset
+  exposes only ordinary business arguments to the model
+  obtains an operation-bound challenge after tool selection
+  signs it with the specialist key and injects the proof
                   |
                   v
-Independent receiver
+Separate stdio MCP receiver process
   pins the accepted principal root out of band
   reconstructs the operation and payload digest
   binds the challenge to verifier, workspace, agent, session, invocation,
@@ -85,7 +86,7 @@ claim that Google defines or endorses it.
 | Layer | Question answered | This reference does not claim |
 |---|---|---|
 | Google Agent Identity / IAM | Which deployed agent workload is calling, and which Google Cloud permissions does it have? | That the workload carries a principal-signed grant for this exact cross-boundary action |
-| Google ADK | How does the agent reason and invoke a tool? | That an in-process callback is an independent authorization boundary |
+| Google ADK | How does the agent reason and invoke a tool? | That MCP transport alone proves delegated authority |
 | MCP / A2A / tool transport | How does the request cross the boundary? | That transport authentication proves the principal's bounded intent |
 | Ratify | Who delegated authority, for which scope/resource/bounds, and is the presentation fresh and unrevoked? | That the receiver must execute |
 | Receiver policy and tool | Is the verified request acceptable now, and should the action execute? | That verifier-supplied context becomes trustworthy without receiver validation |
@@ -151,14 +152,15 @@ adds no authorization guarantee beyond the deterministic receiver tests.
 | Tier | Executed here | Meaning |
 |---|---|---|
 | Receiver verification | Yes | Cryptographic and local-policy allow/deny matrix |
-| ADK `FunctionTool` | Yes | Ordinary tool schema; proof injection stays outside model context |
-| ADK runner loop | Yes | Model turn → function call → gated tool → function response |
+| ADK `FunctionTool` | Yes | Baseline in-process composition |
+| Native ADK `McpToolset` | Yes | Ordinary schema; hidden proof injection; separate receiver process |
+| ADK runner loop | Yes | Model turn → MCP function call → gated receiver → function response |
 | Gemini 3.6 Flash | Configuration-ready | Requires an operator API key; not part of recorded evidence |
-| MCP / A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
+| A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
 
 ## Limitations
 
-- The receiver and challenge store are in-memory and single-process.
+- The receiver and challenge store are in-memory inside one MCP server process.
 - The protected provisioner is a counter, not Google Compute Engine. No cloud
   resources are created.
 - Trust-root distribution, durable revocation, shared challenge storage, key
@@ -169,14 +171,15 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   execution layer must still ensure the real cloud operation matches it.
 - This reference composes with Agent Identity conceptually but does not deploy
   to Vertex AI Agent Engine or exercise preview IAM Agent Identity APIs.
-- The executed draft uses the real ADK runner and `FunctionTool` in one process.
-  It does not yet execute an MCP or A2A transport hop; those are follow-on
-  carriage profiles for the same receiver contract.
+- The executed draft uses the real ADK runner and native `McpToolset` across a
+  separately spawned stdio MCP receiver process. It does not yet execute A2A,
+  remote HTTP MCP, Agent Engine, or Agent Identity deployment.
 
 ## Sources
 
 - Google Agent Identity: <https://docs.cloud.google.com/iam/docs/auth-agent-own-identity>
 - Google ADK: <https://github.com/google/adk-python>
+- ADK MCP tools: <https://google.github.io/adk-docs/tools-custom/mcp-tools/>
 - Gemini API release notes: <https://ai.google.dev/gemini-api/docs/changelog>
 - Ratify Protocol: <https://github.com/identities-ai/ratify-protocol>
 - Agent Relay integration note: <https://ratifyprotocol.com/writing/agent-relay-phase1-technical-note>

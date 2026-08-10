@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import json
 from pathlib import Path
@@ -629,3 +630,41 @@ def test_pending_capacity_fails_structurally_and_is_bounded():
             expected_agent_id=authority.specialist_id,
         )
     assert len(receiver._pending) == 128
+
+
+def test_concurrent_duplicate_request_id_creates_one_pending_operation():
+    _, authority, receiver = setup_reference()
+    request = OperationRequest("duplicate", "us-central1", "n2-standard-4", 1)
+    def issue():
+        try:
+            receiver.issue_challenge(
+                request, expected_agent_id=authority.specialist_id
+            )
+            return "issued"
+        except ValueError as exc:
+            return str(exc)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: issue(), range(2)))
+    assert results.count("issued") == 1
+    assert results.count("request_id already has a pending operation") == 1
+
+
+def test_unavailable_receiver_fails_without_agent_loop_hang():
+    async def exercise():
+        _, authority, _ = setup_reference()
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        toolset = build_mcp_toolset(
+            authority,
+            receiver_url=f"http://127.0.0.1:{port}/mcp",
+            transport_token="unavailable-receiver-token",
+        )
+        started = time.monotonic()
+        try:
+            with pytest.raises(Exception):
+                await toolset.get_tools()
+            assert time.monotonic() - started < 10
+        finally:
+            await toolset.close()
+    asyncio.run(exercise())

@@ -31,7 +31,7 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 ```text
 pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a16
 ....................                                                     [100%]
-27 passed, 23 warnings
+29 passed, 23 warnings
 ALLOW across ADK HTTP MCP -> tool invoked once
 DENY excessive count -> no additional invocation
 DENY wrong region -> no additional invocation
@@ -58,6 +58,9 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
 - Bearer authentication blocks unauthenticated challenge calls, hostile roots
   fail over HTTP, junk presentations cannot cancel honest pending operations,
   and pending capacity fails structurally at its enforced bound.
+- Concurrent duplicate request IDs produce exactly one pending operation, and
+  an unavailable receiver fails within the configured timeout rather than
+  hanging the agent loop.
 - The function tool uses a two-hop Ratify delegation and a receiver-issued,
   operation-bound, single-use challenge.
 - The independent receiver invokes its protected handler exactly once for the

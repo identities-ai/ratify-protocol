@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
+import threading
 import time
 from typing import Any
 
@@ -79,6 +80,7 @@ class _PendingOperation:
     request: OperationRequest
     session_context: bytes
     expected_agent_id: str
+    expires_at: int
 
 
 class StaticRevocationProvider:
@@ -121,6 +123,8 @@ class InfrastructureReceiver:
         self.challenge_store = MemoryChallengeStore(max_size=128)
         self.revocation = StaticRevocationProvider()
         self._pending: dict[str, _PendingOperation] = {}
+        self._max_pending = 128
+        self._state_lock = threading.Lock()
         self.tool_invocations = 0
 
     def issue_challenge(
@@ -130,6 +134,16 @@ class InfrastructureReceiver:
         payload = request.canonical_payload()
         if not expected_agent_id:
             raise ValueError("expected_agent_id is required")
+        now = int(time.time())
+        with self._state_lock:
+            self._pending = {
+                key: value for key, value in self._pending.items()
+                if value.expires_at > now
+            }
+            if request.request_id in self._pending:
+                raise ValueError("request_id already has a pending operation")
+            if len(self._pending) >= self._max_pending:
+                raise ValueError("receiver_pending_capacity")
         operation = OperationContext(
             required_scope=INFRA_SCOPE,
             operation="infra.provision",
@@ -146,10 +160,18 @@ class InfrastructureReceiver:
                 request_hash=operation_context_hash(operation),
             )
         )
-        challenge, expires_at = self.challenge_store.issue(session_context, 300)
-        self._pending[request.request_id] = _PendingOperation(
-            request, session_context, expected_agent_id
-        )
+        with self._state_lock:
+            if request.request_id in self._pending:
+                raise ValueError("request_id already has a pending operation")
+            if len(self._pending) >= self._max_pending:
+                raise ValueError("receiver_pending_capacity")
+            try:
+                challenge, expires_at = self.challenge_store.issue(session_context, 300)
+            except RuntimeError as exc:
+                raise ValueError("receiver_challenge_capacity") from exc
+            self._pending[request.request_id] = _PendingOperation(
+                request, session_context, expected_agent_id, expires_at
+            )
         return ChallengeGrant(challenge, session_context, expires_at)
 
     def execute(
@@ -166,7 +188,8 @@ class InfrastructureReceiver:
         except ValueError as exc:
             return self._deny("invalid_request", str(exc))
 
-        pending = self._pending.pop(request.request_id, None)
+        with self._state_lock:
+            pending = self._pending.get(request.request_id)
         if pending is None:
             return self._deny("unknown_operation", "no pending receiver operation")
         if request != pending.request:
@@ -207,7 +230,9 @@ class InfrastructureReceiver:
         if not result.valid:
             return self._deny(result.identity_status, result.error_reason)
 
-        self.tool_invocations += 1
+        with self._state_lock:
+            self._pending.pop(request.request_id, None)
+            self.tool_invocations += 1
         return {
             "decision": "allow",
             "status": result.identity_status,

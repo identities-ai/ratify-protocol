@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import secrets
 
 from ratify_protocol import (
     HybridPrivateKey,
@@ -18,13 +20,15 @@ from .authority import AuthorityFixture
 
 
 def write_configs(authority: AuthorityFixture, receiver_path: Path, presenter_path: Path) -> None:
+    transport_token = secrets.token_urlsafe(32)
     receiver_path.write_text(json.dumps({
         "trusted_root_id": authority.root_id,
         "trusted_agent_id": authority.specialist_id,
         "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
         "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
+        "transport_token": transport_token,
     }), encoding="utf-8")
-    presenter_path.write_text(json.dumps({
+    payload = json.dumps({
         "root_id": authority.root_id,
         "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
         "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
@@ -32,8 +36,11 @@ def write_configs(authority: AuthorityFixture, receiver_path: Path, presenter_pa
         "private_ed25519": base64_standard_encode(authority.specialist_private_key.ed25519),
         "private_ml_dsa_65": base64_standard_encode(authority.specialist_private_key.ml_dsa_65),
         "delegations": [encode_delegation_cert(cert) for cert in authority.delegations],
-    }), encoding="utf-8")
-    presenter_path.chmod(0o600)
+        "transport_token": transport_token,
+    })
+    descriptor = os.open(presenter_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+        output.write(payload)
 
 
 def load_presenter(path: str) -> AuthorityFixture:
@@ -51,3 +58,7 @@ def load_presenter(path: str) -> AuthorityFixture:
         ),
         delegations=[decode_delegation_cert(cert) for cert in data["delegations"]],
     )
+
+
+def load_transport_token(path: str) -> str:
+    return json.loads(Path(path).read_text(encoding="utf-8"))["transport_token"]

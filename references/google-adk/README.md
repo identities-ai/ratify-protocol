@@ -35,6 +35,7 @@ and then runs the three-case demonstration.
 Tested pins:
 
 - `google-adk==2.6.3`
+- `mcp==1.29.0`
 - `ratify-protocol==1.0.0a16`
 - `pytest==8.4.1`
 
@@ -187,6 +188,13 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   not expose operation-specific hidden MCP metadata as a stable public hook.
   The adapter is isolated and tested, but should be mapped with the ADK team
   before claiming forward compatibility.
+- The internal challenge tool remains MCP-discoverable to authenticated clients
+  but is excluded from the model toolset. Authentication, bounded receiver
+  state, and receiver verification—not client-side hiding—are the controls.
+- This is deliberately one concrete infrastructure-tool profile, not a claim
+  that arbitrary MCP schemas can be wrapped without an explicit authority map.
+- Dependencies are version-pinned but not installed with artifact hashes; the
+  evidence records the requirements file hash, not a supply-chain attestation.
 - The executed draft uses the real ADK runner and native `McpToolset` across an
   independently started Streamable HTTP MCP receiver with receiver-owned trust
   configuration. It does not yet execute A2A, TLS workload authentication,

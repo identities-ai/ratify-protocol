@@ -7,6 +7,7 @@ schema and result, never private keys or proof-bundle bytes.
 from __future__ import annotations
 
 from google.adk.agents import LlmAgent
+from google.adk.models.base_llm import BaseLlm
 from google.adk.tools import FunctionTool
 
 from .authority import AuthorityFixture
@@ -41,7 +42,7 @@ def build_adk_agent(
     receiver: InfrastructureReceiver,
     authority: AuthorityFixture,
     *,
-    model: str = "gemini-3.6-flash",
+    model: str | BaseLlm = "gemini-3.6-flash",
 ) -> LlmAgent:
     """Construct the real ADK agent; running the model is optional."""
     return LlmAgent(

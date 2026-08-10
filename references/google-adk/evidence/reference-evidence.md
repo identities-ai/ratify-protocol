@@ -29,22 +29,25 @@ runs the test matrix, and runs the deterministic ADK `FunctionTool` demo.
 
 ```text
 pins: google-adk==2.6.3 ratify-protocol==1.0.0a16
-................                                                         [100%]
-16 passed, 5 warnings in 5.86s
+.................                                                        [100%]
+17 passed, 6 warnings
 ALLOW -> tool invoked once
 DENY excessive count -> no additional invocation
 DENY wrong region -> no additional invocation
 GOOGLE ADK AUTHORITY REFERENCE PASSED
 ```
 
-The five warnings came from Google ADK transitive dependencies during import:
-one OpenTelemetry entry-point deprecation and four ADK
-`BaseAgentConfig` deprecations. No tests were skipped, xfailed, or retried.
+The six warnings came from Google ADK and its transitive dependencies: one
+OpenTelemetry entry-point deprecation, four ADK `BaseAgentConfig` deprecations,
+and one experimental JSON-schema feature warning. No tests were skipped,
+xfailed, or retried.
 
 ## What this run establishes
 
 - A real `google.adk.agents.LlmAgent` exposes one ordinary
   `google.adk.tools.FunctionTool`.
+- A deterministic model double drives the real ADK runner through model turn,
+  function call, gated tool execution, function response, and final response.
 - The function tool uses a two-hop Ratify delegation and a receiver-issued,
   operation-bound, single-use challenge.
 - The independent receiver invokes its protected handler exactly once for the
@@ -57,8 +60,9 @@ one OpenTelemetry entry-point deprecation and four ADK
 
 ## What this run does not establish
 
-- No Gemini API call was made. The model path remains optional because model
-  judgment is not part of the authorization guarantee.
+- No Gemini API call was made. The optional app is configured for the current
+  stable `gemini-3.6-flash` path, but model judgment is not part of the
+  authorization guarantee.
 - No Vertex AI Agent Engine deployment or preview Agent Identity API was used.
 - No MCP or A2A transport hop was executed; the recorded run covers the ADK
   `FunctionTool` to independently instantiated receiver boundary.

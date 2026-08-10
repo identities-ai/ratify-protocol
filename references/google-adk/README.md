@@ -38,8 +38,11 @@ Tested pins:
 - `ratify-protocol==1.0.0a16`
 - `pytest==8.4.1`
 
-The deterministic path needs no model, API key, Google Cloud project, or paid
-service. The authorization result therefore cannot depend on an LLM response.
+The deterministic path needs no API key, Google Cloud project, or paid
+service. It drives the real ADK runner with a scripted model double, so ADK
+still performs model-turn handling, tool selection, tool execution, and
+function-response delivery. The authorization result cannot depend on model
+judgment.
 The recorded run is in
 [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
@@ -139,8 +142,19 @@ Provision one n2-standard-4 node in us-central1. Use request id demo-1.
 ```
 
 Then request three nodes or change the region and observe the receiver denial.
-The optional model path demonstrates orchestration; it adds no authorization
-guarantee beyond the deterministic receiver tests.
+The app defaults to `gemini-3.6-flash`, Google's current stable Flash model as
+of this evidence date. The optional live path demonstrates orchestration; it
+adds no authorization guarantee beyond the deterministic receiver tests.
+
+## Evidence tiers
+
+| Tier | Executed here | Meaning |
+|---|---|---|
+| Receiver verification | Yes | Cryptographic and local-policy allow/deny matrix |
+| ADK `FunctionTool` | Yes | Ordinary tool schema; proof injection stays outside model context |
+| ADK runner loop | Yes | Model turn → function call → gated tool → function response |
+| Gemini 3.6 Flash | Configuration-ready | Requires an operator API key; not part of recorded evidence |
+| MCP / A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
 
 ## Limitations
 
@@ -155,13 +169,14 @@ guarantee beyond the deterministic receiver tests.
   execution layer must still ensure the real cloud operation matches it.
 - This reference composes with Agent Identity conceptually but does not deploy
   to Vertex AI Agent Engine or exercise preview IAM Agent Identity APIs.
-- The executed draft uses a real ADK `FunctionTool` boundary in one process. It
-  does not yet execute an MCP or A2A transport hop; those are follow-on carriage
-  profiles for the same receiver contract.
+- The executed draft uses the real ADK runner and `FunctionTool` in one process.
+  It does not yet execute an MCP or A2A transport hop; those are follow-on
+  carriage profiles for the same receiver contract.
 
 ## Sources
 
 - Google Agent Identity: <https://docs.cloud.google.com/iam/docs/auth-agent-own-identity>
 - Google ADK: <https://github.com/google/adk-python>
+- Gemini API release notes: <https://ai.google.dev/gemini-api/docs/changelog>
 - Ratify Protocol: <https://github.com/identities-ai/ratify-protocol>
 - Agent Relay integration note: <https://ratifyprotocol.com/writing/agent-relay-phase1-technical-note>

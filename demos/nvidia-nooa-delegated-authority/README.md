@@ -124,7 +124,7 @@ Each denial is asserted against a specific reason code, so none of them can pass
 
 ## The live OpenShell profile
 
-`run-openshell-profile.sh` executes the whole composition against a pinned OpenShell v0.0.96 gateway:
+`run-openshell-profile.sh` executes the whole composition against a pinned OpenShell v0.0.102 gateway:
 
 > NOOA agent → proof-carrying MCP Streamable HTTP → OpenShell destination, method, and tool enforcement → an independent MCP receiver → Ratify semantic authorization → consequential action → signed receipt
 
@@ -142,7 +142,7 @@ One command from a clean checkout brings the gateway up on dynamic ports from im
 
 `log_canaries` is a separate, non-adjudicated pass: it re-exercises cases from the groups above so the log audit has each shape of traffic to search against. The gate is the canary search, not a per-case verdict.
 
-**Stability.** All seven groups are stable and repeatable: 64/64 gates, twice sequentially and twice concurrently, against the published `ratify-protocol==1.0.0a16`. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the full run-by-run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
+**Stability.** All seven groups passed 64/64 gates in one full OpenShell v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a16`. The earlier v0.0.96 campaign also passed twice sequentially and twice concurrently. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the version-separated run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
 
 **How a case is judged.** Each case declares its expected outcome (`authorize`, `deny_at_openshell`, `admit_as:<tool>`, or `deny_at_ratify:<status>`) and every boundary delta it may produce. The runner takes a snapshot of the receiver's counters immediately before and immediately after that case, from a loopback control endpoint the sandbox cannot reach, and compares. A missing case, a missing snapshot, a stale sequence number, a partial result, or an event the deltas do not account for is a **failure**, never a skip. No gate can pass because a record merely exists: `test_adjudicator.py` feeds the adjudicator evidence of each violation in turn and asserts it says FAIL.
 

@@ -79,4 +79,4 @@ One reference-application constant changed during this work: the receiver's `MAX
 2. `refund_service.py` to confirm the receiver, not the agent, decides.
 3. `test_verification.py` for the denials.
 4. `openshell_cases.py` and `test_adjudicator.py` to confirm no gate can pass on the mere existence of a record.
-5. Appendix section 15 for what the live profile established, and section 15.3 for what it observed about OpenShell v0.0.96.
+5. Appendix section 15 for the v0.0.102 compatibility result, and section 15.3 for historical observations from the v0.0.96 campaign.

@@ -250,7 +250,7 @@ This is **not implemented in v1, deliberately.** A normative binding of an exter
 
 ## 15. OpenShell composition, executed
 
-OpenShell (Rust, Apache-2.0) enforces declarative YAML policy across filesystem, network, process, and inference layers, intercepting outbound connections to allow, reroute, or deny. The composition is now executed rather than proposed. `demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh` runs the full path against a pinned v0.0.96 gateway and writes a machine-readable artifact.
+OpenShell (Rust, Apache-2.0) enforces declarative YAML policy across filesystem, network, process, and inference layers, intercepting outbound connections to allow, reroute, or deny. The composition is now executed rather than proposed. `demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh` runs the full path against a pinned v0.0.102 gateway and writes a machine-readable artifact.
 
 ### 15.1 Layer separation
 
@@ -263,13 +263,16 @@ Isolation bounds *where a proof can go*; delegation bounds *what it can do*. Bot
 | MCP tool name | Amount and currency ceiling |
 | Envelope size admitted for inspection | Expiry, revocation, and revocation-source failure |
 
-v0.0.96 states that "tool argument matching is not supported yet; allowed tools accept all argument payloads by default." OpenShell therefore cannot see the refund amount or the order id, and is not asked to. This is why the receiver exposes the two-phase flow as **two tools**, `refund.prepare` and `refund.execute`: a single tool with a phase argument would be invisible to a runtime policy. Ratify does not replace isolation, and OpenShell does not evaluate Ratify's semantic constraints.
+v0.0.102 states that "tool argument matching is not supported yet; allowed tools accept all argument payloads by default." OpenShell therefore cannot see the refund amount or the order id, and is not asked to. This is why the receiver exposes the two-phase flow as **two tools**, `refund.prepare` and `refund.execute`: a single tool with a phase argument would be invisible to a runtime policy. Ratify does not replace isolation, and OpenShell does not evaluate Ratify's semantic constraints.
 
 ### 15.2 What execution established
 
-All seven groups, including the unified NOOA path, are stable and repeatable
-against the published `ratify-protocol==1.0.0a16`: 52 required cases, 64 gates,
-zero skips, twice sequentially and twice concurrently, on `RATIFY_SDK=published`.
+All seven groups, including the unified NOOA path, pass against the published
+`ratify-protocol==1.0.0a16`: 52 required cases, 64 gates, and zero skips. One
+full compatibility run passed 64/64 on OpenShell v0.0.102. The earlier v0.0.96
+stability campaign passed twice sequentially and twice concurrently on
+`RATIFY_SDK=published`; these are version-separated claims, not four v0.0.102
+runs.
 The unified path's early instability, four consecutive `nooa` imports exhausting
 one sandbox, was resolved by importing `nooa` exactly once in a single suite
 process rather than by isolating each case into its own sandbox; the import
@@ -285,7 +288,7 @@ Each case declares an expected outcome and every boundary delta it may produce, 
 - **Three size limits are independently observable.** The MCP/HTTP body limit (the pinned SDK's 4 MiB default, inherited rather than enforced here), OpenShell's `mcp.max_body_bytes` at 262,144, and the receiver's decoded-proof ceiling at 131,072. The receiver's bound was originally 196,608, which corresponds to a 262,148-byte encoded ceiling: four bytes above the envelope limit, so every proof large enough to trip it was already large enough for OpenShell to refuse first. A defense-in-depth check that can never fire is not defense in depth, so the bound was lowered to a value inside the envelope limit, still leaving 42,082 bytes of headroom over the largest chain the protocol permits.
 - **The invariant held.** Fifteen parser-differential probes, duplicate JSON members in both orders and header-versus-body disagreement in both directions, produced no case where OpenShell admitted a request as one method and tool and the MCP server dispatched another.
 
-### 15.3 Findings and constraints observed in v0.0.96
+### 15.3 Findings and constraints observed in the v0.0.96 campaign
 
 Reported as observations of the pinned version, not as defects claimed against it.
 

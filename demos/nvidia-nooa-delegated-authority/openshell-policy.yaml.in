@@ -6,7 +6,7 @@
 #
 # This file cannot pin anything. YAML has no way to fix a CLI version or an
 # image digest. The runner pins the execution environment: openshell CLI
-# 0.0.96, and the gateway and sandbox images by immutable index digest. The
+# 0.0.102, and the gateway and sandbox images by immutable index digest. The
 # rendered policy and its SHA-256 are written into the run artifacts.
 #
 # What this policy decides, and what it deliberately does not:
@@ -16,7 +16,7 @@
 #   Ratify decides      the principal, amount, tenant, resource, expiry,
 #                       revocation, and the delegation chain.
 #
-# v0.0.96 does not support tool-argument matching. From the policy schema:
+# v0.0.102 does not support tool-argument matching. From the policy schema:
 # "Tool argument matching is not supported yet; allowed tools accept all
 # argument payloads by default." So OpenShell cannot see the refund amount or
 # the order id, and is not asked to. The two controls are independent and both
@@ -83,7 +83,7 @@ network_policies:
           # Exactly the two refund tools, and nothing else. The two-phase flow
           # is expressed as two tools precisely so a runtime policy can name
           # them; a single tool with a phase argument would be invisible here,
-          # because arguments are not matchable in v0.0.96.
+          # because arguments are not matchable in v0.0.102.
           - allow:
               method: tools/call
               tool: refund.prepare

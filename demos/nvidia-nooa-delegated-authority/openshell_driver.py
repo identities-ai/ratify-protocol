@@ -956,7 +956,7 @@ class Runner:
         # imports transitively, fetches a model-cost map from raw.githubusercontent
         # at import time. Under a deny-all egress policy every NOOA invocation
         # therefore makes a request OpenShell refuses, and repeated refusals were
-        # observed to collapse the v0.0.96 exec relay: the sandbox dropped back to
+        # observed to collapse the v0.0.102 exec relay: the sandbox dropped back to
         # Provisioning partway through this group and later cases produced no
         # result at all. Telling litellm to use its bundled copy removes the
         # denied request, and with it the instability. Recorded as a finding: an
@@ -1629,7 +1629,7 @@ def main() -> int:
                     "probes send one folded value; recorded as folded rather than "
                     "claimed as true duplication"},
             {"item": "concurrent OpenShell gateway bootstrap",
-             "why": "OpenShell v0.0.96 uses a fixed supervisor-extraction container "
+             "why": "OpenShell v0.0.102 uses a fixed supervisor-extraction container "
                     "name, so concurrent bootstrap collides upstream; the profile "
                     "serializes bootstrap only and records this as a finding"},
             {"item": "TLS, OIDC, or mTLS in front of the gateway",

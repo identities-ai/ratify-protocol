@@ -111,7 +111,7 @@ def build_mcp_toolset(
         authority=authority,
         connection_params=StreamableHTTPConnectionParams(
             url=receiver_url,
-            headers={"Authorization": f"Bearer {transport_token}"},
+            headers={"X-Ratify-Transport-Token": transport_token},
             timeout=5,
             sse_read_timeout=30,
         ),
@@ -131,14 +131,14 @@ def _result_object(result: Any) -> dict[str, Any]:
                 (item.get("text") for item in content if item.get("text")),
                 "MCP receiver error",
             )
-            return {"decision": "deny", "status": "mcp_error", "reason": reason}
+            return {"decision": "deny", "status": "mcp_error", "reason": _safe_error(reason)}
         for item in content:
             text = item.get("text")
             if text:
                 try:
                     parsed = json.loads(text)
                 except json.JSONDecodeError:
-                    return {"decision": "deny", "status": "mcp_error", "reason": text}
+                    return {"decision": "deny", "status": "mcp_error", "reason": _safe_error(text)}
                 return parsed.get("result", parsed)
         return result
     if getattr(result, "isError", False):
@@ -147,7 +147,7 @@ def _result_object(result: Any) -> dict[str, Any]:
             if getattr(item, "text", None):
                 reason = item.text
                 break
-        return {"decision": "deny", "status": "mcp_error", "reason": reason}
+        return {"decision": "deny", "status": "mcp_error", "reason": _safe_error(reason)}
     structured = getattr(result, "structuredContent", None)
     if isinstance(structured, dict):
         return structured.get("result", structured)
@@ -157,6 +157,10 @@ def _result_object(result: Any) -> dict[str, Any]:
             try:
                 parsed = json.loads(text)
             except json.JSONDecodeError:
-                return {"decision": "deny", "status": "mcp_error", "reason": text}
+                return {"decision": "deny", "status": "mcp_error", "reason": _safe_error(text)}
             return parsed.get("result", parsed)
     return {"decision": "deny", "status": "mcp_error", "reason": "empty MCP result"}
+
+
+def _safe_error(value: str) -> str:
+    return value[:512]

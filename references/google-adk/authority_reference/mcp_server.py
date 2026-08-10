@@ -10,9 +10,8 @@ import ipaddress
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.auth.provider import AccessToken
-from mcp.server.auth.settings import AuthSettings
 from ratify_protocol import HybridPublicKey, base64_standard_decode, base64_standard_encode
+import uvicorn
 
 from .receiver import InfrastructureReceiver, OperationRequest
 
@@ -29,22 +28,31 @@ def load_receiver(path: str) -> tuple[InfrastructureReceiver, str, str]:
     return receiver, config["trusted_agent_id"], config["transport_token"]
 
 
-class StaticTokenVerifier:
-    def __init__(self, token: str) -> None:
-        self._token = token
+class TransportTokenBoundary:
+    """Authenticate the reference transport without consuming Authorization."""
 
-    async def verify_token(self, token: str) -> AccessToken | None:
-        if not hmac.compare_digest(token, self._token):
-            return None
-        return AccessToken(
-            token=token, client_id="ratify-adk-presenter", scopes=["mcp:tools"]
-        )
+    def __init__(self, app, token: str) -> None:
+        self._app = app
+        self._token = token.encode("utf-8")
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            headers = dict(scope.get("headers", []))
+            supplied = headers.get(b"x-ratify-transport-token", b"")
+            if not hmac.compare_digest(supplied, self._token):
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [(b"content-type", b"text/plain")],
+                })
+                await send({"type": "http.response.body", "body": b"Unauthorized"})
+                return
+        await self._app(scope, receive, send)
 
 
 def create_server(
     receiver: InfrastructureReceiver,
     trusted_agent_id: str,
-    transport_token: str,
     host: str,
     port: int,
 ) -> FastMCP:
@@ -54,12 +62,6 @@ def create_server(
         port=port,
         stateless_http=False,
         log_level="ERROR",
-        auth=AuthSettings(
-            issuer_url=f"http://{host}:{port}",
-            resource_server_url=f"http://{host}:{port}/mcp",
-            required_scopes=["mcp:tools"],
-        ),
-        token_verifier=StaticTokenVerifier(transport_token),
     )
 
     @server.tool()
@@ -112,13 +114,22 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", required=True, type=int)
     args = parser.parse_args()
-    if not ipaddress.ip_address(args.host).is_loopback:
+    bind_host = "127.0.0.1" if args.host == "localhost" else args.host
+    try:
+        is_loopback = ipaddress.ip_address(bind_host).is_loopback
+    except ValueError as exc:
+        raise SystemExit("--host must be localhost or a numeric loopback address") from exc
+    if not is_loopback:
         raise SystemExit("non-loopback bind requires a production TLS/auth deployment")
     receiver, trusted_agent_id, transport_token = load_receiver(args.trust_config)
-    create_server(
-        receiver, trusted_agent_id, transport_token, args.host, args.port
-    ).run(
-        transport="streamable-http"
+    server = create_server(
+        receiver, trusted_agent_id, bind_host, args.port
+    )
+    uvicorn.run(
+        TransportTokenBoundary(server.streamable_http_app(), transport_token),
+        host=bind_host,
+        port=args.port,
+        log_level="error",
     )
 
 

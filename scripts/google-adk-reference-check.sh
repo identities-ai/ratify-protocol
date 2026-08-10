@@ -21,14 +21,18 @@ local_sdk = (repo / "sdks" / "python").resolve()
 if local_sdk == module or local_sdk in module.parents:
     raise SystemExit(f"FAIL: Ratify resolved from the repository: {module}")
 
-expected = {"google-adk": "2.6.3", "ratify-protocol": "1.0.0a16"}
+expected = {
+    "google-adk": "2.6.3",
+    "mcp": "1.29.0",
+    "ratify-protocol": "1.0.0a16",
+}
 for package, version in expected.items():
     installed = metadata.version(package)
     if installed != version:
         raise SystemExit(f"FAIL: {package}={installed}; expected {version}")
 
 print(f"published Ratify: {module}")
-print("pins: google-adk==2.6.3 ratify-protocol==1.0.0a16")
+print("pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a16")
 PY
 
 PYTHONPATH="$DEMO" "$VENV/bin/pytest" -q "$DEMO/tests"

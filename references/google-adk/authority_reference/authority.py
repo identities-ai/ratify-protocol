@@ -28,7 +28,7 @@ from ratify_protocol import (
 
 
 INFRA_SCOPE = "custom:infra:provision"
-NODE_LIMIT_CONSTRAINT = "ai.identities.ratify.adk.max_nodes"
+NODE_LIMIT_CONSTRAINT = "com.ratifyprotocol.adk.max_nodes"
 WORKSPACE_ID = "customer-project"
 VERIFIER_ID = "independent-infrastructure-receiver"
 

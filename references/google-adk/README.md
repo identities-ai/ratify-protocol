@@ -82,9 +82,11 @@ Independent Streamable HTTP MCP receiver
   invokes the protected tool only after ALLOW
 ```
 
-The `ai.identities.ratify.adk.max_nodes` extension is a draft Ratify integration
+The `com.ratifyprotocol.adk.max_nodes` extension is a draft Ratify integration
 profile. It is deliberately not placed in a Google namespace and does not
-claim that Google defines or endorses it.
+claim that Google defines or endorses it. The prefix follows the protocol's
+reverse-domain convention and is based on `ratifyprotocol.com`, a domain
+controlled by the Ratify Protocol project.
 
 ## Code map
 

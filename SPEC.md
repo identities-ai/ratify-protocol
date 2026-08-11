@@ -1739,11 +1739,9 @@ Evaluate(constraint, certID, context, now) -> nil | error
 - `"constraint_unverifiable: <reason>"` (or wrapping the SDK's sentinel) → routes to `identity_status="constraint_unverifiable"`. Use this for "I don't have the inputs to decide."
 - Any other error → routes to `identity_status="constraint_denied"`.
 
-**Naming convention.** To prevent registry collisions between deployments, extension type names SHOULD use a vendor or namespace prefix:
-- `verify.<type>` — types defined by Ratify Verify.
-- `<vendor>.<type>` — types defined by a deployment / third party.
+**Naming convention.** To prevent registry collisions, a newly defined extension type SHOULD begin with a reverse-domain prefix controlled by its defining organization. Ratify-defined profiles use `com.ratifyprotocol.<profile>.<type>`, Ratify Verify managed types use `com.ratifyprotocol.verify.<type>`, and a third party that controls `example.com` would use `com.example.<type>`. A project MUST NOT claim a reverse-domain prefix for a domain it does not control.
 
-The protocol does not enforce naming; it does fail closed on every unregistered type, which means a deployment that uses extension types implicitly requires every downstream verifier to recognize them. **That's the moat:** a managed verifier (Ratify Verify) can ship a registry of `verify.*` types its customers use; an OSS verifier can recognize the same types only if its operator registers each one explicitly.
+This convention applies to newly defined names. It does not rewrite an existing signed certificate or change the meaning of an extension name already in use. The protocol does not enforce the naming convention, but it does fail closed on every unregistered type. A deployment that uses extension types therefore requires each downstream verifier to register the same exact type name.
 
 ### 17.8 AnchorResolver — identity-bound audit
 

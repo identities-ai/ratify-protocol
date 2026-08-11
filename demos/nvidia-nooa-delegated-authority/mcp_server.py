@@ -21,7 +21,7 @@ or currency. The pending record already holds the receiver's authoritative
 values, so there is nothing for the agent to restate and therefore nothing to
 substitute.
 
-Proof carriage: ``_meta`` under ``ai.identities.ratify/proof``.
+Proof carriage: ``_meta`` under ``com.ratifyprotocol/proof``.
 ``RequestParamsMeta`` is an open map (``extra_items=Any``) in mcp==2.0.0, and
 the server reads it through the public ``Context.request_context.meta``
 accessor. Trace context
@@ -49,7 +49,7 @@ from refund_service import BadRequest, DEFAULT_TENANT, RefundService
 
 #: Where the proof travels. Reverse-DNS, so it cannot collide with the
 #: reserved ``io.modelcontextprotocol/*`` keys.
-PROOF_META_KEY = "ai.identities.ratify/proof"
+PROOF_META_KEY = "com.ratifyprotocol/proof"
 
 #: Challenge length. ``generate_challenge()`` returns 32 cryptographically
 #: random bytes (SPEC 6.4); the SDK exports no constant for it, so it is named

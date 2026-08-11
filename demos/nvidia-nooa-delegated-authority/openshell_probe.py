@@ -109,7 +109,7 @@ def canaries(run_id: str) -> dict[str, str]:
         # example to publish.
         "traceparent": "00-" + (tag.lower() * 4)[:32] + "-" + (tag.lower() * 2)[:16] + "-01",
         "baggage": f"canary=BAGGAGE-{tag}",
-        "proof_key": "ai.identities.ratify",
+        "proof_key": "com.ratifyprotocol",
         "receipt_prefix": "refund-service:",
         "malformed_marker": f"MALFORMED-{tag}",
     }

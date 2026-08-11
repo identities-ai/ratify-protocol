@@ -38,7 +38,7 @@ from ratify_protocol import ProofBundle, sign_challenge
 from ratify_protocol.wire import encode_proof_bundle
 
 #: Where the proof travels. Must match mcp_server.PROOF_META_KEY.
-PROOF_META_KEY = "ai.identities.ratify/proof"
+PROOF_META_KEY = "com.ratifyprotocol/proof"
 
 MCP_PROTOCOL_VERSION = "2026-07-28"
 HTTP_TIMEOUT_SECONDS = 30

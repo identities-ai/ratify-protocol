@@ -6,6 +6,17 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## Unreleased
+
+### Changed
+
+- **Extension type namespaces:** newly defined extension constraint types now
+  use a reverse-domain prefix controlled by the defining organization. Ratify
+  profiles use `com.ratifyprotocol.<profile>.<type>`. Existing signed names,
+  verifier behavior, SDK APIs, and canonical fixture bytes are unchanged.
+
+---
+
 ## v1.0.0-alpha.16 (2026-08-05)
 
 The "resource-bound authority" release: delegations can now name *where* a scope applies, not just *what* it permits.

@@ -103,6 +103,13 @@ This is the build-vs-buy boundary, in one diagram:
 [ opt  ] VerificationReceipt    ↔ none        /  signed audit chain
 ```
 
+Extension constraint names are shared registry keys. New names use a
+reverse-domain prefix owned by the organization defining them. Ratify profiles
+use `com.ratifyprotocol.<profile>.<type>`. A verifier still treats the name as
+an exact opaque string and fails closed when no evaluator is registered. The
+naming rule prevents collisions; it does not add network lookup or make Ratify
+a runtime dependency.
+
 A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
 
 ### Surface adapters (out of scope for this repository)

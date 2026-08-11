@@ -21,6 +21,10 @@ itself.
 
 ## Run the published-package gate
 
+You need Bash, Python 3.11 (the tested version), and network access to install
+the pinned packages. You do not need a Google API key or Google Cloud project
+for this gate.
+
 From the Ratify repository root:
 
 ```bash
@@ -82,6 +86,25 @@ The `ai.identities.ratify.adk.max_nodes` extension is a draft Ratify integration
 profile. It is deliberately not placed in a Google namespace and does not
 claim that Google defines or endorses it.
 
+## Code map
+
+Start with these files if you want to inspect or adapt the reference:
+
+| File | Responsibility |
+|---|---|
+| [`authority_reference/authority.py`](authority_reference/authority.py) | Issues the principal-to-commander and commander-to-specialist delegations |
+| [`authority_reference/adk_mcp.py`](authority_reference/adk_mcp.py) | Keeps the model-facing schema ordinary, then obtains a challenge and injects the proof after ADK selects the tool |
+| [`authority_reference/receiver.py`](authority_reference/receiver.py) | Reconstructs the operation, verifies the proof and local policy, and gates the protected handler |
+| [`authority_reference/mcp_server.py`](authority_reference/mcp_server.py) | Exposes the receiver through authenticated Streamable HTTP MCP |
+| [`authority_reference/deployment_config.py`](authority_reference/deployment_config.py) | Writes separate receiver and presenter configuration with mode `0600` |
+| [`tests/test_reference.py`](tests/test_reference.py) | Exercises the ADK runner, MCP boundary, trust-root attacks, replay, malformed input, concurrency, and availability behavior |
+
+When adapting this profile to another tool, keep the receiver in control of
+the trust root, operation construction, challenge issuance, and final policy
+decision. Bind the proof to the exact operation and receiving context. Consume
+the challenge once, and call the protected handler only after verification
+returns `allow`. Keys and proof bytes should stay outside model context.
+
 ## Layer separation
 
 | Layer | Question answered | This reference does not claim |
@@ -128,7 +151,8 @@ The suite encodes why the boundary matters:
 ## Optional live Gemini path
 
 The deterministic suite is authoritative. To let Gemini select and invoke the
-same ADK tool interactively:
+same ADK tool interactively, run the published-package gate above first. It
+creates the `.venv` used below. Then run:
 
 ```bash
 cd references/google-adk
@@ -137,6 +161,10 @@ python bootstrap_live.py
 python -m authority_reference.mcp_server \
   --trust-config .local/receiver-trust.json --port 8765
 ```
+
+`bootstrap_live.py` creates `.local/receiver-trust.json` and
+`.local/presenter.json`. Both contain secrets and are written with mode `0600`.
+Remove `.local/` before generating a new authority.
 
 In a second shell:
 
@@ -190,7 +218,7 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   before claiming forward compatibility.
 - The internal challenge tool remains MCP-discoverable to authenticated clients
   but is excluded from the model toolset. Authentication, bounded receiver
-  state, and receiver verification—not client-side hiding—are the controls.
+  state, and receiver verification, not client-side hiding, are the controls.
 - This is deliberately one concrete infrastructure-tool profile, not a claim
   that arbitrary MCP schemas can be wrapped without an explicit authority map.
 - Dependencies are version-pinned but not installed with artifact hashes; the

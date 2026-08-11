@@ -201,7 +201,7 @@ adds no authorization guarantee beyond the deterministic receiver tests.
 | Gemini 3.6 Flash | Configuration-ready | Requires an operator API key; not part of recorded evidence |
 | A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
 
-## Limitations
+## Reference scope and production requirements
 
 - The receiver and challenge store are in-memory inside one MCP server process.
 - The protected provisioner is a counter, not Google Compute Engine. No cloud

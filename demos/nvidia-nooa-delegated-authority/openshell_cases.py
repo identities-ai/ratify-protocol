@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 #: Where the proof travels. Mirrors mcp_server.PROOF_META_KEY, restated here
 #: so this module stays importable without the MCP SDK installed.
-PROOF_KEY = "ai.identities.ratify/proof"
+PROOF_KEY = "com.ratifyprotocol/proof"
 
 #: The refund amount the positive path uses, and the amount a denial must not
 #: move. Named once so a gate cannot drift from the case that produced it.

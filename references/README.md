@@ -26,8 +26,9 @@ Every accepted profile should contain:
 
 ## Registry
 
-| Profile | Status | Ratify version | Platform version | Gate |
-|---|---|---|---|---|
+Each profile owns one entry under [`registry/`](registry/README.md). Keeping
+entries in separate files lets platform references branch from `main` and merge
+independently without competing for a shared table row.
 
 ## Lifecycle
 

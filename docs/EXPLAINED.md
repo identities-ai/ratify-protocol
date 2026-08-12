@@ -112,11 +112,19 @@ a runtime dependency.
 
 A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
 
-### Surface adapters (out of scope for this repository)
+### Open references and managed surface adapters
 
-The integration code that turns a `ProofBundle` into a "Zoom auth gate," "Twilio SIP attestation," "AWS API Gateway authorizer," etc. — the **surface adapters** — lives in separate repositories (`ratify/zoom-sdk`, `ratify/voice-sdk`, …). Those are the home of proprietary "last-mile" integration code and are not addressed by this specification.
+Open, executable profiles under [`references/`](../references/README.md) show how
+Ratify composes with specific agent frameworks, transports, and runtimes. They
+are interoperability references: inspectable patterns, deterministic gates,
+and evidence—not hosted services or production support commitments.
 
-The protocol's contract stops at the `ProofBundle` wire format and the verifier algorithm. Anything above that — how a third-party platform's signaling layer is intercepted, how middleware is wired into a specific framework, how an incumbent product's auth model is mapped onto Ratify scopes — is integration work, not protocol work. Ratify Verify ships those adapters as commercial product; the specification does not prevent a third party from writing their own.
+The protocol contract stops at the `ProofBundle` wire format and verifier
+semantics. Production last-mile adapters—such as supported Zoom, Twilio, or API
+gateway deployments—plus managed trust configuration, revocation, policy,
+audit, observability, and availability belong to Ratify Verify's commercial
+surface. Ratify Verify does not introduce a proprietary proof format, and the
+specification does not prevent anyone from building or operating an adapter.
 
 ---
 

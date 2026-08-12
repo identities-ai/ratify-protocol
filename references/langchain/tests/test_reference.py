@@ -22,6 +22,7 @@ from authority_reference import (
     issue_authority,
 )
 from authority_reference.deployment_config import write_configs
+from authority_reference.mcp_server import HeaderBoundary, MAX_PRESENTATION_HEADER_BYTES
 
 
 class ToolCallingFakeModel(GenericFakeChatModel):
@@ -97,7 +98,9 @@ def test_replay_does_not_invoke_again():
     request = OperationRequest("replay", "us-central1", "n2-standard-4", 1)
     bundle = present(authority, receiver, request, now)
     assert receiver.execute(request, bundle, now=now)["decision"] == "allow"
-    assert receiver.execute(request, bundle, now=now)["tool_invocations"] == 1
+    replay = receiver.execute(request, bundle, now=now)
+    assert replay["decision"] == "deny"
+    assert replay["tool_invocations"] == 1
 
 
 def test_altered_operation_denies_before_tool():
@@ -268,3 +271,32 @@ async def test_unauthenticated_transport_cannot_reach_receiver():
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json={})
         assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers, expected_status", [
+    ([(b"x-ratify-transport-token", b"secret"),
+      (b"x-ratify-transport-token", b"secret")], 400),
+    ([(b"x-ratify-transport-token", b"secret"),
+      (b"x-ratify-presentation", b"one"),
+      (b"x-ratify-presentation", b"two")], 400),
+    ([(b"x-ratify-transport-token", b"secret"),
+      (b"x-ratify-presentation", b"x" * (MAX_PRESENTATION_HEADER_BYTES + 1))], 431),
+])
+async def test_security_header_ambiguity_and_size_fail_before_mcp(headers, expected_status):
+    reached = False
+
+    async def app(scope, receive, send):
+        nonlocal reached
+        reached = True
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    await HeaderBoundary(app, "secret")(
+        {"type": "http", "headers": headers}, lambda: None, send
+    )
+    assert sent[0]["status"] == expected_status
+    assert reached is False

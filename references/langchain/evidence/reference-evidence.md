@@ -14,8 +14,8 @@
 $ ./scripts/langchain-reference-check.sh
 published Ratify: .../site-packages/ratify_protocol/__init__.py
 pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0
-.....................                                                    [100%]
-21 passed in 3.29s
+........................                                                 [100%]
+24 passed in 4.52s
 ```
 
 Zero tests were skipped or marked xfail. The gate rejected the repository's
@@ -33,6 +33,8 @@ environment.
 - receiver pending state is bounded and concurrent duplicate request IDs yield
   one challenge;
 - unauthenticated HTTP cannot reach the MCP receiver;
+- duplicate transport or presentation headers and oversized presentation
+  headers fail before MCP dispatch;
 - the model-visible schema excludes proof material;
 - the public MCP interceptor injects proof after tool selection; and
 - the real `create_agent` LangGraph loop executes the gated HTTP MCP tool.

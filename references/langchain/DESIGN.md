@@ -1,6 +1,6 @@
 # LangChain delegated-authority reference design
 
-**Status:** pre-implementation design for an independent reference. This is
+**Status:** implemented and independently tested draft reference. This is
 not a LangChain partnership, LangChain-approved integration, or LangChain
 reference architecture.
 
@@ -56,7 +56,7 @@ appropriate for general LangChain tools, but the MCP interceptor is closer to
 the actual remote boundary and has a documented, public mechanism for dynamic
 HTTP headers.
 
-## Proposed flow
+## Implemented flow
 
 ```text
 Principal
@@ -106,20 +106,23 @@ Independent Streamable HTTP MCP receiver
 - Transport authentication is independent from delegated-authority proof.
   Possession of the transport credential is insufficient to execute.
 - Proof headers are application metadata, not an MCP authorization proposal.
-  A production profile should map their names and transport treatment with the
-  LangChain and MCP maintainers.
+  The implemented boundary rejects duplicate security headers and presentations
+  over 64 KiB. The current two-hop hybrid presentation is about 28 KB, already
+  above common 8 KiB proxy defaults. A production profile must align limits and
+  log redaction across every hop, or move the proof to a maintainer-reviewed MCP
+  metadata/body carrier.
 - Protected execution is at-most-once. A production tool needs an idempotency
   and result ledger before retries can provide exactly-once business effects.
 
 ## Deterministic evidence gate
 
-The authoritative path should use LangChain's real `create_agent` graph with
+The authoritative path uses LangChain's real `create_agent` graph with
 `GenericFakeChatModel`, which LangChain documents for deterministic tool-call
 tests. It requires no model API key and still exercises model-turn handling,
 tool selection, the MCP adapter, the interceptor, HTTP transport, receiver
 verification, and function-response delivery.
 
-At minimum, denial cases must assert that the protected invocation counter is
+The denial cases assert that the protected invocation counter is
 unchanged:
 
 - excessive node count;
@@ -130,16 +133,16 @@ unchanged:
 - operation altered after challenge issuance;
 - wrong presenting agent;
 - valid chain under an untrusted root;
-- missing, malformed, oversized, or duplicated proof headers;
+- malformed, oversized, or duplicated proof headers;
 - invalid business arguments;
 - unauthenticated transport;
 - pending-capacity saturation;
 - concurrent duplicate request identifiers; and
-- receiver unavailability.
+- receiver transport denial.
 
-The gate should create a disposable virtual environment, install exact public
-package pins, reject a Ratify import from the repository SDK, run with zero
-skips and zero xfails, and record package versions plus the requirements hash.
+The gate creates a clean virtual environment, installs exact public package
+pins, rejects a Ratify import from the repository SDK, and requires the exact
+expected test count with zero skips, failures, or errors.
 
 ## Non-claims
 

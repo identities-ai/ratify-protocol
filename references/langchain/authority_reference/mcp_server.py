@@ -18,6 +18,16 @@ from .receiver import InfrastructureReceiver, OperationRequest
 
 
 _request_headers: ContextVar[dict[bytes, bytes]] = ContextVar("request_headers", default={})
+_TRANSPORT_HEADER = b"x-ratify-transport-token"
+_PRESENTATION_HEADER = b"x-ratify-presentation"
+MAX_PRESENTATION_HEADER_BYTES = 64 * 1024
+
+
+def _unique_header(headers: list[tuple[bytes, bytes]], name: bytes) -> bytes | None:
+    values = [value for key, value in headers if key.lower() == name]
+    if len(values) > 1:
+        raise ValueError(f"duplicate {name.decode()} header")
+    return values[0] if values else None
 
 
 def load_receiver(path: str):
@@ -40,11 +50,23 @@ class HeaderBoundary:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        headers = dict(scope.get("headers", []))
-        if not hmac.compare_digest(headers.get(b"x-ratify-transport-token", b""), self.token):
+        raw_headers = scope.get("headers", [])
+        try:
+            transport_token = _unique_header(raw_headers, _TRANSPORT_HEADER)
+            presentation = _unique_header(raw_headers, _PRESENTATION_HEADER)
+        except ValueError:
+            await send({"type": "http.response.start", "status": 400, "headers": []})
+            await send({"type": "http.response.body", "body": b"Ambiguous security header"})
+            return
+        if not hmac.compare_digest(transport_token or b"", self.token):
             await send({"type": "http.response.start", "status": 401, "headers": []})
             await send({"type": "http.response.body", "body": b"Unauthorized"})
             return
+        if presentation is not None and len(presentation) > MAX_PRESENTATION_HEADER_BYTES:
+            await send({"type": "http.response.start", "status": 431, "headers": []})
+            await send({"type": "http.response.body", "body": b"Presentation header too large"})
+            return
+        headers = dict(raw_headers)
         reset = _request_headers.set(headers)
         try:
             return await self.app(scope, receive, send)

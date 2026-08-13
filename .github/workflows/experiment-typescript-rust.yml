@@ -28,6 +28,8 @@ jobs:
         working-directory: experiments/typescript-rust-accelerator/native
       - run: npx napi build --platform --release
         working-directory: experiments/typescript-rust-accelerator/native
+      - run: node -e "const fs=require('fs'),c=require('crypto'); for(const f of fs.readdirSync('.').filter(x=>x.endsWith('.node'))) console.log(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex'),f)"
+        working-directory: experiments/typescript-rust-accelerator/native
       - run: node --import tsx/esm ../../experiments/typescript-rust-accelerator/check.ts
         working-directory: sdks/typescript
       - run: node --import tsx/esm ../../experiments/typescript-rust-accelerator/event_loop.ts

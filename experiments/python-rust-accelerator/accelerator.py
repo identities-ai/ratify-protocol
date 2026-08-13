@@ -3,7 +3,11 @@ import json
 
 from ratify_protocol import VerifyResult
 from ratify_protocol import verify_bundle as python_verify_bundle
-from ratify_rust_accel import verify_bundle_object
+
+try:
+    from ratify_rust_accel import verify_bundle_object as _native_verify_bundle_object
+except (ImportError, OSError):
+    _native_verify_bundle_object = None
 
 
 def native_eligible(options):
@@ -58,10 +62,10 @@ def _options_json(options):
 
 
 def verify_bundle(bundle, options):
-    if not native_eligible(options):
+    if _native_verify_bundle_object is None or not native_eligible(options):
         return python_verify_bundle(bundle, options)
     try:
-        result = json.loads(verify_bundle_object(bundle, _options_json(options)))
+        result = json.loads(_native_verify_bundle_object(bundle, _options_json(options)))
     except (TypeError, ValueError):
         return python_verify_bundle(bundle, options)
     return VerifyResult(

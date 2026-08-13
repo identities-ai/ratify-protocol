@@ -21,6 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: python -m pip install -e "sdks/python[dev]" maturin tzdata
       - run: python -m maturin build --release --interpreter python --out native-dist --manifest-path experiments/python-rust-accelerator/native/Cargo.toml
+      - run: python -c "import hashlib,pathlib; p=next(pathlib.Path('native-dist').glob('*.whl')); print(hashlib.sha256(p.read_bytes()).hexdigest(), p.name)"
       - run: python -m pip install --no-index --find-links native-dist ratify-python-rust-accelerator
       - run: python -m pytest -q sdks/python/tests
       - run: python -m pytest -q experiments/python-rust-accelerator/test_native.py experiments/python-rust-accelerator/test_accelerator.py

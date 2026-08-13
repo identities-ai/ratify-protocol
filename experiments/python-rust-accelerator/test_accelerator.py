@@ -46,3 +46,17 @@ def test_every_provider_option_disables_native_path():
         assert not accelerator.native_eligible(options), field
 
     assert not accelerator.native_eligible(VerifyOptions(force_revocation_check=True))
+
+
+def test_missing_native_module_uses_python_fallback(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(accelerator, "_native_verify_bundle_object", None)
+    monkeypatch.setattr(accelerator, "python_verify_bundle", lambda bundle, options: sentinel)
+    assert accelerator.verify_bundle(object(), VerifyOptions()) is sentinel
+
+
+def test_native_exception_uses_python_fallback(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(accelerator, "_native_verify_bundle_object", lambda *_: (_ for _ in ()).throw(ValueError("corrupt native result")))
+    monkeypatch.setattr(accelerator, "python_verify_bundle", lambda bundle, options: sentinel)
+    assert accelerator.verify_bundle(object(), VerifyOptions()) is sentinel

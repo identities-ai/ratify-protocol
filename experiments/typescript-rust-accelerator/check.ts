@@ -56,9 +56,18 @@ async function measure(call: () => unknown | Promise<unknown>, iterations = 1_00
   return [samples[Math.floor(samples.length / 2)], samples[Math.floor(samples.length * 0.95)]];
 }
 
-const ts = await measure(() => verifyBundle(bundle, { required_scope: options.required_scope, now: options.now }));
-const rust = await measure(() => native.verifyBundleJson(encodeProofBundle(bundle), optionsJson));
-const rustAsync = await measure(() => native.verifyBundleJsonAsync(encodeProofBundle(bundle), optionsJson));
+async function repeated(call: () => unknown | Promise<unknown>, rounds = 5) {
+  const values = [];
+  for (let i = 0; i < rounds; i++) values.push(await measure(call));
+  values.sort((a, b) => a[0] - b[0]);
+  const medians = values.map((v) => v[0]).sort((a, b) => a - b);
+  const p95s = values.map((v) => v[1]).sort((a, b) => a - b);
+  return [medians[Math.floor(rounds / 2)], p95s[Math.floor(rounds / 2)]];
+}
+
+const ts = await repeated(() => verifyBundle(bundle, { required_scope: options.required_scope, now: options.now }));
+const rust = await repeated(() => native.verifyBundleJson(encodeProofBundle(bundle), optionsJson));
+const rustAsync = await repeated(() => native.verifyBundleJsonAsync(encodeProofBundle(bundle), optionsJson));
 console.log(`${checked} native conformance decisions matched; malformed inputs contained`);
 console.log("implementation,median_ms,p95_ms");
 console.log(`typescript,${ts[0].toFixed(4)},${ts[1].toFixed(4)}`);
@@ -66,3 +75,4 @@ console.log(`rust_native_same_api,${rust[0].toFixed(4)},${rust[1].toFixed(4)}`);
 console.log(`rust_native_async,${rustAsync[0].toFixed(4)},${rustAsync[1].toFixed(4)}`);
 console.log(`median_speedup,${(ts[0] / rustAsync[0]).toFixed(2)}x`);
 console.log(`p95_speedup,${(ts[1] / rustAsync[1]).toFixed(2)}x`);
+if (ts[0] / rustAsync[0] < 5 || ts[1] / rustAsync[1] < 5) throw new Error("Node native accelerator did not clear the 5x median and p95 gates");

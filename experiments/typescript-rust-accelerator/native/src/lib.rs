@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use base64::Engine;
-use napi::{Error, Result, Status};
+use napi::{bindgen_prelude::AsyncTask, Env, Error, Result, Status, Task};
 use napi_derive::napi;
 use ratify_protocol::{
     decode_proof_bundle, verify_bundle, RevocationProvider, StreamContext, VerifierContext,
@@ -105,4 +105,27 @@ pub fn verify_bundle_json(bundle_json: String, options_json: String) -> Result<S
         Ok(Err(error)) => Err(Error::new(Status::InvalidArg, error)),
         Err(_) => Err(Error::new(Status::GenericFailure, "native verifier panicked")),
     }
+}
+
+pub struct VerifyTask {
+    bundle_json: String,
+    options_json: String,
+}
+
+impl Task for VerifyTask {
+    type Output = String;
+    type JsValue = String;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        verify_bundle_json(self.bundle_json.clone(), self.options_json.clone())
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+#[napi]
+pub fn verify_bundle_json_async(bundle_json: String, options_json: String) -> AsyncTask<VerifyTask> {
+    AsyncTask::new(VerifyTask { bundle_json, options_json })
 }

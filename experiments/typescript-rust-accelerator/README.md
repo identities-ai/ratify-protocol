@@ -22,3 +22,6 @@ The native path was 14.25x faster at the median and 13.36x faster at p95.
 All 62 applicable verification vectors matched and malformed inputs remained
 contained. The unchanged TypeScript suite passed 416 tests with no skips.
 This is feasibility evidence only until the platform and packaging gates pass.
+
+The releasable path must use an async napi worker task. The synchronous native
+function remains a benchmark control only because it blocks the Node event loop.

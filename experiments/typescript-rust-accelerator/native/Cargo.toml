@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 base64 = "0.22"
-napi = { version = "3", default-features = false, features = ["napi8"] }
+napi = { version = "3", default-features = false, features = ["napi8", "async"] }
 napi-derive = "3"
 ratify-protocol = { path = "../../../sdks/rust" }
 serde = { version = "1", features = ["derive"] }

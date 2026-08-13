@@ -5,6 +5,7 @@ import { verifyBundle as typescriptVerifyBundle } from "../../sdks/typescript/sr
 
 export interface NativeVerifier {
   verifyBundleJson(bundle: string, options: string): string;
+  verifyBundleJsonAsync?(bundle: string, options: string): Promise<string>;
 }
 
 export function nativeEligible(options: VerifyOptions): boolean {
@@ -50,7 +51,11 @@ export async function verifyBundle(
 ): Promise<VerifyResult> {
   if (!native || !nativeEligible(options)) return typescriptVerifyBundle(bundle, options);
   try {
-    return JSON.parse(native.verifyBundleJson(encodeProofBundle(bundle), nativeOptions(options)));
+    const encoded = encodeProofBundle(bundle);
+    const result = native.verifyBundleJsonAsync
+      ? await native.verifyBundleJsonAsync(encoded, nativeOptions(options))
+      : native.verifyBundleJson(encoded, nativeOptions(options));
+    return JSON.parse(result);
   } catch {
     return typescriptVerifyBundle(bundle, options);
   }

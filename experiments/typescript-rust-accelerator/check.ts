@@ -18,7 +18,7 @@ for (const name of readdirSync(vectorDir).filter((name) => name.endsWith(".json"
   if (expected.identity_status === "revoked" && fixture.bundle.delegations.length > 1) {
     options.revoked_cert_ids = [fixture.bundle.delegations[1].cert_id];
   }
-  const result = JSON.parse(native.verifyBundleJson(JSON.stringify(fixture.bundle), JSON.stringify(options)));
+  const result = JSON.parse(await native.verifyBundleJsonAsync(JSON.stringify(fixture.bundle), JSON.stringify(options)));
   for (const field of ["valid", "identity_status", "human_id", "agent_id", "granted_scope", "error_reason"]) {
     assert.deepEqual(result[field] ?? (field === "granted_scope" ? [] : ""), expected[field] ?? (field === "granted_scope" ? [] : ""), `${name}: ${field}`);
   }
@@ -58,9 +58,11 @@ async function measure(call: () => unknown | Promise<unknown>, iterations = 1_00
 
 const ts = await measure(() => verifyBundle(bundle, { required_scope: options.required_scope, now: options.now }));
 const rust = await measure(() => native.verifyBundleJson(encodeProofBundle(bundle), optionsJson));
+const rustAsync = await measure(() => native.verifyBundleJsonAsync(encodeProofBundle(bundle), optionsJson));
 console.log(`${checked} native conformance decisions matched; malformed inputs contained`);
 console.log("implementation,median_ms,p95_ms");
 console.log(`typescript,${ts[0].toFixed(4)},${ts[1].toFixed(4)}`);
 console.log(`rust_native_same_api,${rust[0].toFixed(4)},${rust[1].toFixed(4)}`);
-console.log(`median_speedup,${(ts[0] / rust[0]).toFixed(2)}x`);
-console.log(`p95_speedup,${(ts[1] / rust[1]).toFixed(2)}x`);
+console.log(`rust_native_async,${rustAsync[0].toFixed(4)},${rustAsync[1].toFixed(4)}`);
+console.log(`median_speedup,${(ts[0] / rustAsync[0]).toFixed(2)}x`);
+console.log(`p95_speedup,${(ts[1] / rustAsync[1]).toFixed(2)}x`);

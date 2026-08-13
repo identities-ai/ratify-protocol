@@ -701,3 +701,4 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.verifyBundleJson = nativeBinding.verifyBundleJson
+module.exports.verifyBundleJsonAsync = nativeBinding.verifyBundleJsonAsync

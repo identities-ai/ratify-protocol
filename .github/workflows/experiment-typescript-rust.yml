@@ -30,3 +30,5 @@ jobs:
         working-directory: experiments/typescript-rust-accelerator/native
       - run: node --import tsx/esm ../../experiments/typescript-rust-accelerator/check.ts
         working-directory: sdks/typescript
+      - run: node --import tsx/esm ../../experiments/typescript-rust-accelerator/event_loop.ts
+        working-directory: sdks/typescript

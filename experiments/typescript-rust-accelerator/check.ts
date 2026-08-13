@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 
 import { decodeProofBundle, encodeProofBundle, verifyBundle } from "../../sdks/typescript/src/index.js";
 import native from "./native/index.js";
+import { nativeEligible, verifyBundle as acceleratedVerifyBundle } from "./accelerator.js";
 
 const vectorDir = new URL("../../testvectors/v1/", import.meta.url);
 let checked = 0;
@@ -32,6 +33,16 @@ const fixture = JSON.parse(readFileSync(new URL("happy_path_depth_1.json", vecto
 const bundle = decodeProofBundle(JSON.stringify(fixture.bundle));
 const options = fixture.expected.verify_options;
 const optionsJson = JSON.stringify(options);
+const expectedFallback = await verifyBundle(bundle, { required_scope: options.required_scope, now: options.now });
+assert.deepEqual(await acceleratedVerifyBundle(bundle, { required_scope: options.required_scope, now: options.now }, undefined), expectedFallback);
+assert.deepEqual(await acceleratedVerifyBundle(bundle, { required_scope: options.required_scope, now: options.now }, { verifyBundleJson() { throw new Error("load failure"); } }), expectedFallback);
+for (const option of [
+  { is_revoked: () => false }, { revocation: {} }, { force_revocation_check: true },
+  { policy: {} }, { audit: {} }, { constraint_evaluators: {} },
+  { policy_verdict: {} }, { policy_secret: new Uint8Array([1]) },
+  { anchor_resolver: {} }, { challenge_store: {} },
+  { context: { invocations_in_window: () => 0 } },
+] as any[]) assert.equal(nativeEligible(option), false);
 
 async function measure(call: () => unknown | Promise<unknown>, iterations = 1_000) {
   for (let i = 0; i < 50; i++) await call();

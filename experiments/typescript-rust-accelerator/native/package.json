@@ -1,0 +1,15 @@
+{
+  "name": "ratify-node-rust-accelerator-experiment",
+  "private": true,
+  "version": "0.0.0",
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.1"
+  },
+  "napi": {
+    "name": "ratify_node_rust_accelerator",
+    "triples": {
+      "defaults": false,
+      "additional": ["aarch64-apple-darwin"]
+    }
+  }
+}

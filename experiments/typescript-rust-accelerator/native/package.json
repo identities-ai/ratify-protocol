@@ -2,6 +2,9 @@
   "name": "ratify-node-rust-accelerator-experiment",
   "private": true,
   "version": "0.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": ["index.js", "index.d.ts", "*.node"],
   "devDependencies": {
     "@napi-rs/cli": "^3.4.1"
   },

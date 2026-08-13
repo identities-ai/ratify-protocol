@@ -22,6 +22,7 @@ This work is only a candidate for integration if all of these hold:
 4. Median and p95 verification latency improve by at least 30 percent on the
    supported platform matrix, including wheel installation tests.
 5. The public Python API and wire behavior do not change.
+6. Native verification releases the GIL and improves concurrent throughput.
 
 Until every gate is automated and green, this branch must not be merged or
 released.

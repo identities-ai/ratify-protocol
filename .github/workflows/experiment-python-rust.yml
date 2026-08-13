@@ -27,3 +27,4 @@ jobs:
         env:
           PYTHONPATH: experiments/python-rust-accelerator
       - run: python experiments/python-rust-accelerator/benchmark.py
+      - run: python experiments/python-rust-accelerator/concurrency.py

@@ -21,7 +21,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
         working-directory: sdks/typescript
-      - run: npm test
+      - run: node --import tsx/esm --test test/*.test.ts
+        shell: bash
         working-directory: sdks/typescript
       - run: npm ci
         working-directory: experiments/typescript-rust-accelerator/native

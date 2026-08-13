@@ -1,5 +1,5 @@
 import accelerator
-from ratify_protocol import VerifierContext
+from ratify_protocol import VerifyOptions, VerifierContext
 
 
 class Marker:
@@ -33,3 +33,16 @@ def test_rate_callback_uses_python_fallback():
         "context": VerifierContext(invocations_in_window=lambda _cert, _window: 0),
     })()
     assert not accelerator.native_eligible(options)
+
+
+def test_every_provider_option_disables_native_path():
+    fields = (
+        "is_revoked", "revocation", "policy", "audit", "constraint_evaluators",
+        "policy_verdict", "policy_secret", "anchor_resolver", "challenge_store",
+    )
+    for field in fields:
+        options = VerifyOptions()
+        setattr(options, field, object())
+        assert not accelerator.native_eligible(options), field
+
+    assert not accelerator.native_eligible(VerifyOptions(force_revocation_check=True))

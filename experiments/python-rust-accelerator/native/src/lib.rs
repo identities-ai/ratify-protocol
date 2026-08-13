@@ -208,10 +208,12 @@ fn verify_bundle_json(bundle_json: &str, options_json: &str) -> PyResult<String>
 }
 
 #[pyfunction]
-fn verify_bundle_object(bundle: &Bound<'_, PyAny>, options_json: &str) -> PyResult<String> {
+fn verify_bundle_object(py: Python<'_>, bundle: &Bound<'_, PyAny>, options_json: &str) -> PyResult<String> {
     match catch_unwind(AssertUnwindSafe(|| -> PyResult<String> {
         let bundle = bundle_from_py(bundle)?;
-        verify_inner(&bundle, options_json).map_err(PyValueError::new_err)
+        let options_json = options_json.to_owned();
+        py.allow_threads(move || verify_inner(&bundle, &options_json))
+            .map_err(PyValueError::new_err)
     })) {
         Ok(result) => result,
         Err(_) => Err(PyValueError::new_err("native verifier panicked")),

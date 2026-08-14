@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ratify-authority": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/plugin-runtime/mcp-server.js"],
+      "cwd": "${PLUGIN_ROOT}",
+      "env": {
+        "RATIFY_RECEIVER_URL": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}

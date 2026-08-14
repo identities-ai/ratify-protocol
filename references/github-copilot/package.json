@@ -1,0 +1,25 @@
+{
+  "name": "@identities-ai/ratify-github-copilot-reference",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "node --import tsx src/demo.ts",
+    "receiver": "node --import tsx src/receiver-main.ts",
+    "mcp": "node --import tsx src/mcp-server.ts",
+    "build:plugin": "esbuild src/mcp-server.ts --bundle --platform=node --format=esm --target=node22 --outfile=plugin-runtime/mcp-server.js",
+    "test": "node --import tsx --test test/*.test.ts",
+    "check": "tsc --noEmit && npm test && npm run build:plugin"
+  },
+  "dependencies": {
+    "@identities-ai/ratify-protocol": "1.0.0-alpha.16",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "esbuild": "0.28.2",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}

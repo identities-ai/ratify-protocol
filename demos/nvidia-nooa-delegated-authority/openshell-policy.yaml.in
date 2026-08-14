@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenShell sandbox policy TEMPLATE for the proof-carrying MCP refund
+# reference. Rendered by run-openshell-profile.sh, which substitutes
+# @@MCP_HOST@@ and @@MCP_PORT@@ after validating both.
+#
+# This file cannot pin anything. YAML has no way to fix a CLI version or an
+# image digest. The runner pins the execution environment: openshell CLI
+# 0.0.102, and the gateway and sandbox images by immutable index digest. The
+# rendered policy and its SHA-256 are written into the run artifacts.
+#
+# What this policy decides, and what it deliberately does not:
+#
+#   OpenShell decides   the destination the runtime may reach, the MCP method,
+#                       and the tool name.
+#   Ratify decides      the principal, amount, tenant, resource, expiry,
+#                       revocation, and the delegation chain.
+#
+# v0.0.102 does not support tool-argument matching. From the policy schema:
+# "Tool argument matching is not supported yet; allowed tools accept all
+# argument payloads by default." So OpenShell cannot see the refund amount or
+# the order id, and is not asked to. The two controls are independent and both
+# must permit the action.
+#
+# Default deny is the point. `mcp.allow_all_known_mcp_methods` is left unset,
+# which the schema documents as requiring explicit MCP method rules, so any
+# tool not named below is refused before it reaches the MCP server.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /etc
+    # Where the sandbox image carries the Python dependency tree for the
+    # unified NOOA path. Landlock is enforcing here, so a path absent from
+    # this list is not merely unwritable, it is invisible: omitting /opt made
+    # an installed package report as missing and the import failed with
+    # ModuleNotFoundError for a tree that was demonstrably on disk. Read-only,
+    # and it holds third-party libraries only, never keys or proofs.
+    - /opt
+  read_write:
+    - /tmp
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  ratify_refund_mcp:
+    name: ratify_refund_mcp
+    endpoints:
+      - host: @@MCP_HOST@@
+        port: @@MCP_PORT@@
+        path: /mcp
+        protocol: mcp
+        enforcement: enforce
+        mcp:
+          # Post-quantum authorization envelopes are large. A measured
+          # alpha.16 maximum-depth (8) proof is 88,990 raw bytes, 118,656
+          # base64, and 118,940 bytes as a complete MCP request body. The
+          # 65536 default would reject it and the 131072 used by NVIDIA's own
+          # e2e template leaves roughly 12 KB of headroom once trace context
+          # and envelope keys are counted. 262144 leaves 143,204.
+          max_body_bytes: 262144
+          # Left enabled. Wildcard tool matchers require it, and the tool
+          # names here are already conformant.
+          strict_tool_names: true
+        rules:
+          # Handshake and discovery, named explicitly rather than by wildcard.
+          - allow:
+              method: initialize
+          - allow:
+              method: notifications/initialized
+          - allow:
+              method: tools/list
+          # Exactly the two refund tools, and nothing else. The two-phase flow
+          # is expressed as two tools precisely so a runtime policy can name
+          # them; a single tool with a phase argument would be invisible here,
+          # because arguments are not matchable in v0.0.102.
+          - allow:
+              method: tools/call
+              tool: refund.prepare
+          - allow:
+              method: tools/call
+              tool: refund.execute
+        # No deny_rules. The schema rejects an empty list, and everything not
+        # named above is already denied by the absence of an allow rule.
+    binaries:
+      - path: /bin/sh
+      - path: /usr/bin/env
+      - path: /usr/bin/python3
+      - path: /usr/local/bin/python3

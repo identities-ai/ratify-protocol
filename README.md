@@ -277,6 +277,11 @@ This is what an alpha tester runs to convince themselves the protocol works the 
 
 Full demo source for every language is in [`demos/`](demos/). The accompanying [`demos/README.md`](demos/README.md) explains each scenario in prose.
 
+Deeper platform compositions—including the executed NVIDIA OpenShell + NOOA
+profile—are indexed under [`references/`](references/). Platform references add
+adversarial acceptance cases, evidence, and a claim ledger while preserving
+simple language demos as the protocol's fastest introduction.
+
 ---
 
 ## What's actually happening (read this once)

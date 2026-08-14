@@ -1,0 +1,64 @@
+# OpenShell gateway configuration template for the reproducible profile.
+#
+# Derived from deploy/docker/gateway.toml at OpenShell v0.0.102, with one
+# addition: the [openshell.gateway.gateway_jwt] block. The shipped file omits
+# it, and a v0.0.102 gateway refuses to create Docker sandboxes without it
+# ("docker sandboxes require gateway JWT auth"). The runner generates an
+# ephemeral ed25519 keypair under its temporary directory and deletes it at
+# teardown.
+#
+# @@JWT_DIR@@, @@SANDBOX_IMAGE@@, @@SUPERVISOR_IMAGE@@, @@RUN_ID@@,
+# @@OSHOME@@, @@GW_PORT@@ and @@GW_HEALTH@@ are substituted by
+# run-openshell-profile.sh.
+#
+# Note on bind_address: the gateway image's default command already passes
+# --bind-address and --port, and CLI flags take precedence over this file. The
+# runner therefore sets the ports on the command line as well, and the values
+# here are kept consistent so the file is not misleading to read.
+
+[openshell]
+version = 1
+
+[openshell.gateway]
+bind_address        = "0.0.0.0:@@GW_PORT@@"
+health_bind_address = "0.0.0.0:@@GW_HEALTH@@"
+log_level           = "info"
+compute_drivers     = ["docker"]
+disable_tls         = true
+
+[openshell.gateway.gateway_jwt]
+signing_key_path = "@@JWT_DIR@@/signing.pem"
+public_key_path  = "@@JWT_DIR@@/public.pem"
+kid_path         = "@@JWT_DIR@@/kid"
+gateway_id       = "openshell"
+# 0 means the sandbox JWT does not expire. The OpenShell docs permit this
+# only for local single-player Docker, Podman, or VM gateways, which is
+# exactly what this profile is.
+ttl_secs         = 0
+
+[openshell.gateway.auth]
+# Local single-player profile with no OIDC or mTLS in front of it. The docs
+# describe this as an unsafe local-development escape hatch; it is used here
+# because the profile runs on loopback and is torn down at the end.
+allow_unauthenticated_users = true
+
+[openshell.drivers.docker]
+default_image     = "@@SANDBOX_IMAGE@@"
+# The supervisor enforces policy inside the sandbox, so a mutable tag here
+# would let two runs apply different enforcement behaviour even with the
+# gateway and sandbox pinned.
+supervisor_image  = "@@SUPERVISOR_IMAGE@@"
+image_pull_policy = "IfNotPresent"
+sandbox_namespace = "@@RUN_ID@@"
+# The endpoint each sandbox dials back on. The gateway derives the value it
+# actually injects (OPENSHELL_ENDPOINT) from its own bind port, so this must
+# agree with it or every sandbox fails to fetch its policy and the container
+# restarts until provisioning gives up.
+grpc_endpoint     = "http://host.openshell.internal:@@GW_PORT@@"
+
+# Per-run data home. The gateway extracts the supervisor binary here and then
+# bind-mounts it into each sandbox container by host path, so this is a bind
+# mount with identical host and container paths rather than a named volume,
+# and it is unique per run rather than the shared /var/lib/openshell.
+# @@OSHOME@@ is recorded so the value is visible in the rendered config whose
+# SHA-256 the artifact carries.

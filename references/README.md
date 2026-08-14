@@ -1,17 +1,46 @@
 # Ratify reference profiles
 
-Reference profiles show how Ratify composes with a specific agent framework,
-transport, runtime, or platform without changing the Ratify verifier contract.
-They are larger and more platform-specific than the small examples in
+Reference profiles answer a practical question: **where does Ratify fit in the
+agent stack I already use, and which system must verify authority before the
+action occurs?**
+
+They are executable integrations for specific agent frameworks, transports,
+runtimes, and platforms. Each turns the protocol into a visible outcome: one
+properly authorized request reaches a protected handler, while an out-of-scope,
+changed, expired, revoked, replayed, or untrusted request does not.
+
+## Available references
+
+| Platform | What it demonstrates | Run it |
+| --- | --- | --- |
+| [GitHub Copilot and MCP](github-copilot/README.md) | Copilot invokes a deployment tool; an independent receiver verifies exact delegated authority first | `cd references/github-copilot && ./run-reference-check.sh` |
+
+Only references merged into `main` appear here. The
+[`registry/`](registry/README.md) records exact versions, evidence, and whether
+the named platform reviewed or endorsed each integration.
+
+## Why use a reference?
+
+- **Developer:** start from working adapter and receiver code instead of
+  inventing the integration and trust boundary yourself.
+- **Platform team:** see exactly where authority presentation belongs in the
+  runtime and where enforcement must remain independent.
+- **Security or IAM team:** evaluate concrete allow and deny evidence before
+  considering production deployment.
+- **MCP or SaaS provider:** test how to accept consequential calls from agents
+  issued by customers, partners, or other organizations.
+
+References are larger and more platform-specific than the small examples in
 [`demos/`](../demos/README.md).
 
 These are open-source interoperability references, not hosted services or
-production support commitments. They make the integration pattern inspectable,
-portable, and reproducible. **Ratify Verify** is the separate managed commercial
-surface for operating the same protocol at scale: managed trust configuration,
-revocation, policy, audit retention, observability, availability, and supported
-deployment adapters. The proof bytes and verifier semantics remain portable;
-customers choose whether to operate them themselves or use the managed service.
+production support commitments. Use them now for evaluation, integration work,
+or as the basis of a self-operated implementation. **Ratify Verify** is the
+managed commercial surface under development for organizations that need
+operated trust configuration, revocation, policy, replay protection, audit
+retention, observability, availability, and supported deployment adapters.
+Each profile explains how to join the design-partner path when that is the
+better fit. Proof bytes and verifier semantics remain portable.
 
 Every accepted profile should contain:
 

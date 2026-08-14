@@ -1,0 +1,13 @@
+{
+  "name": "ratify-authority",
+  "description": "Present verifiable, bounded Ratify authority when GitHub Copilot invokes protected tools.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ratify Protocol",
+    "url": "https://ratifyprotocol.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["authority", "delegation", "copilot", "mcp"],
+  "skills": "skills/",
+  "mcpServers": ".mcp.json"
+}

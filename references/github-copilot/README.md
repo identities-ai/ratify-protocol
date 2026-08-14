@@ -1,37 +1,65 @@
-# Ratify authority for GitHub Copilot
+# Receiver-verifiable authority for GitHub Copilot
 
-Give consequential tools a way to verify what a person authorized an AI agent
-to do before the tool acts.
+**Let GitHub Copilot use consequential tools without treating access to a tool
+as unlimited authority.**
 
-Status: independent Ratify Protocol reference, natively exercised with GitHub
-Copilot CLI 1.0.80. This project is not endorsed by GitHub or Microsoft.
+This live, open reference shows a GitHub Copilot plugin invoking an MCP
+deployment tool while an independently operated receiver verifies that a
+recognized principal authorized this agent to perform this exact action on this
+exact resource before the protected handler runs.
 
-## Why this exists
+It is implemented on `main`, tested with GitHub Copilot CLI 1.0.80, and
+available to use now. It is an independent Ratify Protocol project, not a
+GitHub- or Microsoft-endorsed integration.
 
-GitHub controls which agents, repositories, plugins, MCP servers, credentials,
-and tools an organization permits. Those controls establish access. A receiver
-may still need a narrower answer:
+[Run it with Copilot](#use-it-now-with-github-copilot) ·
+[See what it proves](#what-the-reference-proves) ·
+[Choose open source or Ratify Verify](#which-path-should-i-use)
 
-**What did a recognized principal authorize this agent to do for this exact
-operation, resource, and moment?**
+## Why would a developer or enterprise need this?
 
-A credential capable of reaching staging may also technically reach
-production. Ratify carries a signed, bounded mandate that the system owning the
-consequence can verify independently.
+GitHub and Copilot already provide important controls over access: which users,
+agents, repositories, plugins, MCP servers, credentials, and tools are
+available. Ratify is complementary. It gives the system that owns the
+consequence evidence of the narrower mandate behind one action.
+
+| Question | GitHub and Copilot controls | Ratify authority |
+| --- | --- | --- |
+| Can this agent reach the tool? | Yes | Not its purpose |
+| Does the agent have a usable credential? | Yes | Not its purpose |
+| Did a recognized principal authorize this exact action? | Not expressed by tool access alone | Yes |
+| Is the authority limited to this repository, service, and environment? | Repository and tool policy may constrain access | Signed into the delegation and checked by the receiver |
+| Can another organization verify the mandate independently? | Depends on shared platform and credential policy | Yes, using portable proof and configured trust roots |
+| Was the proof changed, revoked, expired, or replayed? | Separate control | Verified before the handler runs |
+
+The practical distinction is simple:
 
 ```mermaid
 flowchart LR
-    A[GitHub controls access] --> B[Copilot can reach the deploy tool]
-    C[Principal delegates bounded authority] --> D[Ratify proof]
+    A[Copilot is allowed to use a deployment tool] --> B{What may it deploy now?}
+    C[Principal signs a bounded mandate] --> D[Ratify proof]
     B --> E[Protected receiver]
     D --> E
-    E -->|valid mandate| F[Invoke handler once]
-    E -->|invalid, changed, revoked, or replayed| G[Deny without invoking handler]
+    E -->|payments to staging, fresh and trusted| F[ALLOW<br/>invoke handler once]
+    E -->|production, changed, revoked, replayed, or untrusted| G[DENY<br/>handler untouched]
 ```
 
-## The value in one minute
+This matters when:
 
-This reference delegates only:
+- a coding agent holds credentials broader than the current task;
+- production actions need stronger evidence than a prompt or approval click;
+- an MCP or SaaS provider receives calls from agents it did not issue;
+- customer, vendor, or partner agents cross an organizational boundary; or
+- security and audit teams need to answer who authorized what, for which agent,
+  resource, operation, and time window.
+
+The outcome is not “more cryptography.” The outcome is that enterprises can
+permit more agent automation while the receiver retains a precise, auditable,
+fail-closed decision boundary.
+
+## What does this reference do?
+
+The included principal delegates only:
 
 ```text
 scope       custom:github:deploy
@@ -39,25 +67,8 @@ repository  identities-ai/copilot-authority-demo
 path        /services/payments/environments/staging
 ```
 
-It produces a visible result:
-
-| Request | Decision | Protected handler |
-| --- | --- | ---: |
-| Payments to staging with a fresh valid proof | Allow | Invoked once |
-| Payments to production | Deny | Not invoked |
-| Different repository | Deny | Not invoked |
-| Artifact changed after challenge issuance | Deny | Not invoked |
-| Revoked delegation | Deny | Not invoked |
-| Replayed proof | Deny | Not invoked again |
-| Untrusted principal | Deny | Not invoked |
-
-The reference makes the missing boundary concrete: possession of a credential
-does not become unlimited authority.
-
-## How it works
-
-Copilot sees one ordinary MCP tool named `deploy_service`. It never receives the
-signing key or constructs the Ratify proof.
+Copilot sees one ordinary MCP tool named `deploy_service`. The model never
+receives the signing key and never constructs the Ratify proof.
 
 ```mermaid
 sequenceDiagram
@@ -69,57 +80,93 @@ sequenceDiagram
 
     User->>Copilot: Deploy payments to staging
     Copilot->>Adapter: deploy_service(request)
-    Adapter->>Receiver: Request operation-bound challenge
+    Adapter->>Receiver: Request challenge bound to the operation
     Receiver-->>Adapter: Fresh single-use challenge
-    Adapter->>Adapter: Sign challenge with delegated agent key
-    Adapter->>Receiver: Request plus Ratify ProofBundle
-    Receiver->>Receiver: Verify root, agent, scope, resource, operation, revocation, freshness, replay
-    alt authority is valid
-        Receiver->>Handler: Invoke exactly once
-        Receiver-->>Copilot: Allow plus receipt
-    else authority is invalid
-        Receiver-->>Copilot: Deny plus reason
+    Adapter->>Adapter: Present signed delegated authority
+    Adapter->>Receiver: Exact request plus Ratify ProofBundle
+    Receiver->>Receiver: Verify trust, agent, scope, resource, payload, expiry, revocation, and replay
+    alt valid authority
+        Receiver->>Handler: Invoke once
+        Receiver-->>Copilot: ALLOW plus decision receipt
+    else invalid authority
+        Receiver-->>Copilot: DENY plus reason
     end
 ```
 
-The receiver is the security boundary. Prompt instructions, skills, and the MCP
-adapter improve integration, but only receiver-side verification controls the
-protected handler.
+The receiver—not the prompt, skill, model, or adapter—is the enforcement
+boundary. A caller cannot reach the protected handler by skipping Ratify proof
+presentation.
 
-## Five-minute local run
+## What the reference proves
 
-Prerequisites:
+| Request | Receiver decision | Protected handler |
+| --- | --- | ---: |
+| Payments to staging with fresh valid authority | Allow | Invoked once |
+| Payments to production | Deny | Not invoked |
+| Different repository | Deny | Not invoked |
+| Artifact changed after challenge issuance | Deny | Not invoked |
+| Revoked delegation | Deny | Not invoked |
+| Replayed proof | Deny | Not invoked again |
+| Untrusted principal | Deny | Not invoked |
 
-- Node.js 22 or later
-- GitHub Copilot CLI 1.0.80 or later for the native path
-- An active Copilot plan with Copilot CLI enabled
+Seven deterministic tests pass with zero failures and zero skips. The plugin was
+also installed directly from this public GitHub repository and exercised
+through Copilot CLI against the independent receiver.
 
-Install dependencies and run the deterministic gate:
+## Use it now with GitHub Copilot
+
+This path runs a safe reference handler that increments a counter. It does not
+deploy real infrastructure.
+
+### 1. Install and authenticate Copilot CLI
+
+You need Node.js 22 or later and an active Copilot plan with Copilot CLI
+enabled.
 
 ```bash
-npm ci
-npm run check
-npm run demo
+npm install -g @github/copilot
+copilot login
 ```
 
-Expected result: seven tests pass with no failures or skips. The demo allows one
-staging request, denies replay and mutation, and ends with handler count one.
+GitHub also documents Homebrew, WinGet, and standalone installation options in
+the [Copilot CLI installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
 
-### Run through GitHub Copilot CLI
-
-Start the independently running receiver in terminal one:
+### 2. Install the Ratify plugin from this repository
 
 ```bash
+copilot plugin install identities-ai/ratify-protocol:references/github-copilot
+copilot plugin list
+```
+
+`ratify-authority` should appear in the installed plugin list. Direct repository
+installation works today; Copilot CLI currently warns that direct installs will
+eventually move to marketplace-only distribution. A Ratify marketplace listing
+is planned. The plugin contains a self-contained runtime and does not run
+`npm install` when Copilot loads it.
+
+### 3. Start the open reference receiver
+
+In terminal one:
+
+```bash
+git clone https://github.com/identities-ai/ratify-protocol.git
+cd ratify-protocol/references/github-copilot
+npm ci
 npm run receiver
 ```
 
-Start Copilot with the local plugin in terminal two:
+The receiver listens on `http://127.0.0.1:8787`. It owns the protected mock
+handler and independently verifies every proof.
+
+### 4. Ask Copilot to use the protected tool
+
+In terminal two, from any trusted working directory:
 
 ```bash
-copilot --plugin-dir "$PWD" --allow-all-tools
+copilot
 ```
 
-Ask Copilot:
+Then ask:
 
 ```text
 Use the Ratify deploy tool to deploy repository
@@ -128,7 +175,7 @@ artifact digest sha256:9f86d081884c7d659a2feaa0c55ad015,
 invocation ID my-first-ratify-deploy.
 ```
 
-The receiver returns a receipt similar to:
+Approve the MCP tool when Copilot asks. The expected result includes:
 
 ```json
 {
@@ -144,35 +191,75 @@ The receiver returns a receipt similar to:
 }
 ```
 
-## Repository map
+Try changing `staging` to `production`. The receiver denies the request and the
+protected handler remains untouched.
 
-| Path | Purpose |
-| --- | --- |
-| `plugin.json` | GitHub Copilot plugin manifest |
-| `.mcp.json` | Starts the bundled MCP adapter from the installed plugin |
-| `skills/deploy-with-authority/SKILL.md` | Tells Copilot when and how to use the protected tool |
-| `plugin-runtime/mcp-server.js` | Self-contained runtime distributed to plugin users |
-| `src/mcp-server.ts` | MCP tool definition |
-| `src/adapter.ts` | Challenge retrieval and proof presentation |
-| `src/authority.ts` | Reproducible reference identity and signed delegation |
-| `src/receiver.ts` | Independent verification and protected handler boundary |
-| `src/request.ts` | Exact operation and session binding |
-| `test/authority-boundary.test.ts` | Seven deterministic allow and deny cases |
-| `reference-evidence.md` | Executed protocol and native Copilot evidence |
+## Run without Copilot
 
-## Clean-install guarantee
+To inspect the protocol boundary or contribute to the implementation:
 
-The installed plugin launches `plugin-runtime/mcp-server.js`, a committed
-self-contained bundle. It does not require `npm install`, TypeScript, or a
-Ratify source checkout at runtime.
+```bash
+git clone https://github.com/identities-ai/ratify-protocol.git
+cd ratify-protocol/references/github-copilot
+npm ci
+npm run check
+npm run demo
+```
 
-The release test copies only the manifest, MCP configuration, skill, and bundled
-runtime into a clean directory with no `node_modules`. Copilot CLI loads that
-copy and completes an authorized call through the independent receiver.
+The gate compiles the source, runs all seven allow and deny tests, and rebuilds
+the distributable plugin runtime.
 
-## What is cryptographically bound
+## Which path should I use?
 
-The published TypeScript SDK `@identities-ai/ratify-protocol@1.0.0-alpha.16`
+```mermaid
+flowchart TD
+    A[What are you trying to do?] --> B[Learn, evaluate, or build a local proof of concept]
+    A --> C[Self-host a product integration]
+    A --> D[Operate production authority across teams or organizations]
+    B --> E[Use this open reference now]
+    C --> F[Use the open SDK and replace every demo-only component]
+    D --> G[Join the Ratify Verify design-partner program]
+```
+
+| Your situation | Recommended path | Available now? |
+| --- | --- | --- |
+| Understand the model or run the Copilot demonstration | This open reference | Yes |
+| Build an internal prototype with your own receiver | Fork this reference and use the open SDK | Yes |
+| Self-host production verification | Use the open protocol and SDK, with production key custody, TLS, durable state, policy, and audit | Build and operate it yourself |
+| Need managed multi-tenant trust, revocation, replay protection, policy, receipts, audit, availability, or support | Ratify Verify | Under development; design partners wanted |
+
+### Open source
+
+Use the open reference and SDK when you want inspectable protocol semantics,
+local evaluation, customization, or full operational ownership. The proof
+format and receiver decision remain portable. This repository is the immediate
+starting point.
+
+Do not deploy the reference unchanged to production. Its keys are public test
+material, its state is in memory, its receiver uses local HTTP, and its handler
+is intentionally a counter.
+
+### Ratify Verify
+
+Ratify Verify is the managed commercial path under development. It is intended
+for organizations that want Ratify to operate the verification control plane:
+
+- tenant-specific trust roots and organization connections;
+- durable atomic challenges and replay protection;
+- fresh revocation and policy decisions;
+- signed verification receipts and audit retention; and
+- production availability, observability, and support.
+
+If that matches your deployment, contact
+[chuks@ratifyprotocol.com](mailto:chuks@ratifyprotocol.com?subject=Ratify%20Verify%20design%20partner)
+with “Ratify Verify design partner” in the subject. Useful context includes the
+agent runtime, protected action, receiving system, organizational boundary, and
+compliance or audit requirement. This is the current lead and design-partner
+path; Ratify Verify is not yet offered here as a generally available service.
+
+## What is cryptographically bound?
+
+The published `@identities-ai/ratify-protocol@1.0.0-alpha.16` TypeScript SDK
 verifies:
 
 - the hybrid-signed delegation chain;
@@ -184,48 +271,34 @@ verifies:
 - certificate validity and fresh revocation state; and
 - operation and session context reconstructed by the receiver.
 
-Changing a request after challenge issuance changes its session binding. Reusing
-the proof fails because the receiver atomically consumes the challenge.
+Changing the request after challenge issuance changes its signed session
+binding. Reusing a proof fails because the receiver atomically consumes the
+challenge.
 
-## Distribution
+## Repository map
 
-After this reference is merged into the public `identities-ai/ratify-protocol`
-repository, install it directly from the repository subdirectory:
+| Path | Purpose |
+| --- | --- |
+| `plugin.json` | Copilot plugin manifest |
+| `.mcp.json` | Starts the bundled MCP adapter |
+| `skills/deploy-with-authority/SKILL.md` | Teaches Copilot when to use the protected tool |
+| `plugin-runtime/mcp-server.js` | Self-contained runtime delivered to plugin users |
+| `src/mcp-server.ts` | MCP tool definition |
+| `src/adapter.ts` | Challenge retrieval and proof presentation |
+| `src/authority.ts` | Reproducible reference identity and delegation |
+| `src/receiver.ts` | Independent verification and protected handler boundary |
+| `src/request.ts` | Exact operation and session binding |
+| `test/authority-boundary.test.ts` | Seven deterministic allow and deny cases |
+| `reference-evidence.md` | Executed protocol, Copilot, and clean-install evidence |
 
-```bash
-copilot plugin install identities-ai/ratify-protocol:references/github-copilot
-```
-
-It can later be listed in a Ratify-owned or community marketplace. GitHub or
-Microsoft endorsement is not required to publish an independent plugin. Do not
-represent this reference as an endorsed integration or GitHub standard.
-
-## Reference versus production
-
-This is an executed interoperability reference, not a production deployment.
-It intentionally uses public deterministic keys, an in-memory challenge store,
-an in-memory revocation set, local HTTP, and a counter as the protected handler.
-
-Production deployments replace those pieces with:
-
-- secure adapter key custody or a cloud KMS;
-- authenticated principal and delegation workflows;
-- authenticated TLS between adapters, receivers, and Ratify Verify;
-- durable atomic challenge and replay storage;
-- tenant-specific trust roots, revocation, and policy;
-- durable signed decision receipts and audit retention; and
-- operational monitoring, availability, and incident controls.
-
-The open protocol keeps proof semantics portable. Ratify Verify is the managed
-commercial surface for operating trust, revocation, replay protection, policy,
-receipts, audit, and availability across organizations.
-
-## Evidence and limitations
+## Evidence, security status, and limitations
 
 - [Executed reference evidence](reference-evidence.md)
 - [Ratify Protocol specification](../../SPEC.md)
 - [Reference profile requirements](../README.md)
 
-The mock handler changes no infrastructure. The fixed seeds are public test
-material and must never be reused for real authority. The in-memory stores are
-single-process and intentionally fail closed on restart.
+This reference is live and maintained as part of Ratify Protocol. It changes no
+real infrastructure. The fixed seeds must never be reused for real authority.
+The in-memory stores are single-process and intentionally fail closed on
+restart. Production deployments must replace every demo-only component listed
+above.

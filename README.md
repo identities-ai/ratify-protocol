@@ -47,27 +47,8 @@ Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are tr
 The protocol SDKs provide the portable authority primitive. Executable
 [reference integrations](references/README.md) show where that primitive fits
 inside real agent platforms and where the receiving system enforces it.
-
-### GitHub Copilot and MCP
-
-[Run the GitHub Copilot reference](references/github-copilot/README.md) to see
-Copilot call an ordinary MCP deployment tool while an independent receiver
-verifies that a recognized principal authorized the exact repository, service,
-environment, artifact, and invocation before its protected handler runs.
-
-```mermaid
-flowchart LR
-    A[GitHub Copilot] --> B[Ratify MCP adapter]
-    C[Signed delegated authority] --> B
-    B --> D[Independent receiver]
-    D -->|valid and bounded| E[Invoke protected action]
-    D -->|changed, revoked, replayed, or untrusted| F[Deny]
-```
-
-Use a reference when you want to answer “How does Ratify fit into my agent
-stack?” Use an SDK when you are building your own presenter or receiver. See the
-[reference index](references/README.md) for every integration currently merged
-and its endorsement and production status.
+The [reference index](references/README.md) lists every integration currently
+available, with setup instructions and its endorsement and production status.
 
 ---
 

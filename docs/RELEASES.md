@@ -71,6 +71,13 @@ v1.0.0-alpha.16 →  resource-bound authority (resource_path constraint),
                    extension constraint params, new input bounds, and
                    MAX_DELEGATION_CHAIN_DEPTH raised 3→8 (SPEC §5.1, §5.7.3);
                    79 fixtures (published 2026-08-05)
+v1.0.0-alpha.17 →  packaging and documentation. Python SDK bounded below
+                   pqcrypto 1.0 after that release changed ML-DSA-65 behavior
+                   and broke verification for installs made from 2026-08-15;
+                   extension namespace ownership (SPEC §17.7); GitHub Copilot
+                   delegated-authority reference; platform reference profile
+                   registry. 79 fixtures, byte-identical to alpha.16
+                   (published 2026-08-24)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

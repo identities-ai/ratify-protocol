@@ -6,7 +6,10 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## Unreleased
+## v1.0.0-alpha.17 (2026-08-24)
+
+A packaging and documentation release. No SDK behavior, canonical bytes or fixture
+contents change, and the protocol version remains 1.
 
 ### Fixed
 

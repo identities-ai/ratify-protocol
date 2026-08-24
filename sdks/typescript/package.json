@@ -1,6 +1,6 @@
 {
   "name": "@identities-ai/ratify-protocol",
-  "version": "1.0.0-alpha.16",
+  "version": "1.0.0-alpha.17",
   "description": "Delegated-authority proofs for human-agent and agent-agent interactions \u2014 TypeScript reference SDK for the Ratify Protocol.",
   "type": "module",
   "main": "./dist/index.js",

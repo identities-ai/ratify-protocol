@@ -8,6 +8,18 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ## Unreleased
 
+### Fixed
+
+- **Python SDK dependency bound.** `pqcrypto` 1.0.0, published 2026-08-15, changed ML-DSA-65
+  behavior, and hybrid signatures do not verify against it. The Python package declared
+  `pqcrypto>=0.3.4` with no upper bound, so any installation made after that date produced a
+  verifier that rejected valid signatures, including the canonical fixtures. The dependency is
+  now bounded to `>=0.3.4,<1.0`. No other SDK depends on `pqcrypto`, and Go, TypeScript, Rust
+  and C were unaffected. Signed objects, canonical bytes, fixture contents and the verifier
+  algorithm are unchanged; this is a packaging repair rather than a protocol change. Anyone who
+  installed `1.0.0a16` between 2026-08-15 and this release should upgrade, or pin
+  `pqcrypto<1.0` alongside it.
+
 ### Changed
 
 - **Extension type namespaces:** newly defined extension constraint types now

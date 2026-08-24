@@ -24,7 +24,9 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=44.0",
-    "pqcrypto>=0.3.4",
+    # pqcrypto 1.0.0 (2026-08-15) changed ML-DSA-65 behaviour; every signature
+    # fails against it. Bounded until the break is understood upstream.
+    "pqcrypto>=0.3.4,<1.0",
 ]
 
 [project.optional-dependencies]

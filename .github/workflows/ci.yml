@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Every job here checks out and runs tests. None writes to the repository, opens
+# issues, or publishes anything, so the token gets read access to contents and
+# nothing else. Without this block the token inherits the repository default,
+# which may be write. Publishing lives in release.yml and grants its own scopes.
+permissions:
+  contents: read
+
 jobs:
   go:
     name: Go tests

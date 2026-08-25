@@ -535,11 +535,24 @@ tag_release() {
 REMAINING RELEASE-DAY STEPS (docs/RELEASES.md §4.2):
   11. Bump downstream claims — a PR in EACH of:
       - ratify-docs:            src/constants/protocol.ts + RELEASE_BUMP.md sweep
-      - identities-marketing:   lib/protocol-facts.ts + public/llms.txt
-      Also add this release's line to the RELEASES.md §3.2 ladder.
+      - ratify-marketing:       lib/protocol-facts.ts. Its check-facts script
+                                fails once the registry moves ahead, and the
+                                choice it forces is deliberate: re-review the
+                                claims and move PROTOCOL_VERSION,
+                                LATEST_PUBLISHED_ACKNOWLEDGED and FACTS_REVIEWED
+                                together, or move the acknowledgement alone to
+                                record a lag. The declared dependency must match
+                                the reviewed version, not the published one.
+      Also add this release's line to the RELEASES.md §3.2 ladder, and stamp the
+      CHANGELOG heading as '## <version> (unreleased)' BEFORE release-prepare —
+      that is the only marker it rewrites, and it does nothing silently if the
+      heading says anything else.
   12. Phase 4 — verify every registry actually serves the new version
       (npm, crates.io BOTH crates, PyPI, GitHub release assets).
-      A green publish job is not proof.
+      A green publish job is not proof. For PyPI, check
+      https://pypi.org/simple/ratify-protocol/ rather than the JSON API: the
+      JSON endpoint is cached and can still report the previous version for
+      some minutes after a successful upload.
 EOF
 }
 

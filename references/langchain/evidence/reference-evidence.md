@@ -19,7 +19,7 @@ pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0
 ```
 
 Zero tests were skipped or marked xfail. The gate rejected the repository's
-local Python SDK and used `ratify-protocol==1.0.0a16` from the disposable virtual
+local Python SDK and used `ratify-protocol==1.0.0a19` from the disposable virtual
 environment.
 
 ## Evidence covered

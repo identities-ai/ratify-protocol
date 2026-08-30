@@ -95,7 +95,7 @@ constraint.
 - `langchain==1.3.14`
 - `langchain-mcp-adapters==0.3.0`
 - `mcp==1.29.0`
-- `ratify-protocol==1.0.0a16`
+- `ratify-protocol==1.0.0a19`
 
 ## Limitations
 

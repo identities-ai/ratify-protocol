@@ -72,6 +72,90 @@ pub fn generate_hybrid_keypair() -> (HybridPublicKey, HybridPrivateKey) {
     )
 }
 
+/// Deterministic hybrid keypair from two 32-byte seeds (`docs/SDKS.md` §4).
+///
+/// `ed_seed` is the Ed25519 private-key seed. `ml_seed` is the ML-DSA-65
+/// keygen seed xi of FIPS 204 Algorithm 1, expanded exactly as
+/// `key_gen_internal` expands it: `fips204` draws xi as the first 32 bytes it
+/// takes from the supplied RNG, so an RNG that yields the seed once and then
+/// refuses reproduces seed-based keygen without reaching into crate internals.
+///
+/// Byte-identical to the Go reference `HybridKeypairFromSeeds`, which is what
+/// the cross-SDK fixtures are generated against.
+///
+/// Both seeds are key material: draw them from a CSPRNG and store them with the
+/// same protection you would give a private key. Reusing a seed reproduces the
+/// identity, which is the point, and also the risk.
+pub fn hybrid_keypair_from_seeds(
+    ed_seed: &[u8; 32],
+    ml_seed: &[u8; 32],
+) -> (HybridPublicKey, HybridPrivateKey) {
+    let ed_sk = SigningKey::from_bytes(ed_seed);
+    let ed_pk = ed_sk.verifying_key();
+
+    let mut rng = SeedOnceRng::new(ml_seed);
+    let (ml_pk, ml_sk) =
+        ml_dsa_65::try_keygen_with_rng(&mut rng).expect("ML-DSA-65 keygen from seed");
+
+    (
+        HybridPublicKey {
+            ed25519: ed_pk.to_bytes().to_vec(),
+            ml_dsa_65: ml_pk.into_bytes().to_vec(),
+        },
+        HybridPrivateKey {
+            ed25519: ed_seed.to_vec(),
+            ml_dsa_65: ml_sk.into_bytes().to_vec(),
+        },
+    )
+}
+
+/// An RNG that yields exactly one 32-byte seed and then fails.
+///
+/// FIPS 204 KeyGen consumes precisely 32 bytes of randomness as xi. Failing
+/// every later request is deliberate: if a future `fips204` release draws more
+/// than xi, this panics loudly at the call above rather than silently producing
+/// a keypair that no longer matches the other SDKs.
+struct SeedOnceRng {
+    seed: [u8; 32],
+    used: bool,
+}
+
+impl SeedOnceRng {
+    fn new(seed: &[u8; 32]) -> Self {
+        Self { seed: *seed, used: false }
+    }
+}
+
+impl rand_core::RngCore for SeedOnceRng {
+    fn next_u32(&mut self) -> u32 {
+        rand_core::impls::next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        rand_core::impls::next_u64_via_fill(self)
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.try_fill_bytes(dest).expect("SeedOnceRng exhausted")
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        if self.used || dest.len() != 32 {
+            // A code-based error rather than a boxed one: this crate builds for
+            // no_std, where rand_core::Error::new is unavailable.
+            return Err(rand_core::Error::from(
+                core::num::NonZeroU32::new(rand_core::Error::CUSTOM_START)
+                    .expect("CUSTOM_START is non-zero"),
+            ));
+        }
+        dest.copy_from_slice(&self.seed);
+        self.used = true;
+        Ok(())
+    }
+}
+
+impl rand_core::CryptoRng for SeedOnceRng {}
+
 /// Generate a fresh HumanRoot (public + private).
 ///
 /// Only available with the `std` feature (uses `SystemTime::now()` for

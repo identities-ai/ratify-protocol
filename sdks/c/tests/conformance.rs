@@ -19,6 +19,7 @@
 //! bundle-hash-from-JSON entry point those cross-SDK checks need).
 
 use ratify_c::{
+    ratify_challenge_sign_bytes_hex, ratify_delegation_sign_bytes_hex,
     ratify_error_free, ratify_string_free,
     ratify_verify_bundle_opts_v2, ratify_verify_result_free,
     ratify_verify_result_identity_status, ratify_verify_result_is_valid,
@@ -39,6 +40,7 @@ use ratify_c::{
 };
 use serde::Deserialize;
 use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
 use std::fs;
 use std::path::PathBuf;
 
@@ -105,6 +107,11 @@ struct Expected {
     // verify fixtures
     verify_result: Option<VerifyResult>,
     verify_options: Option<VerifyOpts>,
+    // Canonical signable bytes for the verify path. docs/SDKS.md §4 requires
+    // every SDK to assert both for every `Kind = verify` fixture; until the C
+    // ABI exposed the helpers, this suite could not.
+    delegation_sign_bytes_hex: Option<Vec<String>>,
+    challenge_sign_bytes_hex: Option<String>,
     // scope fixtures
     expanded_scopes: Option<Vec<String>>,
     // revocation fixtures
@@ -308,12 +315,128 @@ fn build_verifier_context(vc: &FixtureVerifierContext) -> BuiltContext {
 // Fixture runners
 // ---------------------------------------------------------------------------
 
+/// Assert the two canonical signable-byte requirements docs/SDKS.md §4 places
+/// on every `Kind = verify` fixture: the per-cert delegation signing bytes and
+/// the challenge signing bytes.
+/// Take ownership of an SDK error string, freeing it, for use in a message.
+unsafe fn take_err(err: &mut *mut c_char) -> String {
+    if err.is_null() { return "(no detail)".to_string(); }
+    let s = CStr::from_ptr(*err).to_string_lossy().into_owned();
+    ratify_error_free(*err);
+    *err = std::ptr::null_mut();
+    s
+}
+
+unsafe fn check_verify_sign_bytes(
+    fixture: &Fixture,
+    bundle_val: &serde_json::Value,
+    failures: &mut Vec<String>,
+) {
+    if let Some(want) = &fixture.expected.delegation_sign_bytes_hex {
+        let delegations = bundle_val
+            .get("delegations")
+            .and_then(|d| d.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        if delegations.len() != want.len() {
+            failures.push(format!(
+                "{}: chain length {} but {} expected delegation_sign_bytes_hex entries",
+                fixture.name, delegations.len(), want.len()
+            ));
+        } else {
+            for (i, cert) in delegations.iter().enumerate() {
+                let cert_json = match serde_json::to_string(cert) {
+                    Ok(j) => j,
+                    Err(e) => { failures.push(format!("{}: cert {i}: {e}", fixture.name)); continue; }
+                };
+                let c_cert = CString::new(cert_json).expect("cert json");
+                let mut err: *mut c_char = std::ptr::null_mut();
+                let got = ratify_delegation_sign_bytes_hex(c_cert.as_ptr(), &mut err);
+                if got.is_null() {
+                    failures.push(format!(
+                        "{}: cert {i}: delegation_sign_bytes_hex returned null: {}",
+                        fixture.name, take_err(&mut err)
+                    ));
+                    continue;
+                }
+                let got_s = CStr::from_ptr(got).to_string_lossy().into_owned();
+                ratify_string_free(got);
+                if got_s != want[i] {
+                    failures.push(format!(
+                        "{}: cert {i}: delegation sign bytes\n  got  {got_s}\n  want {}",
+                        fixture.name, want[i]
+                    ));
+                }
+            }
+        }
+    }
+
+    if let Some(want) = &fixture.expected.challenge_sign_bytes_hex {
+        let challenge_b64 = bundle_val.get("challenge").and_then(|c| c.as_str()).unwrap_or("");
+        let challenge_at = bundle_val.get("challenge_at").and_then(|c| c.as_i64()).unwrap_or(0);
+        let mut challenge = Vec::new();
+        if !base64_decode(challenge_b64, &mut challenge) {
+            failures.push(format!("{}: challenge is not valid base64", fixture.name));
+            return;
+        }
+
+        // Take the bindings from the BUNDLE, not from verify_options: these
+        // are the bytes the presenter signed. The negative fixtures exist
+        // precisely because the two differ, so reading the verifier's copy
+        // would assert the wrong preimage.
+        let field32 = |key: &str| -> Option<[u8; 32]> {
+            bundle_val.get(key).and_then(|v| v.as_str()).and_then(|b64| {
+                let mut dec = Vec::new();
+                if base64_decode(b64, &mut dec) && dec.len() == 32 {
+                    let mut arr = [0u8; 32]; arr.copy_from_slice(&dec); Some(arr)
+                } else { None }
+            })
+        };
+        let session_bytes = field32("session_context");
+        let stream_bytes = field32("stream_id");
+        let stream_seq = bundle_val.get("stream_seq").and_then(|v| v.as_i64()).unwrap_or(0);
+
+        let (sc_ptr, sc_len) = match &session_bytes {
+            Some(b) => (b.as_ptr(), 32usize),
+            None => (std::ptr::null(), 0usize),
+        };
+        let (sid_ptr, sid_len) = match &stream_bytes {
+            Some(b) => (b.as_ptr(), 32usize),
+            None => (std::ptr::null(), 0usize),
+        };
+
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let got = ratify_challenge_sign_bytes_hex(
+            challenge.as_ptr(), challenge.len(), challenge_at,
+            sc_ptr, sc_len, sid_ptr, sid_len, stream_seq, &mut err,
+        );
+        if got.is_null() {
+            failures.push(format!(
+                "{}: challenge_sign_bytes_hex returned null: {}",
+                fixture.name, take_err(&mut err)
+            ));
+            return;
+        }
+        let got_s = CStr::from_ptr(got).to_string_lossy().into_owned();
+        ratify_string_free(got);
+        if &got_s != want {
+            failures.push(format!(
+                "{}: challenge sign bytes\n  got  {got_s}\n  want {want}",
+                fixture.name
+            ));
+        }
+    }
+}
+
 unsafe fn run_verify_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
     let bundle_val = match &fixture.bundle { Some(b) => b, None => return false };
     let expected = match &fixture.expected.verify_result { Some(e) => e, None => return false };
 
     let bundle_json = serde_json::to_string(bundle_val)
         .unwrap_or_else(|e| panic!("re-serialise {}: {e}", fixture.name));
+
+    check_verify_sign_bytes(fixture, bundle_val, failures);
 
     let opts = fixture.expected.verify_options.as_ref();
     let scope = opts.map(|o| o.required_scope.as_str()).unwrap_or("");

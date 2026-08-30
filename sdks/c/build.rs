@@ -18,6 +18,11 @@ fn main() {
         .expect("cbindgen failed to generate ratify.h")
         .write_to_file(output);
 
-    println!("cargo:rerun-if-changed=src/lib.rs");
+    // Watch every source file, not just lib.rs. Most of the ABI lives in
+    // advanced.rs, and listing only lib.rs meant a change confined to that file
+    // regenerated nothing: the committed header silently kept its previous
+    // contents, so a newly added symbol was compiled into the library but never
+    // declared for callers, and a removed one stayed declared.
+    println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=cbindgen.toml");
 }

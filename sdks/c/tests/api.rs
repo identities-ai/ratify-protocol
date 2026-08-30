@@ -13,6 +13,10 @@
 //! - ratify_string_free / ratify_error_free with NULL (must not crash)
 
 use ratify_c::{
+    ratify_derive_id, ratify_human_root_from_seeds, ratify_human_root_pub_key_json,
+    ratify_agent_sign_challenge, ratify_verify_challenge_signature,
+    ratify_generate_hybrid_keypair, ratify_agent_pub_key_json,
+    RatifyHumanRoot, RatifyAgent,
     ratify_session_token_from_json, ratify_session_token_free,
     ratify_agent_free, ratify_agent_generate, ratify_agent_id,
     ratify_challenge_generate, ratify_delegation_cert_free, ratify_delegation_cert_to_json,
@@ -1184,6 +1188,203 @@ fn delegation_cert_to_json_bounds_integer_fields() {
         ratify_delegation_cert_free(cert2);
 
         ratify_agent_free(agent);
+        ratify_human_root_free(root);
+    }
+}
+
+/// Deterministic identity reconstruction (docs/SDKS.md §4
+/// `HybridKeypairFromSeeds`).
+///
+/// This is what lets a C issuer persist an identity: store the two seeds, and
+/// rebuild the same root after a restart. Before this entry point existed, a C
+/// issuer could mint an identity and serialise its public half but never load
+/// it back, so any verifier pinning its id broke on the next restart.
+#[test]
+fn human_root_from_seeds_is_deterministic_and_matches_derive_id() {
+    unsafe {
+        let ed_seed = [7u8; 32];
+        let ml_seed = [9u8; 32];
+
+        let mut first: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut first, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk, "from_seeds failed");
+        assert!(!first.is_null());
+
+        let mut second: *mut RatifyHumanRoot = std::ptr::null_mut();
+        ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut second, &mut err,
+        );
+
+        let id1 = ratify_human_root_id(first);
+        let id2 = ratify_human_root_id(second);
+        let s1 = CStr::from_ptr(id1).to_string_lossy().into_owned();
+        let s2 = CStr::from_ptr(id2).to_string_lossy().into_owned();
+        assert_eq!(s1, s2, "same seeds must rebuild the same identity");
+        assert_eq!(s1.len(), 32, "id is 32 lowercase hex characters");
+
+        // The id must equal DeriveID over the root's own public key, which is
+        // what a pinning verifier computes independently.
+        let pub_json = ratify_human_root_pub_key_json(first, &mut err);
+        assert!(!pub_json.is_null());
+        let derived = ratify_derive_id(pub_json, &mut err);
+        assert!(!derived.is_null(), "derive_id failed");
+        assert_eq!(CStr::from_ptr(derived).to_string_lossy(), s1);
+
+        ratify_string_free(derived);
+        ratify_string_free(pub_json);
+        ratify_string_free(id1);
+        ratify_string_free(id2);
+        ratify_human_root_free(first);
+        ratify_human_root_free(second);
+    }
+}
+
+/// The deterministic keygen vector every SDK must reproduce, asserted here so
+/// the C ABI is pinned to the same output as Go, Rust, and TypeScript rather
+/// than merely being self-consistent.
+#[test]
+fn human_root_from_seeds_matches_the_canonical_vector() {
+    unsafe {
+        let mut ed_seed = [0u8; 32];
+        let mut ml_seed = [0u8; 32];
+        for i in 0..32 {
+            ed_seed[i] = i as u8;
+            ml_seed[i] = 0xA0u8.wrapping_add(i as u8);
+        }
+
+        let mut root: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut root, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+
+        let id = ratify_human_root_id(root);
+        assert_eq!(
+            CStr::from_ptr(id).to_string_lossy(),
+            "3823136b5a5fc4c755b22704474172c0",
+            "derived identity must match the canonical vector"
+        );
+
+        // The public key itself, not only the digest over it. HybridPublicKey
+        // serialises its components as base64 (types.rs), so this is the
+        // canonical ed25519 key in the encoding the wire format uses.
+        let pub_json = ratify_human_root_pub_key_json(root, &mut err);
+        let json = CStr::from_ptr(pub_json).to_string_lossy().into_owned();
+        assert!(
+            json.contains("A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="),
+            "ed25519 public key must match the canonical vector, got {json}"
+        );
+
+        ratify_string_free(pub_json);
+        ratify_string_free(id);
+        ratify_human_root_free(root);
+    }
+}
+
+#[test]
+fn from_seeds_rejects_wrong_seed_lengths() {
+    unsafe {
+        let short = [0u8; 16];
+        let ok = [0u8; 32];
+        let mut out: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            short.as_ptr(), 16, ok.as_ptr(), 32, 0, &mut out, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyErrBadArgument);
+        assert!(out.is_null());
+        if !err.is_null() { ratify_error_free(err); }
+    }
+}
+
+/// The challenge signing and verification primitives round-trip, and the
+/// optional bindings are actually bound: a signature made under one session
+/// context must not verify under another.
+#[test]
+fn challenge_sign_and_verify_round_trip_with_bindings() {
+    unsafe {
+        let mut agent: *mut RatifyAgent = std::ptr::null_mut();
+        let name = CString::new("test-agent").unwrap();
+        let atype = CString::new("test").unwrap();
+        assert_eq!(
+            ratify_agent_generate(name.as_ptr(), atype.as_ptr(), &mut agent),
+            RatifyStatus::RatifyOk
+        );
+
+        let challenge = [42u8; 32];
+        let ts: i64 = 1_800_000_000;
+        let sc_a = [1u8; 32];
+        let sc_b = [2u8; 32];
+        let mut err: *mut c_char = std::ptr::null_mut();
+
+        // Sign bound to session context A.
+        let sig = ratify_agent_sign_challenge(
+            agent, challenge.as_ptr(), 32, ts,
+            sc_a.as_ptr(), 32, std::ptr::null(), 0, 0, &mut err,
+        );
+        assert!(!sig.is_null(), "sign_challenge returned null");
+
+        let pub_json = ratify_agent_pub_key_json(agent, &mut err);
+        assert!(!pub_json.is_null());
+
+        // Verifies under A.
+        let mut valid: c_int = -1;
+        let st = ratify_verify_challenge_signature(
+            challenge.as_ptr(), 32, ts, sc_a.as_ptr(), 32,
+            std::ptr::null(), 0, 0, sig, pub_json, &mut valid, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+        assert_eq!(valid, 1, "signature should verify under the context it was signed with");
+
+        // Does not verify under B. If this passed, the binding would be
+        // decorative and session-bound challenges would carry no guarantee.
+        let mut valid_b: c_int = -1;
+        ratify_verify_challenge_signature(
+            challenge.as_ptr(), 32, ts, sc_b.as_ptr(), 32,
+            std::ptr::null(), 0, 0, sig, pub_json, &mut valid_b, &mut err,
+        );
+        assert_eq!(valid_b, 0, "signature must not verify under a different session context");
+
+        ratify_string_free(sig);
+        ratify_string_free(pub_json);
+        ratify_agent_free(agent);
+    }
+}
+
+/// A randomly generated keypair must be reproducible from the seeds returned
+/// alongside it, which is what makes seeds a usable private-key representation.
+#[test]
+fn generate_hybrid_keypair_returns_seeds_that_reproduce_it() {
+    unsafe {
+        let mut pub_json: *mut c_char = std::ptr::null_mut();
+        let mut ed = [0u8; 32];
+        let mut ml = [0u8; 32];
+        let mut err: *mut c_char = std::ptr::null_mut();
+
+        let st = ratify_generate_hybrid_keypair(
+            &mut pub_json, ed.as_mut_ptr(), ml.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+        assert!(!pub_json.is_null());
+
+        let want_id = ratify_derive_id(pub_json, &mut err);
+        assert!(!want_id.is_null());
+        let want = CStr::from_ptr(want_id).to_string_lossy().into_owned();
+
+        let mut root: *mut RatifyHumanRoot = std::ptr::null_mut();
+        ratify_human_root_from_seeds(
+            ed.as_ptr(), 32, ml.as_ptr(), 32, 0, &mut root, &mut err,
+        );
+        let got_id = ratify_human_root_id(root);
+        assert_eq!(CStr::from_ptr(got_id).to_string_lossy(), want);
+
+        ratify_string_free(got_id);
+        ratify_string_free(want_id);
+        ratify_string_free(pub_json);
         ratify_human_root_free(root);
     }
 }

@@ -111,7 +111,7 @@ For every fixture in `testvectors/v1/*.json`:
 
 ### Minimum SDK surface
 
-Every implementation MUST export these primitives with equivalent semantics:
+Every implementation MUST export these primitives with equivalent semantics, with one intentional exception recorded under Documented exceptions below (Python does not implement deterministic seed-based key generation):
 
 | Go name | What it does |
 |---|---|
@@ -161,6 +161,46 @@ Every implementation MUST export these primitives with equivalent semantics:
 | `Verify(bundle, options) -> VerifyResult` | The full verifier algorithm (§10 of SPEC). |
 
 Naming conventions and capitalization follow the idioms of each language (`camelCase` for JS/Swift, `snake_case` for Python, `PascalCase` for Go). Semantics MUST be identical.
+
+### Documented exceptions
+
+The table above is the contract. Where an implementation cannot meet an entry,
+the exception is recorded here rather than left implicit, and it is the only
+place an SDK may fall short without being a defect.
+
+**Python: `hybrid_keypair_from_seeds` raises `NotImplementedError`.** The
+`pqcrypto` ML-DSA-65 binding calls PQClean's `crypto_sign_keypair`, which reads
+the OS RNG and ignores a caller-supplied seed, so Python cannot honour the
+deterministic half of the entry. It refuses rather than returning a keypair,
+because returning one would silently break the single property the function
+exists for: the same seeds would yield a different identity on every call, with
+no error at the call site. Derive or restore identities from seeds with the Go,
+Rust, TypeScript, or C SDK.
+
+Python is therefore intentionally non-equivalent for this one entry. It is not
+a defect and it is not expected to be fixed in the pure-Python distribution:
+closing it requires a native extension, which would make the package
+platform-specific. Every other entry in the table is implemented in Python,
+and the deterministic keygen vector asserted by the Go, Rust, TypeScript, and
+C suites has no Python counterpart for the same reason.
+
+**C: some entries have a different shape, none are absent.** The C ABI has no
+value types, so a few entries are expressed through handles or through the
+lower-level primitive the contract is built on:
+
+- `GenerateHybridKeypair` returns the public key as JSON plus the two 32-byte
+  seeds that reproduce it. The protocol specifies no private-key serialisation
+  format, so seeds are the C SDK's unit of private key material; feed them back
+  through `ratify_human_root_from_seeds` or `ratify_agent_from_seeds`.
+- `SignChallenge` is `ratify_agent_sign_challenge`, taking an agent handle
+  rather than a bare private key, because that is where the C SDK holds key
+  material.
+- The three `ChallengeSignBytes*` entries and the two `SignChallenge*` entries
+  are each one function with optional session and stream arguments, which this
+  section permits where idiomatic.
+- `OperationContextBytes` and `SessionContextBytes` take the same explicit
+  parameters as their hash counterparts, since the context types are not
+  deserialisable from JSON across the ABI.
 
 ### Cryptography library recommendations
 

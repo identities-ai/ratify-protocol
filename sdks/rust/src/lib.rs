@@ -41,7 +41,7 @@ pub use challenge_store::MemoryChallengeStore;
 pub use crypto::{
     chain_hash, challenge_sign_bytes, challenge_sign_bytes_with_session_context,
     challenge_sign_bytes_with_stream, delegation_sign_bytes, derive_id, generate_challenge,
-    generate_hybrid_keypair, issue_delegation, issue_key_rotation_statement, issue_revocation_list,
+    generate_hybrid_keypair, hybrid_keypair_from_seeds, issue_delegation, issue_key_rotation_statement, issue_revocation_list,
     issue_revocation_push, issue_session_token, issue_witness_entry, key_rotation_sign_bytes,
     revocation_push_sign_bytes, revocation_sign_bytes, session_token_sign_bytes, sign_both,
     sign_challenge, sign_challenge_with_session_context, sign_challenge_with_stream,

@@ -6,6 +6,41 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.19 (unreleased)
+
+A security release for the TypeScript SDK. No canonical bytes, fixture
+contents, wire format or verifier behavior change, and the protocol version
+remains 1.
+
+### Fixed
+
+- **TypeScript: quadratic backtracking when stripping base64 padding.** The
+  fallback decoder in `sdks/typescript/src/canonical.ts` stripped trailing `=`
+  with the regular expression `/=+$/`. Against a run of `n` padding characters
+  followed by any non-terminal character, that expression backtracks
+  polynomially: measured at 52 ms for 10 000 characters, 847 ms for 40 000 and
+  3.4 s for 80 000, which extrapolates to several seconds of blocked event loop
+  at the 128 KiB `MAX_PROOF_BUNDLE_BYTES` ceiling. The decoder is exported and
+  its input is not always size-checked before the call, so one crafted bundle
+  could stall a verifier.
+
+  The strip now scans backwards, which is linear and measured below a
+  millisecond at every size above.
+
+  This affects only the path taken where `Buffer` is undefined: browsers, Deno
+  without node compatibility, and edge runtimes. Node.js uses `Buffer` and was
+  never exposed. Decoded output is unchanged and the canonical fixtures still
+  pass byte-identically.
+
+### Changed
+
+- **CI workflow token scoped to read-only.** `.github/workflows/ci.yml` declared
+  no `permissions` block, so its token inherited the repository default, which
+  may grant write. Every job in that workflow only checks out and runs tests.
+  Publishing lives in `release.yml`, which grants its own scopes.
+
+---
+
 ## v1.0.0-alpha.18 (2026-08-30)
 
 An SDK surface release. No canonical bytes, fixture contents, wire format or

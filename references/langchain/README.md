@@ -9,6 +9,54 @@ This reference answers one narrow question:
 > receiver independently verify who authorized that agent for the exact action
 > and which bounds still apply?
 
+## Why would a developer or enterprise need this?
+
+LangChain and LangSmith already provide real controls: which agents run, which
+tools they may select, which credentials they carry, and who may reach the Agent
+Server. Ratify is complementary. It gives the system that carries the
+consequence evidence of the narrower mandate behind one action.
+
+| Question | LangChain / LangSmith controls | Ratify authority |
+| --- | --- | --- |
+| Can this agent select this tool? | Yes | Not its purpose |
+| Does the agent hold a usable credential? | Yes | Not its purpose |
+| Did a recognized principal authorize this exact action? | Not expressed by tool access alone | Yes |
+| Is the authority limited to this region, size, and count? | Application logic may check | Signed into the delegation and checked by the receiver |
+| Can a different organization verify the mandate? | Depends on shared platform and credentials | Yes, from portable proof and configured trust roots |
+| Was the proof changed, revoked, expired, or replayed? | Separate concern | Verified before the handler runs |
+
+This matters when a LangChain agent holds credentials broader than the current
+task, when an MCP or SaaS provider receives calls from agents it did not issue,
+when agents cross an organizational boundary, or when an audit has to answer who
+authorized what, for which agent, resource, and time window.
+
+```mermaid
+flowchart LR
+    A[Agent may select the provisioning tool] --> B{What may it provision now?}
+    C[Principal signs a bounded mandate] --> D[Ratify proof]
+    B --> E[Independent receiver]
+    D --> E
+    E -->|"one node, allowed region, fresh, trusted"| F["ALLOW<br/>handler invoked once"]
+    E -->|"excess count, wrong region, expired,<br/>revoked, replayed, or untrusted"| G["DENY<br/>handler untouched"]
+```
+
+## Who implements what
+
+Four roles. **LangChain implements nothing**: the reference uses the public
+`MultiServerMCPClient` tool-interceptor API and the standard `create_agent`
+loop, so no change to LangChain, LangGraph, or LangSmith is required.
+
+| Role | Who this usually is | What they do | What they build |
+| --- | --- | --- | --- |
+| **Principal** | The organization accountable for the resource | Signs a bounded delegation naming scope, region, count, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides the bounds |
+| **Agent operator** | The team running the LangChain agent | Adds the interceptor and points it at the receiver | No protocol code, but real configuration: receiver address, trusted principal, and which tools are protected |
+| **Receiver operator** | Whoever owns the consequence: the provisioning API, the MCP server | Issues challenges, verifies the proof, guards the handler | The verification path. Here `authority_reference/receiver.py` plus the HTTP boundary in `mcp_server.py`: the verify call is a small part, and the rest is challenge issuance, header bounds, trust-root comparison, and keeping the handler unreachable except through the allow branch |
+| **LangChain / LangGraph** | The agent framework | Selects and calls the tool as it already does | **Nothing** |
+
+The asymmetry is the point. The party carrying the risk is the party that
+checks, and it can check without trusting the agent, the model, the prompt, or
+the framework that routed the call.
+
 ```text
 ALLOW -> protected tool invoked once
 DENY  -> protected tool invocation count does not change
@@ -67,7 +115,7 @@ credentials. MCP transports the tool call. Ratify adds portable evidence of the
 principal's bounded authority for the exact action. Receiver policy still makes
 the final execution decision.
 
-## What is actually tested
+## What the reference proves
 
 | Boundary case | Expected effect |
 |---|---|
@@ -97,6 +145,32 @@ constraint.
 - `mcp==1.29.0`
 - `ratify-protocol==1.0.0a19`
 
+## Which path should I use?
+
+**Use this open reference** when you want to read every line of the decision
+path, run it with no account, and adapt the receiver to your own service. It is
+Apache-2.0 and has no runtime dependency on any hosted Ratify service.
+
+**Register interest in Ratify Verify** when you would rather not operate trust
+distribution, revocation freshness, challenge storage, and audit retention
+yourself. Those are the deployment concerns listed under Limitations below, and
+they are the parts that turn a working reference into a production control.
+
+Both verify the same proofs. The protocol does not change between them.
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| `authority_reference/langchain_agent.py` | The agent and the MCP tool interceptor that carries the proof |
+| `authority_reference/mcp_server.py` | HTTP boundary: transport credential, header bounds, duplicate rejection |
+| `authority_reference/receiver.py` | Verification and the protected handler boundary |
+| `authority_reference/authority.py` | Reference identities and the bounded delegation |
+| `authority_reference/deployment_config.py` | Trust roots and expected agent, pinned out of band |
+| `tests/test_reference.py` | The 24 deterministic boundary cases |
+| `evidence/reference-evidence.md` | Executed evidence for the gate |
+| `DESIGN.md` | Architecture and threat-boundary rationale |
+
 ## Limitations
 
 - In-memory receiver state fails closed on restart.
@@ -105,7 +179,7 @@ constraint.
 - Trust distribution, durable revocation, shared challenge storage, receipts,
   rate limits, key custody, and audit retention remain deployment concerns.
 - Proof headers are an independent integration profile, not an MCP or LangChain
-  standard. The two-certificate alpha16 presentation is about 28 KB. This
+  standard. The two-certificate presentation is about 28 KB. This
   reference rejects presentations over 64 KiB, but many production proxies
   default to a much smaller per-header limit. Do not deploy this carrier without
   aligning every hop's limits and log redaction. A standardized MCP metadata or

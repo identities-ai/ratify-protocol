@@ -14,7 +14,9 @@
 
 use ratify_c::{
     ratify_derive_id, ratify_human_root_from_seeds, ratify_human_root_pub_key_json,
-    RatifyHumanRoot,
+    ratify_agent_sign_challenge, ratify_verify_challenge_signature,
+    ratify_generate_hybrid_keypair, ratify_agent_pub_key_json,
+    RatifyHumanRoot, RatifyAgent,
     ratify_session_token_from_json, ratify_session_token_free,
     ratify_agent_free, ratify_agent_generate, ratify_agent_id,
     ratify_challenge_generate, ratify_delegation_cert_free, ratify_delegation_cert_to_json,
@@ -1253,5 +1255,93 @@ fn from_seeds_rejects_wrong_seed_lengths() {
         assert_eq!(st, RatifyStatus::RatifyErrBadArgument);
         assert!(out.is_null());
         if !err.is_null() { ratify_error_free(err); }
+    }
+}
+
+/// The challenge signing and verification primitives round-trip, and the
+/// optional bindings are actually bound: a signature made under one session
+/// context must not verify under another.
+#[test]
+fn challenge_sign_and_verify_round_trip_with_bindings() {
+    unsafe {
+        let mut agent: *mut RatifyAgent = std::ptr::null_mut();
+        let name = CString::new("test-agent").unwrap();
+        let atype = CString::new("test").unwrap();
+        assert_eq!(
+            ratify_agent_generate(name.as_ptr(), atype.as_ptr(), &mut agent),
+            RatifyStatus::RatifyOk
+        );
+
+        let challenge = [42u8; 32];
+        let ts: i64 = 1_800_000_000;
+        let sc_a = [1u8; 32];
+        let sc_b = [2u8; 32];
+        let mut err: *mut c_char = std::ptr::null_mut();
+
+        // Sign bound to session context A.
+        let sig = ratify_agent_sign_challenge(
+            agent, challenge.as_ptr(), 32, ts,
+            sc_a.as_ptr(), 32, std::ptr::null(), 0, 0, &mut err,
+        );
+        assert!(!sig.is_null(), "sign_challenge returned null");
+
+        let pub_json = ratify_agent_pub_key_json(agent, &mut err);
+        assert!(!pub_json.is_null());
+
+        // Verifies under A.
+        let mut valid: c_int = -1;
+        let st = ratify_verify_challenge_signature(
+            challenge.as_ptr(), 32, ts, sc_a.as_ptr(), 32,
+            std::ptr::null(), 0, 0, sig, pub_json, &mut valid, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+        assert_eq!(valid, 1, "signature should verify under the context it was signed with");
+
+        // Does not verify under B. If this passed, the binding would be
+        // decorative and session-bound challenges would carry no guarantee.
+        let mut valid_b: c_int = -1;
+        ratify_verify_challenge_signature(
+            challenge.as_ptr(), 32, ts, sc_b.as_ptr(), 32,
+            std::ptr::null(), 0, 0, sig, pub_json, &mut valid_b, &mut err,
+        );
+        assert_eq!(valid_b, 0, "signature must not verify under a different session context");
+
+        ratify_string_free(sig);
+        ratify_string_free(pub_json);
+        ratify_agent_free(agent);
+    }
+}
+
+/// A randomly generated keypair must be reproducible from the seeds returned
+/// alongside it, which is what makes seeds a usable private-key representation.
+#[test]
+fn generate_hybrid_keypair_returns_seeds_that_reproduce_it() {
+    unsafe {
+        let mut pub_json: *mut c_char = std::ptr::null_mut();
+        let mut ed = [0u8; 32];
+        let mut ml = [0u8; 32];
+        let mut err: *mut c_char = std::ptr::null_mut();
+
+        let st = ratify_generate_hybrid_keypair(
+            &mut pub_json, ed.as_mut_ptr(), ml.as_mut_ptr(), &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+        assert!(!pub_json.is_null());
+
+        let want_id = ratify_derive_id(pub_json, &mut err);
+        assert!(!want_id.is_null());
+        let want = CStr::from_ptr(want_id).to_string_lossy().into_owned();
+
+        let mut root: *mut RatifyHumanRoot = std::ptr::null_mut();
+        ratify_human_root_from_seeds(
+            ed.as_ptr(), 32, ml.as_ptr(), 32, 0, &mut root, &mut err,
+        );
+        let got_id = ratify_human_root_id(root);
+        assert_eq!(CStr::from_ptr(got_id).to_string_lossy(), want);
+
+        ratify_string_free(got_id);
+        ratify_string_free(want_id);
+        ratify_string_free(pub_json);
+        ratify_human_root_free(root);
     }
 }

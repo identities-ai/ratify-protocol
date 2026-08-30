@@ -16,6 +16,16 @@ import uvicorn
 from .receiver import InfrastructureReceiver, OperationRequest
 
 
+_TRANSPORT_HEADER = b"x-ratify-transport-token"
+
+
+def _unique_header(headers: list[tuple[bytes, bytes]], name: bytes) -> bytes | None:
+    values = [value for key, value in headers if key.lower() == name]
+    if len(values) > 1:
+        raise ValueError(f"duplicate {name.decode()} header")
+    return values[0] if values else None
+
+
 def load_receiver(path: str) -> tuple[InfrastructureReceiver, str, str]:
     config = json.loads(Path(path).read_text(encoding="utf-8"))
     receiver = InfrastructureReceiver(
@@ -37,9 +47,17 @@ class TransportTokenBoundary:
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
-            headers = dict(scope.get("headers", []))
-            supplied = headers.get(b"x-ratify-transport-token", b"")
-            if not hmac.compare_digest(supplied, self._token):
+            try:
+                supplied = _unique_header(scope.get("headers", []), _TRANSPORT_HEADER)
+            except ValueError:
+                await send({
+                    "type": "http.response.start",
+                    "status": 400,
+                    "headers": [(b"content-type", b"text/plain")],
+                })
+                await send({"type": "http.response.body", "body": b"Ambiguous security header"})
+                return
+            if not hmac.compare_digest(supplied or b"", self._token):
                 await send({
                     "type": "http.response.start",
                     "status": 401,

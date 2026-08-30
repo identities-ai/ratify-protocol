@@ -16,6 +16,31 @@ ALLOW -> tool invoked once
 DENY  -> tool invocation count does not change
 ```
 
+Identity answers **which workload connected**. ADK answers **how the agent
+selected and called a tool**. Ratify answers a different question: **which
+principal authorized this agent to perform this exact operation, on this
+resource, within these signed limits?** The receiver can verify that evidence
+without sharing the sender's API key or calling the sender during the decision.
+
+```mermaid
+sequenceDiagram
+    participant P as Principal
+    participant A as Google ADK agent
+    participant R as Independent MCP receiver
+    participant T as Protected tool
+    P->>A: Signed, bounded delegation
+    A->>R: Exact operation
+    R-->>A: Single-use operation-bound challenge
+    A->>R: Challenge response + delegation proof
+    R->>R: Verify root, agent, scope, resource,<br/>limit, expiry, revocation, freshness
+    alt proof and receiver policy allow
+        R->>T: Execute once
+        T-->>A: ALLOW
+    else anything fails
+        R-->>A: DENY; tool remains untouched
+    end
+```
+
 The model may request more authority. It cannot grant that authority to
 itself.
 
@@ -31,7 +56,7 @@ From the Ratify repository root:
 ./scripts/google-adk-reference-check.sh
 ```
 
-The script creates a disposable demo virtual environment, installs the exact
+The script creates an isolated demo virtual environment, installs the exact
 published packages in `requirements.txt`, refuses to run if Ratify resolves to
 this repository's local Python SDK, runs the deterministic adversarial suite,
 and then runs the three-case demonstration.
@@ -50,6 +75,8 @@ function-response delivery. The authorization result cannot depend on model
 judgment.
 The recorded run is in
 [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
+The gate requires exactly 33 passing tests and fails if any test is skipped,
+xfail, missing, or unexpectedly added.
 
 ## What the reference implements
 
@@ -149,6 +176,7 @@ The suite encodes why the boundary matters:
 | Different agent answers the challenge | `agent_binding_failed` | Not invoked |
 | Valid chain under an untrusted root | `untrusted_root` | Not invoked |
 | Non-integral, zero, negative, boolean, or excessive node count | Input rejected | Not invoked |
+| Duplicate transport-authentication headers | HTTP `400` before MCP dispatch | Not invoked |
 
 ## Optional live Gemini path
 

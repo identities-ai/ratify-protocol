@@ -44,6 +44,7 @@ from authority_reference import (
 )
 from authority_reference.adk_mcp import _result_object
 from authority_reference.deployment_config import write_configs
+from authority_reference.mcp_server import TransportTokenBoundary
 
 
 def setup_reference(**authority_options):
@@ -718,3 +719,30 @@ def test_both_secret_bearing_configs_are_created_mode_0600():
         write_configs(authority, receiver_path, presenter_path)
         assert receiver_path.stat().st_mode & 0o777 == 0o600
         assert presenter_path.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("values", [
+    [b"secret", b"secret"],
+    [b"wrong", b"secret"],
+])
+def test_duplicate_transport_tokens_fail_before_mcp(values):
+    async def exercise():
+        reached = False
+
+        async def app(scope, receive, send):
+            nonlocal reached
+            reached = True
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        headers = [(b"x-ratify-transport-token", value) for value in values]
+        await TransportTokenBoundary(app, "secret")(
+            {"type": "http", "headers": headers}, lambda: None, send
+        )
+        assert sent[0]["status"] == 400
+        assert reached is False
+
+    asyncio.run(exercise())

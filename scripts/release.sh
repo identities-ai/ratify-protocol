@@ -169,6 +169,32 @@ c_toml = re.sub(
 )
 write("sdks/c/Cargo.toml", c_toml)
 
+# Python native extra: its crate version and the exact-version pin the Python
+# SDK uses to depend on it. The pin must move with the SDK version or
+# `pip install 'ratify-protocol[native]'` resolves to nothing and the extra
+# silently becomes uninstallable.
+native_toml = read("sdks/python-native/Cargo.toml")
+native_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', native_toml, count=1, flags=re.M)
+write("sdks/python-native/Cargo.toml", native_toml)
+
+native_lock_path = root / "sdks/python-native/Cargo.lock"
+if native_lock_path.exists():
+    native_lock = read("sdks/python-native/Cargo.lock")
+    for pkg in ("ratify-protocol-native", "ratify-protocol"):
+        native_lock = re.sub(
+            rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
+            rf'\g<1>{npm_version}\2',
+            native_lock,
+        )
+    write("sdks/python-native/Cargo.lock", native_lock)
+
+pyproject_pinned = re.sub(
+    r'("ratify-protocol-native==)[^"]+(")',
+    rf'\g<1>{py_version}\2',
+    read("sdks/python/pyproject.toml"),
+)
+write("sdks/python/pyproject.toml", pyproject_pinned)
+
 c_lock = read("sdks/c/Cargo.lock")
 for pkg in ("ratify-c", "ratify-protocol"):
     c_lock = re.sub(

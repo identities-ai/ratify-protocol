@@ -28,6 +28,26 @@ Company B executes the refund and absorbs the loss. **The party carrying the ris
 
 That inversion is what this reference addresses. The principal's limits are signed, they travel with the request, and the receiving service verifies them locally before acting. A misconfiguration or prompt injection inside Company A stops being Company B's liability.
 
+```mermaid
+sequenceDiagram
+    participant P as Company A principal
+    participant A as NOOA agent
+    participant O as OpenShell
+    participant R as Company B receiver
+    participant T as Refund service
+    P->>A: Signed refund authority<br/>≤ $100, named order, expires
+    A->>O: MCP refund request + proof
+    O->>O: Enforce destination, method, path, tool
+    O->>R: Admitted request
+    R->>R: Verify principal, agent, action,<br/>resource, amount, expiry, revocation
+    alt proof and receiver policy allow
+        R->>T: Execute refund once
+        T-->>A: Signed decision receipt
+    else any check fails
+        R-->>A: DENY; no refund
+    end
+```
+
 ## Where it fits
 
 NVIDIA's open stack already answers most of the questions worth asking about an agent. This reference addresses one that sits alongside them.
@@ -142,7 +162,7 @@ One command from a clean checkout brings the gateway up on dynamic ports from im
 
 `log_canaries` is a separate, non-adjudicated pass: it re-exercises cases from the groups above so the log audit has each shape of traffic to search against. The gate is the canary search, not a per-case verdict.
 
-**Stability.** All seven groups passed 64/64 gates in one full OpenShell v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a16`. The earlier v0.0.96 campaign also passed twice sequentially and twice concurrently. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the version-separated run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
+**Stability.** All seven groups passed 64/64 gates in one full OpenShell v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a16`. That live run has not been repeated since the pins moved to `1.0.0a19`; the hermetic suite has, and the sandbox lock still resolves `pqcrypto==0.4.0`, which is the dependency the move was made for. The earlier v0.0.96 campaign also passed twice sequentially and twice concurrently. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the version-separated run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
 
 **How a case is judged.** Each case declares its expected outcome (`authorize`, `deny_at_openshell`, `admit_as:<tool>`, or `deny_at_ratify:<status>`) and every boundary delta it may produce. The runner takes a snapshot of the receiver's counters immediately before and immediately after that case, from a loopback control endpoint the sandbox cannot reach, and compares. A missing case, a missing snapshot, a stale sequence number, a partial result, or an event the deltas do not account for is a **failure**, never a skip. No gate can pass because a record merely exists: `test_adjudicator.py` feeds the adjudicator evidence of each violation in turn and asserts it says FAIL.
 
@@ -164,8 +184,8 @@ One command from a clean checkout brings the gateway up on dynamic ports from im
 | `openshell_driver.py` | Orchestration: bounded external calls, per-case snapshots, the artifact. |
 | `run-openshell-profile.sh` | Environment setup and teardown around the driver. |
 | `test_verification.py` | 54 hermetic receiver-security tests. No NOOA, no LLM. |
-| `test_mcp_transport.py` | 34 hermetic MCP transport and proof-carriage tests. |
-| `test_adjudicator.py` | 37 tests that the adjudicator cannot be fooled. |
+| `test_mcp_transport.py` | 39 hermetic MCP transport and proof-carriage cases. |
+| `test_adjudicator.py` | 84 cases proving the adjudicator fails each incomplete or inconsistent evidence shape. |
 | `test_nooa_presentation.py` | 4 tests against released NOOA. |
 
 ## The NOOA integration seam
@@ -207,7 +227,7 @@ A reference that overstates itself is worse than no reference, so the limits are
 
 ## Environment
 
-Requires Ratify Protocol v1.0.0-alpha.16, published and installed from PyPI: all 181 tests pass with `nooa==0.0.8` on Python 3.12 via `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository. The live profile passes 64/64, twice sequentially and twice concurrently, against the same published package. The dependency is real rather than nominal: the resource-bound scenario uses alpha.16's `resource_path` constraint, and those tests fail on alpha.15 because the constraint type does not exist there. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
+Requires Ratify Protocol v1.0.0-alpha.19, published and installed from PyPI: all 181 tests pass with `nooa==0.0.8` on Python 3.12 via `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository. The live profile passed 64/64 once on OpenShell v0.0.102; the earlier v0.0.96 stability campaign passed twice sequentially and twice concurrently. The dependency is real rather than nominal: the resource-bound scenario uses alpha.16's `resource_path` constraint, and those tests fail on alpha.15 because the constraint type does not exist there. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
 
 ## Beyond this reference
 

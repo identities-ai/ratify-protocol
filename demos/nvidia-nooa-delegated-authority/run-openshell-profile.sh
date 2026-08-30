@@ -234,7 +234,7 @@ LOCK="$HERE/sandbox-requirements.lock"
 # sandbox-requirements.in, run ./stage-lock.sh, then
 #   RATIFY_SDK=published ./run-openshell-profile.sh
 RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a16}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a19}"
 case "$RATIFY_SDK" in
   local)
       SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro")

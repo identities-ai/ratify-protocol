@@ -66,7 +66,7 @@ echo "==> venv ($("$PY" -V))"
 # The reference needs alpha.16's resource_path constraint, so a published run
 # cannot succeed against alpha.15.
 RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a16}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a19}"
 case "$RATIFY_SDK" in
   local)
       "$VENV/bin/pip" install --quiet -e ./sdks/python ;;

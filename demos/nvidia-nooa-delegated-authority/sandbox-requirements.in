@@ -21,6 +21,6 @@ uvicorn==0.52.1
 # ratify_protocol.__version__ == "1.0.0a16" from site-packages, not from a source
 # tree. Its own runtime requirements are listed below so they are locked rather
 # than resolved at build time.
-ratify-protocol==1.0.0a16
+ratify-protocol==1.0.0a19
 cryptography>=44.0
 pqcrypto>=0.3.4

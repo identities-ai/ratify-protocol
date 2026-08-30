@@ -178,7 +178,7 @@ go test ./...
 Or install as a module in your own project:
 
 ```bash
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.18
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.19
 ```
 
 ### TypeScript
@@ -196,7 +196,7 @@ npm test
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a18
+pip install ratify-protocol==1.0.0a19
 ```
 
 Or to run the conformance suite yourself:
@@ -212,7 +212,7 @@ pytest
 ### Rust
 
 ```bash
-cargo add ratify-protocol@1.0.0-alpha.18
+cargo add ratify-protocol@1.0.0-alpha.19
 ```
 
 Or to run the conformance suite yourself:
@@ -370,10 +370,10 @@ The 79 fixtures in `testvectors/v1/` are the canonical conformance set. **Any im
 
 | Implementation | Language | Conformance (`main`) | Install (latest release) |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 79/79 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.18` |
+| `github.com/identities-ai/ratify-protocol` | Go | ✅ 79/79 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.19` |
 | `@identities-ai/ratify-protocol` | TypeScript | ✅ 79/79 | `npm install @identities-ai/ratify-protocol` |
-| `ratify-protocol` | Python | ✅ 79/79 | `pip install ratify-protocol==1.0.0a18` |
-| `ratify-protocol` | Rust | ✅ 79/79 | `cargo add ratify-protocol@1.0.0-alpha.18` |
+| `ratify-protocol` | Python | ✅ 79/79 | `pip install ratify-protocol==1.0.0a19` |
+| `ratify-protocol` | Rust | ✅ 79/79 | `cargo add ratify-protocol@1.0.0-alpha.19` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |

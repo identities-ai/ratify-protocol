@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "1.0.0-alpha.18"
+version = "1.0.0-alpha.19"
 dependencies = [
  "base64",
  "chrono",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol-native"
-version = "1.0.0-alpha.18"
+version = "1.0.0-alpha.19"
 dependencies = [
  "pyo3",
  "ratify-protocol",

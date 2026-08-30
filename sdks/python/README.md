@@ -24,7 +24,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 ## Install
 
 ```bash
-pip install ratify-protocol==1.0.0a18
+pip install ratify-protocol==1.0.0a19
 ```
 
 This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
@@ -34,7 +34,7 @@ This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and 
 One function, `hybrid_keypair_from_seeds`, needs an optional add-on:
 
 ```bash
-pip install 'ratify-protocol[native]==1.0.0a18'
+pip install 'ratify-protocol[native]==1.0.0a19'
 ```
 
 Everything else works without it: verifying proofs, issuing delegations,

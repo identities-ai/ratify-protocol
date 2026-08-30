@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.19 (unreleased)
+## v1.0.0-alpha.19 (2026-08-30)
 
 A security release for the TypeScript SDK. No canonical bytes, fixture
 contents, wire format or verifier behavior change, and the protocol version

@@ -206,14 +206,15 @@ jobs:
   # abi3-py310 means one wheel per platform covers every CPython from 3.10 up,
   # rather than one per interpreter minor version.
   # ──────────────────────────────────────────────────────────────────────────
-  publish-pypi-native:
-    name: Publish native extra to PyPI
+  # Builds wheels only. Deliberately carries neither the pypi-publish
+  # environment nor id-token: write — it never talks to PyPI, and attaching the
+  # environment here would make all five matrix legs wait on the environment's
+  # manual approval before they could even compile. Approval belongs on the one
+  # job that actually uploads.
+  build-pypi-native:
+    name: Build native extra wheels
     needs: gate-tests
-    environment:
-      name: pypi-publish
-      url: https://pypi.org/project/ratify-protocol-native/
     permissions:
-      id-token: write
       contents: read
     strategy:
       fail-fast: false
@@ -242,9 +243,9 @@ jobs:
           name: native-wheels-${{ matrix.os }}-${{ matrix.target }}
           path: sdks/python-native/dist
 
-  publish-pypi-native-upload:
-    name: Upload native extra wheels
-    needs: publish-pypi-native
+  publish-pypi-native:
+    name: Publish native extra to PyPI
+    needs: build-pypi-native
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish
@@ -470,7 +471,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, publish-crates, publish-npm, publish-go, build-c-binaries]
+    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: always() && needs.gate-tests.result == 'success'
     runs-on: ubuntu-latest
     permissions:

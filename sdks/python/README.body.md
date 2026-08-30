@@ -6,6 +6,29 @@ pip install ratify-protocol=={{VERSION_PYPI}}
 
 This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
 
+### Optional: deterministic key generation from seeds
+
+One function, `hybrid_keypair_from_seeds`, needs an optional add-on:
+
+```bash
+pip install 'ratify-protocol[native]=={{VERSION_PYPI}}'
+```
+
+Everything else works without it: verifying proofs, issuing delegations,
+signing challenges, and persisting an identity by storing its key bytes.
+
+You need the extra only for **seed portability across languages**, when the
+same two seeds must produce the same identity in Python as in the Go, Rust,
+TypeScript, or C SDK. Without it, `hybrid_keypair_from_seeds` raises
+`NotImplementedError` explaining how to enable it. It never returns a
+non-deterministic answer in place of a deterministic one.
+
+The add-on is a separate package, `ratify-protocol-native`, because it contains
+compiled code and is therefore platform-specific. Keeping it separate is what
+lets `ratify-protocol` itself stay pure Python and install everywhere.
+`pqcrypto`'s ML-DSA-65 binding ignores caller-supplied seeds, so this one
+operation runs through the Ratify Rust core instead.
+
 ### Running the conformance suite from a clean checkout
 
 If you cloned the repo and want to run `python -m pytest` against the committed fixtures, the package is not on your path until you install it. Do this:

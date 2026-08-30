@@ -57,6 +57,41 @@ The outcome is not “more cryptography.” The outcome is that enterprises can
 permit more agent automation while the receiver retains a precise, auditable,
 fail-closed decision boundary.
 
+## Who implements what
+
+Four roles, and only two of them write anything. **GitHub implements nothing.**
+The plugin uses the existing plugin manifest and MCP mechanisms, so no change to
+Copilot, GitHub, or any Microsoft surface is required for this to work.
+
+| Role | Who this usually is | What they do | What they build |
+| --- | --- | --- | --- |
+| **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | Nothing. Issues a delegation with the SDK or Ratify Verify |
+| **Agent operator** | The team running Copilot | Installs the plugin, points it at their receiver | Nothing. Installs and configures |
+| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Verifies the proof before the protected handler runs | The verification call, roughly ten lines against the SDK |
+| **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing** |
+
+```mermaid
+flowchart TB
+    subgraph nobuild["No changes required"]
+        GH["GitHub / Copilot<br/>routes the tool call"]
+    end
+    subgraph install["Installs and configures"]
+        P["Principal<br/>signs the bounded mandate"]
+        AO["Agent operator<br/>installs the plugin"]
+    end
+    subgraph build["Writes the verification call"]
+        RO["Receiver operator<br/>owns the consequence"]
+    end
+    P -->|"signed delegation"| AO
+    AO -->|"tool call"| GH
+    GH -->|"routed call + proof"| RO
+    RO -->|"ALLOW once, or DENY"| AO
+```
+
+The asymmetry is the point. The party that carries the risk is the party that
+gets to check, and they can check without trusting the agent, the model, the
+prompt, or the platform that routed the call.
+
 ## What does this reference do?
 
 The included principal delegates only:

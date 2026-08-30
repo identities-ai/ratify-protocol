@@ -9,6 +9,14 @@ runtimes, and platforms. Each turns the protocol into a visible outcome: one
 properly authorized request reaches a protected handler, while an out-of-scope,
 changed, expired, revoked, replayed, or untrusted request does not.
 
+## Adding a reference
+
+Every reference README follows the required structure in
+[`REFERENCE-README-STANDARD.md`](REFERENCE-README-STANDARD.md): ten sections in a
+fixed order, a table naming what each role implements including the platform,
+and diagrams that show the deny path as well as the allow path. The GitHub
+Copilot reference is the worked example.
+
 ## Available references
 
 | Platform | What it demonstrates | Run it |

@@ -63,6 +63,14 @@ if not c_dep_match:
 cbindgen = read("sdks/c/cbindgen.toml")
 c_banner_match = re.search(r'\* Version: (\S+)', cbindgen)
 
+# The IANA time zone database must stay declared. Without it a verifier
+# resolves no zone and denies every time_window constraint, so the same bundle
+# verifies on one host and is rejected on another. The only CI job that would
+# notice is the Windows wheel leg, so a dependency tidy-up could drop this and
+# look green everywhere else.
+if not re.search(r'^\s*"tzdata[><=~ ]', pyproject, re.M):
+    fail("sdks/python/pyproject.toml must declare tzdata (time_window needs an IANA database)")
+
 native_toml = read("sdks/python-native/Cargo.toml")
 native_match = re.search(r'^version = "([^"]+)"$', native_toml, re.M)
 if not native_match:

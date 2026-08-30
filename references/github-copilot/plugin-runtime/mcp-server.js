@@ -23218,7 +23218,10 @@ function base64StandardDecode(s) {
   }
   const table = {};
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("").forEach((c, i) => table[c] = i);
-  const clean3 = s.replace(/=+$/, "");
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 61)
+    end -= 1;
+  const clean3 = s.slice(0, end);
   const bytes = [];
   let buf = 0;
   let bits = 0;

@@ -57,6 +57,46 @@ The outcome is not “more cryptography.” The outcome is that enterprises can
 permit more agent automation while the receiver retains a precise, auditable,
 fail-closed decision boundary.
 
+## Who implements what
+
+Four roles, and only two of them write anything. **GitHub implements nothing.**
+The plugin uses the existing plugin manifest and MCP mechanisms, so no change to
+Copilot, GitHub, or any Microsoft surface is required for this to work.
+
+| Role | Who this usually is | What they do | What they build |
+| --- | --- | --- | --- |
+| **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides what the bounds should be |
+| **Agent operator** | The team running Copilot | Installs the plugin and points it at their receiver and trust root | No code, but real configuration: the receiver address, the trusted principal, and which tools are protected |
+| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is 138 lines: the `verifyBundle` call is about 15 of them, and the rest is challenge issuance, session binding, comparing the verified root against the trust policy, and making the handler unreachable except through the allow branch |
+| **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing.** The plugin uses the existing plugin manifest and MCP mechanisms |
+
+The receiver number is worth being precise about, because the verification call
+on its own is not an integration. The surrounding work is where a receiver
+operator spends their effort, and most of it is deciding what this deployment
+trusts rather than writing protocol code.
+
+```mermaid
+flowchart TB
+    subgraph nobuild["No changes required"]
+        GH["GitHub / Copilot<br/>routes the tool call"]
+    end
+    subgraph install["Installs and configures"]
+        P["Principal<br/>signs the bounded mandate"]
+        AO["Agent operator<br/>installs the plugin"]
+    end
+    subgraph build["Writes the verification call"]
+        RO["Receiver operator<br/>owns the consequence"]
+    end
+    P -->|"signed delegation"| AO
+    AO -->|"tool call"| GH
+    GH -->|"routed call + proof"| RO
+    RO -->|"ALLOW once, or DENY"| AO
+```
+
+The asymmetry is the point. The party that carries the risk is the party that
+gets to check, and they can check without trusting the agent, the model, the
+prompt, or the platform that routed the call.
+
 ## What does this reference do?
 
 The included principal delegates only:

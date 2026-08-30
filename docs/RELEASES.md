@@ -78,6 +78,15 @@ v1.0.0-alpha.17 →  packaging and documentation. Python SDK bounded below
                    delegated-authority reference; platform reference profile
                    registry. 79 fixtures, byte-identical to alpha.16
                    (published 2026-08-24)
+v1.0.0-alpha.18 →  SDK surface completion. Rust and C gained deterministic
+                   seed-based key generation, C gained the remaining minimum
+                   surface entries, and the C conformance suite now asserts the
+                   delegation and challenge sign-byte fixtures it was always
+                   required to. Python deterministic keygen ships as an optional
+                   native extra (`ratify-protocol-native`), leaving the base
+                   package pure Python. Fixes time_window denial on hosts with
+                   no system tz database. 79 fixtures, byte-identical to
+                   alpha.17 (published 2026-08-30)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

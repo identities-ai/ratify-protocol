@@ -44,6 +44,70 @@ sequenceDiagram
 The model may request more authority. It cannot grant that authority to
 itself.
 
+## Why would a developer or enterprise need this?
+
+Google Cloud and ADK already provide substantial controls: IAM on the resource,
+service identity for the workload, and ADK's own tool and callback surface for
+what an agent may select. Ratify is complementary. It gives the system carrying
+the consequence evidence of the narrower mandate behind one action.
+
+| Question | Google Cloud / ADK controls | Ratify authority |
+| --- | --- | --- |
+| Can this workload reach the API? | Yes, through IAM and service identity | Not its purpose |
+| Can this agent select this tool? | Yes, through ADK tool configuration | Not its purpose |
+| Did a recognized principal authorize this exact action? | Not expressed by workload identity alone | Yes |
+| Is the authority limited to this project, region, and node count? | IAM can bound the resource; the per-action ceiling is application logic | Signed into the delegation and checked by the receiver |
+| Can a different organization verify the mandate? | Depends on a shared Google Cloud trust domain | Yes, from portable proof and configured trust roots |
+| Was the proof changed, revoked, expired, or replayed? | Separate concern | Verified before the handler runs |
+
+Workload identity answers which service is calling. It does not carry which
+human or organization sanctioned this particular provisioning request, at this
+size, for this project. That distinction matters when an agent holds
+credentials broader than the current task, when a receiver serves agents it did
+not issue, or when the call crosses an organizational boundary.
+
+```mermaid
+flowchart LR
+    A[Agent may call the provisioning tool] --> B{What may it provision now?}
+    C[Principal signs a bounded mandate] --> D[Ratify proof]
+    B --> E[Independent MCP receiver]
+    D --> E
+    E -->|"one node, authorized project and region,<br/>fresh and trusted"| F["ALLOW<br/>tool invoked once"]
+    E -->|"excess count, wrong resource, expired,<br/>revoked, replayed, or untrusted"| G["DENY<br/>tool untouched"]
+```
+
+## Who implements what
+
+Four roles. **Google implements nothing**: the reference uses ADK's public
+agent and tool surface and an ordinary MCP receiver, so no change to ADK,
+Gemini, or any Google Cloud service is required.
+
+| Role | Who this usually is | What they do | What they build |
+| --- | --- | --- | --- |
+| **Principal** | The organization accountable for the cloud resource | Signs a bounded delegation naming scope, resource, node count, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides the bounds |
+| **Agent operator** | The team running the ADK agent | Points the agent at the receiver and the trusted principal | No protocol code, but real configuration: receiver address, trust root, and which tools are protected |
+| **Receiver operator** | Whoever owns the consequence: the provisioning API or MCP server | Issues challenges, verifies the proof, guards the handler | The verification path: `authority_reference/receiver.py` and the transport boundary in `mcp_server.py`. The verify call is a small part; the rest is challenge issuance, header handling, trust-root comparison, and keeping the handler unreachable except through the allow branch |
+| **Google ADK / Gemini** | The agent framework and model | Select and call the tool as they already do | **Nothing** |
+
+The asymmetry is the point. The party carrying the risk is the party that
+checks, and it can check without trusting the agent, the model, the prompt, or
+the framework that routed the call.
+
+## Which path should I use?
+
+**Use this open reference** when you want to read every line of the decision
+path, run it without a Google Cloud account or a model key, and adapt the
+receiver to your own service. It is Apache-2.0 with no runtime dependency on a
+hosted Ratify service.
+
+**Register interest in Ratify Verify** when you would rather not operate trust
+distribution, revocation freshness, challenge storage, and audit retention
+yourself. Those are the deployment concerns under "Reference scope and
+production requirements" below, and they are what turns a working reference
+into a production control.
+
+Both verify the same proofs. The protocol does not change between them.
+
 ## Run the published-package gate
 
 You need Bash, Python 3.11 (the tested version), and network access to install
@@ -160,7 +224,7 @@ private keys or proof bytes. Moving `verify_bundle` into an ADK callback inside
 the agent process would be a useful fail-fast check, but not a security control:
 a compromised agent could skip its own callback.
 
-## Deterministic acceptance matrix
+## What the reference proves
 
 The suite encodes why the boundary matters:
 

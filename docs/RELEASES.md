@@ -87,6 +87,13 @@ v1.0.0-alpha.18 →  SDK surface completion. Rust and C gained deterministic
                    package pure Python. Fixes time_window denial on hosts with
                    no system tz database. 79 fixtures, byte-identical to
                    alpha.17 (published 2026-08-30)
+v1.0.0-alpha.19 →  security. The TypeScript fallback base64 decoder stripped
+                   padding with a regular expression that backtracks
+                   polynomially, so one crafted bundle could stall a verifier
+                   for seconds on any runtime without Buffer (browsers, Deno,
+                   edge). The strip is now a linear backwards scan. CI workflow
+                   token scoped to read-only. 79 fixtures, byte-identical to
+                   alpha.18
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

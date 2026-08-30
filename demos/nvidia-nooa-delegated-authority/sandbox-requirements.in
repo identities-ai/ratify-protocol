@@ -1,0 +1,26 @@
+# Top-level requirements for the NOOA sandbox image's dependency tree.
+#
+# Compiled to sandbox-requirements.lock, which is what the profile installs from.
+# This file states intent; the lock states what actually gets installed, with
+# hashes. Regenerate with:
+#
+#   ./stage-lock.sh          (resolves inside the pinned base image, by digest)
+#
+# Why a lock at all. Pinning these four lines alone left every transitive
+# dependency floating: `packaging` moved 26.2 -> 26.3 between two runs an hour
+# apart, which changed the staged tree's content hash and therefore the image tag.
+# The dependency set was recorded but not reproducible, so "same image" was only
+# ever true within a session.
+nooa==0.0.8
+mcp==2.0.0
+uvicorn==0.52.1
+
+# The Ratify Python SDK, pinned to the published release. Verified installable
+# and importable outside any repository checkout (2026-08-05) before this pin was
+# uncommitted: `pip install ratify-protocol==1.0.0a16` in a clean venv resolves
+# ratify_protocol.__version__ == "1.0.0a16" from site-packages, not from a source
+# tree. Its own runtime requirements are listed below so they are locked rather
+# than resolved at build time.
+ratify-protocol==1.0.0a19
+cryptography>=44.0
+pqcrypto>=0.3.4

@@ -36,6 +36,16 @@ verifier behavior change, and the protocol version remains 1.
 
 ### Fixed
 
+- **Python: `time_window` constraints were denied on any host without a system
+  IANA time zone database.** `zoneinfo` reads the operating system's copy where
+  one exists and falls back to the `tzdata` package where it does not. Windows
+  ships no system database and minimal Linux containers often omit theirs, so on
+  those hosts every `time_window` constraint resolved no zone and failed closed
+  with `constraint_denied: unknown timezone`. The same proof bundle therefore
+  verified on one machine and was rejected on another. `tzdata` is now a
+  dependency. Affects every published Python release to date; no other SDK is
+  affected, and nothing about the wire format or the fixtures changes.
+
 - **The C conformance suite did not assert two requirements it claimed to meet.**
   `docs/SDKS.md` requires that for every `Kind = verify` fixture an SDK's
   delegation signing bytes match `expected.delegation_sign_bytes_hex` and its

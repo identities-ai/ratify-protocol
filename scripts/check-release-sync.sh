@@ -63,6 +63,20 @@ if not c_dep_match:
 cbindgen = read("sdks/c/cbindgen.toml")
 c_banner_match = re.search(r'\* Version: (\S+)', cbindgen)
 
+native_toml = read("sdks/python-native/Cargo.toml")
+native_match = re.search(r'^version = "([^"]+)"$', native_toml, re.M)
+if not native_match:
+    fail("missing version in sdks/python-native/Cargo.toml")
+native_version = native_match.group(1)
+
+# The Python SDK pins the optional native extra to an exact version, so the two
+# must move together. If they drift, `pip install ratify-protocol[native]`
+# resolves to nothing and the extra silently becomes uninstallable.
+pyproject_native = re.search(r'"ratify-protocol-native==([^"]+)"', pyproject)
+if not pyproject_native:
+    fail("missing ratify-protocol-native pin in sdks/python/pyproject.toml")
+
+
 def py_to_semver(v: str) -> str:
     return re.sub(r'a(\d+)$', r'-alpha.\1', v)
 
@@ -72,6 +86,13 @@ if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
 if c_version != ts_version:
     fail(f"C version {c_version} does not match TypeScript {ts_version}")
+if native_version != ts_version:
+    fail(f"Python native extra version {native_version} does not match TypeScript {ts_version}")
+if pyproject_native.group(1) != py_version:
+    fail(
+        f"ratify-protocol-native pin {pyproject_native.group(1)} does not match "
+        f"the Python SDK version {py_version}"
+    )
 if c_dep_match.group(1) != ts_version:
     fail(f"C ratify-protocol dependency pin {c_dep_match.group(1)} does not match {ts_version}")
 if not c_banner_match or c_banner_match.group(1) != ts_version:

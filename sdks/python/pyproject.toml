@@ -30,6 +30,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Deterministic seed-based key generation, which pqcrypto cannot provide. A
+# separate distribution so this package stays pure-Python: install it only if
+# you need the same seeds to yield the same identity across SDKs.
+native = [
+    "ratify-protocol-native==1.0.0a17",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

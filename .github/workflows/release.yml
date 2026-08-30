@@ -171,6 +171,19 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build
           ls -lh dist/
+      # ratify-protocol stays pure-Python, so this remains a single
+      # py3-none-any wheel that installs on every platform. The optional
+      # native extra is a separate distribution with its own job below.
+      - name: assert the wheel is platform-independent
+        working-directory: sdks/python
+        run: |
+          if ! ls dist/*-py3-none-any.whl >/dev/null 2>&1; then
+            echo "::error::ratify-protocol must publish a py3-none-any wheel."
+            echo "A platform-specific wheel here means the package stopped"
+            echo "being pure-Python and would no longer install everywhere."
+            ls -l dist/
+            exit 1
+          fi
       - name: publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -185,6 +198,83 @@ jobs:
   # a repo secret. Token should be scoped to publish-update for the
   # 'ratify-protocol' crate; see docs/REGISTRY_SETUP.md.
   # ──────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # The optional native extra. A separate distribution so that
+  # `ratify-protocol` itself stays pure-Python and installs anywhere, including
+  # platforms this job has no wheel for.
+  #
+  # abi3-py310 means one wheel per platform covers every CPython from 3.10 up,
+  # rather than one per interpreter minor version.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-pypi-native:
+    name: Publish native extra to PyPI
+    needs: gate-tests
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol-native/
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64,  manylinux: auto }
+          - { os: ubuntu-latest,  target: aarch64, manylinux: auto }
+          - { os: macos-latest,   target: aarch64, manylinux: auto }
+          - { os: macos-13,       target: x86_64,  manylinux: auto }
+          - { os: windows-latest, target: x64,     manylinux: auto }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          working-directory: sdks/python-native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: sdks/python-native/dist
+
+  publish-pypi-native-upload:
+    name: Upload native extra wheels
+    needs: publish-pypi-native
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol-native/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-wheels-*
+          merge-multiple: true
+          path: dist
+      # The sdist is built once, separately: a source install of the extra does
+      # require a Rust toolchain, which is documented in its README.
+      - name: build sdist
+        working-directory: sdks/python-native
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
   publish-crates:
     name: Publish to crates.io
     needs: gate-tests

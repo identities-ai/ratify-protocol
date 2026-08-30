@@ -111,7 +111,7 @@ For every fixture in `testvectors/v1/*.json`:
 
 ### Minimum SDK surface
 
-Every implementation MUST export these primitives with equivalent semantics, with one intentional exception recorded under Documented exceptions below (Python does not implement deterministic seed-based key generation):
+Every implementation MUST export these primitives with equivalent semantics. One entry has a distribution caveat rather than a semantic one, recorded under Documented exceptions below (Python needs an optional extra for deterministic seed-based key generation):
 
 | Go name | What it does |
 |---|---|
@@ -168,21 +168,40 @@ The table above is the contract. Where an implementation cannot meet an entry,
 the exception is recorded here rather than left implicit, and it is the only
 place an SDK may fall short without being a defect.
 
-**Python: `hybrid_keypair_from_seeds` raises `NotImplementedError`.** The
-`pqcrypto` ML-DSA-65 binding calls PQClean's `crypto_sign_keypair`, which reads
-the OS RNG and ignores a caller-supplied seed, so Python cannot honour the
-deterministic half of the entry. It refuses rather than returning a keypair,
-because returning one would silently break the single property the function
-exists for: the same seeds would yield a different identity on every call, with
-no error at the call site. Derive or restore identities from seeds with the Go,
-Rust, TypeScript, or C SDK.
+**Python: `hybrid_keypair_from_seeds` needs the optional `native` extra.**
 
-Python is therefore intentionally non-equivalent for this one entry. It is not
-a defect and it is not expected to be fixed in the pure-Python distribution:
-closing it requires a native extension, which would make the package
-platform-specific. Every other entry in the table is implemented in Python,
-and the deterministic keygen vector asserted by the Go, Rust, TypeScript, and
-C suites has no Python counterpart for the same reason.
+```sh
+pip install 'ratify-protocol[native]'
+```
+
+`pqcrypto`'s ML-DSA-65 binding calls PQClean's `crypto_sign_keypair`, which
+reads the OS RNG and ignores a caller-supplied seed, so the pure-Python package
+cannot derive a deterministic keypair. The pure-Python ML-DSA implementations
+that exist carry explicit warnings against use in cryptographic applications, so
+the deterministic path runs through the Ratify Rust core in a small extension
+instead.
+
+That extension ships as a **separate distribution**, `ratify-protocol-native`,
+rather than being folded into `ratify-protocol`. Keeping it separate is
+deliberate: `ratify-protocol` stays a pure-Python `py3-none-any` wheel that
+installs on any platform and any supported CPython, including platforms the
+extra has no wheel for. A release job asserts that property so the base package
+cannot quietly become platform-specific.
+
+Without the extra, `hybrid_keypair_from_seeds` raises `NotImplementedError`
+rather than returning a keypair: returning one would break the single property
+the function exists for, since the same seeds would yield a different identity
+on every call with no error at the call site. Every other entry in the table
+works in pure Python, and nothing else in the SDK depends on the extra. Signing
+and verification always use `pqcrypto`.
+
+With the extra installed, Python reproduces the same cross-SDK keygen vector as
+the Go, Rust, TypeScript, and C suites, and identities derived from seeds in
+Python verify in the other SDKs.
+
+**When you need it.** Only for seed portability across languages. Verifying
+proofs, issuing delegations, signing challenges, and persisting an identity by
+storing its key bytes all work without it.
 
 **C: some entries have a different shape, none are absent.** The C ABI has no
 value types, so a few entries are expressed through handles or through the

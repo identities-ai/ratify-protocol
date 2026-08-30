@@ -50,9 +50,28 @@ verifier behavior change, and the protocol version remains 1.
   was compiled into the library but never declared for callers, and a removed
   one stayed declared and would fail at link time.
 
+### Added
+
+- **Optional native extra for Python deterministic key generation.**
+  `pip install 'ratify-protocol[native]'` installs `ratify-protocol-native`, a
+  separate distribution that supplies seed-based key generation through the
+  Ratify Rust core. With it, the same two seeds produce the same identity in
+  Python as in every other SDK, and Python asserts the same cross-SDK keygen
+  vector as the Go, Rust, C and TypeScript suites.
+
+  It is a separate distribution on purpose: `ratify-protocol` itself remains a
+  pure-Python `py3-none-any` wheel that installs on any platform and any
+  supported CPython, and a release check asserts that it stays that way. The
+  extra ships abi3 wheels, so one wheel per platform covers every CPython from
+  3.10 up. Installing it is only necessary for seed portability across
+  languages: verifying proofs, issuing delegations, signing challenges, and
+  persisting an identity by storing its key bytes all work without it. Signing
+  and verification always use `pqcrypto` and are unaffected.
+
 ### Changed
 
-- **Python `hybrid_keypair_from_seeds` now raises `NotImplementedError`.**
+- **Python `hybrid_keypair_from_seeds` now raises `NotImplementedError` when the
+  native extra is absent.**
   It previously accepted an ML-DSA seed, validated that it was exactly 32 bytes,
   and then discarded it: the `pqcrypto` binding calls PQClean's
   `crypto_sign_keypair`, which reads the OS RNG. Callers passing identical seeds
@@ -60,9 +79,8 @@ verifier behavior change, and the protocol version remains 1.
   anyone persisting seeds to restore an identity silently received a new one and
   discovered it only when verification failed elsewhere. This is a behavioral
   change for any caller of that one function; every other Python entry point is
-  unaffected. Derive or restore identities from seeds with the Go, Rust,
-  TypeScript or C SDK. Recorded in `docs/SDKS.md` as the one intentional
-  non-equivalence in the minimum surface.
+  unaffected. Install the `native` extra above, or derive identities from seeds
+  with the Go, Rust, TypeScript or C SDK.
 
 ---
 

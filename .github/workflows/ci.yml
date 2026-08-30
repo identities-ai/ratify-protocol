@@ -103,7 +103,26 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
+      # The pure-Python package must pass without the optional native extra:
+      # that is the configuration most users install.
       - name: full test suite (79 fixtures)
+        run: pytest -v
+
+      # Then build the optional native extra from source and re-run with it
+      # required. RATIFY_REQUIRE_NATIVE=1 turns a missing extension into an
+      # error rather than a skip: without it, a job that failed to build the
+      # extension would silently skip every deterministic-keygen test and still
+      # report success.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: build and install the native extra
+        working-directory: sdks/python-native
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: test suite with the native extra required
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
   rust:

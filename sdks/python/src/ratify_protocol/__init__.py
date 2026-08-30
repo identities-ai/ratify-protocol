@@ -216,7 +216,7 @@ from .wire import (
     encode_verification_receipt,
 )
 
-__version__ = "1.0.0a17"
+__version__ = "1.0.0a18"
 
 __all__ = [
     # types

@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.18 (unreleased)
+## v1.0.0-alpha.18 (2026-08-30)
 
 An SDK surface release. No canonical bytes, fixture contents, wire format or
 verifier behavior change, and the protocol version remains 1.

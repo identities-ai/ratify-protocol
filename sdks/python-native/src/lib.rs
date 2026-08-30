@@ -42,10 +42,10 @@ fn hybrid_keypair_from_seeds_py(
 
     let (public, private) = hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
     Ok((
-        PyBytes::new_bound(py, &public.ed25519).unbind(),
-        PyBytes::new_bound(py, &public.ml_dsa_65).unbind(),
-        PyBytes::new_bound(py, &private.ed25519).unbind(),
-        PyBytes::new_bound(py, &private.ml_dsa_65).unbind(),
+        PyBytes::new(py, &public.ed25519).unbind(),
+        PyBytes::new(py, &public.ml_dsa_65).unbind(),
+        PyBytes::new(py, &private.ed25519).unbind(),
+        PyBytes::new(py, &private.ml_dsa_65).unbind(),
     ))
 }
 

@@ -230,8 +230,9 @@ LOCK="$HERE/sandbox-requirements.lock"
 # is what the *final* evidence must use: an image built from the checkout proves the
 # checkout, not the package a reader installs.
 #
-# RELEASE GATE: after v1.0.0-alpha.16 is tagged and on PyPI, uncomment the pin in
-# sandbox-requirements.in, run ./stage-lock.sh, then
+# The pin in sandbox-requirements.in names a published release, and the lock is
+# staged from it with ./stage-lock.sh. To run against that published package
+# rather than the checkout:
 #   RATIFY_SDK=published ./run-openshell-profile.sh
 RATIFY_SDK="${RATIFY_SDK:-local}"
 RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a19}"
@@ -601,7 +602,7 @@ json.dump({
         "final: built from the published Ratify package"
         if "$RATIFY_SDK" == "published"
         else "pre-release: Ratify SDK built from the repository checkout, not the "
-             "published package; superseded once v1.0.0-alpha.16 is published"
+             "published package; run with RATIFY_SDK=published for the released one"
     ),
     "hashes": {"rendered_policy_sha256": "$POLICY_SHA",
                "gateway_config_sha256": "$GATEWAY_SHA"},

@@ -36,6 +36,18 @@ verifier behavior change, and the protocol version remains 1.
 
 ### Fixed
 
+- **The native extra's pyo3 dependency carried three security advisories.**
+  `ratify-protocol-native` was introduced pinned to pyo3 0.22, which is subject
+  to GHSA advisories for an out-of-bounds read in `PyList`/`PyTuple` iterator
+  `nth`/`nth_back` (high), a missing `Sync` bound on
+  `PyCFunction::new_closure` (moderate), and a buffer overflow risk in
+  `PyString::from_object` (low). The extension calls none of those APIs, so
+  none was reachable through it, but a package in this project's supply chain
+  should not ship against known advisories. Now pinned to pyo3 0.29, which
+  patches all three. `PyBytes::new_bound`, the transitional name from pyo3's
+  Bound migration, is now `PyBytes::new`. Key generation output is unchanged
+  and still matches the cross-SDK vector byte for byte.
+
 - **Python: `time_window` constraints were denied on any host without a system
   IANA time zone database.** `zoneinfo` reads the operating system's copy where
   one exists and falls back to the `tzdata` package where it does not. Windows

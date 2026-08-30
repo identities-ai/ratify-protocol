@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ratify-protocol"
-version = "1.0.0a18"
+version = "1.0.0a19"
 description = "Delegated-authority proofs for human-agent and agent-agent interactions — Python reference SDK for the Ratify Protocol."
 readme = "README.md"
 authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
@@ -45,7 +45,7 @@ dependencies = [
 # separate distribution so this package stays pure-Python: install it only if
 # you need the same seeds to yield the same identity across SDKs.
 native = [
-    "ratify-protocol-native==1.0.0a18",
+    "ratify-protocol-native==1.0.0a19",
 ]
 dev = [
     "pytest>=8.0",

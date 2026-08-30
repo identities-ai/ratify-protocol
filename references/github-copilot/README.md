@@ -65,10 +65,15 @@ Copilot, GitHub, or any Microsoft surface is required for this to work.
 
 | Role | Who this usually is | What they do | What they build |
 | --- | --- | --- | --- |
-| **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | Nothing. Issues a delegation with the SDK or Ratify Verify |
-| **Agent operator** | The team running Copilot | Installs the plugin, points it at their receiver | Nothing. Installs and configures |
-| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Verifies the proof before the protected handler runs | The verification call, roughly ten lines against the SDK |
-| **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing** |
+| **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides what the bounds should be |
+| **Agent operator** | The team running Copilot | Installs the plugin and points it at their receiver and trust root | No code, but real configuration: the receiver address, the trusted principal, and which tools are protected |
+| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is 138 lines: the `verifyBundle` call is about 15 of them, and the rest is challenge issuance, session binding, comparing the verified root against the trust policy, and making the handler unreachable except through the allow branch |
+| **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing.** The plugin uses the existing plugin manifest and MCP mechanisms |
+
+The receiver number is worth being precise about, because the verification call
+on its own is not an integration. The surrounding work is where a receiver
+operator spends their effort, and most of it is deciding what this deployment
+trusts rather than writing protocol code.
 
 ```mermaid
 flowchart TB

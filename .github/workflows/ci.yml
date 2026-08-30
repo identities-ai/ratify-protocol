@@ -62,6 +62,12 @@ jobs:
       - name: check release metadata
         run: ./scripts/check-release-sync.sh
 
+      # A reference README that drifts from the required structure is not a
+      # style problem: the sections exist to answer a new reader's questions in
+      # the order they ask them. See references/REFERENCE-README-STANDARD.md.
+      - name: Reference README structure
+        run: python3 scripts/check-reference-readmes.py
+
   typescript:
     name: TypeScript SDK conformance
     runs-on: ubuntu-latest

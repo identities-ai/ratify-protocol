@@ -54,8 +54,18 @@ operator, and the platform. Say plainly what each does and what each builds,
 including where the answer is nothing.
 
 This is also the section anyone reaching out to a platform team will quote,
-because it answers their first question: what do we have to do? Usually the
-honest answer is nothing, and saying so is more persuasive than a feature list.
+because it answers their first question: what do we have to do?
+
+Two ways this section goes wrong, both of which cost more credibility than they
+save:
+
+- **Claiming no work where there is configuration.** "Nothing to build" and
+  "nothing to decide" are different. An operator who installs a plugin still
+  chooses a receiver address, a trusted principal, and which tools are
+  protected. Say so.
+- **Quoting a line count for the verification call alone.** The call is not the
+  integration. Give the size of the working receiver and say what the rest of it
+  does, because that is the work the reader is actually estimating.
 
 ### 4. What does this reference do?
 
@@ -129,7 +139,7 @@ not.
 - **A decision or role diagram**, in section 2 or 3, showing what is checked and
   by whom, with both outcomes visible.
 
-**Rules:**
+**Rules, each one checkable by reading the diagram source:**
 
 - Both branches always appear. A diagram that only shows the happy path is
   marketing, not documentation.

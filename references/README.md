@@ -22,6 +22,7 @@ Copilot reference is the worked example.
 | Platform | What it demonstrates | Run it |
 | --- | --- | --- |
 | [GitHub Copilot and MCP](github-copilot/README.md) | Copilot invokes a deployment tool; an independent receiver verifies exact delegated authority first | `cd references/github-copilot && ./run-reference-check.sh` |
+| [Google ADK and MCP](google-adk/README.md) | An ADK agent requests cloud provisioning; an independent MCP receiver verifies the signed ceiling and resource before anything is created | `./scripts/google-adk-reference-check.sh` |
 
 Only references merged into `main` appear here. The
 [`registry/`](registry/README.md) records exact versions, evidence, and whether

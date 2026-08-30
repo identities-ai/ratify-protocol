@@ -43,6 +43,9 @@ use ratify_protocol::{
     verify_session_token_e, verify_streamed_turn_with_options, verify_transaction_receipt,
     verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
     build_session_context, operation_context_hash,
+    canonical_json, challenge_sign_bytes_with_stream,
+    delegation_sign_bytes, derive_id, hybrid_keypair_from_seeds,
+    DelegationCert,
     witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, OperationContext,
     ProofBundle, SessionContextInputs, StreamedTurn, StreamedVerifyOptions,
     HybridPublicKey, HybridSignature,
@@ -2004,4 +2007,221 @@ fn unix_now() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+// ============================================================================
+// Minimum-surface primitives (docs/SDKS.md §4)
+//
+// These complete the C ABI's coverage of the published minimum SDK surface.
+// Without `ratify_delegation_sign_bytes_hex` and `ratify_challenge_sign_bytes_hex`
+// in particular, the C conformance suite could not make the two assertions that
+// §4 requires of every `Kind = verify` fixture.
+// ============================================================================
+
+/// Compute the 16-byte hex identity from a hybrid public key (SPEC §7).
+///
+/// `pub_json` is the public key JSON (`{"ed25519":"...","ml_dsa_65":"..."}`),
+/// as returned by `ratify_human_root_pub_key_json`. Free the result with
+/// `ratify_string_free`.
+///
+/// A verifier that pins an identity by id uses this to confirm that a public
+/// key it has been given belongs to the principal it pinned (SPEC §15.4).
+#[no_mangle]
+pub unsafe extern "C" fn ratify_derive_id(
+    pub_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(pub_json, "pub_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let pk: HybridPublicKey = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&derive_id(&pk))
+}
+
+/// Return the canonical delegation-cert signing bytes as a lowercase hex string.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_delegation_sign_bytes_hex(
+    cert_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(cert_json, "cert_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let cert: DelegationCert = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    new_cstring(&hex_encode(&delegation_sign_bytes(&cert)))
+}
+
+/// Return the challenge signing bytes as a lowercase hex string.
+///
+/// One entry point covers all three challenge-bytes variants in
+/// `docs/SDKS.md` §4, which explicitly permits optional arguments where that is
+/// idiomatic:
+///
+/// - plain (`challenge || BE u64(ts)`): pass NULL for both optional pointers;
+/// - session-bound (SPEC §5.8): pass a 32-byte `session_context`;
+/// - stream-bound: additionally pass a 32-byte `stream_id` and `stream_seq`.
+///
+/// `challenge` must point to exactly `challenge_len` bytes. `session_context`
+/// and `stream_id`, when non-NULL, MUST each be exactly 32 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_sign_bytes_hex(
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    challenge_at_unix: i64,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    stream_id: *const c_uchar,
+    stream_id_len: usize,
+    stream_seq: i64,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if challenge.is_null() {
+        set_err(err_out, "challenge is null");
+        return std::ptr::null_mut();
+    }
+    let ch = slice::from_raw_parts(challenge, challenge_len);
+
+    let sc: &[u8] = if session_context.is_null() {
+        if session_context_len != 0 {
+            set_err(err_out, "session_context is null but session_context_len is non-zero");
+            return std::ptr::null_mut();
+        }
+        &[]
+    } else {
+        if session_context_len != 32 {
+            set_err(err_out, "session_context_len must be 32");
+            return std::ptr::null_mut();
+        }
+        slice::from_raw_parts(session_context, 32)
+    };
+
+    let sid: &[u8] = if stream_id.is_null() {
+        if stream_id_len != 0 {
+            set_err(err_out, "stream_id is null but stream_id_len is non-zero");
+            return std::ptr::null_mut();
+        }
+        &[]
+    } else {
+        if stream_id_len != 32 {
+            set_err(err_out, "stream_id_len must be 32");
+            return std::ptr::null_mut();
+        }
+        slice::from_raw_parts(stream_id, 32)
+    };
+
+    new_cstring(&hex_encode(&challenge_sign_bytes_with_stream(
+        ch,
+        challenge_at_unix,
+        sc,
+        sid,
+        stream_seq,
+    )))
+}
+
+/// Canonicalise a JSON document (SPEC §6). Returns the canonical form as a
+/// string; free with `ratify_string_free`. Provided for interop audit, which is
+/// what §4 names it for.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_canonical_json(
+    json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let value: serde_json::Value = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    match String::from_utf8(canonical_json(&value)) {
+        Ok(text) => new_cstring(&text),
+        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+    }
+}
+
+/// Rebuild a HumanRoot deterministically from two 32-byte seeds.
+///
+/// This is the supported way to persist an issuer identity in C: store the two
+/// seeds as key material and reconstruct the identity after a restart. The
+/// protocol deliberately specifies no private-key serialisation format, so
+/// seeds are the portable unit.
+///
+/// `created_at_unix` is carried into the rebuilt identity so that a restored
+/// root is byte-identical to the original rather than merely equivalent.
+///
+/// Both seeds MUST be 32 bytes and MUST come from a cryptographically secure
+/// source. Anyone holding them holds the identity.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_human_root_from_seeds(
+    ed_seed: *const c_uchar,
+    ed_seed_len: usize,
+    ml_seed: *const c_uchar,
+    ml_seed_len: usize,
+    created_at_unix: i64,
+    out: *mut *mut RatifyHumanRoot,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() { return RatifyStatus::RatifyErrNullPointer; }
+    let (ed, ml) = match seed_pair(ed_seed, ed_seed_len, ml_seed, ml_seed_len, err_out) {
+        Some(v) => v,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let (pub_key, priv_key) = hybrid_keypair_from_seeds(&ed, &ml);
+    let root = ratify_protocol::HumanRoot {
+        id: derive_id(&pub_key),
+        public_key: pub_key,
+        created_at: created_at_unix,
+        // None, not Some(empty): matches what generate_human_root produces, so a
+        // root rebuilt from seeds serialises byte-identically to the original.
+        anchors: None,
+    };
+    *out = Box::into_raw(Box::new(RatifyHumanRoot(root, priv_key)));
+    RatifyStatus::RatifyOk
+}
+
+/// Rebuild an AgentIdentity deterministically from two 32-byte seeds.
+/// See `ratify_human_root_from_seeds` for the seed-custody warning.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_agent_from_seeds(
+    name_utf8: *const c_char,
+    agent_type_utf8: *const c_char,
+    ed_seed: *const c_uchar,
+    ed_seed_len: usize,
+    ml_seed: *const c_uchar,
+    ml_seed_len: usize,
+    created_at_unix: i64,
+    out: *mut *mut RatifyAgent,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() { return RatifyStatus::RatifyErrNullPointer; }
+    let name = match cstr_to_string(name_utf8, "name_utf8", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
+    let agent_type = match cstr_to_string(agent_type_utf8, "agent_type_utf8", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
+    let (ed, ml) = match seed_pair(ed_seed, ed_seed_len, ml_seed, ml_seed_len, err_out) {
+        Some(v) => v,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let (pub_key, priv_key) = hybrid_keypair_from_seeds(&ed, &ml);
+    let agent = ratify_protocol::AgentIdentity {
+        id: derive_id(&pub_key),
+        name,
+        agent_type,
+        public_key: pub_key,
+        created_at: created_at_unix,
+    };
+    *out = Box::into_raw(Box::new(RatifyAgent(agent, priv_key)));
+    RatifyStatus::RatifyOk
+}
+
+/// Validate and copy a pair of 32-byte seeds out of caller memory.
+unsafe fn seed_pair(
+    ed_seed: *const c_uchar,
+    ed_seed_len: usize,
+    ml_seed: *const c_uchar,
+    ml_seed_len: usize,
+    err_out: *mut *mut c_char,
+) -> Option<([u8; 32], [u8; 32])> {
+    if ed_seed.is_null() || ml_seed.is_null() {
+        set_err(err_out, "seed pointer is null");
+        return None;
+    }
+    if ed_seed_len != 32 || ml_seed_len != 32 {
+        set_err(err_out, "both seeds must be exactly 32 bytes");
+        return None;
+    }
+    let mut ed = [0u8; 32];
+    let mut ml = [0u8; 32];
+    ed.copy_from_slice(slice::from_raw_parts(ed_seed, 32));
+    ml.copy_from_slice(slice::from_raw_parts(ml_seed, 32));
+    Some((ed, ml))
 }

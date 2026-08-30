@@ -13,6 +13,8 @@
 //! - ratify_string_free / ratify_error_free with NULL (must not crash)
 
 use ratify_c::{
+    ratify_derive_id, ratify_human_root_from_seeds, ratify_human_root_pub_key_json,
+    RatifyHumanRoot,
     ratify_session_token_from_json, ratify_session_token_free,
     ratify_agent_free, ratify_agent_generate, ratify_agent_id,
     ratify_challenge_generate, ratify_delegation_cert_free, ratify_delegation_cert_to_json,
@@ -1185,5 +1187,71 @@ fn delegation_cert_to_json_bounds_integer_fields() {
 
         ratify_agent_free(agent);
         ratify_human_root_free(root);
+    }
+}
+
+/// Deterministic identity reconstruction (docs/SDKS.md §4
+/// `HybridKeypairFromSeeds`).
+///
+/// This is what lets a C issuer persist an identity: store the two seeds, and
+/// rebuild the same root after a restart. Before this entry point existed, a C
+/// issuer could mint an identity and serialise its public half but never load
+/// it back, so any verifier pinning its id broke on the next restart.
+#[test]
+fn human_root_from_seeds_is_deterministic_and_matches_derive_id() {
+    unsafe {
+        let ed_seed = [7u8; 32];
+        let ml_seed = [9u8; 32];
+
+        let mut first: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut first, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk, "from_seeds failed");
+        assert!(!first.is_null());
+
+        let mut second: *mut RatifyHumanRoot = std::ptr::null_mut();
+        ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut second, &mut err,
+        );
+
+        let id1 = ratify_human_root_id(first);
+        let id2 = ratify_human_root_id(second);
+        let s1 = CStr::from_ptr(id1).to_string_lossy().into_owned();
+        let s2 = CStr::from_ptr(id2).to_string_lossy().into_owned();
+        assert_eq!(s1, s2, "same seeds must rebuild the same identity");
+        assert_eq!(s1.len(), 32, "id is 32 lowercase hex characters");
+
+        // The id must equal DeriveID over the root's own public key, which is
+        // what a pinning verifier computes independently.
+        let pub_json = ratify_human_root_pub_key_json(first, &mut err);
+        assert!(!pub_json.is_null());
+        let derived = ratify_derive_id(pub_json, &mut err);
+        assert!(!derived.is_null(), "derive_id failed");
+        assert_eq!(CStr::from_ptr(derived).to_string_lossy(), s1);
+
+        ratify_string_free(derived);
+        ratify_string_free(pub_json);
+        ratify_string_free(id1);
+        ratify_string_free(id2);
+        ratify_human_root_free(first);
+        ratify_human_root_free(second);
+    }
+}
+
+#[test]
+fn from_seeds_rejects_wrong_seed_lengths() {
+    unsafe {
+        let short = [0u8; 16];
+        let ok = [0u8; 32];
+        let mut out: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            short.as_ptr(), 16, ok.as_ptr(), 32, 0, &mut out, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyErrBadArgument);
+        assert!(out.is_null());
+        if !err.is_null() { ratify_error_free(err); }
     }
 }

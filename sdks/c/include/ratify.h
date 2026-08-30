@@ -1024,6 +1024,68 @@ enum RatifyStatus ratify_verify_bundle_opts_with_challenge_store(const char *bun
                                                                  struct RatifyVerifyResult **out,
                                                                  char **err_out);
 
+// Compute the 16-byte hex identity from a hybrid public key (SPEC §7).
+//
+// `pub_json` is the public key JSON (`{"ed25519":"...","ml_dsa_65":"..."}`),
+// as returned by `ratify_human_root_pub_key_json`. Free the result with
+// `ratify_string_free`.
+//
+// A verifier that pins an identity by id uses this to confirm that a public
+// key it has been given belongs to the principal it pinned (SPEC §15.4).
+char *ratify_derive_id(const char *pub_json, char **err_out);
+
+// Return the canonical delegation-cert signing bytes as a lowercase hex string.
+char *ratify_delegation_sign_bytes_hex(const char *cert_json, char **err_out);
+
+// Return the challenge signing bytes as a lowercase hex string.
+//
+// `challenge` must point to exactly `challenge_len` bytes. When
+// `session_context` is non-NULL it must be exactly 32 bytes and the v1.1
+// session-bound preimage is produced instead (SPEC §5.8).
+char *ratify_challenge_sign_bytes_hex(const unsigned char *challenge,
+                                      uintptr_t challenge_len,
+                                      int64_t challenge_at_unix,
+                                      const unsigned char *session_context,
+                                      uintptr_t session_context_len,
+                                      char **err_out);
+
+// Canonicalise a JSON document (SPEC §6). Returns the canonical form as a
+// string; free with `ratify_string_free`. Provided for interop audit, which is
+// what §4 names it for.
+char *ratify_canonical_json(const char *json, char **err_out);
+
+// Rebuild a HumanRoot deterministically from two 32-byte seeds.
+//
+// This is the supported way to persist an issuer identity in C: store the two
+// seeds as key material and reconstruct the identity after a restart. The
+// protocol deliberately specifies no private-key serialisation format, so
+// seeds are the portable unit.
+//
+// `created_at_unix` is carried into the rebuilt identity so that a restored
+// root is byte-identical to the original rather than merely equivalent.
+//
+// Both seeds MUST be 32 bytes and MUST come from a cryptographically secure
+// source. Anyone holding them holds the identity.
+enum RatifyStatus ratify_human_root_from_seeds(const unsigned char *ed_seed,
+                                               uintptr_t ed_seed_len,
+                                               const unsigned char *ml_seed,
+                                               uintptr_t ml_seed_len,
+                                               int64_t created_at_unix,
+                                               struct RatifyHumanRoot **out,
+                                               char **err_out);
+
+// Rebuild an AgentIdentity deterministically from two 32-byte seeds.
+// See `ratify_human_root_from_seeds` for the seed-custody warning.
+enum RatifyStatus ratify_agent_from_seeds(const char *name_utf8,
+                                          const char *agent_type_utf8,
+                                          const unsigned char *ed_seed,
+                                          uintptr_t ed_seed_len,
+                                          const unsigned char *ml_seed,
+                                          uintptr_t ml_seed_len,
+                                          int64_t created_at_unix,
+                                          struct RatifyAgent **out,
+                                          char **err_out);
+
 // Register a custom entropy callback for platforms without OS-level RNG.
 //
 // `callback` must:

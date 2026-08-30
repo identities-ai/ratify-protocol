@@ -111,32 +111,30 @@ def hybrid_keypair_from_seeds(
 ) -> tuple[HybridPublicKey, HybridPrivateKey]:
     """Derive a hybrid keypair deterministically from two 32-byte seeds.
 
-    NOTE: pqcrypto's ml_dsa_65 module does not expose seed-based keygen
-    through its public API — it calls PQClean's crypto_sign_keypair which
-    reads from the OS RNG. This function is therefore NOT truly deterministic
-    on the ML-DSA side in Python. For test-vector regeneration use the Go
-    reference; this SDK's responsibility is VERIFICATION of existing fixtures,
-    not regeneration.
+    NOT IMPLEMENTED in the Python SDK, and it raises rather than returning a
+    keypair. pqcrypto's ml_dsa_65 module does not expose seed-based keygen
+    through its public API: it calls PQClean's crypto_sign_keypair, which reads
+    from the OS RNG and ignores any caller-supplied seed.
+
+    Returning a keypair anyway would silently break the one property the
+    function exists for. The same seeds would yield a different ML-DSA identity
+    on every call, with no error at the call site, so a caller persisting seeds
+    to restore an identity would get a new identity and only discover it when
+    verification failed somewhere else. Failing here is the honest behaviour.
+
+    Use the Go, Rust, or TypeScript SDK to generate or restore an identity from
+    seeds. Python verifies existing fixtures; it does not regenerate them.
     """
     if len(ed_seed) != 32:
         raise ValueError(f"Ed25519 seed must be 32 bytes, got {len(ed_seed)}")
     if len(ml_seed) != 32:
         raise ValueError(f"ML-DSA-65 seed must be 32 bytes, got {len(ml_seed)}")
 
-    ed_priv = ed25519.Ed25519PrivateKey.from_private_bytes(ed_seed)
-    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-    ed_pub_bytes = ed_priv.public_key().public_bytes(
-        encoding=Encoding.Raw,
-        format=PublicFormat.Raw,
-    )
-
-    # pqcrypto does not expose seed-based ML-DSA keygen; fall back to
-    # OS-randomness keygen. The result will differ between invocations.
-    ml_pub, ml_secret = ml_dsa_65.generate_keypair()
-
-    return (
-        HybridPublicKey(ed25519=ed_pub_bytes, ml_dsa_65=ml_pub),
-        HybridPrivateKey(ed25519=ed_seed, ml_dsa_65=ml_secret),
+    raise NotImplementedError(
+        "hybrid_keypair_from_seeds is not available in the Python SDK: "
+        "pqcrypto's ML-DSA-65 binding does not accept a caller-supplied seed, "
+        "so the result would not be deterministic. Use the Go, Rust, or "
+        "TypeScript SDK to derive an identity from seeds."
     )
 
 

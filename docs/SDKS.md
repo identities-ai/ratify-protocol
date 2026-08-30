@@ -162,6 +162,16 @@ Every implementation MUST export these primitives with equivalent semantics:
 
 Naming conventions and capitalization follow the idioms of each language (`camelCase` for JS/Swift, `snake_case` for Python, `PascalCase` for Go). Semantics MUST be identical.
 
+**One documented exception.** `hybrid_keypair_from_seeds` raises
+`NotImplementedError` in the Python SDK. The `pqcrypto` ML-DSA-65 binding calls
+PQClean's `crypto_sign_keypair`, which reads the OS RNG and ignores a
+caller-supplied seed, so Python cannot honour the deterministic half of the
+contract. It refuses rather than returning a keypair, because returning one
+would silently break the single property the function exists for: the same seeds
+would yield a different identity on every call, with no error at the call site.
+Derive or restore identities from seeds with the Go, Rust, TypeScript, or C SDK.
+Every other entry in the table is implemented in all five.
+
 ### Cryptography library recommendations
 
 | Language | Ed25519 | ML-DSA-65 |

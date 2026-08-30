@@ -1242,6 +1242,49 @@ fn human_root_from_seeds_is_deterministic_and_matches_derive_id() {
     }
 }
 
+/// The deterministic keygen vector every SDK must reproduce, asserted here so
+/// the C ABI is pinned to the same output as Go, Rust, and TypeScript rather
+/// than merely being self-consistent.
+#[test]
+fn human_root_from_seeds_matches_the_canonical_vector() {
+    unsafe {
+        let mut ed_seed = [0u8; 32];
+        let mut ml_seed = [0u8; 32];
+        for i in 0..32 {
+            ed_seed[i] = i as u8;
+            ml_seed[i] = 0xA0u8.wrapping_add(i as u8);
+        }
+
+        let mut root: *mut RatifyHumanRoot = std::ptr::null_mut();
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let st = ratify_human_root_from_seeds(
+            ed_seed.as_ptr(), 32, ml_seed.as_ptr(), 32, 1_800_000_000, &mut root, &mut err,
+        );
+        assert_eq!(st, RatifyStatus::RatifyOk);
+
+        let id = ratify_human_root_id(root);
+        assert_eq!(
+            CStr::from_ptr(id).to_string_lossy(),
+            "3823136b5a5fc4c755b22704474172c0",
+            "derived identity must match the canonical vector"
+        );
+
+        // The public key itself, not only the digest over it. HybridPublicKey
+        // serialises its components as base64 (types.rs), so this is the
+        // canonical ed25519 key in the encoding the wire format uses.
+        let pub_json = ratify_human_root_pub_key_json(root, &mut err);
+        let json = CStr::from_ptr(pub_json).to_string_lossy().into_owned();
+        assert!(
+            json.contains("A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="),
+            "ed25519 public key must match the canonical vector, got {json}"
+        );
+
+        ratify_string_free(pub_json);
+        ratify_string_free(id);
+        ratify_human_root_free(root);
+    }
+}
+
 #[test]
 fn from_seeds_rejects_wrong_seed_lengths() {
     unsafe {

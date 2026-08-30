@@ -207,3 +207,58 @@ func checkVerificationReceiptSignBytes(t *testing.T, raw json.RawMessage, want s
 			base64.StdEncoding.EncodeToString(got), want)
 	}
 }
+
+// TestHybridKeypairFromSeedsKnownAnswer pins the deterministic keygen vector
+// that every SDK implementing HybridKeypairFromSeeds must reproduce.
+//
+// The canonical fixtures carry no seeds, so nothing else holds the seeded
+// keygen implementations to each other: an SDK could be deterministic and
+// deterministically different, and every existing test would still pass. This
+// vector is asserted identically in the Rust, C, and TypeScript suites.
+//
+// Python does not implement seeded keygen (see docs/SDKS.md), so it has no
+// counterpart to this test.
+func TestHybridKeypairFromSeedsKnownAnswer(t *testing.T) {
+	var edSeed, mlSeed [32]byte
+	for i := 0; i < 32; i++ {
+		edSeed[i] = byte(i)
+		mlSeed[i] = byte(0xA0 + i)
+	}
+
+	pub, priv, err := HybridKeypairFromSeeds(edSeed, mlSeed)
+	if err != nil {
+		t.Fatalf("HybridKeypairFromSeeds: %v", err)
+	}
+
+	const (
+		wantEd25519 = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+		wantMLPrefix = "1963d47ac0e93110e3add0354e0333e31c75de34038909ec8833eb6e2aaa7218"
+		wantID       = "3823136b5a5fc4c755b22704474172c0"
+	)
+
+	if got := hex.EncodeToString(pub.Ed25519); got != wantEd25519 {
+		t.Errorf("ed25519 public key\n  got:  %s\n  want: %s", got, wantEd25519)
+	}
+	if len(pub.MLDSA65) != 1952 {
+		t.Errorf("ML-DSA-65 public key length = %d, want 1952", len(pub.MLDSA65))
+	}
+	if got := hex.EncodeToString(pub.MLDSA65[:32]); got != wantMLPrefix {
+		t.Errorf("ML-DSA-65 public key prefix\n  got:  %s\n  want: %s", got, wantMLPrefix)
+	}
+	if got := DeriveID(pub); got != wantID {
+		t.Errorf("derived ID\n  got:  %s\n  want: %s", got, wantID)
+	}
+
+	// The same seeds must rebuild the same identity: this is the property the
+	// entry exists for, and what lets an issuer persist seeds instead of keys.
+	again, _, err := HybridKeypairFromSeeds(edSeed, mlSeed)
+	if err != nil {
+		t.Fatalf("second HybridKeypairFromSeeds: %v", err)
+	}
+	if DeriveID(again) != DeriveID(pub) {
+		t.Error("identical seeds produced a different identity")
+	}
+	if priv.Ed25519 == nil {
+		t.Error("private key not populated")
+	}
+}

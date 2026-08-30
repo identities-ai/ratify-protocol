@@ -28,6 +28,8 @@ import {
   type PolicyVerdict,
   type VerificationReceipt,
   type VerifierContext,
+  hybridKeypairFromSeeds,
+  deriveID,
 } from "../src/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -159,3 +161,41 @@ for (const v of doc.vectors) {
     }
   });
 }
+
+// Deterministic keygen known-answer vector.
+//
+// The canonical fixtures carry no seeds, so nothing else holds the seeded
+// keygen implementations to each other: an SDK could be deterministic and
+// deterministically different from the others, and every existing test would
+// still pass. Asserted identically in the Go, Rust, and C suites.
+//
+// Python does not implement seeded keygen (see docs/SDKS.md), so it has no
+// counterpart to this test.
+test("cross-sdk: hybridKeypairFromSeeds matches the canonical vector", async () => {
+  const edSeed = new Uint8Array(32);
+  const mlSeed = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    edSeed[i] = i;
+    mlSeed[i] = (0xa0 + i) & 0xff;
+  }
+
+  const { publicKey } = await hybridKeypairFromSeeds(edSeed, mlSeed);
+  const hex = (b: Uint8Array) =>
+    Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+
+  assert.equal(
+    hex(publicKey.ed25519),
+    "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+  );
+  assert.equal(publicKey.ml_dsa_65.length, 1952);
+  assert.equal(
+    hex(publicKey.ml_dsa_65.slice(0, 32)),
+    "1963d47ac0e93110e3add0354e0333e31c75de34038909ec8833eb6e2aaa7218",
+  );
+  assert.equal(deriveID(publicKey), "3823136b5a5fc4c755b22704474172c0");
+
+  // The same seeds must rebuild the same identity: the property the entry
+  // exists for, and what lets an issuer persist seeds instead of keys.
+  const again = await hybridKeypairFromSeeds(edSeed, mlSeed);
+  assert.equal(deriveID(again.publicKey), deriveID(publicKey));
+});

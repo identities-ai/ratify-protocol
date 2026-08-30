@@ -111,7 +111,7 @@ For every fixture in `testvectors/v1/*.json`:
 
 ### Minimum SDK surface
 
-Every implementation MUST export these primitives with equivalent semantics:
+Every implementation MUST export these primitives with equivalent semantics, with one intentional exception recorded under Documented exceptions below (Python does not implement deterministic seed-based key generation):
 
 | Go name | What it does |
 |---|---|
@@ -175,7 +175,14 @@ deterministic half of the entry. It refuses rather than returning a keypair,
 because returning one would silently break the single property the function
 exists for: the same seeds would yield a different identity on every call, with
 no error at the call site. Derive or restore identities from seeds with the Go,
-Rust, TypeScript, or C SDK. Every other entry is implemented.
+Rust, TypeScript, or C SDK.
+
+Python is therefore intentionally non-equivalent for this one entry. It is not
+a defect and it is not expected to be fixed in the pure-Python distribution:
+closing it requires a native extension, which would make the package
+platform-specific. Every other entry in the table is implemented in Python,
+and the deterministic keygen vector asserted by the Go, Rust, TypeScript, and
+C suites has no Python counterpart for the same reason.
 
 **C: some entries have a different shape, none are absent.** The C ABI has no
 value types, so a few entries are expressed through handles or through the

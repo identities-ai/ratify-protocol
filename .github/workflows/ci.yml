@@ -179,10 +179,12 @@ jobs:
             exit 1
           fi
 
-      # Cross-compiled wheels cannot be installed on the builder, so only the
-      # native-architecture targets prove the wheel actually works.
+      # Cross-compiled wheels cannot be executed on the builder, so only the
+      # native-architecture legs prove the wheel actually works. Driven by the
+      # matrix's own `test` flag: whether a runner can run what it just built is
+      # a property of the leg, not something to re-derive from os and target.
       - name: install and run the suite against the built wheel
-        if: matrix.target != 'aarch64' || matrix.os != 'ubuntu-latest'
+        if: matrix.test
         shell: bash
         run: |
           python -m pip install --upgrade pip

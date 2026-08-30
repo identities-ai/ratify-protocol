@@ -65,7 +65,7 @@ Tested pins:
 
 - `google-adk==2.6.3`
 - `mcp==1.29.0`
-- `ratify-protocol==1.0.0a16`
+- `ratify-protocol==1.0.0a19`
 - `pytest==8.4.1`
 
 The deterministic path needs no API key, Google Cloud project, or paid

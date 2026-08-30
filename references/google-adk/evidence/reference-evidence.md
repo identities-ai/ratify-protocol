@@ -11,7 +11,7 @@ from the independent Ratify reference; it is not Google attestation.
 | Python | 3.11.1 |
 | Google ADK | `2.6.3` |
 | MCP Python SDK | `1.29.0` |
-| Ratify Protocol | published PyPI package `1.0.0a16` |
+| Ratify Protocol | published PyPI package `1.0.0a19` |
 | pytest | `8.4.1` |
 | Protocol base commit | `f5a1522f20b79c881f77db96ae44948dd19dbd42` |
 | Requirements SHA-256 | `b934bca56ea62573af6b5ffe9b8b9224138ee405a5efd3f99f157c21fef5a3b9` |
@@ -29,7 +29,7 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 ## Recorded result
 
 ```text
-pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a16
+pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a19
 .................................                                        [100%]
 33 passed, 37 warnings
 gate: 33/33 passed; zero skipped, xfailed, failed, or errored

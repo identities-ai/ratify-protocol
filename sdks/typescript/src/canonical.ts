@@ -137,7 +137,13 @@ export function base64StandardDecode(s: string): Uint8Array {
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     .split("")
     .forEach((c, i) => (table[c] = i));
-  const clean = s.replace(/=+$/, "");
+  // Trailing padding is stripped by scanning backwards rather than with a regex.
+  // /=+$/ backtracks polynomially: an input of many '=' followed by a character
+  // that is not the end of the string costs O(n^2). This decoder is exported and
+  // its input is not always size-checked before it is called.
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 0x3d) end -= 1;
+  const clean = s.slice(0, end);
   const bytes: number[] = [];
   let buf = 0;
   let bits = 0;

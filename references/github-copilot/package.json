@@ -12,7 +12,7 @@
     "check": "tsc --noEmit && npm test && npm run build:plugin"
   },
   "dependencies": {
-    "@identities-ai/ratify-protocol": "1.0.0-alpha.16",
+    "@identities-ai/ratify-protocol": "1.0.0-alpha.19",
     "@modelcontextprotocol/sdk": "1.30.0",
     "zod": "3.25.76"
   },

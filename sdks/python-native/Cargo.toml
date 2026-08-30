@@ -1,0 +1,19 @@
+[package]
+name = "ratify-protocol-native"
+version = "1.0.0-alpha.17"
+edition = "2021"
+license = "Apache-2.0"
+description = "Native deterministic key generation for the Ratify Protocol Python SDK"
+repository = "https://github.com/identities-ai/ratify-protocol"
+publish = false
+
+[lib]
+name = "ratify_protocol_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3-py310 builds one wheel per platform that works on every CPython from
+# 3.10 up, instead of one per interpreter minor version. It must match
+# requires-python in pyproject.toml.
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+ratify-protocol = { path = "../rust" }

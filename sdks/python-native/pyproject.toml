@@ -1,0 +1,32 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "ratify-protocol-native"
+description = "Native deterministic key generation for the Ratify Protocol Python SDK"
+readme = "README.md"
+authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Security :: Cryptography",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://ratifyprotocol.com"
+Repository = "https://github.com/identities-ai/ratify-protocol"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "ratify_protocol_native"
+features = ["pyo3/extension-module"]

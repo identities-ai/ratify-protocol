@@ -27,9 +27,26 @@ dependencies = [
     # pqcrypto 1.0.0 (2026-08-15) changed ML-DSA-65 behaviour; every signature
     # fails against it. Bounded until the break is understood upstream.
     "pqcrypto>=0.3.4,<1.0",
+    # The IANA time zone database, for the time_window constraint (SPEC 5.7).
+    # zoneinfo reads the operating system's copy where there is one and falls
+    # back to this package where there is not: Windows has no system database,
+    # and minimal Linux containers often omit theirs.
+    #
+    # Declared unconditionally rather than behind a win32 marker. Without it a
+    # verifier resolves no zone and denies every time_window constraint, so the
+    # same proof bundle verifies on one machine and is rejected on another.
+    # A protocol built on byte-identical cross-platform decisions cannot have
+    # its verdict depend on which files the host happens to ship.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
+# Deterministic seed-based key generation, which pqcrypto cannot provide. A
+# separate distribution so this package stays pure-Python: install it only if
+# you need the same seeds to yield the same identity across SDKs.
+native = [
+    "ratify-protocol-native==1.0.0a17",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

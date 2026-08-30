@@ -103,8 +103,95 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
+      # The pure-Python package must pass without the optional native extra:
+      # that is the configuration most users install.
       - name: full test suite (79 fixtures)
         run: pytest -v
+
+      # Then build the optional native extra from source and re-run with it
+      # required. RATIFY_REQUIRE_NATIVE=1 turns a missing extension into an
+      # error rather than a skip: without it, a job that failed to build the
+      # extension would silently skip every deterministic-keygen test and still
+      # report success.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: build and install the native extra
+        working-directory: sdks/python-native
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: test suite with the native extra required
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
+        run: pytest -v
+
+  # The optional native extra's wheels are built on five platforms at release
+  # time. That matrix would otherwise run for the first time during a release,
+  # which is the worst moment to discover a manylinux or Windows build problem,
+  # so it is exercised here as a dry run whenever the extra changes. Nothing is
+  # published; the wheels are built and discarded.
+  #
+  # Runs on every CI event rather than being paths-filtered: the extra links
+  # the Rust core, so a change anywhere in sdks/rust can break these wheels
+  # without touching sdks/python-native at all. A path filter would skip the
+  # job exactly when the core changed underneath it.
+  python-native-wheels:
+    name: Python native extra wheels (dry run)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `test` says whether the runner can execute the wheel it just built.
+          # A cross-compiled wheel installs nowhere useful on the builder, so
+          # those legs prove the build only. Both macOS targets build on the
+          # Apple Silicon runner, matching how this repo already builds its C
+          # binaries: the Intel `macos-13` label queues indefinitely.
+          - { os: ubuntu-latest,  target: x86_64,               py: '3.10', test: true  }
+          - { os: ubuntu-latest,  target: aarch64,              py: '3.12', test: false }
+          - { os: macos-latest,   target: aarch64-apple-darwin, py: '3.12', test: true  }
+          - { os: macos-latest,   target: x86_64-apple-darwin,  py: '3.12', test: false }
+          - { os: windows-latest, target: x64,                  py: '3.12', test: true  }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist
+          working-directory: sdks/python-native
+
+      # abi3 is what keeps the matrix to one wheel per platform instead of one
+      # per interpreter minor version. If the feature were dropped the wheels
+      # would still build, so assert the tag rather than trusting it.
+      - name: assert the wheel is abi3
+        shell: bash
+        working-directory: sdks/python-native
+        run: |
+          ls -l dist/
+          if ! ls dist/*-abi3-*.whl >/dev/null 2>&1; then
+            echo "::error::expected an abi3 wheel; the pyo3 abi3-py310 feature may have been dropped"
+            exit 1
+          fi
+
+      # Cross-compiled wheels cannot be executed on the builder, so only the
+      # native-architecture legs prove the wheel actually works. Driven by the
+      # matrix's own `test` flag: whether a runner can run what it just built is
+      # a property of the leg, not something to re-derive from os and target.
+      - name: install and run the suite against the built wheel
+        if: matrix.test
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install ./sdks/python-native/dist/*.whl
+          pip install -e './sdks/python[dev]'
+          cd sdks/python
+          RATIFY_REQUIRE_NATIVE=1 pytest -q
 
   rust:
     name: Rust SDK conformance

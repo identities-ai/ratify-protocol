@@ -28,3 +28,7 @@ dist/
 .git_backup
 .memory/
 .ratify-demo/
+
+# Python native extra build output
+sdks/python-native/target/
+sdks/python-native/dist/

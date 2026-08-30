@@ -62,6 +62,22 @@ from .types import (
 )
 
 
+# The optional native extra (`pip install 'ratify-protocol[native]'`), a
+# separate distribution so that this package stays pure-Python and installs on
+# any platform. It supplies deterministic seed-based key generation, which
+# pqcrypto cannot do. Signing and verification never use it.
+#
+# ImportError is the only failure caught here: a genuine load failure of an
+# installed extension (wrong architecture, missing symbol) raises something
+# else and is left to surface, rather than being reported as "not installed".
+try:
+    from ratify_protocol_native import (
+        hybrid_keypair_from_seeds_py as _native_seed_keypair,
+    )
+except ImportError:
+    _native_seed_keypair = None
+
+
 # ----------------------------------------------------------------------
 # ID derivation
 # ----------------------------------------------------------------------
@@ -111,30 +127,44 @@ def hybrid_keypair_from_seeds(
 ) -> tuple[HybridPublicKey, HybridPrivateKey]:
     """Derive a hybrid keypair deterministically from two 32-byte seeds.
 
-    NOT IMPLEMENTED in the Python SDK, and it raises rather than returning a
-    keypair. pqcrypto's ml_dsa_65 module does not expose seed-based keygen
-    through its public API: it calls PQClean's crypto_sign_keypair, which reads
-    from the OS RNG and ignores any caller-supplied seed.
+    Requires the optional native extra::
 
-    Returning a keypair anyway would silently break the one property the
-    function exists for. The same seeds would yield a different ML-DSA identity
-    on every call, with no error at the call site, so a caller persisting seeds
-    to restore an identity would get a new identity and only discover it when
-    verification failed somewhere else. Failing here is the honest behaviour.
+        pip install 'ratify-protocol[native]'
 
-    Use the Go, Rust, or TypeScript SDK to generate or restore an identity from
-    seeds. Python verifies existing fixtures; it does not regenerate them.
+    Without it this raises NotImplementedError. pqcrypto's ML-DSA-65 binding
+    calls PQClean's crypto_sign_keypair, which reads the OS RNG and ignores any
+    caller-supplied seed, so pure Python cannot honour the deterministic half
+    of this entry. Returning a keypair anyway would silently break the one
+    property the function exists for: the same seeds would yield a different
+    identity on every call, with no error at the call site.
+
+    The extra is only needed for seed portability across languages. Verifying
+    proofs, issuing delegations, signing challenges, and persisting an identity
+    by storing its key bytes all work in pure Python without it.
+
+    With the extra installed, output is byte-identical to the Go, Rust,
+    TypeScript, and C SDKs for the same seeds.
+
+    Both seeds are key material: anyone holding them holds the identity.
     """
     if len(ed_seed) != 32:
         raise ValueError(f"Ed25519 seed must be 32 bytes, got {len(ed_seed)}")
     if len(ml_seed) != 32:
         raise ValueError(f"ML-DSA-65 seed must be 32 bytes, got {len(ml_seed)}")
 
-    raise NotImplementedError(
-        "hybrid_keypair_from_seeds is not available in the Python SDK: "
-        "pqcrypto's ML-DSA-65 binding does not accept a caller-supplied seed, "
-        "so the result would not be deterministic. Use the Go, Rust, or "
-        "TypeScript SDK to derive an identity from seeds."
+    if _native_seed_keypair is None:
+        raise NotImplementedError(
+            "hybrid_keypair_from_seeds requires the native extra: "
+            "pip install 'ratify-protocol[native]'. pqcrypto's ML-DSA-65 "
+            "binding does not accept a caller-supplied seed, so the pure-Python "
+            "package cannot derive a deterministic keypair. Every other entry "
+            "point works without it."
+        )
+
+    ed_pub, ml_pub, ed_priv, ml_priv = _native_seed_keypair(ed_seed, ml_seed)
+    return (
+        HybridPublicKey(ed25519=ed_pub, ml_dsa_65=ml_pub),
+        HybridPrivateKey(ed25519=ed_priv, ml_dsa_65=ml_priv),
     )
 
 

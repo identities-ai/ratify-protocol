@@ -162,15 +162,38 @@ Every implementation MUST export these primitives with equivalent semantics:
 
 Naming conventions and capitalization follow the idioms of each language (`camelCase` for JS/Swift, `snake_case` for Python, `PascalCase` for Go). Semantics MUST be identical.
 
-**One documented exception.** `hybrid_keypair_from_seeds` raises
-`NotImplementedError` in the Python SDK. The `pqcrypto` ML-DSA-65 binding calls
-PQClean's `crypto_sign_keypair`, which reads the OS RNG and ignores a
-caller-supplied seed, so Python cannot honour the deterministic half of the
-contract. It refuses rather than returning a keypair, because returning one
-would silently break the single property the function exists for: the same seeds
-would yield a different identity on every call, with no error at the call site.
-Derive or restore identities from seeds with the Go, Rust, TypeScript, or C SDK.
-Every other entry in the table is implemented in all five.
+### Documented exceptions
+
+The table above is the contract. Where an implementation cannot meet an entry,
+the exception is recorded here rather than left implicit, and it is the only
+place an SDK may fall short without being a defect.
+
+**Python: `hybrid_keypair_from_seeds` raises `NotImplementedError`.** The
+`pqcrypto` ML-DSA-65 binding calls PQClean's `crypto_sign_keypair`, which reads
+the OS RNG and ignores a caller-supplied seed, so Python cannot honour the
+deterministic half of the entry. It refuses rather than returning a keypair,
+because returning one would silently break the single property the function
+exists for: the same seeds would yield a different identity on every call, with
+no error at the call site. Derive or restore identities from seeds with the Go,
+Rust, TypeScript, or C SDK. Every other entry is implemented.
+
+**C: some entries have a different shape, none are absent.** The C ABI has no
+value types, so a few entries are expressed through handles or through the
+lower-level primitive the contract is built on:
+
+- `GenerateHybridKeypair` returns the public key as JSON plus the two 32-byte
+  seeds that reproduce it. The protocol specifies no private-key serialisation
+  format, so seeds are the C SDK's unit of private key material; feed them back
+  through `ratify_human_root_from_seeds` or `ratify_agent_from_seeds`.
+- `SignChallenge` is `ratify_agent_sign_challenge`, taking an agent handle
+  rather than a bare private key, because that is where the C SDK holds key
+  material.
+- The three `ChallengeSignBytes*` entries and the two `SignChallenge*` entries
+  are each one function with optional session and stream arguments, which this
+  section permits where idiomatic.
+- `OperationContextBytes` and `SessionContextBytes` take the same explicit
+  parameters as their hash counterparts, since the context types are not
+  deserialisable from JSON across the ABI.
 
 ### Cryptography library recommendations
 

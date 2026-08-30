@@ -6,6 +6,66 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.18 (unreleased)
+
+An SDK surface release. No canonical bytes, fixture contents, wire format or
+verifier behavior change, and the protocol version remains 1.
+
+### Added
+
+- **Deterministic key generation in Rust and C.** `docs/SDKS.md` requires every
+  SDK to export `HybridKeypairFromSeeds`, and neither the Rust SDK nor the C ABI
+  had it. Without it an application cannot reconstruct an identity it created,
+  so a C or Rust issuer could mint a key and publish its public half but never
+  load it back, and any verifier pinning that identity broke on the next
+  restart. Seeds are the portable unit of private key material: the protocol
+  specifies no private-key serialization format, so storing two 32-byte seeds
+  and rebuilding is the supported way to persist an issuer identity.
+- **Remaining minimum-surface entries in the C ABI:** `ratify_derive_id`,
+  `ratify_canonical_json`, `ratify_delegation_sign_bytes_hex`,
+  `ratify_challenge_sign_bytes_hex`, `ratify_verify_delegation_signature`,
+  `ratify_agent_sign_challenge`, `ratify_verify_challenge_signature`,
+  `ratify_generate_hybrid_keypair`, `ratify_human_root_from_seeds`,
+  `ratify_agent_from_seeds`, `ratify_agent_pub_key_json`, and the operation- and
+  session-context byte helpers. Four entries take a different shape because the
+  ABI has no value types; each is documented in `docs/SDKS.md`.
+- **A deterministic keygen known-answer vector** asserted by the Go, Rust, C and
+  TypeScript suites. The canonical fixtures carry no seeds, so nothing held the
+  seeded implementations to each other: one could have been deterministic and
+  deterministically different from the rest with every existing test passing.
+
+### Fixed
+
+- **The C conformance suite did not assert two requirements it claimed to meet.**
+  `docs/SDKS.md` requires that for every `Kind = verify` fixture an SDK's
+  delegation signing bytes match `expected.delegation_sign_bytes_hex` and its
+  challenge signing bytes match `expected.challenge_sign_bytes_hex`. The Go and
+  Rust suites assert both. The C suite asserted neither, because the ABI did not
+  expose the helpers, so it was structurally narrower than the contract. Both
+  assertions now run across all canonical verify fixtures.
+- **The generated C header could go stale.** `sdks/c/build.rs` declared
+  `rerun-if-changed` for `src/lib.rs` only, while most of the ABI lives in
+  `src/advanced.rs`. A change confined to that file regenerated nothing, so the
+  committed `include/ratify.h` kept its previous contents: a newly added symbol
+  was compiled into the library but never declared for callers, and a removed
+  one stayed declared and would fail at link time.
+
+### Changed
+
+- **Python `hybrid_keypair_from_seeds` now raises `NotImplementedError`.**
+  It previously accepted an ML-DSA seed, validated that it was exactly 32 bytes,
+  and then discarded it: the `pqcrypto` binding calls PQClean's
+  `crypto_sign_keypair`, which reads the OS RNG. Callers passing identical seeds
+  received different keypairs with no error and no warning at the call site, so
+  anyone persisting seeds to restore an identity silently received a new one and
+  discovered it only when verification failed elsewhere. This is a behavioral
+  change for any caller of that one function; every other Python entry point is
+  unaffected. Derive or restore identities from seeds with the Go, Rust,
+  TypeScript or C SDK. Recorded in `docs/SDKS.md` as the one intentional
+  non-equivalence in the minimum surface.
+
+---
+
 ## v1.0.0-alpha.17 (2026-08-24)
 
 A packaging and documentation release. No SDK behavior, canonical bytes or fixture

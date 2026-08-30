@@ -1,0 +1,9 @@
+# LangChain
+
+- **Profile:** [`../langchain/`](../langchain/README.md)
+- **Status:** Independent draft; 24/24 gate green
+- **Ratify:** `1.0.0a19`
+- **Platform:** `langchain==1.3.14`, `langchain-mcp-adapters==0.3.0`
+- **Gate:** `./scripts/langchain-reference-check.sh`
+- **Production backlog:** [`../langchain/PRODUCTION_GAPS.md`](../langchain/PRODUCTION_GAPS.md)
+- **Endorsement:** Not LangChain-reviewed or LangChain-approved

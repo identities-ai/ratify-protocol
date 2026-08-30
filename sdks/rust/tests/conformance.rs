@@ -668,3 +668,40 @@ fn run_all_fixtures() {
     );
     println!("✓ {} fixtures passed", pass);
 }
+
+/// Known-answer test for deterministic keygen, generated from the Go reference
+/// (`HybridKeypairFromSeeds`). The fixtures do not carry seeds, so without a KAT
+/// nothing would catch this drifting away from the other SDKs.
+#[test]
+fn hybrid_keypair_from_seeds_matches_go_reference() {
+    let mut ed_seed = [0u8; 32];
+    let mut ml_seed = [0u8; 32];
+    for i in 0..32 {
+        ed_seed[i] = i as u8;
+        ml_seed[i] = 0xA0u8.wrapping_add(i as u8);
+    }
+
+    let (pub_key, priv_key) =
+        ratify_protocol::crypto::hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
+
+    assert_eq!(
+        hex::encode(&pub_key.ed25519),
+        "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+    );
+    assert_eq!(pub_key.ml_dsa_65.len(), 1952);
+    assert_eq!(
+        hex::encode(&pub_key.ml_dsa_65[..32]),
+        "1963d47ac0e93110e3add0354e0333e31c75de34038909ec8833eb6e2aaa7218"
+    );
+    assert_eq!(
+        ratify_protocol::crypto::derive_id(&pub_key),
+        "3823136b5a5fc4c755b22704474172c0"
+    );
+
+    // Determinism: the same seeds must reproduce the same identity, which is
+    // the property the whole entry exists for.
+    let (again, _) = ratify_protocol::crypto::hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
+    assert_eq!(pub_key.ed25519, again.ed25519);
+    assert_eq!(pub_key.ml_dsa_65, again.ml_dsa_65);
+    assert_eq!(priv_key.ed25519, ed_seed.to_vec());
+}

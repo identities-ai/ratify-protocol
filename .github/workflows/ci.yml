@@ -141,11 +141,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  target: x86_64,  py: '3.10' }
-          - { os: ubuntu-latest,  target: aarch64, py: '3.12' }
-          - { os: macos-latest,   target: aarch64, py: '3.12' }
-          - { os: macos-13,       target: x86_64,  py: '3.12' }
-          - { os: windows-latest, target: x64,     py: '3.12' }
+          # `test` says whether the runner can execute the wheel it just built.
+          # A cross-compiled wheel installs nowhere useful on the builder, so
+          # those legs prove the build only. Both macOS targets build on the
+          # Apple Silicon runner, matching how this repo already builds its C
+          # binaries: the Intel `macos-13` label queues indefinitely.
+          - { os: ubuntu-latest,  target: x86_64,               py: '3.10', test: true  }
+          - { os: ubuntu-latest,  target: aarch64,              py: '3.12', test: false }
+          - { os: macos-latest,   target: aarch64-apple-darwin, py: '3.12', test: true  }
+          - { os: macos-latest,   target: x86_64-apple-darwin,  py: '3.12', test: false }
+          - { os: windows-latest, target: x64,                  py: '3.12', test: true  }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

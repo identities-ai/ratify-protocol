@@ -44,7 +44,7 @@ sequenceDiagram
         R->>T: Execute refund once
         T-->>A: Signed decision receipt
     else any check fails
-        R-->>A: DENY; no refund
+        R-->>A: DENY, no refund
     end
 ```
 

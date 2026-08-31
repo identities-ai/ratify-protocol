@@ -83,7 +83,7 @@ sequenceDiagram
         R->>T: Execute once
         T-->>A: ALLOW
     else anything fails
-        R-->>A: DENY; tool remains untouched
+        R-->>A: DENY, tool remains untouched
     end
 ```
 

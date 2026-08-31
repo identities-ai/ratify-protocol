@@ -1,6 +1,6 @@
 # Google ADK reference evidence
 
-**Status:** executed draft evidence, August 10, 2026. This record is generated
+**Status:** executed draft evidence, re-run August 30, 2026. This record is generated
 from the independent Ratify reference; it is not Google attestation.
 
 ## Environment
@@ -8,13 +8,13 @@ from the independent Ratify reference; it is not Google attestation.
 | Field | Value |
 |---|---|
 | Host | macOS 26.6, arm64 |
-| Python | 3.11.1 |
+| Python | 3.12.10 |
 | Google ADK | `2.6.3` |
 | MCP Python SDK | `1.29.0` |
 | Ratify Protocol | published PyPI package `1.0.0a19` |
-| pytest | `8.4.1` |
-| Protocol base commit | `f5a1522f20b79c881f77db96ae44948dd19dbd42` |
-| Requirements SHA-256 | `b934bca56ea62573af6b5ffe9b8b9224138ee405a5efd3f99f157c21fef5a3b9` |
+| pytest | `9.0.3` |
+| Protocol base commit | `7c0bf40d22c73b6919f2044c5f2d9194aa1d47f8` |
+| Requirements SHA-256 | `a392fe01d0be77588aff28e0a2729f98aaa5513009c28aad8ae45553f41e75f5` |
 
 ## Reproduction
 

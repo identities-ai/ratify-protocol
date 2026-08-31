@@ -130,7 +130,7 @@ Tested pins:
 - `google-adk==2.6.3`
 - `mcp==1.29.0`
 - `ratify-protocol==1.0.0a19`
-- `pytest==8.4.1`
+- `pytest==9.0.3`
 
 The deterministic path needs no API key, Google Cloud project, or paid
 service. It drives the real ADK runner with a scripted model double, so ADK

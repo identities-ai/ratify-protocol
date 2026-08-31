@@ -1,0 +1,12 @@
+{
+  "name": "ratify-mermaid-check",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Parses every mermaid diagram in the repository's documentation.",
+  "type": "module",
+  "scripts": { "check": "node check.mjs" },
+  "dependencies": {
+    "jsdom": "26.1.0",
+    "mermaid": "11.12.0"
+  }
+}

@@ -40,6 +40,18 @@ def check(readme: Path) -> list[str]:
     if len(diagrams) < 2:
         problems.append(f"{name}: needs at least 2 mermaid diagrams, found {len(diagrams)}")
 
+    # Semicolons separate statements in a sequence diagram, so one inside a
+    # message ends the message early and the rest is parsed as a new statement.
+    # GitHub then renders "Unable to render rich display" instead of the
+    # diagram, which is invisible in review and obvious to every reader.
+    for i, block in enumerate(diagrams):
+        for line in block.split("\n"):
+            if ";" in line and "->" in line:
+                problems.append(
+                    f"{name}: diagram {i + 1} has a semicolon inside a message, "
+                    f"which stops it rendering: {line.strip()}"
+                )
+
     # A diagram that shows only the authorized path is marketing. At least one
     # must carry both outcomes.
     joined = " ".join(diagrams).lower()

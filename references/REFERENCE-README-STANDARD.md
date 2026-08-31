@@ -146,6 +146,37 @@ not.
 - Label edges with what is actually carried: "signed delegation", "proof
   bundle", "routed call + proof". Not "request" or "data".
 - Render on GitHub without a plugin. `mermaid` in a fenced block, nothing else.
+- **No semicolons inside a message.** A semicolon separates statements in a
+  sequence diagram, so `DENY; tool untouched` ends the message at the semicolon
+  and the remainder is parsed as a new statement. GitHub then shows "Unable to
+  render rich display" where the diagram should be. Use a comma.
+  `scripts/check-reference-readmes.py` rejects this, but the lint only knows the
+  pitfalls it has been taught.
+- **Every diagram is parsed in CI** by `scripts/mermaid-check`, which runs the
+  real mermaid parser over every fenced block in the repository. The lint above
+  catches one known pitfall; the parser catches the rest. To run it locally:
+
+  ```bash
+  cd scripts/mermaid-check && npm ci && node check.mjs
+  ```
+
+  If you would rather check a single diagram by hand before committing, paste it
+  into the GitHub preview, or:
+
+  ```bash
+  npm install mermaid jsdom
+  node -e '
+    const {JSDOM} = require("jsdom");
+    const dom = new JSDOM("<!doctype html><body></body>", {pretendToBeVisual: true});
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    Object.defineProperty(globalThis, "navigator", {value: dom.window.navigator, configurable: true});
+    import("mermaid").then(async ({default: m}) => {
+      m.initialize({startOnLoad: false});
+      await m.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      console.log("ok");
+    }).catch(e => { console.error(e.message); process.exit(1); });
+  ' diagram.mmd
+  ```
 - Never use a diagram to restate a table. If the diagram adds nothing the prose
   lacks, remove it.
 

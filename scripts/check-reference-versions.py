@@ -92,6 +92,16 @@ def main() -> int:
             elif found != {want}:
                 failures.append(f"{name}: {label} names {sorted(found)}, but requirements.txt pins {want}")
 
+        # Keep the physical reference's stated gate count aligned with its
+        # registry metadata; prose counts otherwise drift silently.
+        if name == "physical-ai-edge-sentinel" and metadata_path.exists():
+            readme_text = (ref / "README.md").read_text(encoding="utf-8")
+            gate_count = re.search(r"gate result is \*\*(\d+) passed,\s*0 failed,\s*0 skipped", readme_text)
+            if gate_count and int(gate_count.group(1)) != metadata.get("tests"):
+                failures.append(
+                    f"{name}: README gate count {gate_count.group(1)} does not match metadata {metadata.get('tests')}"
+                )
+
         # Every other pin, not just Ratify's. A reference states its tested
         # versions in prose, and prose does not move when a dependency does.
         # The rule is narrow on purpose: a document need not mention every pin,

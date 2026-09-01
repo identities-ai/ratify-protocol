@@ -1,16 +1,16 @@
 # Evidence
 
 - Validation date: 2026-08-31
-- Reference source revision: `8984d39`
+- Reference source revision: `25fcb3e`
 - Target compiler: GCC 14.2.0 (Raspbian)
 - Target architecture: ARMv7l
 - SDK line: Ratify 1.0.0-alpha.19
-- Rebuilt binary SHA-256: `edge` `db3508b28da5bb24c79fd7383e35f807a91cb2a9a8b18a81ccbcd0dce5ebcada`, `edge-test` `a3cc2aee0ffc258e7d006ad96604c88618010d6665b5e3b52f5f535a4b55f42b`, `controller` `2873fe169cd516f8b948619cb1c1bd50a73b5a426b5e7ae51091cb01bbd37d66`
+- Rebuilt ARMv7 binary hashes: pending final hardware rerun for the five-input implementation
 
 ## Deterministic gate
 
 - Protocol release line: Ratify alpha.19
-- Target: Raspberry Pi 2, ARMv7
+- Target: Raspberry Pi 2, ARMv7 (final rerun pending device recovery)
 - C SDK: freshly built from the matching protocol source tree
 - Result: 25 passed, 0 failed, 0 skipped
 - Revocation: signed state exercised, with unavailable-state denial covered

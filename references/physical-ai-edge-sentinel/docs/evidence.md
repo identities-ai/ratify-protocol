@@ -5,7 +5,7 @@
 - Validation date: 2026-08-31
 - Reference source revision: `8f8a853`
 - Host: macOS development machine (not the ARMv7 target)
-- SDK line: Ratify 1.0.0-alpha.19, freshly built from the matching protocol source tree
+- SDK line: Ratify 1.0.0-alpha.20, freshly built from the matching protocol source tree
 - Result: 25 passed, 0 failed, 0 skipped
 - Revocation: signed state exercised, with unavailable-state denial covered
 - Operation context: challenge session context binds scope, zone, duration, resource, and invocation identifiers; every mismatch fails closed and the original challenge remains usable

@@ -1,10 +1,10 @@
 === host ===
-Linux crayberry1 6.12.62+rpt-rpi-v7 #1 SMP Raspbian 1:6.12.62-1+rpt1 (2025-12-18) armv7l GNU/Linux
+Linux raspberry-pi 6.12.62+rpt-rpi-v7 #1 SMP Raspbian 1:6.12.62-1+rpt1 (2025-12-18) armv7l GNU/Linux
 PRETTY_NAME="Raspbian GNU/Linux 13 (trixie)"
 model name	: ARMv7 Processor rev 5 (v7l)
 
 === alpha.18 shared link ===
-	libratify_c.so => /home/crayfish/smoke/vendor/ratify-c/lib/libratify_c.so (0x76d22000)
+	libratify_c.so => /opt/ratify/smoke/vendor/ratify-c/lib/libratify_c.so (0x76d22000)
 Ratify 1.0.0-alpha.18 — Edge Sentinel Pi 2 smoke test
 sizeof(void*) = 4 bytes
 
@@ -27,7 +27,7 @@ SMOKE TEST PASSED
 
 === footprint ===
 total 32160
--rw-r--r-- 1 crayfish crayfish 30835406 Aug 30 09:30 libratify_c.a
--rwxr-xr-x 1 crayfish crayfish  2087904 Aug 30 09:30 libratify_c.so
+-rw-r--r-- 1 runner runner 30835406 Aug 30 09:30 libratify_c.a
+-rwxr-xr-x 1 runner runner  2087904 Aug 30 09:30 libratify_c.so
    text	   data	    bss	    dec	    hex	filename
    7520	    424	      8	   7952	   1f10	smoke

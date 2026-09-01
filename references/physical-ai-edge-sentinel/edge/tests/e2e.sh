@@ -6,6 +6,7 @@
 # status AND the actuator invocation count reported by the daemon.
 set -e
 PORT=${1:-8098}
+CONTROLLER_BIN=${CONTROLLER_BIN:-./controller}
 TRUST=$(mktemp -d)
 CTRL_IN=$(mktemp -u); mkfifo "$CTRL_IN"
 cleanup() { kill $EDGE_PID $CTRL_PID 2>/dev/null || true; rm -rf "$TRUST" "$CTRL_IN"; }
@@ -16,7 +17,7 @@ trap cleanup EXIT
 export SENTINEL_ALLOW_UNTRUSTED_CLOCK=1
 unset SENTINEL_ALLOW_NO_REVOCATION
 export SENTINEL_TEST_QUARANTINE_OVERRIDE=1
-./controller --host 127.0.0.1 --port "$PORT" < "$CTRL_IN" > /tmp/e2e.ctrl &
+"$CONTROLLER_BIN" --host 127.0.0.1 --port "$PORT" < "$CTRL_IN" > /tmp/e2e.ctrl &
 CTRL_PID=$!
 exec 3> "$CTRL_IN"
 

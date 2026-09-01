@@ -10,6 +10,7 @@
 
 set -e
 PORT=${1:-8099}
+CONTROLLER_BIN=${CONTROLLER_BIN:-./controller}
 EDGE_BIN=${EDGE_BIN:-./edge}
 TRUST=$(mktemp -d)
 CAPTURE=$(mktemp)
@@ -19,7 +20,7 @@ trap cleanup EXIT
 
 echo "== starting controller (generates identity, prints anchor) =="
 : > "$TRUST/pinned_human_id"
-./controller --host 127.0.0.1 --port "$PORT" < "$CTRL_IN" > /tmp/ctrl.out &
+"$CONTROLLER_BIN" --host 127.0.0.1 --port "$PORT" < "$CTRL_IN" > /tmp/ctrl.out &
 CTRL_PID=$!
 exec 3> "$CTRL_IN"
 

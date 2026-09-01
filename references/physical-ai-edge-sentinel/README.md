@@ -1,130 +1,147 @@
 # Ratify Edge Physical AI
 
-**Experimental reference, non-hazardous actuator, pre-RTC.**
+**Verify delegated authority at a Linux edge boundary before a bounded physical actuation.**
 
-This is not a platform partnership, endorsed integration, or approved
-reference architecture. It is a self-authored Ratify interoperability example.
+This experimental reference is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture.
 
-This reference shows how an AI agent can request a physical action without
-receiving unrestricted control of a machine. A Linux edge receiver verifies
-delegated Ratify authority and local device policy before sending one bounded
-command to an Arduino Uno LED. The LED is a safe stand-in for a valve, robot
-command, instrument, or other actuator. This is not a safety-certified
-robotics controller.
+**Start here:** [run it](#use-it-now) · [evidence and limitations](#evidence-security-status-and-limitations) · [open source or Ratify Verify](#which-path-should-i-use)
 
-## Why this exists
+## Why would a developer or enterprise need this?
 
-Workload identity answers which process connected. It does not by itself show
-which principal approved this exact action, resource, duration, and time window.
-Ratify adds portable signed authority that the system carrying the consequence
-can verify independently. The edge receiver does not trust the model, prompt,
-agent framework, or network connection to make the final decision.
+Robots, farm equipment, instruments, and edge devices need to decide whether an action is authorized at the point where it has consequences. Network identity and agent-framework permissions are useful controls, but they do not by themselves express which principal approved this exact action, resource, duration, and time window.
 
-## Who implements what
-
-| Role | Responsibility | Implementation |
+| Question | Network and platform controls | Ratify authority |
 | --- | --- | --- |
-| Principal | Sets the authority ceiling and signs the delegation | Ratify SDK or Ratify Verify |
-| Agent operator | Runs the agent and presents the proof | ADK, LangChain, or another agent runtime |
-| Edge operator | Pins the trust root and local policy | Linux receiver in `edge/` |
-| Actuator operator | Connects the safe output device | Arduino sketch in `arduino/` |
-| Ratify Protocol | Defines proof semantics | Existing Ratify SDKs |
-
-The Arduino is not the authorization boundary. It does not verify proofs, hold
-keys, enforce policy, or provide trusted time.
-
-## Architecture
+| Can this process reach the receiver? | Usually yes | Not its purpose |
+| Did a recognized principal authorize this action? | Not expressed by reachability alone | Signed delegation is checked |
+| Is the requested scope and duration within bounds? | Often application-specific | Receiver evaluates proof and local policy |
+| Can the decision be checked without a network call? | Depends on deployment | Yes, after proof presentation |
 
 ```mermaid
 flowchart LR
-  P[Principal] -->|signed bounded delegation| A[AI agent]
-  A -->|proof bundle and action request| E[Linux edge verifier]
-  E -->|root, scope, expiry, replay, revocation, local policy| D{Allow?}
-  D -->|deny| N[No actuator command]
-  D -->|allow| U[Guarded actuator adapter]
-  U -->|USB serial| R[Arduino Uno LED]
-  E -->|decision and invocation count| L[Local evidence]
+  I[Agent identity and network access] --> C{Receiver checks}
+  D[Signed delegation and fresh proof] --> C
+  P[Local device policy] --> C
+  C -->|allow, all checks pass| A[Bounded actuator command]
+  C -->|deny, any check fails| X[No actuator command]
 ```
 
-## One request, two outcomes
+This matters when an agent can call a tool but must not have unlimited authority: agricultural equipment, warehouse robots, drones, laboratory instruments, charging systems, and other edge-controlled devices. Ratify complements IAM, OAuth, MCP, A2A, and local policy; it does not replace them.
+
+## Who implements what
+
+| Role | What it decides or builds | This reference uses |
+| --- | --- | --- |
+| Principal | Sets the authority ceiling and signs the delegation | Ratify SDK or Ratify Verify |
+| Agent operator | Presents the proof and action request | Deterministic controller, with an agent adapter planned separately |
+| Receiver operator | Pins the trust root, local policy, and actuator mapping | Linux receiver in `edge/` |
+| Actuator operator | Connects and programs the safe output device | Arduino sketch in `arduino/` |
+| Platform vendor | No change required to its platform | Ratify is independent of an agent framework |
+
+The Arduino is an actuator, not the authorization boundary. It does not verify proofs, hold keys, enforce local policy, or provide trusted time. Direct access to the Arduino is outside this reference's security boundary.
+
+## What does this reference do?
+
+The example delegation authorizes a bounded farm action:
+
+```text
+scope       physical:actuate
+zone        greenhouse-b
+resource    irrigation-valve-3
+duration    20 seconds maximum
+expiry      signed delegation expiry
+```
+
+The current hardware maps that valve action to a short LED command over USB serial. No hazardous device is connected.
 
 ```mermaid
 sequenceDiagram
-    participant A as Agent
-    participant E as Edge verifier
+    participant P as Principal
+    participant A as Agent or controller
+    participant E as Linux edge receiver
     participant R as Arduino actuator
-    A->>E: Request action with Ratify proof
-    E->>E: Verify authority and local policy
-    alt allowed physical:actuate
-        E->>R: RATIFY_ALLOW FIRE duration
+    P->>A: signed bounded delegation
+    A->>E: proof bundle and action request
+    E->>E: verify signatures, anchor, freshness, scope, policy
+    alt allow, authorized physical actuation
+        E->>R: bounded actuator command
         R-->>E: LED output
-    else expired, replayed, altered, or out of scope
-        E-->>A: DENY
-        Note over R: No command, LED remains off
+    else deny, expired, replayed, altered, or out of scope
+        E-->>A: denial decision
+        Note over R: no actuator command
     end
 ```
 
-## Farm-monitor scenario
+The Linux receiver is the enforcement boundary. The agent, model, transport, and Arduino cannot turn a denied receiver decision into an authorized decision inside this reference.
 
-An agent requests: **open irrigation valve 3 in greenhouse B for 20 seconds**.
-The Arduino LED stands in for the valve. A delegation can constrain the
-greenhouse, valve, action scope, maximum duration, agent identity, and expiry.
-The same pattern applies to warehouse robots, agricultural equipment, drones,
-laboratory instruments, charging systems, and other edge-controlled devices.
+## What the reference proves
 
-## Run it yourself
+The deterministic gate runs the 16-row protocol matrix and observes the protected effect:
 
-The deterministic gate creates authority, issues a fresh challenge, presents
-the proof, and asserts both the decision and actuator invocation count. It does
-not require a model key:
+| Tested case | Decision | Actuator handler |
+| --- | --- | --- |
+| authorized actuation | authorized | invoked |
+| monitor-only request | authorized | not invoked |
+| replayed proof | invalid | not invoked |
+| expired proof | invalid | not invoked |
+| wrong scope | invalid or denied | not invoked |
+| wrong agent | invalid or denied | not invoked |
+| revoked certificate | revoked | not invoked |
+| unavailable revocation state | unavailable | not invoked |
 
-```sh
-RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh
-```
+The gate result is **16 passed, 0 failed, 0 skipped**. A Pi 2 ARMv7 serial integration run also observed two authorized invocations and zero invocations for denied requests. The serial run is evidence of the adapter path, not a claim that the Arduino verifies authorization.
 
-To use the Arduino actuator after uploading the sketch:
+## Use it now
 
-```sh
-./edge/edge --trust trust --serial /dev/ttyACM0 --baud 115200
-```
+Prerequisites: a Linux machine with the current Ratify C SDK source, a C compiler, `make`, and optionally a Raspberry Pi 2 or similar ARMv7 device. The deterministic gate does not require an Arduino, model API, cloud account, or trusted RTC.
 
-The first release uses the test build because the DS3231 RTC is not fitted.
-The production binary ignores test clock and revocation overrides and remains
-fail-closed without trusted time.
+1. Clone the protocol repository and enter this reference:
 
-## What it proves
+   ```sh
+   git clone https://github.com/identities-ai/ratify-protocol
+   cd ratify-protocol/references/physical-ai-edge-sentinel
+   ```
 
-- Ratify proof verification runs on a constrained Linux edge device.
-- A valid delegated actuation reaches one safe physical output.
-- Monitor, replay, expiry, wrong-scope, wrong-agent, and revoked requests do
-  not actuate.
-- The actuator can be swapped from GPIO to USB serial without changing the
-  authorization path.
-- The design is independent of one agent framework.
+2. Build or locate the current C SDK, then run the clean gate:
 
-## What it does not prove
+   ```sh
+   RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh
+   ```
 
-- The Arduino independently enforces authorization.
-- Offline authorization survives a power cycle.
-- The production binary has successfully actuated hardware.
-- Suitability for hazardous, safety-critical, or regulated actuation.
+3. For the optional safe hardware path, upload `arduino/ratify_actuator/ratify_actuator.ino` with Arduino IDE, connect the Uno by USB, and run:
 
-Those claims require the DS3231 installation, offline power-cycle test, and a
-separate production hardware acceptance review. No hazardous actuator should be
-connected to this reference.
+   ```sh
+   ./edge/edge --trust trust --serial /dev/ttyACM0 --baud 115200
+   ```
 
-## Open source and commercial path
+The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
 
-This is a self-operated interoperability reference. Ratify Verify is the
-managed commercial surface for operated trust configuration, revocation,
-audit retention, observability, availability, and supported deployment
-adapters. The reference is intended for robotics and edge-AI teams that need
-bounded, auditable autonomy across hardware, software, sensors, communications,
-and agent runtimes. It is not affiliated with or endorsed by any platform
-company.
+## Which path should I use?
 
-## Status and limitations
+Use this open reference when you need inspectable source, a deterministic local gate, and a safe demonstration of the verification boundary. Use [Ratify Verify](https://ratifyprotocol.com) when you need managed trust configuration, revocation operations, audit retention, observability, availability, and supported deployment adapters.
 
-Experimental and pre-hardware. The Arduino LED path is tested over USB from the
-Raspberry Pi using the test build. Trusted-clock, offline power-cycle, and
-production hardware acceptance remain open.
+## What is cryptographically bound?
+
+Ratify signatures bind the delegation and proof fields defined by the protocol, including issuer and subject identities, delegated scope, constraints, expiry, and the fresh challenge response. The receiver separately applies its pinned-root comparison, current time, revocation state, and local device policy. The Arduino serial command is not cryptographically bound and must not be treated as an authorization proof.
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| `edge/` | Linux verifier, policy, replay store, and actuator adapters |
+| `controller/` | Deterministic controller that provisions and presents test proofs |
+| `scenarios/` | Positive and negative protocol fixtures |
+| `arduino/ratify_actuator/` | Safe Uno serial actuator sketch |
+| `run-reference-check.sh` | Clean, reproducible reference gate |
+| `docs/evidence.md` | Hardware and software evidence with explicit limits |
+| `ratify-reference.json` | Reference metadata and gate declaration |
+
+## Evidence, security status, and limitations
+
+Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). The reference was exercised against Ratify alpha.19 on a Raspberry Pi 2 ARMv7 target, with a fresh C SDK build and 16 passing protocol rows. The Arduino LED path was exercised over USB serial.
+
+This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The DS3231 trusted-clock installation, offline power-cycle test, production hardware acceptance, and a real agent-framework adapter remain future work.
+
+## Open source status
+
+This is an experimental, self-operated interoperability reference. Ratify Protocol and this reference are not endorsed by Arduino, Raspberry Pi, Google, LangChain, NVIDIA, or any other platform or hardware vendor.

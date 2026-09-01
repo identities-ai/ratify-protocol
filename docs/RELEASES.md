@@ -93,7 +93,19 @@ v1.0.0-alpha.19 →  security. The TypeScript fallback base64 decoder stripped
                    for seconds on any runtime without Buffer (browsers, Deno,
                    edge). The strip is now a linear backwards scan. CI workflow
                    token scoped to read-only. 79 fixtures, byte-identical to
-                   alpha.18
+                   alpha.18 (published 2026-08-30)
+v1.0.0-alpha.20 →  C SDK surface. `ratify_proof_bundle_create_with_context`
+                   builds a ProofBundle carrying a 32-byte session context, so
+                   a C caller can produce a context-bound proof rather than
+                   only verify one; Go, Rust, Python and TypeScript already had
+                   an equivalent entry point. Challenge and session context
+                   must both be exactly 32 bytes, and existing symbols are
+                   unchanged, so the addition is ABI-compatible for alpha.19
+                   callers. The other four SDKs carry no functional change and
+                   moved only to keep the release line synchronized. Physical
+                   AI edge reference added, verified on ARMv7 hardware.
+                   79 fixtures, byte-identical to alpha.19
+                   (published 2026-09-01)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

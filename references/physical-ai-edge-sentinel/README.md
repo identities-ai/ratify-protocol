@@ -89,7 +89,7 @@ The deterministic gate runs the 16-row protocol matrix and observes the protecte
 | revoked certificate | revoked | not invoked |
 | unavailable revocation state | unavailable | not invoked |
 
-The local gate result is **25 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation is pending device recovery. The earlier serial run observed two authorized invocations and zero invocations for denied requests; it is evidence of the adapter path, not a claim that the Arduino verifies authorization.
+The local gate result is **25 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
 
 ## Use it now
 

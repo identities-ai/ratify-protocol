@@ -16,6 +16,7 @@
 - Observed authorized invocations: 2
 - Observed denied or replay invocations: 0
 - Physical output: built-in Uno LED, non-hazardous demonstration
+- End-to-end script: `SERIAL_DEVICE=/dev/ttyACM0 ./tests/e2e.sh`
 
 ## Explicit limits
 

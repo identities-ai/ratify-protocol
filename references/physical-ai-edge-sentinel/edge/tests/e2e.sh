@@ -32,18 +32,31 @@ echo "provision $TRUST" >&3
 for _ in $(seq 1 50); do grep -q "^PROVISIONED" /tmp/e2e.ctrl && break; sleep 0.1; done
 grep -q "^PROVISIONED" /tmp/e2e.ctrl || { echo "FAIL: provisioning"; exit 1; }
 
-./edge-test --trust "$TRUST" --port "$PORT" > /tmp/e2e.edge 2>&1 &
+if [ -n "${SERIAL_DEVICE:-}" ]; then
+    ./edge-test --trust "$TRUST" --port "$PORT" \
+        --serial "$SERIAL_DEVICE" --baud "${SERIAL_BAUD:-115200}" \
+        > /tmp/e2e.edge 2>&1 &
+else
+    ./edge-test --trust "$TRUST" --port "$PORT" > /tmp/e2e.edge 2>&1 &
+fi
 EDGE_PID=$!
 for _ in $(seq 1 50); do grep -q listening /tmp/e2e.edge && break; sleep 0.1; done
 
 fails=0
 send() {  # send CMD, wait for a new response line, echo it
     before=$(wc -l < /tmp/e2e.ctrl)
+    # The receiver intentionally rate-limits challenge issuance. Keep the
+    # harness deterministic instead of turning a 503 into a missing row.
+    sleep 0.2
     echo "$1" >&3
     for _ in $(seq 1 100); do
-        [ "$(wc -l < /tmp/e2e.ctrl)" -gt "$before" ] && break; sleep 0.1
+        if [ "$(wc -l < /tmp/e2e.ctrl)" -gt "$before" ]; then
+            last=$(tail -1 /tmp/e2e.ctrl)
+            [ -n "$last" ] && { printf '%s\n' "$last"; return; }
+        fi
+        sleep 0.1
     done
-    tail -1 /tmp/e2e.ctrl
+    printf '%s\n' '{"error":"controller response timeout"}'
 }
 row() {  # row LABEL RESPONSE WANT_STATUS WANT_ACTUATED
     st=$(echo "$2" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')

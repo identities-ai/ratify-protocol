@@ -114,6 +114,14 @@ Prerequisites: a Linux machine with the current Ratify C SDK source, a C compile
    ./edge/edge --trust trust --serial /dev/ttyACM0 --baud 115200
    ```
 
+   To run the complete end-to-end matrix with the real serial actuator, build `edge-test` and run from `edge/`:
+
+   ```sh
+   SERIAL_DEVICE=/dev/ttyACM0 ./tests/e2e.sh
+   ```
+
+   This starts the controller, provisions a temporary trust directory, starts the edge verifier, obtains fresh challenges, and presents authorized, monitor, and replay cases. The script asserts both each decision status and the number of actuator invocations. It uses the test clock and quarantine overrides because no DS3231 is installed; it does not represent production clock behavior.
+
 The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
 
 ### Run through Google ADK

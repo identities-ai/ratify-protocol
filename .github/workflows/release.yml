@@ -241,7 +241,7 @@ jobs:
           manylinux: ${{ matrix.manylinux }}
           args: --release --out dist
           working-directory: sdks/python-native
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-wheels-${{ matrix.os }}-${{ matrix.target }}
           path: sdks/python-native/dist
@@ -261,7 +261,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: native-wheels-*
           merge-multiple: true

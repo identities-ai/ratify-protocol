@@ -325,6 +325,17 @@ enum RatifyStatus ratify_proof_bundle_create(const struct RatifyAgent *agent,
                                              struct RatifyProofBundle **out,
                                              char **err_out);
 
+// Build a ProofBundle with the protocol's 32-byte session context binding.
+enum RatifyStatus ratify_proof_bundle_create_with_context(const struct RatifyAgent *agent,
+                                                          const char *cert_json,
+                                                          const unsigned char *challenge,
+                                                          uintptr_t challenge_len,
+                                                          int64_t challenge_at_unix,
+                                                          const unsigned char *session_context,
+                                                          uintptr_t session_context_len,
+                                                          struct RatifyProofBundle **out,
+                                                          char **err_out);
+
 // Serialise a ProofBundle to JSON. Free with `ratify_string_free`.
 char *ratify_proof_bundle_to_json(const struct RatifyProofBundle *handle, char **err_out);
 

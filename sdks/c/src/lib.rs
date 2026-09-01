@@ -120,6 +120,7 @@ use std::slice;
 
 use ratify_protocol::{
     generate_agent, generate_challenge, generate_human_root, issue_delegation, sign_challenge,
+    sign_challenge_with_session_context,
     verify_bundle, AgentIdentity, DelegationCert, HumanRoot, HybridPrivateKey, HybridSignature,
     IdentityStatus, ProofBundle, RevocationProvider, VerifierContext, VerifyOptions, VerifyResult,
 };
@@ -885,6 +886,43 @@ pub unsafe extern "C" fn ratify_proof_bundle_create(
         session_context: vec![],
         stream_id: vec![],
         stream_seq: 0,
+    };
+    *out = Box::into_raw(Box::new(RatifyProofBundle(bundle)));
+    RatifyStatus::RatifyOk
+}
+
+/// Build a ProofBundle with the protocol's 32-byte session context binding.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_proof_bundle_create_with_context(
+    agent: *const RatifyAgent, cert_json: *const c_char,
+    challenge: *const c_uchar, challenge_len: usize, challenge_at_unix: i64,
+    session_context: *const c_uchar, session_context_len: usize,
+    out: *mut *mut RatifyProofBundle, err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if agent.is_null() || cert_json.is_null() || challenge.is_null() ||
+        session_context.is_null() || out.is_null() {
+        set_err(err_out, "null argument");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if challenge_len != 32 || session_context_len != 32 {
+        set_err(err_out, "challenge and session_context must be exactly 32 bytes");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    let cert_str = match cstr_to_string(cert_json, "cert_json", err_out) {
+        Some(s) => s, None => return RatifyStatus::RatifyErrJson,
+    };
+    let cert: DelegationCert = match serde_json::from_str(&cert_str) {
+        Ok(c) => c,
+        Err(e) => { set_err(err_out, &format!("cert_json: {e}")); return RatifyStatus::RatifyErrJson; }
+    };
+    let ch = slice::from_raw_parts(challenge, 32).to_vec();
+    let sc = slice::from_raw_parts(session_context, 32).to_vec();
+    let agent_ref = &*agent;
+    let sig = sign_challenge_with_session_context(&ch, challenge_at_unix, &sc, &agent_ref.1);
+    let bundle = ProofBundle {
+        agent_id: agent_ref.0.id.clone(), agent_pub_key: agent_ref.0.public_key.clone(),
+        delegations: vec![cert], challenge: ch, challenge_at: challenge_at_unix,
+        challenge_sig: sig, session_context: sc, stream_id: vec![], stream_seq: 0,
     };
     *out = Box::into_raw(Box::new(RatifyProofBundle(bundle)));
     RatifyStatus::RatifyOk

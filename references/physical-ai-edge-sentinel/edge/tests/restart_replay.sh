@@ -10,6 +10,7 @@
 
 set -e
 PORT=${1:-8099}
+EDGE_BIN=${EDGE_BIN:-./edge}
 TRUST=$(mktemp -d)
 CAPTURE=$(mktemp)
 CTRL_IN=$(mktemp -u); mkfifo "$CTRL_IN"
@@ -40,7 +41,7 @@ export SENTINEL_ALLOW_UNTRUSTED_CLOCK=1
 export SENTINEL_ALLOW_NO_REVOCATION=1
 
 start_edge() {
-    ./edge --trust "$TRUST" --port "$PORT" > /tmp/edge.out 2>&1 &
+    "$EDGE_BIN" --trust "$TRUST" --port "$PORT" > /tmp/edge.out 2>&1 &
     EDGE_PID=$!
     for _ in $(seq 1 50); do
         grep -q "listening" /tmp/edge.out 2>/dev/null && return 0

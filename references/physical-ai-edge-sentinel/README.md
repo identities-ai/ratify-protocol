@@ -122,6 +122,14 @@ Prerequisites: a Linux machine with the current Ratify C SDK source, a C compile
 
    This starts the controller, provisions a temporary trust directory, starts the edge verifier, obtains fresh challenges, and presents authorized, monitor, and replay cases. The script asserts both each decision status and the number of actuator invocations. It uses the test clock and quarantine overrides because no DS3231 is installed; it does not represent production clock behavior.
 
+   The restart-replay quarantine case is likewise a test-build scenario:
+
+   ```sh
+   EDGE_BIN=./edge-test ./tests/restart_replay.sh
+   ```
+
+   The production `edge` binary is intentionally not used for this case before a trusted RTC is installed, because it must refuse to issue challenges without trusted time.
+
 The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
 
 ### Run through Google ADK

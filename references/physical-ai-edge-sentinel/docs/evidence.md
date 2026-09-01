@@ -17,6 +17,8 @@
 - Observed denied or replay invocations: 0
 - Physical output: built-in Uno LED, non-hazardous demonstration
 - End-to-end script: `SERIAL_DEVICE=/dev/ttyACM0 ./tests/e2e.sh`
+- Pi result: authorized actuation, monitor authorization, first capture presentation, and replay denial all passed; exactly 2 actuator invocations
+- Restart replay: `EDGE_BIN=./edge-test ./tests/restart_replay.sh` denied after restart with `post_boot_quarantine`, 0 actuator calls
 
 ## Explicit limits
 

@@ -2,10 +2,10 @@
 #
 #   make            build against ./vendor/ratify-c (shared library)
 #   make STATIC=1   link libratify_c.a instead
-#   make vendor     fetch and extract the alpha.18 armv7 artifact
+#   make vendor     fetch and extract the alpha.19 armv7 artifact
 #   make run        build and run with the default iteration count
 
-RATIFY_VERSION ?= v1.0.0-alpha.18
+RATIFY_VERSION ?= v1.0.0-alpha.19
 RATIFY_ARCHIVE ?= ratify-c-$(RATIFY_VERSION)-linux-armv7.tar.gz
 RATIFY_URL     ?= https://github.com/identities-ai/ratify-protocol/releases/download/$(RATIFY_VERSION)/$(RATIFY_ARCHIVE)
 RATIFY_SDK     ?= vendor/ratify-c

@@ -10,6 +10,7 @@ failure instead.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -50,6 +51,28 @@ def main() -> int:
     for entry in sorted(registry_dir.glob("*.md")):
         name = entry.stem
         ref = ROOT / "references" / name
+        metadata_path = ref / "ratify-reference.json"
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            evidence = ref / metadata.get("evidence", "docs/evidence.md")
+            if "tests" in metadata or "skips" in metadata:
+                if not evidence.exists():
+                    failures.append(f"{name}: evidence file missing: {evidence}")
+                else:
+                    evidence_text = evidence.read_text(encoding="utf-8")
+                    match = re.search(
+                        r"Result:\s*(\d+) passed,\s*(\d+) failed,\s*(\d+) skipped",
+                        evidence_text,
+                    )
+                    if not match:
+                        failures.append(f"{name}: evidence has no parseable test result")
+                    else:
+                        passed, failed, skipped = map(int, match.groups())
+                        if passed != metadata.get("tests") or skipped != metadata.get("skips") or failed != 0:
+                            failures.append(
+                                f"{name}: evidence result {passed}/{failed}/{skipped} "
+                                f"does not match metadata {metadata.get('tests')}/0/{metadata.get('skips')}"
+                            )
         # Python references pin in requirements.txt. Others (the TypeScript
         # ones) pin in package.json and are checked by their own gate.
         requirements = ref / "requirements.txt"

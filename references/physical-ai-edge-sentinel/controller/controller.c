@@ -39,6 +39,8 @@
 
 static char host[128] = "127.0.0.1";
 static char zone[64] = "north-paddock";
+static char resource[128] = "arduino-led";
+static char invocation[128] = "manual";
 static int  port = 8088;
 static int  duration_ms = 500;
 
@@ -93,9 +95,9 @@ static int fetch_challenge(unsigned char *out32, unsigned char *context32,
     int n = snprintf(req, sizeof(req),
                      "GET /challenge HTTP/1.1\r\nHost: %s\r\n"
                      "X-Sentinel-Scope: %s\r\nX-Sentinel-Zone: %s\r\n"
-                     "X-Sentinel-Duration-Ms: %d\r\n"
-                     "Connection: close\r\n\r\n", host, scope, zone,
-                     duration_ms);
+                     "X-Sentinel-Duration-Ms: %d\r\nX-Sentinel-Resource: %s\r\n"
+                     "X-Sentinel-Invocation: %s\r\nConnection: close\r\n\r\n",
+                     host, scope, zone, duration_ms, resource, invocation);
     char *body = http_do(req, (size_t)n);
     if (!body) return -1;
 
@@ -164,9 +166,11 @@ static void post_action(const char *bundle_json, const char *scope)
                      "X-Sentinel-Scope: %s\r\n"
                      "X-Sentinel-Zone: %s\r\n"
                      "X-Sentinel-Duration-Ms: %d\r\n"
+                     "X-Sentinel-Resource: %s\r\n"
+                     "X-Sentinel-Invocation: %s\r\n"
                      "Content-Type: application/json\r\n"
                      "Content-Length: %zu\r\nConnection: close\r\n\r\n",
-                     host, scope, zone, duration_ms, blen);
+                     host, scope, zone, duration_ms, resource, invocation, blen);
     memcpy(req + n, bundle_json, blen);
 
     char *resp = http_do(req, (size_t)n + blen);

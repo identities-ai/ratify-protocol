@@ -53,6 +53,8 @@ typedef struct {
     const char *scope;
     const char *zone;
     int         duration_ms;
+    const char *resource_id;
+    const char *invocation_id;
 } sentinel_request;
 
 typedef struct sentinel_ctx sentinel_ctx;

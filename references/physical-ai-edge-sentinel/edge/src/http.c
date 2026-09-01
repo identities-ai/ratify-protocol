@@ -92,10 +92,14 @@ static int header_value(const char *headers, const char *name, char *out,
 static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers)
 {
     char scope[128] = {0}, zone[64] = {0}, durbuf[16] = {0};
+    char resource[128] = "arduino-led", invocation[128] = "manual";
     header_value(headers, "X-Sentinel-Scope", scope, sizeof(scope));
     header_value(headers, "X-Sentinel-Zone", zone, sizeof(zone));
     header_value(headers, "X-Sentinel-Duration-Ms", durbuf, sizeof(durbuf));
-    sentinel_request req = { scope, zone, durbuf[0] ? atoi(durbuf) : 0 };
+    header_value(headers, "X-Sentinel-Resource", resource, sizeof(resource));
+    header_value(headers, "X-Sentinel-Invocation", invocation, sizeof(invocation));
+    sentinel_request req = { scope, zone, durbuf[0] ? atoi(durbuf) : 0,
+                             resource, invocation };
     char hex[SENTINEL_CHALLENGE_HEX + 1];
     char context_hex[SENTINEL_CHALLENGE_HEX + 1];
     int64_t expires = 0;
@@ -126,15 +130,20 @@ static void handle_action(sentinel_ctx *ctx, int fd, const char *headers,
 
     char zone[TRUST_ZONE_MAX] = {0};
     char durbuf[16] = {0};
+    char resource[128] = "arduino-led", invocation[128] = "manual";
     header_value(headers, "X-Sentinel-Zone", zone, sizeof(zone));
     int requested_ms = header_value(headers, "X-Sentinel-Duration-Ms",
                                     durbuf, sizeof(durbuf))
                        ? atoi(durbuf) : actuate_ms;
+    header_value(headers, "X-Sentinel-Resource", resource, sizeof(resource));
+    header_value(headers, "X-Sentinel-Invocation", invocation, sizeof(invocation));
 
     sentinel_request req;
     req.scope = scope;
     req.zone = zone;
     req.duration_ms = requested_ms;
+    req.resource_id = resource;
+    req.invocation_id = invocation;
 
     sentinel_decision d;
     sentinel_decide(ctx, body, body_len, &req, &d);

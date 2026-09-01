@@ -22,8 +22,11 @@
 #define ACTUATE_SCOPE "physical:actuate"
 #define TRUST_DIR "/tmp/sentinel-test-trust"
 #define TEST_ZONE "north-paddock"
+#define TEST_RESOURCE "arduino-led"
+#define TEST_INVOCATION "manual"
 
-static const sentinel_request REQ_ACTUATE = { ACTUATE_SCOPE, TEST_ZONE, 500 };
+static const sentinel_request REQ_ACTUATE = { ACTUATE_SCOPE, TEST_ZONE, 500,
+                                               TEST_RESOURCE, TEST_INVOCATION };
 
 static int failures = 0;
 static int checks   = 0;
@@ -155,7 +158,8 @@ static char *present_cert(sentinel_ctx *ctx, RatifyAgent *agent,
     char challenge_hex[SENTINEL_CHALLENGE_HEX + 1];
     int64_t expires;
     char context_hex[SENTINEL_CHALLENGE_HEX + 1];
-    sentinel_request challenge_req = { "physical:actuate", "north-paddock", 500 };
+    sentinel_request challenge_req = { "physical:actuate", "north-paddock", 500,
+                                       TEST_RESOURCE, TEST_INVOCATION };
     if (sentinel_issue_challenge(ctx, &challenge_req, challenge_hex, context_hex, &expires) != 0)
         return NULL;
     unsigned char challenge[SENTINEL_CHALLENGE_BYTES];
@@ -264,7 +268,8 @@ int main(void)
     {
         char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
                           now, now + 3600, now);
-        sentinel_request req = { "infrastructure:monitor", TEST_ZONE, 500 };
+        sentinel_request req = { "infrastructure:monitor", TEST_ZONE, 500,
+                                 TEST_RESOURCE, TEST_INVOCATION };
         sentinel_decision d;
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
@@ -409,7 +414,8 @@ int main(void)
     {
         char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
                           now, now + 3600, now);
-        sentinel_request req = { ACTUATE_SCOPE, "south-paddock", 500 };
+        sentinel_request req = { ACTUATE_SCOPE, "south-paddock", 500,
+                                 TEST_RESOURCE, TEST_INVOCATION };
         sentinel_decision d;
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
@@ -422,12 +428,37 @@ int main(void)
     {
         char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
                           now, now + 3600, now);
-        sentinel_request req = { ACTUATE_SCOPE, TEST_ZONE, 60000 };
+        sentinel_request req = { ACTUATE_SCOPE, TEST_ZONE, 60000,
+                                 TEST_RESOURCE, TEST_INVOCATION };
         sentinel_decision d;
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         if (d.allow) actuator_fire(&d, 60000);
         row("changed duration: context mismatch", &d, "invalid", 0, before);
+        ratify_string_free(b);
+    }
+
+    /* Resource and invocation identifiers are independent context inputs. */
+    {
+        char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
+                          now, now + 3600, now);
+        sentinel_request req = { ACTUATE_SCOPE, TEST_ZONE, 500,
+                                 "other-actuator", TEST_INVOCATION };
+        sentinel_decision d;
+        before = actuator_invocations();
+        sentinel_decide(ctx, b, strlen(b), &req, &d);
+        row("changed resource: context mismatch", &d, "invalid", 0, before);
+        ratify_string_free(b);
+    }
+    {
+        char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
+                          now, now + 3600, now);
+        sentinel_request req = { ACTUATE_SCOPE, TEST_ZONE, 500,
+                                 TEST_RESOURCE, "different-invocation" };
+        sentinel_decision d;
+        before = actuator_invocations();
+        sentinel_decide(ctx, b, strlen(b), &req, &d);
+        row("changed invocation: context mismatch", &d, "invalid", 0, before);
         ratify_string_free(b);
     }
 

@@ -117,8 +117,11 @@ int sentinel_issue_challenge(sentinel_ctx *ctx, const sentinel_request *req,
     const char *scope = req && req->scope ? req->scope : "";
     const char *zone = req && req->zone ? req->zone : "";
     int duration = req ? req->duration_ms : 0;
-    snprintf(invocation, sizeof(invocation), "%s|%s|%d", scope, zone, duration);
-    if (ratify_operation_context_hash(scope, "physical-actuate", zone, invocation,
+    const char *resource = req && req->resource_id ? req->resource_id : zone;
+    const char *invocation_id = req && req->invocation_id ? req->invocation_id : "manual";
+    snprintf(invocation, sizeof(invocation), "%s|%s|%d|%s", scope, zone, duration,
+             invocation_id);
+    if (ratify_operation_context_hash(scope, "physical-actuate", resource, invocation,
                                       NULL, 0, op_hash, &err) != RatifyOk ||
         ratify_session_context_build("ratify-edge", zone, NULL, "edge-session",
                                      invocation, op_hash, 32, context, &err) != RatifyOk) {
@@ -196,10 +199,14 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle_json,
     unsigned char op_hash[32], context[32];
     char invocation[192];
     char *context_err = NULL;
-    snprintf(invocation, sizeof(invocation), "%s|%s|%d", required_scope ? required_scope : "",
-             req && req->zone ? req->zone : "", req ? req->duration_ms : 0);
+    const char *resource = req && req->resource_id ? req->resource_id :
+        (req && req->zone ? req->zone : "");
+    const char *invocation_id = req && req->invocation_id ? req->invocation_id : "manual";
+    snprintf(invocation, sizeof(invocation), "%s|%s|%d|%s",
+             required_scope ? required_scope : "", req && req->zone ? req->zone : "",
+             req ? req->duration_ms : 0, invocation_id);
     if (ratify_operation_context_hash(required_scope, "physical-actuate",
-                                      req && req->zone ? req->zone : "", invocation,
+                                      resource, invocation,
                                       NULL, 0, op_hash, &context_err) != RatifyOk ||
         ratify_session_context_build("ratify-edge", req && req->zone ? req->zone : "",
                                      NULL, "edge-session", invocation, op_hash, 32,

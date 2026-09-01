@@ -2,6 +2,8 @@
 
 **Verify delegated authority at a Linux edge boundary before a bounded physical actuation.**
 
+[Ratify Protocol](https://ratifyprotocol.com) is an open protocol for proving delegated authority. A principal signs a bounded delegation naming what an agent may do, and any receiver can verify that proof offline, before acting, without calling the issuer. Signatures are hybrid Ed25519 and ML-DSA-65.
+
 This experimental reference is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture.
 
 **Start here:** [run it](#use-it-now) · [evidence and limitations](#evidence-security-status-and-limitations) · [open source or Ratify Verify](#which-path-should-i-use)
@@ -132,9 +134,22 @@ Prerequisites: a Linux machine with the current Ratify C SDK source, a C compile
 
 The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
 
-### Run through Google ADK
+## Run through Google ADK
 
-The adapter in [`../../adk/edge_agent.py`](../../adk/edge_agent.py) is a real ADK `FunctionTool`. It hides proof construction from the model, obtains the edge challenge, and submits the signed bundle to `/action`. See [`../../adk/README.md`](../../adk/README.md) for the pinned environment and receiver setup.
+The deterministic controller above is the default because a gate should not depend on a model behaving. The Google ADK path exists to show the same boundary holding when a real agent framework drives it, and the adapter in [`../../adk/edge_agent.py`](../../adk/edge_agent.py) is a real ADK `FunctionTool` rather than a stand-in.
+
+Four layers, and it is worth being precise about which one decides:
+
+| Layer | What it does | What it can reach |
+| --- | --- | --- |
+| **The model** (Gemini through ADK) | Decides *whether* to ask for an action and with what zone and duration | Two arguments. It never sees the delegation, the proof bundle, or any key |
+| **The ADK adapter** | Requests a challenge, signs the operation context outside model context, presents the proof | The agent's private key, which never enters a tool argument or a prompt |
+| **The Linux receiver** | Verifies the signature chain, trust anchor, freshness, scope, zone, duration and local policy, then decides | The actuator, and only after an allow |
+| **The Arduino** | Executes a command that already passed | Nothing. It verifies nothing and can refuse nothing |
+
+The model is not a security boundary here, and nothing depends on it choosing well. A model that asks for the wrong zone, too long a duration, or an action outside the delegation gets the same denial as an attacker would: the receiver never reaches the actuator. That is the point of running the framework path at all.
+
+Setup is in [`../../adk/README.md`](../../adk/README.md): the pinned environment, the receiver address, and how the authority fixture is issued. The adapter needs the receiver running first, because it asks it for a challenge before it can sign anything.
 
 ## Which path should I use?
 

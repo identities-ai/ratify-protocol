@@ -154,15 +154,19 @@ static char *present_cert(sentinel_ctx *ctx, RatifyAgent *agent,
     char *err = NULL;
     char challenge_hex[SENTINEL_CHALLENGE_HEX + 1];
     int64_t expires;
-    if (sentinel_issue_challenge(ctx, challenge_hex, &expires) != 0)
+    char context_hex[SENTINEL_CHALLENGE_HEX + 1];
+    sentinel_request challenge_req = { "physical:actuate", "north-paddock", 500 };
+    if (sentinel_issue_challenge(ctx, &challenge_req, challenge_hex, context_hex, &expires) != 0)
         return NULL;
     unsigned char challenge[SENTINEL_CHALLENGE_BYTES];
     hex_decode(challenge_hex, challenge, sizeof(challenge));
+    unsigned char context[SENTINEL_CHALLENGE_BYTES];
+    hex_decode(context_hex, context, sizeof(context));
 
     RatifyProofBundle *bundle = NULL;
-    RatifyStatus st = ratify_proof_bundle_create(agent, cert_json, challenge,
-                                                 sizeof(challenge),
-                                                 challenge_at, &bundle, &err);
+    RatifyStatus st = ratify_proof_bundle_create_with_context(
+        agent, cert_json, challenge, sizeof(challenge), challenge_at,
+        context, sizeof(context), &bundle, &err);
     if (st != RatifyOk) {
         fprintf(stderr, "proof_bundle_create: %s\n", err ? err : "?");
         return NULL;
@@ -251,6 +255,20 @@ int main(void)
         sentinel_decide(ctx, b, strlen(b), &REQ_ACTUATE, &allow_d);
         if (allow_d.allow) actuator_fire(&allow_d, 200);
         row("authorized, pinned root", &allow_d, "authorized_agent", 1, before);
+        ratify_string_free(b);
+    }
+
+    /* A proof captured for actuation cannot be retargeted to a different
+     * operation scope, even when the delegation itself would otherwise be
+     * acceptable. */
+    {
+        char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
+                          now, now + 3600, now);
+        sentinel_request req = { "infrastructure:monitor", TEST_ZONE, 500 };
+        sentinel_decision d;
+        before = actuator_invocations();
+        sentinel_decide(ctx, b, strlen(b), &req, &d);
+        row("changed scope: context mismatch", &d, "invalid", 0, before);
         ratify_string_free(b);
     }
 
@@ -385,7 +403,9 @@ int main(void)
     /* Checkpoint C rows: revocation state and local policy.              */
     /* ---------------------------------------------------------------- */
 
-    /* Row: local policy rejects a zone the device does not serve. */
+    /* A captured proof cannot be retargeted to another zone: the operation
+     * context is checked before local policy, so this fails closed without
+     * reaching the actuator. */
     {
         char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
                           now, now + 3600, now);
@@ -394,12 +414,11 @@ int main(void)
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         if (d.allow) actuator_fire(&d, 500);
-        row("zone outside local policy", &d, SENTINEL_REASON_ZONE, 0, before);
+        row("changed zone: context mismatch", &d, "invalid", 0, before);
         ratify_string_free(b);
     }
 
-    /* Row: local policy caps activation duration. Ratify has no duration
-     * constraint; this is device policy narrowing the delegation. */
+    /* A captured proof cannot be extended to another duration. */
     {
         char *b = present(ctx, root, agent, "[\"" ACTUATE_SCOPE "\"]",
                           now, now + 3600, now);
@@ -408,8 +427,7 @@ int main(void)
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         if (d.allow) actuator_fire(&d, 60000);
-        row("activation longer than policy allows", &d,
-            SENTINEL_REASON_DURATION, 0, before);
+        row("changed duration: context mismatch", &d, "invalid", 0, before);
         ratify_string_free(b);
     }
 

@@ -6,7 +6,7 @@
  * byte-for-byte. The edge binary therefore has no hand-written JSON parser on
  * its attack surface.
  *
- *   GET  /challenge   -> {"challenge":"<64 hex>","expires_at":N,"quarantine_remaining":N}
+ *   GET  /challenge   -> {"challenge":"<64 hex>","session_context":"<64 hex>","expires_at":N,"quarantine_remaining":N}
  *   POST /action      -> body is the proof bundle; X-Sentinel-Scope names the scope
  */
 #define _POSIX_C_SOURCE 200809L
@@ -89,20 +89,26 @@ static int header_value(const char *headers, const char *name, char *out,
     return 0;
 }
 
-static void handle_challenge(sentinel_ctx *ctx, int fd)
+static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers)
 {
+    char scope[128] = {0}, zone[64] = {0}, durbuf[16] = {0};
+    header_value(headers, "X-Sentinel-Scope", scope, sizeof(scope));
+    header_value(headers, "X-Sentinel-Zone", zone, sizeof(zone));
+    header_value(headers, "X-Sentinel-Duration-Ms", durbuf, sizeof(durbuf));
+    sentinel_request req = { scope, zone, durbuf[0] ? atoi(durbuf) : 0 };
     char hex[SENTINEL_CHALLENGE_HEX + 1];
+    char context_hex[SENTINEL_CHALLENGE_HEX + 1];
     int64_t expires = 0;
-    if (sentinel_issue_challenge(ctx, hex, &expires) != 0) {
+    if (sentinel_issue_challenge(ctx, &req, hex, context_hex, &expires) != 0) {
         send_response(fd, 503, "Service Unavailable",
                       "{\"error\":\"challenge_unavailable\"}");
         return;
     }
     char body[256];
     snprintf(body, sizeof(body),
-             "{\"challenge\":\"%s\",\"expires_at\":%lld,"
+             "{\"challenge\":\"%s\",\"session_context\":\"%s\",\"expires_at\":%lld,"
              "\"quarantine_remaining\":%lld}",
-             hex, (long long)expires,
+             hex, context_hex, (long long)expires,
              (long long)sentinel_quarantine_remaining(ctx));
     send_response(fd, 200, "OK", body);
 }
@@ -231,7 +237,7 @@ int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port,
         }
 
         if (strncmp(headers, "GET /challenge", 14) == 0) {
-            handle_challenge(ctx, fd);
+            handle_challenge(ctx, fd, headers);
             close(fd);
             continue;
         }

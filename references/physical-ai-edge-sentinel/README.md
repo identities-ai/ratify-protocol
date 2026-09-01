@@ -142,7 +142,7 @@ Use this open reference when you need inspectable source, a deterministic local 
 
 ## What is cryptographically bound?
 
-Ratify signatures bind the delegation and proof fields defined by the protocol, including issuer and subject identities, delegated scope, constraints, expiry, and the fresh challenge response. This edge transport currently issues a single-use nonce without operation-context binding; scope, zone, and duration are supplied separately and checked by the receiver's local policy. The receiver separately applies its pinned-root comparison, current time, revocation state, and local device policy. The Arduino serial command is not cryptographically bound and must not be treated as an authorization proof.
+Ratify signatures bind the delegation and proof fields defined by the protocol, including issuer and subject identities, delegated scope, constraints, expiry, and a fresh challenge response. This edge transport also derives a session context from the requested scope, zone, duration, and invocation descriptor. The challenge store binds that context, and the receiver recomputes and requires the same context before accepting the proof; changing any of those inputs fails closed. The receiver separately applies its pinned-root comparison, current time, revocation state, and local device policy. The Arduino serial command is not cryptographically bound and must not be treated as an authorization proof.
 
 ## Repository map
 

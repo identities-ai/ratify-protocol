@@ -63,9 +63,11 @@ typedef struct sentinel_ctx sentinel_ctx;
 int  sentinel_init(const char *trust_dir, sentinel_ctx **out);
 void sentinel_free(sentinel_ctx *ctx);
 
-/* Issue a fresh single-use challenge. `out_hex` must hold
- * SENTINEL_CHALLENGE_HEX + 1 bytes. Returns 0 on success. */
-int  sentinel_issue_challenge(sentinel_ctx *ctx, char *out_hex,
+/* Issue a fresh single-use challenge bound to the request operation context.
+ * Both hex outputs must hold SENTINEL_CHALLENGE_HEX + 1 bytes. Returns 0 on
+ * success. */
+int  sentinel_issue_challenge(sentinel_ctx *ctx, const sentinel_request *req,
+                              char *out_hex, char *out_context_hex,
                               int64_t *out_expires_at);
 
 /* Verify a presented bundle and decide. `bundle_json` must be NUL-terminated

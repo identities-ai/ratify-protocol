@@ -40,11 +40,20 @@ def build_edge_tool(authority: AuthorityFixture, *, edge_url: str) -> FunctionTo
 
     def actuate_edge(zone: str, duration_ms: int) -> dict[str, Any]:
         """Request one bounded physical actuation through the edge verifier."""
-        challenge = _json_request(f"{edge_url}/challenge")
+        scope = "physical:actuate"
+        challenge = _json_request(
+            f"{edge_url}/challenge",
+            headers={
+                "X-Sentinel-Scope": scope,
+                "X-Sentinel-Zone": zone,
+                "X-Sentinel-Duration-Ms": str(duration_ms),
+            },
+        )
         challenge_bytes = bytes.fromhex(challenge["challenge"])
+        session_context = bytes.fromhex(challenge["session_context"])
         bundle = authority.present(
             challenge=challenge_bytes,
-            session_context=b"",
+            session_context=session_context,
         )
         payload = encode_proof_bundle(bundle).encode("utf-8")
         return _json_request(
@@ -53,7 +62,7 @@ def build_edge_tool(authority: AuthorityFixture, *, edge_url: str) -> FunctionTo
             body=payload,
             headers={
                 "Content-Type": "application/json",
-                "X-Sentinel-Scope": "physical:actuate",
+                "X-Sentinel-Scope": scope,
                 "X-Sentinel-Zone": zone,
                 "X-Sentinel-Duration-Ms": str(duration_ms),
             },

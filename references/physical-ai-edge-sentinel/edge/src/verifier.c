@@ -102,7 +102,8 @@ int64_t sentinel_quarantine_remaining(const sentinel_ctx *ctx)
     return elapsed >= SENTINEL_QUARANTINE_S ? 0 : SENTINEL_QUARANTINE_S - elapsed;
 }
 
-int sentinel_issue_challenge(sentinel_ctx *ctx, char *out_hex,
+int sentinel_issue_challenge(sentinel_ctx *ctx, const sentinel_request *req,
+                             char *out_hex, char *out_context_hex,
                              int64_t *out_expires_at)
 {
     int64_t now; int trusted;
@@ -110,8 +111,21 @@ int sentinel_issue_challenge(sentinel_ctx *ctx, char *out_hex,
         return -1;
 
     unsigned char challenge[SENTINEL_CHALLENGE_BYTES];
+    unsigned char op_hash[32], context[32];
+    char invocation[192];
     char *err = NULL;
-    if (ratify_challenge_store_issue(ctx->store, NULL, 0,
+    const char *scope = req && req->scope ? req->scope : "";
+    const char *zone = req && req->zone ? req->zone : "";
+    int duration = req ? req->duration_ms : 0;
+    snprintf(invocation, sizeof(invocation), "%s|%s|%d", scope, zone, duration);
+    if (ratify_operation_context_hash(scope, "physical-actuate", zone, invocation,
+                                      NULL, 0, op_hash, &err) != RatifyOk ||
+        ratify_session_context_build("ratify-edge", zone, NULL, "edge-session",
+                                     invocation, op_hash, 32, context, &err) != RatifyOk) {
+        ratify_error_free(err);
+        return -1;
+    }
+    if (ratify_challenge_store_issue(ctx->store, context, 32,
                                      SENTINEL_CHALLENGE_TTL_S,
                                      challenge, out_expires_at,
                                      &err) != RatifyOk) {
@@ -121,6 +135,7 @@ int sentinel_issue_challenge(sentinel_ctx *ctx, char *out_hex,
         return -1;
     }
     hex_encode(challenge, sizeof(challenge), out_hex);
+    hex_encode(context, sizeof(context), out_context_hex);
     return 0;
 }
 
@@ -178,12 +193,29 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle_json,
     /* 5. Ratify verification with single-use challenge enforcement. The store
      *    rejects a challenge we did not issue before any signature work, which
      *    is what keeps a flood cheap at ~24 ms per real verification. */
+    unsigned char op_hash[32], context[32];
+    char invocation[192];
+    char *context_err = NULL;
+    snprintf(invocation, sizeof(invocation), "%s|%s|%d", required_scope ? required_scope : "",
+             req && req->zone ? req->zone : "", req ? req->duration_ms : 0);
+    if (ratify_operation_context_hash(required_scope, "physical-actuate",
+                                      req && req->zone ? req->zone : "", invocation,
+                                      NULL, 0, op_hash, &context_err) != RatifyOk ||
+        ratify_session_context_build("ratify-edge", req && req->zone ? req->zone : "",
+                                     NULL, "edge-session", invocation, op_hash, 32,
+                                     context, &context_err) != RatifyOk) {
+        deny(out, "operation_context_invalid");
+        ratify_error_free(context_err);
+        return;
+    }
     RatifyVerifyOptions opts;
     memset(&opts, 0, sizeof(opts));
     opts.required_scope     = required_scope;
     opts.now_unix           = now;      /* never 0: 0 means "system clock" */
     opts.revocation_fn      = revocation_cb;
     opts.revocation_userdata = &ctx->trust;
+    opts.session_context = context;
+    opts.session_context_len = 32;
 
     RatifyVerifyResult *result = NULL;
     char *err = NULL;

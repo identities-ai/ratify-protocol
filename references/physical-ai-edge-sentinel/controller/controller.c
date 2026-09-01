@@ -86,12 +86,16 @@ static char *http_do(const char *req, size_t req_len)
     return out;
 }
 
-static int fetch_challenge(unsigned char *out32)
+static int fetch_challenge(unsigned char *out32, unsigned char *context32,
+                           const char *scope)
 {
-    char req[256];
+    char req[512];
     int n = snprintf(req, sizeof(req),
                      "GET /challenge HTTP/1.1\r\nHost: %s\r\n"
-                     "Connection: close\r\n\r\n", host);
+                     "X-Sentinel-Scope: %s\r\nX-Sentinel-Zone: %s\r\n"
+                     "X-Sentinel-Duration-Ms: %d\r\n"
+                     "Connection: close\r\n\r\n", host, scope, zone,
+                     duration_ms);
     char *body = http_do(req, (size_t)n);
     if (!body) return -1;
 
@@ -103,12 +107,21 @@ static int fetch_challenge(unsigned char *out32)
         if (sscanf(p + i * 2, "%2x", &v) != 1) { free(body); return -1; }
         out32[i] = (unsigned char)v;
     }
+    p = strstr(body, "\"session_context\":\"");
+    if (!p) { free(body); return -1; }
+    p += strlen("\"session_context\":\"");
+    for (int i = 0; i < CHALLENGE_BYTES; i++) {
+        unsigned v;
+        if (sscanf(p + i * 2, "%2x", &v) != 1) { free(body); return -1; }
+        context32[i] = (unsigned char)v;
+    }
     free(body);
     return 0;
 }
 
 static char *build_bundle(RatifyHumanRoot *root, RatifyAgent *agent,
-                          const char *scope, const unsigned char *challenge)
+                          const char *scope, const unsigned char *challenge,
+                          const unsigned char *context)
 {
     char scopes[160];
     snprintf(scopes, sizeof(scopes), "[\"%s\"]", scope);
@@ -127,9 +140,9 @@ static char *build_bundle(RatifyHumanRoot *root, RatifyAgent *agent,
     if (!cert_json) return NULL;
 
     RatifyProofBundle *bundle = NULL;
-    RatifyStatus st = ratify_proof_bundle_create(agent, cert_json, challenge,
-                                                 CHALLENGE_BYTES, now,
-                                                 &bundle, &err);
+    RatifyStatus st = ratify_proof_bundle_create_with_context(
+        agent, cert_json, challenge, CHALLENGE_BYTES, now,
+        context, CHALLENGE_BYTES, &bundle, &err);
     ratify_string_free(cert_json);
     if (st != RatifyOk) {
         fprintf(stderr, "controller: bundle failed: %s\n", err ? err : "?");
@@ -255,16 +268,18 @@ int main(int argc, char **argv)
             const char *scope = !strcmp(line, "actuate")
                 ? ACTUATE_SCOPE : MONITOR_SCOPE;
             unsigned char challenge[CHALLENGE_BYTES];
-            if (fetch_challenge(challenge) != 0) continue;
-            char *b = build_bundle(root, agent, scope, challenge);
+            unsigned char context[CHALLENGE_BYTES];
+            if (fetch_challenge(challenge, context, scope) != 0) continue;
+            char *b = build_bundle(root, agent, scope, challenge, context);
             if (b) { post_action(b, scope); ratify_string_free(b); }
             continue;
         }
 
         if (!strncmp(line, "capture ", 8)) {
             unsigned char challenge[CHALLENGE_BYTES];
-            if (fetch_challenge(challenge) != 0) continue;
-            char *b = build_bundle(root, agent, ACTUATE_SCOPE, challenge);
+            unsigned char context[CHALLENGE_BYTES];
+            if (fetch_challenge(challenge, context, ACTUATE_SCOPE) != 0) continue;
+            char *b = build_bundle(root, agent, ACTUATE_SCOPE, challenge, context);
             if (b) {
                 FILE *f = fopen(line + 8, "w");
                 if (f) { fputs(b, f); fclose(f); printf("CAPTURED %s\n", line + 8); }

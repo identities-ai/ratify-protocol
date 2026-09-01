@@ -33,7 +33,7 @@ This matters when an agent can call a tool but must not have unlimited authority
 | Role | What it decides or builds | This reference uses |
 | --- | --- | --- |
 | Principal | Sets the authority ceiling and signs the delegation | Ratify SDK or Ratify Verify |
-| Agent operator | Presents the proof and action request | Deterministic controller, with an agent adapter planned separately |
+| Agent operator | Presents the proof and action request | Deterministic controller or the Google ADK adapter in `adk/` |
 | Receiver operator | Pins the trust root, local policy, and actuator mapping | Linux receiver in `edge/` |
 | Actuator operator | Connects and programs the safe output device | Arduino sketch in `arduino/` |
 | Platform vendor | No change required to its platform | Ratify is independent of an agent framework |
@@ -116,6 +116,10 @@ Prerequisites: a Linux machine with the current Ratify C SDK source, a C compile
 
 The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
 
+### Run through Google ADK
+
+The adapter in [`../../adk/edge_agent.py`](../../adk/edge_agent.py) is a real ADK `FunctionTool`. It hides proof construction from the model, obtains the edge challenge, and submits the signed bundle to `/action`. See [`../../adk/README.md`](../../adk/README.md) for the pinned environment and receiver setup.
+
 ## Which path should I use?
 
 Use this open reference when you need inspectable source, a deterministic local gate, and a safe demonstration of the verification boundary. Use [Ratify Verify](https://ratifyprotocol.com) when you need managed trust configuration, revocation operations, audit retention, observability, availability, and supported deployment adapters.
@@ -134,13 +138,14 @@ Ratify signatures bind the delegation and proof fields defined by the protocol, 
 | `arduino/ratify_actuator/` | Safe Uno serial actuator sketch |
 | `run-reference-check.sh` | Clean, reproducible reference gate |
 | `docs/evidence.md` | Hardware and software evidence with explicit limits |
+| `../../adk/` | Google ADK tool adapter and setup instructions |
 | `ratify-reference.json` | Reference metadata and gate declaration |
 
 ## Evidence, security status, and limitations
 
 Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). The reference was exercised against Ratify alpha.19 on a Raspberry Pi 2 ARMv7 target, with a fresh C SDK build and 16 passing protocol rows. The Arduino LED path was exercised over USB serial.
 
-This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The DS3231 trusted-clock installation, offline power-cycle test, production hardware acceptance, and a real agent-framework adapter remain future work.
+This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The DS3231 trusted-clock installation, offline power-cycle test, and production hardware acceptance remain future work.
 
 ## Open source status
 

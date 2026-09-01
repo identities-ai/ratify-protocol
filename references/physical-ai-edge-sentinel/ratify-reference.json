@@ -4,5 +4,9 @@
   "status": "experimental",
   "platform": "Linux edge receiver and Arduino Uno actuator",
   "endorsement": "self-authored, no platform endorsement",
+  "agent_adapter": "../../adk/edge_agent.py",
+  "evidence": "docs/evidence.md",
+  "tests": 16,
+  "skips": 0,
   "gate": "./run-reference-check.sh"
 }

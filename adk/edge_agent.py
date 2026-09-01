@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from google.adk.agents import LlmAgent
@@ -22,11 +23,21 @@ from authority_reference.authority import AuthorityFixture, issue_authority
 def _json_request(url: str, *, method: str = "GET", body: bytes | None = None,
                   headers: dict[str, str] | None = None) -> dict[str, Any]:
     request = Request(url, data=body, method=method, headers=headers or {})
-    with urlopen(request, timeout=5) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=5) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        # A denied action is an expected receiver decision, not a transport
+        # failure. Preserve its JSON so an ADK agent can report it accurately.
+        try:
+            return json.loads(error.read().decode("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"allow": False, "status": "http_error", "detail": str(error)}
 
 
 def build_edge_tool(authority: AuthorityFixture, *, edge_url: str) -> FunctionTool:
+    edge_url = edge_url.rstrip("/")
+
     def actuate_edge(zone: str, duration_ms: int) -> dict[str, Any]:
         """Request one bounded physical actuation through the edge verifier."""
         challenge = _json_request(f"{edge_url}/challenge")

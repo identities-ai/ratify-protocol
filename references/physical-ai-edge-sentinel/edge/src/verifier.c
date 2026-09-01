@@ -43,6 +43,15 @@ static void deny(sentinel_decision *out, const char *reason)
     snprintf(out->reason, sizeof(out->reason), "%s", reason);
 }
 
+static int build_invocation(const char *scope, const char *zone, int duration,
+                            const char *invocation_id, char *out, size_t cap)
+{
+    int n = snprintf(out, cap, "%s|%s|%d|%s", scope ? scope : "",
+                     zone ? zone : "", duration,
+                     invocation_id ? invocation_id : "manual");
+    return n >= 0 && (size_t)n < cap ? 0 : -1;
+}
+
 int sentinel_init(const char *trust_dir, sentinel_ctx **out)
 {
     sentinel_ctx *ctx = calloc(1, sizeof(*ctx));
@@ -112,15 +121,16 @@ int sentinel_issue_challenge(sentinel_ctx *ctx, const sentinel_request *req,
 
     unsigned char challenge[SENTINEL_CHALLENGE_BYTES];
     unsigned char op_hash[32], context[32];
-    char invocation[192];
+    char invocation[512];
     char *err = NULL;
     const char *scope = req && req->scope ? req->scope : "";
     const char *zone = req && req->zone ? req->zone : "";
     int duration = req ? req->duration_ms : 0;
     const char *resource = req && req->resource_id ? req->resource_id : zone;
     const char *invocation_id = req && req->invocation_id ? req->invocation_id : "manual";
-    snprintf(invocation, sizeof(invocation), "%s|%s|%d|%s", scope, zone, duration,
-             invocation_id);
+    if (build_invocation(scope, zone, duration, invocation_id,
+                         invocation, sizeof(invocation)) != 0)
+        return -1;
     if (ratify_operation_context_hash(scope, "physical-actuate", resource, invocation,
                                       NULL, 0, op_hash, &err) != RatifyOk ||
         ratify_session_context_build("ratify-edge", zone, NULL, "edge-session",
@@ -197,14 +207,17 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle_json,
      *    rejects a challenge we did not issue before any signature work, which
      *    is what keeps a flood cheap at ~24 ms per real verification. */
     unsigned char op_hash[32], context[32];
-    char invocation[192];
+    char invocation[512];
     char *context_err = NULL;
     const char *resource = req && req->resource_id ? req->resource_id :
         (req && req->zone ? req->zone : "");
     const char *invocation_id = req && req->invocation_id ? req->invocation_id : "manual";
-    snprintf(invocation, sizeof(invocation), "%s|%s|%d|%s",
-             required_scope ? required_scope : "", req && req->zone ? req->zone : "",
-             req ? req->duration_ms : 0, invocation_id);
+    if (build_invocation(required_scope, req && req->zone ? req->zone : "",
+                         req ? req->duration_ms : 0, invocation_id,
+                         invocation, sizeof(invocation)) != 0) {
+        deny(out, "operation_context_too_large");
+        return;
+    }
     if (ratify_operation_context_hash(required_scope, "physical-actuate",
                                       resource, invocation,
                                       NULL, 0, op_hash, &context_err) != RatifyOk ||

@@ -41,12 +41,16 @@ def build_edge_tool(authority: AuthorityFixture, *, edge_url: str) -> FunctionTo
     def actuate_edge(zone: str, duration_ms: int) -> dict[str, Any]:
         """Request one bounded physical actuation through the edge verifier."""
         scope = "physical:actuate"
+        resource = "arduino-led"
+        invocation = f"adk:{zone}:{duration_ms}"
         challenge = _json_request(
             f"{edge_url}/challenge",
             headers={
                 "X-Sentinel-Scope": scope,
                 "X-Sentinel-Zone": zone,
                 "X-Sentinel-Duration-Ms": str(duration_ms),
+                "X-Sentinel-Resource": resource,
+                "X-Sentinel-Invocation": invocation,
             },
         )
         challenge_bytes = bytes.fromhex(challenge["challenge"])
@@ -65,6 +69,8 @@ def build_edge_tool(authority: AuthorityFixture, *, edge_url: str) -> FunctionTo
                 "X-Sentinel-Scope": scope,
                 "X-Sentinel-Zone": zone,
                 "X-Sentinel-Duration-Ms": str(duration_ms),
+                "X-Sentinel-Resource": resource,
+                "X-Sentinel-Invocation": invocation,
             },
         )
 

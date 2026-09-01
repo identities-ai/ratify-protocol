@@ -89,7 +89,8 @@ static int header_value(const char *headers, const char *name, char *out,
     return 0;
 }
 
-static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers)
+static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers,
+                             int default_duration_ms)
 {
     char scope[128] = {0}, zone[64] = {0}, durbuf[16] = {0};
     char resource[128] = "arduino-led", invocation[128] = "manual";
@@ -98,7 +99,8 @@ static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers)
     header_value(headers, "X-Sentinel-Duration-Ms", durbuf, sizeof(durbuf));
     header_value(headers, "X-Sentinel-Resource", resource, sizeof(resource));
     header_value(headers, "X-Sentinel-Invocation", invocation, sizeof(invocation));
-    sentinel_request req = { scope, zone, durbuf[0] ? atoi(durbuf) : 0,
+    sentinel_request req = { scope, zone,
+                             durbuf[0] ? atoi(durbuf) : default_duration_ms,
                              resource, invocation };
     char hex[SENTINEL_CHALLENGE_HEX + 1];
     char context_hex[SENTINEL_CHALLENGE_HEX + 1];
@@ -246,7 +248,7 @@ int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port,
         }
 
         if (strncmp(headers, "GET /challenge", 14) == 0) {
-            handle_challenge(ctx, fd, headers);
+            handle_challenge(ctx, fd, headers, actuate_ms);
             close(fd);
             continue;
         }

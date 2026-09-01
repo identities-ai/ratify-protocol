@@ -65,6 +65,15 @@ static void row(const char *label, const sentinel_decision *d,
                "", want_status, d->reason);
 }
 
+static void require_detail(const char *label, const sentinel_decision *d,
+                           const char *needle)
+{
+    checks++;
+    int ok = strstr(d->reason, needle) != NULL;
+    if (!ok) failures++;
+    printf("%-40s %s  detail=\"%s\"\n", label, ok ? "PASS" : "FAIL", d->reason);
+}
+
 static void write_file(const char *name, const char *contents)
 {
     char path[512];
@@ -274,6 +283,7 @@ int main(void)
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         row("changed scope: context mismatch", &d, "invalid", 0, before);
+        require_detail("scope mismatch reason", &d, "session_context_mismatch");
         ratify_string_free(b);
     }
 
@@ -421,6 +431,7 @@ int main(void)
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         if (d.allow) actuator_fire(&d, 500);
         row("changed zone: context mismatch", &d, "invalid", 0, before);
+        require_detail("zone mismatch reason", &d, "session_context_mismatch");
         ratify_string_free(b);
     }
 
@@ -435,6 +446,7 @@ int main(void)
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         if (d.allow) actuator_fire(&d, 60000);
         row("changed duration: context mismatch", &d, "invalid", 0, before);
+        require_detail("duration mismatch reason", &d, "session_context_mismatch");
         ratify_string_free(b);
     }
 
@@ -448,6 +460,7 @@ int main(void)
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         row("changed resource: context mismatch", &d, "invalid", 0, before);
+        require_detail("resource mismatch reason", &d, "session_context_mismatch");
         ratify_string_free(b);
     }
     {
@@ -459,6 +472,10 @@ int main(void)
         before = actuator_invocations();
         sentinel_decide(ctx, b, strlen(b), &req, &d);
         row("changed invocation: context mismatch", &d, "invalid", 0, before);
+        require_detail("invocation mismatch reason", &d, "session_context_mismatch");
+        before = actuator_invocations();
+        sentinel_decide(ctx, b, strlen(b), &REQ_ACTUATE, &d);
+        row("context mismatch does not consume", &d, "authorized_agent", 0, before);
         ratify_string_free(b);
     }
 

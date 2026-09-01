@@ -12,9 +12,9 @@
 - Protocol release line: Ratify alpha.19
 - Target: Raspberry Pi 2, ARMv7
 - C SDK: freshly built from the matching protocol source tree
-- Result: 17 passed, 0 failed, 0 skipped
+- Result: 25 passed, 0 failed, 0 skipped
 - Revocation: signed state exercised, with unavailable-state denial covered
-- Operation context: challenge session context binds scope, zone, duration, and invocation descriptor; scope, zone, and duration mismatch rows fail closed
+- Operation context: challenge session context binds scope, zone, duration, resource, and invocation identifiers; every mismatch fails closed and the original challenge remains usable
 - Trusted RTC: not installed; test clock is used only by the test build
 
 ## Serial actuator integration

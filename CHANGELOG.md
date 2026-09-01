@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.20 (unreleased)
+## v1.0.0-alpha.20 (2026-09-01)
 
 Completes the C SDK's context-binding surface. No canonical bytes, fixture
 contents, wire format or verifier behavior change, and the protocol version

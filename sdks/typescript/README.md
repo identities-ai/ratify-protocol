@@ -24,7 +24,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 ## Install
 
 ```bash
-npm install @identities-ai/ratify-protocol@1.0.0-alpha.19
+npm install @identities-ai/ratify-protocol@1.0.0-alpha.20
 ```
 
 ## Three verbs, three examples

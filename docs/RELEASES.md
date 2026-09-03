@@ -41,6 +41,29 @@ Contributors who prefer to iterate on a language in their own repository may do 
 - **Protocol version** is the `version` field on every signed object (`1` currently). It changes only for wire-breaking changes (new algorithm, new required field, semantic shift in verifier algorithm). Protocol version bumps are rare and coordinated across all implementations.
 - **SDK version** is per-SDK semver (`1.2.3`). Same major version = same protocol version. Minor/patch bumps can happen independently per SDK for bug fixes and quality improvements that don't change fixture behavior.
 
+### 3.1a Dry run the artifact path before you need it
+
+The release workflow accepts `dry_run` on a manual run. It builds everything,
+verifies the artifacts, and publishes nothing:
+
+```
+Actions → Release → Run workflow → tag: <the next tag>, dry_run: true
+```
+
+Every publishing job is skipped. The wheel matrix, the C library build, and the
+job that downloads and merges the five native wheels all run, because that merge
+is the thing worth checking. It asserts five wheels, one sdist, no nested paths,
+and one wheel per platform tag before anything would upload.
+
+**Run it after changing any artifact action, and before the release that depends
+on it.** The upload uses `skip-existing`, so a partial set of wheels publishes
+successfully and reports nothing wrong. Finding that during a release means
+finding it after crates.io and npm have already published, and a published
+version cannot be withdrawn.
+
+A dry run binds no deployment environment, so it needs no approval and reaches
+no credential.
+
 ### 3.2 The alpha → stable ladder
 
 ```

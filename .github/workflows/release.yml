@@ -19,8 +19,22 @@ on:
         description: 'Tag to publish (e.g. v1.0.0-alpha.8)'
         required: true
         type: string
+      dry_run:
+        description: 'Build and verify artifacts, publish nothing'
+        required: false
+        default: false
+        type: boolean
 
 env:
+  # A dry run builds and verifies everything and publishes nothing. It exists
+  # because the path between the wheel build and the PyPI upload is only
+  # exercised during a real release, and `skip-existing: true` on that upload
+  # means a partial set of wheels publishes successfully and silently.
+  # Discovering that during a release means discovering it after crates.io and
+  # npm have already published, which is not a state with a clean recovery.
+  #
+  # Always false for a tag push. Only a manual run can ask for one.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
   # Normalise the ref so both push and workflow_dispatch use the same variable.
   # For push: github.ref_name = "v1.0.0-alpha.8"
   # For workflow_dispatch: inputs.tag = "v1.0.0-alpha.8"
@@ -152,6 +166,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-pypi:
     name: Publish to PyPI
+    if: ${{ env.DRY_RUN != 'true' }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -248,11 +263,16 @@ jobs:
 
   publish-pypi-native:
     name: Publish native extra to PyPI
+    # Deliberately not gated at the job level. The download and merge
+    # below is exactly what a dry run exists to exercise, so the job
+    # runs and only its upload is skipped.
     needs: build-pypi-native
     runs-on: ubuntu-latest
-    environment:
-      name: pypi-publish
-      url: https://pypi.org/project/ratify-protocol-native/
+    # No environment on a dry run. The environment exists to gate a publish
+    # behind its reviewers and its credentials, and a dry run publishes
+    # nothing; binding it here would make the check wait on an approval that
+    # protects an upload it is not going to perform.
+    environment: ${{ env.DRY_RUN != 'true' && 'pypi-publish' || '' }}
     permissions:
       id-token: write
       contents: read
@@ -273,7 +293,25 @@ jobs:
         run: |
           python -m pip install 'maturin>=1.7,<2'
           maturin sdist --out ../../dist
+      # The upload runs with skip-existing, so a partial set of wheels publishes
+      # successfully and says nothing. Whatever reaches it is checked first.
+      - name: the merged artifact set must be complete and flat
+        run: |
+          set -euo pipefail
+          echo "dist/ contains:"; ls -la dist/
+          wheels=$(find dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')
+          sdists=$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')
+          nested=$(find dist -mindepth 2 | wc -l | tr -d ' ')
+          test "$wheels" = "5" || { echo "::error::expected 5 wheels, found $wheels; merge-multiple did not flatten every matrix leg"; exit 1; }
+          test "$sdists" = "1" || { echo "::error::expected 1 sdist, found $sdists"; exit 1; }
+          test "$nested" = "0" || { echo "::error::dist/ has nested paths; merge-multiple left artifacts in per-name directories"; exit 1; }
+          for tag in manylinux_2_17_x86_64 manylinux_2_17_aarch64 macosx_.*arm64 macosx_.*x86_64 win_amd64; do
+            find dist -maxdepth 1 -name '*.whl' | grep -qE "$tag" || { echo "::error::no wheel matching platform tag $tag"; exit 1; }
+          done
+          echo "5 wheels, 1 sdist, flat, every platform present"
+
       - name: publish to PyPI
+        if: ${{ env.DRY_RUN != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
@@ -281,6 +319,7 @@ jobs:
 
   publish-crates:
     name: Publish to crates.io
+    if: ${{ env.DRY_RUN != 'true' }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -344,7 +383,7 @@ jobs:
     name: Publish to npm
     needs: gate-tests
     runs-on: ubuntu-latest
-    if: ${{ vars.NPM_PUBLISH_ENABLED == 'true' }}
+    if: ${{ env.DRY_RUN != 'true' && (vars.NPM_PUBLISH_ENABLED == 'true') }}
     environment:
       name: npm-publish
       url: https://www.npmjs.com/package/@identities-ai/ratify-protocol
@@ -392,6 +431,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-go:
     name: Publish Go (auto via pkg.go.dev)
+    if: ${{ env.DRY_RUN != 'true' }}
     needs: gate-tests
     runs-on: ubuntu-latest
     steps:
@@ -475,7 +515,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     needs: [gate-tests, publish-pypi, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: always() && needs.gate-tests.result == 'success'
+    if: ${{ env.DRY_RUN != 'true' && (always() && needs.gate-tests.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

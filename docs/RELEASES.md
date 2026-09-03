@@ -50,10 +50,14 @@ verifies the artifacts, and publishes nothing:
 Actions → Release → Run workflow → tag: <the next tag>, dry_run: true
 ```
 
-Every publishing job is skipped. The wheel matrix, the C library build, and the
-job that downloads and merges the five native wheels all run, because that merge
-is the thing worth checking. It asserts five wheels, one sdist, no nested paths,
-and one wheel per platform tag before anything would upload.
+What runs: the test gate, the five-leg wheel matrix, the C library build, and
+`verify-pypi-native`, which downloads and merges the wheels exactly as the
+upload would receive them and asserts five wheels, one sdist, no nested paths,
+and a wheel for every platform tag.
+
+What does not run: every publishing job. They are skipped rather than run with
+their uploads disabled, so none of them binds a deployment environment, waits
+for an approval, or requests a credential.
 
 **Run it after changing any artifact action, and before the release that depends
 on it.** The upload uses `skip-existing`, so a partial set of wheels publishes
@@ -61,8 +65,16 @@ successfully and reports nothing wrong. Finding that during a release means
 finding it after crates.io and npm have already published, and a published
 version cannot be withdrawn.
 
-A dry run binds no deployment environment, so it needs no approval and reaches
-no credential.
+Two implementation notes, because both are easy to get wrong:
+
+- The conditions read `inputs.dry_run` through `github.event_name`, never a
+  workflow-level `env`. The `env` context is not available in `jobs.<id>.if` or
+  in `environment:`, so a condition written against it evaluates as an empty
+  string and passes, which would leave every publishing job running during a
+  dry run.
+- Verification is its own job with no environment, and the publish job depends
+  on it. That keeps the dry run free of approvals, and it means the assertion
+  also guards a real release rather than only the rehearsal.
 
 ### 3.2 The alpha → stable ladder
 

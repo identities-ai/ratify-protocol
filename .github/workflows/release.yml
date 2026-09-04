@@ -1,5 +1,14 @@
 name: Release
 
+# The run list is public, so a run says what it is. Without this every entry
+# reads "Release", and a rehearsal that stops early is indistinguishable from a
+# release that failed. A reader should not have to open a run to tell whether
+# anything was published.
+run-name: >-
+  ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+      && format('Dry run {0} — verifies artifacts, publishes nothing', inputs.tag)
+      || format('Release {0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
+
 # Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
 # workflow runs the full CI matrix, then publishes each SDK to its registry
 # only if all tests pass. Per-SDK publish steps are conditional and continue

@@ -26,7 +26,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 The Go SDK is the **reference implementation** and lives at the project root — not in this directory.
 
 ```go
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.19
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20
 ```
 
 ```go

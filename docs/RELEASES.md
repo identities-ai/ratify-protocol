@@ -41,6 +41,47 @@ Contributors who prefer to iterate on a language in their own repository may do 
 - **Protocol version** is the `version` field on every signed object (`1` currently). It changes only for wire-breaking changes (new algorithm, new required field, semantic shift in verifier algorithm). Protocol version bumps are rare and coordinated across all implementations.
 - **SDK version** is per-SDK semver (`1.2.3`). Same major version = same protocol version. Minor/patch bumps can happen independently per SDK for bug fixes and quality improvements that don't change fixture behavior.
 
+### 3.1a Dry run the artifact path before you need it
+
+The release workflow accepts `dry_run` on a manual run. It builds everything,
+verifies the artifacts, and publishes nothing:
+
+```
+Actions → Release → Run workflow → tag: <the version currently on main>, dry_run: true
+```
+
+Use the version `main` already carries, not the one you are about to cut. The
+gate checks the tag against the SDK manifests, so asking for the next version
+fails before anything is built: `tag 1.0.0-alpha.21 ≠ rust 1.0.0-alpha.20`. A
+dry run rehearses publishing what is on `main`, which is the same artifact path
+the next release will use.
+
+What runs: the test gate, the five-leg wheel matrix, the C library build, and
+`verify-pypi-native`, which downloads and merges the wheels exactly as the
+upload would receive them and asserts five wheels, one sdist, no nested paths,
+and a wheel for every platform tag.
+
+What does not run: every publishing job. They are skipped rather than run with
+their uploads disabled, so none of them binds a deployment environment, waits
+for an approval, or requests a credential.
+
+**Run it after changing any artifact action, and before the release that depends
+on it.** The upload uses `skip-existing`, so a partial set of wheels publishes
+successfully and reports nothing wrong. Finding that during a release means
+finding it after crates.io and npm have already published, and a published
+version cannot be withdrawn.
+
+Two implementation notes, because both are easy to get wrong:
+
+- The conditions read `inputs.dry_run` through `github.event_name`, never a
+  workflow-level `env`. The `env` context is not available in `jobs.<id>.if` or
+  in `environment:`, so a condition written against it evaluates as an empty
+  string and passes, which would leave every publishing job running during a
+  dry run.
+- Verification is its own job with no environment, and the publish job depends
+  on it. That keeps the dry run free of approvals, and it means the assertion
+  also guards a real release rather than only the rehearsal.
+
 ### 3.2 The alpha → stable ladder
 
 ```

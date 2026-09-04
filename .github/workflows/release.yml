@@ -1,5 +1,14 @@
 name: Release
 
+# The run list is public, so a run says what it is. Without this every entry
+# reads "Release", and a rehearsal that stops early is indistinguishable from a
+# release that failed. A reader should not have to open a run to tell whether
+# anything was published.
+run-name: >-
+  ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+      && format('Dry run {0} — verifies artifacts, publishes nothing', inputs.tag)
+      || format('Release {0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
+
 # Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
 # workflow runs the full CI matrix, then publishes each SDK to its registry
 # only if all tests pass. Per-SDK publish steps are conditional and continue
@@ -19,6 +28,11 @@ on:
         description: 'Tag to publish (e.g. v1.0.0-alpha.8)'
         required: true
         type: string
+      dry_run:
+        description: 'Build and verify artifacts, publish nothing'
+        required: false
+        default: false
+        type: boolean
 
 env:
   # Normalise the ref so both push and workflow_dispatch use the same variable.
@@ -86,7 +100,7 @@ jobs:
         run: npm test
 
       # Python
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Python install
@@ -96,6 +110,25 @@ jobs:
           pip install -e '.[dev]'
       - name: Python full test suite
         working-directory: sdks/python
+        run: pytest -v
+
+      # The pure-Python run above intentionally skips the three deterministic
+      # seed tests because they require the optional native extension. Build
+      # that extension in the release gate too, so a release cannot pass while
+      # the native path is absent or incompatible. One non-native-only test is
+      # expected to skip in this configuration; RATIFY_REQUIRE_NATIVE makes
+      # every native-required test fail instead of silently skipping.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Build and install the native Python extra
+        working-directory: sdks/python-native
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: Python native-extra test suite
+        working-directory: sdks/python
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
       # Rust
@@ -152,6 +185,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-pypi:
     name: Publish to PyPI
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -162,7 +196,7 @@ jobs:
       contents: read   # required by actions/checkout to read the repo
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: build sdist + wheel
@@ -231,7 +265,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: build wheel
@@ -246,9 +280,61 @@ jobs:
           name: native-wheels-${{ matrix.os }}-${{ matrix.target }}
           path: sdks/python-native/dist
 
+  # Assembles exactly what the upload would receive and checks it, in a job that
+  # binds no environment and holds no credential, so it runs on a dry run
+  # without waiting for an approval that protects an upload it will not perform.
+  #
+  # This is the job a dry run exists for. Five matrix legs upload separately
+  # named artifacts and merge-multiple flattens them here, and until now nothing
+  # checked the result except a release doing it for real.
+  verify-pypi-native:
+    name: Verify the native wheel set
+    needs: build-pypi-native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-wheels-*
+          merge-multiple: true
+          path: dist
+      # The sdist is built once, separately: a source install of the extra does
+      # require a Rust toolchain, which is documented in its README.
+      - name: build sdist
+        working-directory: sdks/python-native
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      # The upload runs with skip-existing, so a partial set publishes
+      # successfully and says nothing. The set is asserted rather than inferred
+      # from a green job.
+      - name: the merged artifact set must be complete and flat
+        run: |
+          set -euo pipefail
+          echo "dist/ contains:"; ls -la dist/
+          wheels=$(find dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')
+          sdists=$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')
+          nested=$(find dist -mindepth 2 | wc -l | tr -d ' ')
+          test "$wheels" = "5" || { echo "::error::expected 5 wheels, found $wheels; merge-multiple did not flatten every matrix leg"; exit 1; }
+          test "$sdists" = "1" || { echo "::error::expected 1 sdist, found $sdists"; exit 1; }
+          test "$nested" = "0" || { echo "::error::dist/ has nested paths; merge-multiple left artifacts in per-name directories"; exit 1; }
+          for tag in manylinux_2_17_x86_64 manylinux_2_17_aarch64 macosx_.*arm64 macosx_.*x86_64 win_amd64; do
+            find dist -maxdepth 1 -name '*.whl' | grep -qE "$tag" || { echo "::error::no wheel matching platform tag $tag"; exit 1; }
+          done
+          echo "5 wheels, 1 sdist, flat, every platform present"
+
   publish-pypi-native:
     name: Publish native extra to PyPI
-    needs: build-pypi-native
+    # Skipped entirely on a dry run, rather than run with its upload disabled:
+    # a job that does not start cannot upload by accident, and it binds no
+    # environment and requests no token.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    needs: verify-pypi-native
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish
@@ -258,7 +344,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: actions/download-artifact@v8
@@ -281,6 +367,7 @@ jobs:
 
   publish-crates:
     name: Publish to crates.io
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -344,7 +431,7 @@ jobs:
     name: Publish to npm
     needs: gate-tests
     runs-on: ubuntu-latest
-    if: ${{ vars.NPM_PUBLISH_ENABLED == 'true' }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && vars.NPM_PUBLISH_ENABLED == 'true' }}
     environment:
       name: npm-publish
       url: https://www.npmjs.com/package/@identities-ai/ratify-protocol
@@ -392,6 +479,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-go:
     name: Publish Go (auto via pkg.go.dev)
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: gate-tests
     runs-on: ubuntu-latest
     steps:
@@ -475,7 +563,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     needs: [gate-tests, publish-pypi, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: always() && needs.gate-tests.result == 'success'
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

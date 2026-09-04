@@ -1,6 +1,6 @@
 /*
  * Ratify Protocol — C/C++ bindings
- * Version: 1.0.0-alpha.19
+ * Version: 1.0.0-alpha.20
  *
  * Cryptographic authorization for AI agents.
  * Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204).
@@ -324,6 +324,17 @@ enum RatifyStatus ratify_proof_bundle_create(const struct RatifyAgent *agent,
                                              int64_t challenge_at_unix,
                                              struct RatifyProofBundle **out,
                                              char **err_out);
+
+// Build a ProofBundle with the protocol's 32-byte session context binding.
+enum RatifyStatus ratify_proof_bundle_create_with_context(const struct RatifyAgent *agent,
+                                                          const char *cert_json,
+                                                          const unsigned char *challenge,
+                                                          uintptr_t challenge_len,
+                                                          int64_t challenge_at_unix,
+                                                          const unsigned char *session_context,
+                                                          uintptr_t session_context_len,
+                                                          struct RatifyProofBundle **out,
+                                                          char **err_out);
 
 // Serialise a ProofBundle to JSON. Free with `ratify_string_free`.
 char *ratify_proof_bundle_to_json(const struct RatifyProofBundle *handle, char **err_out);

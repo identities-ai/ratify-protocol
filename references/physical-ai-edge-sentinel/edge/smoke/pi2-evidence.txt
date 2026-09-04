@@ -1,0 +1,33 @@
+=== host ===
+Linux raspberry-pi 6.12.62+rpt-rpi-v7 #1 SMP Raspbian 1:6.12.62-1+rpt1 (2025-12-18) armv7l GNU/Linux
+PRETTY_NAME="Raspbian GNU/Linux 13 (trixie)"
+model name	: ARMv7 Processor rev 5 (v7l)
+
+=== alpha.18 shared link ===
+	libratify_c.so => /opt/ratify/smoke/vendor/ratify-c/lib/libratify_c.so (0x76d22000)
+Ratify 1.0.0-alpha.18 — Edge Sentinel Pi 2 smoke test
+sizeof(void*) = 4 bytes
+
+pinned human_id: 21e9ffb73429beba0d8b1e2d36f1835d
+bundle size:     17572 bytes (MAX_PROOF_BUNDLE_BYTES = 131072)
+
+depth-1 verify, pinned root                    PASS (valid=1 status=authorized_agent anchor=match)
+attacker root: SDK accepts, anchor rejects     PASS (valid=1 status=authorized_agent anchor=anchor_mismatch)
+
+depth-1 hybrid verify, 200 iterations after 5 warm-up:
+  min     24272.1 us
+  median  24909.0 us
+  mean    25043.0 us
+  p95     25588.9 us
+  max     28346.2 us
+
+peak RSS: 3720 KiB
+
+SMOKE TEST PASSED
+
+=== footprint ===
+total 32160
+-rw-r--r-- 1 runner runner 30835406 Aug 30 09:30 libratify_c.a
+-rwxr-xr-x 1 runner runner  2087904 Aug 30 09:30 libratify_c.so
+   text	   data	    bss	    dec	    hex	filename
+   7520	    424	      8	   7952	   1f10	smoke

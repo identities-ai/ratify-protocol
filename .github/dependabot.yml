@@ -1,0 +1,22 @@
+# Keep workflow actions current.
+#
+# Added after several actions were found still pinned to v4, whose Node 20
+# runtime is deprecated: the runner had begun forcing them onto Node 24 and
+# warning on every run. Some workflows here had already moved to current majors
+# and others had not, which is the state nothing was watching for.
+#
+# Actions only. The language ecosystems in this repository are pinned
+# deliberately, per release, and are checked by the release gate rather than by
+# a bot.
+# Weekly rather than monthly. Monthly is how several actions here ended up
+# multiple majors behind: a deprecation announced in advance had a month to sit
+# unnoticed, and by the time anything surfaced the fix was a batch rather than a
+# single bump. Actions change rarely enough that weekly is a small queue.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore

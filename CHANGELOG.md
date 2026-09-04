@@ -6,6 +6,32 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.20 (2026-09-01)
+
+Completes the C SDK's context-binding surface. No canonical bytes, fixture
+contents, wire format or verifier behavior change, and the protocol version
+remains 1. The Go, Rust, Python and TypeScript SDKs are unchanged in this
+release; their versions move only to keep the release line synchronized.
+
+### Added
+
+- **C: `ratify_proof_bundle_create_with_context`.** Every other reference
+  implementation could already build a ProofBundle bound to a 32-byte session
+  context: Go through `SignChallengeWithSessionContext`, Rust through
+  `sign_challenge_with_session_context`, and Python and TypeScript through the
+  optional `session_context` argument on their challenge signing functions. The
+  C SDK could not, so a C caller could verify a context-bound proof but never
+  produce one, and any C integration needing that binding had to reach outside
+  the published surface.
+
+  The new function mirrors `ratify_proof_bundle_create` with two extra
+  parameters, and follows the Go and Rust shape of a separate entry point
+  rather than an optional argument, which C cannot express. Both the challenge
+  and the session context must be exactly 32 bytes; any other length returns
+  `RatifyErrBadArgument` and produces no bundle. Existing symbols are
+  unchanged, so the addition is ABI-compatible for callers already linked
+  against alpha.19.
+
 ## v1.0.0-alpha.19 (2026-08-30)
 
 A security release for the TypeScript SDK. No canonical bytes, fixture

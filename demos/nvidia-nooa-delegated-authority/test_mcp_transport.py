@@ -31,14 +31,34 @@ import pytest
 # missing dependency into a green tick is worse than no gate, so
 # RATIFY_REQUIRE_MCP=1 makes the absence a hard failure instead of a skip.
 # scripts/nvidia-reference-check.sh sets it.
+# The guard below checks for the symbol this module actually uses, not merely
+# that `mcp` imports. An older `mcp` imports cleanly and has no top-level
+# `Client`, so a presence-only check let collection proceed and then died on
+# `from mcp import Client`. That is a collection error rather than a skip, and
+# it took the whole cross-SDK release gate down on a machine that happened to
+# carry mcp 1.26. Presence is not capability.
+_MCP_NEEDS = "mcp==2.0.0 (this module imports `mcp.Client`)"
+
 if os.environ.get("RATIFY_REQUIRE_MCP") == "1":
     import mcp  # noqa: F401, must import, or this check has failed
+
+    if not hasattr(mcp, "Client"):
+        raise RuntimeError(
+            f"RATIFY_REQUIRE_MCP=1 but the installed mcp has no top-level "
+            f"Client; needs {_MCP_NEEDS}"
+        )
 else:
-    pytest.importorskip(
+    _mcp = pytest.importorskip(
         "mcp",
         reason="MCP transport tests require `pip install mcp==2.0.0`; "
         "set RATIFY_REQUIRE_MCP=1 to make this a failure instead",
     )
+    if not hasattr(_mcp, "Client"):
+        pytest.skip(
+            f"installed mcp lacks a top-level Client; needs {_MCP_NEEDS}. "
+            "Set RATIFY_REQUIRE_MCP=1 to make this a failure instead",
+            allow_module_level=True,
+        )
 
 import uvicorn  # noqa: E402
 from mcp import Client  # noqa: E402

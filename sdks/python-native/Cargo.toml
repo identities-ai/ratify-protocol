@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol-native"
-version = "1.0.0-alpha.19"
+version = "1.0.0-alpha.20"
 edition = "2021"
 license = "Apache-2.0"
 description = "Native deterministic key generation for the Ratify Protocol Python SDK"

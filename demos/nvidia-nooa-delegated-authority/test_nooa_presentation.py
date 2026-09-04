@@ -36,14 +36,43 @@ from refund_service import RefundService, serve
 # contribution whose headline claim is "this integrates with NOOA" must not be
 # able to go green everywhere by never running. RATIFY_REQUIRE_NOOA=1 turns the
 # skip into a hard failure; scripts/nooa-integration-check.sh sets it.
+# Checks for the module this test actually imports from, not merely that
+# `nooa` is present. A package that imports cleanly but lacks
+# `nooa.unifiedllm` would otherwise pass the guard and then fail collection,
+# which reports as an error rather than a skip and takes the suite down with
+# it. Presence is not capability.
+_NOOA_NEEDS = "nooa==0.0.8 (this module imports `nooa.unifiedllm.FakeLLMClient`)"
+
+
+def _has_unifiedllm() -> bool:
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("nooa.unifiedllm") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 if os.environ.get("RATIFY_REQUIRE_NOOA") == "1":
     import nooa  # noqa: F401, must import, or this check has failed
+
+    if not _has_unifiedllm():
+        raise RuntimeError(
+            f"RATIFY_REQUIRE_NOOA=1 but the installed nooa has no unifiedllm "
+            f"module; needs {_NOOA_NEEDS}"
+        )
 else:
     nooa = pytest.importorskip(
         "nooa",
         reason="NOOA integration test requires `pip install nooa==0.0.8` (Python 3.12/3.13); "
         "set RATIFY_REQUIRE_NOOA=1 to make this a failure instead",
     )
+    if not _has_unifiedllm():
+        pytest.skip(
+            f"installed nooa has no unifiedllm module; needs {_NOOA_NEEDS}. "
+            "Set RATIFY_REQUIRE_NOOA=1 to make this a failure instead",
+            allow_module_level=True,
+        )
 
 from nooa.unifiedllm import FakeLLMClient  # noqa: E402
 

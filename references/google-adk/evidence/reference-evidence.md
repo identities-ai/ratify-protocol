@@ -1,6 +1,6 @@
 # Google ADK reference evidence
 
-**Status:** executed draft evidence, re-run August 30, 2026. This record is generated
+**Status:** executed published-reference evidence, re-run September 4, 2026. This record is generated
 from the independent Ratify reference; it is not Google attestation.
 
 ## Environment
@@ -11,10 +11,9 @@ from the independent Ratify reference; it is not Google attestation.
 | Python | 3.12.10 |
 | Google ADK | `2.6.3` |
 | MCP Python SDK | `1.29.0` |
-| Ratify Protocol | published PyPI package `1.0.0a19` |
+| Ratify Protocol | published PyPI package `1.0.0a20` |
 | pytest | `9.0.3` |
-| Protocol base commit | `7c0bf40d22c73b6919f2044c5f2d9194aa1d47f8` |
-| Requirements SHA-256 | `a392fe01d0be77588aff28e0a2729f98aaa5513009c28aad8ae45553f41e75f5` |
+| Protocol release | `v1.0.0-alpha.20` |
 
 ## Reproduction
 
@@ -29,7 +28,7 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 ## Recorded result
 
 ```text
-pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a19
+pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a20
 .................................                                        [100%]
 33 passed, 37 warnings
 gate: 33/33 passed; zero skipped, xfailed, failed, or errored

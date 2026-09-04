@@ -6,7 +6,7 @@ DEMO="$ROOT/references/google-adk"
 VENV="$DEMO/.venv"
 
 python3 -m venv "$VENV"
-"$VENV/bin/pip" install --disable-pip-version-check -q -r "$DEMO/requirements.txt"
+"$VENV/bin/python" -m pip install --disable-pip-version-check -q -r "$DEMO/requirements.txt"
 
 DEMO="$DEMO" "$VENV/bin/python" - <<'PY'
 import importlib.metadata as metadata
@@ -24,7 +24,7 @@ if local_sdk == module or local_sdk in module.parents:
 expected = {
     "google-adk": "2.6.3",
     "mcp": "1.29.0",
-    "ratify-protocol": "1.0.0a19",
+    "ratify-protocol": "1.0.0a20",
 }
 for package, version in expected.items():
     installed = metadata.version(package)
@@ -32,7 +32,7 @@ for package, version in expected.items():
         raise SystemExit(f"FAIL: {package}={installed}; expected {version}")
 
 print(f"published Ratify: {module}")
-print("pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a19")
+print("pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a20")
 PY
 
 RESULTS="$DEMO/.reference-results.xml"

@@ -47,8 +47,14 @@ The release workflow accepts `dry_run` on a manual run. It builds everything,
 verifies the artifacts, and publishes nothing:
 
 ```
-Actions → Release → Run workflow → tag: <the next tag>, dry_run: true
+Actions → Release → Run workflow → tag: <the version currently on main>, dry_run: true
 ```
+
+Use the version `main` already carries, not the one you are about to cut. The
+gate checks the tag against the SDK manifests, so asking for the next version
+fails before anything is built: `tag 1.0.0-alpha.21 ≠ rust 1.0.0-alpha.20`. A
+dry run rehearses publishing what is on `main`, which is the same artifact path
+the next release will use.
 
 What runs: the test gate, the five-leg wheel matrix, the C library build, and
 `verify-pypi-native`, which downloads and merges the wheels exactly as the

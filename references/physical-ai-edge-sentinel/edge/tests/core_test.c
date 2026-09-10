@@ -18,6 +18,7 @@
 #include "ratify.h"
 #include "sentinel.h"
 #include "actuator.h"
+#include "trust.h"
 
 #define ACTUATE_SCOPE "physical:actuate"
 #define TRUST_DIR "/tmp/sentinel-test-trust"
@@ -227,6 +228,28 @@ int main(void)
     provision(root, root_id, "[]", now0);
     printf("pinned human_id: %s\n\n", root_id);
 
+    /* Provisioning must reject an ID that does not derive from the pinned
+     * public key. The runtime check independently derives the presented root
+     * key before trusting a verified bundle. */
+    {
+        RatifyHumanRoot *different_root = NULL;
+        ratify_human_root_generate(&different_root);
+        char *different_id = ratify_human_root_id(different_root);
+        char id_line[64];
+        snprintf(id_line, sizeof(id_line), "%s\n", different_id);
+        write_file("pinned_human_id", id_line);
+        sentinel_ctx *bad = NULL;
+        int rejected = sentinel_init(TRUST_DIR, &bad) != 0;
+        checks++;
+        if (!rejected) failures++;
+        printf("%-40s %s\n", "mismatched pinned key and ID rejected",
+               rejected ? "PASS" : "FAIL");
+        if (bad) sentinel_free(bad);
+        ratify_string_free(different_id);
+        ratify_human_root_free(different_root);
+        provision(root, root_id, "[]", now0);
+    }
+
     int64_t now = (int64_t)time(NULL);
     unsigned long before;
 
@@ -258,6 +281,29 @@ int main(void)
     sentinel_ctx *ctx = NULL;
     if (sentinel_init(TRUST_DIR, &ctx) != 0) return 1;
     actuator_bind(sentinel_actuator_token(ctx));
+
+    /* The proof verifier validates signatures, but the receiver must also
+     * bind the verified root key to local trust. This bundle-shaped unit input
+     * models an attacker key claiming the legitimate root ID. */
+    {
+        RatifyHumanRoot *attacker_root = NULL;
+        ratify_human_root_generate(&attacker_root);
+        char *attacker_pub = ratify_human_root_pub_key_json(attacker_root, &err);
+        char spoofed_bundle[8192];
+        snprintf(spoofed_bundle, sizeof(spoofed_bundle),
+                 "{\"delegations\":[{\"issuer_id\":\"%s\",\"issuer_pub_key\":%s}]}",
+                 root_id, attacker_pub);
+        trust_ctx trust;
+        int loaded = trust_load(TRUST_DIR, &trust) == 0;
+        int rejected = loaded && !trust_bundle_matches_anchor(&trust, spoofed_bundle);
+        checks++;
+        if (!rejected) failures++;
+        printf("%-40s %s\n", "ID-spoofed issuer key rejected",
+               rejected ? "PASS" : "FAIL");
+        if (loaded) trust_unload(&trust);
+        ratify_string_free(attacker_pub);
+        ratify_human_root_free(attacker_root);
+    }
 
     /* Row: authorized, pinned root. The only row that fires the actuator. */
     sentinel_decision allow_d;

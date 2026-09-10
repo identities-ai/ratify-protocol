@@ -270,11 +270,13 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle_json,
         snprintf(out->reason, sizeof(out->reason), "%s",
                  (reason && reason[0]) ? reason : "");
         out->allow = 0;
-    } else if (strcmp(out->human_id, ctx->trust.pinned_human_id) != 0) {
+    } else if (strcmp(out->human_id, ctx->trust.pinned_human_id) != 0 ||
+               !trust_bundle_matches_anchor(&ctx->trust, bundle_json)) {
         /* 6. The anchor check. The SDK just told us this chain is internally
          *    valid and correctly signed. It cannot tell us whose chain it is,
-         *    because it does not know which principal we trust. This is the
-         *    step an implementer skips. */
+         *    because it does not know which principal we trust. Both the
+         *    claimed root ID and the issuer public key must match the locally
+         *    provisioned anchor. */
         deny(out, SENTINEL_REASON_ANCHOR_MISMATCH);
     } else if (sensitive &&
                !trust_zone_allowed(&ctx->trust, req ? req->zone : NULL)) {

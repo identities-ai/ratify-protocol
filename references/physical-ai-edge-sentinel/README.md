@@ -91,7 +91,7 @@ The deterministic gate runs the 16-row protocol matrix and observes the protecte
 | revoked certificate | revoked | not invoked |
 | unavailable revocation state | unavailable | not invoked |
 
-The local gate result is **25 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
+The local gate result is **27 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
 
 ## Use it now
 
@@ -122,7 +122,7 @@ Prerequisites: a Linux machine with the current Ratify C SDK source, a C compile
    SERIAL_DEVICE=/dev/ttyACM0 ./tests/e2e.sh
    ```
 
-   This starts the controller, provisions a temporary trust directory, starts the edge verifier, obtains fresh challenges, and presents authorized, monitor, and replay cases. The script asserts both each decision status and the number of actuator invocations. It uses the test clock and quarantine overrides because no DS3231 is installed; it does not represent production clock behavior.
+   This starts the controller, provisions a temporary trust directory with an operator public key and its derived identity, starts the edge verifier, obtains fresh challenges, and presents authorized, monitor, and replay cases. The script asserts both each decision status and the number of actuator invocations. It uses the test clock and quarantine overrides because no DS3231 is installed; it does not represent production clock behavior.
 
    The restart-replay quarantine case is likewise a test-build scenario:
 

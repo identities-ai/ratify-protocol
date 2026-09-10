@@ -4,7 +4,10 @@ import { createDemoAuthority } from "./authority.js";
 import { createReceiverServer, ProtectedDeployReceiver } from "./receiver.js";
 
 const authority = await createDemoAuthority();
-const receiver = new ProtectedDeployReceiver(authority.root.id, authority.agent.id);
+const receiver = new ProtectedDeployReceiver({
+  id: authority.root.id,
+  publicKey: authority.root.public_key,
+}, authority.agent.id);
 const server = createReceiverServer(receiver).listen(0, "127.0.0.1");
 await once(server, "listening");
 const address = server.address();

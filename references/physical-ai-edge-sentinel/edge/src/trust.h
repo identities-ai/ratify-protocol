@@ -41,6 +41,10 @@ int  trust_revocation_ok(const trust_ctx *t);
  * -1 unavailable (fail closed). */
 int  trust_is_revoked(const trust_ctx *t, const char *cert_id);
 
+/* 1 only when the verified bundle's root issuer key derives to this device's
+ * provisioned anchor identity. Parsing failure denies. */
+int  trust_bundle_matches_anchor(const trust_ctx *t, const char *bundle_json);
+
 /* 1 if `zone` is permitted by local policy. An empty policy permits nothing. */
 int  trust_zone_allowed(const trust_ctx *t, const char *zone);
 

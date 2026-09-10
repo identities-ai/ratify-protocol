@@ -4,7 +4,9 @@ import {
   base64StandardDecode,
   base64StandardEncode,
   decodeProofBundle,
+  deriveID,
   verifyBundle,
+  type HybridPublicKey,
   type ProofBundle,
 } from "@identities-ai/ratify-protocol";
 import { REQUIRED_SCOPE } from "./constants.js";
@@ -29,15 +31,29 @@ export interface DeployDecision {
   };
 }
 
+export interface TrustedRoot {
+  id: string;
+  publicKey: HybridPublicKey;
+}
+
+function samePublicKey(left: HybridPublicKey, right: HybridPublicKey): boolean {
+  return left.ed25519.every((value, index) => value === right.ed25519[index])
+    && left.ml_dsa_65.every((value, index) => value === right.ml_dsa_65[index]);
+}
+
 export class ProtectedDeployReceiver {
   private readonly challenges = new MemoryChallengeStore();
   private readonly revoked = new Set<string>();
   private invocations = 0;
 
   constructor(
-    private readonly trustedRootID: string,
+    private readonly trustedRoot: TrustedRoot,
     private readonly expectedAgentID: string,
-  ) {}
+  ) {
+    if (deriveID(trustedRoot.publicKey) !== trustedRoot.id) {
+      throw new Error("trusted root ID does not match its public key");
+    }
+  }
 
   revoke(certID: string): void {
     this.revoked.add(certID);
@@ -76,7 +92,10 @@ export class ProtectedDeployReceiver {
         handler_invocations: this.invocations,
       };
     }
-    if (result.human_id !== this.trustedRootID) {
+    const rootCert = bundle.delegations.find((cert) => cert.issuer_id === result.human_id);
+    if (!rootCert
+      || !samePublicKey(rootCert.issuer_pub_key, this.trustedRoot.publicKey)
+      || result.human_id !== this.trustedRoot.id) {
       return {
         allowed: false,
         reason: "untrusted_root: verified delegation is not anchored to this receiver's trust policy",

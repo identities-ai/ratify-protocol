@@ -144,7 +144,7 @@ Each denial is asserted against a specific reason code, so none of them can pass
 
 ## The live OpenShell profile
 
-`run-openshell-profile.sh` executes the whole composition against a pinned OpenShell v0.0.102 gateway:
+`run-openshell-profile.sh` executes the whole composition against a pinned, validated OpenShell v0.0.102 CLI and gateway stack:
 
 > NOOA agent → proof-carrying MCP Streamable HTTP → OpenShell destination, method, and tool enforcement → an independent MCP receiver → Ratify semantic authorization → consequential action → signed receipt
 
@@ -154,7 +154,7 @@ One command from a clean checkout brings the gateway up on dynamic ports from im
 |---|---|
 | `positive_and_replay` | The one path that may move money, and that replaying the same presentation cannot move it again |
 | `ratify_semantic_denials` | Thirteen denials OpenShell cannot see and is not asked to (amount, resource, tenant, expiry, revocation, revocation failure, wrong key, untrusted root, scope and constraint amplification, cross-request proof movement, invalid challenge, malformed proof), plus two authorize controls that isolate what is actually causing them |
-| `maximum_depth` | An eight-certificate alpha.16 chain, 88,990 bytes, carried inline in `_meta` and authorized |
+| `maximum_depth` | An eight-certificate alpha.20 chain, 88,990 bytes, carried inline in `_meta` and authorized |
 | `size_boundaries` | Three independent limits, each enforced by a different component against a different quantity |
 | `parser_differentials` | Fifteen probes of one invariant: admitted as X, never dispatched as Y. A separate coverage gate requires the matrix to have actually exercised both the admission and the denial branch, since the invariant alone is satisfiable by a policy that denies everything |
 | `destination_path_port` | Unauthorized destination, wrong port, wrong path, unlisted tool, disallowed method, and the control endpoint, all refused before MCP ingress |
@@ -162,7 +162,7 @@ One command from a clean checkout brings the gateway up on dynamic ports from im
 
 `log_canaries` is a separate, non-adjudicated pass: it re-exercises cases from the groups above so the log audit has each shape of traffic to search against. The gate is the canary search, not a per-case verdict.
 
-**Stability.** All seven groups passed 64/64 gates in one full OpenShell v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a16`. That live run has not been repeated since the pins moved to `1.0.0a19`; the hermetic suite has, and the sandbox lock still resolves `pqcrypto==0.4.0`, which is the dependency the move was made for. The earlier v0.0.96 campaign also passed twice sequentially and twice concurrently. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the version-separated run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
+**Stability.** All seven groups passed 64/64 gates in a live OpenShell v0.0.102 compatibility run against the published `ratify-protocol==1.0.0a20`; the same published package also passes all 181 hermetic and NOOA integration tests. The earlier v0.0.96 campaign remains historical evidence for that older pinned stack. The unified path's early instability, imported once per case, exhausted the sandbox, was resolved by importing `nooa` exactly once per suite process instead; see [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md) for the version-separated run evidence, including a disclosed, bounded retry added for a transient `sandbox download` flake under concurrent load.
 
 **How a case is judged.** Each case declares its expected outcome (`authorize`, `deny_at_openshell`, `admit_as:<tool>`, or `deny_at_ratify:<status>`) and every boundary delta it may produce. The runner takes a snapshot of the receiver's counters immediately before and immediately after that case, from a loopback control endpoint the sandbox cannot reach, and compares. A missing case, a missing snapshot, a stale sequence number, a partial result, or an event the deltas do not account for is a **failure**, never a skip. No gate can pass because a record merely exists: `test_adjudicator.py` feeds the adjudicator evidence of each violation in turn and asserts it says FAIL.
 
@@ -227,7 +227,7 @@ A reference that overstates itself is worse than no reference, so the limits are
 
 ## Environment
 
-Requires Ratify Protocol v1.0.0-alpha.19, published and installed from PyPI: all 181 tests pass with `nooa==0.0.8` on Python 3.12 via `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository. The live profile passed 64/64 once on OpenShell v0.0.102; the earlier v0.0.96 stability campaign passed twice sequentially and twice concurrently. The dependency is real rather than nominal: the resource-bound scenario uses alpha.16's `resource_path` constraint, and those tests fail on alpha.15 because the constraint type does not exist there. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
+Requires Ratify Protocol v1.0.0-alpha.20, published and installed from PyPI: all 181 tests pass with `nooa==0.0.8` on Python 3.12 via `RATIFY_SDK=published ./scripts/nvidia-reference-check.sh`, which fails on any skip and asserts that `ratify_protocol` resolves outside this repository. The live profile is validated against the pinned OpenShell v0.0.102 CLI and gateway stack. The dependency is real rather than nominal: the resource-bound scenario uses the `resource_path` constraint introduced before alpha.20. The receiving service uses only the Python standard library, because a protocol reference should not need a web framework to be understood. Apache-2.0.
 
 ## Beyond this reference
 

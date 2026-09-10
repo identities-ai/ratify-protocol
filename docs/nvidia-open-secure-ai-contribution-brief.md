@@ -80,7 +80,7 @@ certificates and 88,990 bytes, crosses inline in `_meta` and authorizes.
 Validation is **181 Python tests**: 54 receiver-security, 39 MCP transport, 84
 adjudicator, 4 mandatory NOOA integration tests. Zero skips, and no LLM, API key,
 or paid service anywhere in the suite. Verified against the **published**
-`ratify-protocol==1.0.0a16` package, not a local checkout: the gate asserts the
+`ratify-protocol==1.0.0a20` package, not a local checkout: the gate asserts the
 module resolves from the installed package before it will report success.
 
 The live OpenShell profile executes **52 cases judged by 64 gates**, passing twice

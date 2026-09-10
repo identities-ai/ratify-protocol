@@ -77,6 +77,44 @@ static int json_scalar(const char *json, const char *key, char *out, size_t cap)
     return n > 0;
 }
 
+/* Extract one JSON object value. This is used only after the bundle has passed
+ * Ratify signature verification, so it never grants authority based on an
+ * unauthenticated parse. */
+static char *json_object(const char *json, const char *key)
+{
+    char pattern[64];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char *p = strstr(json, pattern);
+    if (!p) return NULL;
+    p = strchr(p + strlen(pattern), ':');
+    if (!p) return NULL;
+    p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    if (*p != '{') return NULL;
+
+    const char *start = p;
+    int depth = 0, in_string = 0, escaped = 0;
+    for (; *p; p++) {
+        if (in_string) {
+            if (escaped) escaped = 0;
+            else if (*p == '\\') escaped = 1;
+            else if (*p == '"') in_string = 0;
+            continue;
+        }
+        if (*p == '"') in_string = 1;
+        else if (*p == '{') depth++;
+        else if (*p == '}' && --depth == 0) {
+            size_t n = (size_t)(p - start + 1);
+            char *out = malloc(n + 1);
+            if (!out) return NULL;
+            memcpy(out, start, n);
+            out[n] = '\0';
+            return out;
+        }
+    }
+    return NULL;
+}
+
 static void load_policy(const char *path, trust_ctx *t)
 {
     FILE *f = fopen(path, "r");
@@ -202,6 +240,24 @@ int trust_load(const char *trust_dir, trust_ctx *t)
     }
     memcpy(t->pinned_human_id, buf, TRUST_ID_HEX_LEN + 1);
 
+    /* The ID is a label for the configured public key, not the trust anchor on
+     * its own. Reject provisioning whose label does not derive from the key. */
+    char pubpath[512];
+    snprintf(pubpath, sizeof(pubpath), "%s/operator_pub_key.json", trust_dir);
+    char *pub_json = read_file(pubpath, 1 << 16, NULL);
+    char *derive_err = NULL;
+    char *derived_id = pub_json ? ratify_derive_id(pub_json, &derive_err) : NULL;
+    if (!derived_id || strcmp(derived_id, t->pinned_human_id) != 0) {
+        fprintf(stderr, "trust: pinned_human_id does not match operator_pub_key.json\n");
+        ratify_error_free(derive_err);
+        ratify_string_free(derived_id);
+        free(pub_json);
+        return -1;
+    }
+    ratify_error_free(derive_err);
+    ratify_string_free(derived_id);
+    free(pub_json);
+
 #ifdef SENTINEL_TEST_BUILD
     /* Development-only escape hatches. They must not be present in the
      * production binary, where missing revocation or an untrusted clock must
@@ -239,6 +295,19 @@ int trust_is_revoked(const trust_ctx *t, const char *cert_id)
 {
     if (!t->list) return -1;                       /* unavailable: fail closed */
     return ratify_revocation_list_contains(t->list, cert_id) ? 1 : 0;
+}
+
+int trust_bundle_matches_anchor(const trust_ctx *t, const char *bundle_json)
+{
+    char *issuer_pub_json = json_object(bundle_json, "issuer_pub_key");
+    if (!issuer_pub_json) return 0;
+    char *err = NULL;
+    char *issuer_id = ratify_derive_id(issuer_pub_json, &err);
+    int matches = issuer_id && strcmp(issuer_id, t->pinned_human_id) == 0;
+    ratify_error_free(err);
+    ratify_string_free(issuer_id);
+    free(issuer_pub_json);
+    return matches;
 }
 
 int trust_zone_allowed(const trust_ctx *t, const char *zone)

@@ -406,13 +406,13 @@ verification semantics—there is no managed-only wire format.
 | **See the measured performance numbers** | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
 | **Understand the threat model** | [`docs/EXPLAINED.md`](docs/EXPLAINED.md) |
 | **Read the normative spec** | [`SPEC.md`](SPEC.md) |
-| **Use the Verify managed service** (revocation, audit, policy enforcement at scale) | [docs.identities.ai](https://docs.identities.ai) |
-| **Integrate with a specific surface** (Meetings, Conversational AI, Agentic API, Physical AI) | [docs.identities.ai/guides](https://docs.identities.ai) |
+| **Use the Verify managed service** (revocation, audit, policy enforcement at scale) | [docs.ratifyprotocol.com](https://docs.ratifyprotocol.com) |
+| **Integrate with a specific surface** (Meetings, Conversational AI, Agentic API, Physical AI) | [docs.ratifyprotocol.com/guides](https://docs.ratifyprotocol.com/guides/) |
 | **Add a new language SDK** | [`docs/SDKS.md`](docs/SDKS.md) + the new-SDK issue template |
 | **Report a security issue** | [`SECURITY.md`](SECURITY.md) — do not open a public issue |
 | **Cite Ratify in academic work** | [`CITATION.cff`](CITATION.cff) — GitHub auto-renders BibTeX/APA/Chicago |
 
-This README is the entry point. **[docs.identities.ai](https://docs.identities.ai) covers per-language quickstarts in depth, integration guides for each surface, the managed Ratify Verify product, and the commercial API reference.**
+This README is the entry point. **[docs.ratifyprotocol.com](https://docs.ratifyprotocol.com) covers per-language quickstarts in depth, integration guides for each surface, the managed Ratify Verify product, and the commercial API reference.**
 
 ---
 

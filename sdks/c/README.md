@@ -19,7 +19,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 
 - Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
-- Developer docs: [docs.identities.ai](https://docs.identities.ai)
+- Developer docs: [docs.ratifyprotocol.com](https://docs.ratifyprotocol.com)
 
 ---
 

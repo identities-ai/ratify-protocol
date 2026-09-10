@@ -235,7 +235,7 @@ LOCK="$HERE/sandbox-requirements.lock"
 # rather than the checkout:
 #   RATIFY_SDK=published ./run-openshell-profile.sh
 RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a19}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a20}"
 case "$RATIFY_SDK" in
   local)
       SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro")

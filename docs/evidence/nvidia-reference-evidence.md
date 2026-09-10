@@ -2,8 +2,8 @@
 
 Machine-readable form: [`nvidia-reference-evidence.json`](./nvidia-reference-evidence.json).
 
-**Main stability campaign executed 2026-08-05. Latest-version compatibility
-run executed 2026-08-10.** Branch `feat/nvidia-nooa-reference`, rebased onto
+**Main stability campaign executed 2026-08-05. Current published-package
+compatibility run executed 2026-09-10.** Branch `feat/nvidia-nooa-reference`, rebased onto
 `origin/main` at `f5a1522` (the commit marking `v1.0.0-alpha.16` published).
 
 - **`tested_source_commit: 37b378b`** — the 2026-08-05 stability campaign
@@ -15,11 +15,12 @@ run executed 2026-08-10.** Branch `feat/nvidia-nooa-reference`, rebased onto
 
 ## OpenShell v0.0.102 compatibility validation
 
-The complete live profile was rerun on 2026-08-10 after updating the reference
-to NVIDIA's latest OpenShell release, **v0.0.102**. It passed **64/64 gates**,
+The complete live profile was rerun on 2026-09-10 against the published Ratify
+alpha.20 package and the validated pinned OpenShell **v0.0.102** CLI and
+gateway stack. It passed **64/64 gates**,
 executed all **52 required cases**, and reported zero failures, skips, driver
 errors, timeouts, or leftover containers. The sandbox contained NOOA 0.0.8 and
-the published `ratify-protocol==1.0.0a16`; the run's `evidence_status` is
+the published `ratify-protocol==1.0.0a20`; the run's `evidence_status` is
 `final: built from the published Ratify package`.
 
 | Component | v0.0.102 run |
@@ -37,14 +38,13 @@ two sequential, two concurrent, and intentional-failure runs were retroactively
 executed on v0.0.102. Those remain the v0.0.96 stability campaign documented
 below.
 
-This is the first evidence produced after alpha.16's publication; every run in
-this document installs `ratify-protocol==1.0.0a16` from PyPI rather than this
-repository's own checkout, and every artifact's own `evidence_status` field says
-so.
+This current validation installs `ratify-protocol==1.0.0a20` from PyPI rather
+than this repository's own checkout, and the artifact's `evidence_status` field
+says so. The older alpha.16 and alpha.19 runs remain historical records below.
 
 ## Provenance
 
-`ratify-protocol==1.0.0a16` was installed and imported in a clean virtual
+`ratify-protocol==1.0.0a20` was installed and imported in a clean virtual
 environment outside any repository checkout before the sandbox pin was
 uncommitted, confirming it resolves to an installed package rather than a source
 tree. Inside the built sandbox image, `ratify_protocol` resolves to

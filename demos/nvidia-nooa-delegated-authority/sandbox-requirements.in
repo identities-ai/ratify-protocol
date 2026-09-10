@@ -17,10 +17,10 @@ uvicorn==0.52.1
 
 # The Ratify Python SDK, pinned to the published release. Verified installable
 # and importable outside any repository checkout (2026-08-05) before this pin was
-# uncommitted: `pip install ratify-protocol==1.0.0a16` in a clean venv resolves
-# ratify_protocol.__version__ == "1.0.0a16" from site-packages, not from a source
+# uncommitted: `pip install ratify-protocol==1.0.0a20` in a clean venv resolves
+# ratify_protocol.__version__ == "1.0.0a20" from site-packages, not from a source
 # tree. Its own runtime requirements are listed below so they are locked rather
 # than resolved at build time.
-ratify-protocol==1.0.0a19
+ratify-protocol==1.0.0a20
 cryptography>=44.0
 pqcrypto>=0.3.4

@@ -268,8 +268,9 @@ v0.0.102 states that "tool argument matching is not supported yet; allowed tools
 ### 15.2 What execution established
 
 All seven groups, including the unified NOOA path, pass against the published
-`ratify-protocol==1.0.0a16`: 52 required cases, 64 gates, and zero skips. One
-full compatibility run passed 64/64 on OpenShell v0.0.102. The earlier v0.0.96
+`ratify-protocol==1.0.0a20`: 52 required cases, 64 gates, and zero skips. One
+full compatibility run passed 64/64 on the validated OpenShell v0.0.102
+CLI and gateway stack. The earlier v0.0.96
 stability campaign passed twice sequentially and twice concurrently on
 `RATIFY_SDK=published`; these are version-separated claims, not four v0.0.102
 runs.

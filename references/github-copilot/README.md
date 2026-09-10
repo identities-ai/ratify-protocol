@@ -66,8 +66,8 @@ Copilot, GitHub, or any Microsoft surface is required for this to work.
 | Role | Who this usually is | What they do | What they build |
 | --- | --- | --- | --- |
 | **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides what the bounds should be |
-| **Agent operator** | The team running Copilot | Installs the plugin and points it at their receiver and trust root | No code, but real configuration: the receiver address, the trusted principal, and which tools are protected |
-| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is 138 lines: the `verifyBundle` call is about 15 of them, and the rest is challenge issuance, session binding, comparing the verified root against the trust policy, and making the handler unreachable except through the allow branch |
+| **Agent operator** | The team running Copilot | Installs the plugin and points it at their receiver and trust root | No code, but real configuration: the receiver address, the trusted issuer public key and derived ID, and which tools are protected |
+| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is 138 lines: the `verifyBundle` call is about 15 of them, and the rest is challenge issuance, session binding, comparing the verified root key against the trust policy, and making the handler unreachable except through the allow branch |
 | **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing.** The plugin uses the existing plugin manifest and MCP mechanisms |
 
 The receiver number is worth being precise about, because the verification call
@@ -147,9 +147,9 @@ presentation.
 | Artifact changed after challenge issuance | Deny | Not invoked |
 | Revoked delegation | Deny | Not invoked |
 | Replayed proof | Deny | Not invoked again |
-| Untrusted principal | Deny | Not invoked |
+| Untrusted root key, including an ID-spoofed root | Deny | Not invoked |
 
-Seven deterministic tests pass with zero failures and zero skips. The plugin was
+Nine deterministic tests pass with zero failures and zero skips. The plugin was
 also installed directly from this public GitHub repository and exercised
 through Copilot CLI against the independent receiver.
 
@@ -278,7 +278,9 @@ starting point.
 
 Do not deploy the reference unchanged to production. Its keys are public test
 material, its state is in memory, its receiver uses local HTTP, and its handler
-is intentionally a counter.
+is intentionally a counter. A production receiver must pin each trusted issuer
+public key out of band and validate its derived ID; this reference now enforces
+that check.
 
 ### Ratify Verify
 
@@ -329,7 +331,7 @@ challenge.
 | `src/authority.ts` | Reproducible reference identity and delegation |
 | `src/receiver.ts` | Independent verification and protected handler boundary |
 | `src/request.ts` | Exact operation and session binding |
-| `test/authority-boundary.test.ts` | Seven deterministic allow and deny cases |
+| `test/authority-boundary.test.ts` | Nine deterministic allow and deny cases |
 | `reference-evidence.md` | Executed protocol, Copilot, and clean-install evidence |
 
 ## Evidence, security status, and limitations

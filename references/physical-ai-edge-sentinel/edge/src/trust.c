@@ -79,7 +79,8 @@ static int json_scalar(const char *json, const char *key, char *out, size_t cap)
 
 /* Extract the final occurrence of an object field. Ratify serialises
  * delegations from leaf to root, so the terminal certificate's issuer key is
- * the last issuer_pub_key in a verified bundle. */
+ * the last issuer_pub_key in a verified bundle. This relies on the SDK's
+ * strict decoding rejecting unknown fields before this application check. */
 static char *json_object_last(const char *json, const char *key)
 {
     char pattern[64];

@@ -91,7 +91,7 @@ The deterministic gate runs the 16-row protocol matrix and observes the protecte
 | revoked certificate | revoked | not invoked |
 | unavailable revocation state | unavailable | not invoked |
 
-The local gate result is **27 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
+The local gate result is **28 passed, 0 failed, 0 skipped**. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
 
 ## Use it now
 
@@ -176,7 +176,7 @@ Ratify signatures bind the delegation and proof fields defined by the protocol, 
 
 Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). The reference was exercised against Ratify alpha.20 on a Raspberry Pi 2 ARMv7 target, with a fresh C SDK build and 25 passing protocol rows. The Arduino LED path was exercised over USB serial.
 
-The Google ADK adapter is implemented and statically checked, but the physical Pi run used the deterministic C controller rather than a live ADK model runner. This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The receiver supports multi-hop delegation bundles ordered leaf to root; the DS3231 trusted-clock installation, offline power-cycle test, and production hardware acceptance remain future work.
+The Google ADK adapter is implemented and statically checked, but the physical Pi run used the deterministic C controller rather than a live ADK model runner. This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The receiver's anchor check selects the terminal issuer in multi-hop bundles ordered leaf to root; full hardware acceptance remains future work.
 
 ## Open source status
 

@@ -77,42 +77,53 @@ static int json_scalar(const char *json, const char *key, char *out, size_t cap)
     return n > 0;
 }
 
-/* Extract one JSON object value. This is used only after the bundle has passed
- * Ratify signature verification, so it never grants authority based on an
- * unauthenticated parse. */
-static char *json_object(const char *json, const char *key)
+/* Extract the final occurrence of an object field. Ratify serialises
+ * delegations from leaf to root, so the terminal certificate's issuer key is
+ * the last issuer_pub_key in a verified bundle. */
+static char *json_object_last(const char *json, const char *key)
 {
     char pattern[64];
     snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    const char *p = strstr(json, pattern);
-    if (!p) return NULL;
-    p = strchr(p + strlen(pattern), ':');
-    if (!p) return NULL;
-    p++;
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-    if (*p != '{') return NULL;
+    const char *cursor = json;
+    char *last = NULL;
 
-    const char *start = p;
-    int depth = 0, in_string = 0, escaped = 0;
-    for (; *p; p++) {
-        if (in_string) {
-            if (escaped) escaped = 0;
-            else if (*p == '\\') escaped = 1;
-            else if (*p == '"') in_string = 0;
-            continue;
-        }
-        if (*p == '"') in_string = 1;
-        else if (*p == '{') depth++;
-        else if (*p == '}' && --depth == 0) {
-            size_t n = (size_t)(p - start + 1);
-            char *out = malloc(n + 1);
-            if (!out) return NULL;
-            memcpy(out, start, n);
-            out[n] = '\0';
-            return out;
+    while (cursor && *cursor) {
+        const char *p = strstr(cursor, pattern);
+        if (!p) break;
+        p = strchr(p + strlen(pattern), ':');
+        if (!p) break;
+        p++;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        if (*p == '{') {
+            const char *start = p;
+            int depth = 0, in_string = 0, escaped = 0;
+            for (; *p; p++) {
+                if (in_string) {
+                    if (escaped) escaped = 0;
+                    else if (*p == '\\') escaped = 1;
+                    else if (*p == '"') in_string = 0;
+                    continue;
+                }
+                if (*p == '"') in_string = 1;
+                else if (*p == '{') depth++;
+                else if (*p == '}' && --depth == 0) {
+                    size_t n = (size_t)(p - start + 1);
+                    char *candidate = malloc(n + 1);
+                    if (!candidate) { free(last); return NULL; }
+                    memcpy(candidate, start, n);
+                    candidate[n] = '\0';
+                    free(last);
+                    last = candidate;
+                    cursor = p + 1;
+                    break;
+                }
+            }
+            if (!*p) break;
+        } else {
+            cursor = p + 1;
         }
     }
-    return NULL;
+    return last;
 }
 
 static void load_policy(const char *path, trust_ctx *t)
@@ -299,7 +310,7 @@ int trust_is_revoked(const trust_ctx *t, const char *cert_id)
 
 int trust_bundle_matches_anchor(const trust_ctx *t, const char *bundle_json)
 {
-    char *issuer_pub_json = json_object(bundle_json, "issuer_pub_key");
+    char *issuer_pub_json = json_object_last(bundle_json, "issuer_pub_key");
     if (!issuer_pub_json) return 0;
     char *err = NULL;
     char *issuer_id = ratify_derive_id(issuer_pub_json, &err);

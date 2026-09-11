@@ -176,7 +176,7 @@ Ratify signatures bind the delegation and proof fields defined by the protocol, 
 
 Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). The reference was exercised against Ratify alpha.20 on a Raspberry Pi 2 ARMv7 target, with a fresh C SDK build and 25 passing protocol rows. The Arduino LED path was exercised over USB serial.
 
-The Google ADK adapter is implemented and statically checked, but the physical Pi run used the deterministic C controller rather than a live ADK model runner. This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The DS3231 trusted-clock installation, offline power-cycle test, and production hardware acceptance remain future work.
+The Google ADK adapter is implemented and statically checked, but the physical Pi run used the deterministic C controller rather than a live ADK model runner. This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The receiver supports multi-hop delegation bundles ordered leaf to root; the DS3231 trusted-clock installation, offline power-cycle test, and production hardware acceptance remain future work.
 
 ## Open source status
 

@@ -92,9 +92,15 @@ export class ProtectedDeployReceiver {
         handler_invocations: this.invocations,
       };
     }
-    const rootCert = bundle.delegations.find((cert) => cert.issuer_id === result.human_id);
+    // The root is the terminal certificate of the chain ([leaf, ..., root]),
+    // which is where `human_id` comes from. Searching for the first certificate
+    // whose issuer_id matches would select an intermediate in a multi-hop chain.
+    // The pinned KEY is the anchor: `issuer_id` is attacker-chosen, because the
+    // protocol does not bind an identifier to its key during the chain walk.
+    const rootCert = bundle.delegations[bundle.delegations.length - 1];
     if (!rootCert
       || !samePublicKey(rootCert.issuer_pub_key, this.trustedRoot.publicKey)
+      || rootCert.issuer_id !== this.trustedRoot.id
       || result.human_id !== this.trustedRoot.id) {
       return {
         allowed: false,

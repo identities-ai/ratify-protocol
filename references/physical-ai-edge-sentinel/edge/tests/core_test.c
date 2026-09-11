@@ -305,6 +305,58 @@ int main(void)
         ratify_human_root_free(attacker_root);
     }
 
+    /* A multi-hop bundle is ordered leaf to root. The anchor must be checked
+     * against the terminal issuer, not the first intermediate issuer. */
+    {
+        RatifyHumanRoot *intermediate_root = NULL;
+        ratify_human_root_generate(&intermediate_root);
+        char *intermediate_pub = ratify_human_root_pub_key_json(intermediate_root, &err);
+        char *pinned_pub = ratify_human_root_pub_key_json(root, &err);
+        char multi_hop[16384];
+        snprintf(multi_hop, sizeof(multi_hop),
+                 "{\"delegations\":["
+                 "{\"issuer_id\":\"intermediate\",\"issuer_pub_key\":%s},"
+                 "{\"issuer_id\":\"%s\",\"issuer_pub_key\":%s}]}" ,
+                 intermediate_pub, root_id, pinned_pub);
+        trust_ctx trust;
+        int loaded = trust_load(TRUST_DIR, &trust) == 0;
+        int accepted = loaded && trust_bundle_matches_anchor(&trust, multi_hop);
+        checks++;
+        if (!accepted) failures++;
+        printf("%-40s %s\n", "multi-hop terminal root accepted",
+               accepted ? "PASS" : "FAIL");
+        if (loaded) trust_unload(&trust);
+        ratify_string_free(intermediate_pub);
+        ratify_string_free(pinned_pub);
+        ratify_human_root_free(intermediate_root);
+    }
+
+    /* The inverse proves the terminal position is authoritative: a pinned
+     * key in an intermediate certificate must not rescue an attacker root. */
+    {
+        RatifyHumanRoot *attacker_root = NULL;
+        ratify_human_root_generate(&attacker_root);
+        char *pinned_pub = ratify_human_root_pub_key_json(root, &err);
+        char *attacker_pub = ratify_human_root_pub_key_json(attacker_root, &err);
+        char multi_hop[16384];
+        snprintf(multi_hop, sizeof(multi_hop),
+                 "{\"delegations\":["
+                 "{\"issuer_id\":\"%s\",\"issuer_pub_key\":%s},"
+                 "{\"issuer_id\":\"attacker\",\"issuer_pub_key\":%s}]}" ,
+                 root_id, pinned_pub, attacker_pub);
+        trust_ctx trust;
+        int loaded = trust_load(TRUST_DIR, &trust) == 0;
+        int rejected = loaded && !trust_bundle_matches_anchor(&trust, multi_hop);
+        checks++;
+        if (!rejected) failures++;
+        printf("%-40s %s\n", "multi-hop attacker terminal rejected",
+               rejected ? "PASS" : "FAIL");
+        if (loaded) trust_unload(&trust);
+        ratify_string_free(pinned_pub);
+        ratify_string_free(attacker_pub);
+        ratify_human_root_free(attacker_root);
+    }
+
     /* Row: authorized, pinned root. The only row that fires the actuator. */
     sentinel_decision allow_d;
     {

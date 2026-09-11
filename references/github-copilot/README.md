@@ -149,9 +149,11 @@ presentation.
 | Replayed proof | Deny | Not invoked again |
 | Untrusted root key, including an ID-spoofed root | Deny | Not invoked |
 
-Nine deterministic tests pass with zero failures and zero skips. The plugin was
-also installed directly from this public GitHub repository and exercised
-through Copilot CLI against the independent receiver.
+The gate result is recorded in [`ratify-reference.json`](ratify-reference.json)
+and checked by the reference gate, which fails if the declared count does not
+match the observed run, or if any test fails or skips. The plugin was also
+installed directly from this public GitHub repository and exercised through
+Copilot CLI against the independent receiver.
 
 ## Use it now with GitHub Copilot
 
@@ -331,7 +333,8 @@ challenge.
 | `src/authority.ts` | Reproducible reference identity and delegation |
 | `src/receiver.ts` | Independent verification and protected handler boundary |
 | `src/request.ts` | Exact operation and session binding |
-| `test/authority-boundary.test.ts` | Nine deterministic allow and deny cases |
+| `test/authority-boundary.test.ts` | Deterministic allow and deny cases |
+| `ratify-reference.json` | Reference metadata and gate declaration |
 | `reference-evidence.md` | Executed protocol, Copilot, and clean-install evidence |
 
 ## Evidence, security status, and limitations

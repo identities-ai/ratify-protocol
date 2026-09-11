@@ -6,6 +6,7 @@
 - Integration surface: GitHub Copilot plugin, Agent Skill, and MCP server
 - MCP SDK: `@modelcontextprotocol/sdk@1.30.0`
 - Gate: `references/github-copilot/run-reference-check.sh`
+- Gate result: Declared in [`ratify-reference.json`](../github-copilot/ratify-reference.json) and checked by the gate
 - Evidence: [`reference-evidence.md`](../github-copilot/reference-evidence.md)
 
 This entry records Ratify-maintained interoperability evidence. It does not imply a partnership, approval, or standardization commitment by GitHub or Microsoft.

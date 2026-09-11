@@ -1,0 +1,11 @@
+{
+  "slug": "github-copilot",
+  "display_name": "Ratify authority for GitHub Copilot",
+  "status": "independent Ratify reference; not reviewed or endorsed by GitHub or Microsoft",
+  "platform": "GitHub Copilot plugin, Agent Skill, and MCP server",
+  "endorsement": "self-authored, no platform endorsement",
+  "evidence": "reference-evidence.md",
+  "tests": 9,
+  "skips": 0,
+  "gate": "./run-reference-check.sh"
+}

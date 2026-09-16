@@ -1,17 +1,31 @@
-"""Ratify-aware native Google ADK MCP toolset.
+"""Ratify-aware Google ADK MCP integrations.
 
-The model sees only business arguments. This adapter obtains a receiver-issued
-challenge and adds the proof presentation after ADK has selected the tool.
+The supported integration uses ADK's public ``before_tool_callback`` and
+``FunctionTool`` APIs. The model sees only business arguments; the callback
+obtains a receiver-issued challenge and the tool sends the resulting proof in
+MCP request metadata after ADK has selected the tool.
+
+The native ``McpToolset`` adapter remains as an experimental compatibility
+lane because ADK does not yet expose a public hook for adding custom MCP request
+metadata to an ``McpTool`` invocation.
 """
 
 from __future__ import annotations
 
+import asyncio
+from contextvars import ContextVar
 from copy import deepcopy
+from functools import partial
 import inspect
 import json
 from typing import Any
 
+from google.adk.tools import FunctionTool
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.base_toolset import BaseToolset
+from google.adk.tools.tool_context import ToolContext
 from google.adk.tools.mcp_tool.mcp_session_manager import (
+    MCPSessionManager,
     StreamableHTTPConnectionParams,
 )
 from google.adk.tools.mcp_tool.mcp_tool import McpTool
@@ -24,6 +38,135 @@ from ratify_protocol import (
 )
 
 from .authority import AuthorityFixture
+from .mcp_metadata import ADMISSION_META_KEY, AUTHORITY_META_KEY
+
+
+_PRESENTATION: ContextVar[tuple[int, tuple[str, str], str, str | None] | None] = ContextVar(
+    "ratify_mcp_authority_presentation", default=None
+)
+
+
+class SupportedRatifyMcpAdapter(BaseToolset):
+    """Public-API ADK callback and tool pair for a receiver-owned MCP tool."""
+
+    def __init__(
+        self,
+        authority: AuthorityFixture,
+        *,
+        receiver_url: str,
+        transport_token: str,
+    ) -> None:
+        super().__init__()
+        self._authority = authority
+        self._session_manager = MCPSessionManager(
+            StreamableHTTPConnectionParams(
+                url=receiver_url,
+                headers={"X-Ratify-Transport-Token": transport_token},
+                timeout=5,
+                sse_read_timeout=30,
+            )
+        )
+
+        async def provision_cloud_node(
+            request_id: str,
+            region: str,
+            instance_type: str,
+            count: int,
+            tool_context: ToolContext,
+        ) -> dict[str, Any]:
+            """Provision cloud nodes under receiver-verified delegated authority."""
+            key = (tool_context.invocation_id, tool_context.function_call_id or "")
+            stored = _PRESENTATION.get()
+            _PRESENTATION.set(None)
+            if stored is None or stored[0] != id(self) or stored[1] != key:
+                return {
+                    "decision": "deny",
+                    "status": "missing_authority_presentation",
+                    "reason": "the ADK authority callback did not authorize this call",
+                }
+            presentation = stored[2]
+            meta = {AUTHORITY_META_KEY: presentation}
+            if stored[3] is not None:
+                meta[ADMISSION_META_KEY] = stored[3]
+            session = await self._session_manager.create_session()
+            response = await session.call_tool(
+                "provision_cloud_node",
+                arguments={
+                    "request_id": request_id,
+                    "region": region,
+                    "instance_type": instance_type,
+                    "count": count,
+                },
+                meta=meta,
+            )
+            return _result_object(response)
+
+        self.tool = FunctionTool(provision_cloud_node)
+
+    async def get_tools(self, readonly_context=None) -> list[BaseTool]:
+        return [self.tool]
+
+    async def before_tool_callback(
+        self,
+        *,
+        tool: BaseTool,
+        args: dict[str, Any],
+        tool_context: Any,
+    ) -> dict[str, Any] | None:
+        """Authorize the selected operation without adding proof to tool args."""
+        if tool is not self.tool:
+            return None
+        _PRESENTATION.set(None)
+        if not tool_context.function_call_id:
+            return {
+                "decision": "deny",
+                "status": "missing_call_id",
+                "reason": "ADK did not provide a function call identifier",
+            }
+        session = await self._session_manager.create_session()
+        grant = _result_object(await session.call_tool(
+            "issue_authority_challenge",
+            arguments=args,
+        ))
+        if grant.get("decision") == "deny" or "challenge" not in grant:
+            return grant
+        bundle = await asyncio.to_thread(
+            partial(
+                self._authority.present,
+                challenge=base64_standard_decode(grant["challenge"]),
+                session_context=base64_standard_decode(grant["session_context"]),
+            )
+        )
+        key = (tool_context.invocation_id, tool_context.function_call_id)
+        admission = None
+        if self._authority.admission_delegations:
+            admission = await asyncio.to_thread(
+                partial(
+                    self._authority.present_admission,
+                    challenge=base64_standard_decode(grant["challenge"]),
+                    session_context=base64_standard_decode(grant["session_context"]),
+                )
+            )
+        _PRESENTATION.set((id(self), key, encode_proof_bundle(bundle),
+                           encode_proof_bundle(admission) if admission else None))
+        return None
+
+    async def close(self) -> None:
+        await self._session_manager.close()
+
+
+def build_supported_mcp_adapter(
+    authority: AuthorityFixture,
+    *,
+    receiver_url: str,
+    transport_token: str,
+) -> SupportedRatifyMcpAdapter:
+    """Build the supported public-API ADK integration."""
+    return SupportedRatifyMcpAdapter(
+        authority,
+        receiver_url=receiver_url,
+        transport_token=transport_token,
+    )
 
 
 class ProofInjectingMcpTool(McpTool):
@@ -73,10 +216,19 @@ class ProofInjectingMcpTool(McpTool):
             challenge=base64_standard_decode(grant["challenge"]),
             session_context=base64_standard_decode(grant["session_context"]),
         )
-        response = await super()._run_async_impl(
-            args={**args, "presentation": encode_proof_bundle(bundle)},
-            tool_context=tool_context,
-            credential=credential,
+        admission = (
+            self._authority.present_admission(
+                challenge=base64_standard_decode(grant["challenge"]),
+                session_context=base64_standard_decode(grant["session_context"]),
+            )
+            if self._authority.admission_delegations
+            else None
+        )
+        response = await session.call_tool(
+            self._mcp_tool.name,
+            arguments=args,
+            meta={AUTHORITY_META_KEY: encode_proof_bundle(bundle),
+                  **({ADMISSION_META_KEY: encode_proof_bundle(admission)} if admission else {})},
         )
         return _result_object(response)
 

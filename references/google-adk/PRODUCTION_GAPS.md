@@ -13,21 +13,28 @@ the profile has repeatable Agent Engine or equivalent deployment evidence.
 
 ## Ordered work
 
-### P0 — supported hidden presentation hook
+### P0 — native MCP metadata hook and telemetry contract
 
-The reference subclasses pinned-version `McpTool` behavior because ADK does not
-currently expose a stable operation-specific hidden metadata hook.
+The recommended lane now uses public `before_tool_callback` and `FunctionTool`
+APIs and carries the proof in namespaced MCP request metadata. The separately
+tested native `McpToolset` lane still subclasses pinned-version behavior because
+ADK does not expose a stable operation-specific custom-metadata hook on
+`McpTool`.
 
 - Review the seam with ADK maintainers.
-- Prefer an official callback/interceptor that runs after tool selection and
-  before MCP dispatch.
+- Prefer an official native-MCP callback/provider that runs after tool
+  selection and before MCP dispatch.
 - Keep keys, challenges, session context, and proof bytes outside model-visible
   arguments, events, traces, and confirmation prompts.
 - Define a versioned MCP metadata/body carrier rather than relying on a large
   custom HTTP proof header.
 
-**Exit criterion:** public supported API, carrier contract, and forward-
-compatibility tests; no private member or pinned internal subclass is required.
+**Current evidence:** the public callback path, metadata carrier, and event
+redaction test are executable without private ADK internals.
+
+**Exit criterion:** the native `McpTool` path can set namespaced request
+metadata through a public API, and Google telemetry/proxy preservation and
+redaction contracts are documented.
 
 ### P0 — Agent Identity and transport binding
 

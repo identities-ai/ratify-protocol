@@ -1,6 +1,6 @@
 # Google ADK reference evidence
 
-**Status:** executed published-reference evidence, re-run September 4, 2026. This record is generated
+**Status:** executed published-reference evidence, re-run September 16, 2026. This record is generated
 from the independent Ratify reference; it is not Google attestation.
 
 ## Environment
@@ -29,13 +29,13 @@ runs the test matrix, and runs the deterministic native ADK MCP demo.
 
 ```text
 pins: google-adk==2.6.3 mcp==1.29.0 ratify-protocol==1.0.0a20
-.................................                                        [100%]
-33 passed, 37 warnings
-gate: 33/33 passed; zero skipped, xfailed, failed, or errored
-ALLOW across ADK HTTP MCP -> tool invoked once
-DENY excessive count -> no additional invocation
-DENY wrong region -> no additional invocation
-GOOGLE ADK HTTP MCP AUTHORITY REFERENCE PASSED
+.................................................                        [100%]
+49 passed, 37 warnings in 19.01s
+gate: 49/49 passed; zero skipped, xfailed, failed, or errored
+ALLOW across ADK HTTP MCP: {'decision': 'allow', 'status': 'authorized_agent', 'resource': 'gcp:projects/customer-project/regions/us-central1', 'nodes_provisioned': 1, 'tool_invocations': 1, 'protected_action_invoked': True}
+DENY excessive count: {'decision': 'deny', 'status': 'constraint_denied', 'reason': 'constraint_denied: cert 0: constraint[1] (com.ratifyprotocol.adk.max_nodes): requested 3 nodes exceeds max 1', 'tool_invocations': 1, 'protected_action_invoked': False, 'verification_code': 'constraint_denied'}
+DENY wrong region: {'decision': 'deny', 'status': 'constraint_denied', 'reason': 'constraint_denied: cert 0: constraint[0] (resource_path): requested resource does not match the authorized resource', 'tool_invocations': 1, 'protected_action_invoked': False, 'verification_code': 'constraint_denied'}
+GOOGLE ADK HTTP MCP FEDERATION REFERENCE PASSED
 ```
 
 The warnings came from Google ADK and transitive dependency deprecations or
@@ -45,6 +45,15 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
 
 - A real `google.adk.agents.LlmAgent` exposes one ordinary
   `google.adk.tools.FunctionTool`.
+- The public ADK callback lane carries the authority proof in MCP request
+  metadata, not model-visible arguments, and the exact proof is absent from
+  serialized ADK events.
+- A real nested ADK coordinator, broker, and worker handoff reaches a
+  receiver-owned federated route.
+- A dual-root authority and workload-admission presentation succeeds only when
+  both roots approve the same worker key.
+- Runtime broker narrowing is enforced by receiver verification: narrower
+  certificates allow, while widened region or node ceilings deny before action.
 - A deterministic model double drives the real ADK runner through model turn,
   function call, gated tool execution, function response, and final response.
 - Native ADK `McpToolset` discovers the public tool from an independently
@@ -62,8 +71,8 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
 - Concurrent duplicate request IDs produce exactly one pending operation, and
   an unavailable receiver fails within the configured timeout rather than
   hanging the agent loop.
-- The function tool uses a two-hop Ratify delegation and a receiver-issued,
-  operation-bound, single-use challenge.
+- The function tool uses a receiver-issued, operation-bound, single-use
+  challenge; the federation path uses three signed delegation certificates.
 - The independent receiver invokes its protected handler exactly once for the
   valid request.
 - Excess count, wrong region, expiry, revocation, replay, altered operation,
@@ -71,16 +80,30 @@ experimental feature notices. No tests were skipped, xfailed, or retried.
   protected handler.
 - Ratify resolved from the demo virtual environment's public package install,
   not from this repository's Python SDK source.
+- The exact-call scale harness completed 10, 100, 1,000, and 1,000,000 calls
+  with one unique challenge and dual-root hybrid verification per call. The
+  one-million result is recorded in
+  [`federation-scale-local.json`](federation-scale-local.json): 369.693 calls
+  per second, p50 20.229 ms, p95 28.129 ms, p99 31.801 ms, 56,244 encoded proof
+  bytes, 900,000 allows, 100,000 constraint denials, and 900,000 protected-action
+  invocations. The scale workload deliberately uses constraint denials only;
+  replay, revocation, malformed-admission, and untrusted-root denials are
+  covered by the deterministic gate rather than mixed into the million-call
+  throughput sample.
 
 ## What this run does not establish
 
-- No Gemini API call was made. The optional app is configured for the current
-  stable `gemini-3.6-flash` path, but model judgment is not part of the
+- No Gemini API call was made. The optional app is configured with the example
+  `gemini-3.6-flash` model identifier, but model judgment is not part of the
   authorization guarantee.
 - No Vertex AI Agent Engine deployment or preview Agent Identity API was used.
 - Streamable HTTP MCP was executed over loopback. A2A, TLS workload
   authentication, Agent Engine, and Agent Identity deployment were not.
 - No real Google Cloud resource was provisioned.
+- The scale numbers are single-host Python measurements on a 10-core Apple
+  Silicon host with eight workers. They exclude ADK model latency, MCP HTTP,
+  external revocation distribution, multi-host storage, and Google Cloud
+  service latency; they are not Google production capacity claims.
 - Only the platform and versions above were executed. Other operating systems,
   architectures, Python versions, and ADK versions remain compatibility
   targets, not results.

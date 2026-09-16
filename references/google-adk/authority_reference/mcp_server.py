@@ -9,11 +9,19 @@ import json
 import ipaddress
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from ratify_protocol import HybridPublicKey, base64_standard_decode, base64_standard_encode
 import uvicorn
 
-from .receiver import InfrastructureReceiver, OperationRequest
+from .receiver import (
+    DualPresentation,
+    FederationPolicy,
+    FederationRoute,
+    InfrastructureReceiver,
+    OperationRequest,
+    SqliteNodeProvisioner,
+)
+from .mcp_metadata import ADMISSION_META_KEY, AUTHORITY_META_KEY
 
 
 _TRANSPORT_HEADER = b"x-ratify-transport-token"
@@ -28,12 +36,64 @@ def _unique_header(headers: list[tuple[bytes, bytes]], name: bytes) -> bytes | N
 
 def load_receiver(path: str) -> tuple[InfrastructureReceiver, str, str]:
     config = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not config.get("federation_routes"):
+        raise ValueError("receiver config must include non-empty federation_routes")
+    root_public_key = HybridPublicKey(
+        ed25519=base64_standard_decode(config["root_ed25519"]),
+        ml_dsa_65=base64_standard_decode(config["root_ml_dsa_65"]),
+    )
+    routes = [
+        FederationRoute(
+            agent_id=route["agent_id"],
+            root_id=route["root_id"],
+            subjects_leaf_to_root=tuple(route["subjects_leaf_to_root"]),
+        )
+        for route in config.get("federation_routes", [])
+    ]
+    admission_policy = None
+    admission_fields = {
+        "admission_root_id",
+        "admission_root_ed25519",
+        "admission_root_ml_dsa_65",
+        "admission_routes",
+    }
+    if admission_fields.intersection(config):
+        if not all(config.get(field) for field in admission_fields):
+            raise ValueError("dual-root receiver config must include complete admission policy")
+        admission_key = HybridPublicKey(
+            ed25519=base64_standard_decode(config["admission_root_ed25519"]),
+            ml_dsa_65=base64_standard_decode(config["admission_root_ml_dsa_65"]),
+        )
+        admission_policy = FederationPolicy(
+            roots={config["admission_root_id"]: admission_key},
+            routes=[
+                FederationRoute(
+                    agent_id=route["agent_id"],
+                    root_id=route["root_id"],
+                    subjects_leaf_to_root=tuple(route["subjects_leaf_to_root"]),
+                )
+                for route in config["admission_routes"]
+            ],
+        )
     receiver = InfrastructureReceiver(
         trusted_root_id=config["trusted_root_id"],
-        trusted_root_public_key=HybridPublicKey(
-            ed25519=base64_standard_decode(config["root_ed25519"]),
-            ml_dsa_65=base64_standard_decode(config["root_ml_dsa_65"]),
+        trusted_root_public_key=root_public_key,
+        federation_policy=(
+            FederationPolicy(
+                roots={config["trusted_root_id"]: root_public_key},
+                routes=routes,
+            )
+            if routes
+            else None
         ),
+        admission_policy=admission_policy,
+        receiver_public_key=HybridPublicKey(
+            ed25519=base64_standard_decode(config["receiver_ed25519"]),
+            ml_dsa_65=base64_standard_decode(config["receiver_ml_dsa_65"]),
+        ),
+        challenge_ttl_seconds=config.get("challenge_ttl_seconds", 300),
+        challenge_capacity=config.get("challenge_capacity", 128),
+        pending_capacity=config.get("pending_capacity", 128),
     )
     return receiver, config["trusted_agent_id"], config["transport_token"]
 
@@ -115,12 +175,36 @@ def create_server(
         region: str,
         instance_type: str,
         count: int,
-        presentation: str,
+        ctx: Context,
     ) -> dict:
         """Provision only after receiver-side authority verification."""
+        meta = ctx.request_context.meta
+        if isinstance(meta, dict):
+            extra = meta
+        else:
+            extra = getattr(meta, "model_extra", None) if meta else None
+            if extra is None and meta is not None:
+                if hasattr(meta, "model_dump"):
+                    extra = meta.model_dump()
+                elif hasattr(meta, "dict"):
+                    extra = meta.dict()
+        presentation = extra.get(AUTHORITY_META_KEY) if extra else None
+        if not isinstance(presentation, str):
+            return {
+                "decision": "deny",
+                "status": "missing_authority_presentation",
+                "reason": "delegated authority is required in MCP request metadata",
+                "tool_invocations": receiver.tool_invocations,
+            }
+        admission = extra.get(ADMISSION_META_KEY) if extra else None
+        submitted = (
+            DualPresentation(authority=presentation, admission=admission)
+            if isinstance(admission, str)
+            else presentation
+        )
         return await asyncio.to_thread(
             receiver.execute,
-            OperationRequest(request_id, region, instance_type, count), presentation
+            OperationRequest(request_id, region, instance_type, count), submitted
         )
 
     return server
@@ -131,6 +215,7 @@ def main() -> None:
     parser.add_argument("--trust-config", required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", required=True, type=int)
+    parser.add_argument("--protected-db")
     args = parser.parse_args()
     bind_host = "127.0.0.1" if args.host == "localhost" else args.host
     try:
@@ -140,6 +225,8 @@ def main() -> None:
     if not is_loopback:
         raise SystemExit("non-loopback bind requires a production TLS/auth deployment")
     receiver, trusted_agent_id, transport_token = load_receiver(args.trust_config)
+    if args.protected_db:
+        receiver.provisioner = SqliteNodeProvisioner(args.protected_db)
     server = create_server(
         receiver, trusted_agent_id, bind_host, args.port
     )

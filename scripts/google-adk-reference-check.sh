@@ -50,11 +50,11 @@ failed = sum(
     case.find("failure") is not None or case.find("error") is not None
     for case in cases
 )
-if len(cases) != 33 or skipped or failed:
+if len(cases) != 49 or skipped or failed:
     raise SystemExit(
-        f"FAIL: expected 33 passed, zero skipped/failed; "
+        f"FAIL: expected 49 passed, zero skipped/failed; "
         f"got total={len(cases)} skipped={skipped} failed={failed}"
     )
-print("gate: 33/33 passed; zero skipped, xfailed, failed, or errored")
+print("gate: 49/49 passed; zero skipped, xfailed, failed, or errored")
 PY
 PYTHONPATH="$DEMO" "$VENV/bin/python" "$DEMO/demo.py"

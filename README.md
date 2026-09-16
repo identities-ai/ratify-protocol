@@ -408,6 +408,7 @@ verification semantics—there is no managed-only wire format.
 | **Read the normative spec** | [`SPEC.md`](SPEC.md) |
 | **Use the Verify managed service** (revocation, audit, policy enforcement at scale) | [docs.ratifyprotocol.com](https://docs.ratifyprotocol.com) |
 | **Integrate with a specific surface** (Meetings, Conversational AI, Agentic API, Physical AI) | [docs.ratifyprotocol.com/guides](https://docs.ratifyprotocol.com/guides/) |
+| **Guard a protected handler on the receiver side** | [`ratify-receiver`](https://github.com/identities-ai/ratify-receiver), a TypeScript helper for receivers that use Ratify Verify |
 | **Add a new language SDK** | [`docs/SDKS.md`](docs/SDKS.md) + the new-SDK issue template |
 | **Report a security issue** | [`SECURITY.md`](SECURITY.md) — do not open a public issue |
 | **Cite Ratify in academic work** | [`CITATION.cff`](CITATION.cff) — GitHub auto-renders BibTeX/APA/Chicago |

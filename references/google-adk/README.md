@@ -44,6 +44,10 @@ sequenceDiagram
 The model may request more authority. It cannot grant that authority to
 itself.
 
+For the three-agent, cross-domain topology, receiver trust policy, revocation
+freshness model, and exact-call scale harness, see
+[`FEDERATION_SCALE.md`](FEDERATION_SCALE.md).
+
 ## Why would a developer or enterprise need this?
 
 Google Cloud and ADK already provide substantial controls: IAM on the resource,
@@ -78,9 +82,10 @@ flowchart LR
 
 ## Who implements what
 
-Four roles. **Google implements nothing**: the reference uses ADK's public
-agent and tool surface and an ordinary MCP receiver, so no change to ADK,
-Gemini, or any Google Cloud service is required.
+Four roles. The supported lane uses ADK's public agent, `FunctionTool`, and
+`before_tool_callback` surfaces and an ordinary MCP receiver, so it requires no
+change to Gemini or a Google Cloud service. A native `McpTool` integration would
+benefit from a supported ADK hook for per-invocation MCP metadata.
 
 | Role | Who this usually is | What they do | What they build |
 | --- | --- | --- | --- |
@@ -139,8 +144,22 @@ function-response delivery. The authorization result cannot depend on model
 judgment.
 The recorded run is in
 [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
-The gate requires exactly 33 passing tests and fails if any test is skipped,
+The gate requires exactly 49 passing tests and fails if any test is skipped,
 xfail, missing, or unexpectedly added.
+
+Run the measured local authority path separately:
+
+```bash
+cd references/google-adk
+python -m authority_reference.scale_benchmark \
+  --calls 10,100,1000,1000000 \
+  --workers 8 \
+  --output evidence/federation-scale-local-rerun.json
+```
+
+The rerun path uses a separate output name so it cannot silently overwrite the
+checked-in canonical evidence. The benchmark does not substitute extrapolated
+calls for measured calls.
 
 ## What the reference implements
 
@@ -157,10 +176,11 @@ ADK commander
         extension constraint: max_nodes = 1
                   |
                   v
-Google ADK native McpToolset
+Google ADK public callback + FunctionTool
   exposes only ordinary business arguments to the model
   obtains an operation-bound challenge after tool selection
-  signs it with the specialist key and injects the proof
+  signs it with the specialist key
+  carries the proof in MCP request metadata
                   |
                   v
 Independent Streamable HTTP MCP receiver
@@ -187,7 +207,9 @@ Start with these files if you want to inspect or adapt the reference:
 |---|---|
 | [`authority_reference/authority.py`](authority_reference/authority.py) | Issues the principal-to-commander and commander-to-specialist delegations |
 | [`authority_reference/adk_mcp.py`](authority_reference/adk_mcp.py) | Keeps the model-facing schema ordinary, then obtains a challenge and injects the proof after ADK selects the tool |
+| [`authority_reference/multi_agent.py`](authority_reference/multi_agent.py) | Builds the ADK coordinator, broker, and worker routing topology |
 | [`authority_reference/receiver.py`](authority_reference/receiver.py) | Reconstructs the operation, verifies the proof and local policy, and gates the protected handler |
+| [`authority_reference/scale_benchmark.py`](authority_reference/scale_benchmark.py) | Runs exact full-path call tiers and emits machine-readable measurements |
 | [`authority_reference/mcp_server.py`](authority_reference/mcp_server.py) | Exposes the receiver through authenticated Streamable HTTP MCP |
 | [`authority_reference/deployment_config.py`](authority_reference/deployment_config.py) | Writes separate receiver and presenter configuration with mode `0600` |
 | [`tests/test_reference.py`](tests/test_reference.py) | Exercises the ADK runner, MCP boundary, trust-root attacks, replay, malformed input, concurrency, and availability behavior |
@@ -278,8 +300,9 @@ Provision one n2-standard-4 node in us-central1. Use request id demo-1.
 ```
 
 Then request three nodes or change the region and observe the receiver denial.
-The app defaults to `gemini-3.6-flash`, Google's current stable Flash model as
-of this evidence date. The optional live path demonstrates orchestration; it
+The app is configured with `gemini-3.6-flash` as an example Flash model; verify
+that model identifier against the ADK and Gemini release available to your
+project before running. The optional live path demonstrates orchestration; it
 adds no authorization guarantee beyond the deterministic receiver tests.
 
 ## Evidence tiers
@@ -289,6 +312,9 @@ adds no authorization guarantee beyond the deterministic receiver tests.
 | Receiver verification | Yes | Cryptographic and local-policy allow/deny matrix |
 | ADK `FunctionTool` | Yes | Baseline in-process composition |
 | Native ADK `McpToolset` | Yes | Ordinary schema; hidden proof injection; independent HTTP receiver |
+| Public ADK callback + MCP metadata | Yes | Supported hook; proof captured in `_meta` and absent from ADK events |
+| Three-agent ADK handoff | Yes | Coordinator to broker to worker reaches the federated receiver gate |
+| Exact-call scale | 10, 100, 1,000, and 1,000,000 measured locally | Full three-certificate authority path |
 | ADK runner loop | Yes | Model turn → MCP function call → gated receiver → function response |
 | Gemini 3.6 Flash | Configuration-ready | Requires an operator API key; not part of recorded evidence |
 | A2A / Agent Engine | Not yet | Proposed follow-on, not claimed as executed |
@@ -296,8 +322,9 @@ adds no authorization guarantee beyond the deterministic receiver tests.
 ## Reference scope and production requirements
 
 - The receiver and challenge store are in-memory inside one MCP server process.
-- The protected provisioner is a counter, not Google Compute Engine. No cloud
-  resources are created.
+- The default protected provisioner is in memory. The demo can use the included
+  SQLite provisioner to prove a durable receiver-owned write exists only after
+  allow. No Google Cloud resources are created.
 - Trust-root distribution, durable revocation, shared challenge storage, key
   custody, authorization receipts, rate limits, and production audit retention
   are deployment responsibilities not solved by this draft.
@@ -306,10 +333,10 @@ adds no authorization guarantee beyond the deterministic receiver tests.
   execution layer must still ensure the real cloud operation matches it.
 - This reference composes with Agent Identity conceptually but does not deploy
   to Vertex AI Agent Engine or exercise preview IAM Agent Identity APIs.
-- Proof injection uses a small pinned-version `McpTool` adapter because ADK does
-  not expose operation-specific hidden MCP metadata as a stable public hook.
-  The adapter is isolated and tested, but should be mapped with the ADK team
-  before claiming forward compatibility.
+- The recommended lane uses public `before_tool_callback` and `FunctionTool`
+  APIs. A separate native `McpToolset` compatibility lane still uses a small
+  pinned-version adapter because ADK does not expose operation-specific custom
+  MCP metadata on `McpTool`; that gap should be reviewed with the ADK team.
 - The internal challenge tool remains MCP-discoverable to authenticated clients
   but is excluded from the model toolset. Authentication, bounded receiver
   state, and receiver verification, not client-side hiding, are the controls.

@@ -22,7 +22,7 @@ Copilot reference is the worked example.
 | Platform | What it demonstrates | Run it |
 | --- | --- | --- |
 | [GitHub Copilot and MCP](github-copilot/README.md) | Copilot invokes a deployment tool; an independent receiver verifies exact delegated authority first | `cd references/github-copilot && ./run-reference-check.sh` |
-| [Google ADK and MCP](google-adk/README.md) | An ADK agent requests cloud provisioning; an independent MCP receiver verifies the signed ceiling and resource before anything is created | `./scripts/google-adk-reference-check.sh` |
+| [Google ADK and MCP](google-adk/README.md) | ADK agents route work across a modeled trust boundary; an independent MCP receiver verifies the signed route, ceiling, resource, freshness, and revocation before a protected write | `./scripts/google-adk-reference-check.sh` |
 | [LangChain and MCP](langchain/README.md) | A LangChain agent crosses an MCP boundary; the receiver verifies who authorized the exact action and which bounds still apply | `./scripts/langchain-reference-check.sh` |
 | [NVIDIA OpenShell and NOOA](nvidia-nooa-openshell/README.md) | An agent at one company asks another company's service to move money; the receiver verifies the signed ceiling, named order, and expiry before refunding | `./scripts/nvidia-reference-check.sh` |
 | [Ratify Edge Physical AI](physical-ai-edge-sentinel/README.md) | A Linux edge receiver verifies a bounded physical-action request before sending one safe actuator command to an Arduino Uno | `RATIFY_SDK=/path/to/ratify-c ./references/physical-ai-edge-sentinel/run-reference-check.sh` |

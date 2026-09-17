@@ -118,7 +118,7 @@ jobs:
       # the native path is absent or incompatible. One non-native-only test is
       # expected to skip in this configuration; RATIFY_REQUIRE_NATIVE makes
       # every native-required test fail instead of silently skipping.
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
       - name: Build and install the native Python extra
         working-directory: sdks/python-native
         run: |

@@ -3,7 +3,8 @@
 Machine-readable form: [`nvidia-reference-evidence.json`](./nvidia-reference-evidence.json).
 
 **Main stability campaign executed 2026-08-05. Current published-package
-compatibility run executed 2026-09-10.** Branch `feat/nvidia-nooa-reference`, rebased onto
+compatibility run executed 2026-09-18.** The historical campaign branch was
+`feat/nvidia-nooa-reference`, rebased onto
 `origin/main` at `f5a1522` (the commit marking `v1.0.0-alpha.16` published).
 
 - **`tested_source_commit: 37b378b`** — the 2026-08-05 stability campaign
@@ -15,7 +16,7 @@ compatibility run executed 2026-09-10.** Branch `feat/nvidia-nooa-reference`, re
 
 ## OpenShell v0.0.102 compatibility validation
 
-The complete live profile was rerun on 2026-09-10 against the published Ratify
+The complete live profile was rerun on 2026-09-18 against the published Ratify
 alpha.20 package and the validated pinned OpenShell **v0.0.102** CLI and
 gateway stack. It passed **64/64 gates**,
 executed all **52 required cases**, and reported zero failures, skips, driver
@@ -32,6 +33,14 @@ the published `ratify-protocol==1.0.0a20`; the run's `evidence_status` is
 | Rendered policy | `sha256:677750dbc9062a58fa82146d9da342ee3861e64490ed934017171a67c0df96a9` |
 | Gateway configuration | `sha256:66d86577c9e084dacd0ea82d4d329099c3231042354920ca202360f910167495` |
 | Raw artifact | `sha256:4a06f935d86e8e87ea9ccbf6a5e4f08f7427f87a41ff6b97447ee8ada3f69263` |
+
+The fresh run artifact is committed as
+[`nvidia-openshell-live-2026-09-18.json`](./nvidia-openshell-live-2026-09-18.json)
+and has SHA-256
+`9e3868ff055a8a6d07d953a36740694410288875565a48a0b380d7ed5db4d43b`.
+It was executed on arm64 macOS with Docker 29.4.0 and Python 3.12.12 using
+`RATIFY_SDK=published`; it left zero containers behind. The historical artifact
+hash above remains for the earlier 2026-09-10 compatibility record.
 
 This is one full latest-version compatibility run, not a claim that the earlier
 two sequential, two concurrent, and intentional-failure runs were retroactively

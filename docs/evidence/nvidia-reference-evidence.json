@@ -4,7 +4,7 @@
   "branch": "feat/nvidia-nooa-reference",
   "tested_source_commit": "37b378b",
   "documentation_commit": "141f429",
-  "provenance_note": "the 2026-08-05 stability campaign was executed against 37b378b. 141f429 is one commit later and touches only prose (README, docs/, this evidence summary) with zero changes to the driver, adjudicator, tests, Dockerfile, or profile script; diffed and confirmed before that campaign note was written. A separate full OpenShell v0.0.102 compatibility run was executed on 2026-08-10 against the compatibility update in this PR and is recorded separately.",
+  "provenance_note": "the 2026-08-05 stability campaign was executed against 37b378b. 141f429 is one commit later and touches only prose (README, docs/, this evidence summary) with zero changes to the driver, adjudicator, tests, Dockerfile, or profile script; diffed and confirmed before that campaign note was written. A separate full OpenShell v0.0.102 compatibility run was executed on 2026-08-10 against the compatibility update in this PR and is recorded separately. A fresh published-package live run was executed on 2026-09-18 against the current main profile and is recorded in nvidia-openshell-live-2026-09-18.json.",
   "commit_base": "f5a1522 (v1.0.0-alpha.16 published in the RELEASES ladder)",
   "ratify_protocol": {
     "published_version": "1.0.0a16",
@@ -47,6 +47,23 @@
     "gateway_config_sha256": "66d86577c9e084dacd0ea82d4d329099c3231042354920ca202360f910167495",
     "raw_artifact_sha256": "4a06f935d86e8e87ea9ccbf6a5e4f08f7427f87a41ff6b97447ee8ada3f69263",
     "scope_note": "one full latest-version compatibility run; the earlier two sequential, two concurrent, and intentional-failure runs remain v0.0.96 results"
+  },
+  "fresh_live_run_2026_09_18": {
+    "artifact": "./nvidia-openshell-live-2026-09-18.json",
+    "artifact_sha256": "9e3868ff055a8a6d07d953a36740694410288875565a48a0b380d7ed5db4d43b",
+    "executed_date": "2026-09-18",
+    "ratify_protocol": "1.0.0a20, published, PyPI",
+    "openshell_cli": "0.0.102",
+    "nooa": "0.0.8",
+    "mcp": "2.0.0",
+    "container_runtime": "Docker 29.4.0",
+    "executed_on": "Darwin arm64, Python 3.12.12",
+    "required_cases": 52,
+    "gates": { "passed": 64, "failed": 0, "skipped": 0 },
+    "driver_errors": [],
+    "timeouts": [],
+    "residue_containers": 0,
+    "command": "OPENSSL_BIN=/opt/homebrew/opt/openssl@3/bin/openssl PYTHON=/opt/homebrew/bin/python3.12 RATIFY_SDK=published ./demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh"
   },
   "dockerfile_sha256": "9b128c9d2744ac6c671c1f51422df0c26d9e054952dd550d33886799e0e61f6e",
   "dependency_lock": {

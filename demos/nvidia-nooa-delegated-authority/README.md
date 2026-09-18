@@ -144,7 +144,14 @@ Each denial is asserted against a specific reason code, so none of them can pass
 
 ## The live OpenShell profile
 
-`run-openshell-profile.sh` executes the whole composition against a pinned, validated OpenShell v0.0.102 CLI and gateway stack:
+`run-openshell-profile.sh` executes the whole composition against a pinned, validated OpenShell v0.0.102 CLI and gateway stack. The live profile also requires Docker (or a compatible daemon), OpenShell CLI `0.0.102`, Python 3.12, and OpenSSL 3 for Ed25519 key generation. On macOS, set `OPENSSL_BIN` explicitly if `/usr/bin/openssl` is not OpenSSL 3:
+
+```bash
+OPENSSL_BIN=/opt/homebrew/opt/openssl@3/bin/openssl \
+PYTHON=/opt/homebrew/bin/python3.12 \
+RATIFY_SDK=published \
+./demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh
+```
 
 > NOOA agent → proof-carrying MCP Streamable HTTP → OpenShell destination, method, and tool enforcement → an independent MCP receiver → Ratify semantic authorization → consequential action → signed receipt
 

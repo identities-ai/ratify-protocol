@@ -13,9 +13,11 @@ trap 'rm -f "$TEST_OUTPUT"' EXIT
 npm run check 2>&1 | tee "$TEST_OUTPUT"
 
 expected=$(sed -n 's/.*"tests"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' ratify-reference.json)
-observed=$(sed -n 's/^ℹ pass \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
-failed=$(sed -n 's/^ℹ fail \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
-skipped=$(sed -n 's/^ℹ skipped \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
+# Node's built-in TAP reporter changed its summary from `ℹ pass 9` to
+# `# pass 9`. Accept both forms, but still fail closed if the tally is absent.
+observed=$(sed -n -e 's/^ℹ pass \([0-9][0-9]*\)$/\1/p' -e 's/^# pass \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
+failed=$(sed -n -e 's/^ℹ fail \([0-9][0-9]*\)$/\1/p' -e 's/^# fail \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
+skipped=$(sed -n -e 's/^ℹ skipped \([0-9][0-9]*\)$/\1/p' -e 's/^# skipped \([0-9][0-9]*\)$/\1/p' "$TEST_OUTPUT")
 
 if [ -z "$expected" ] || [ -z "$observed" ] || [ "$expected" != "$observed" ]; then
     echo "reference gate: declared tests=$expected, observed tests=$observed" >&2

@@ -10,6 +10,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from ratify_protocol import base64_standard_decode, encode_proof_bundle
 
 from .authority import AuthorityFixture
+from .receiver import OperationRequest
 
 
 def _result(value: Any) -> dict[str, Any]:
@@ -72,4 +73,37 @@ def build_agent(model, tools):
             "denials exactly; never claim success when decision is deny."
         ),
         name="ratify_infrastructure_specialist",
+    )
+
+
+def local_preflight(
+    authority: AuthorityFixture, request: OperationRequest, *, now: int
+) -> bool:
+    """Apply the agent operator's local bounds before presenting a proof.
+
+    This is application policy, not Ratify verification. It intentionally has
+    no receiver revocation view and does not consume the receiver challenge.
+    The receiver must repeat the authoritative checks at execution time.
+    """
+    request.validate()
+    certificate = authority.delegations[0]
+    if not certificate.issued_at <= now < certificate.expires_at:
+        return False
+
+    resource = next(
+        (constraint.resource_id for constraint in certificate.constraints
+         if constraint.type == "resource_path"),
+        None,
+    )
+    max_nodes = next(
+        (constraint.params.get("max_nodes")
+         for constraint in certificate.constraints
+         if constraint.type == "com.ratifyprotocol.langchain.max_nodes"
+         and isinstance(constraint.params, dict)),
+        None,
+    )
+    return (
+        resource == f"gcp:projects/customer-project/regions/{request.region}"
+        and isinstance(max_nodes, int)
+        and request.count <= max_nodes
     )

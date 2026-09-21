@@ -1,6 +1,6 @@
 # LangChain reference evidence
 
-**Evidence date:** 2026-08-11
+**Evidence date:** 2026-09-20
 
 **Branch:** `feat/langchain-reference`
 
@@ -14,8 +14,8 @@
 $ ./scripts/langchain-reference-check.sh
 published Ratify: .../site-packages/ratify_protocol/__init__.py
 pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0
-........................                                                 [100%]
-24 passed in 4.52s
+..........................                                               [100%]
+26 passed in 3.84s
 ```
 
 Zero tests were skipped or marked xfail. The gate rejected the repository's
@@ -28,6 +28,10 @@ environment.
 - scope/resource and signed node-ceiling denials invoke it zero times;
 - expiry, revocation, replay, operation alteration, wrong agent, and hostile
   root fail closed;
+- revocation and expiry that occur after the agent's local preflight are
+  rechecked by the receiver and fail closed;
+- the local preflight passes before those changes, while paired control actions
+  are allowed before the change;
 - malformed proof does not consume an honest pending operation;
 - invalid business values never reach verification or execution;
 - receiver pending state is bounded and concurrent duplicate request IDs yield

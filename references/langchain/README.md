@@ -96,7 +96,7 @@ Run the published-package gate from the repository root:
 The gate creates a clean environment and uses the real `create_agent` LangGraph loop with a deterministic model
 double, the public `MultiServerMCPClient` tool-interceptor API, and an
 independently started Streamable HTTP MCP receiver. It needs no model API key or
-paid service. It requires exactly 24 passing tests and fails on a skipped,
+paid service. It requires exactly 26 passing tests and fails on a skipped,
 xfail, missing, or additional test. See
 [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
@@ -105,9 +105,12 @@ xfail, missing, or additional test. See
 The model sees only `request_id`, `region`, `instance_type`, and `count`. After
 tool selection, a LangChain MCP interceptor obtains an operation-bound challenge,
 signs it outside model context, and adds the proof as a per-call HTTP header.
-The receiver pins the accepted root and expected agent out of band, reconstructs
-the operation, consumes the challenge, verifies the delegation, and invokes the
-protected handler only after ALLOW.
+The agent-side example can apply a local preflight to the visible delegation
+bounds, but that check has no receiver-owned revocation view and does not
+consume the challenge. The receiver pins the accepted root and expected agent
+out of band, reconstructs the operation, consumes the challenge, verifies the
+delegation at execution time, and invokes the protected handler only after
+ALLOW.
 
 LangChain and LangGraph orchestrate the agent. LangSmith authentication and
 authorization protect Agent Server resources and can supply user-scoped
@@ -122,6 +125,7 @@ the final execution decision.
 | Valid two-hop delegation, one node, allowed region | Receiver invokes the protected handler once |
 | Excess count or wrong region | Signed constraint denies before execution |
 | Expired or revoked delegation | Denied before execution |
+| Authority revoked or expired between local preflight and execution | Receiver rechecks current authority and denies before execution |
 | Replayed proof or changed operation | Denied; prior execution count is unchanged |
 | Wrong presenting agent or untrusted root | Denied despite a cryptographically valid hostile proof |
 | Malformed proof or invalid business input | Denied without consuming honest work or reaching the tool |
@@ -166,8 +170,9 @@ Both verify the same proofs. The protocol does not change between them.
 | `authority_reference/mcp_server.py` | HTTP boundary: transport credential, header bounds, duplicate rejection |
 | `authority_reference/receiver.py` | Verification and the protected handler boundary |
 | `authority_reference/authority.py` | Reference identities and the bounded delegation |
+| `authority_reference/langchain_agent.py` | MCP interceptor and the explicitly non-authoritative local preflight |
 | `authority_reference/deployment_config.py` | Trust roots and expected agent, pinned out of band |
-| `tests/test_reference.py` | The 24 deterministic boundary cases |
+| `tests/test_reference.py` | The 26 deterministic boundary cases |
 | `evidence/reference-evidence.md` | Executed evidence for the gate |
 | `DESIGN.md` | Architecture and threat-boundary rationale |
 

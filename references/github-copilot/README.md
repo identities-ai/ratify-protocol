@@ -261,7 +261,7 @@ flowchart TD
     B --> E[Use this open reference now]
     C --> F[Use the open SDK and replace every demo-only component]
     D --> G[Join the Ratify Verify design-partner program]
-    click G "https://ratifyprotocol.com/#partners" "Apply to become a Ratify Verify design partner"
+    click G "https://ratifyprotocol.com/?intent=proof#partners" "Apply to become a Ratify Verify design partner"
 ```
 
 | Your situation | Recommended path | Available now? |
@@ -295,7 +295,9 @@ for organizations that want Ratify to operate the verification control plane:
 - signed verification receipts and audit retention; and
 - production availability, observability, and support.
 
-If that matches your deployment, contact
+If that matches your deployment, [register your interest in the Ratify Verify
+design-partner program](https://ratifyprotocol.com/?intent=proof#partners), or
+contact
 [partners@ratifyprotocol.com](mailto:partners@ratifyprotocol.com?subject=Ratify%20Verify%20design%20partner)
 with “Ratify Verify design partner” in the subject. Useful context includes the
 agent runtime, protected action, receiving system, organizational boundary, and

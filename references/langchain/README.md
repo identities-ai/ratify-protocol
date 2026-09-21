@@ -58,6 +58,14 @@ key. To use the real adapter, install no additional package, set
 `authority_reference/jev_adapter.py`. The adapter uses
 `https://api.typesafe.ai/v1/systemone` and the `jev-latest` model by default.
 
+Coding agents are a natural application of this boundary. Jev can propose a
+bounded tool such as a repository search, patch, or allowlisted test command;
+local application policy can request approval; and the receiver can verify
+authority before a mutation runs. This reference demonstrates bounded tool
+selection and receiver verification. It does not claim arbitrary shell access,
+filesystem mutation, deployment control, dynamic context selection, or
+security-aware model routing.
+
 ## Who implements what
 
 Four roles. **LangChain implements nothing**: the reference uses the public

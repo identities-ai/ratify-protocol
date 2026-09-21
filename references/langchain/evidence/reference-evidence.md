@@ -15,7 +15,7 @@ $ ./scripts/langchain-reference-check.sh
 published Ratify: .../site-packages/ratify_protocol/__init__.py
 pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0
 ..........................                                               [100%]
-26 passed in 3.84s
+26 passed in 5.00s
 ```
 
 Zero tests were skipped or marked xfail. The gate rejected the repository's

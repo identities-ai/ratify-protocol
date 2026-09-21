@@ -15,7 +15,7 @@ $ ./scripts/langchain-reference-check.sh
 published Ratify: .../site-packages/ratify_protocol/__init__.py
 pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0
 ..........................                                               [100%]
-26 passed in 5.00s
+28 passed in 4.79s
 ```
 
 Zero tests were skipped or marked xfail. The gate rejected the repository's
@@ -42,6 +42,8 @@ environment.
 - the model-visible schema excludes proof material;
 - the public MCP interceptor injects proof after tool selection; and
 - the real `create_agent` LangGraph loop executes the gated HTTP MCP tool.
+- the optional Jev adapter returns a typed tool proposal and probabilities; and
+- a Jev-selected tool still fails closed when receiver authority is out of scope.
 
 This evidence supports only the independent draft and limitations documented in
 the profile README. It is not evidence of LangChain review or endorsement.

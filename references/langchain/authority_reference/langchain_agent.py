@@ -10,6 +10,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from ratify_protocol import base64_standard_decode, encode_proof_bundle
 
 from .authority import AuthorityFixture
+from .jev_adapter import JevToolDecision, select_tool_with_jev
 from .receiver import OperationRequest
 
 
@@ -74,6 +75,26 @@ def build_agent(model, tools):
         ),
         name="ratify_infrastructure_specialist",
     )
+
+
+def build_agent_with_jev(model, tools, *, state, jev_client):
+    """Preselect one available tool with Jev before the LangChain loop.
+
+    Jev narrows the proposal set. The MCP interceptor still attaches Ratify
+    authority, and the receiver still decides whether the action may execute.
+    """
+
+    tool_descriptions = {
+        tool.name: tool.description or "No description provided."
+        for tool in tools
+    }
+    decision: JevToolDecision = select_tool_with_jev(
+        jev_client, state, tool_descriptions
+    )
+    selected = [tool for tool in tools if tool.name == decision.tool_name]
+    if not selected:
+        raise ValueError("jev_selected_unavailable_tool")
+    return build_agent(model, selected), decision
 
 
 def local_preflight(

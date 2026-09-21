@@ -50,10 +50,10 @@ failed = sum(
     case.find("failure") is not None or case.find("error") is not None
     for case in cases
 )
-if len(cases) != 26 or skipped or failed:
+if len(cases) != 28 or skipped or failed:
     raise SystemExit(
-        f"FAIL: expected 26 passed, zero skipped/failed; "
+        f"FAIL: expected 28 passed, zero skipped/failed; "
         f"got total={len(cases)} skipped={skipped} failed={failed}"
     )
-print("gate: 26/26 passed; zero skipped, xfailed, failed, or errored")
+print("gate: 28/28 passed; zero skipped, xfailed, failed, or errored")
 PY

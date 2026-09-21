@@ -19,7 +19,7 @@ from ratify_protocol import encode_proof_bundle, generate_agent, sign_challenge
 
 from authority_reference import (
     InfrastructureReceiver, OperationRequest, build_agent, build_mcp_tools,
-    issue_authority, local_preflight,
+    issue_authority, local_preflight, select_tool_with_jev,
 )
 from authority_reference.deployment_config import write_configs
 from authority_reference.mcp_server import HeaderBoundary, MAX_PRESENTATION_HEADER_BYTES
@@ -50,6 +50,51 @@ def present(authority, receiver, request, now):
     grant = receiver.issue_challenge(request, expected_agent_id=authority.specialist_id)
     return authority.present(challenge=grant.challenge,
                              session_context=grant.session_context, now=now)
+
+
+class JevStub:
+    def __init__(self, tool_name):
+        self.tool_name = tool_name
+
+    def choose_tool(self, state, tools):
+        assert state["request"]
+        assert self.tool_name in tools
+        return type(
+            "Decision",
+            (),
+            {
+                "tool_name": self.tool_name,
+                "probabilities": {self.tool_name: 1.0},
+                "confidence": 1.0,
+            },
+        )()
+
+
+def test_jev_selects_a_typed_tool_proposal():
+    decision = select_tool_with_jev(
+        JevStub("provision_cloud_node"),
+        {"request": "provision one staging node"},
+        {
+            "provision_cloud_node": "Provision a bounded cloud node.",
+            "request_approval": "Ask a human to approve the action.",
+        },
+    )
+    assert decision.tool_name == "provision_cloud_node"
+    assert decision.probabilities == {"provision_cloud_node": 1.0}
+
+
+def test_jev_tool_selection_does_not_bypass_receiver_authority():
+    now, authority, receiver = setup_reference()
+    decision = select_tool_with_jev(
+        JevStub("provision_cloud_node"),
+        {"request": "provision three staging nodes"},
+        {"provision_cloud_node": "Provision a bounded cloud node."},
+    )
+    assert decision.tool_name == "provision_cloud_node"
+    request = OperationRequest("jev-proposal", "us-central1", "n2-standard-4", 3)
+    result = receiver.execute(request, present(authority, receiver, request, now), now=now)
+    assert result["decision"] == "deny"
+    assert result["tool_invocations"] == 0
 
 
 def test_valid_authority_invokes_tool_once():

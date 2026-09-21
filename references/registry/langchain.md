@@ -1,7 +1,7 @@
 # LangChain
 
 - **Profile:** [`../langchain/`](../langchain/README.md)
-- **Status:** Independent draft; 26/26 gate green
+- **Status:** Independent draft; 28/28 gate green
 - **Ratify:** `1.0.0a19`
 - **Platform:** `langchain==1.3.14`, `langchain-mcp-adapters==0.3.0`
 - **Gate:** `./scripts/langchain-reference-check.sh`

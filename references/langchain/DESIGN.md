@@ -91,6 +91,12 @@ Independent Streamable HTTP MCP receiver
   invokes the protected handler only after ALLOW
 ```
 
+An optional Jev adapter can sit before the LangChain loop. It sends the current
+state and available tool descriptions to TypeSafe's System One API and returns
+a typed tool proposal with probabilities and confidence. The proposal narrows
+what the agent considers; it does not create authority. The same MCP
+interceptor and receiver verification path runs afterward.
+
 ## Security decisions
 
 - The receiver, not the LangChain process, is the security boundary. A local

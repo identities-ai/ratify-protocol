@@ -151,7 +151,8 @@ constraint.
 path, run it with no account, and adapt the receiver to your own service. It is
 Apache-2.0 and has no runtime dependency on any hosted Ratify service.
 
-**Register interest in Ratify Verify** when you would rather not operate trust
+[Register interest in Ratify Verify](https://ratifyprotocol.com/?intent=proof#partners)
+when you would rather not operate trust
 distribution, revocation freshness, challenge storage, and audit retention
 yourself. Those are the deployment concerns listed under Limitations below, and
 they are the parts that turn a working reference into a production control.

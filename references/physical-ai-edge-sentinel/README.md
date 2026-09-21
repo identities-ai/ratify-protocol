@@ -153,7 +153,7 @@ Setup is in [`../../adk/README.md`](../../adk/README.md): the pinned environment
 
 ## Which path should I use?
 
-Use this open reference when you need inspectable source, a deterministic local gate, and a safe demonstration of the verification boundary. Use [Ratify Verify](https://ratifyprotocol.com) when you need managed trust configuration, revocation operations, audit retention, observability, availability, and supported deployment adapters.
+Use this open reference when you need inspectable source, a deterministic local gate, and a safe demonstration of the verification boundary. Use [Ratify Verify](https://ratifyprotocol.com/?intent=proof#partners) when you need managed trust configuration, revocation operations, audit retention, observability, availability, and supported deployment adapters.
 
 ## What is cryptographically bound?
 

@@ -19,7 +19,7 @@ from ratify_protocol import encode_proof_bundle, generate_agent, sign_challenge
 
 from authority_reference import (
     InfrastructureReceiver, OperationRequest, build_agent, build_mcp_tools,
-    issue_authority,
+    issue_authority, local_preflight, select_tool_with_jev,
 )
 from authority_reference.deployment_config import write_configs
 from authority_reference.mcp_server import HeaderBoundary, MAX_PRESENTATION_HEADER_BYTES
@@ -50,6 +50,51 @@ def present(authority, receiver, request, now):
     grant = receiver.issue_challenge(request, expected_agent_id=authority.specialist_id)
     return authority.present(challenge=grant.challenge,
                              session_context=grant.session_context, now=now)
+
+
+class JevStub:
+    def __init__(self, tool_name):
+        self.tool_name = tool_name
+
+    def choose_tool(self, state, tools):
+        assert state["request"]
+        assert self.tool_name in tools
+        return type(
+            "Decision",
+            (),
+            {
+                "tool_name": self.tool_name,
+                "probabilities": {self.tool_name: 1.0},
+                "confidence": 1.0,
+            },
+        )()
+
+
+def test_jev_selects_a_typed_tool_proposal():
+    decision = select_tool_with_jev(
+        JevStub("provision_cloud_node"),
+        {"request": "provision one staging node"},
+        {
+            "provision_cloud_node": "Provision a bounded cloud node.",
+            "request_approval": "Ask a human to approve the action.",
+        },
+    )
+    assert decision.tool_name == "provision_cloud_node"
+    assert decision.probabilities == {"provision_cloud_node": 1.0}
+
+
+def test_jev_tool_selection_does_not_bypass_receiver_authority():
+    now, authority, receiver = setup_reference()
+    decision = select_tool_with_jev(
+        JevStub("provision_cloud_node"),
+        {"request": "provision three staging nodes"},
+        {"provision_cloud_node": "Provision a bounded cloud node."},
+    )
+    assert decision.tool_name == "provision_cloud_node"
+    request = OperationRequest("jev-proposal", "us-central1", "n2-standard-4", 3)
+    result = receiver.execute(request, present(authority, receiver, request, now), now=now)
+    assert result["decision"] == "deny"
+    assert result["tool_invocations"] == 0
 
 
 def test_valid_authority_invokes_tool_once():
@@ -90,6 +135,48 @@ def test_revoked_authority_denies_before_tool():
     request = OperationRequest("revoked", "us-central1", "n2-standard-4", 1)
     result = receiver.execute(request, present(authority, receiver, request, now), now=now)
     assert result["status"] == "revoked"
+    assert result["tool_invocations"] == 0
+
+
+def test_revocation_between_preflight_and_execution_denies_at_receiver():
+    now, authority, receiver = setup_reference()
+    request = OperationRequest("revoked-after-preflight", "us-central1", "n2-standard-4", 1)
+    assert local_preflight(authority, request, now=now) is True
+    bundle = present(authority, receiver, request, now)
+
+    # Control: the same authority is usable before revocation.
+    control_now, control_authority, control_receiver = setup_reference()
+    control_request = OperationRequest("revocation-control", "us-central1", "n2-standard-4", 1)
+    assert local_preflight(control_authority, control_request, now=control_now) is True
+    control = control_receiver.execute(
+        control_request, present(control_authority, control_receiver, control_request, control_now),
+        now=control_now,
+    )
+    assert control["decision"] == "allow"
+    assert control["tool_invocations"] == 1
+
+    receiver.revocation.revoke(authority.delegations[0].cert_id)
+    result = receiver.execute(request, bundle, now=now)
+
+    assert result["status"] == "revoked"
+    assert result["tool_invocations"] == 0
+
+
+def test_expiry_between_preflight_and_execution_denies_at_receiver():
+    now = int(time.time())
+    authority = issue_authority(now=now - 1, expires_at=now + 10)
+    receiver = InfrastructureReceiver(
+        trusted_root_id=authority.root_id,
+        trusted_root_public_key=authority.root_public_key,
+    )
+    request = OperationRequest("expired-after-preflight", "us-central1", "n2-standard-4", 1)
+    assert local_preflight(authority, request, now=now) is True
+    bundle = present(authority, receiver, request, now)
+
+    # The receiver evaluates the same proof after its signed expiry time.
+    result = receiver.execute(request, bundle, now=now + 11)
+
+    assert result["status"] == "expired"
     assert result["tool_invocations"] == 0
 
 

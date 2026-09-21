@@ -40,6 +40,32 @@ flowchart LR
     E -->|"excess count, wrong region, expired,<br/>revoked, replayed, or untrusted"| G["DENY<br/>handler untouched"]
 ```
 
+## Optional Jev decision adapter
+
+The reference includes an optional adapter for [Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev),
+TypeSafe's typed-decision model. The adapter sends the agent state and available
+tool descriptions to the documented TypeSafe API and receives a selected tool,
+probabilities, and confidence. LangChain can then expose the selected tool to
+the agent loop.
+
+Jev only proposes the tool. It does not create, carry, or verify Ratify
+authority. The MCP interceptor still attaches the proof, and the receiver still
+runs the Ratify verifier before the protected handler can execute.
+
+The offline gate uses a deterministic Jev stub, so it needs no hosted-model API
+key. To use the real adapter, install no additional package, set
+`TYPESAFE_API_KEY`, and call `JevClient` from
+`authority_reference/jev_adapter.py`. The adapter uses
+`https://api.typesafe.ai/v1/systemone` and the `jev-latest` model by default.
+
+Coding agents are a natural application of this boundary. Jev can propose a
+bounded tool such as a repository search, patch, or allowlisted test command;
+local application policy can request approval; and the receiver can verify
+authority before a mutation runs. This reference demonstrates bounded tool
+selection and receiver verification. It does not claim arbitrary shell access,
+filesystem mutation, deployment control, dynamic context selection, or
+security-aware model routing.
+
 ## Who implements what
 
 Four roles. **LangChain implements nothing**: the reference uses the public
@@ -96,7 +122,7 @@ Run the published-package gate from the repository root:
 The gate creates a clean environment and uses the real `create_agent` LangGraph loop with a deterministic model
 double, the public `MultiServerMCPClient` tool-interceptor API, and an
 independently started Streamable HTTP MCP receiver. It needs no model API key or
-paid service. It requires exactly 24 passing tests and fails on a skipped,
+paid service. It requires exactly 28 passing tests and fails on a skipped,
 xfail, missing, or additional test. See
 [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
@@ -105,9 +131,12 @@ xfail, missing, or additional test. See
 The model sees only `request_id`, `region`, `instance_type`, and `count`. After
 tool selection, a LangChain MCP interceptor obtains an operation-bound challenge,
 signs it outside model context, and adds the proof as a per-call HTTP header.
-The receiver pins the accepted root and expected agent out of band, reconstructs
-the operation, consumes the challenge, verifies the delegation, and invokes the
-protected handler only after ALLOW.
+The agent-side example can apply a local preflight to the visible delegation
+bounds, but that check has no receiver-owned revocation view and does not
+consume the challenge. The receiver pins the accepted root and expected agent
+out of band, reconstructs the operation, consumes the challenge, verifies the
+delegation at execution time, and invokes the protected handler only after
+ALLOW.
 
 LangChain and LangGraph orchestrate the agent. LangSmith authentication and
 authorization protect Agent Server resources and can supply user-scoped
@@ -122,6 +151,7 @@ the final execution decision.
 | Valid two-hop delegation, one node, allowed region | Receiver invokes the protected handler once |
 | Excess count or wrong region | Signed constraint denies before execution |
 | Expired or revoked delegation | Denied before execution |
+| Authority revoked or expired between local preflight and execution | Receiver rechecks current authority and denies before execution |
 | Replayed proof or changed operation | Denied; prior execution count is unchanged |
 | Wrong presenting agent or untrusted root | Denied despite a cryptographically valid hostile proof |
 | Malformed proof or invalid business input | Denied without consuming honest work or reaching the tool |
@@ -164,11 +194,12 @@ Both verify the same proofs. The protocol does not change between them.
 | Path | Purpose |
 | --- | --- |
 | `authority_reference/langchain_agent.py` | The agent and the MCP tool interceptor that carries the proof |
+| `authority_reference/jev_adapter.py` | Optional Jev tool-selection adapter; proposal only |
 | `authority_reference/mcp_server.py` | HTTP boundary: transport credential, header bounds, duplicate rejection |
 | `authority_reference/receiver.py` | Verification and the protected handler boundary |
 | `authority_reference/authority.py` | Reference identities and the bounded delegation |
 | `authority_reference/deployment_config.py` | Trust roots and expected agent, pinned out of band |
-| `tests/test_reference.py` | The 24 deterministic boundary cases |
+| `tests/test_reference.py` | The 28 deterministic boundary and Jev-separation cases |
 | `evidence/reference-evidence.md` | Executed evidence for the gate |
 | `DESIGN.md` | Architecture and threat-boundary rationale |
 

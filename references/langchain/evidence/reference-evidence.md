@@ -2,9 +2,9 @@
 
 **Evidence date:** 2026-09-20
 
-**Branch:** `feat/langchain-reference`
+**Branch:** `feat/jev-ratify-timing-reference`
 
-**Base commit:** `380d4dddd658a879347a642b93092721da5d6c8b`
+**Base commit:** `762c95a`
 
 **Requirements SHA-256:** `0387f1ff4d240616e34b178ef0a7a116e775f7fb7c955685857f0dd064da078e`
 

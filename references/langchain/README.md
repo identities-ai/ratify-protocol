@@ -189,7 +189,6 @@ Both verify the same proofs. The protocol does not change between them.
 | `authority_reference/mcp_server.py` | HTTP boundary: transport credential, header bounds, duplicate rejection |
 | `authority_reference/receiver.py` | Verification and the protected handler boundary |
 | `authority_reference/authority.py` | Reference identities and the bounded delegation |
-| `authority_reference/langchain_agent.py` | MCP interceptor and the explicitly non-authoritative local preflight |
 | `authority_reference/deployment_config.py` | Trust roots and expected agent, pinned out of band |
 | `tests/test_reference.py` | The 28 deterministic boundary and Jev-separation cases |
 | `evidence/reference-evidence.md` | Executed evidence for the gate |

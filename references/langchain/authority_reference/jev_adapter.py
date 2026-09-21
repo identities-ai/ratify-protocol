@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -24,12 +25,13 @@ class JevToolDecision:
 class JevClient:
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         *,
         endpoint: str = "https://api.typesafe.ai/v1/systemone",
         model: str = "jev-latest",
         timeout: float = 30.0,
     ) -> None:
+        api_key = api_key or os.environ.get("TYPESAFE_API_KEY", "")
         if not api_key:
             raise ValueError("typesafe_api_key_required")
         self.api_key = api_key

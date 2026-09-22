@@ -1,0 +1,424 @@
+Agent Relay × Ratify Phase 2 Technical Note: Verifiable Authority Across a Company Boundary · Ratify Protocol
+Skip to content Ratify Protocol ™ Protocol Docs Labs Security Writing Try it Break the proof ☰ Protocol Docs Labs Security Writing GitHub
+Writing
+Agent Relay × Ratify Phase 2 Technical Note: Verifiable Authority Across a Company Boundary
+Ratify Protocol · August 25, 2026 · 23 min read
+agent-relay
+delegation
+case-study
+verifiable-authority
+Share LinkedIn X Email Agent Relay and Ratify Protocol completed the Phase 2
+cross-deployment engagement across two sessions, on August 18 and 19, 2026. One company's
+digital workers did real work in another company's repository under narrowly granted
+authority that was narrowed again when it was passed on. The client revoked that authority
+while the work was still in progress.
+There were two sessions because the first left three things uncaptured, and we would
+rather say that here than have a reader find two merged pull requests in the repository and
+work it out themselves. §5 covers what was missed and how.
+Agent Relay has written its own account of the same engagement, from the side that had the
+authority taken away from it:
+Someone else's agent in your repo .
+This note is the record underneath it.
+The Phase 1 technical note
+recorded what a local integration spike found and named the boundary it left open:
+federation between independent Relay deployments, including rejection of the same local
+resource identifier under a different deployment authority. This note records what happened
+when we ran that across two deployments we operate separately, what passed, what we measured,
+what we got wrong, and what remains unproven.
+I want to be direct about the last two. Three things everyone involved believed were working
+turned out not to be, and we found all three before the recording rather than during it. That
+part of the record matters as much to me as the part that passed.
+1. The question this engagement answers
+Why would one company let another company's digital worker touch anything that matters?
+The hard question is not how the worker gets access. Access is easy, and that is the reason
+the question is hard. An API key says nothing about who authorized the work, what they
+authorized, or whether that authorization still stands. When the worker belongs to someone else, runs on
+infrastructure you do not operate, and coordinates through middleware you cannot inspect,
+"trust our logs" is not an answer. The coordination layer is a party to the transaction. It
+cannot also be the referee.
+An answer has to be something either side can check for itself afterwards, without calling
+the other company and without trusting the pipe the work traveled through. It requires
+authority bounded to the thing being worked on and an expiration time. The authority must
+also support withdrawal while work is in flight and leave a trail a skeptic can verify
+offline.
+2. What was built
+Two deployments, operated separately.
+Client Contractor
+Hostname relay.ratifyprotocol.com ratify.agentrelay.com
+Runs on a GCE VM Ratify operates Cloudflare Containers Agent Relay operates
+Software Agent Relay's engine and adapter Agent Relay's engine and adapter
+Both deployments run the contractor's software. The independence comes from separate
+operators, hosts, keys, state, and credentials, not from different code. This is the harder
+case and the honest one. If the proof holds while both sides run the same binary, it holds
+because of what the proof carries rather than because the implementations differ.
+The work happened in /docs of
+identities-ai/ratify-agent-relay-engagement ,
+a public repository built for the engagement. Nothing production-critical sat in the blast
+radius, but its history was public and its CI was real. The engagement ended with a real
+pull request.
+Between the two deployments, the only things that crossed were Agent Relay's A2A messages and
+Ratify delegated-authority proofs. The two sides shared neither a workspace nor a filesystem,
+and they shared no code or logs. GitHub is the third party in the arrangement and carried the
+fork, the commits and the pull request, which is ordinary and is why the repository is public.
+3. What passed
+3.1 Authority was granted narrowly
+The client issued a delegation to the contractor's lead agent. Not "this worker may write
+files" but "this worker may write files under /docs of this repository, until this time,
+unless revoked sooner."
+Copy
+cert_id relay-run-1787074501
+issuer 345140967b9b99a16983cdfeb8acc807 client root, held on one laptop
+subject 5a727611736ec8902a419e04fc91d816 Agent Relay's lead agent
+scope files:write, identity:delegate
+bound to git:github.com/identities-ai/ratify-agent-relay-engagement under /docs
+issued 2026-08-18T17:35:01Z
+expires 2026-08-18T21:35:01Z
+The second scope exists for one purpose. It permits the single narrowing hop described below,
+and nothing else.
+3.2 Authority narrowed when it was passed on
+The lead agent handed the task to the implementation agent across the deployment boundary.
+The child delegation kept files:write and dropped the right to delegate further.
+The contractor, rather than the protocol, chose that narrowing. The lead held
+identity:delegate , so passing it forward unchanged would have been a legal subset and the
+protocol would have accepted it. What the protocol guarantees is that authority can only
+shrink along a chain, never grow. Shrinking it further than required is the contractor
+exercising that guarantee rather than the protocol compelling it.
+Authority also narrowed in duration, which is a property we had not previously demonstrated
+and had not intended to claim. Sub-delegation sets a child's lifetime to the smaller of what
+was requested and what remains on the parent.
+The artifacts contain their own control for this. Three children, each requesting 600 seconds
+through the same code path, one issued against a parent with room and two against a parent
+without.
+Copy
+work-43528b2bab594b4d requested 600s, parent had 1194s left granted in full, 600s
+work-a925b80b3684b8e5 requested 600s, parent had 453s left cut to 453s
+work-f9bb76e93710b6f6 requested 600s, parent had 451s left cut to 451s
+The two short ones expire on relay-run-1787078590 's exact second, not at a shorter default.
+So the mechanism is visibly choosing the parent's remaining window when that is the smaller of
+the two, rather than children simply being issued briefly.
+The clamp binds a child's window at the moment it is issued. It does not retroactively
+shorten a child that has already been issued if the parent is later cut short. That case is
+covered by two other mechanisms: the verifier checks each certificate's own window, and
+revocation propagates, which §4 demonstrates. The distinction matters because the stronger
+version of this claim, that a child can never outlive its parent, is not true as stated.
+Those two children demonstrate the shape of the hop. They were issued after the run under a
+fresh root, and they are not the certificate behind the merged write. That one is gone:
+sub-delegation mints it in process and neither logs nor persists it, and its identifier is
+random hex. Asked for it, Agent Relay said so rather than minting a replacement and
+presenting it as the original.
+3.3 The write was gated on the verifier's answer
+The implementation agent wrote under /docs , committed, and opened a pull request. The work
+itself was deliberately ordinary.
+It became evidence because the write happened downstream of a verdict. Before any bytes
+were written, the agent presented the delegation chain to the deployed verifier for the
+exact path it intended to touch and published nothing until the answer came back accepted.
+It then presented the same chain for a path outside the prefix and required the refusal.
+Copy
+PR identities-ai/ratify-agent-relay-engagement#5
+opened 2026-08-18T17:49:48Z from AgentRelayBot:ratify-run-2026-08-18
+commit b1b43035 author and committer AgentRelayBot
+file docs/handoff-note.md 1307 bytes
+merged 2026-08-18T18:35:10Z main 21dbaa5
+verifier 0c7afc4cb45cc3987cf1003f7957af5d
+requested path docs/handoff-note.md -> authorized_agent, granted [files:write]
+control path handoff-note.md -> constraint_denied, outside the prefix "/docs"
+The control is the part that matters. The same certificate authorizes the write inside
+/docs and is refused outside it, which is what makes the acceptance a decision rather than
+a default. An acceptance from a verifier that accepts everything provides no evidence, as
+an earlier unresourced presentation in this engagement showed when every test passed.
+A receipt carries no identifier. It is named by its own hash, prev_hash chains it to the
+receipt before it, and the deployment's decision binds to it by receipt_hash . The claim
+being made is about the wire format, which is why it demonstrates cleanly once a pair is
+captured.
+One field in those decisions reads oddly, and it is better explained here than discovered in
+the evidence. The decisions paired with revoked receipts carry served: true , while the
+refused federation grant carries served: false with unserved_authority . The field does not
+mean that the deployment would have served a revoked certificate. It initialises true and
+is cleared only by the deployment's own authority check, which runs only when core
+verification has passed. A revoked certificate fails core verification, so that check never
+runs and the field is never cleared. It records that no policy refusal happened, not that the
+work was served. Revocation is a protocol refusal, and served only ever describes a policy
+one.
+Copy
+receipt hash OOnGiGy8HkmT+L5Pyvg8T7R/zqU0Y5rQpsvImFRx0bo=
+receipt says authorized_agent
+deployment served=true, authority=ratify.agentrelay.com
+That hash belongs to the second session's write, the one merged as PR #7. The pair bound to
+the first session's write was emitted and not persisted by either side, so it is gone.
+Receipts and their decisions now persist on every call and the hash travels in the pull
+request body, so the per-commit record exists going forward rather than only for a run.
+3.4 Authority was refused where it did not apply
+A Relay coordination channel is a resource whose identity is anchored to its deployment, in
+the form relay:v1:<host>:channel:<id> . The host fixes which deployment's namespace the
+resource belongs to rather than serving as decoration.
+The refused grant is cryptographically valid, with nothing wrong in its signature chain.
+What fails is deployment policy, and the distinction matters: a verifier serves only one
+deployment authority and refuses resources belonging to any other, with the policy reason
+unserved_authority . Authority to act and resource namespace are two separate facts, and
+they are checked separately. A verifier that treated them as one could be talked into serving
+another deployment's resources by a perfectly signed proof.
+Both halves ran in the second session, against the deployed adapter under the client root,
+over a real channel on the contractor's workspace rather than a fixture. They had run the day
+before under an ephemeral root the contractor minted, which proved the wiring and the policy
+but said nothing about whether the client's trust root was honoured.
+Copy
+served relay:v1:ratify.agentrelay.com:channel:213287751714545664
+core authorized_agent, deployment served true
+receipt gwDnZE8NcTSsJz2PSKSwDVZuqBa8HPJ7UbX8keJWdeo=
+unserved relay:v1:relay.ratifyprotocol.com:channel:213287751714545664
+refused unserved_authority, served false
+receipt still reads authorized_agent
+receipt 0rYU5tBGF51ZIRZbKwxZ8s2vzQ+6OUGqWxMexC/rzME=
+Policy refused while the protocol did not. The receipt is signed over the untouched core
+result, so it records what Ratify concluded. The
+separately signed deployment decision is what records the refusal to serve. Had the refusal
+also broken the chain result, unserved_authority would be indistinguishable from a bad
+delegation, and a deployment could hide its own policy behind the protocol.
+Neither certificate carried a path prefix. Ratify treats an undefined path_prefix as
+authorizing the whole named resource, and the empty string is not a valid encoding: it is
+rejected on the wire, where the failure reads as a malformed certificate rather than as a
+namespace grant. The client tooling was emitting an empty string and was corrected before the
+session. A path constraint on a channel resource would also have put a second thing under
+test at the same time, and this beat is about the namespace.
+What made the beat runnable at all was a defect found while building the driver for it. All
+four verifier call sites in the adapter passed the git repository constant unconditionally, so
+a Relay identifier could never reach the serve-authority policy. The verifier could always
+evaluate one, and nothing could ever hand it one. No test could show that, because every test
+drove a git resource.
+4. The kill switch, and what it measured
+Your browser cannot play this video. Download it instead . The client revokes at 18:02:09.706Z. The contractor's deployment applies it 1.417s later, the next handoff returns revoked, and an unrelated certificate still answers. Silent by design: the contractor captured no audio track. Timestamps are printed by each terminal, not added in the edit.
+Mid-task, the client revoked the upstream delegation. The next handoff returned revoked
+and the action did not happen. The contractor's middleware did not get a vote, and neither
+did the contractor.
+This ran in both sessions. The times below are the second, which is the one both sides
+recorded.
+Time (UTC) Event Recorded by
+18:02:09.706 Revocation sent, HTTP 201 client tooling
+18:02:11.123 Applied, applied_count 1 contractor adapter metadata
+18:03:01.702 Revoked certificate, same path refused
+18:03:09.431 Control certificate authorized_agent
+18:04:27.027 Revoked certificate again refused
+18:05:44.799 Agent run again, nothing created verified by absence, both sides
+Send to applied was 1.417 seconds. We publish that as a bound and not as a measurement. The
+contractor's drain poll runs every three seconds, and two samples taken at opposite ends of
+the same poll interval do not support a latency figure. A number that has to be walked back
+after publication is worse than a weaker claim made accurately the first time. The equivalent
+in the first session was 2.145 seconds.
+A second figure exists and we are not publishing it. From the spoken mark to the applied
+stamp was 11.1 seconds, but that interval contains the client talking before pressing the
+key. It is a round trip with a human in it, not a propagation time.
+The most useful evidence in the run was not planned. The same certificate, on the same path,
+through the same command, answered authorized_agent at 18:00:08 and revoked at 18:03:05,
+with nothing between the two but the revocation.
+Copy
+18:00:08 relay-run-1787160460, docs/federation-note-2026-08-19.md authorized_agent
+18:02:11 revocation applied
+18:03:05 relay-run-1787160460, docs/federation-note-2026-08-19.md revoked
+The certificate, path, command, and deployment remained unchanged. Those three lines contain
+the whole claim of this engagement, and they exist because the
+contractor took a baseline presentation before the mark rather than only after it.
+Further details rule out other readings of the evidence. The refused certificate carried
+12835 seconds of remaining validity at its last successful presentation, so the refusal
+cannot be read as expiry. A second, unrelated certificate answered authorized_agent
+between two refusals of the revoked one. This rules out both a verifier that went dark and a
+transient fault on either side of the successful control. When the agent ran again afterwards,
+it stopped before creating a branch on the contractor's fork or opening a pull request, and
+there was no commit. Either party can check that absence, so the fail-closed result does not
+depend on a refusal message reported by one party.
+The crossing rests on two stamps: the client's send at
+18:02:09.706Z, written by the client's own tooling, and the contractor's applied at
+18:02:11.123Z, read from the contractor's adapter metadata. The stamps come from two systems,
+and neither party holds both ends.
+One limitation in that metadata, found by Agent Relay, needs stating before anyone relies on
+it. The deployment publishes each verdict to its own agent metadata, which is what lets a
+reader check a receipt against what the deployment actually decided. It does not fire on the
+revoked path. The handler returns before the publish step when an inbound presentation is
+invalid, so accepts and policy refusals are recorded there and the revocation verdict is not.
+The signed receipts carry that verdict instead and verify against the verifier key.
+The consequence is sharper than a missing record. Agent Relay checked that metadata after the
+run, saw the control certificate's verdict as the newest entry, concluded the revoked
+presentation had not run, and told us the order wrong. It had run and left no trace. The
+correction came from terminal output. A gap that misleads the operator holding full access is
+a different class of problem from one that inconveniences a reader.
+The client's recording carries an audio track and the contractor's does not. That track
+corroborates the spoken mark, but it is not a third stamp. A transient in it matches the send
+time to a tenth of a second and was briefly read as the keystroke. Listening to the file
+rather than measuring it shows that the room noise is captured but the keystrokes are not.
+Two entries in the logs look alarming and are not, named here so no reader has to wonder. The
+contractor's trust set shows a third issuer marked chain , which is an ephemeral stand-in
+root left by that morning's smoke run, held in memory and discarded on the next deployment.
+The client's own log repeats a deferred-delivery warning every thirty seconds from 18:22:03,
+which is the client's local inbox failing to drain rather than the message to the contractor,
+which plainly arrived, since it was applied 1.4 seconds later.
+5. What we got wrong
+Three things everyone believed were working turned out not to be. All three were found by
+exercising the running process rather than by asking an artifact, and all three were found
+before publication rather than by a reader.
+They are also why there were two sessions. The first ran the delegation, the narrowing, the
+gated write and the kill switch, and merged real work into /docs . What it did not do was
+fire the federation beat, keep the receipt and its decision, or record any of it on the
+contractor's side. The second session existed to close those three, and it did.
+The kill switch answered every health check while holding no key. The unauthenticated
+health endpoint returned {"ok":true} throughout, because it asked the artifact rather than
+the process. The dummy revocation that exposed it was fired at a certificate identifier that
+did not exist, deliberately, so that failure would cost nothing.
+The publisher was never wired to the protocol. Agent Relay's publishing path imported
+nothing from Ratify and asked no verifier anything, so it would have committed identically
+whether the delegation authorized the write, refused it, or had been revoked thirty seconds
+earlier. What had been proven was that a GitHub account could fork a repository and open a
+pull request, which is a fact about GitHub rather than a fact about Ratify. Their account of
+how it was missed is the useful part: the gap had been recorded as two separate absences, no
+presentation driver and no commit path, and each was closed on its own terms. Nothing was
+written down about the seam between them, so closing both looked like closing the gap.
+A workflow gate would have held the pull request unapproved, on camera. GitHub holds
+fork-pull-request workflows from first-time contributors until a maintainer approves them.
+The rehearsal pull request came back reporting no checks and no error, which is what that
+condition looks like from the outside. Merging that rehearsal rather than closing it is what
+cleared the hold, because a merged pull request makes the account a returning contributor.
+I am including these because a launch story that reported only the passing half would have
+been the wrong kind of evidence for a protocol whose entire proposition is that you should
+not have to take anyone's word for anything.
+6. Where enforcement actually happens
+The architecture needs the same honesty as the proof, so here is the split.
+Ratify supplies the portable delegated-authority proof: who delegated what, to whom, bounded
+how, and whether it still stands, verifiable by either side offline. The execution
+environment supplies the enforcement. Revocation propagated through an Agent Relay handoff,
+narrowing happened across an Agent Relay hop, and the consequential filesystem write was
+mediated at Agent Relay's boundary before anything became observable.
+Agent Relay states that the boundary is OS-enforced, and this engagement did not test that
+claim. The two adversarial cases that would have tested it, path traversal outside the bound
+and two-principal isolation, are the two that skip. What the run does evidence is that the
+write was gated on a verdict and refused outside the prefix. The isolation model underneath
+is theirs to describe and ours to take on their word. I separate that from everything else
+here that you do not have to.
+A proof layer cannot enforce filesystem boundaries from inside a signature. The receiving
+system enforces the real boundary under its stated isolation model. The
+proof makes the authorization behind each action checkable by anyone, afterwards, without
+requiring anyone's word.
+7. What a skeptic can check
+Every runnable claim verifies offline, against the published protocol releases, with no call
+to either company. TypeScript, Go, Python, and Rust verify each proof decision and receipt
+signature. The C lane verifies both but its current FFI does not expose the two
+receipt-binding accessors.
+One command replays the engagement:
+Copy
+git clone https://github.com/identities-ai/ratify-agent-relay-harness
+cd ratify-agent-relay-harness && npm ci && npm run engagement
+It exits non-zero if any published claim fails to re-verify. A clean run prints
+engagement: 8/8 verified, 6/6 refused .
+The harness contains one of two kinds of evidence. It holds a synthetic model
+with fixture identifiers, built so someone with neither deployment can run the whole thing on
+a laptop. It answers whether the mechanism behaves as described. It is not, and does not claim
+to be, the certificates issued on 18 and 19 August. The model produces a signed head
+checkpoint and the live sessions did not. A reader should not carry that artifact across.
+The live run's certificates, receipts, deployment decisions and logs from both sides publish
+separately, and those are what to check if the question is what happened on those days rather
+than how the mechanism behaves.
+The client's half is in the same repository, under evidence-live-2026-08/client/ : every
+delegation certificate issued across both sessions, both signed revocations and their
+envelopes, and the client deployment's logs across the run window.
+Agent Relay publishes theirs separately at
+AgentWorkforce/ratify-agent-relay-evidence ,
+in the same layout with contractor/ where ours has client/ : both run records, every
+certificate, the receipts with their paired deployment decisions, and the deployed image
+exported as a release asset. Checking the crossing needs both halves. Either one alone
+evidences only what its own side did.
+The adversarial annex ships as runnable failing tests, and each case carries a negative
+control proving the refusal comes from the protection under test rather than from an accident
+of setup.
+Two kinds of evidence sit in that annex, and the difference matters. Six
+adversarial cases ran against the deployed adapter after the revocation. Eighteen
+serve-authority cases run in process against a locally generated verifier: they demonstrate
+the wire format and the refusal logic, and they have never touched either deployment or the
+client root. Both contribute evidence, but only one is a statement about the systems
+described in this note.
+The receipt-and-decision pairing is exercised six ways. Stripping the signed decision
+refuses. A served decision lifted onto a refused receipt is rejected. Flipping served=true
+without re-signing is rejected. A decision re-signed under an attacker key is rejected. An
+invalid-chain receipt is refused despite served=true . An unknown decision version is
+rejected. A seventh case keeps the reasons separate, so a broken signature reads as an
+invalid chain rather than as unserved authority.
+Two cases are runtime-gated and skip loudly rather than pass silently: path traversal outside
+the bound, and two-principal isolation. Both need two OS principals with distinct uids inside
+Agent Relay's confinement boundary, and a way to run a hostile one against a victim tree. The
+deployed adapter runs as a single unprivileged uid, which is the right posture for serving
+traffic and the wrong shape for that experiment. Standing those principals up needs root on
+the host rather than a container, so they stay skipped and the annex reads six refusals
+rather than eight.
+We could have run something adjacent and called it close enough. Saying what is
+gated, and why, is part of why the rest is credible.
+8. What this does not show
+This is evidence that portable, bounded, revocable, offline-verifiable authority works across
+a real organizational boundary and a real agent-runtime boundary, on real work.
+This does not establish production hardening or commercial adoption, and it is not a
+performance benchmark. Both deployments run the same software, so it does not demonstrate
+interoperability between independent implementations. The receipt and decision pair bound to
+the merged write was not retained, and the narrowing certificates shown above are a
+demonstration issued afterwards rather than the ones behind that write.
+9. What comes next
+The Phase 1 note said the next phase would make the "where" cryptographically portable. It
+now is, across two deployments operated by two companies, and a certificate naming a resource
+under a deployment authority the verifier does not serve is refused while the delegation
+itself stays valid.
+Two things stay out of scope, and both were out of scope before the run rather than left
+undone by it.
+The first is independent implementations verifying each other's proofs. Both deployments run
+Agent Relay's software, so this engagement shows that the proof carries what it claims to
+carry, not that two separately written verifiers agree. Ratify publishes five SDKs and a
+conformance suite for that question, and answering it across a live boundary needs a
+second party running something other than Agent Relay's adapter.
+The second is the two confinement cases the annex skips: path traversal outside the bound,
+and two-principal isolation. They need two OS principals with distinct uids inside the
+confinement boundary and a way to run a hostile one against a victim tree. The deployed
+adapter runs as a single unprivileged uid, which is the correct posture for serving traffic,
+so those cases need root on a host rather than a container.
+Neither is scheduled. Both are named here so that a reader counting what was demonstrated
+against what was claimed finds the same number we do.
+10. If you operate a boundary like this one
+The gap in §9 is an invitation rather than a complaint, so let me put it plainly.
+What this engagement could not demonstrate is a verifier that Agent Relay did not write,
+checking proofs that Agent Relay's adapter produced, across a live boundary. Ratify publishes
+five SDKs and a conformance suite precisely so that a second party can be that verifier. What
+it cannot do is supply the second party.
+If you run a platform where authority crosses a system or an organizational boundary, that is
+the conversation I want to have. The reason to have it is a real boundary with real
+consequences on the far side of it, one we can pressure-test the way this one was
+pressure-tested. Every claim in this note came out of doing that with one partner over
+five weeks, and three of the most useful findings came from things both sides expected to work
+and which did not.
+Write to partners@ratifyprotocol.com and describe the
+boundary. If you would rather pick a shape than describe one, there is a form at
+ratifyprotocol.com/#partners covering a bounded
+technical reference, a platform integration, a design-partner deployment, and a security
+review. Neither is required, and the boundary matters more than the shape. The Phase 1 spike
+began as a question about whether delegated authority could survive a handoff at all.
+Ratify Protocol™
+Portable authorization for AI agents
+Signed delegation proofs that let receiving systems verify an agent’s authority before executing the action.
+Protocol
+Specification
+Developer docs
+SDK quickstart
+Verify quickstart
+GitHub
+Benchmarks
+Explore
+Writing
+Labs & demos
+AI agent authorization
+A2A delegation
+Break the proof
+Security & limits
+Protocol evidence
+Company
+About
+Design partners
+Contact
+LinkedIn
+X
+Legal
+Privacy
+Terms
+Ratify Protocol™ and the Ratify logo are trademarks of Identities.AI, Inc. U.S. patent application pending.
+© 2026 Identities.AI, Inc. All rights reserved.
+Ratify Protocol is open-source alpha software. Verification depends on correctly configured trust anchors, context, and revocation policy.

@@ -524,7 +524,7 @@ Link any badge to `https://ratifyprotocol.com`. Full guidelines: [`docs/ATTRIBUT
 - **Trademarks:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc. The trademark and patent rights are not licensed under the open-source licenses governing the code or specification.
 - **Patent:** U.S. patent application pending.
 
-Maintained by **Identities AI, Inc.** See [`CONTRIBUTING.md`](CONTRIBUTING.md) for participation, the governance plan, and the DCO sign-off requirement.
+Maintained by **Identities AI, Inc.** See [`CONTRIBUTING.md`](CONTRIBUTING.md) for participation, the governance plan, and the DCO sign-off requirement. Questions and bug reports are welcome as GitHub issues.
 
 ---
 

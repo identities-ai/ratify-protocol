@@ -4,7 +4,7 @@
 
 classifier.dev is a keyless, zero-shot text classifier that returns labels and calibrated confidence over plain HTTP. This reference shows what happens after that semantic result becomes a consequential CRM call: classifier.dev proposes the operation, while an independent Ratify receiver verifies the delegated authority before the protected handler runs.
 
-This is an independent Ratify Protocol reference. It is not a classifier.dev partnership, endorsement, or official architecture. Start with the [source and executable gate](https://github.com/identities-ai/ratify-classifier-reference) or the [Ratify Verify path](https://ratifyprotocol.com/#partners).
+This is an independent Ratify Protocol reference. It is not a classifier.dev partnership, endorsement, or official architecture. Start with the [source and executable gate](https://github.com/identities-ai/ratify-classifier-reference) or the [Ratify Verify path](https://ratifyprotocol.com/?intent=proof#partners).
 
 ## Why would a developer or enterprise need this?
 

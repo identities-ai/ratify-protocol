@@ -105,7 +105,8 @@ path, run it without a Google Cloud account or a model key, and adapt the
 receiver to your own service. It is Apache-2.0 with no runtime dependency on a
 hosted Ratify service.
 
-**Register interest in Ratify Verify** when you would rather not operate trust
+[Register interest in Ratify Verify](https://ratifyprotocol.com/?intent=proof#partners)
+when you would rather not operate trust
 distribution, revocation freshness, challenge storage, and audit retention
 yourself. Those are the deployment concerns under "Reference scope and
 production requirements" below, and they are what turns a working reference

@@ -113,7 +113,8 @@ See [the evidence record](../../docs/evidence/nvidia-reference-evidence.json).
 **Use this open reference** to read every line of the decision path and run it
 with no account. Apache-2.0, no runtime dependency on a hosted Ratify service.
 
-**Register interest in Ratify Verify** if you would rather not operate trust
+[Register interest in Ratify Verify](https://ratifyprotocol.com/?intent=proof#partners)
+if you would rather not operate trust
 distribution, revocation freshness, challenge storage, and audit retention.
 Both verify the same proofs.
 

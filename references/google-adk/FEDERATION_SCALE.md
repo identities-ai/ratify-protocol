@@ -165,9 +165,8 @@ tiers. On the recorded 10-core Apple Silicon host with eight workers, the
 constraint denials, and 900,000 protected actions at 369.693 calls per second.
 The dual-root encoded proof was 56,244 bytes. These are single-host Python
 measurements, not Google capacity claims; extrapolation to a Google deployment
-remains labeled as extrapolation. The aggregate 369.693 calls per second is
-approximately 154 receiver decisions per second per logical core on this host;
-the aggregate ceiling is a property of this single-process Python reference.
+remains labeled as extrapolation. The 369.693 calls per second is an aggregate
+measurement of this single-process Python reference, not a per-core rate.
 
 The benchmark includes challenge issuance, leaf signing, full hybrid-chain
 verification, constraints, revocation lookup, challenge consumption, and the

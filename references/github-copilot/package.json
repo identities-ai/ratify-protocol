@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@identities-ai/ratify-protocol": "1.0.0-alpha.19",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "zod": "3.25.76"
   },
   "devDependencies": {

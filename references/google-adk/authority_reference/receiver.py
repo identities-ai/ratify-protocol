@@ -75,6 +75,7 @@ class ChallengeGrant:
     challenge: bytes
     session_context: bytes
     expires_at: int
+    session_inputs: SessionContextInputs
 
 
 @dataclass(frozen=True)
@@ -326,16 +327,15 @@ class InfrastructureReceiver:
             resource_id=region_resource(request.region, self.workspace_id),
             payload_digest=hashlib.sha256(payload).digest(),
         )
-        session_context = build_session_context(
-            SessionContextInputs(
-                verifier_id=self.verifier_id,
-                workspace_id=self.workspace_id,
-                agent_id=expected_agent_id,
-                session_id=self.session_id,
-                invocation_id=secrets.token_urlsafe(16),
-                request_hash=operation_context_hash(operation),
-            )
+        session_inputs = SessionContextInputs(
+            verifier_id=self.verifier_id,
+            workspace_id=self.workspace_id,
+            agent_id=expected_agent_id,
+            session_id=self.session_id,
+            invocation_id=secrets.token_urlsafe(16),
+            request_hash=operation_context_hash(operation),
         )
+        session_context = build_session_context(session_inputs)
         with self._state_lock:
             if request.request_id in self._pending:
                 raise ValueError("request_id already has a pending operation")
@@ -350,7 +350,7 @@ class InfrastructureReceiver:
             self._pending[request.request_id] = _PendingOperation(
                 request, challenge, session_context, expected_agent_id, expires_at
             )
-        return ChallengeGrant(challenge, session_context, expires_at)
+        return ChallengeGrant(challenge, session_context, expires_at, session_inputs)
 
     def execute(
         self,

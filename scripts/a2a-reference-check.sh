@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase"))
 skipped = sum(case.find("skipped") is not None for case in cases)
 failed = sum(case.find("failure") is not None or case.find("error") is not None for case in cases)
-if len(cases) != 2 or skipped or failed:
-    raise SystemExit(f"FAIL: expected 2 passed, zero skipped/failed; got total={len(cases)} skipped={skipped} failed={failed}")
-print("gate: 2/2 passed; zero skipped, xfailed, failed, or errored")
+if len(cases) != 4 or skipped or failed:
+    raise SystemExit(f"FAIL: expected 4 passed, zero skipped/failed; got total={len(cases)} skipped={skipped} failed={failed}")
+print("gate: 4/4 passed; zero skipped, xfailed, failed, or errored")
 PY

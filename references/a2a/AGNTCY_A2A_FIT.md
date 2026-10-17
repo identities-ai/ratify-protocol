@@ -4,10 +4,13 @@ This is a discussion note for A2A and AGNTCY maintainers, not a proposed standar
 
 AGNTCY's [A2A and task-based access-control analysis](https://blogs.agntcy.org/technical/identity/2026/08/25/agent-identity-tbac-a2a-task-authorization.html) describes more than agent identification. Its existing TBAC rules decide which named tools an Agentic Service may call, with allow, deny, and approval outcomes re-evaluated at invocation. The article also describes a task authorization profile under development: an authorization object bound to the agent, A2A task ID, action, resource, delegation limits, proof of possession, and lifetime. **That proposed profile substantially overlaps Ratify's delegated-authority model.** The formats and enforcement boundaries need comparison before proposing another A2A extension.
 
+AGNTCY also has a [runnable cross-domain ID-JAG and VC demo](https://github.com/agntcy/agent-identity-demos/tree/main/cross-domain-id-jag-vc) with scoped token exchange and narrowed delegation across organizations. That demo is further along than a simple identity check; it is distinct from the proposed A2A task authorization profile.
+
 | Work | Current status | Relationship to this draft |
 | --- | --- | --- |
 | AGNTCY Identity | Released identifiers, ResolverMetadata, and Agent Badges establish agent provenance. | The draft pins an expected agent ID; it does not verify an AGNTCY identity or badge. |
 | AGNTCY TBAC | Existing per-tool policy can allow, deny, or require approval and re-evaluates at invocation. | The draft uses its receiver's local policy and signed one-node limit; it does not call TBAC. |
+| AGNTCY cross-domain demo | Runnable ID-JAG assertions, VC badges, token exchange, and narrowed privileges across two organizations. | Compare its issuer and resource-server checks with the Ratify receiver's pinned-root and exact-operation proof. No demo components run here. |
 | AGNTCY task authorization profile | In development, including task binding, delegated constraints, and proof of possession. | This is the closest overlap. Ratify's draft verifies an exact action and signed limit, but does not bind an A2A `taskId` or implement approval propagation. |
 | A2A | Defines task states and the extension carrier; authorization scope remains implementation-specific. | The draft advertises a provisional URI, carries the operation in a `DataPart` and proof in metadata, and returns an immediate response. |
 
@@ -22,4 +25,4 @@ Questions for maintainers:
 
 The current draft has no transport authentication, AGNTCY integration, durable task state, or multi-replica replay store. See [limitations and evidence](README.md#evidence-security-status-and-limitations).
 
-Sources: [AGNTCY A2A and TBAC analysis](https://blogs.agntcy.org/technical/identity/2026/08/25/agent-identity-tbac-a2a-task-authorization.html), [AGNTCY identity introduction](https://spec.identity.agntcy.org/docs/intro/), [A2A extension model](https://a2a-protocol.org/latest/topics/extensions/).
+Sources: [AGNTCY A2A and TBAC analysis](https://blogs.agntcy.org/technical/identity/2026/08/25/agent-identity-tbac-a2a-task-authorization.html), [AGNTCY cross-domain demo](https://github.com/agntcy/agent-identity-demos/tree/main/cross-domain-id-jag-vc), [AGNTCY identity introduction](https://spec.identity.agntcy.org/docs/intro/), [A2A extension model](https://a2a-protocol.org/latest/topics/extensions/).

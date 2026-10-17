@@ -144,6 +144,6 @@ Executed locally with `a2a-sdk==1.2.2`, `ratify-protocol==1.0.0a20`, Python 3.11
 - The challenge and pending-operation stores are in-memory in one process. An unauthenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
 - The protected provisioner is in-memory and creates no cloud resource. A real executor must ensure the verified logical resource maps to the actual resource it changes.
 - The A2A tests exercise official server routes over in-process HTTP, not two independently deployed services, TLS, or an A2A SDK client. They do not prove cross-vendor interoperability.
-- The current carrier imports the published ADK scenario's Python package, which brings ADK and MCP dependencies into this draft. An independent reference would extract that shared receiver before publication.
+- The current carrier imports the published ADK scenario's Python package, which brings ADK and MCP dependencies into this draft. A standalone adapter would extract that shared receiver and drop those unrelated dependencies.
 
 Sources: [A2A extensions](https://a2a-protocol.org/latest/topics/extensions/), [A2A authorization scope](https://a2a-protocol.org/latest/specification/), [AGNTCY identity](https://spec.identity.agntcy.org/docs/intro/).

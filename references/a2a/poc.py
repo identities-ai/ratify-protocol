@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import re
 import sys
 from typing import Any
@@ -18,13 +19,16 @@ from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentExtension, AgentInterface, AgentSkill, SendMessageRequest
 from a2a.utils.errors import ExtensionSupportRequiredError
-from ratify_protocol import encode_proof_bundle
+from ratify_protocol import (
+    OperationContext, SessionContextInputs, build_session_context,
+    encode_proof_bundle, operation_context_hash,
+)
 from starlette.applications import Starlette
 
 # Reuse the published reference's authority fixture and receiver. The A2A
 # carrier is experimental; no ADK runtime participates in this flow.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "google-adk"))
-from authority_reference.authority import issue_authority  # noqa: E402
+from authority_reference.authority import INFRA_SCOPE, WORKSPACE_ID, issue_authority, region_resource  # noqa: E402
 from authority_reference.receiver import InfrastructureReceiver, OperationRequest  # noqa: E402
 
 
@@ -72,6 +76,14 @@ class AuthorityExecutor(AgentExecutor):
                     "challenge": grant.challenge.hex(),
                     "session_context": grant.session_context.hex(),
                     "expires_at": grant.expires_at,
+                    "session_inputs": {
+                        "verifier_id": grant.session_inputs.verifier_id,
+                        "workspace_id": grant.session_inputs.workspace_id,
+                        "agent_id": grant.session_inputs.agent_id,
+                        "session_id": grant.session_inputs.session_id,
+                        "invocation_id": grant.session_inputs.invocation_id,
+                        "request_hash": grant.session_inputs.request_hash.hex(),
+                    },
                 }
             else:
                 metadata = MessageToDict(message.metadata)
@@ -138,7 +150,27 @@ def operation_data(request: OperationRequest, step: str) -> dict[str, Any]:
             "instance_type": request.instance_type, "count": str(request.count)}
 
 
-def presentation_metadata(authority: Any, grant: dict[str, Any]) -> dict[str, str]:
+def presentation_metadata(authority: Any, grant: dict[str, Any], request: OperationRequest) -> dict[str, str]:
+    """Sign only a challenge bound to the caller's intended operation."""
+    request.validate()
+    operation = OperationContext(
+        required_scope=INFRA_SCOPE,
+        operation="infra.provision",
+        resource_id=region_resource(request.region, WORKSPACE_ID),
+        payload_digest=hashlib.sha256(request.canonical_payload()).digest(),
+    )
+    inputs = grant["session_inputs"]
+    if inputs["workspace_id"] != WORKSPACE_ID or inputs["agent_id"] != authority.specialist_id:
+        raise ValueError("challenge targets a different workspace or agent")
+    if bytes.fromhex(inputs["request_hash"]) != operation_context_hash(operation):
+        raise ValueError("challenge does not match the intended operation")
+    rebuilt = build_session_context(SessionContextInputs(
+        verifier_id=inputs["verifier_id"], workspace_id=inputs["workspace_id"],
+        agent_id=inputs["agent_id"], session_id=inputs["session_id"],
+        invocation_id=inputs["invocation_id"], request_hash=bytes.fromhex(inputs["request_hash"]),
+    ))
+    if bytes.fromhex(grant["session_context"]) != rebuilt:
+        raise ValueError("challenge session context does not match its inputs")
     proof = authority.present(
         challenge=bytes.fromhex(grant["challenge"]),
         session_context=bytes.fromhex(grant["session_context"]),

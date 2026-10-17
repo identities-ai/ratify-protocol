@@ -217,6 +217,19 @@ jobs:
           pip install -e './sdks/python[dev]'
           cd sdks/python
           RATIFY_REQUIRE_NATIVE=1 pytest -q
+  a2a-reference:
+    name: A2A reference (wire gate, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: A2A reference gate
+        run: ./scripts/a2a-reference-check.sh
+
   nooa-reference:
     name: NVIDIA NOOA reference (integration required, not skipped)
     runs-on: ubuntu-latest

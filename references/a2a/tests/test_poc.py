@@ -4,6 +4,7 @@ import asyncio
 import uuid
 
 import httpx
+import pytest
 
 from poc import EXTENSION_URI, demo_fixture, operation_data, presentation_metadata
 from authority_reference.receiver import OperationRequest
@@ -40,7 +41,7 @@ def test_receiver_checks_exact_a2a_operation_before_provisioning():
                                      base_url="http://127.0.0.1:8766") as client:
             allowed = OperationRequest("allow-1", "us-central1", "n2-standard-4", 1)
             grant = await send(client, allowed, "challenge")
-            proof = presentation_metadata(authority, grant)
+            proof = presentation_metadata(authority, grant, allowed)
             result = await send(client, allowed, "execute", metadata=proof)
             assert result["decision"] == "allow"
             assert receiver.tool_invocations == 1
@@ -52,7 +53,7 @@ def test_receiver_checks_exact_a2a_operation_before_provisioning():
             excessive = OperationRequest("deny-3", "us-central1", "n2-standard-4", 3)
             grant = await send(client, excessive, "challenge")
             result = await send(client, excessive, "execute",
-                                metadata=presentation_metadata(authority, grant))
+                                metadata=presentation_metadata(authority, grant, excessive))
             assert result["decision"] == "deny"
             assert result["status"] == "constraint_denied"
             assert receiver.tool_invocations == 1
@@ -61,7 +62,7 @@ def test_receiver_checks_exact_a2a_operation_before_provisioning():
             grant = await send(client, original, "challenge")
             changed = OperationRequest("changed-1", "us-east1", "n2-standard-4", 1)
             result = await send(client, changed, "execute",
-                                metadata=presentation_metadata(authority, grant))
+                                metadata=presentation_metadata(authority, grant, original))
             assert result["decision"] == "deny"
             assert result["status"] == "operation_binding_failed"
             assert receiver.tool_invocations == 1
@@ -82,7 +83,7 @@ def test_missing_extension_or_proof_never_reaches_action():
             assert result["decision"] == "deny"
             assert result["status"] == "invalid_a2a_message"
             error = await send(client, request, "execute",
-                               metadata=presentation_metadata(authority, grant), activate=False,
+                               metadata=presentation_metadata(authority, grant, request), activate=False,
                                expect_error=True)
             assert error["code"] == -32008
             bad_count = operation_data(request, "challenge")
@@ -92,5 +93,44 @@ def test_missing_extension_or_proof_never_reaches_action():
             result = await send(client, request, "execute", metadata={EXTENSION_URI: "invalid"})
             assert result["status"] == "invalid_presentation"
             assert receiver.tool_invocations == 0
+            result = await send(client, request, "execute",
+                                metadata=presentation_metadata(authority, grant, request))
+            assert result["decision"] == "allow"
+            assert receiver.tool_invocations == 1
+
+    asyncio.run(scenario())
+
+
+def test_caller_rejects_a_challenge_for_a_changed_operation():
+    async def scenario():
+        app, authority, receiver = demo_fixture()
+        intended = OperationRequest("intended-1", "us-central1", "n2-standard-4", 1)
+        changed = OperationRequest("intended-1", "us-central1", "n2-standard-8", 1)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://127.0.0.1:8766") as client:
+            grant = await send(client, intended, "challenge", payload=operation_data(changed, "challenge"))
+            with pytest.raises(ValueError, match="intended operation"):
+                presentation_metadata(authority, grant, intended)
+            assert receiver.tool_invocations == 0
+
+    asyncio.run(scenario())
+
+
+def test_proof_for_another_pending_operation_never_provisions():
+    async def scenario():
+        app, authority, receiver = demo_fixture()
+        first = OperationRequest("first-1", "us-central1", "n2-standard-4", 1)
+        second = OperationRequest("second-1", "us-central1", "n2-standard-4", 1)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://127.0.0.1:8766") as client:
+            first_grant = await send(client, first, "challenge")
+            await send(client, second, "challenge")
+            first_proof = presentation_metadata(authority, first_grant, first)
+            substituted = await send(client, second, "execute", metadata=first_proof)
+            assert substituted["decision"] == "deny"
+            assert receiver.tool_invocations == 0
+            allowed = await send(client, first, "execute", metadata=first_proof)
+            assert allowed["decision"] == "allow"
+            assert receiver.tool_invocations == 1
 
     asyncio.run(scenario())

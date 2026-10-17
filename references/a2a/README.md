@@ -59,6 +59,9 @@ max_nodes      1
 receiving act  infra.provision
 ```
 
+The grant does not limit instance type or cost. A real provisioning policy must
+set those limits before this example can guard billable infrastructure.
+
 The receiving agent accepts a structured A2A `DataPart` with a region, instance type, count, and request ID. Count is carried as a canonical decimal string because protobuf `Value` represents JSON numbers as doubles. The receiver converts and validates it before constructing the operation.
 
 ```mermaid
@@ -73,6 +76,7 @@ sequenceDiagram
     C->>A: A2A challenge message, exact operation
     A->>R: Parsed operation and pinned presenter ID
     R-->>C: Single-use challenge, operation-bound context
+    C->>C: Check challenge context against intended operation
     C->>A: A2A execute message, operation + signed proof metadata
     A->>R: Reconstructed operation + proof bundle
     alt Trusted proof inside signed bounds
@@ -95,8 +99,10 @@ The `A2A-Extensions` request header activates a provisional Ratify URI advertise
 | Region changes after challenge issuance | Deny | Not called |
 | Required extension not activated | A2A error `-32008` | Not called |
 | Proof missing | Deny | Not called |
+| Caller receives a challenge for a different instance type | Refuses to sign | Not called |
+| Proof from another pending operation | Deny | Not called |
 
-The focused gate has two deterministic tests and zero skips. Tests send A2A 1.0 JSON-RPC requests through the official Python server routes using an in-process HTTP transport and count protected calls. Reuse after a successful action reaches the receiver's `unknown_operation` path; a changed region fails the pending-operation comparison. The broader ADK suite tests the underlying cryptographic verifier separately.
+The focused gate has four deterministic tests and zero skips. Tests send A2A 1.0 JSON-RPC requests through the official Python server routes using an in-process HTTP transport and count protected calls. Reuse after a successful action reaches the receiver's `unknown_operation` path; a changed region fails the pending-operation comparison. The caller checks the returned session-context inputs against its intended operation before signing, and a proof substituted between two pending operations is denied. The broader ADK suite tests the underlying cryptographic verifier separately.
 
 ## Use it now
 
@@ -114,7 +120,7 @@ Use this open reference to inspect and challenge the proposed A2A carrier and re
 
 ## What is cryptographically bound?
 
-The principal signs the agent delegation, scope, resource, node ceiling, and expiry. The agent signs the receiver's fresh challenge with a session context containing a receiver-local verifier ID, workspace, expected agent, receiver session, invocation, and hash of the receiver-constructed operation. That operation includes the canonical request payload digest. The receiver pins the principal's public root, checks the chain and revocation state, consumes the challenge once, and applies the one-node constraint before the protected call.
+The principal signs the agent delegation, scope, resource, node ceiling, and expiry. The receiver returns the fresh challenge and inputs for a session context containing its verifier ID, workspace, expected agent, session, invocation, and hash of its constructed operation. Before signing, the calling agent recomputes that hash from its intended operation, checks the workspace and agent, and rebuilds the session context. The operation includes the canonical request payload digest. The receiver pins the principal's public root, checks the chain and revocation state, consumes the challenge once, and applies the one-node constraint before the protected call. The principal's grant still does not restrict every payload field.
 
 The A2A `DataPart`, message ID, header, and metadata placement are carrier details, not themselves a Ratify signature. The receiver constructs the operation from parsed data and compares it with the pending challenged operation. This draft does not bind an A2A task ID or context ID into the signed session context.
 
@@ -133,11 +139,11 @@ The A2A `DataPart`, message ID, header, and metadata placement are carrier detai
 
 Executed locally with `a2a-sdk==1.2.2`, `ratify-protocol==1.0.0a20`, Python 3.11, and the pinned ADK scenario dependencies. The two wire-level tests pass with zero skips. This is an independent draft for technical discussion. The provisional extension URI has not been registered or accepted by A2A, and this profile has not been reviewed or endorsed by A2A, Google, Cisco, AGNTCY, or Microsoft.
 
-- Transport authentication and AGNTCY identity or badge verification are absent. The receiver pins one expected agent ID for this local fixture.
+- Transport authentication and AGNTCY identity or badge verification are absent. The caller does not authenticate the receiver's verifier ID, so a same-operation challenge can be relayed. The receiver pins one expected agent ID for this local fixture.
 - The two A2A messages share a receiver-owned request ID and pending challenge, but do not form a durable A2A task or bind A2A context IDs. Whether this should use in-task authorization, another existing extension, or a separate profile is open for community review.
-- The challenge and pending-operation stores are in-memory in one process. An unauthenticated caller can occupy the 128 pending-operation slots for up to five minutes. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
+- The challenge and pending-operation stores are in-memory in one process. An unauthenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
 - The protected provisioner is in-memory and creates no cloud resource. A real executor must ensure the verified logical resource maps to the actual resource it changes.
 - The A2A tests exercise official server routes over in-process HTTP, not two independently deployed services, TLS, or an A2A SDK client. They do not prove cross-vendor interoperability.
-- The current carrier imports the published ADK scenario's Python package, which brings ADK and MCP dependencies into this draft. An independent reference would extract that shared receiver before publication.
+- The current carrier imports the published ADK scenario's Python package, which brings ADK and MCP dependencies into this draft. A standalone adapter would extract that shared receiver and drop those unrelated dependencies.
 
 Sources: [A2A extensions](https://a2a-protocol.org/latest/topics/extensions/), [A2A authorization scope](https://a2a-protocol.org/latest/specification/), [AGNTCY identity](https://spec.identity.agntcy.org/docs/intro/).

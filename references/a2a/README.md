@@ -46,7 +46,7 @@ This matters when the caller belongs to another organization, a workload credent
 | Calling agent operator | Holds the delegated agent key, requests a receiver challenge, signs it, and carries the proof in A2A message metadata. In the draft this is a deterministic client, not a model. |
 | Receiving agent operator | Pins the trusted principal root and expected agent, parses the requested operation, issues and consumes the challenge, checks revocation and local policy, then guards the provisioner. This is the main integration work. |
 | A2A | Supplies the Agent Card, extension negotiation, structured messages, and JSON-RPC transport. No A2A core modification is needed for this experiment. |
-| AGNTCY or another identity provider | A possible source of agent identity and key binding to evaluate with its maintainers. No AGNTCY code runs here. |
+| AGNTCY Identity and TBAC | Existing identity and tool-level policy work to compare with this authority check; AGNTCY is also designing a task authorization profile with substantial overlap. No AGNTCY code runs here. See the [comparison note](AGNTCY_A2A_FIT.md). |
 
 ## What does this reference do?
 

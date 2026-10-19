@@ -4,7 +4,7 @@
 - Status: independent Ratify reference; not reviewed or endorsed by GitHub or Microsoft
 - Ratify SDK: `@identities-ai/ratify-protocol@1.0.0-alpha.19`
 - Integration surface: GitHub Copilot plugin, Agent Skill, and MCP server
-- MCP SDK: `@modelcontextprotocol/sdk@1.30.0`
+- MCP SDK: `@modelcontextprotocol/sdk@1.31.0`
 - Gate: `references/github-copilot/run-reference-check.sh`
 - Gate result: Declared in [`ratify-reference.json`](../github-copilot/ratify-reference.json) and checked by the gate
 - Evidence: [`reference-evidence.md`](../github-copilot/reference-evidence.md)

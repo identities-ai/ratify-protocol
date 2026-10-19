@@ -91,18 +91,28 @@ def test_receiver_checks_exact_a2a_operation_before_provisioning():
             assert result["status"] == "operation_binding_failed"
             assert result["_state"] == "TASK_STATE_AUTH_REQUIRED"
             unknown = OperationRequest("unknown-id", "us-central1", "n2-standard-4", 1)
-            result = await send(client, unknown, "execute", metadata={}, task=grant)
-            assert result["status"] == "invalid_a2a_message"
+            original_proof = presentation_metadata(authority, grant, bound(original, grant))
+            result = await send(client, unknown, "execute", metadata=original_proof, task=grant)
+            assert result["status"] == "unknown_operation"
             assert result["_state"] == "TASK_STATE_AUTH_REQUIRED"
             result = await send(client, unknown, "challenge", task=grant)
             assert result["status"] == "invalid_a2a_message"
             assert result["_state"] == "TASK_STATE_AUTH_REQUIRED"
             assert receiver.tool_invocations == 1
             result = await send(client, original, "execute", task=grant,
-                                metadata=presentation_metadata(authority, grant,
-                                                               bound(original, grant)))
+                                metadata=original_proof)
             assert result["decision"] == "allow"
             assert result["_state"] == "TASK_STATE_COMPLETED"
+            assert receiver.tool_invocations == 2
+
+            expired = OperationRequest("expired-task", "us-central1", "n2-standard-4", 1)
+            expired_grant = await send(client, expired, "challenge")
+            receiver._pending[expired.request_id] = replace(
+                receiver._pending[expired.request_id], expires_at=0
+            )
+            result = await send(client, expired, "execute", task=expired_grant)
+            assert result["status"] == "invalid_a2a_message"
+            assert result["_state"] == "TASK_STATE_REJECTED"
             assert receiver.tool_invocations == 2
 
     asyncio.run(scenario())
@@ -327,6 +337,7 @@ def test_proof_for_another_pending_operation_never_provisions():
             substituted = await send(client, second, "execute", metadata=first_proof,
                                      task=second_grant)
             assert substituted["decision"] == "deny"
+            assert substituted["_state"] == "TASK_STATE_AUTH_REQUIRED"
             assert receiver.tool_invocations == 0
             allowed = await send(client, first, "execute", metadata=first_proof,
                                  task=first_grant)

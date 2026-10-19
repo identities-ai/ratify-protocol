@@ -315,8 +315,12 @@ class InfrastructureReceiver:
         self.tool_invocations = 0
 
     def has_pending_task(self, task_id: str) -> bool:
+        now = int(time.time())
         with self._state_lock:
-            return any(pending.request.task_id == task_id for pending in self._pending.values())
+            return any(
+                pending.request.task_id == task_id and pending.expires_at > now
+                for pending in self._pending.values()
+            )
 
     def issue_challenge(
         self, request: OperationRequest, *, expected_agent_id: str

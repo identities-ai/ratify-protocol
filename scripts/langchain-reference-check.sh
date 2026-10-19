@@ -26,7 +26,7 @@ if local_sdk == module or local_sdk in module.parents:
 expected = {
     "langchain": "1.3.14",
     "langchain-mcp-adapters": "0.3.0",
-    "mcp": "1.29.0",
+    "mcp": "1.30.0",
     "ratify-protocol": "1.0.0a19",
 }
 for package, version in expected.items():
@@ -34,7 +34,7 @@ for package, version in expected.items():
     if installed != version:
         raise SystemExit(f"FAIL: {package}={installed}; expected {version}")
 print(f"published Ratify: {module}")
-print("pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0")
+print("pins: langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.30.0")
 PY
 
 PYTHONPATH="$DEMO" "$VENV/bin/pytest" -q -rsxX -p no:cacheprovider \

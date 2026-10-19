@@ -12,7 +12,7 @@ A2A provides agent discovery, interoperable messaging, task handling, and extens
 
 | Question | A2A and identity controls | Ratify in this draft |
 | --- | --- | --- |
-| Which agent connected? | Transport authentication and potentially an agent identity credential | The draft pins one expected presenter ID; it does not authenticate the transport |
+| Which agent connected? | Transport authentication and potentially an agent identity credential | The HTTPS gate requires a caller bearer token and pins one expected presenter ID; it does not bind the token to the Ratify key |
 | Can the caller send an A2A message? | Server policy decides | Not Ratify's purpose |
 | Did a principal authorize this operation and ceiling? | Not defined by the A2A message alone | A signed chain is checked against the receiver-constructed operation |
 | Should the receiving organization execute? | Its own policy and handler decide | The receiver calls the handler only after verification allows |
@@ -43,8 +43,8 @@ This matters when the caller belongs to another organization, a workload credent
 | Role | Decision and work |
 | --- | --- |
 | Principal | Signs a bounded delegation for the agent. The fixture issues a one-node, one-region grant. |
-| Calling agent operator | Holds the delegated agent key, requests a receiver challenge, signs it, and carries the proof in A2A message metadata. In the draft this is a deterministic client, not a model. |
-| Receiving agent operator | Pins the trusted principal root and expected agent, parses the requested operation, issues and consumes the challenge, checks revocation and local policy, then guards the provisioner. This is the main integration work. |
+| Calling agent operator | Holds the delegated agent key, requests a receiver challenge, checks its operation binding, signs it, and carries the proof in A2A message metadata. A Node wire client sends the HTTPS A2A messages in the network test; a separate Python caller holds the signing key. No model participates. |
+| Receiving agent operator | Runs a separate HTTPS process in the network test, requires a bearer token, pins the trusted principal root and expected agent, binds the A2A task and context IDs, checks revocation and local policy, then guards the provisioner. |
 | A2A | Supplies the Agent Card, extension negotiation, structured messages, and JSON-RPC transport. No A2A core modification is needed for this experiment. |
 | AGNTCY Identity and TBAC | Existing identity and tool-level policy work to compare with this authority check; AGNTCY is also designing a task authorization profile with substantial overlap. No AGNTCY code runs here. See the [comparison note](AGNTCY_A2A_FIT.md). |
 
@@ -75,9 +75,9 @@ sequenceDiagram
     P->>C: Signed one-node delegation
     C->>A: A2A challenge message, exact operation
     A->>R: Parsed operation and pinned presenter ID
-    R-->>C: Single-use challenge, operation-bound context
+    R-->>C: AUTH_REQUIRED task, challenge bound to task and operation
     C->>C: Check challenge context against intended operation
-    C->>A: A2A execute message, operation + signed proof metadata
+    C->>A: Resume same task, operation + signed proof metadata
     A->>R: Reconstructed operation + proof bundle
     alt Trusted proof inside signed bounds
         R->>T: Provision one node
@@ -94,25 +94,28 @@ The `A2A-Extensions` request header activates a provisional Ratify URI advertise
 | Wire-level case | Decision | Protected provisioner |
 | --- | --- | --- |
 | One node in the signed region | Allow | Called once |
-| Reuse of the same presentation | Deny | Not called again |
+| Reuse on the completed task | A2A error `-32004` | Not called again |
+| Reuse of a proof on a new task for the same operation | Deny | Not called again |
 | Three nodes under a one-node grant | Deny | Not called |
 | Region changes after challenge issuance | Deny | Not called |
 | Required extension not activated | A2A error `-32008` | Not called |
 | Proof missing | Deny | Not called |
 | Caller receives a challenge for a different instance type | Refuses to sign | Not called |
 | Proof from another pending operation | Deny | Not called |
+| Local HTTPS receiver, independent Node client, valid token and proof | Allow | Called once |
+| Missing or wrong bearer token, or untrusted TLS certificate | Refused | Not called |
 
-The focused gate has four deterministic tests and zero skips. Tests send A2A 1.0 JSON-RPC requests through the official Python server routes using an in-process HTTP transport and count protected calls. Reuse after a successful action reaches the receiver's `unknown_operation` path; a changed region fails the pending-operation comparison. The caller checks the returned session-context inputs against its intended operation before signing, and a proof substituted between two pending operations is denied. The broader ADK suite tests the underlying cryptographic verifier separately.
+The focused gate has six deterministic tests and zero skips. Five tests exercise A2A 1.0 JSON-RPC through the official Python server routes in-process. The network test starts a separate HTTPS receiver and uses an independent Node JSON-RPC client. It checks TLS trust, caller bearer authentication on a valid execute request, task resumption, a valid protected action, and denial of a proof copied to another task. A changed region fails the pending-operation comparison. Reuse after completion is rejected by A2A's terminal task handling; reuse on a new task reaches the receiver and is denied. The broader ADK suite tests the underlying cryptographic verifier separately.
 
 ## Use it now
 
-You need Python 3.10 or newer, `pip`, and network access to install pinned published packages. No Gemini key, Google Cloud project, Discord account, or external service is needed. From a clean Ratify Protocol checkout:
+You need Python 3.10 or newer, `pip`, Node.js 22 or newer, OpenSSL, and network access to install pinned published packages. The network test listens only on local loopback and generates a short-lived test certificate and bearer token. No Gemini key, Google Cloud project, Discord account, or external service is needed. From a clean Ratify Protocol checkout:
 
 ```bash
 ./scripts/a2a-reference-check.sh
 ```
 
-The script installs into `references/a2a/.venv`, verifies package versions and that Ratify comes from the published package, then runs the wire-level tests. It installs the pinned ADK and MCP dependencies because this draft reuses the existing ADK scenario's receiver package; no ADK agent or MCP server runs in the A2A tests.
+The script installs into `references/a2a/.venv`, verifies package versions and that Ratify comes from the published package, then runs the wire-level tests. It installs the pinned ADK and MCP dependencies because this draft reuses the existing ADK scenario's receiver package; no ADK agent or MCP server runs in the A2A tests. The HTTPS test needs permission to bind a local port.
 
 ## Which path should I use?
 
@@ -120,15 +123,17 @@ Use this open reference to inspect and challenge the proposed A2A carrier and re
 
 ## What is cryptographically bound?
 
-The principal signs the agent delegation, scope, resource, node ceiling, and expiry. The receiver returns the fresh challenge and inputs for a session context containing its verifier ID, workspace, expected agent, session, invocation, and hash of its constructed operation. Before signing, the calling agent recomputes that hash from its intended operation, checks the workspace and agent, and rebuilds the session context. The operation includes the canonical request payload digest. The receiver pins the principal's public root, checks the chain and revocation state, consumes the challenge once, and applies the one-node constraint before the protected call. The principal's grant still does not restrict every payload field.
+The principal signs the agent delegation, scope, resource, node ceiling, and expiry. The receiver returns the fresh challenge and inputs for a session context containing its verifier ID, workspace, expected agent, session, invocation, and hash of its constructed operation. Before signing, the calling agent recomputes that hash from its intended operation, checks the workspace and agent, and rebuilds the session context. The operation's canonical payload includes the A2A task and context IDs from the SDK's request context as well as the request fields. A client may choose the initial context ID; the SDK creates the task ID and validates task resumption. The receiver pins the principal's public root, checks the chain and revocation state, consumes the challenge once, and applies the one-node constraint before the protected call. The principal's grant still does not restrict every payload field.
 
-The A2A `DataPart`, message ID, header, and metadata placement are carrier details, not themselves a Ratify signature. The receiver constructs the operation from parsed data and compares it with the pending challenged operation. This draft does not bind an A2A task ID or context ID into the signed session context.
+The A2A `DataPart`, message ID, header, and metadata placement are carrier details, not themselves a Ratify signature. The receiver constructs the operation from parsed data and SDK task identity and compares it with the pending challenged operation. The task and context IDs enter the signed session context through the operation hash; the message ID does not.
 
 ## Repository map
 
 | File | Purpose |
 | --- | --- |
 | [`poc.py`](poc.py) | A2A Agent Card, extension gate, challenge and execute message adapter |
+| [`serve.py`](serve.py) | Separate HTTPS receiver entry point for the network gate |
+| [`wire_client.mjs`](wire_client.mjs) | Independent Node A2A JSON-RPC caller for the network gate |
 | [`tests/test_poc.py`](tests/test_poc.py) | A2A wire allow and deny assertions with protected-call counts |
 | [`requirements.txt`](requirements.txt) | Published dependency pins |
 | [`../../scripts/a2a-reference-check.sh`](../../scripts/a2a-reference-check.sh) | Clean-checkout gate |
@@ -137,13 +142,13 @@ The A2A `DataPart`, message ID, header, and metadata placement are carrier detai
 
 ## Evidence, security status, and limitations
 
-Executed locally with `a2a-sdk==1.2.2`, `ratify-protocol==1.0.0a20`, Python 3.11, and the pinned ADK scenario dependencies. The two wire-level tests pass with zero skips. This is an independent draft for technical discussion. The provisional extension URI has not been registered or accepted by A2A, and this profile has not been reviewed or endorsed by A2A, Google, Cisco, AGNTCY, or Microsoft.
+Executed locally with `a2a-sdk==1.2.2`, `ratify-protocol==1.0.0a20`, Python 3.11, Node 22, OpenSSL, and the pinned ADK scenario dependencies. The six tests pass with zero skips. This is an independent draft for technical discussion. The provisional extension URI has not been registered or accepted by A2A, and this profile has not been reviewed or endorsed by A2A, Google, Cisco, AGNTCY, or Microsoft.
 
-- Transport authentication and AGNTCY identity or badge verification are absent. The caller does not authenticate the receiver's verifier ID, so a same-operation challenge can be relayed. The receiver pins one expected agent ID for this local fixture.
-- The two A2A messages share a receiver-owned request ID and pending challenge, but do not form a durable A2A task or bind A2A context IDs. Whether this should use in-task authorization, another existing extension, or a separate profile is open for community review.
-- The challenge and pending-operation stores are in-memory in one process. An unauthenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
+- The network gate uses local HTTPS with a generated test certificate and bearer token. It proves transport enforcement in the fixture, not OAuth issuance, mutual TLS, AGNTCY identity verification, or binding the bearer token to the Ratify agent key. The caller validates the TLS certificate, but does not independently pin the receiver's Ratify verifier ID.
+- The challenge and execution form an in-memory A2A task with `AUTH_REQUIRED` followed by completion. The task ID and context ID are signed through the operation hash, but the task store is not durable. Whether the authority proof belongs in this provisional extension or an AGNTCY task authorization profile remains open for community review.
+- The challenge and pending-operation stores are in-memory in one receiver process. An authenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. The executor does not support cancellation; the A2A SDK may mark a waiting task canceled without releasing its pending challenge before that TTL. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
 - The protected provisioner is in-memory and creates no cloud resource. A real executor must ensure the verified logical resource maps to the actual resource it changes.
-- The A2A tests exercise official server routes over in-process HTTP, not two independently deployed services, TLS, or an A2A SDK client. They do not prove cross-vendor interoperability.
+- The network test runs separate caller and receiver processes on one host and uses an independent Node JSON-RPC client. It does not prove interoperability with another vendor's deployed A2A agent or use a second vendor's SDK.
 - The current carrier imports the published ADK scenario's Python package, which brings ADK and MCP dependencies into this draft. A standalone adapter would extract that shared receiver and drop those unrelated dependencies.
 
 Sources: [A2A extensions](https://a2a-protocol.org/latest/topics/extensions/), [A2A authorization scope](https://a2a-protocol.org/latest/specification/), [AGNTCY identity](https://spec.identity.agntcy.org/docs/intro/).

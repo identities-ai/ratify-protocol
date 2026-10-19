@@ -43,6 +43,8 @@ class OperationRequest:
     region: str
     instance_type: str
     count: int
+    task_id: str = ""
+    context_id: str = ""
 
     def validate(self) -> None:
         if not self.request_id or len(self.request_id) > 128:
@@ -55,16 +57,24 @@ class OperationRequest:
             raise ValueError("count must be an integer")
         if self.count < 1 or self.count > 1000:
             raise ValueError("count must be between 1 and 1000")
+        if bool(self.task_id) != bool(self.context_id):
+            raise ValueError("task and context IDs must be supplied together")
+        if len(self.task_id) > 128 or len(self.context_id) > 128:
+            raise ValueError("task and context IDs must be at most 128 characters")
 
     def canonical_payload(self) -> bytes:
         self.validate()
-        return json.dumps(
-            {
+        payload = {
                 "count": self.count,
                 "instance_type": self.instance_type,
                 "region": self.region,
                 "request_id": self.request_id,
-            },
+            }
+        if self.task_id:
+            payload["task_id"] = self.task_id
+            payload["context_id"] = self.context_id
+        return json.dumps(
+            payload,
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -303,6 +313,14 @@ class InfrastructureReceiver:
         self.session_id = secrets.token_urlsafe(16)
         self._state_lock = threading.Lock()
         self.tool_invocations = 0
+
+    def has_pending_task(self, task_id: str) -> bool:
+        now = int(time.time())
+        with self._state_lock:
+            return any(
+                pending.request.task_id == task_id and pending.expires_at > now
+                for pending in self._pending.values()
+            )
 
     def issue_challenge(
         self, request: OperationRequest, *, expected_agent_id: str

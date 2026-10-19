@@ -227,6 +227,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
       - name: A2A reference gate
         run: ./scripts/a2a-reference-check.sh
 

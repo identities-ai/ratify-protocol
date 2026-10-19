@@ -11,8 +11,8 @@ AGNTCY also has a [runnable cross-domain ID-JAG and VC demo](https://github.com/
 | AGNTCY Identity | Released identifiers, ResolverMetadata, and Agent Badges establish agent provenance. | The draft pins an expected agent ID; it does not verify an AGNTCY identity or badge. |
 | AGNTCY TBAC | Existing per-tool policy can allow, deny, or require approval and re-evaluates at invocation. | The draft uses its receiver's local policy and signed one-node limit; it does not call TBAC. |
 | AGNTCY cross-domain demo | Runnable ID-JAG assertions, VC badges, token exchange, and narrowed privileges across two organizations. | Compare its issuer and resource-server checks with the Ratify receiver's pinned-root and exact-operation proof. No demo components run here. |
-| AGNTCY task authorization profile | In development, including task binding, delegated constraints, and proof of possession. | This is the closest overlap. Ratify's draft verifies an exact action and signed limit, but does not bind an A2A `taskId` or implement approval propagation. |
-| A2A | Defines task states and the extension carrier; authorization scope remains implementation-specific. | The draft advertises a provisional URI, carries the operation in a `DataPart` and proof in metadata, and returns an immediate response. |
+| AGNTCY task authorization profile | In development, including task binding, delegated constraints, and proof of possession. | This is the closest overlap. Ratify's draft binds the A2A task and context IDs into its signed operation hash and verifies the exact action and signed limit, but does not implement approval propagation. |
+| A2A | Defines task states and the extension carrier; authorization scope remains implementation-specific. | The draft advertises a provisional URI, carries the operation in a `DataPart` and proof in metadata, and resumes an `AUTH_REQUIRED` task after proof presentation. |
 
 The immediate experiment to discuss is whether an AGNTCY-identified agent can present a Ratify mandate at the receiving action, with both the existing TBAC rule and the signed operation limits enforced. That may be an integration of complementary controls, or it may expose redundant authority objects. The present draft does not establish which design is preferable.
 
@@ -23,6 +23,6 @@ Questions for maintainers:
 3. How should the A2A `taskId`, approver identity, invocation, and actual receiver operation be bound so a declared operation cannot widen authority?
 4. Should the proof ride an existing in-task authorization flow or extension, and which receiver checks remain independent of A2A and TBAC?
 
-The current draft has no transport authentication, AGNTCY integration, durable task state, or multi-replica replay store. See [limitations and evidence](README.md#evidence-security-status-and-limitations).
+The current draft has a local HTTPS and bearer-authentication gate, but no AGNTCY integration, durable task state, or multi-replica replay store. See [limitations and evidence](README.md#evidence-security-status-and-limitations).
 
 Sources: [AGNTCY A2A and TBAC analysis](https://blogs.agntcy.org/technical/identity/2026/08/25/agent-identity-tbac-a2a-task-authorization.html), [AGNTCY cross-domain demo](https://github.com/agntcy/agent-identity-demos/tree/main/cross-domain-id-jag-vc), [AGNTCY identity introduction](https://spec.identity.agntcy.org/docs/intro/), [A2A extension model](https://a2a-protocol.org/latest/topics/extensions/).

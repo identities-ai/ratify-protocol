@@ -5,6 +5,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REF="$ROOT/references/a2a"
 VENV="$REF/.venv"
 
+command -v node >/dev/null || { echo "FAIL: Node.js 22 or newer is required" >&2; exit 1; }
+node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)' || {
+  echo "FAIL: Node.js 22 or newer is required" >&2; exit 1;
+}
+command -v openssl >/dev/null || { echo "FAIL: OpenSSL is required" >&2; exit 1; }
+
 python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install --disable-pip-version-check -q -r "$REF/requirements.txt"
 
@@ -42,7 +48,7 @@ import xml.etree.ElementTree as ET
 cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase"))
 skipped = sum(case.find("skipped") is not None for case in cases)
 failed = sum(case.find("failure") is not None or case.find("error") is not None for case in cases)
-if len(cases) != 4 or skipped or failed:
-    raise SystemExit(f"FAIL: expected 4 passed, zero skipped/failed; got total={len(cases)} skipped={skipped} failed={failed}")
-print("gate: 4/4 passed; zero skipped, xfailed, failed, or errored")
+if len(cases) != 6 or skipped or failed:
+    raise SystemExit(f"FAIL: expected 6 passed, zero skipped/failed; got total={len(cases)} skipped={skipped} failed={failed}")
+print("gate: 6/6 passed; zero skipped, xfailed, failed, or errored")
 PY

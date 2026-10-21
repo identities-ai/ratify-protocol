@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
@@ -415,16 +416,22 @@ func EncodeRevocationPushV2(push *RevocationPushV2) ([]byte, error) {
 // SignRevocationListV2 returns a signed copy of list. boundIssuerID and
 // boundStatusKey must come from caller-authenticated issuer status configuration.
 func SignRevocationListV2(list *RevocationListV2, boundIssuerID string, boundStatusKey HybridPublicKey, statusKey HybridPrivateKey) (*RevocationListV2, error) {
+	return SignRevocationListV2WithSigner(context.Background(), list, boundIssuerID, boundStatusKey, localSignerV2{statusKey})
+}
+
+// SignRevocationListV2WithSigner is SignRevocationListV2 with an external
+// signer whose complete public key must equal boundStatusKey.
+func SignRevocationListV2WithSigner(ctx context.Context, list *RevocationListV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (*RevocationListV2, error) {
 	if err := validateRevocationListV2(list); err != nil {
 		return nil, err
 	}
 	if boundIssuerID == "" || list.IssuerID != boundIssuerID {
 		return nil, fmt.Errorf("revocation-list issuer does not match caller-authenticated status-key binding")
 	}
-	if err := validateV2PrivateKey(statusKey); err != nil {
+	derivedStatusKey, err := signerPublicKeyV2(signer)
+	if err != nil {
 		return nil, err
 	}
-	derivedStatusKey := statusKey.Public()
 	if !bytes.Equal(boundStatusKey.Ed25519, derivedStatusKey.Ed25519) || !bytes.Equal(boundStatusKey.MLDSA65, derivedStatusKey.MLDSA65) {
 		return nil, fmt.Errorf("status private key does not match caller-authenticated issuer status-key binding")
 	}
@@ -442,7 +449,7 @@ func SignRevocationListV2(list *RevocationListV2, boundIssuerID string, boundSta
 	if err != nil {
 		return nil, err
 	}
-	signature, err := signV2Statement(v2RevocationList, signable, statusKey)
+	signature, err := signV2StatementWithSigner(ctx, v2RevocationList, signable, signer, derivedStatusKey)
 	if err != nil {
 		return nil, err
 	}
@@ -464,16 +471,22 @@ func SignRevocationListV2(list *RevocationListV2, boundIssuerID string, boundSta
 // SignRevocationPushV2 returns a signed copy of push. boundIssuerID and
 // boundStatusKey must come from caller-authenticated issuer status configuration.
 func SignRevocationPushV2(push *RevocationPushV2, boundIssuerID string, boundStatusKey HybridPublicKey, statusKey HybridPrivateKey) (*RevocationPushV2, error) {
+	return SignRevocationPushV2WithSigner(context.Background(), push, boundIssuerID, boundStatusKey, localSignerV2{statusKey})
+}
+
+// SignRevocationPushV2WithSigner is SignRevocationPushV2 with an external
+// signer whose complete public key must equal boundStatusKey.
+func SignRevocationPushV2WithSigner(ctx context.Context, push *RevocationPushV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (*RevocationPushV2, error) {
 	if err := validateRevocationPushV2(push); err != nil {
 		return nil, err
 	}
 	if boundIssuerID == "" || push.IssuerID != boundIssuerID {
 		return nil, fmt.Errorf("revocation-push issuer does not match caller-authenticated status-key binding")
 	}
-	if err := validateV2PrivateKey(statusKey); err != nil {
+	derivedStatusKey, err := signerPublicKeyV2(signer)
+	if err != nil {
 		return nil, err
 	}
-	derivedStatusKey := statusKey.Public()
 	if !bytes.Equal(boundStatusKey.Ed25519, derivedStatusKey.Ed25519) || !bytes.Equal(boundStatusKey.MLDSA65, derivedStatusKey.MLDSA65) {
 		return nil, fmt.Errorf("status private key does not match caller-authenticated issuer status-key binding")
 	}
@@ -491,7 +504,7 @@ func SignRevocationPushV2(push *RevocationPushV2, boundIssuerID string, boundSta
 	if err != nil {
 		return nil, err
 	}
-	signature, err := signV2Statement(v2RevocationPush, signable, statusKey)
+	signature, err := signV2StatementWithSigner(ctx, v2RevocationPush, signable, signer, derivedStatusKey)
 	if err != nil {
 		return nil, err
 	}
@@ -816,13 +829,19 @@ func certSignableBytesV2(c *DelegationCertV2) ([]byte, error) {
 // hybrid key. The public key and issuer ID in the certificate must match that
 // key; the caller still decides whether the issuer is trusted.
 func SignDelegationCertV2(cert *DelegationCertV2, issuerKey HybridPrivateKey) (*DelegationCertV2, error) {
+	return SignDelegationCertV2WithSigner(context.Background(), cert, localSignerV2{issuerKey})
+}
+
+// SignDelegationCertV2WithSigner is SignDelegationCertV2 with an external
+// signer whose complete public key must equal the certificate issuer key.
+func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2, signer SignerV2) (*DelegationCertV2, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("v2 delegation certificate is nil")
 	}
-	if err := validateV2PrivateKey(issuerKey); err != nil {
+	issuerPub, err := signerPublicKeyV2(signer)
+	if err != nil {
 		return nil, err
 	}
-	issuerPub := issuerKey.Public()
 	issuerID, err := keyIDV2(issuerPub)
 	if err != nil {
 		return nil, err
@@ -850,7 +869,7 @@ func SignDelegationCertV2(cert *DelegationCertV2, issuerKey HybridPrivateKey) (*
 	if err != nil {
 		return nil, err
 	}
-	signature, err := signV2Statement(v2DelegationCertificate, signable, issuerKey)
+	signature, err := signV2StatementWithSigner(ctx, v2DelegationCertificate, signable, signer, issuerPub)
 	if err != nil {
 		return nil, err
 	}
@@ -959,13 +978,19 @@ func EncodeProofBundleV2(b *ProofBundleV2) ([]byte, error) {
 // presentation with the agent key. It verifies the resulting local chain and
 // signatures, but does not establish that the terminal issuer is trusted.
 func SignProofBundleV2(bundle *ProofBundleV2, agentKey HybridPrivateKey) (*ProofBundleV2, error) {
+	return SignProofBundleV2WithSigner(context.Background(), bundle, localSignerV2{agentKey})
+}
+
+// SignProofBundleV2WithSigner is SignProofBundleV2 with an external signer
+// whose complete public key must equal the bundle agent key.
+func SignProofBundleV2WithSigner(ctx context.Context, bundle *ProofBundleV2, signer SignerV2) (*ProofBundleV2, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("v2 proof bundle is nil")
 	}
-	if err := validateV2PrivateKey(agentKey); err != nil {
+	agentPub, err := signerPublicKeyV2(signer)
+	if err != nil {
 		return nil, err
 	}
-	agentPub := agentKey.Public()
 	agentID, err := keyIDV2(agentPub)
 	if err != nil {
 		return nil, err
@@ -993,7 +1018,7 @@ func SignProofBundleV2(bundle *ProofBundleV2, agentKey HybridPrivateKey) (*Proof
 	if err != nil {
 		return nil, err
 	}
-	prepared.ChallengeSig, err = signV2Statement(v2ChallengePresentation, signable, agentKey)
+	prepared.ChallengeSig, err = signV2StatementWithSigner(ctx, v2ChallengePresentation, signable, signer, agentPub)
 	if err != nil {
 		return nil, err
 	}

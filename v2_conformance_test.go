@@ -737,9 +737,12 @@ type v2OrderingVector struct {
 	MaxChallengeAgeSeconds int64  `json:"max_challenge_age_seconds"`
 	FutureSkewSeconds      int64  `json:"future_skew_seconds"`
 	RequestContext         *struct {
-		HasResource         bool   `json:"has_resource"`
-		RequestedResourceID string `json:"requested_resource_id"`
-		RequestedPath       string `json:"requested_path"`
+		HasResource           bool   `json:"has_resource"`
+		RequestedResourceID   string `json:"requested_resource_id"`
+		RequestedPath         string `json:"requested_path"`
+		HasAmount             bool   `json:"has_amount"`
+		RequestedAmountMicros int64  `json:"requested_amount_micros"`
+		RequestedCurrency     string `json:"requested_currency"`
 	} `json:"request_context"`
 	ReceiverBindingHook string `json:"receiver_binding_hook"`
 	ClaimStore          string `json:"claim_store"`
@@ -894,7 +897,8 @@ func runV2OrderingVector(t *testing.T, v v2OrderingVector, bundle []byte) {
 		req.ContextPolicy = policy
 	}
 	if c := v.RequestContext; c != nil {
-		req.Context = ratify.ConstraintContextV2{HasResource: c.HasResource, RequestedResourceID: c.RequestedResourceID, RequestedPath: c.RequestedPath}
+		req.Context = ratify.ConstraintContextV2{HasResource: c.HasResource, RequestedResourceID: c.RequestedResourceID, RequestedPath: c.RequestedPath,
+			HasAmount: c.HasAmount, RequestedAmountMicros: c.RequestedAmountMicros, RequestedCurrency: c.RequestedCurrency}
 	}
 	req.StatusRoles = ratify.V2StatusRoleBindings{StatusKeyIssuers: v.StatusRoles.StatusKeyIssuers, CurrentStatusKeyIDs: v.StatusRoles.CurrentStatusKeyIDs, ReservedKeyIDs: map[string]struct{}{}}
 	for _, id := range v.StatusRoles.ReservedKeyIDs {

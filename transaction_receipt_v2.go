@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
@@ -141,6 +142,12 @@ func TransactionReceiptV2SignBytes(receipt *TransactionReceiptV2) ([]byte, error
 // one party's hybrid key. The caller attaches the returned signature once per
 // listed party.
 func SignTransactionReceiptPartyV2(receipt *TransactionReceiptV2, partyID string, key HybridPrivateKey) (TransactionReceiptSignatureV2, error) {
+	return SignTransactionReceiptPartyV2WithSigner(context.Background(), receipt, partyID, localSignerV2{key})
+}
+
+// SignTransactionReceiptPartyV2WithSigner is SignTransactionReceiptPartyV2
+// with an external signer whose complete key must equal the party agent key.
+func SignTransactionReceiptPartyV2WithSigner(ctx context.Context, receipt *TransactionReceiptV2, partyID string, signer SignerV2) (TransactionReceiptSignatureV2, error) {
 	if receipt == nil {
 		return TransactionReceiptSignatureV2{}, fmt.Errorf("transaction receipt is required")
 	}
@@ -148,10 +155,11 @@ func SignTransactionReceiptPartyV2(receipt *TransactionReceiptV2, partyID string
 	if partyIndex < 0 {
 		return TransactionReceiptSignatureV2{}, fmt.Errorf("party %q is not listed in the transaction receipt", partyID)
 	}
-	if err := validateV2PrivateKey(key); err != nil {
+	partyPublic, err := signerPublicKeyV2(signer)
+	if err != nil {
 		return TransactionReceiptSignatureV2{}, err
 	}
-	if !equalHybridPublicKeys(key.Public(), receipt.Parties[partyIndex].AgentPubKey) {
+	if !equalHybridPublicKeys(partyPublic, receipt.Parties[partyIndex].AgentPubKey) {
 		return TransactionReceiptSignatureV2{}, fmt.Errorf("signing key does not match party %q agent public key", partyID)
 	}
 	if err := validateTransactionReceiptV2(receipt, false); err != nil {
@@ -161,7 +169,7 @@ func SignTransactionReceiptPartyV2(receipt *TransactionReceiptV2, partyID string
 	if err != nil {
 		return TransactionReceiptSignatureV2{}, err
 	}
-	signature, err := signV2Statement(v2TransactionPartyStatement, signable, key)
+	signature, err := signV2StatementWithSigner(ctx, v2TransactionPartyStatement, signable, signer, partyPublic)
 	if err != nil {
 		return TransactionReceiptSignatureV2{}, err
 	}
@@ -262,7 +270,12 @@ func validateTransactionReceiptV2(receipt *TransactionReceiptV2, requireSignatur
 		if err := VerifyProofBundleV2Signatures(bundle); err != nil {
 			return fmt.Errorf("wire v2: party %q proof bundle signature: %w", party.PartyID, err)
 		}
-		if bundle.AgentID != party.AgentID || !equalHybridPublicKeys(bundle.AgentPubKey, party.AgentPubKey) || bundle.VerifierID != party.VerifierID || len(bundle.Delegations) == 0 || bundle.Delegations[0].SubjectID != party.AgentID {
+		if len(bundle.Delegations) == 0 {
+			// SPEC-v2 §5.5: a transaction party must present delegated
+			// authority; an empty chain is rejected, never evaluated.
+			return v2Errorf(V2ErrTransactionPartyMismatch, "wire v2: party %q proof bundle has no delegation certificates", party.PartyID)
+		}
+		if bundle.AgentID != party.AgentID || !equalHybridPublicKeys(bundle.AgentPubKey, party.AgentPubKey) || bundle.VerifierID != party.VerifierID || bundle.Delegations[0].SubjectID != party.AgentID {
 			return v2Errorf(V2ErrTransactionPartyMismatch, "wire v2: party %q proof bundle identity does not match its signed party", party.PartyID)
 		}
 		partyHash := transactionPartyRequestHashV2(transactionHash, party.RequiredScope)

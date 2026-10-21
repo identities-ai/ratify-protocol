@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/binary"
 	"encoding/json"
@@ -294,17 +295,24 @@ func EncodeKeyRotationStatementV2(stmt *KeyRotationStatementV2) ([]byte, error) 
 // SignKeyRotationStatementV2 returns a signed copy. Callers remain responsible
 // for authenticating the current key and validating rotation-chain state.
 func SignKeyRotationStatementV2(stmt *KeyRotationStatementV2, oldKey, newKey HybridPrivateKey) (*KeyRotationStatementV2, error) {
+	return SignKeyRotationStatementV2WithSigners(context.Background(), stmt, localSignerV2{oldKey}, localSignerV2{newKey})
+}
+
+// SignKeyRotationStatementV2WithSigners is SignKeyRotationStatementV2 with
+// external signers: oldSigner signs 0x0004 under the statement old key and
+// newSigner signs 0x0009 under the statement new key.
+func SignKeyRotationStatementV2WithSigners(ctx context.Context, stmt *KeyRotationStatementV2, oldSigner, newSigner SignerV2) (*KeyRotationStatementV2, error) {
 	if err := validateKeyRotationStatementV2(stmt, false); err != nil {
 		return nil, err
 	}
-	if err := validateV2PrivateKey(oldKey); err != nil {
+	oldPub, err := signerPublicKeyV2(oldSigner)
+	if err != nil {
 		return nil, fmt.Errorf("old rotation key: %w", err)
 	}
-	if err := validateV2PrivateKey(newKey); err != nil {
+	newPub, err := signerPublicKeyV2(newSigner)
+	if err != nil {
 		return nil, fmt.Errorf("new rotation key: %w", err)
 	}
-	oldPub := oldKey.Public()
-	newPub := newKey.Public()
 	if !equalHybridPublicKeys(oldPub, stmt.OldKey) || !equalHybridPublicKeys(newPub, stmt.NewKey) {
 		return nil, fmt.Errorf("rotation private keys do not match the statement keys")
 	}
@@ -312,11 +320,11 @@ func SignKeyRotationStatementV2(stmt *KeyRotationStatementV2, oldKey, newKey Hyb
 	if err != nil {
 		return nil, err
 	}
-	oldSignature, err := signV2Statement(v2KeyRotationAuthorization, signable, oldKey)
+	oldSignature, err := signV2StatementWithSigner(ctx, v2KeyRotationAuthorization, signable, oldSigner, oldPub)
 	if err != nil {
 		return nil, err
 	}
-	newSignature, err := signV2Statement(v2KeyRotationProofOfPossession, signable, newKey)
+	newSignature, err := signV2StatementWithSigner(ctx, v2KeyRotationProofOfPossession, signable, newSigner, newPub)
 	if err != nil {
 		return nil, err
 	}

@@ -58,9 +58,12 @@ type membershipJSON struct {
 }
 
 type requestContextJSON struct {
-	HasResource         bool   `json:"has_resource"`
-	RequestedResourceID string `json:"requested_resource_id,omitempty"`
-	RequestedPath       string `json:"requested_path,omitempty"`
+	HasResource           bool   `json:"has_resource"`
+	RequestedResourceID   string `json:"requested_resource_id,omitempty"`
+	RequestedPath         string `json:"requested_path,omitempty"`
+	HasAmount             bool   `json:"has_amount,omitempty"`
+	RequestedAmountMicros int64  `json:"requested_amount_micros,omitempty"`
+	RequestedCurrency     string `json:"requested_currency,omitempty"`
 }
 
 type rateJSON struct {
@@ -615,6 +618,26 @@ func (g *gen) terminalScenarios() []scenario {
 		constraintOut("constraint_unknown", 1), withReceiver))
 	add(g.terminal("mixed_unverifiable_constraint_and_audience_match", "audience passes, resource_path unverifiable: constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_unverifiable", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(1, "domain-b")} }))
+
+	// Closed v2 registry: integer micro-unit amounts, IANA zones the verifier
+	// cannot load, and v1 geo types that v2 does not register.
+	amount := ratify.ConstraintV2{Type: ratify.ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: 5000000}
+	amountCerts := g.chain(chainSpec{rootCons: []ratify.ConstraintV2{amount}})
+	amountCtx := func(micros int64, currency string) func(*scenario) {
+		return func(s *scenario) {
+			s.reqCtx = &requestContextJSON{HasAmount: true, RequestedAmountMicros: micros, RequestedCurrency: currency}
+		}
+	}
+	add(g.terminal("max_amount_at_limit", "a request of exactly max_amount_micros in the same currency passes", amountCerts, allow(), amountCtx(5000000, "USD")))
+	add(g.terminal("max_amount_exceeded", "one micro-unit above max_amount_micros is constraint_denied", amountCerts, constraintOut("constraint_denied", 0), amountCtx(5000001, "USD")))
+	add(g.terminal("max_amount_currency_mismatch", "a request in another currency is constraint_denied", amountCerts, constraintOut("constraint_denied", 0), amountCtx(1, "EUR")))
+	add(g.terminal("max_amount_missing_context", "an absent authenticated amount is constraint_unverifiable", amountCerts, constraintOut("constraint_unverifiable", 0), nil))
+	unknownZone := ratify.ConstraintV2{Type: ratify.ConstraintTimeWindow, Start: "00:00", End: "23:59", TZ: "Ratify/Conformance_Unknown_Zone"}
+	add(g.terminal("time_window_unknown_zone", "a tz the verifier time-zone database cannot load is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknownZone}}),
+		constraintOut("constraint_unverifiable", 0), nil))
+	geo := ratify.ConstraintV2{Type: ratify.ConstraintGeoCircle, Params: map[string]any{"lat_microdegrees": 0, "lon_microdegrees": 0, "radius_mm": 1000}}
+	add(g.terminal("geo_circle_unregistered_in_v2", "geo_circle is not in the v2 registry and fails closed as constraint_unknown", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{geo}}),
+		constraintOut("constraint_unknown", 0), nil))
 
 	rateCerts := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{rate}})
 	batch := []rateJSON{{IssuerID: g.k("intermediate").ID, CertID: "cert-leaf", WindowS: 60, Limit: 5}}

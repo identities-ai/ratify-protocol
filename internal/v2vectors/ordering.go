@@ -395,7 +395,7 @@ func (g *gen) preflightScenarios() []scenario {
 	_, noSession, _ := g.bundle(bundleSpec{agent: agent, certs: certs})
 	add(std("policy_required_context_absent", "a bound context policy with a null proof session_context is a pre-claim mismatch in the Verify profile", noSession, "session_context_mismatch", nil))
 
-	audience := []ratify.Constraint{{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-1"}, "trust_domain_ids": []any{}}}}
+	audience := []ratify.ConstraintV2{{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-1"}, "trust_domain_ids": []any{}}}}
 	exactCerts := g.chain(chainSpec{leafCons: audience})
 	_, exactWire, _ := g.bundle(bundleSpec{agent: agent, certs: exactCerts, session: session})
 	add(std("audience_requires_expected_receiver", "an audience-constrained chain without expected_receiver_id fails before claim", exactWire, "receiver_audience_required", nil))
@@ -558,12 +558,12 @@ func (g *gen) terminalScenarios() []scenario {
 		}))
 
 	// Constraint aggregation, audience, and rate.
-	resourcePath := ratify.Constraint{Type: ratify.ConstraintResourcePath, ResourceID: "customer/123"}
-	unknown := ratify.Constraint{Type: "ratify.conformance_unknown", Params: map[string]any{"x": 1}}
-	domainA := ratify.Constraint{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}}
-	domainB := ratify.Constraint{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"domain-b"}, "max_membership_age_seconds": 3600}}
-	exactOrDomain := ratify.Constraint{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-9"}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}}
-	rate := ratify.Constraint{Type: ratify.ConstraintMaxRate, Count: 5, WindowS: 60}
+	resourcePath := ratify.ConstraintV2{Type: ratify.ConstraintResourcePath, ResourceID: "customer/123"}
+	unknown := ratify.ConstraintV2{Type: "ratify.conformance_unknown", Params: map[string]any{"x": 1}}
+	domainA := ratify.ConstraintV2{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}}
+	domainB := ratify.ConstraintV2{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"domain-b"}, "max_membership_age_seconds": 3600}}
+	exactOrDomain := ratify.ConstraintV2{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-9"}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}}
+	rate := ratify.ConstraintV2{Type: ratify.ConstraintMaxRate, Count: 5, WindowS: 60}
 	membership := func(link int, domains ...string) membershipJSON {
 		return membershipJSON{DelegationIndex: link, ReceiverID: "receiver-1", TrustDomainIDs: domains, IssuedAt: Now - 60, ExpiresAt: Now + 600, EvidenceDigest: "sha384:" + hexRepeat(byte('a'+link), 96)}
 	}
@@ -573,50 +573,50 @@ func (g *gen) terminalScenarios() []scenario {
 	}
 	resourceCtx := &requestContextJSON{HasResource: true, RequestedResourceID: "customer/999"}
 
-	add(g.terminal("constraint_denied_resource_mismatch", "a known constraint that evaluates false is denied after complete status", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}}),
+	add(g.terminal("constraint_denied_resource_mismatch", "a known constraint that evaluates false is denied after complete status", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}}),
 		constraintOut("constraint_denied", 0), func(s *scenario) { s.reqCtx = resourceCtx }))
-	add(g.terminal("constraint_unverifiable_missing_context", "a constraint whose action context is absent is unverifiable, never passed by omission", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}}),
+	add(g.terminal("constraint_unverifiable_missing_context", "a constraint whose action context is absent is unverifiable, never passed by omission", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}}),
 		constraintOut("constraint_unverifiable", 0), nil))
-	add(g.terminal("constraint_unknown_type", "an unrecognized constraint type fails closed after status aggregation", g.chain(chainSpec{leafCons: []ratify.Constraint{unknown}}),
+	add(g.terminal("constraint_unknown_type", "an unrecognized constraint type fails closed after status aggregation", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknown}}),
 		constraintOut("constraint_unknown", 0), nil))
-	add(g.terminal("constraint_denied_outranks_unknown", "denied outranks unknown independent of link order", g.chain(chainSpec{leafCons: []ratify.Constraint{unknown}, rootCons: []ratify.Constraint{resourcePath}}),
+	add(g.terminal("constraint_denied_outranks_unknown", "denied outranks unknown independent of link order", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknown}, rootCons: []ratify.ConstraintV2{resourcePath}}),
 		constraintOut("constraint_denied", 0), func(s *scenario) { s.reqCtx = resourceCtx }))
-	add(g.terminal("constraint_unknown_outranks_unverifiable", "unknown outranks unverifiable independent of link order", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}, rootCons: []ratify.Constraint{unknown}}),
+	add(g.terminal("constraint_unknown_outranks_unverifiable", "unknown outranks unverifiable independent of link order", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}, rootCons: []ratify.ConstraintV2{unknown}}),
 		constraintOut("constraint_unknown", 0), nil))
-	add(g.terminal("scope_denied_outranks_constraint", "scope_denied precedes constraint results", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}}),
+	add(g.terminal("scope_denied_outranks_constraint", "scope_denied precedes constraint results", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}}),
 		constraintOut("scope_denied", 0), func(s *scenario) { s.scope = "meeting:attend" }))
-	add(g.terminal("audience_domain_match", "trust-domain membership authorizes the receiver after claim", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}}),
+	add(g.terminal("audience_domain_match", "trust-domain membership authorizes the receiver after claim", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
 		allow(), func(s *scenario) {
 			withReceiver(s)
 			s.memberships = []membershipJSON{membership(0, "domain-a")}
 			s.out.CallbackCounts.Audience = 1
 			s.out.AllowValidUntil = Now + 600
 		}))
-	add(g.terminal("audience_exact_mismatch_domain_match", "an exact-ID mismatch alone does not reject when a domain is named; the domain match authorizes", g.chain(chainSpec{leafCons: []ratify.Constraint{exactOrDomain}}),
+	add(g.terminal("audience_exact_mismatch_domain_match", "an exact-ID mismatch alone does not reject when a domain is named; the domain match authorizes", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{exactOrDomain}}),
 		allow(), func(s *scenario) {
 			withReceiver(s)
 			s.memberships = []membershipJSON{membership(0, "domain-a")}
 			s.out.CallbackCounts.Audience = 1
 			s.out.AllowValidUntil = Now + 600
 		}))
-	add(g.terminal("audience_membership_missing", "missing required membership is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}}),
+	add(g.terminal("audience_membership_missing", "missing required membership is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
 		constraintOut("constraint_unverifiable", 1), withReceiver))
-	add(g.terminal("audience_domain_nonmatch", "authoritative membership ruling out the named domain is constraint_denied", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}}),
+	add(g.terminal("audience_domain_nonmatch", "authoritative membership ruling out the named domain is constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
 		constraintOut("constraint_denied", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(0, "domain-x")} }))
-	add(g.terminal("audience_nonmatch_and_missing_leaf_first", "two domain links: valid non-match on the leaf, missing membership on the root: constraint_denied", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}, rootCons: []ratify.Constraint{domainB}}),
+	add(g.terminal("audience_nonmatch_and_missing_leaf_first", "two domain links: valid non-match on the leaf, missing membership on the root: constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_denied", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(0, "domain-x")} }))
-	add(g.terminal("audience_nonmatch_and_missing_root_first", "two domain links: missing membership on the leaf, valid non-match on the root: constraint_denied", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}, rootCons: []ratify.Constraint{domainB}}),
+	add(g.terminal("audience_nonmatch_and_missing_root_first", "two domain links: missing membership on the leaf, valid non-match on the root: constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_denied", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(1, "domain-x")} }))
-	add(g.terminal("mixed_unverifiable_constraint_and_audience_denied_leaf_first", "leaf resource_path unverifiable, root audience non-match: constraint_denied", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}, rootCons: []ratify.Constraint{domainB}}),
+	add(g.terminal("mixed_unverifiable_constraint_and_audience_denied_leaf_first", "leaf resource_path unverifiable, root audience non-match: constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_denied", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(1, "domain-x")} }))
-	add(g.terminal("mixed_unverifiable_constraint_and_audience_denied_root_first", "leaf audience non-match, root resource_path unverifiable: constraint_denied", g.chain(chainSpec{leafCons: []ratify.Constraint{domainA}, rootCons: []ratify.Constraint{resourcePath}}),
+	add(g.terminal("mixed_unverifiable_constraint_and_audience_denied_root_first", "leaf audience non-match, root resource_path unverifiable: constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}, rootCons: []ratify.ConstraintV2{resourcePath}}),
 		constraintOut("constraint_denied", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(0, "domain-x")} }))
-	add(g.terminal("mixed_unknown_constraint_and_audience_missing", "unknown constraint and missing audience membership: constraint_unknown", g.chain(chainSpec{leafCons: []ratify.Constraint{unknown}, rootCons: []ratify.Constraint{domainB}}),
+	add(g.terminal("mixed_unknown_constraint_and_audience_missing", "unknown constraint and missing audience membership: constraint_unknown", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknown}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_unknown", 1), withReceiver))
-	add(g.terminal("mixed_unverifiable_constraint_and_audience_match", "audience passes, resource_path unverifiable: constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.Constraint{resourcePath}, rootCons: []ratify.Constraint{domainB}}),
+	add(g.terminal("mixed_unverifiable_constraint_and_audience_match", "audience passes, resource_path unverifiable: constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_unverifiable", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(1, "domain-b")} }))
 
-	rateCerts := g.chain(chainSpec{leafCons: []ratify.Constraint{rate}})
+	rateCerts := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{rate}})
 	batch := []rateJSON{{IssuerID: g.k("intermediate").ID, CertID: "cert-leaf", WindowS: 60, Limit: 5}}
 	add(g.terminal("rate_reserved", "max_rate reserved only after every status is current", rateCerts, allow(), func(s *scenario) {
 		s.rate = "reserve"
@@ -636,7 +636,7 @@ func (g *gen) terminalScenarios() []scenario {
 		constraintOut("scope_denied", 0), func(s *scenario) { s.rate = "reserve"; s.scope = "meeting:attend" }))
 
 	// Issuer collision: the same cert_id and rate window under two issuers.
-	shared := g.chain(chainSpec{leafID: "shared-id", rootID: "shared-id", leafCons: []ratify.Constraint{rate}, rootCons: []ratify.Constraint{rate}})
+	shared := g.chain(chainSpec{leafID: "shared-id", rootID: "shared-id", leafCons: []ratify.ConstraintV2{rate}, rootCons: []ratify.ConstraintV2{rate}})
 	add(g.terminal("issuer_scoped_cert_id_collision", "the same cert_id under two issuers is valid; status and rate counters stay issuer-scoped", shared, allow(), func(s *scenario) {
 		s.rate = "reserve"
 		s.out.CallbackCounts.Rate = 1

@@ -31,7 +31,7 @@ type DelegationCertV2 struct {
 	SubjectID     string          `json:"subject_id"`
 	SubjectPubKey HybridPublicKey `json:"subject_pub_key"`
 	Scope         []string        `json:"scope"`
-	Constraints   []Constraint    `json:"constraints"`
+	Constraints   []ConstraintV2  `json:"constraints"`
 	IssuedAt      int64           `json:"issued_at"`
 	ExpiresAt     int64           `json:"expires_at"`
 	Signature     HybridSignature `json:"signature"`
@@ -120,7 +120,7 @@ type revocationPushSignableV2 struct {
 
 type delegationSignableV2 struct {
 	CertID        string          `json:"cert_id"`
-	Constraints   []Constraint    `json:"constraints"`
+	Constraints   []ConstraintV2  `json:"constraints"`
 	ExpiresAt     int64           `json:"expires_at"`
 	IssuedAt      int64           `json:"issued_at"`
 	IssuerID      string          `json:"issuer_id"`
@@ -146,7 +146,7 @@ type presentationSignableV2 struct {
 
 type delegationCanonicalV2 struct {
 	CertID        string          `json:"cert_id"`
-	Constraints   []Constraint    `json:"constraints"`
+	Constraints   []ConstraintV2  `json:"constraints"`
 	ExpiresAt     int64           `json:"expires_at"`
 	IssuedAt      int64           `json:"issued_at"`
 	IssuerID      string          `json:"issuer_id"`
@@ -175,7 +175,7 @@ type proofBundleCanonicalV2 struct {
 
 var delegationV2Fields = []string{"version", "cert_id", "issuer_id", "issuer_pub_key", "subject_id", "subject_pub_key", "scope", "constraints", "issued_at", "expires_at", "signature"}
 var proofBundleV2Fields = []string{"version", "verifier_id", "agent_id", "agent_pub_key", "delegations", "delegation_digest", "challenge", "challenge_at", "challenge_sig", "session_context", "stream_id", "stream_seq"}
-var v2SchemaFieldNames = strings.Fields("version cert_id issuer_id issuer_pub_key subject_id subject_pub_key scope constraints signature ed25519 ml_dsa_65 issued_at expires_at verifier_id agent_id agent_pub_key delegations delegation_digest challenge challenge_at challenge_sig session_context stream_id stream_seq type params count currency end lat lon max_alt_m max_amount max_lat max_lon max_mps min_alt_m min_lat min_lon path_prefix points radius_m resource_id start tz window_s exact_receiver_ids trust_domain_ids max_membership_age_seconds next_update sequence pushed_at revoked authority_id recovery_epoch role previous_statement_hash old_key new_key old_key_id new_key_id not_before old_signature new_signature log_id bundle_hash issuer_ids decision decision_reason identity_status trust_assessment status_assessment challenge_assessment context_assessment context_policy_digest verified_at required_scope granted_scope status_evidence_digests previous_receipt_hash human_id status_key_id object_type_code digest transaction_id created_at terms_schema_uri terms_canonical_json parties party_id proof_bundle_hash proof_bundle party_signatures invocation_id workspace_id session_id")
+var v2SchemaFieldNames = strings.Fields("version cert_id issuer_id issuer_pub_key subject_id subject_pub_key scope constraints signature ed25519 ml_dsa_65 issued_at expires_at verifier_id agent_id agent_pub_key delegations delegation_digest challenge challenge_at challenge_sig session_context stream_id stream_seq type params count currency end lat lon max_alt_m max_amount max_amount_micros max_lat max_lon max_mps min_alt_m min_lat min_lon path_prefix points radius_m resource_id start tz window_s exact_receiver_ids trust_domain_ids max_membership_age_seconds next_update sequence pushed_at revoked authority_id recovery_epoch role previous_statement_hash old_key new_key old_key_id new_key_id not_before old_signature new_signature log_id bundle_hash issuer_ids decision decision_reason identity_status trust_assessment status_assessment challenge_assessment context_assessment context_policy_digest verified_at required_scope granted_scope status_evidence_digests previous_receipt_hash human_id status_key_id object_type_code digest transaction_id created_at terms_schema_uri terms_canonical_json parties party_id proof_bundle_hash proof_bundle party_signatures invocation_id workspace_id session_id")
 
 func requireV2Fields(data []byte, names []string, nullable ...string) error {
 	var fields map[string]json.RawMessage
@@ -233,8 +233,8 @@ func checkV2SchemaKeyCase(data []byte) error {
 
 func DecodeDelegationCertV2(data []byte) (_ *DelegationCertV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: certificate exceeds MAX_PROOF_BUNDLE_BYTES")
+	if err := checkV2WireSize(data, "certificate", "MAX_DELEGATION_CERT_BYTES_V2", MaxDelegationCertBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data); err != nil {
 		return nil, err
@@ -280,8 +280,8 @@ func placeholderV2Signature() HybridSignature {
 
 func DecodeRevocationListV2(data []byte) (_ *RevocationListV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: revocation list exceeds MAX_PROOF_BUNDLE_BYTES")
+	if err := checkV2WireSize(data, "revocation list", "MAX_REVOCATION_LIST_BYTES_V2", MaxRevocationListBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data); err != nil {
 		return nil, err
@@ -304,8 +304,8 @@ func DecodeRevocationListV2(data []byte) (_ *RevocationListV2, err error) {
 
 func DecodeRevocationPushV2(data []byte) (_ *RevocationPushV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: revocation push exceeds MAX_PROOF_BUNDLE_BYTES")
+	if err := checkV2WireSize(data, "revocation push", "MAX_REVOCATION_PUSH_BYTES_V2", MaxRevocationPushBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data); err != nil {
 		return nil, err
@@ -344,12 +344,18 @@ func validateRevocationListV2(list *RevocationListV2) error {
 	if list == nil || list.Version != 2 || !validV2ID(list.IssuerID) || list.Sequence <= 0 || list.Sequence > maxSafeInteger || list.UpdatedAt < -maxSafeInteger || list.UpdatedAt > maxSafeInteger || list.NextUpdate < -maxSafeInteger || list.NextUpdate > maxSafeInteger || list.NextUpdate <= list.UpdatedAt {
 		return fmt.Errorf("v2 revocation list has invalid version, issuer, sequence, or time bounds")
 	}
+	if len(list.Revoked) > MaxRevocationListRefsV2 {
+		return fmt.Errorf("v2 revocation list exceeds MAX_REVOCATION_LIST_REFS_V2 (%d)", MaxRevocationListRefsV2)
+	}
 	return validateRevokedCertsV2(list.Revoked)
 }
 
 func validateRevocationPushV2(push *RevocationPushV2) error {
 	if push == nil || push.Version != 2 || !validV2ID(push.IssuerID) || push.Sequence <= 0 || push.Sequence > maxSafeInteger || push.PushedAt < -maxSafeInteger || push.PushedAt > maxSafeInteger {
 		return fmt.Errorf("v2 revocation push has invalid version, issuer, sequence, or timestamp")
+	}
+	if len(push.Revoked) > MaxRevocationPushRefsV2 {
+		return fmt.Errorf("v2 revocation push exceeds MAX_REVOCATION_PUSH_REFS_V2 (%d)", MaxRevocationPushRefsV2)
 	}
 	return validateRevokedCertsV2(push.Revoked)
 }
@@ -584,8 +590,8 @@ func StatusEvidenceDigest(objectType uint16, object any) ([]byte, error) {
 
 func DecodeProofBundleV2(data []byte) (_ *ProofBundleV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: proof bundle exceeds MAX_PROOF_BUNDLE_BYTES (%d)", MaxProofBundleBytes)
+	if err := checkV2WireSize(data, "proof bundle", "MAX_PROOF_BUNDLE_BYTES_V2", MaxProofBundleBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data, "delegation_digest"); err != nil {
 		return nil, err
@@ -671,104 +677,6 @@ func DecodeProofBundleV2(data []byte) (_ *ProofBundleV2, err error) {
 		}
 	}
 	return &bundle, nil
-}
-
-func validateV2ConstraintFields(data []byte) error {
-	if err := checkV2Nulls(data); err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
-		return fmt.Errorf("constraint must be an object")
-	}
-	var c Constraint
-	if err := json.Unmarshal(data, &c); err != nil {
-		return err
-	}
-	required := map[ConstraintType][]string{
-		ConstraintGeoCircle:    {"lat", "lon", "radius_m"},
-		ConstraintGeoPolygon:   {"points"},
-		ConstraintGeoBBox:      {"min_lat", "min_lon", "max_lat", "max_lon"},
-		ConstraintTimeWindow:   {"start", "end", "tz"},
-		ConstraintMaxSpeedMps:  {"max_mps"},
-		ConstraintMaxAmount:    {"max_amount", "currency"},
-		ConstraintMaxRate:      {"count", "window_s"},
-		ConstraintResourcePath: {"resource_id"},
-	}
-	allowed := map[ConstraintType][]string{
-		ConstraintGeoCircle:    {"type", "lat", "lon", "radius_m"},
-		ConstraintGeoPolygon:   {"type", "points"},
-		ConstraintGeoBBox:      {"type", "min_lat", "min_lon", "max_lat", "max_lon", "min_alt_m", "max_alt_m"},
-		ConstraintTimeWindow:   {"type", "start", "end", "tz"},
-		ConstraintMaxSpeedMps:  {"type", "max_mps"},
-		ConstraintMaxAmount:    {"type", "max_amount", "currency"},
-		ConstraintMaxRate:      {"type", "count", "window_s"},
-		ConstraintResourcePath: {"type", "resource_id", "path_prefix"},
-	}
-	for key := range fields {
-		if !containsV2Field(allowed[c.Type], key) && !(c.Type == ConstraintReceiverAudience && containsV2Field([]string{"type", "params"}, key)) && !(len(allowed[c.Type]) == 0 && c.Type != ConstraintReceiverAudience && containsV2Field([]string{"type", "params"}, key)) {
-			return fmt.Errorf("field %q is not allowed for constraint type %q", key, c.Type)
-		}
-	}
-	for _, name := range required[c.Type] {
-		if _, ok := fields[name]; !ok {
-			return fmt.Errorf("constraint type %q requires field %q", c.Type, name)
-		}
-	}
-	if c.Type == ConstraintGeoBBox {
-		_, min := fields["min_alt_m"]
-		_, max := fields["max_alt_m"]
-		if min != max {
-			return fmt.Errorf("geo_bbox altitude bounds must be both present or both absent")
-		}
-	}
-	if c.Type == ConstraintReceiverAudience {
-		var params map[string]json.RawMessage
-		if err := json.Unmarshal(fields["params"], &params); err != nil || params == nil {
-			return fmt.Errorf("receiver audience requires params object")
-		}
-		var exact, domains []string
-		if json.Unmarshal(params["exact_receiver_ids"], &exact) != nil || exact == nil || json.Unmarshal(params["trust_domain_ids"], &domains) != nil || domains == nil {
-			return fmt.Errorf("receiver audience requires exact_receiver_ids and trust_domain_ids arrays")
-		}
-		if len(exact)+len(domains) == 0 {
-			return fmt.Errorf("receiver audience must name an exact receiver or trust domain")
-		}
-		for _, values := range [][]string{exact, domains} {
-			seen := map[string]bool{}
-			for _, value := range values {
-				if value == "" || seen[value] {
-					return fmt.Errorf("receiver audience IDs must be non-empty and unique")
-				}
-				seen[value] = true
-			}
-		}
-		age, hasAge := params["max_membership_age_seconds"]
-		if len(domains) > 0 && (!hasAge || bytes.Equal(bytes.TrimSpace(age), []byte("null"))) {
-			return fmt.Errorf("receiver audience trust domains require max_membership_age_seconds")
-		}
-		if hasAge {
-			var seconds int64
-			if err := json.Unmarshal(age, &seconds); err != nil || seconds <= 0 || seconds > maxSafeInteger {
-				return fmt.Errorf("max_membership_age_seconds must be a positive safe integer")
-			}
-		}
-		if len(domains) == 0 && hasAge {
-			return fmt.Errorf("receiver audience without trust domains must omit max_membership_age_seconds")
-		}
-		if c.Params == nil {
-			return fmt.Errorf("receiver audience requires params")
-		}
-		if err := ValidateParamsValue(c.Params, 0); err != nil {
-			return err
-		}
-		for key := range params {
-			if !containsV2Field([]string{"exact_receiver_ids", "trust_domain_ids", "max_membership_age_seconds"}, key) {
-				return fmt.Errorf("unknown receiver audience parameter %q", key)
-			}
-		}
-	}
-	return nil
 }
 
 // validateV2ScopeArray checks only the wire shape and resource bounds.
@@ -899,7 +807,7 @@ func validV2ID(id string) bool {
 func certSignableBytesV2(c *DelegationCertV2) ([]byte, error) {
 	constraints := c.Constraints
 	if constraints == nil {
-		constraints = []Constraint{}
+		constraints = []ConstraintV2{}
 	}
 	return CanonicalJSON(delegationSignableV2{c.CertID, constraints, c.ExpiresAt, c.IssuedAt, c.IssuerID, c.IssuerPubKey, c.Scope, c.SubjectID, c.SubjectPubKey, c.Version})
 }
@@ -970,7 +878,7 @@ func delegationDigestV2(certs []DelegationCertV2) ([]byte, error) {
 	for i, c := range certs {
 		constraints := c.Constraints
 		if constraints == nil {
-			constraints = []Constraint{}
+			constraints = []ConstraintV2{}
 		}
 		ordered[i] = delegationCanonicalV2{c.CertID, constraints, c.ExpiresAt, c.IssuedAt, c.IssuerID, c.IssuerPubKey, c.Scope, c.Signature, c.SubjectID, c.SubjectPubKey, c.Version}
 	}

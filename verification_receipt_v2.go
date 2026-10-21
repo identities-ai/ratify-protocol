@@ -507,16 +507,16 @@ func EncodeVerificationReceiptV2(receipt *VerificationReceiptV2) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MaxVerificationReceiptBytesV2); err != nil {
+		return nil, err
 	}
 	return data, nil
 }
 
 func DecodeVerificationReceiptV2(data []byte) (_ *VerificationReceiptV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MaxVerificationReceiptBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2WithTextTopLevel(data, map[string]bool{"previous_receipt_hash": true}, map[string]bool{"bundle_hash": true}); err != nil {
 		return nil, err

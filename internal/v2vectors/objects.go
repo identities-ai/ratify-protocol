@@ -90,8 +90,8 @@ func (g *gen) genesisRotationState(key string) *RotationStateJSON {
 }
 
 // constrainedLeaf pins every v2 constraint encoding used by the corpus.
-func (g *gen) constrainedLeafConstraints() []ratify.Constraint {
-	return []ratify.Constraint{
+func (g *gen) constrainedLeafConstraints() []ratify.ConstraintV2 {
+	return []ratify.ConstraintV2{
 		{Type: ratify.ConstraintMaxRate, Count: 5, WindowS: 60},
 		{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-1"}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}},
 		{Type: ratify.ConstraintResourcePath, ResourceID: "customer/123", PathPrefix: "/v1/customers/"},

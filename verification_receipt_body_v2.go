@@ -72,8 +72,8 @@ func VerificationReceiptV2Body(receipt *VerificationReceiptV2) ([]byte, error) {
 // pre-signing body before it can become an immutable terminal outbox entry.
 func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt body exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", MaxVerificationReceiptBodyBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2WithTextTopLevel(data, nil, map[string]bool{"bundle_hash": true}); err != nil {
 		return nil, err

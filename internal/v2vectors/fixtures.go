@@ -63,8 +63,8 @@ func (g *gen) fixtureSessionContext(agent *Key) []byte {
 type chainSpec struct {
 	leafScope   []string
 	rootScope   []string
-	leafCons    []ratify.Constraint
-	rootCons    []ratify.Constraint
+	leafCons    []ratify.ConstraintV2
+	rootCons    []ratify.ConstraintV2
 	leafID      string
 	rootID      string
 	leafIssued  int64

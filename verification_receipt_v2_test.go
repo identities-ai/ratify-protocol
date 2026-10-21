@@ -591,7 +591,7 @@ func TestVerificationReceiptV2InterruptedEmptyChainRoundTripAndBinding(t *testin
 	}
 	cert := DelegationCertV2{Version: 2, CertID: "empty-chain-binding-test", IssuerID: issuerID,
 		IssuerPubKey: issuerPub, SubjectID: agentID, SubjectPubKey: agentPub,
-		Scope: []string{"execute:tool"}, Constraints: []Constraint{}, IssuedAt: 10, ExpiresAt: 20}
+		Scope: []string{"execute:tool"}, Constraints: []ConstraintV2{}, IssuedAt: 10, ExpiresAt: 20}
 	certBody, err := certSignableBytesV2(&cert)
 	if err != nil {
 		t.Fatal(err)

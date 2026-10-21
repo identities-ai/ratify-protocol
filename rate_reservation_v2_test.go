@@ -8,7 +8,7 @@ import (
 
 func rateConstraintV2Test(t *testing.T, issuer, cert string, index, count int, window int64) V2DeferredConstraint {
 	t.Helper()
-	encoded, err := CanonicalJSON(Constraint{Type: ConstraintMaxRate, Count: count, WindowS: window})
+	encoded, err := CanonicalJSON(ConstraintV2{Type: ConstraintMaxRate, Count: int64(count), WindowS: window})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,9 @@ func TestBuildV2RateReservationBatchRejectsMalformedOrDuplicatedSignedConstraint
 	issuer := strings.Repeat("a", 64)
 	valid := rateConstraintV2Test(t, issuer, "cert", 0, 2, 60)
 	for _, input := range []V2DeferredConstraint{
-		rateConstraintV2Test(t, issuer, "cert", 0, 0, 60),
-		rateConstraintV2Test(t, issuer, "cert", 0, 2, 0),
+		{IssuerID: issuer, CertID: "cert", Type: ConstraintMaxRate, CanonicalJSON: []byte(`{"count":0,"type":"max_rate","window_s":60}`)},
+		{IssuerID: issuer, CertID: "cert", Type: ConstraintMaxRate, CanonicalJSON: []byte(`{"count":2,"type":"max_rate","window_s":0}`)},
+		{IssuerID: issuer, CertID: "cert", Type: ConstraintMaxRate, CanonicalJSON: []byte(`{"count":2,"type":"max_rate","window_s":86401}`)},
 		{IssuerID: strings.Repeat("a", 32), CertID: "cert", Type: ConstraintMaxRate, CanonicalJSON: valid.CanonicalJSON},
 		{IssuerID: issuer, CertID: "", Type: ConstraintMaxRate, CanonicalJSON: valid.CanonicalJSON},
 		{IssuerID: issuer, CertID: strings.Repeat("x", MaxIdentifierLengthBytes+1), Type: ConstraintMaxRate, CanonicalJSON: valid.CanonicalJSON},

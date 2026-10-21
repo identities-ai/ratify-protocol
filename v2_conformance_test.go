@@ -894,7 +894,7 @@ func runV2OrderingVector(t *testing.T, v v2OrderingVector, bundle []byte) {
 		req.ContextPolicy = policy
 	}
 	if c := v.RequestContext; c != nil {
-		req.Context = ratify.VerifierContext{HasResource: c.HasResource, RequestedResourceID: c.RequestedResourceID, RequestedPath: c.RequestedPath}
+		req.Context = ratify.ConstraintContextV2{HasResource: c.HasResource, RequestedResourceID: c.RequestedResourceID, RequestedPath: c.RequestedPath}
 	}
 	req.StatusRoles = ratify.V2StatusRoleBindings{StatusKeyIssuers: v.StatusRoles.StatusKeyIssuers, CurrentStatusKeyIDs: v.StatusRoles.CurrentStatusKeyIDs, ReservedKeyIDs: map[string]struct{}{}}
 	for _, id := range v.StatusRoles.ReservedKeyIDs {

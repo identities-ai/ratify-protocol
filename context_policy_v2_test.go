@@ -153,7 +153,7 @@ func TestLocalAuthorizationEvaluatesContextBeforeConstraints(t *testing.T) {
 	policyContext := bytes.Repeat([]byte{0x61}, 32)
 	bundle.SessionContext = &policyContext
 	leaf := &bundle.Delegations[0]
-	leaf.Constraints = []Constraint{{Type: "future_constraint", Params: map[string]any{}}}
+	leaf.Constraints = []ConstraintV2{{Type: "future_constraint", Params: map[string]any{}}}
 	leafBytes, err := certSignableBytesV2(leaf)
 	if err != nil {
 		t.Fatal(err)

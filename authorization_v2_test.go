@@ -29,7 +29,7 @@ func TestLocalTimeWindowValidUntilV2(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			bundle := &ProofBundleV2{Delegations: []DelegationCertV2{{Constraints: []Constraint{{Type: ConstraintTimeWindow, Start: tc.start, End: tc.end, TZ: tc.zone}}}}}
+			bundle := &ProofBundleV2{Delegations: []DelegationCertV2{{Constraints: []ConstraintV2{{Type: ConstraintTimeWindow, Start: tc.start, End: tc.end, TZ: tc.zone}}}}}
 			got, err := localTimeWindowValidUntilV2(bundle, now)
 			if err != nil || got != want.Unix() {
 				t.Fatalf("terminal horizon=%d want=%d err=%v", got, want.Unix(), err)
@@ -192,7 +192,7 @@ func signedV2DelegationChainTest(t testing.TB, parentMayDelegate bool) (*ProofBu
 	if parentMayDelegate {
 		parentScope = append(parentScope, ScopeIdentityDelegate)
 	}
-	rootCert := DelegationCertV2{Version: 2, CertID: "root-cert", IssuerID: rootID, IssuerPubKey: rootPub, SubjectID: midID, SubjectPubKey: midPub, Scope: parentScope, Constraints: []Constraint{}, IssuedAt: 10, ExpiresAt: 30}
+	rootCert := DelegationCertV2{Version: 2, CertID: "root-cert", IssuerID: rootID, IssuerPubKey: rootPub, SubjectID: midID, SubjectPubKey: midPub, Scope: parentScope, Constraints: []ConstraintV2{}, IssuedAt: 10, ExpiresAt: 30}
 	rootBytes, err := certSignableBytesV2(&rootCert)
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func signedV2DelegationChainTest(t testing.TB, parentMayDelegate bool) (*ProofBu
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafCert := DelegationCertV2{Version: 2, CertID: "leaf-cert", IssuerID: midID, IssuerPubKey: midPub, SubjectID: agentID, SubjectPubKey: agentPub, Scope: []string{"data:read"}, Constraints: []Constraint{}, IssuedAt: 10, ExpiresAt: 30}
+	leafCert := DelegationCertV2{Version: 2, CertID: "leaf-cert", IssuerID: midID, IssuerPubKey: midPub, SubjectID: agentID, SubjectPubKey: agentPub, Scope: []string{"data:read"}, Constraints: []ConstraintV2{}, IssuedAt: 10, ExpiresAt: 30}
 	leafBytes, err := certSignableBytesV2(&leafCert)
 	if err != nil {
 		t.Fatal(err)
@@ -411,24 +411,24 @@ func TestEvaluateProofBundleV2LocalAuthorizationScopeAndExpiry(t *testing.T) {
 func TestEvaluateProofBundleV2DefersLocalConstraintFailuresUntilEveryStatusCheck(t *testing.T) {
 	tests := []struct {
 		name       string
-		constraint Constraint
-		context    VerifierContext
+		constraint ConstraintV2
+		context    ConstraintContextV2
 		wantStatus string
 	}{
 		{
 			name:       "known constraint denied",
-			constraint: Constraint{Type: ConstraintMaxAmount, MaxAmount: 5, Currency: "USD"},
-			context:    VerifierContext{HasAmount: true, RequestedAmount: 10, RequestedCurrency: "USD"},
+			constraint: ConstraintV2{Type: ConstraintMaxAmount, MaxAmountMicros: 5_000_000, Currency: "USD"},
+			context:    ConstraintContextV2{HasAmount: true, RequestedAmountMicros: 10_000_000, RequestedCurrency: "USD"},
 			wantStatus: "constraint_denied",
 		},
 		{
 			name:       "unknown constraint",
-			constraint: Constraint{Type: ConstraintType("future_constraint"), Params: map[string]any{}},
+			constraint: ConstraintV2{Type: ConstraintType("future_constraint"), Params: map[string]any{}},
 			wantStatus: "constraint_unknown",
 		},
 		{
 			name:       "unverifiable constraint",
-			constraint: Constraint{Type: ConstraintMaxAmount, MaxAmount: 5, Currency: "USD"},
+			constraint: ConstraintV2{Type: ConstraintMaxAmount, MaxAmountMicros: 5_000_000, Currency: "USD"},
 			wantStatus: "constraint_unverifiable",
 		},
 	}
@@ -436,7 +436,7 @@ func TestEvaluateProofBundleV2DefersLocalConstraintFailuresUntilEveryStatusCheck
 		t.Run(tt.name, func(t *testing.T) {
 			bundle, rootKey, rootPriv, _, agentPriv := signedV2DelegationChainTest(t, true)
 			rootIndex := len(bundle.Delegations) - 1
-			bundle.Delegations[rootIndex].Constraints = []Constraint{tt.constraint}
+			bundle.Delegations[rootIndex].Constraints = []ConstraintV2{tt.constraint}
 			signable, err := certSignableBytesV2(&bundle.Delegations[rootIndex])
 			if err != nil {
 				t.Fatal(err)
@@ -496,7 +496,7 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 		t.Run(statusCase.name, func(t *testing.T) {
 			bundle, rootKey, rootPriv, _, agentPriv := signedV2DelegationChainTest(t, true)
 			rootIndex := len(bundle.Delegations) - 1
-			bundle.Delegations[rootIndex].Constraints = []Constraint{{Type: ConstraintMaxAmount, MaxAmount: 5, Currency: "USD"}}
+			bundle.Delegations[rootIndex].Constraints = []ConstraintV2{{Type: ConstraintMaxAmount, MaxAmountMicros: 5_000_000, Currency: "USD"}}
 			signable, err := certSignableBytesV2(&bundle.Delegations[rootIndex])
 			if err != nil {
 				t.Fatal(err)
@@ -523,7 +523,7 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 			assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
 				Now: time.Unix(15, 0), TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
 				TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
-				Context:       VerifierContext{HasAmount: true, RequestedAmount: 10, RequestedCurrency: "USD"},
+				Context:       ConstraintContextV2{HasAmount: true, RequestedAmountMicros: 10_000_000, RequestedCurrency: "USD"},
 				ContextPolicy: policy, ExpectedChallenge: expected, ClaimToken: token,
 			})
 			if assessment.Status != "pending_external_checks" || assessment.LocalPolicyFailure == nil {
@@ -645,7 +645,7 @@ func TestEvaluateProofBundleV2FailureOrderChecksAllTimeBoundsBeforeExpiry(t *tes
 
 func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) {
 	bundle, rootKey, _, midPriv, agentPriv := signedV2DelegationChainTest(t, true)
-	bundle.Delegations[0].Constraints = []Constraint{
+	bundle.Delegations[0].Constraints = []ConstraintV2{
 		{Type: ConstraintMaxRate, Count: 2, WindowS: 60},
 		{Type: ConstraintMaxRate, Count: 4, WindowS: 120},
 		{Type: ConstraintReceiverAudience, Params: map[string]any{
@@ -892,7 +892,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 
 	tampered := *bundle
 	tampered.Delegations = append([]DelegationCertV2(nil), bundle.Delegations...)
-	tampered.Delegations[0].Constraints = append([]Constraint(nil), bundle.Delegations[0].Constraints...)
+	tampered.Delegations[0].Constraints = append([]ConstraintV2(nil), bundle.Delegations[0].Constraints...)
 	tamperedParams := make(map[string]any, len(tampered.Delegations[0].Constraints[2].Params))
 	for key, value := range tampered.Delegations[0].Constraints[2].Params {
 		tamperedParams[key] = value

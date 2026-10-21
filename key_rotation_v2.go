@@ -257,8 +257,8 @@ func KeyRotationStatementV2Digest(stmt *KeyRotationStatementV2) ([]byte, error) 
 // DecodeKeyRotationStatementV2 strictly decodes one v2 rotation statement.
 func DecodeKeyRotationStatementV2(data []byte) (_ *KeyRotationStatementV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: rotation statement exceeds the wire size limit")
+	if err := checkV2WireSize(data, "rotation statement", "MAX_KEY_ROTATION_STATEMENT_BYTES_V2", MaxKeyRotationStatementBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data, "previous_statement_hash"); err != nil {
 		return nil, err

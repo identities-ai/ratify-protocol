@@ -34,7 +34,7 @@ type certSpec struct {
 	issuer, subject *Key
 	certID          string
 	scope           []string
-	constraints     []ratify.Constraint
+	constraints     []ratify.ConstraintV2
 	issuedAt        int64
 	expiresAt       int64
 	signer          *Key   // defaults to issuer
@@ -43,7 +43,7 @@ type certSpec struct {
 
 func (g *gen) cert(s certSpec) (ratify.DelegationCertV2, []byte, signed) {
 	if s.constraints == nil {
-		s.constraints = []ratify.Constraint{}
+		s.constraints = []ratify.ConstraintV2{}
 	}
 	if s.issuedAt == 0 {
 		s.issuedAt = Now - 3600

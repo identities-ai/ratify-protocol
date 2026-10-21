@@ -333,6 +333,39 @@ func ValidateScopes(scopes []string) error {
 	return nil
 }
 
+// ValidateScopesV2 applies the Protocol v2 delegation scope rules while
+// leaving the published v1 validator unchanged. V2 treats registry validity
+// as a post-claim authorization check, so callers should use this only after
+// authenticated challenge claim.
+func ValidateScopesV2(scopes []string) error {
+	if len(scopes) == 0 {
+		return fmt.Errorf("scope must be a non-empty array")
+	}
+	if err := ValidateScopes(scopes); err != nil {
+		return err
+	}
+	seen := make(map[string]bool, len(scopes))
+	for _, scope := range scopes {
+		if scope == "custom:*" {
+			return fmt.Errorf("custom:* is not a valid scope")
+		}
+		if seen[scope] {
+			return fmt.Errorf("duplicate scope %q", scope)
+		}
+		seen[scope] = true
+	}
+	return nil
+}
+
+// ValidateRequiredScopeV2 requires one registered canonical scope. Wildcards
+// and custom extension scopes cannot be requested as a verifier decision.
+func ValidateRequiredScopeV2(scope string) error {
+	if !validScopes[scope] || scopeWildcards[scope] != nil || strings.HasPrefix(scope, CustomScopePrefix) {
+		return fmt.Errorf("required scope must be one non-empty canonical scope")
+	}
+	return nil
+}
+
 // isValidScope returns true iff s is canonical, a wildcard, or a custom extension.
 func isValidScope(s string) bool {
 	if validScopes[s] {

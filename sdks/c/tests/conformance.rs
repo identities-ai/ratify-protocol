@@ -19,29 +19,24 @@
 //! bundle-hash-from-JSON entry point those cross-SDK checks need).
 
 use ratify_c::{
-    ratify_challenge_sign_bytes_hex, ratify_delegation_sign_bytes_hex,
-    ratify_error_free, ratify_string_free,
-    ratify_verify_bundle_opts_v2, ratify_verify_result_free,
-    ratify_verify_result_identity_status, ratify_verify_result_is_valid,
-    ratify_scopes_expand, ratify_scopes_validate,
-    ratify_revocation_list_sign_bytes_hex, ratify_revocation_list_verify,
-    ratify_revocation_push_sign_bytes_hex,
-    ratify_revocation_push_sig_ed25519_hex, ratify_revocation_push_sig_ml_dsa_65_hex,
-    ratify_revocation_push_verify,
+    ratify_challenge_sign_bytes_hex, ratify_delegation_sign_bytes_hex, ratify_error_free,
     ratify_key_rotation_sign_bytes_hex, ratify_key_rotation_verify,
-    ratify_session_token_sign_bytes_hex, ratify_session_token_mac_hex,
-    ratify_verify_streamed_turn,
-    ratify_transaction_receipt_sign_bytes_hex, ratify_transaction_receipt_verify_full,
-    ratify_witness_entry_sign_bytes_hex,
-    ratify_witness_entry_sig_ed25519_hex, ratify_witness_entry_sig_ml_dsa_65_hex,
-    ratify_witness_entry_verify,
-    RatifyResourceContext, RatifyStatus, RatifyStreamContext, RatifyVerifierContext,
-    RatifyVerifyOptions, RatifyVerifyResult,
+    ratify_revocation_list_sign_bytes_hex, ratify_revocation_list_verify,
+    ratify_revocation_push_sig_ed25519_hex, ratify_revocation_push_sig_ml_dsa_65_hex,
+    ratify_revocation_push_sign_bytes_hex, ratify_revocation_push_verify, ratify_scopes_expand,
+    ratify_scopes_validate, ratify_session_token_mac_hex, ratify_session_token_sign_bytes_hex,
+    ratify_string_free, ratify_transaction_receipt_sign_bytes_hex,
+    ratify_transaction_receipt_verify_full, ratify_verify_bundle_opts_v2,
+    ratify_verify_result_free, ratify_verify_result_identity_status, ratify_verify_result_is_valid,
+    ratify_verify_streamed_turn, ratify_witness_entry_sig_ed25519_hex,
+    ratify_witness_entry_sig_ml_dsa_65_hex, ratify_witness_entry_sign_bytes_hex,
+    ratify_witness_entry_verify, RatifyResourceContext, RatifyStatus, RatifyStreamContext,
+    RatifyVerifierContext, RatifyVerifyOptions, RatifyVerifyResult,
 };
 use serde::Deserialize;
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 use std::fs;
+use std::os::raw::c_char;
 use std::path::PathBuf;
 
 // ---------------------------------------------------------------------------
@@ -176,7 +171,11 @@ struct StreamOpts {
 
 fn testvector_dir() -> PathBuf {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
-    PathBuf::from(manifest).join("..").join("..").join("testvectors").join("v1")
+    PathBuf::from(manifest)
+        .join("..")
+        .join("..")
+        .join("testvectors")
+        .join("v1")
 }
 
 fn load_fixtures() -> Vec<Fixture> {
@@ -190,12 +189,15 @@ fn load_fixtures() -> Vec<Fixture> {
     let mut fixtures = Vec::new();
     for entry in entries {
         let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("json") { continue; }
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
         // cross_sdk_vectors.json is a separate byte-equivalence corpus (different
         // schema), exercised by the Go/TS/Python/Rust suites rather than the C FFI.
-        if path.file_name().and_then(|n| n.to_str()) == Some("cross_sdk_vectors.json") { continue; }
-        let raw = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {path:?}: {e}"));
+        if path.file_name().and_then(|n| n.to_str()) == Some("cross_sdk_vectors.json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path:?}: {e}"));
         match serde_json::from_str::<Fixture>(&raw) {
             Ok(f) => fixtures.push(f),
             Err(e) => panic!("parse {path:?}: {e}"),
@@ -213,14 +215,18 @@ unsafe fn c_string(s: &str) -> CString {
 }
 
 unsafe fn read_cstr(ptr: *mut std::os::raw::c_char) -> String {
-    if ptr.is_null() { return String::new(); }
+    if ptr.is_null() {
+        return String::new();
+    }
     let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
     ratify_string_free(ptr);
     s
 }
 
 unsafe fn read_err(ptr: *mut std::os::raw::c_char) -> String {
-    if ptr.is_null() { return String::new(); }
+    if ptr.is_null() {
+        return String::new();
+    }
     let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
     ratify_error_free(ptr);
     s
@@ -240,13 +246,22 @@ fn base64_decode(input: &str, out: &mut Vec<u8>) -> bool {
     let mut buf = 0u32;
     let mut bits = 0u32;
     for &b in bytes {
-        if b == b'=' { break; }
-        if b as usize >= TABLE.len() { return false; }
+        if b == b'=' {
+            break;
+        }
+        if b as usize >= TABLE.len() {
+            return false;
+        }
         let v = TABLE[b as usize];
-        if v == 0x40 { return false; }
+        if v == 0x40 {
+            return false;
+        }
         buf = (buf << 6) | (v as u32);
         bits += 6;
-        if bits >= 8 { bits -= 8; out.push((buf >> bits) as u8); }
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
     }
     true
 }
@@ -259,10 +274,16 @@ unsafe extern "C" fn conformance_revocation(
     cert_id: *const std::os::raw::c_char,
     userdata: *mut std::ffi::c_void,
 ) -> std::os::raw::c_int {
-    if cert_id.is_null() || userdata.is_null() { return 0; }
+    if cert_id.is_null() || userdata.is_null() {
+        return 0;
+    }
     let queried = CStr::from_ptr(cert_id);
     let revoked = CStr::from_ptr(userdata as *const std::os::raw::c_char);
-    if queried == revoked { 1 } else { 0 }
+    if queried == revoked {
+        1
+    } else {
+        0
+    }
 }
 
 unsafe extern "C" fn fixed_rate_count(
@@ -281,17 +302,25 @@ struct BuiltContext {
 
 fn build_verifier_context(vc: &FixtureVerifierContext) -> BuiltContext {
     let has_location = vc.current_lat.is_some() as std::os::raw::c_int;
-    let has_speed    = vc.current_speed_mps.is_some() as std::os::raw::c_int;
-    let has_amount   = vc.requested_amount.is_some() as std::os::raw::c_int;
+    let has_speed = vc.current_speed_mps.is_some() as std::os::raw::c_int;
+    let has_amount = vc.requested_amount.is_some() as std::os::raw::c_int;
     let currency_cstr = if !vc.requested_currency.is_empty() {
         CString::new(vc.requested_currency.clone()).ok()
-    } else { None };
-    let currency_ptr = currency_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+    } else {
+        None
+    };
+    let currency_ptr = currency_cstr
+        .as_ref()
+        .map_or(std::ptr::null(), |c| c.as_ptr());
     let rate_count_box = vc.invocations_in_window_count.map(Box::new);
     let (rate_fn, rate_ud) = if let Some(ref b) = rate_count_box {
-        (Some(fixed_rate_count as unsafe extern "C" fn(*const _, i64, *mut _) -> i64),
-         b.as_ref() as *const i64 as *mut std::ffi::c_void)
-    } else { (None, std::ptr::null_mut()) };
+        (
+            Some(fixed_rate_count as unsafe extern "C" fn(*const _, i64, *mut _) -> i64),
+            b.as_ref() as *const i64 as *mut std::ffi::c_void,
+        )
+    } else {
+        (None, std::ptr::null_mut())
+    };
     BuiltContext {
         ctx: RatifyVerifierContext {
             current_lat: vc.current_lat.unwrap_or(0.0),
@@ -320,7 +349,9 @@ fn build_verifier_context(vc: &FixtureVerifierContext) -> BuiltContext {
 /// the challenge signing bytes.
 /// Take ownership of an SDK error string, freeing it, for use in a message.
 unsafe fn take_err(err: &mut *mut c_char) -> String {
-    if err.is_null() { return "(no detail)".to_string(); }
+    if err.is_null() {
+        return "(no detail)".to_string();
+    }
     let s = CStr::from_ptr(*err).to_string_lossy().into_owned();
     ratify_error_free(*err);
     *err = std::ptr::null_mut();
@@ -342,13 +373,18 @@ unsafe fn check_verify_sign_bytes(
         if delegations.len() != want.len() {
             failures.push(format!(
                 "{}: chain length {} but {} expected delegation_sign_bytes_hex entries",
-                fixture.name, delegations.len(), want.len()
+                fixture.name,
+                delegations.len(),
+                want.len()
             ));
         } else {
             for (i, cert) in delegations.iter().enumerate() {
                 let cert_json = match serde_json::to_string(cert) {
                     Ok(j) => j,
-                    Err(e) => { failures.push(format!("{}: cert {i}: {e}", fixture.name)); continue; }
+                    Err(e) => {
+                        failures.push(format!("{}: cert {i}: {e}", fixture.name));
+                        continue;
+                    }
                 };
                 let c_cert = CString::new(cert_json).expect("cert json");
                 let mut err: *mut c_char = std::ptr::null_mut();
@@ -356,7 +392,8 @@ unsafe fn check_verify_sign_bytes(
                 if got.is_null() {
                     failures.push(format!(
                         "{}: cert {i}: delegation_sign_bytes_hex returned null: {}",
-                        fixture.name, take_err(&mut err)
+                        fixture.name,
+                        take_err(&mut err)
                     ));
                     continue;
                 }
@@ -373,8 +410,14 @@ unsafe fn check_verify_sign_bytes(
     }
 
     if let Some(want) = &fixture.expected.challenge_sign_bytes_hex {
-        let challenge_b64 = bundle_val.get("challenge").and_then(|c| c.as_str()).unwrap_or("");
-        let challenge_at = bundle_val.get("challenge_at").and_then(|c| c.as_i64()).unwrap_or(0);
+        let challenge_b64 = bundle_val
+            .get("challenge")
+            .and_then(|c| c.as_str())
+            .unwrap_or("");
+        let challenge_at = bundle_val
+            .get("challenge_at")
+            .and_then(|c| c.as_i64())
+            .unwrap_or(0);
         let mut challenge = Vec::new();
         if !base64_decode(challenge_b64, &mut challenge) {
             failures.push(format!("{}: challenge is not valid base64", fixture.name));
@@ -386,16 +429,26 @@ unsafe fn check_verify_sign_bytes(
         // precisely because the two differ, so reading the verifier's copy
         // would assert the wrong preimage.
         let field32 = |key: &str| -> Option<[u8; 32]> {
-            bundle_val.get(key).and_then(|v| v.as_str()).and_then(|b64| {
-                let mut dec = Vec::new();
-                if base64_decode(b64, &mut dec) && dec.len() == 32 {
-                    let mut arr = [0u8; 32]; arr.copy_from_slice(&dec); Some(arr)
-                } else { None }
-            })
+            bundle_val
+                .get(key)
+                .and_then(|v| v.as_str())
+                .and_then(|b64| {
+                    let mut dec = Vec::new();
+                    if base64_decode(b64, &mut dec) && dec.len() == 32 {
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&dec);
+                        Some(arr)
+                    } else {
+                        None
+                    }
+                })
         };
         let session_bytes = field32("session_context");
         let stream_bytes = field32("stream_id");
-        let stream_seq = bundle_val.get("stream_seq").and_then(|v| v.as_i64()).unwrap_or(0);
+        let stream_seq = bundle_val
+            .get("stream_seq")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
 
         let (sc_ptr, sc_len) = match &session_bytes {
             Some(b) => (b.as_ptr(), 32usize),
@@ -408,13 +461,21 @@ unsafe fn check_verify_sign_bytes(
 
         let mut err: *mut c_char = std::ptr::null_mut();
         let got = ratify_challenge_sign_bytes_hex(
-            challenge.as_ptr(), challenge.len(), challenge_at,
-            sc_ptr, sc_len, sid_ptr, sid_len, stream_seq, &mut err,
+            challenge.as_ptr(),
+            challenge.len(),
+            challenge_at,
+            sc_ptr,
+            sc_len,
+            sid_ptr,
+            sid_len,
+            stream_seq,
+            &mut err,
         );
         if got.is_null() {
             failures.push(format!(
                 "{}: challenge_sign_bytes_hex returned null: {}",
-                fixture.name, take_err(&mut err)
+                fixture.name,
+                take_err(&mut err)
             ));
             return;
         }
@@ -430,8 +491,14 @@ unsafe fn check_verify_sign_bytes(
 }
 
 unsafe fn run_verify_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let bundle_val = match &fixture.bundle { Some(b) => b, None => return false };
-    let expected = match &fixture.expected.verify_result { Some(e) => e, None => return false };
+    let bundle_val = match &fixture.bundle {
+        Some(b) => b,
+        None => return false,
+    };
+    let expected = match &fixture.expected.verify_result {
+        Some(e) => e,
+        None => return false,
+    };
 
     let bundle_json = serde_json::to_string(bundle_val)
         .unwrap_or_else(|e| panic!("re-serialise {}: {e}", fixture.name));
@@ -441,103 +508,169 @@ unsafe fn run_verify_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> b
     let opts = fixture.expected.verify_options.as_ref();
     let scope = opts.map(|o| o.required_scope.as_str()).unwrap_or("");
     let now = opts.map(|o| o.now).unwrap_or(0);
-    let built_ctx = fixture.verifier_context.as_ref().map(build_verifier_context);
+    let built_ctx = fixture
+        .verifier_context
+        .as_ref()
+        .map(build_verifier_context);
 
     let revoked_cert_cstr: Option<CString> = if expected.identity_status == "revoked" {
-        let delegations = bundle_val.get("delegations")
-            .and_then(|d| d.as_array()).cloned().unwrap_or_default();
+        let delegations = bundle_val
+            .get("delegations")
+            .and_then(|d| d.as_array())
+            .cloned()
+            .unwrap_or_default();
         if delegations.len() > 1 {
-            delegations[1].get("cert_id").and_then(|id| id.as_str())
+            delegations[1]
+                .get("cert_id")
+                .and_then(|id| id.as_str())
                 .and_then(|id| CString::new(id).ok())
-        } else { None }
-    } else { None };
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     let session_bytes: Option<[u8; 32]> = opts
-        .and_then(|o| if o.session_context.is_empty() { None } else { Some(&o.session_context) })
+        .and_then(|o| {
+            if o.session_context.is_empty() {
+                None
+            } else {
+                Some(&o.session_context)
+            }
+        })
         .and_then(|b64| {
             let mut dec = Vec::new();
             if base64_decode(b64, &mut dec) && dec.len() == 32 {
-                let mut arr = [0u8; 32]; arr.copy_from_slice(&dec); Some(arr)
-            } else { None }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&dec);
+                Some(arr)
+            } else {
+                None
+            }
         });
 
-    let stream_id_bytes: Option<[u8; 32]> = opts
+    let stream_id_bytes: Option<[u8; 32]> = opts.and_then(|o| o.stream.as_ref()).and_then(|s| {
+        let mut dec = Vec::new();
+        if base64_decode(&s.stream_id, &mut dec) && dec.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&dec);
+            Some(arr)
+        } else {
+            None
+        }
+    });
+    let stream_last_seq = opts
         .and_then(|o| o.stream.as_ref())
-        .and_then(|s| {
-            let mut dec = Vec::new();
-            if base64_decode(&s.stream_id, &mut dec) && dec.len() == 32 {
-                let mut arr = [0u8; 32]; arr.copy_from_slice(&dec); Some(arr)
-            } else { None }
-        });
-    let stream_last_seq = opts.and_then(|o| o.stream.as_ref()).map(|s| s.last_seen_seq).unwrap_or(0);
+        .map(|s| s.last_seen_seq)
+        .unwrap_or(0);
     let stream_ctx = stream_id_bytes.as_ref().map(|id| RatifyStreamContext {
-        stream_id: id.as_ptr(), stream_id_len: 32, last_seen_seq: stream_last_seq,
+        stream_id: id.as_ptr(),
+        stream_id_len: 32,
+        last_seen_seq: stream_last_seq,
     });
 
     let bundle_c = c_string(&bundle_json);
     let scope_c = c_string(scope);
     let (rev_fn, rev_ud) = if let Some(cid) = &revoked_cert_cstr {
-        (Some(conformance_revocation as unsafe extern "C" fn(*const _, *mut _) -> _),
-         cid.as_ptr() as *mut std::ffi::c_void)
-    } else { (None, std::ptr::null_mut()) };
+        (
+            Some(conformance_revocation as unsafe extern "C" fn(*const _, *mut _) -> _),
+            cid.as_ptr() as *mut std::ffi::c_void,
+        )
+    } else {
+        (None, std::ptr::null_mut())
+    };
 
-    let session_ctx_len = if session_bytes.is_some() { 32usize } else { 0usize };
+    let session_ctx_len = if session_bytes.is_some() {
+        32usize
+    } else {
+        0usize
+    };
     let opts_c = RatifyVerifyOptions {
-        required_scope: if scope.is_empty() { std::ptr::null() } else { scope_c.as_ptr() },
+        required_scope: if scope.is_empty() {
+            std::ptr::null()
+        } else {
+            scope_c.as_ptr()
+        },
         now_unix: now,
-        session_context: session_bytes.as_ref().map_or(std::ptr::null(), |b| b.as_ptr()),
+        session_context: session_bytes
+            .as_ref()
+            .map_or(std::ptr::null(), |b| b.as_ptr()),
         session_context_len: session_ctx_len,
         revocation_fn: rev_fn,
         revocation_userdata: rev_ud,
-        context: built_ctx.as_ref().map_or(std::ptr::null(), |bc| &bc.ctx as *const _),
-        stream: stream_ctx.as_ref().map_or(std::ptr::null(), |s| s as *const _),
+        context: built_ctx
+            .as_ref()
+            .map_or(std::ptr::null(), |bc| &bc.ctx as *const _),
+        stream: stream_ctx
+            .as_ref()
+            .map_or(std::ptr::null(), |s| s as *const _),
     };
 
     // Resource context (SPEC §5.16) threaded through the versioned symbol.
     let rid_cstr: Option<CString> = fixture.verifier_context.as_ref().and_then(|v| {
-        if v.requested_resource_id.is_empty() { None }
-        else { CString::new(v.requested_resource_id.clone()).ok() }
+        if v.requested_resource_id.is_empty() {
+            None
+        } else {
+            CString::new(v.requested_resource_id.clone()).ok()
+        }
     });
     let rpath_cstr: Option<CString> = fixture.verifier_context.as_ref().and_then(|v| {
-        if v.requested_path.is_empty() { None }
-        else { CString::new(v.requested_path.clone()).ok() }
+        if v.requested_path.is_empty() {
+            None
+        } else {
+            CString::new(v.requested_path.clone()).ok()
+        }
     });
     let resource_ctx = if rid_cstr.is_some() || rpath_cstr.is_some() {
         Some(RatifyResourceContext {
             requested_resource_id: rid_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
             requested_path: rpath_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
         })
-    } else { None };
+    } else {
+        None
+    };
 
     let mut result: *mut RatifyVerifyResult = std::ptr::null_mut();
     let mut err: *mut std::os::raw::c_char = std::ptr::null_mut();
     let status = ratify_verify_bundle_opts_v2(
         bundle_c.as_ptr(),
         &opts_c,
-        resource_ctx.as_ref().map_or(std::ptr::null(), |r| r as *const _),
+        resource_ctx
+            .as_ref()
+            .map_or(std::ptr::null(), |r| r as *const _),
         &mut result,
         &mut err,
     );
 
     if matches!(status, RatifyStatus::RatifyErrJson) {
         failures.push(format!("[{}] JSON error", fixture.name));
-        if !result.is_null() { ratify_verify_result_free(result); }
+        if !result.is_null() {
+            ratify_verify_result_free(result);
+        }
         return false;
     }
     if result.is_null() {
-        failures.push(format!("[{}] result is null (status={status:?})", fixture.name));
+        failures.push(format!(
+            "[{}] result is null (status={status:?})",
+            fixture.name
+        ));
         return false;
     }
 
     let got_valid = ratify_verify_result_is_valid(result) != 0;
     let status_ptr = ratify_verify_result_identity_status(result);
-    let got_status = if status_ptr.is_null() { String::new() } else {
+    let got_status = if status_ptr.is_null() {
+        String::new()
+    } else {
         let s = CStr::from_ptr(status_ptr).to_string_lossy().into_owned();
         ratify_string_free(status_ptr);
         s
     };
     ratify_verify_result_free(result);
-    if !err.is_null() { ratify_error_free(err); }
+    if !err.is_null() {
+        ratify_error_free(err);
+    }
 
     if got_valid == expected.valid && got_status == expected.identity_status {
         true
@@ -551,8 +684,14 @@ unsafe fn run_verify_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> b
 }
 
 unsafe fn run_scope_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let input = match &fixture.scope_input { Some(s) => s, None => return false };
-    let want_expanded = match &fixture.expected.expanded_scopes { Some(s) => s, None => return false };
+    let input = match &fixture.scope_input {
+        Some(s) => s,
+        None => return false,
+    };
+    let want_expanded = match &fixture.expected.expanded_scopes {
+        Some(s) => s,
+        None => return false,
+    };
 
     let input_json = serde_json::to_string(input).unwrap();
     let input_c = c_string(&input_json);
@@ -562,28 +701,43 @@ unsafe fn run_scope_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bo
     let out = ratify_scopes_expand(input_c.as_ptr(), &mut err);
     let err_str = read_err(err);
     if out.is_null() {
-        failures.push(format!("[{}] ratify_scopes_expand failed: {err_str}", fixture.name));
+        failures.push(format!(
+            "[{}] ratify_scopes_expand failed: {err_str}",
+            fixture.name
+        ));
         return false;
     }
     let got_json = read_cstr(out);
     let mut got: Vec<String> = serde_json::from_str(&got_json).unwrap_or_default();
     let mut want = want_expanded.clone();
-    got.sort(); want.sort();
+    got.sort();
+    want.sort();
     if got != want {
-        failures.push(format!("[{}] expand_scopes: got {:?}, want {:?}", fixture.name, got, want));
+        failures.push(format!(
+            "[{}] expand_scopes: got {:?}, want {:?}",
+            fixture.name, got, want
+        ));
         return false;
     }
 
     // ratify_scopes_validate(scopes_json) -> *mut c_char (error string or null = valid)
     let verr = ratify_scopes_validate(input_c.as_ptr());
-    if !verr.is_null() { ratify_string_free(verr); } // non-null = has error, that's fine for unknown scope fixture
+    if !verr.is_null() {
+        ratify_string_free(verr);
+    } // non-null = has error, that's fine for unknown scope fixture
 
     true
 }
 
 unsafe fn run_revocation_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let raw = match &fixture.revocation_list { Some(r) => r, None => return false };
-    let want_hex = match &fixture.expected.revocation_sign_bytes_hex { Some(h) => h, None => return false };
+    let raw = match &fixture.revocation_list {
+        Some(r) => r,
+        None => return false,
+    };
+    let want_hex = match &fixture.expected.revocation_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
 
     let list_json = serde_json::to_string(raw).unwrap();
     let list_c = c_string(&list_json);
@@ -593,13 +747,19 @@ unsafe fn run_revocation_fixture(fixture: &Fixture, failures: &mut Vec<String>) 
     let got_hex_ptr = ratify_revocation_list_sign_bytes_hex(list_c.as_ptr(), &mut err);
     let got_hex = read_cstr(got_hex_ptr);
     if got_hex != *want_hex {
-        failures.push(format!("[{}] revocation sign_bytes_hex: got {got_hex}, want {want_hex}", fixture.name));
+        failures.push(format!(
+            "[{}] revocation sign_bytes_hex: got {got_hex}, want {want_hex}",
+            fixture.name
+        ));
         return false;
     }
 
     // Check signature verification against issuer's public key
     if fixture.entities.is_empty() {
-        failures.push(format!("[{}] revocation fixture needs issuer entity", fixture.name));
+        failures.push(format!(
+            "[{}] revocation fixture needs issuer entity",
+            fixture.name
+        ));
         return false;
     }
     let pub_key_json = serde_json::to_string(&fixture.entities[0].public_key).unwrap();
@@ -610,15 +770,24 @@ unsafe fn run_revocation_fixture(fixture: &Fixture, failures: &mut Vec<String>) 
     let vs = ratify_revocation_list_verify(list_c.as_ptr(), pub_key_c.as_ptr(), &mut verify_err);
     let verify_err_str = read_err(verify_err);
     if !matches!(vs, RatifyStatus::RatifyOk) {
-        failures.push(format!("[{}] revocation_list_verify failed: {verify_err_str}", fixture.name));
+        failures.push(format!(
+            "[{}] revocation_list_verify failed: {verify_err_str}",
+            fixture.name
+        ));
         return false;
     }
     true
 }
 
 unsafe fn run_revocation_push_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let raw = match &fixture.revocation_push { Some(r) => r, None => return false };
-    let want_sign_hex = match &fixture.expected.revocation_push_sign_bytes_hex { Some(h) => h, None => return false };
+    let raw = match &fixture.revocation_push {
+        Some(r) => r,
+        None => return false,
+    };
+    let want_sign_hex = match &fixture.expected.revocation_push_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
 
     let push_json = serde_json::to_string(raw).unwrap();
     let push_c = c_string(&push_json);
@@ -628,7 +797,10 @@ unsafe fn run_revocation_push_fixture(fixture: &Fixture, failures: &mut Vec<Stri
     let got_hex_ptr = ratify_revocation_push_sign_bytes_hex(push_c.as_ptr(), &mut err);
     let got_hex = read_cstr(got_hex_ptr);
     if got_hex != *want_sign_hex {
-        failures.push(format!("[{}] push sign_bytes_hex: got {got_hex}, want {want_sign_hex}", fixture.name));
+        failures.push(format!(
+            "[{}] push sign_bytes_hex: got {got_hex}, want {want_sign_hex}",
+            fixture.name
+        ));
         return false;
     }
 
@@ -656,7 +828,10 @@ unsafe fn run_revocation_push_fixture(fixture: &Fixture, failures: &mut Vec<Stri
 
     // signature verification
     if fixture.entities.is_empty() {
-        failures.push(format!("[{}] revocation_push fixture needs issuer entity", fixture.name));
+        failures.push(format!(
+            "[{}] revocation_push fixture needs issuer entity",
+            fixture.name
+        ));
         return false;
     }
     let pub_key_json = serde_json::to_string(&fixture.entities[0].public_key).unwrap();
@@ -674,8 +849,14 @@ unsafe fn run_revocation_push_fixture(fixture: &Fixture, failures: &mut Vec<Stri
 }
 
 unsafe fn run_key_rotation_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let raw = match &fixture.key_rotation { Some(r) => r, None => return false };
-    let want_sign_hex = match &fixture.expected.key_rotation_sign_bytes_hex { Some(h) => h, None => return false };
+    let raw = match &fixture.key_rotation {
+        Some(r) => r,
+        None => return false,
+    };
+    let want_sign_hex = match &fixture.expected.key_rotation_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
 
     let rot_json = serde_json::to_string(raw).unwrap();
     let rot_c = c_string(&rot_json);
@@ -685,7 +866,10 @@ unsafe fn run_key_rotation_fixture(fixture: &Fixture, failures: &mut Vec<String>
     let got_hex_ptr = ratify_key_rotation_sign_bytes_hex(rot_c.as_ptr(), &mut err);
     let got_hex = read_cstr(got_hex_ptr);
     if got_hex != *want_sign_hex {
-        failures.push(format!("[{}] key_rotation sign_bytes_hex drift", fixture.name));
+        failures.push(format!(
+            "[{}] key_rotation sign_bytes_hex drift",
+            fixture.name
+        ));
         return false;
     }
 
@@ -707,10 +891,22 @@ unsafe fn run_key_rotation_fixture(fixture: &Fixture, failures: &mut Vec<String>
 }
 
 unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let st = match &fixture.session_token { Some(s) => s, None => return false };
-    let want_sign_hex = match &fixture.expected.session_token_sign_bytes_hex { Some(h) => h, None => return false };
-    let want_mac_hex  = match &fixture.expected.session_token_mac_hex { Some(h) => h, None => return false };
-    let want_streamed = match &fixture.expected.streamed_turn { Some(t) => t, None => return false };
+    let st = match &fixture.session_token {
+        Some(s) => s,
+        None => return false,
+    };
+    let want_sign_hex = match &fixture.expected.session_token_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
+    let want_mac_hex = match &fixture.expected.session_token_mac_hex {
+        Some(h) => h,
+        None => return false,
+    };
+    let want_streamed = match &fixture.expected.streamed_turn {
+        Some(t) => t,
+        None => return false,
+    };
 
     let token_json = serde_json::to_string(&st.token).unwrap();
     let token_c = c_string(&token_json);
@@ -720,7 +916,10 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
     let got_sign_ptr = ratify_session_token_sign_bytes_hex(token_c.as_ptr(), &mut err);
     let got_sign = read_cstr(got_sign_ptr);
     if &got_sign != want_sign_hex {
-        failures.push(format!("[{}] session_token sign_bytes_hex drift", fixture.name));
+        failures.push(format!(
+            "[{}] session_token sign_bytes_hex drift",
+            fixture.name
+        ));
         return false;
     }
 
@@ -736,10 +935,13 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
     // Decode session secret from hex
     let mut secret = Vec::with_capacity(st.session_secret_hex.len() / 2);
     for i in (0..st.session_secret_hex.len()).step_by(2) {
-        match u8::from_str_radix(&st.session_secret_hex[i..i+2], 16) {
+        match u8::from_str_radix(&st.session_secret_hex[i..i + 2], 16) {
             Ok(b) => secret.push(b),
             Err(_) => {
-                failures.push(format!("[{}] bad session_secret_hex at index {i}", fixture.name));
+                failures.push(format!(
+                    "[{}] bad session_secret_hex at index {i}",
+                    fixture.name
+                ));
                 return false;
             }
         }
@@ -760,12 +962,16 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
     let mut ve: *mut std::os::raw::c_char = std::ptr::null_mut();
     let result = ratify_verify_streamed_turn(
         token_c.as_ptr(),
-        secret.as_ptr(), secret.len(),
-        chall.as_ptr(), chall.len(),
+        secret.as_ptr(),
+        secret.len(),
+        chall.as_ptr(),
+        chall.len(),
         st.challenge_at,
         sig_c.as_ptr(),
-        std::ptr::null(), 0,  // no session context
-        std::ptr::null(), 0,  // no stream id
+        std::ptr::null(),
+        0, // no session context
+        std::ptr::null(),
+        0, // no stream id
         0,
         st.verify_now,
         &mut ve,
@@ -773,13 +979,18 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
 
     if result.is_null() {
         let ve_str = read_err(ve);
-        failures.push(format!("[{}] verify_streamed_turn returned null: {ve_str}", fixture.name));
+        failures.push(format!(
+            "[{}] verify_streamed_turn returned null: {ve_str}",
+            fixture.name
+        ));
         return false;
     }
 
     let got_valid = ratify_verify_result_is_valid(result) != 0;
     let status_ptr = ratify_verify_result_identity_status(result);
-    let got_status = if status_ptr.is_null() { String::new() } else {
+    let got_status = if status_ptr.is_null() {
+        String::new()
+    } else {
         let s = CStr::from_ptr(status_ptr).to_string_lossy().into_owned();
         ratify_string_free(status_ptr);
         s
@@ -797,9 +1008,18 @@ unsafe fn run_session_token_fixture(fixture: &Fixture, failures: &mut Vec<String
 }
 
 unsafe fn run_transaction_receipt_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let raw = match &fixture.transaction_receipt { Some(r) => r, None => return false };
-    let want_sign_hex = match &fixture.expected.receipt_sign_bytes_hex { Some(h) => h, None => return false };
-    let want_valid = match fixture.expected.receipt_valid { Some(v) => v, None => return false };
+    let raw = match &fixture.transaction_receipt {
+        Some(r) => r,
+        None => return false,
+    };
+    let want_sign_hex = match &fixture.expected.receipt_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
+    let want_valid = match fixture.expected.receipt_valid {
+        Some(v) => v,
+        None => return false,
+    };
 
     let receipt_json = serde_json::to_string(raw).unwrap();
     let receipt_c = c_string(&receipt_json);
@@ -817,18 +1037,25 @@ unsafe fn run_transaction_receipt_fixture(fixture: &Fixture, failures: &mut Vec<
     let now = match fixture.timestamps.get("verifier_now") {
         Some(t) => *t,
         None => {
-            failures.push(format!("[{}] missing timestamps.verifier_now", fixture.name));
+            failures.push(format!(
+                "[{}] missing timestamps.verifier_now",
+                fixture.name
+            ));
             return false;
         }
     };
 
     let mut valid_out: std::os::raw::c_int = 0;
     let mut ve: *mut std::os::raw::c_char = std::ptr::null_mut();
-    let s = ratify_transaction_receipt_verify_full(receipt_c.as_ptr(), now, &mut valid_out, &mut ve);
+    let s =
+        ratify_transaction_receipt_verify_full(receipt_c.as_ptr(), now, &mut valid_out, &mut ve);
     let got_error_reason = read_err(ve);
 
     if !matches!(s, RatifyStatus::RatifyOk) {
-        failures.push(format!("[{}] receipt_verify_full parse error", fixture.name));
+        failures.push(format!(
+            "[{}] receipt_verify_full parse error",
+            fixture.name
+        ));
         return false;
     }
 
@@ -851,8 +1078,14 @@ unsafe fn run_transaction_receipt_fixture(fixture: &Fixture, failures: &mut Vec<
 }
 
 unsafe fn run_witness_entry_fixture(fixture: &Fixture, failures: &mut Vec<String>) -> bool {
-    let raw = match &fixture.witness_entry { Some(r) => r, None => return false };
-    let want_sign_hex = match &fixture.expected.witness_entry_sign_bytes_hex { Some(h) => h, None => return false };
+    let raw = match &fixture.witness_entry {
+        Some(r) => r,
+        None => return false,
+    };
+    let want_sign_hex = match &fixture.expected.witness_entry_sign_bytes_hex {
+        Some(h) => h,
+        None => return false,
+    };
 
     let entry_json = serde_json::to_string(raw).unwrap();
     let entry_c = c_string(&entry_json);
@@ -862,7 +1095,10 @@ unsafe fn run_witness_entry_fixture(fixture: &Fixture, failures: &mut Vec<String
     let got_hex_ptr = ratify_witness_entry_sign_bytes_hex(entry_c.as_ptr(), &mut err);
     let got_hex = read_cstr(got_hex_ptr);
     if got_hex != *want_sign_hex {
-        failures.push(format!("[{}] witness_entry sign_bytes_hex drift", fixture.name));
+        failures.push(format!(
+            "[{}] witness_entry sign_bytes_hex drift",
+            fixture.name
+        ));
         return false;
     }
 
@@ -890,7 +1126,10 @@ unsafe fn run_witness_entry_fixture(fixture: &Fixture, failures: &mut Vec<String
 
     // signature verification
     if fixture.entities.is_empty() {
-        failures.push(format!("[{}] witness_entry fixture needs witness entity", fixture.name));
+        failures.push(format!(
+            "[{}] witness_entry fixture needs witness entity",
+            fixture.name
+        ));
         return false;
     }
     let pub_key_json = serde_json::to_string(&fixture.entities[0].public_key).unwrap();
@@ -901,7 +1140,10 @@ unsafe fn run_witness_entry_fixture(fixture: &Fixture, failures: &mut Vec<String
     let vs = ratify_witness_entry_verify(entry_c.as_ptr(), pub_key_c.as_ptr(), &mut ve);
     let ve_str = read_err(ve);
     if !matches!(vs, RatifyStatus::RatifyOk) {
-        failures.push(format!("[{}] witness_entry_verify failed: {ve_str}", fixture.name));
+        failures.push(format!(
+            "[{}] witness_entry_verify failed: {ve_str}",
+            fixture.name
+        ));
         return false;
     }
     true
@@ -922,21 +1164,23 @@ fn c_api_passes_all_verify_fixtures() {
         total += 1;
         let ok = unsafe {
             match fixture.kind.as_str() {
-                "verify"              => run_verify_fixture(fixture, &mut failures),
-                "scope"               => run_scope_fixture(fixture, &mut failures),
-                "revocation"          => run_revocation_fixture(fixture, &mut failures),
-                "revocation_push"     => run_revocation_push_fixture(fixture, &mut failures),
-                "key_rotation"        => run_key_rotation_fixture(fixture, &mut failures),
-                "session_token"       => run_session_token_fixture(fixture, &mut failures),
+                "verify" => run_verify_fixture(fixture, &mut failures),
+                "scope" => run_scope_fixture(fixture, &mut failures),
+                "revocation" => run_revocation_fixture(fixture, &mut failures),
+                "revocation_push" => run_revocation_push_fixture(fixture, &mut failures),
+                "key_rotation" => run_key_rotation_fixture(fixture, &mut failures),
+                "session_token" => run_session_token_fixture(fixture, &mut failures),
                 "transaction_receipt" => run_transaction_receipt_fixture(fixture, &mut failures),
-                "witness_entry"       => run_witness_entry_fixture(fixture, &mut failures),
+                "witness_entry" => run_witness_entry_fixture(fixture, &mut failures),
                 other => {
                     failures.push(format!("[{}] unknown fixture kind: {other}", fixture.name));
                     false
                 }
             }
         };
-        if ok { passed += 1; }
+        if ok {
+            passed += 1;
+        }
     }
 
     println!("\nC API conformance: {passed}/{total} passed\n");

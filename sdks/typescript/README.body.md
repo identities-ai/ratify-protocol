@@ -267,9 +267,9 @@ No network code in this package. HTTP concerns (challenge issuance, revocation l
 
 **Signing mode.** `@noble/post-quantum` signs ML-DSA-65 with hedged randomization by default, so two signings of the same message produce different bytes. This does NOT affect interop: the signatures verify in Go, Python, Rust, and C/C++, and vice versa. What must match across languages is the canonical signable bytes (SPEC §8.3), and those match byte-for-byte. Only the Go reference generator signs deterministically, so that fixtures regenerate reproducibly; passing `{ extraEntropy: false }` would make this SDK deterministic too, but hedged signing is side-channel hardening and is kept as the default.
 
-## API added on main (ships in alpha.16, release unpublished)
+## API added in v1 alpha.16
 
-The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; install from `main` to use it ahead of the release.
+The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 
 - **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a constraint's `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id`, `requested_path`, and `has_resource` on `VerifierContext` (SPEC §5.16); `verifyBundle(bundle, { context })` evaluates them. Helpers: `normalizeResourcePath`, `resourcePathMatches`, `validateResourceConstraints`.
 - **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operationContextBytes`, `operationContextHash`, `sessionContextBytes`, and `buildSessionContext`; `verifierContextHash` produces the canonical hash bound into a `VerificationReceipt`.
@@ -278,6 +278,30 @@ The following surface is merged to `main` and ships in alpha.16. The tag is not 
 - **Extension-constraint params.** A constraint's `params` carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validateParamsValue`; `isCanonicalConstraintType` guards which types may carry them.
 - **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
 - **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
+
+## Protocol v2 (2.0.0-alpha line)
+
+Version `{{VERSION}}` is a prerelease on the separate v2 line. It exports the
+v2 API from the package root, next to the unchanged v1 API, and from
+`@identities-ai/ratify-protocol/v2` alone. v2 prereleases use the `v2-alpha`
+npm dist-tag, so an unpinned install and exact `1.0.0-alpha.20` pins continue
+to resolve to v1.
+
+The v2 API covers strict decoding and canonical encoding of every v2 signed
+object, hybrid signature verification with full 256-bit v2 key IDs, the
+stateful live verifier `verifyProofBundleV2` (pre-claim checks, claim, trust,
+status, audience, rate reservation, and the terminal receipt body), the
+revocation status reducer, witness and verification-receipt log heads, key
+rotation acceptance, and the v2 operation, session-context, and
+challenge-claim helpers. Choose the helpers that match the proof version: v1
+proofs use the v1 API, and v2 proofs use the v2 API.
+
+`npm test` runs every file in `testvectors/v2`, including the verifier
+ordering, status, log, and rotation sequences. This alpha is not a v2
+conformance claim; the remaining gates are listed in SPEC-v2 §8 and
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+Callers still supply authenticated challenge issuance and an atomic durable
+claim store.
 
 ## License
 

@@ -32,37 +32,33 @@ use std::slice;
 #[allow(deprecated)]
 use ratify_protocol::verify_streamed_turn;
 use ratify_protocol::{
-    bundle_hash as sdk_bundle_hash, chain_hash as sdk_chain_hash,
-    expand_scopes, has_scope, hex_encode, intersect_scopes, is_sensitive,
-    issue_key_rotation_statement, issue_policy_verdict, issue_revocation_list,
-    issue_revocation_push, issue_session_token, issue_verification_receipt,
-    issue_witness_entry, key_rotation_sign_bytes, revocation_push_sign_bytes,
-    revocation_sign_bytes, session_token_sign_bytes, sign_transaction_receipt_party,
-    transaction_receipt_sign_bytes, validate_scopes, verify_key_rotation_statement,
-    verify_policy_verdict, verify_revocation_list, verify_revocation_push,
-    verify_session_token_e, verify_streamed_turn_with_options, verify_transaction_receipt,
-    verify_bundle, verify_verification_receipt, verify_witness_entry, vocabulary,
-    build_session_context, operation_context_hash,
-    canonical_json, challenge_sign_bytes_with_stream,
-    operation_context_bytes, session_context_bytes, sign_challenge_with_stream,
-    sign_challenge, sign_challenge_with_session_context,
-    verify_challenge_signature, verify_challenge_signature_with_session_context,
-    verify_challenge_signature_with_stream, verify_delegation_signature,
-    delegation_sign_bytes, derive_id, hybrid_keypair_from_seeds,
-    DelegationCert,
-    witness_entry_sign_bytes, ChallengeStore, MemoryChallengeStore, OperationContext,
-    ProofBundle, SessionContextInputs, StreamedTurn, StreamedVerifyOptions,
-    HybridPublicKey, HybridSignature,
-    KeyRotationStatement, PolicyVerdict,
-    RevocationList, RevocationPush, SessionToken,
-    TransactionReceipt, VerificationReceipt,
-    WitnessEntry,
+    build_session_context, build_session_context_v2, bundle_hash as sdk_bundle_hash,
+    canonical_json, chain_hash as sdk_chain_hash, challenge_claim_digest_v2,
+    challenge_sign_bytes_with_stream, decode_payload_digest_v2, delegation_sign_bytes, derive_id,
+    derive_key_id_v2, expand_scopes, has_scope, hex_encode, hybrid_keypair_from_seeds,
+    intersect_scopes, is_sensitive, issue_key_rotation_statement, issue_policy_verdict,
+    issue_revocation_list, issue_revocation_push, issue_session_token, issue_verification_receipt,
+    issue_witness_entry, key_rotation_sign_bytes, operation_context_bytes, operation_context_hash,
+    operation_context_v2_hash, protocol_claim_id_from_digest_v2, protocol_claim_id_v2,
+    revocation_push_sign_bytes, revocation_sign_bytes, session_context_bytes,
+    session_token_sign_bytes, sign_challenge, sign_challenge_with_session_context,
+    sign_challenge_with_stream, sign_transaction_receipt_party, transaction_receipt_sign_bytes,
+    validate_scopes, verify_bundle, verify_challenge_signature,
+    verify_challenge_signature_with_session_context, verify_challenge_signature_with_stream,
+    verify_delegation_signature, verify_delegation_v2, verify_key_rotation_statement,
+    verify_policy_verdict, verify_revocation_list, verify_revocation_push, verify_session_token_e,
+    verify_streamed_turn_with_options, verify_transaction_receipt, verify_verification_receipt,
+    verify_witness_entry, vocabulary, witness_entry_sign_bytes, ChallengeStore, DelegationCert,
+    HybridPublicKey, HybridSignature, KeyRotationStatement, MemoryChallengeStore, OperationContext,
+    OperationContextV2, PolicyVerdict, ProofBundle, RevocationList, RevocationPush,
+    SessionContextInputs, SessionContextV2Inputs, SessionToken, StreamedTurn,
+    StreamedVerifyOptions, TransactionReceipt, VerificationReceipt, WitnessEntry,
 };
 
 use crate::{
-    set_err, cstr_to_string, new_cstring, checked_build_opts,
-    RatifyHumanRoot, RatifyAgent, RatifyProofBundle, RatifyVerifyResult,
-    RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
+    checked_build_opts, cstr_to_string, new_cstring, set_err, RatifyAgent, RatifyHumanRoot,
+    RatifyProofBundle, RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
+    RatifyVerifyResult,
 };
 
 // ============================================================================
@@ -95,7 +91,10 @@ unsafe fn validated_buf<'a>(
         return None;
     }
     if len < min_len {
-        set_err(err_out, &format!("{name}_len must be >= {min_len}, got {len}"));
+        set_err(
+            err_out,
+            &format!("{name}_len must be >= {min_len}, got {len}"),
+        );
         return None;
     }
     Some(slice::from_raw_parts(ptr, len))
@@ -112,12 +111,17 @@ unsafe fn exact_buf<'a>(
     err_out: *mut *mut c_char,
 ) -> Option<&'a [u8]> {
     if ptr.is_null() {
-        if len == 0 { return Some(&[]); } // NULL+0 = absent (caller uses genesis/zeros)
+        if len == 0 {
+            return Some(&[]);
+        } // NULL+0 = absent (caller uses genesis/zeros)
         set_err(err_out, &format!("{name} is null but {name}_len is {len}"));
         return None;
     }
     if len != exact {
-        set_err(err_out, &format!("{name}_len must be exactly {exact}, got {len}"));
+        set_err(
+            err_out,
+            &format!("{name}_len must be exactly {exact}, got {len}"),
+        );
         return None;
     }
     Some(slice::from_raw_parts(ptr, exact))
@@ -143,7 +147,10 @@ unsafe fn mandatory_exact_buf<'a>(
         return Err(RatifyStatus::RatifyErrNullPointer);
     }
     if len != exact {
-        set_err(err_out, &format!("{name}_len must be exactly {exact}, got {len}"));
+        set_err(
+            err_out,
+            &format!("{name}_len must be exactly {exact}, got {len}"),
+        );
         return Err(RatifyStatus::RatifyErrBadArgument);
     }
     Ok(slice::from_raw_parts(ptr, exact))
@@ -203,10 +210,18 @@ pub unsafe extern "C" fn ratify_session_token_issue(
         return RatifyStatus::RatifyErrNullPointer;
     }
     let session_id_str = match cstr_to_string(session_id, "session_id", err_out) {
-        Some(s) => s, None => return RatifyStatus::RatifyErrEncoding,
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
     };
-    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
-        Some(b) => b, None => return RatifyStatus::RatifyErrBadArgument,
+    let secret = match validated_buf(
+        session_secret,
+        session_secret_len,
+        1,
+        "session_secret",
+        err_out,
+    ) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
     };
 
     match issue_session_token(
@@ -217,7 +232,10 @@ pub unsafe extern "C" fn ratify_session_token_issue(
         valid_until_unix,
         secret,
     ) {
-        Ok(tok) => { *out = Box::into_raw(Box::new(RatifySessionToken(tok))); RatifyStatus::RatifyOk }
+        Ok(tok) => {
+            *out = Box::into_raw(Box::new(RatifySessionToken(tok)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => map_sdk_err(err_out, e),
     }
 }
@@ -235,16 +253,26 @@ pub unsafe extern "C" fn ratify_session_token_verify(
     now_unix: i64,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(token_json, "token_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
+    if check_not_null(token_json, "token_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
     let token_str = match cstr_to_string(token_json, "token_json", err_out) {
-        Some(s) => s, None => return RatifyStatus::RatifyErrJson,
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
     };
     let token: SessionToken = match serde_json::from_str(&token_str) {
         Ok(t) => t,
         Err(e) => return json_err(err_out, "token_json", e),
     };
-    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
-        Some(b) => b, None => return RatifyStatus::RatifyErrBadArgument,
+    let secret = match validated_buf(
+        session_secret,
+        session_secret_len,
+        1,
+        "session_secret",
+        err_out,
+    ) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
     };
     match verify_session_token_e(&token, secret, now_unix) {
         Ok(()) => RatifyStatus::RatifyOk,
@@ -258,10 +286,16 @@ pub unsafe extern "C" fn ratify_session_token_to_json(
     handle: *const RatifySessionToken,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
     match serde_json::to_string(&(*handle).0) {
         Ok(s) => new_cstring(&s),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -272,10 +306,19 @@ pub unsafe extern "C" fn ratify_session_token_from_json(
     out: *mut *mut RatifySessionToken,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<SessionToken>(&s) {
-        Ok(t) => { *out = Box::into_raw(Box::new(RatifySessionToken(t))); RatifyStatus::RatifyOk }
+        Ok(t) => {
+            *out = Box::into_raw(Box::new(RatifySessionToken(t)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "session_token_from_json", e),
     }
 }
@@ -283,7 +326,9 @@ pub unsafe extern "C" fn ratify_session_token_from_json(
 /// Free a `RatifySessionToken` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_session_token_free(handle: *mut RatifySessionToken) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -298,37 +343,69 @@ pub unsafe extern "C" fn ratify_session_token_free(handle: *mut RatifySessionTok
 fn check_receipt_structure(r: &VerificationReceipt) -> Result<(), String> {
     // The closed identity_status vocabulary a receipt may attest (SPEC §5.9).
     const VALID_DECISIONS: &[&str] = &[
-        "authorized_agent", "verified_human", "expired", "revoked",
-        "scope_denied", "constraint_denied", "constraint_unverifiable",
-        "constraint_unknown", "invalid_scope", "delegation_not_authorized",
-        "invalid", "unauthorized",
+        "authorized_agent",
+        "verified_human",
+        "expired",
+        "revoked",
+        "scope_denied",
+        "constraint_denied",
+        "constraint_unverifiable",
+        "constraint_unknown",
+        "invalid_scope",
+        "delegation_not_authorized",
+        "invalid",
+        "unauthorized",
     ];
     if r.version != 1 {
-        return Err(format!("wire: receipt version {} is not PROTOCOL_VERSION (1)", r.version));
+        return Err(format!(
+            "wire: receipt version {} is not PROTOCOL_VERSION (1)",
+            r.version
+        ));
     }
     if r.verifier_id.is_empty() {
         return Err("wire: receipt verifier_id must be non-empty".to_string());
     }
     if !VALID_DECISIONS.contains(&r.decision.as_str()) {
-        return Err(format!("wire: receipt decision {:?} is not a known identity_status", r.decision));
+        return Err(format!(
+            "wire: receipt decision {:?} is not a known identity_status",
+            r.decision
+        ));
     }
     if r.bundle_hash.len() != 32 {
-        return Err(format!("wire: bundle_hash must be 32 bytes, got {}", r.bundle_hash.len()));
+        return Err(format!(
+            "wire: bundle_hash must be 32 bytes, got {}",
+            r.bundle_hash.len()
+        ));
     }
     if r.prev_hash.len() != 32 {
-        return Err(format!("wire: prev_hash must be 32 bytes, got {}", r.prev_hash.len()));
+        return Err(format!(
+            "wire: prev_hash must be 32 bytes, got {}",
+            r.prev_hash.len()
+        ));
     }
     if r.verifier_pub.ed25519.len() != 32 {
-        return Err(format!("wire: verifier_pub.ed25519 must be 32 bytes, got {}", r.verifier_pub.ed25519.len()));
+        return Err(format!(
+            "wire: verifier_pub.ed25519 must be 32 bytes, got {}",
+            r.verifier_pub.ed25519.len()
+        ));
     }
     if r.verifier_pub.ml_dsa_65.len() != 1952 {
-        return Err(format!("wire: verifier_pub.ml_dsa_65 must be 1952 bytes, got {}", r.verifier_pub.ml_dsa_65.len()));
+        return Err(format!(
+            "wire: verifier_pub.ml_dsa_65 must be 1952 bytes, got {}",
+            r.verifier_pub.ml_dsa_65.len()
+        ));
     }
     if r.signature.ed25519.len() != 64 {
-        return Err(format!("wire: signature.ed25519 must be 64 bytes, got {}", r.signature.ed25519.len()));
+        return Err(format!(
+            "wire: signature.ed25519 must be 64 bytes, got {}",
+            r.signature.ed25519.len()
+        ));
     }
     if r.signature.ml_dsa_65.len() != 3309 {
-        return Err(format!("wire: signature.ml_dsa_65 must be 3309 bytes, got {}", r.signature.ml_dsa_65.len()));
+        return Err(format!(
+            "wire: signature.ml_dsa_65 must be 3309 bytes, got {}",
+            r.signature.ml_dsa_65.len()
+        ));
     }
     Ok(())
 }
@@ -355,14 +432,18 @@ pub unsafe extern "C" fn ratify_receipt_issue(
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
     if bundle.is_null() || result.is_null() || verifier.is_null() || out.is_null() {
-        set_err(err_out, "bundle, result, verifier, and out must be non-null");
+        set_err(
+            err_out,
+            "bundle, result, verifier, and out must be non-null",
+        );
         return RatifyStatus::RatifyErrNullPointer;
     }
     let prev: Option<&[u8]> = if prev_hash.is_null() {
         None
     } else {
         match exact_buf(prev_hash, prev_hash_len, 32, "prev_hash", err_out) {
-            Some(b) => Some(b), None => return RatifyStatus::RatifyErrBadArgument,
+            Some(b) => Some(b),
+            None => return RatifyStatus::RatifyErrBadArgument,
         }
     };
 
@@ -376,7 +457,10 @@ pub unsafe extern "C" fn ratify_receipt_issue(
         prev,
         verified_at_unix,
     ) {
-        Ok(r) => { *out = Box::into_raw(Box::new(RatifyReceipt(r))); RatifyStatus::RatifyOk }
+        Ok(r) => {
+            *out = Box::into_raw(Box::new(RatifyReceipt(r)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => map_sdk_err(err_out, e),
     }
 }
@@ -388,10 +472,16 @@ pub unsafe extern "C" fn ratify_receipt_verify(
     receipt_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(receipt_json, "receipt_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+    if check_not_null(receipt_json, "receipt_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     let r: VerificationReceipt = match serde_json::from_str(&s) {
-        Ok(r) => r, Err(e) => return json_err(err_out, "receipt_json", e),
+        Ok(r) => r,
+        Err(e) => return json_err(err_out, "receipt_json", e),
     };
     match verify_verification_receipt(&r) {
         Ok(()) => RatifyStatus::RatifyOk,
@@ -413,7 +503,10 @@ pub unsafe extern "C" fn ratify_bundle_hash(
     }
     match sdk_bundle_hash(&(*bundle).0) {
         Ok(h) => {
-            if h.len() != 32 { set_err(err_out, "bundle_hash: unexpected hash length"); return RatifyStatus::RatifyErrInternal; }
+            if h.len() != 32 {
+                set_err(err_out, "bundle_hash: unexpected hash length");
+                return RatifyStatus::RatifyErrInternal;
+            }
             slice::from_raw_parts_mut(out_32, 32).copy_from_slice(&h);
             RatifyStatus::RatifyOk
         }
@@ -435,7 +528,10 @@ pub unsafe extern "C" fn ratify_receipt_hash(
     }
     match ratify_protocol::receipt_hash(&(*handle).0) {
         Ok(h) => {
-            if h.len() != 32 { set_err(err_out, "receipt_hash: unexpected hash length"); return RatifyStatus::RatifyErrInternal; }
+            if h.len() != 32 {
+                set_err(err_out, "receipt_hash: unexpected hash length");
+                return RatifyStatus::RatifyErrInternal;
+            }
             slice::from_raw_parts_mut(out_32, 32).copy_from_slice(&h);
             RatifyStatus::RatifyOk
         }
@@ -449,7 +545,10 @@ pub unsafe extern "C" fn ratify_receipt_to_json(
     handle: *const RatifyReceipt,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
     // SPEC §17.5: never emit a document our own decoder rejects.
     if let Err(e) = check_receipt_structure(&(*handle).0) {
         set_err(err_out, &e);
@@ -457,7 +556,10 @@ pub unsafe extern "C" fn ratify_receipt_to_json(
     }
     match serde_json::to_string(&(*handle).0) {
         Ok(s) => new_cstring(&s),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -468,8 +570,14 @@ pub unsafe extern "C" fn ratify_receipt_from_json(
     out: *mut *mut RatifyReceipt,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<VerificationReceipt>(&s) {
         Ok(r) => {
             // SPEC §17.5: reject a structurally-invalid wire receipt (wrong
@@ -479,7 +587,8 @@ pub unsafe extern "C" fn ratify_receipt_from_json(
                 set_err(err_out, &e);
                 return RatifyStatus::RatifyErrJson;
             }
-            *out = Box::into_raw(Box::new(RatifyReceipt(r))); RatifyStatus::RatifyOk
+            *out = Box::into_raw(Box::new(RatifyReceipt(r)));
+            RatifyStatus::RatifyOk
         }
         Err(e) => json_err(err_out, "receipt_from_json", e),
     }
@@ -488,7 +597,9 @@ pub unsafe extern "C" fn ratify_receipt_from_json(
 /// Free a `RatifyReceipt` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_receipt_free(handle: *mut RatifyReceipt) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -515,10 +626,12 @@ pub unsafe extern "C" fn ratify_revocation_list_issue(
         return RatifyStatus::RatifyErrNullPointer;
     }
     let certs_str = match cstr_to_string(revoked_certs_json, "revoked_certs_json", err_out) {
-        Some(s) => s, None => return RatifyStatus::RatifyErrJson,
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
     };
     let revoked_certs: Vec<String> = match serde_json::from_str(&certs_str) {
-        Ok(v) => v, Err(e) => return json_err(err_out, "revoked_certs_json", e),
+        Ok(v) => v,
+        Err(e) => return json_err(err_out, "revoked_certs_json", e),
     };
 
     let issuer_ref = &*issuer;
@@ -526,7 +639,10 @@ pub unsafe extern "C" fn ratify_revocation_list_issue(
         issuer_id: issuer_ref.0.id.clone(),
         updated_at: updated_at_unix,
         revoked_certs,
-        signature: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
+        signature: HybridSignature {
+            ed25519: vec![0u8; 64],
+            ml_dsa_65: vec![0u8; 3309],
+        },
     };
     issue_revocation_list(&mut list, &issuer_ref.1);
     *out = Box::into_raw(Box::new(RatifyRevocationList(list)));
@@ -542,13 +658,34 @@ pub unsafe extern "C" fn ratify_revocation_list_verify(
     issuer_pub_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(list_json, "list_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    if check_not_null(issuer_pub_json, "issuer_pub_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let list_str = match cstr_to_string(list_json, "list_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let pub_str  = match cstr_to_string(issuer_pub_json, "issuer_pub_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let list: RevocationList = match serde_json::from_str(&list_str) { Ok(l) => l, Err(e) => return json_err(err_out, "list_json", e) };
-    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) { Ok(k) => k, Err(e) => return json_err(err_out, "issuer_pub_json", e) };
-    if verify_revocation_list(&list, &pub_key) { RatifyStatus::RatifyOk } else { set_err(err_out, "revocation_list signature invalid"); RatifyStatus::RatifyErrCrypto }
+    if check_not_null(list_json, "list_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if check_not_null(issuer_pub_json, "issuer_pub_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let list_str = match cstr_to_string(list_json, "list_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let pub_str = match cstr_to_string(issuer_pub_json, "issuer_pub_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let list: RevocationList = match serde_json::from_str(&list_str) {
+        Ok(l) => l,
+        Err(e) => return json_err(err_out, "list_json", e),
+    };
+    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) {
+        Ok(k) => k,
+        Err(e) => return json_err(err_out, "issuer_pub_json", e),
+    };
+    if verify_revocation_list(&list, &pub_key) {
+        RatifyStatus::RatifyOk
+    } else {
+        set_err(err_out, "revocation_list signature invalid");
+        RatifyStatus::RatifyErrCrypto
+    }
 }
 
 /// Returns 1 if `cert_id` appears in the revocation list, 0 otherwise.
@@ -557,8 +694,13 @@ pub unsafe extern "C" fn ratify_revocation_list_contains(
     handle: *const RatifyRevocationList,
     cert_id: *const c_char,
 ) -> c_int {
-    if handle.is_null() || cert_id.is_null() { return 0; }
-    let id = match CStr::from_ptr(cert_id).to_str() { Ok(s) => s, Err(_) => return 0 };
+    if handle.is_null() || cert_id.is_null() {
+        return 0;
+    }
+    let id = match CStr::from_ptr(cert_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
     (*handle).0.revoked_certs.iter().any(|c| c == id) as c_int
 }
 
@@ -568,19 +710,39 @@ pub unsafe extern "C" fn ratify_revocation_list_to_json(
     handle: *const RatifyRevocationList,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Deserialise a RevocationList from JSON. Free with `ratify_revocation_list_free`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_revocation_list_from_json(
-    json: *const c_char, out: *mut *mut RatifyRevocationList, err_out: *mut *mut c_char,
+    json: *const c_char,
+    out: *mut *mut RatifyRevocationList,
+    err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<RevocationList>(&s) {
-        Ok(l) => { *out = Box::into_raw(Box::new(RatifyRevocationList(l))); RatifyStatus::RatifyOk }
+        Ok(l) => {
+            *out = Box::into_raw(Box::new(RatifyRevocationList(l)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "revocation_list_from_json", e),
     }
 }
@@ -588,7 +750,9 @@ pub unsafe extern "C" fn ratify_revocation_list_from_json(
 /// Free a `RatifyRevocationList` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_revocation_list_free(handle: *mut RatifyRevocationList) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -610,16 +774,28 @@ pub unsafe extern "C" fn ratify_revocation_push_issue(
     out: *mut *mut RatifyRevocationPush,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if issuer.is_null() || out.is_null() { set_err(err_out, "issuer and out must be non-null"); return RatifyStatus::RatifyErrNullPointer; }
-    let entries_str = match cstr_to_string(new_revoked_json, "new_revoked_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let entries: Vec<String> = match serde_json::from_str(&entries_str) { Ok(v) => v, Err(e) => return json_err(err_out, "new_revoked_json", e) };
+    if issuer.is_null() || out.is_null() {
+        set_err(err_out, "issuer and out must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let entries_str = match cstr_to_string(new_revoked_json, "new_revoked_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let entries: Vec<String> = match serde_json::from_str(&entries_str) {
+        Ok(v) => v,
+        Err(e) => return json_err(err_out, "new_revoked_json", e),
+    };
     let issuer_ref = &*issuer;
     let mut push = RevocationPush {
         issuer_id: issuer_ref.0.id.clone(),
         seq_no,
         entries,
         pushed_at: pushed_at_unix,
-        signature: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
+        signature: HybridSignature {
+            ed25519: vec![0u8; 64],
+            ml_dsa_65: vec![0u8; 3309],
+        },
     };
     issue_revocation_push(&mut push, &issuer_ref.1);
     *out = Box::into_raw(Box::new(RatifyRevocationPush(push)));
@@ -633,29 +809,75 @@ pub unsafe extern "C" fn ratify_revocation_push_verify(
     issuer_pub_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(push_json, "push_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    if check_not_null(issuer_pub_json, "issuer_pub_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let push_str = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let pub_str  = match cstr_to_string(issuer_pub_json, "issuer_pub_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let push: RevocationPush = match serde_json::from_str(&push_str) { Ok(p) => p, Err(e) => return json_err(err_out, "push_json", e) };
-    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) { Ok(k) => k, Err(e) => return json_err(err_out, "issuer_pub_json", e) };
-    if verify_revocation_push(&push, &pub_key) { RatifyStatus::RatifyOk } else { set_err(err_out, "revocation_push signature invalid"); RatifyStatus::RatifyErrCrypto }
+    if check_not_null(push_json, "push_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if check_not_null(issuer_pub_json, "issuer_pub_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let push_str = match cstr_to_string(push_json, "push_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let pub_str = match cstr_to_string(issuer_pub_json, "issuer_pub_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let push: RevocationPush = match serde_json::from_str(&push_str) {
+        Ok(p) => p,
+        Err(e) => return json_err(err_out, "push_json", e),
+    };
+    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) {
+        Ok(k) => k,
+        Err(e) => return json_err(err_out, "issuer_pub_json", e),
+    };
+    if verify_revocation_push(&push, &pub_key) {
+        RatifyStatus::RatifyOk
+    } else {
+        set_err(err_out, "revocation_push signature invalid");
+        RatifyStatus::RatifyErrCrypto
+    }
 }
 
 /// Serialise a RevocationPush to JSON. Free with `ratify_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_revocation_push_to_json(handle: *const RatifyRevocationPush, err_out: *mut *mut c_char) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+pub unsafe extern "C" fn ratify_revocation_push_to_json(
+    handle: *const RatifyRevocationPush,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Deserialise a RevocationPush from JSON. Free with `ratify_revocation_push_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_revocation_push_from_json(json: *const c_char, out: *mut *mut RatifyRevocationPush, err_out: *mut *mut c_char) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+pub unsafe extern "C" fn ratify_revocation_push_from_json(
+    json: *const c_char,
+    out: *mut *mut RatifyRevocationPush,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<RevocationPush>(&s) {
-        Ok(p) => { *out = Box::into_raw(Box::new(RatifyRevocationPush(p))); RatifyStatus::RatifyOk }
+        Ok(p) => {
+            *out = Box::into_raw(Box::new(RatifyRevocationPush(p)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "revocation_push_from_json", e),
     }
 }
@@ -663,7 +885,9 @@ pub unsafe extern "C" fn ratify_revocation_push_from_json(json: *const c_char, o
 /// Free a `RatifyRevocationPush` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_revocation_push_free(handle: *mut RatifyRevocationPush) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -695,7 +919,8 @@ pub unsafe extern "C" fn ratify_witness_entry_issue(
         vec![0u8; 32]
     } else {
         match exact_buf(prev_hash, prev_hash_len, 32, "prev_hash", err_out) {
-            Some(b) => b.to_vec(), None => return RatifyStatus::RatifyErrBadArgument,
+            Some(b) => b.to_vec(),
+            None => return RatifyStatus::RatifyErrBadArgument,
         }
     };
     let witness_ref = &*witness;
@@ -704,7 +929,10 @@ pub unsafe extern "C" fn ratify_witness_entry_issue(
         entry_data: data,
         timestamp: timestamp_unix,
         witness_id: witness_ref.0.id.clone(),
-        signature: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
+        signature: HybridSignature {
+            ed25519: vec![0u8; 64],
+            ml_dsa_65: vec![0u8; 3309],
+        },
     };
     issue_witness_entry(&mut entry, &witness_ref.1);
     *out = Box::into_raw(Box::new(RatifyWitnessEntry(entry)));
@@ -718,29 +946,75 @@ pub unsafe extern "C" fn ratify_witness_entry_verify(
     witness_pub_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(entry_json, "entry_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    if check_not_null(witness_pub_json, "witness_pub_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let entry_str = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let pub_str   = match cstr_to_string(witness_pub_json, "witness_pub_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let entry: WitnessEntry = match serde_json::from_str(&entry_str) { Ok(e) => e, Err(e) => return json_err(err_out, "entry_json", e) };
-    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) { Ok(k) => k, Err(e) => return json_err(err_out, "witness_pub_json", e) };
-    if verify_witness_entry(&entry, &pub_key) { RatifyStatus::RatifyOk } else { set_err(err_out, "witness_entry signature invalid"); RatifyStatus::RatifyErrCrypto }
+    if check_not_null(entry_json, "entry_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if check_not_null(witness_pub_json, "witness_pub_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let entry_str = match cstr_to_string(entry_json, "entry_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let pub_str = match cstr_to_string(witness_pub_json, "witness_pub_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let entry: WitnessEntry = match serde_json::from_str(&entry_str) {
+        Ok(e) => e,
+        Err(e) => return json_err(err_out, "entry_json", e),
+    };
+    let pub_key: HybridPublicKey = match serde_json::from_str(&pub_str) {
+        Ok(k) => k,
+        Err(e) => return json_err(err_out, "witness_pub_json", e),
+    };
+    if verify_witness_entry(&entry, &pub_key) {
+        RatifyStatus::RatifyOk
+    } else {
+        set_err(err_out, "witness_entry signature invalid");
+        RatifyStatus::RatifyErrCrypto
+    }
 }
 
 /// Serialise a WitnessEntry to JSON. Free with `ratify_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_witness_entry_to_json(handle: *const RatifyWitnessEntry, err_out: *mut *mut c_char) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+pub unsafe extern "C" fn ratify_witness_entry_to_json(
+    handle: *const RatifyWitnessEntry,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Deserialise a WitnessEntry from JSON. Free with `ratify_witness_entry_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_witness_entry_from_json(json: *const c_char, out: *mut *mut RatifyWitnessEntry, err_out: *mut *mut c_char) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+pub unsafe extern "C" fn ratify_witness_entry_from_json(
+    json: *const c_char,
+    out: *mut *mut RatifyWitnessEntry,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<WitnessEntry>(&s) {
-        Ok(e) => { *out = Box::into_raw(Box::new(RatifyWitnessEntry(e))); RatifyStatus::RatifyOk }
+        Ok(e) => {
+            *out = Box::into_raw(Box::new(RatifyWitnessEntry(e)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "witness_entry_from_json", e),
     }
 }
@@ -748,7 +1022,9 @@ pub unsafe extern "C" fn ratify_witness_entry_from_json(json: *const c_char, out
 /// Free a `RatifyWitnessEntry` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_witness_entry_free(handle: *mut RatifyWitnessEntry) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -777,19 +1053,28 @@ pub unsafe extern "C" fn ratify_key_rotation_issue(
         set_err(err_out, "old_root, new_root, and out must be non-null");
         return RatifyStatus::RatifyErrNullPointer;
     }
-    let reason_str = match cstr_to_string(reason, "reason", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
+    let reason_str = match cstr_to_string(reason, "reason", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
     let old_ref = &*old_root;
     let new_ref = &*new_root;
     let mut stmt = KeyRotationStatement {
         version: 1,
-        old_id:    old_ref.0.id.clone(),
+        old_id: old_ref.0.id.clone(),
         old_pub_key: old_ref.0.public_key.clone(),
-        new_id:    new_ref.0.id.clone(),
+        new_id: new_ref.0.id.clone(),
         new_pub_key: new_ref.0.public_key.clone(),
         rotated_at: rotated_at_unix,
         reason: reason_str,
-        signature_old: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
-        signature_new: HybridSignature { ed25519: vec![0u8; 64], ml_dsa_65: vec![0u8; 3309] },
+        signature_old: HybridSignature {
+            ed25519: vec![0u8; 64],
+            ml_dsa_65: vec![0u8; 3309],
+        },
+        signature_new: HybridSignature {
+            ed25519: vec![0u8; 64],
+            ml_dsa_65: vec![0u8; 3309],
+        },
     };
     // issue_key_rotation_statement is infallible in the Rust SDK
     issue_key_rotation_statement(&mut stmt, &old_ref.1, &new_ref.1);
@@ -803,9 +1088,17 @@ pub unsafe extern "C" fn ratify_key_rotation_verify(
     stmt_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(stmt_json, "stmt_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(stmt_json, "stmt_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let stmt: KeyRotationStatement = match serde_json::from_str(&s) { Ok(st) => st, Err(e) => return json_err(err_out, "stmt_json", e) };
+    if check_not_null(stmt_json, "stmt_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(stmt_json, "stmt_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let stmt: KeyRotationStatement = match serde_json::from_str(&s) {
+        Ok(st) => st,
+        Err(e) => return json_err(err_out, "stmt_json", e),
+    };
     match verify_key_rotation_statement(&stmt) {
         Ok(()) => RatifyStatus::RatifyOk,
         Err(e) => map_sdk_err(err_out, e),
@@ -814,18 +1107,43 @@ pub unsafe extern "C" fn ratify_key_rotation_verify(
 
 /// Serialise a KeyRotationStatement to JSON. Free with `ratify_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_key_rotation_to_json(handle: *const RatifyKeyRotation, err_out: *mut *mut c_char) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+pub unsafe extern "C" fn ratify_key_rotation_to_json(
+    handle: *const RatifyKeyRotation,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Deserialise a KeyRotationStatement from JSON. Free with `ratify_key_rotation_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_key_rotation_from_json(json: *const c_char, out: *mut *mut RatifyKeyRotation, err_out: *mut *mut c_char) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+pub unsafe extern "C" fn ratify_key_rotation_from_json(
+    json: *const c_char,
+    out: *mut *mut RatifyKeyRotation,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<KeyRotationStatement>(&s) {
-        Ok(st) => { *out = Box::into_raw(Box::new(RatifyKeyRotation(st))); RatifyStatus::RatifyOk }
+        Ok(st) => {
+            *out = Box::into_raw(Box::new(RatifyKeyRotation(st)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "key_rotation_from_json", e),
     }
 }
@@ -833,7 +1151,9 @@ pub unsafe extern "C" fn ratify_key_rotation_from_json(json: *const c_char, out:
 /// Free a `RatifyKeyRotation` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_key_rotation_free(handle: *mut RatifyKeyRotation) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -847,10 +1167,21 @@ pub unsafe extern "C" fn ratify_scope_has(
     granted_json: *const c_char,
     required: *const c_char,
 ) -> c_int {
-    if granted_json.is_null() || required.is_null() { return 0; }
-    let granted_str = match CStr::from_ptr(granted_json).to_str() { Ok(s) => s, Err(_) => return 0 };
-    let req_str     = match CStr::from_ptr(required).to_str()     { Ok(s) => s, Err(_) => return 0 };
-    let granted: Vec<String> = match serde_json::from_str(granted_str) { Ok(v) => v, Err(_) => return 0 };
+    if granted_json.is_null() || required.is_null() {
+        return 0;
+    }
+    let granted_str = match CStr::from_ptr(granted_json).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let req_str = match CStr::from_ptr(required).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let granted: Vec<String> = match serde_json::from_str(granted_str) {
+        Ok(v) => v,
+        Err(_) => return 0,
+    };
     has_scope(&granted, req_str) as c_int
 }
 
@@ -859,7 +1190,9 @@ pub unsafe extern "C" fn ratify_scope_has(
 /// NULL or non-UTF-8 input returns 0.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_scope_is_sensitive(scope: *const c_char) -> c_int {
-    if scope.is_null() { return 0; }
+    if scope.is_null() {
+        return 0;
+    }
     match CStr::from_ptr(scope).to_str() {
         Ok(s) => is_sensitive(s) as c_int,
         Err(_) => 0,
@@ -875,15 +1208,24 @@ pub unsafe extern "C" fn ratify_scopes_expand(
     scopes_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(scopes_json, "scopes_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
+    let s = match cstr_to_string(scopes_json, "scopes_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
     let scopes: Vec<String> = match serde_json::from_str(&s) {
         Ok(v) => v,
-        Err(e) => { set_err(err_out, &format!("scopes_json: {e}")); return std::ptr::null_mut(); }
+        Err(e) => {
+            set_err(err_out, &format!("scopes_json: {e}"));
+            return std::ptr::null_mut();
+        }
     };
     let expanded = expand_scopes(&scopes);
     match serde_json::to_string(&expanded) {
         Ok(out) => new_cstring(&out),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -904,18 +1246,33 @@ pub unsafe extern "C" fn ratify_scopes_intersect(
     let mut parsed: Vec<Vec<String>> = Vec::with_capacity(count);
     for i in 0..count {
         let ptr = *scope_arrays_json.add(i);
-        if ptr.is_null() { set_err(err_out, &format!("scope_arrays_json[{i}] is null")); return std::ptr::null_mut(); }
-        let s = match CStr::from_ptr(ptr).to_str() { Ok(s) => s, Err(_) => { set_err(err_out, &format!("scope_arrays_json[{i}] invalid UTF-8")); return std::ptr::null_mut(); } };
+        if ptr.is_null() {
+            set_err(err_out, &format!("scope_arrays_json[{i}] is null"));
+            return std::ptr::null_mut();
+        }
+        let s = match CStr::from_ptr(ptr).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                set_err(err_out, &format!("scope_arrays_json[{i}] invalid UTF-8"));
+                return std::ptr::null_mut();
+            }
+        };
         match serde_json::from_str::<Vec<String>>(s) {
             Ok(v) => parsed.push(v),
-            Err(e) => { set_err(err_out, &format!("scope_arrays_json[{i}]: {e}")); return std::ptr::null_mut(); }
+            Err(e) => {
+                set_err(err_out, &format!("scope_arrays_json[{i}]: {e}"));
+                return std::ptr::null_mut();
+            }
         }
     }
     let refs: Vec<&[String]> = parsed.iter().map(|v| v.as_slice()).collect();
     let result = intersect_scopes(&refs);
     match serde_json::to_string(&result) {
         Ok(out) => new_cstring(&out),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -925,12 +1282,18 @@ pub unsafe extern "C" fn ratify_scopes_intersect(
 /// (free with `ratify_string_free`) if any scope is invalid. NULL input returns
 /// a null-pointer error string.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_scopes_validate(
-    scopes_json: *const c_char,
-) -> *mut c_char {
-    if scopes_json.is_null() { return new_cstring("scopes_json is null"); }
-    let s = match CStr::from_ptr(scopes_json).to_str() { Ok(s) => s, Err(_) => return new_cstring("scopes_json invalid UTF-8") };
-    let scopes: Vec<String> = match serde_json::from_str(s) { Ok(v) => v, Err(e) => return new_cstring(&format!("scopes_json: {e}")) };
+pub unsafe extern "C" fn ratify_scopes_validate(scopes_json: *const c_char) -> *mut c_char {
+    if scopes_json.is_null() {
+        return new_cstring("scopes_json is null");
+    }
+    let s = match CStr::from_ptr(scopes_json).to_str() {
+        Ok(s) => s,
+        Err(_) => return new_cstring("scopes_json invalid UTF-8"),
+    };
+    let scopes: Vec<String> = match serde_json::from_str(s) {
+        Ok(v) => v,
+        Err(e) => return new_cstring(&format!("scopes_json: {e}")),
+    };
     match validate_scopes(&scopes) {
         None => std::ptr::null_mut(), // valid
         Some(err) => new_cstring(&err),
@@ -983,15 +1346,52 @@ pub unsafe extern "C" fn ratify_policy_verdict_issue(
     out: *mut *mut RatifyPolicyVerdict,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let vid   = match cstr_to_string(verdict_id, "verdict_id", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
-    let aid   = match cstr_to_string(agent_id,   "agent_id",   err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
-    let scp   = match cstr_to_string(scope,       "scope",      err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
-    let ctx_h = match mandatory_exact_buf(context_hash, context_hash_len, 32, "context_hash", err_out) { Ok(b) => b, Err(e) => return e };
-    let secret = match validated_buf(policy_secret, policy_secret_len, 1, "policy_secret", err_out) { Some(b) => b, None => return RatifyStatus::RatifyErrBadArgument };
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let vid = match cstr_to_string(verdict_id, "verdict_id", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let aid = match cstr_to_string(agent_id, "agent_id", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let scp = match cstr_to_string(scope, "scope", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let ctx_h =
+        match mandatory_exact_buf(context_hash, context_hash_len, 32, "context_hash", err_out) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+    let secret = match validated_buf(
+        policy_secret,
+        policy_secret_len,
+        1,
+        "policy_secret",
+        err_out,
+    ) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
 
-    match issue_policy_verdict(&vid, &aid, &scp, allow != 0, ctx_h, issued_at_unix, valid_until_unix, secret) {
-        Ok(v) => { *out = Box::into_raw(Box::new(RatifyPolicyVerdict(v))); RatifyStatus::RatifyOk }
+    match issue_policy_verdict(
+        &vid,
+        &aid,
+        &scp,
+        allow != 0,
+        ctx_h,
+        issued_at_unix,
+        valid_until_unix,
+        secret,
+    ) {
+        Ok(v) => {
+            *out = Box::into_raw(Box::new(RatifyPolicyVerdict(v)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => map_sdk_err(err_out, e),
     }
 }
@@ -1012,12 +1412,42 @@ pub unsafe extern "C" fn ratify_policy_verdict_verify(
     now_unix: i64,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    let s       = match cstr_to_string(verdict_json,     "verdict_json",     err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let aid     = match cstr_to_string(expected_agent_id,"expected_agent_id",err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
-    let scp     = match cstr_to_string(expected_scope,   "expected_scope",   err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrEncoding };
-    let verdict: PolicyVerdict = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => return json_err(err_out, "verdict_json", e) };
-    let secret  = match validated_buf(policy_secret, policy_secret_len, 1, "policy_secret", err_out) { Some(b) => b, None => return RatifyStatus::RatifyErrBadArgument };
-    let ctx_h   = match mandatory_exact_buf(expected_context_hash, expected_context_hash_len, 32, "expected_context_hash", err_out) { Ok(b) => b, Err(e) => return e };
+    let s = match cstr_to_string(verdict_json, "verdict_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let aid = match cstr_to_string(expected_agent_id, "expected_agent_id", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let scp = match cstr_to_string(expected_scope, "expected_scope", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let verdict: PolicyVerdict = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => return json_err(err_out, "verdict_json", e),
+    };
+    let secret = match validated_buf(
+        policy_secret,
+        policy_secret_len,
+        1,
+        "policy_secret",
+        err_out,
+    ) {
+        Some(b) => b,
+        None => return RatifyStatus::RatifyErrBadArgument,
+    };
+    let ctx_h = match mandatory_exact_buf(
+        expected_context_hash,
+        expected_context_hash_len,
+        32,
+        "expected_context_hash",
+        err_out,
+    ) {
+        Ok(b) => b,
+        Err(e) => return e,
+    };
 
     match verify_policy_verdict(&verdict, secret, &aid, &scp, ctx_h, now_unix) {
         Ok(()) => RatifyStatus::RatifyOk,
@@ -1027,18 +1457,43 @@ pub unsafe extern "C" fn ratify_policy_verdict_verify(
 
 /// Serialise a PolicyVerdict to JSON. Free with `ratify_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_policy_verdict_to_json(handle: *const RatifyPolicyVerdict, err_out: *mut *mut c_char) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+pub unsafe extern "C" fn ratify_policy_verdict_to_json(
+    handle: *const RatifyPolicyVerdict,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Deserialise a PolicyVerdict from JSON. Free with `ratify_policy_verdict_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_policy_verdict_from_json(json: *const c_char, out: *mut *mut RatifyPolicyVerdict, err_out: *mut *mut c_char) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+pub unsafe extern "C" fn ratify_policy_verdict_from_json(
+    json: *const c_char,
+    out: *mut *mut RatifyPolicyVerdict,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<PolicyVerdict>(&s) {
-        Ok(v) => { *out = Box::into_raw(Box::new(RatifyPolicyVerdict(v))); RatifyStatus::RatifyOk }
+        Ok(v) => {
+            *out = Box::into_raw(Box::new(RatifyPolicyVerdict(v)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "policy_verdict_from_json", e),
     }
 }
@@ -1046,7 +1501,9 @@ pub unsafe extern "C" fn ratify_policy_verdict_from_json(json: *const c_char, ou
 /// Free a `RatifyPolicyVerdict` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_policy_verdict_free(handle: *mut RatifyPolicyVerdict) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -1067,9 +1524,17 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify(
     now_unix: i64,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if check_not_null(receipt_json, "receipt_json", err_out).is_none() { return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
-    let receipt: TransactionReceipt = match serde_json::from_str(&s) { Ok(r) => r, Err(e) => return json_err(err_out, "receipt_json", e) };
+    if check_not_null(receipt_json, "receipt_json", err_out).is_none() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
+    let receipt: TransactionReceipt = match serde_json::from_str(&s) {
+        Ok(r) => r,
+        Err(e) => return json_err(err_out, "receipt_json", e),
+    };
     // Use caller-supplied timestamp; fall back to system clock if 0.
     // This eliminates the SystemTime::now() dependency for embedded targets
     // that have no OS clock but can supply a timestamp from NTP or RTC.
@@ -1082,7 +1547,15 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify(
             .unwrap_or(0)
     };
     let result = verify_transaction_receipt(&receipt, now_ts);
-    if result.valid { RatifyStatus::RatifyOk } else { set_err(err_out, &format!("transaction_receipt invalid: {}", result.error_reason)); RatifyStatus::RatifyErrCrypto }
+    if result.valid {
+        RatifyStatus::RatifyOk
+    } else {
+        set_err(
+            err_out,
+            &format!("transaction_receipt invalid: {}", result.error_reason),
+        );
+        RatifyStatus::RatifyErrCrypto
+    }
 }
 
 /// Sign a TransactionReceipt as one party using an AgentIdentity.
@@ -1097,41 +1570,86 @@ pub unsafe extern "C" fn ratify_transaction_receipt_sign_party(
     agent: *const RatifyAgent,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    if agent.is_null() { set_err(err_out, "agent is null"); return std::ptr::null_mut(); }
-    let receipt_str = match cstr_to_string(receipt_json, "receipt_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let pid_str     = match cstr_to_string(party_id,    "party_id",    err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let receipt: TransactionReceipt = match serde_json::from_str(&receipt_str) { Ok(r) => r, Err(e) => { set_err(err_out, &format!("receipt_json: {e}")); return std::ptr::null_mut(); } };
+    if agent.is_null() {
+        set_err(err_out, "agent is null");
+        return std::ptr::null_mut();
+    }
+    let receipt_str = match cstr_to_string(receipt_json, "receipt_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let pid_str = match cstr_to_string(party_id, "party_id", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let receipt: TransactionReceipt = match serde_json::from_str(&receipt_str) {
+        Ok(r) => r,
+        Err(e) => {
+            set_err(err_out, &format!("receipt_json: {e}"));
+            return std::ptr::null_mut();
+        }
+    };
     let agent_ref = &*agent;
     // sign_transaction_receipt_party is infallible in the Rust SDK
     let sig = sign_transaction_receipt_party(&receipt, &pid_str, &agent_ref.1);
     match serde_json::to_string(&sig) {
         Ok(s) => new_cstring(&s),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
 /// Deserialise a TransactionReceipt from JSON. Free with `ratify_transaction_receipt_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_transaction_receipt_from_json(json: *const c_char, out: *mut *mut RatifyTransactionReceipt, err_out: *mut *mut c_char) -> RatifyStatus {
-    if out.is_null() { set_err(err_out, "out is null"); return RatifyStatus::RatifyErrNullPointer; }
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrJson };
+pub unsafe extern "C" fn ratify_transaction_receipt_from_json(
+    json: *const c_char,
+    out: *mut *mut RatifyTransactionReceipt,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out.is_null() {
+        set_err(err_out, "out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
+    };
     match serde_json::from_str::<TransactionReceipt>(&s) {
-        Ok(r) => { *out = Box::into_raw(Box::new(RatifyTransactionReceipt(r))); RatifyStatus::RatifyOk }
+        Ok(r) => {
+            *out = Box::into_raw(Box::new(RatifyTransactionReceipt(r)));
+            RatifyStatus::RatifyOk
+        }
         Err(e) => json_err(err_out, "transaction_receipt_from_json", e),
     }
 }
 
 /// Serialise a TransactionReceipt to JSON. Free with `ratify_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_transaction_receipt_to_json(handle: *const RatifyTransactionReceipt, err_out: *mut *mut c_char) -> *mut c_char {
-    if handle.is_null() { set_err(err_out, "handle is null"); return std::ptr::null_mut(); }
-    match serde_json::to_string(&(*handle).0) { Ok(s) => new_cstring(&s), Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() } }
+pub unsafe extern "C" fn ratify_transaction_receipt_to_json(
+    handle: *const RatifyTransactionReceipt,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_err(err_out, "handle is null");
+        return std::ptr::null_mut();
+    }
+    match serde_json::to_string(&(*handle).0) {
+        Ok(s) => new_cstring(&s),
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Free a `RatifyTransactionReceipt` handle. Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_transaction_receipt_free(handle: *mut RatifyTransactionReceipt) {
-    if !handle.is_null() { drop(Box::from_raw(handle)); }
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 // ============================================================================
@@ -1149,9 +1667,15 @@ pub unsafe extern "C" fn ratify_chain_hash(
     out_32: *mut c_uchar,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if bundle.is_null() || out_32.is_null() { set_err(err_out, "bundle and out_32 must be non-null"); return RatifyStatus::RatifyErrNullPointer; }
+    if bundle.is_null() || out_32.is_null() {
+        set_err(err_out, "bundle and out_32 must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
     let h = sdk_chain_hash(&(*bundle).0.delegations);
-    if h.len() != 32 { set_err(err_out, "chain_hash: unexpected length"); return RatifyStatus::RatifyErrInternal; }
+    if h.len() != 32 {
+        set_err(err_out, "chain_hash: unexpected length");
+        return RatifyStatus::RatifyErrInternal;
+    }
     slice::from_raw_parts_mut(out_32, 32).copy_from_slice(&h);
     RatifyStatus::RatifyOk
 }
@@ -1167,30 +1691,65 @@ pub unsafe extern "C" fn ratify_verifier_context_hash(
     out_32: *mut c_uchar,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if ctx.is_null() || out_32.is_null() { set_err(err_out, "ctx and out_32 must be non-null"); return RatifyStatus::RatifyErrNullPointer; }
+    if ctx.is_null() || out_32.is_null() {
+        set_err(err_out, "ctx and out_32 must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
 
     // Build the Rust VerifierContext from the C struct — reuse the same logic as build_opts.
     let ctx_ref = &*ctx;
-    let currency = if ctx_ref.requested_currency.is_null() { None } else {
-        CStr::from_ptr(ctx_ref.requested_currency).to_str().ok().map(|s| s.to_owned())
+    let currency = if ctx_ref.requested_currency.is_null() {
+        None
+    } else {
+        CStr::from_ptr(ctx_ref.requested_currency)
+            .to_str()
+            .ok()
+            .map(|s| s.to_owned())
     };
     let rust_ctx = ratify_protocol::VerifierContext {
-        current_lat:           if ctx_ref.has_location != 0 { Some(ctx_ref.current_lat) } else { None },
-        current_lon:           if ctx_ref.has_location != 0 { Some(ctx_ref.current_lon) } else { None },
-        current_alt_m:         if ctx_ref.has_location != 0 { Some(ctx_ref.current_alt_m) } else { None },
-        current_speed_mps:     if ctx_ref.has_speed    != 0 { Some(ctx_ref.current_speed_mps) } else { None },
-        requested_amount:      if ctx_ref.has_amount   != 0 { Some(ctx_ref.requested_amount) } else { None },
-        requested_currency:    if ctx_ref.has_amount   != 0 { currency } else { None },
+        current_lat: if ctx_ref.has_location != 0 {
+            Some(ctx_ref.current_lat)
+        } else {
+            None
+        },
+        current_lon: if ctx_ref.has_location != 0 {
+            Some(ctx_ref.current_lon)
+        } else {
+            None
+        },
+        current_alt_m: if ctx_ref.has_location != 0 {
+            Some(ctx_ref.current_alt_m)
+        } else {
+            None
+        },
+        current_speed_mps: if ctx_ref.has_speed != 0 {
+            Some(ctx_ref.current_speed_mps)
+        } else {
+            None
+        },
+        requested_amount: if ctx_ref.has_amount != 0 {
+            Some(ctx_ref.requested_amount)
+        } else {
+            None
+        },
+        requested_currency: if ctx_ref.has_amount != 0 {
+            currency
+        } else {
+            None
+        },
         invocations_in_window: None, // not needed for hashing
         // The legacy RatifyVerifierContext carries no resource context
         // (SPEC §5.16); resource fields are supplied only through the
         // versioned verify path, not this hashing helper.
         requested_resource_id: None,
-        requested_path:        None,
+        requested_path: None,
     };
     match ratify_protocol::verifier_context_hash(&rust_ctx) {
         Ok(h) => {
-            if h.len() != 32 { set_err(err_out, "verifier_context_hash: unexpected length"); return RatifyStatus::RatifyErrInternal; }
+            if h.len() != 32 {
+                set_err(err_out, "verifier_context_hash: unexpected length");
+                return RatifyStatus::RatifyErrInternal;
+            }
             slice::from_raw_parts_mut(out_32, 32).copy_from_slice(&h);
             RatifyStatus::RatifyOk
         }
@@ -1211,8 +1770,17 @@ pub unsafe extern "C" fn ratify_revocation_list_sign_bytes_hex(
     list_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(list_json, "list_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let list: RevocationList = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(list_json, "list_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let list: RevocationList = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&revocation_sign_bytes(&list)))
 }
 
@@ -1222,8 +1790,17 @@ pub unsafe extern "C" fn ratify_revocation_push_sign_bytes_hex(
     push_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(push_json, "push_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let push: RevocationPush = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&revocation_push_sign_bytes(&push)))
 }
 
@@ -1233,8 +1810,17 @@ pub unsafe extern "C" fn ratify_revocation_push_sig_ed25519_hex(
     push_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(push_json, "push_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let push: RevocationPush = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&push.signature.ed25519))
 }
 
@@ -1244,8 +1830,17 @@ pub unsafe extern "C" fn ratify_revocation_push_sig_ml_dsa_65_hex(
     push_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(push_json, "push_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let push: RevocationPush = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(push_json, "push_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let push: RevocationPush = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&push.signature.ml_dsa_65))
 }
 
@@ -1255,8 +1850,17 @@ pub unsafe extern "C" fn ratify_key_rotation_sign_bytes_hex(
     rotation_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(rotation_json, "rotation_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let stmt: KeyRotationStatement = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(rotation_json, "rotation_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let stmt: KeyRotationStatement = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&key_rotation_sign_bytes(&stmt)))
 }
 
@@ -1266,8 +1870,17 @@ pub unsafe extern "C" fn ratify_session_token_sign_bytes_hex(
     token_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(token_json, "token_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let token: SessionToken = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(token_json, "token_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let token: SessionToken = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&session_token_sign_bytes(&token)))
 }
 
@@ -1277,8 +1890,17 @@ pub unsafe extern "C" fn ratify_session_token_mac_hex(
     token_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(token_json, "token_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let token: SessionToken = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(token_json, "token_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let token: SessionToken = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&token.mac))
 }
 
@@ -1288,8 +1910,17 @@ pub unsafe extern "C" fn ratify_transaction_receipt_sign_bytes_hex(
     receipt_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let receipt: TransactionReceipt = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(receipt_json, "receipt_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let receipt: TransactionReceipt = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&transaction_receipt_sign_bytes(&receipt)))
 }
 
@@ -1299,8 +1930,17 @@ pub unsafe extern "C" fn ratify_witness_entry_sign_bytes_hex(
     entry_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let entry: WitnessEntry = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&witness_entry_sign_bytes(&entry)))
 }
 
@@ -1310,8 +1950,17 @@ pub unsafe extern "C" fn ratify_witness_entry_sig_ed25519_hex(
     entry_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let entry: WitnessEntry = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&entry.signature.ed25519))
 }
 
@@ -1321,8 +1970,17 @@ pub unsafe extern "C" fn ratify_witness_entry_sig_ml_dsa_65_hex(
     entry_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(entry_json, "entry_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let entry: WitnessEntry = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(entry_json, "entry_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let entry: WitnessEntry = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&entry.signature.ml_dsa_65))
 }
 
@@ -1356,60 +2014,82 @@ pub unsafe extern "C" fn ratify_witness_entry_sig_ml_dsa_65_hex(
 /// - `now_unix`            — current clock; 0 = use system clock.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_verify_streamed_turn(
-    token_json:           *const c_char,
-    session_secret:       *const c_uchar,
-    session_secret_len:   usize,
-    challenge:            *const c_uchar,
-    challenge_len:        usize,
-    challenge_at:         i64,
-    challenge_sig_json:   *const c_char,
-    session_context:      *const c_uchar,
-    session_context_len:  usize,
-    stream_id:            *const c_uchar,
-    stream_id_len:        usize,
-    stream_seq:           i64,
-    now_unix:             i64,
-    err_out:              *mut *mut c_char,
+    token_json: *const c_char,
+    session_secret: *const c_uchar,
+    session_secret_len: usize,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    challenge_at: i64,
+    challenge_sig_json: *const c_char,
+    session_context: *const c_uchar,
+    session_context_len: usize,
+    stream_id: *const c_uchar,
+    stream_id_len: usize,
+    stream_seq: i64,
+    now_unix: i64,
+    err_out: *mut *mut c_char,
 ) -> *mut crate::RatifyVerifyResult {
     // Parse session token
     let token_str = match cstr_to_string(token_json, "token_json", err_out) {
-        Some(s) => s, None => return std::ptr::null_mut(),
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
     };
     let token: SessionToken = match serde_json::from_str(&token_str) {
         Ok(t) => t,
-        Err(e) => { set_err(err_out, &format!("token_json: {e}")); return std::ptr::null_mut(); }
+        Err(e) => {
+            set_err(err_out, &format!("token_json: {e}"));
+            return std::ptr::null_mut();
+        }
     };
 
     // Session secret
-    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
-        Some(b) => b, None => return std::ptr::null_mut(),
+    let secret = match validated_buf(
+        session_secret,
+        session_secret_len,
+        1,
+        "session_secret",
+        err_out,
+    ) {
+        Some(b) => b,
+        None => return std::ptr::null_mut(),
     };
 
     // Challenge bytes
     let chall = match validated_buf(challenge, challenge_len, 1, "challenge", err_out) {
-        Some(b) => b, None => return std::ptr::null_mut(),
+        Some(b) => b,
+        None => return std::ptr::null_mut(),
     };
 
     // Challenge signature
     let sig_str = match cstr_to_string(challenge_sig_json, "challenge_sig_json", err_out) {
-        Some(s) => s, None => return std::ptr::null_mut(),
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
     };
     let sig: HybridSignature = match serde_json::from_str(&sig_str) {
         Ok(s) => s,
-        Err(e) => { set_err(err_out, &format!("challenge_sig_json: {e}")); return std::ptr::null_mut(); }
+        Err(e) => {
+            set_err(err_out, &format!("challenge_sig_json: {e}"));
+            return std::ptr::null_mut();
+        }
     };
 
     // Optional session context: NULL+0 = absent; non-NULL must be exactly 32 bytes.
     let sess_ctx: &[u8] = if session_context.is_null() {
         if session_context_len != 0 {
-            set_err(err_out, "session_context is null but session_context_len is non-zero");
+            set_err(
+                err_out,
+                "session_context is null but session_context_len is non-zero",
+            );
             return std::ptr::null_mut();
         }
         &[]
     } else if session_context_len == 0 {
         &[]
     } else if session_context_len != 32 {
-        set_err(err_out, &format!("session_context_len must be 0 or 32, got {session_context_len}"));
+        set_err(
+            err_out,
+            &format!("session_context_len must be 0 or 32, got {session_context_len}"),
+        );
         return std::ptr::null_mut();
     } else {
         slice::from_raw_parts(session_context, 32)
@@ -1425,7 +2105,10 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
     } else if stream_id_len == 0 {
         &[]
     } else if stream_id_len != 32 {
-        set_err(err_out, &format!("stream_id_len must be 0 or 32, got {stream_id_len}"));
+        set_err(
+            err_out,
+            &format!("stream_id_len must be 0 or 32, got {stream_id_len}"),
+        );
         return std::ptr::null_mut();
     } else {
         slice::from_raw_parts(stream_id, 32)
@@ -1433,9 +2116,22 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn(
 
     #[allow(deprecated)]
     let result = verify_streamed_turn(
-        &token, secret, chall, challenge_at, &sig,
-        sess_ctx, sid, stream_seq,
-        if now_unix == 0 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) } else { now_unix },
+        &token,
+        secret,
+        chall,
+        challenge_at,
+        &sig,
+        sess_ctx,
+        sid,
+        stream_seq,
+        if now_unix == 0 {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0)
+        } else {
+            now_unix
+        },
     );
 
     Box::into_raw(Box::new(crate::RatifyVerifyResult(result)))
@@ -1456,7 +2152,10 @@ unsafe fn checked_build_streamed_opts<'a>(
         return Err(RatifyStatus::RatifyErrBadArgument);
     }
     if o.session_context_len == 32 && o.session_context.is_null() {
-        set_err(err_out, "session_context is null but session_context_len is 32");
+        set_err(
+            err_out,
+            "session_context is null but session_context_len is 32",
+        );
         return Err(RatifyStatus::RatifyErrNullPointer);
     }
     if !o.stream.is_null() {
@@ -1470,9 +2169,7 @@ unsafe fn checked_build_streamed_opts<'a>(
             return Err(RatifyStatus::RatifyErrNullPointer);
         }
     }
-    if !o.required_scope.is_null()
-        && std::ffi::CStr::from_ptr(o.required_scope).to_str().is_err()
-    {
+    if !o.required_scope.is_null() && std::ffi::CStr::from_ptr(o.required_scope).to_str().is_err() {
         set_err(err_out, "required_scope contains invalid UTF-8");
         return Err(RatifyStatus::RatifyErrEncoding);
     }
@@ -1509,7 +2206,11 @@ unsafe fn checked_build_streamed_opts<'a>(
         challenge_store: None,
         session_context,
         stream,
-        now: if o.now_unix == 0 { None } else { Some(o.now_unix) },
+        now: if o.now_unix == 0 {
+            None
+        } else {
+            Some(o.now_unix)
+        },
     })
 }
 
@@ -1575,7 +2276,13 @@ pub unsafe extern "C" fn ratify_verify_streamed_turn_opts(
             return RatifyStatus::RatifyErrJson;
         }
     };
-    let secret = match validated_buf(session_secret, session_secret_len, 1, "session_secret", err_out) {
+    let secret = match validated_buf(
+        session_secret,
+        session_secret_len,
+        1,
+        "session_secret",
+        err_out,
+    ) {
         Some(b) => b,
         None => return RatifyStatus::RatifyErrBadArgument,
     };
@@ -1636,15 +2343,26 @@ pub unsafe extern "C" fn ratify_transaction_receipt_verify_full(
     valid_out: *mut c_int,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if valid_out.is_null() { set_err(err_out, "valid_out is null"); return RatifyStatus::RatifyErrNullPointer; }
+    if valid_out.is_null() {
+        set_err(err_out, "valid_out is null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
     let s = match cstr_to_string(receipt_json, "receipt_json", err_out) {
-        Some(s) => s, None => return RatifyStatus::RatifyErrJson,
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrJson,
     };
     let receipt: TransactionReceipt = match serde_json::from_str(&s) {
         Ok(v) => v,
         Err(e) => return json_err(err_out, "receipt_json", e),
     };
-    let ts = if now_unix == 0 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) } else { now_unix };
+    let ts = if now_unix == 0 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    } else {
+        now_unix
+    };
     let result = verify_transaction_receipt(&receipt, ts);
     *valid_out = result.valid as c_int;
     if !result.valid && !result.error_reason.is_empty() {
@@ -1797,6 +2515,143 @@ pub unsafe extern "C" fn ratify_session_context_build(
     }
 }
 
+/// Compute the Protocol v2 operation request hash. `required_scope` must be a
+/// non-NULL registered canonical scope; other string fields may be NULL
+/// (empty). `payload_digest` is NULL (absent) or canonical
+/// `sha256:<64 lowercase hex>` text. Writes 32 bytes to `out_hash`.
+/// Missing output pointers return `RatifyErrNullPointer`; an invalid required
+/// scope or malformed digest returns `RatifyErrBadArgument`; invalid UTF-8
+/// returns `RatifyErrEncoding`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_operation_context_v2_hash(
+    required_scope: *const c_char,
+    operation: *const c_char,
+    resource_id: *const c_char,
+    requested_path: *const c_char,
+    payload_digest: *const c_char,
+    out_hash: *mut c_uchar,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out_hash.is_null() {
+        set_err(err_out, "out_hash must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let digest_text = if payload_digest.is_null() {
+        None
+    } else {
+        match opt_utf8(payload_digest, "payload_digest", err_out) {
+            Ok(s) => Some(s),
+            Err(status) => return status,
+        }
+    };
+    let digest = match decode_payload_digest_v2(digest_text.as_deref()) {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => Vec::new(),
+        Err(error) => {
+            set_err(err_out, &error);
+            return RatifyStatus::RatifyErrBadArgument;
+        }
+    };
+    let ctx = OperationContextV2 {
+        required_scope: match opt_utf8(required_scope, "required_scope", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        operation: match opt_utf8(operation, "operation", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        resource_id: match opt_utf8(resource_id, "resource_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        requested_path: match opt_utf8(requested_path, "requested_path", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        payload_digest: digest,
+    };
+    match operation_context_v2_hash(&ctx) {
+        Ok(hash) => {
+            std::ptr::copy_nonoverlapping(hash.as_ptr(), out_hash, 32);
+            RatifyStatus::RatifyOk
+        }
+        Err(error) => {
+            set_err(err_out, &error);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Build the Protocol v2 session context from canonical verifier, workspace,
+/// and agent IDs plus session, invocation, and a 32-byte request hash. The
+/// verifier and agent IDs must be non-NULL 64-character lowercase hex strings;
+/// workspace_id must be a non-NULL lowercase UUID. NULL session_id and
+/// invocation_id mean empty. Missing required ID pointers return
+/// `RatifyErrNullPointer`; malformed IDs return `RatifyErrBadArgument`, and
+/// invalid UTF-8 returns `RatifyErrEncoding`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_session_context_v2_build(
+    verifier_id: *const c_char,
+    workspace_id: *const c_char,
+    agent_id: *const c_char,
+    session_id: *const c_char,
+    invocation_id: *const c_char,
+    request_hash: *const c_uchar,
+    request_hash_len: usize,
+    out_context: *mut c_uchar,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out_context.is_null() {
+        set_err(err_out, "out_context must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if verifier_id.is_null() || workspace_id.is_null() || agent_id.is_null() {
+        set_err(
+            err_out,
+            "verifier_id, workspace_id, and agent_id must be non-null",
+        );
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if request_hash.is_null() || request_hash_len != 32 {
+        set_err(err_out, "request_hash must point to exactly 32 bytes");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    let inputs = SessionContextV2Inputs {
+        verifier_id: match opt_utf8(verifier_id, "verifier_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        workspace_id: match opt_utf8(workspace_id, "workspace_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        agent_id: match opt_utf8(agent_id, "agent_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        session_id: match opt_utf8(session_id, "session_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        invocation_id: match opt_utf8(invocation_id, "invocation_id", err_out) {
+            Ok(s) => s,
+            Err(st) => return st,
+        },
+        request_hash: slice::from_raw_parts(request_hash, 32).to_vec(),
+    };
+    match build_session_context_v2(&inputs) {
+        Ok(context) => {
+            std::ptr::copy_nonoverlapping(context.as_ptr(), out_context, 32);
+            RatifyStatus::RatifyOk
+        }
+        Err(error) => {
+            set_err(err_out, &error);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
 // ============================================================================
 // Challenge store (SPEC §10 single-use challenges)
 // ============================================================================
@@ -1881,8 +2736,14 @@ pub unsafe extern "C" fn ratify_challenge_store_check(
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
     challenge_store_op(
-        store, challenge, challenge_len, session_context, session_context_len, now_unix,
-        err_out, false,
+        store,
+        challenge,
+        challenge_len,
+        session_context,
+        session_context_len,
+        now_unix,
+        err_out,
+        false,
     )
 }
 
@@ -1903,8 +2764,14 @@ pub unsafe extern "C" fn ratify_challenge_store_consume(
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
     challenge_store_op(
-        store, challenge, challenge_len, session_context, session_context_len, now_unix,
-        err_out, true,
+        store,
+        challenge,
+        challenge_len,
+        session_context,
+        session_context_len,
+        now_unix,
+        err_out,
+        true,
     )
 }
 
@@ -2000,7 +2867,10 @@ unsafe fn validated_buf_opt<'a>(
         if len == 0 {
             return Ok(&[]);
         }
-        set_err(err_out, "session_context is null but session_context_len is non-zero");
+        set_err(
+            err_out,
+            "session_context is null but session_context_len is non-zero",
+        );
         return Err(RatifyStatus::RatifyErrNullPointer);
     }
     Ok(slice::from_raw_parts(ptr, len))
@@ -2035,9 +2905,257 @@ pub unsafe extern "C" fn ratify_derive_id(
     pub_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(pub_json, "pub_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let pk: HybridPublicKey = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(pub_json, "pub_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let pk: HybridPublicKey = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&derive_id(&pk))
+}
+
+/// Compute the full 256-bit Protocol v2 key ID from a hybrid public key.
+/// `pub_json` has the same JSON shape as `ratify_derive_id`. Free the result
+/// with `ratify_string_free`; invalid input returns null and sets `err_out`.
+/// The v1 symbol and its 128-bit output are unchanged.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_derive_key_id_v2(
+    pub_json: *const c_char,
+    err_out: *mut *mut c_char,
+) -> *mut c_char {
+    let s = match cstr_to_string(pub_json, "pub_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let pk: HybridPublicKey = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
+    match derive_key_id_v2(&pk) {
+        Ok(id) => new_cstring(&id),
+        Err(e) => {
+            set_err(err_out, &e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Hash exactly 32 decoded Protocol v2 challenge bytes into a 48-byte replay
+/// digest. `out_digest` must point to 48 writable bytes. On failure it is
+/// zeroed when the declared capacity is at least 48 bytes. Null pointers
+/// return `RatifyErrNullPointer`; wrong lengths return `RatifyErrBadArgument`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_challenge_claim_digest_v2(
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    out_digest: *mut c_uchar,
+    out_digest_len: usize,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if out_digest.is_null() || challenge.is_null() {
+        if !out_digest.is_null() && out_digest_len >= 48 {
+            std::ptr::write_bytes(out_digest, 0, 48);
+        }
+        set_err(err_out, "challenge and out_digest must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if out_digest_len < 48 {
+        set_err(err_out, "out_digest must have capacity for 48 bytes");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    if challenge_len != 32 {
+        std::ptr::write_bytes(out_digest, 0, 48);
+        set_err(err_out, "challenge must be exactly 32 bytes");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    match challenge_claim_digest_v2(slice::from_raw_parts(challenge, 32)) {
+        Ok(digest) => {
+            std::ptr::copy_nonoverlapping(digest.as_ptr(), out_digest, 48);
+            RatifyStatus::RatifyOk
+        }
+        Err(error) => {
+            std::ptr::write_bytes(out_digest, 0, 48);
+            set_err(err_out, &error);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Derive a 64-hex-character Protocol v2 claim ID from a UTF-8 namespace,
+/// epoch, and decoded challenge. Namespace is length-delimited and may contain
+/// NUL bytes. `out_id` needs at least 65 bytes including the terminator and
+/// starts with NUL on failure when writable. Null pointers return
+/// `RatifyErrNullPointer`, invalid UTF-8 returns `RatifyErrEncoding`, and
+/// empty namespaces, unsafe epochs, or wrong lengths return `RatifyErrBadArgument`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_protocol_claim_id_v2(
+    namespace: *const c_uchar,
+    namespace_len: usize,
+    replay_epoch: u64,
+    challenge: *const c_uchar,
+    challenge_len: usize,
+    out_id: *mut c_char,
+    out_id_len: usize,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    claim_id_v2_ffi(
+        namespace,
+        namespace_len,
+        replay_epoch,
+        challenge,
+        challenge_len,
+        out_id,
+        out_id_len,
+        err_out,
+        false,
+    )
+}
+
+/// Derive the same ID from a precomputed 48-byte v2 challenge claim digest.
+/// `out_id` needs 65 bytes; failure clears its first byte when writable.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_protocol_claim_id_from_digest_v2(
+    namespace: *const c_uchar,
+    namespace_len: usize,
+    replay_epoch: u64,
+    digest: *const c_uchar,
+    digest_len: usize,
+    out_id: *mut c_char,
+    out_id_len: usize,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    claim_id_v2_ffi(
+        namespace,
+        namespace_len,
+        replay_epoch,
+        digest,
+        digest_len,
+        out_id,
+        out_id_len,
+        err_out,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn claim_id_v2_ffi(
+    namespace: *const c_uchar,
+    namespace_len: usize,
+    replay_epoch: u64,
+    input: *const c_uchar,
+    input_len: usize,
+    out_id: *mut c_char,
+    out_id_len: usize,
+    err_out: *mut *mut c_char,
+    from_digest: bool,
+) -> RatifyStatus {
+    if namespace.is_null() || input.is_null() || out_id.is_null() {
+        if !out_id.is_null() && out_id_len > 0 {
+            *out_id = 0;
+        }
+        set_err(err_out, "namespace, input, and out_id must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if out_id_len < 65
+        || namespace_len > isize::MAX as usize
+        || input_len != if from_digest { 48 } else { 32 }
+    {
+        if out_id_len > 0 {
+            *out_id = 0;
+        }
+        set_err(err_out, "invalid v2 claim ID input or output length");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    let namespace = match std::str::from_utf8(slice::from_raw_parts(namespace, namespace_len)) {
+        Ok(value) => value,
+        Err(_) => {
+            *out_id = 0;
+            set_err(err_out, "namespace contains invalid UTF-8");
+            return RatifyStatus::RatifyErrEncoding;
+        }
+    };
+    let bytes = slice::from_raw_parts(input, input_len);
+    let result = if from_digest {
+        protocol_claim_id_from_digest_v2(namespace, replay_epoch, bytes)
+    } else {
+        protocol_claim_id_v2(namespace, replay_epoch, bytes)
+    };
+    match result {
+        Ok(id) => {
+            std::ptr::copy_nonoverlapping(id.as_ptr().cast::<c_char>(), out_id, 64);
+            *out_id.add(64) = 0;
+            RatifyStatus::RatifyOk
+        }
+        Err(error) => {
+            *out_id = 0;
+            set_err(err_out, &error);
+            RatifyStatus::RatifyErrBadArgument
+        }
+    }
+}
+
+/// Verify both Protocol v2 delegation signature components over the caller's
+/// exact caller-provided signable bytes. This primitive does not check that
+/// those bytes are a canonical certificate projection, check its key ID, or
+/// authorize a delegation. `signable` must be non-null and readable for
+/// `signable_len` bytes. Writes 1 or 0 to `valid_out`, including 0 on error.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_verify_delegation_signature_v2(
+    signable: *const c_uchar,
+    signable_len: usize,
+    signature_json: *const c_char,
+    public_key_json: *const c_char,
+    valid_out: *mut c_int,
+    err_out: *mut *mut c_char,
+) -> RatifyStatus {
+    if valid_out.is_null() {
+        set_err(err_out, "valid_out must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    *valid_out = 0;
+    if signable.is_null() {
+        set_err(err_out, "signable must be non-null");
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    if signable_len > isize::MAX as usize {
+        set_err(err_out, "signable_len exceeds PTRDIFF_MAX");
+        return RatifyStatus::RatifyErrBadArgument;
+    }
+    let signature = match cstr_to_string(signature_json, "signature_json", err_out) {
+        Some(value) => value,
+        None if signature_json.is_null() => return RatifyStatus::RatifyErrNullPointer,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let public_key = match cstr_to_string(public_key_json, "public_key_json", err_out) {
+        Some(value) => value,
+        None if public_key_json.is_null() => return RatifyStatus::RatifyErrNullPointer,
+        None => return RatifyStatus::RatifyErrEncoding,
+    };
+    let signature: HybridSignature = match serde_json::from_str(&signature) {
+        Ok(value) => value,
+        Err(error) => {
+            set_err(err_out, &error.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let public_key: HybridPublicKey = match serde_json::from_str(&public_key) {
+        Ok(value) => value,
+        Err(error) => {
+            set_err(err_out, &error.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let bytes = slice::from_raw_parts(signable, signable_len);
+    *valid_out = i32::from(verify_delegation_v2(bytes, &signature, &public_key).is_ok());
+    RatifyStatus::RatifyOk
 }
 
 /// Return the canonical delegation-cert signing bytes as a lowercase hex string.
@@ -2046,8 +3164,17 @@ pub unsafe extern "C" fn ratify_delegation_sign_bytes_hex(
     cert_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(cert_json, "cert_json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let cert: DelegationCert = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(cert_json, "cert_json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let cert: DelegationCert = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     new_cstring(&hex_encode(&delegation_sign_bytes(&cert)))
 }
 
@@ -2083,7 +3210,10 @@ pub unsafe extern "C" fn ratify_challenge_sign_bytes_hex(
 
     let sc: &[u8] = if session_context.is_null() {
         if session_context_len != 0 {
-            set_err(err_out, "session_context is null but session_context_len is non-zero");
+            set_err(
+                err_out,
+                "session_context is null but session_context_len is non-zero",
+            );
             return std::ptr::null_mut();
         }
         &[]
@@ -2126,11 +3256,23 @@ pub unsafe extern "C" fn ratify_canonical_json(
     json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    let s = match cstr_to_string(json, "json", err_out) { Some(s) => s, None => return std::ptr::null_mut() };
-    let value: serde_json::Value = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return std::ptr::null_mut(); } };
+    let s = match cstr_to_string(json, "json", err_out) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let value: serde_json::Value = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return std::ptr::null_mut();
+        }
+    };
     match String::from_utf8(canonical_json(&value)) {
         Ok(text) => new_cstring(&text),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2156,7 +3298,9 @@ pub unsafe extern "C" fn ratify_human_root_from_seeds(
     out: *mut *mut RatifyHumanRoot,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { return RatifyStatus::RatifyErrNullPointer; }
+    if out.is_null() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
     let (ed, ml) = match seed_pair(ed_seed, ed_seed_len, ml_seed, ml_seed_len, err_out) {
         Some(v) => v,
         None => return RatifyStatus::RatifyErrBadArgument,
@@ -2188,9 +3332,17 @@ pub unsafe extern "C" fn ratify_agent_from_seeds(
     out: *mut *mut RatifyAgent,
     err_out: *mut *mut c_char,
 ) -> RatifyStatus {
-    if out.is_null() { return RatifyStatus::RatifyErrNullPointer; }
-    let name = match cstr_to_string(name_utf8, "name_utf8", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
-    let agent_type = match cstr_to_string(agent_type_utf8, "agent_type_utf8", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
+    if out.is_null() {
+        return RatifyStatus::RatifyErrNullPointer;
+    }
+    let name = match cstr_to_string(name_utf8, "name_utf8", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrNullPointer,
+    };
+    let agent_type = match cstr_to_string(agent_type_utf8, "agent_type_utf8", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrNullPointer,
+    };
     let (ed, ml) = match seed_pair(ed_seed, ed_seed_len, ml_seed, ml_seed_len, err_out) {
         Some(v) => v,
         None => return RatifyStatus::RatifyErrBadArgument,
@@ -2247,9 +3399,22 @@ pub unsafe extern "C" fn ratify_verify_delegation_signature(
         set_err(err_out, "valid_out must be non-null");
         return RatifyStatus::RatifyErrNullPointer;
     }
-    let s = match cstr_to_string(cert_json, "cert_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
-    let cert: DelegationCert = match serde_json::from_str(&s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return RatifyStatus::RatifyErrJson; } };
-    *valid_out = if verify_delegation_signature(&cert) { 1 } else { 0 };
+    let s = match cstr_to_string(cert_json, "cert_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrNullPointer,
+    };
+    let cert: DelegationCert = match serde_json::from_str(&s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    *valid_out = if verify_delegation_signature(&cert) {
+        1
+    } else {
+        0
+    };
     RatifyStatus::RatifyOk
 }
 
@@ -2278,11 +3443,18 @@ pub unsafe extern "C" fn ratify_agent_sign_challenge(
         return std::ptr::null_mut();
     }
     let ch = slice::from_raw_parts(challenge, challenge_len);
-    let sc = match optional_32(session_context, session_context_len, "session_context", err_out) {
-        Ok(v) => v, Err(()) => return std::ptr::null_mut(),
+    let sc = match optional_32(
+        session_context,
+        session_context_len,
+        "session_context",
+        err_out,
+    ) {
+        Ok(v) => v,
+        Err(()) => return std::ptr::null_mut(),
     };
     let sid = match optional_32(stream_id, stream_id_len, "stream_id", err_out) {
-        Ok(v) => v, Err(()) => return std::ptr::null_mut(),
+        Ok(v) => v,
+        Err(()) => return std::ptr::null_mut(),
     };
     // Dispatch by which bindings are present. The stream variants assert a
     // 32-byte stream_id in the core, and an assertion reached through the FFI
@@ -2297,7 +3469,10 @@ pub unsafe extern "C" fn ratify_agent_sign_challenge(
     };
     match serde_json::to_string(&sig) {
         Ok(j) => new_cstring(&j),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2323,21 +3498,52 @@ pub unsafe extern "C" fn ratify_verify_challenge_signature(
         set_err(err_out, "challenge and valid_out must be non-null");
         return RatifyStatus::RatifyErrNullPointer;
     }
-    let sig_s = match cstr_to_string(sig_json, "sig_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
-    let pub_s = match cstr_to_string(pub_json, "pub_json", err_out) { Some(s) => s, None => return RatifyStatus::RatifyErrNullPointer };
-    let sig: HybridSignature = match serde_json::from_str(&sig_s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return RatifyStatus::RatifyErrJson; } };
-    let pk: HybridPublicKey = match serde_json::from_str(&pub_s) { Ok(v) => v, Err(e) => { set_err(err_out, &e.to_string()); return RatifyStatus::RatifyErrJson; } };
+    let sig_s = match cstr_to_string(sig_json, "sig_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrNullPointer,
+    };
+    let pub_s = match cstr_to_string(pub_json, "pub_json", err_out) {
+        Some(s) => s,
+        None => return RatifyStatus::RatifyErrNullPointer,
+    };
+    let sig: HybridSignature = match serde_json::from_str(&sig_s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
+    let pk: HybridPublicKey = match serde_json::from_str(&pub_s) {
+        Ok(v) => v,
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
+    };
 
     let ch = slice::from_raw_parts(challenge, challenge_len);
-    let sc = match optional_32(session_context, session_context_len, "session_context", err_out) {
-        Ok(v) => v, Err(()) => return RatifyStatus::RatifyErrBadArgument,
+    let sc = match optional_32(
+        session_context,
+        session_context_len,
+        "session_context",
+        err_out,
+    ) {
+        Ok(v) => v,
+        Err(()) => return RatifyStatus::RatifyErrBadArgument,
     };
     let sid = match optional_32(stream_id, stream_id_len, "stream_id", err_out) {
-        Ok(v) => v, Err(()) => return RatifyStatus::RatifyErrBadArgument,
+        Ok(v) => v,
+        Err(()) => return RatifyStatus::RatifyErrBadArgument,
     };
     let ok = if !sid.is_empty() {
         verify_challenge_signature_with_stream(
-            ch, challenge_at_unix, sc, sid, stream_seq, &sig, &pk,
+            ch,
+            challenge_at_unix,
+            sc,
+            sid,
+            stream_seq,
+            &sig,
+            &pk,
         )
         .is_ok()
     } else if !sc.is_empty() {
@@ -2386,7 +3592,10 @@ pub unsafe extern "C" fn ratify_generate_hybrid_keypair(
     let (pk, _priv) = ratify_protocol::hybrid_keypair_from_seeds(&ed, &ml);
     let json = match serde_json::to_string(&pk) {
         Ok(j) => j,
-        Err(e) => { set_err(err_out, &e.to_string()); return RatifyStatus::RatifyErrJson; }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            return RatifyStatus::RatifyErrJson;
+        }
     };
     *out_pub_json = new_cstring(&json);
     std::ptr::copy_nonoverlapping(ed.as_ptr(), out_ed_seed, 32);
@@ -2412,15 +3621,30 @@ pub unsafe extern "C" fn ratify_operation_context_bytes_hex(
         Err(_) => return std::ptr::null_mut(),
     };
     let ctx = OperationContext {
-        required_scope: match opt_utf8(required_scope, "required_scope", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        operation: match opt_utf8(operation, "operation", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        resource_id: match opt_utf8(resource_id, "resource_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        requested_path: match opt_utf8(requested_path, "requested_path", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
+        required_scope: match opt_utf8(required_scope, "required_scope", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        operation: match opt_utf8(operation, "operation", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        resource_id: match opt_utf8(resource_id, "resource_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        requested_path: match opt_utf8(requested_path, "requested_path", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
         payload_digest: digest.to_vec(),
     };
     match operation_context_bytes(&ctx) {
         Ok(bytes) => new_cstring(&hex_encode(&bytes)),
-        Err(e) => { set_err(err_out, &e); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e);
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2443,16 +3667,34 @@ pub unsafe extern "C" fn ratify_session_context_bytes_hex(
         return std::ptr::null_mut();
     }
     let inputs = SessionContextInputs {
-        verifier_id: match opt_utf8(verifier_id, "verifier_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        workspace_id: match opt_utf8(workspace_id, "workspace_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        agent_id: match opt_utf8(agent_id, "agent_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        session_id: match opt_utf8(session_id, "session_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
-        invocation_id: match opt_utf8(invocation_id, "invocation_id", err_out) { Ok(s) => s, Err(_) => return std::ptr::null_mut() },
+        verifier_id: match opt_utf8(verifier_id, "verifier_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        workspace_id: match opt_utf8(workspace_id, "workspace_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        agent_id: match opt_utf8(agent_id, "agent_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        session_id: match opt_utf8(session_id, "session_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
+        invocation_id: match opt_utf8(invocation_id, "invocation_id", err_out) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        },
         request_hash: slice::from_raw_parts(request_hash, 32).to_vec(),
     };
     match session_context_bytes(&inputs) {
         Ok(bytes) => new_cstring(&hex_encode(&bytes)),
-        Err(e) => { set_err(err_out, &e); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e);
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2472,7 +3714,10 @@ pub unsafe extern "C" fn ratify_agent_pub_key_json(
     }
     match serde_json::to_string(&(*agent).0.public_key) {
         Ok(j) => new_cstring(&j),
-        Err(e) => { set_err(err_out, &e.to_string()); std::ptr::null_mut() }
+        Err(e) => {
+            set_err(err_out, &e.to_string());
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2485,7 +3730,10 @@ unsafe fn optional_32<'a>(
 ) -> Result<&'a [u8], ()> {
     if ptr.is_null() {
         if len != 0 {
-            set_err(err_out, &format!("{name} is null but its length is non-zero"));
+            set_err(
+                err_out,
+                &format!("{name} is null but its length is non-zero"),
+            );
             return Err(());
         }
         return Ok(&[]);

@@ -44,7 +44,7 @@ pub fn evaluate_constraints<'a>(
     Ok(())
 }
 
-fn evaluate_constraint(
+pub(crate) fn evaluate_constraint(
     c: &Constraint,
     cert_id: &str,
     ctx: &VerifierContext,
@@ -327,7 +327,7 @@ fn point_in_polygon(lat: f64, lon: f64, poly: &[[f64; 2]]) -> bool {
     inside
 }
 
-fn parse_hhmm(s: &str) -> Option<i32> {
+pub(crate) fn parse_hhmm(s: &str) -> Option<i32> {
     let b = s.as_bytes();
     if b.len() != 5 || b[2] != b':' {
         return None;

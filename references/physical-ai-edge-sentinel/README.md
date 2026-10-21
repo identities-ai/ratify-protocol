@@ -174,9 +174,9 @@ Ratify signatures bind the delegation and proof fields defined by the protocol, 
 
 ## Evidence, security status, and limitations
 
-Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). The reference was exercised against Ratify alpha.20 on a Raspberry Pi 2 ARMv7 target, with a fresh C SDK build and 25 passing protocol rows. The Arduino LED path was exercised over USB serial.
+Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-11, the alpha.20 C SDK and production receiver were rebuilt for Raspberry Pi 2 ARMv7. The 29-case core suite passed. With the DS3231 clock trusted and production quarantine left intact, the receiver allowed one 500 ms LED action, allowed a captured proof once, then denied its replay without another actuator call. No quarantine override was compiled into or enabled for the production binary.
 
-The Google ADK adapter is implemented and statically checked, but the physical Pi run used the deterministic C controller rather than a live ADK model runner. This reference does not claim that the Arduino independently authorizes actions, that offline authorization survives a power cycle, that the production binary has passed hardware acceptance, or that the design is suitable for hazardous, safety-critical, or regulated actuation. The receiver's anchor check selects the terminal issuer in multi-hop bundles ordered leaf to root; full hardware acceptance remains future work.
+The Google ADK adapter is implemented and statically checked, but the Pi run used the deterministic C controller rather than a live ADK model runner. The Arduino does not independently authorize actions. The run does not establish trusted time through power loss or network loss, replay protection across restart, or suitability for hazardous, safety-critical, or regulated actuation. The receiver's anchor check selects the terminal issuer in multi-hop bundles ordered leaf to root. This is v1 alpha.20 evidence only; v2 has not been implemented or tested.
 
 ## Open source status
 

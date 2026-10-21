@@ -29,7 +29,7 @@ import (
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // signCertBypassingIssuanceHygiene signs a cert directly with both key

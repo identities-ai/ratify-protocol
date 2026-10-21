@@ -23,9 +23,11 @@ End state we want:
 | Registry          | Package                                    | Owner shown        | Links to       |
 |-------------------|--------------------------------------------|--------------------|----------------|
 | PyPI              | `ratify-protocol`                          | `identities-ai` org | identities.ai + GitHub |
+| PyPI              | `ratify-protocol-native`                   | `identities-ai` org | identities.ai + GitHub |
+| PyPI (v2 line)    | `ratify-protocol-v2`, `ratify-protocol-native-v2` | `identities-ai` org | identities.ai + GitHub |
 | crates.io         | `ratify-protocol`                          | `gh:identities-ai:maintainers` team | identities.ai + GitHub |
 | npm               | `@identities-ai/ratify-protocol`           | `identities-ai` org | identities.ai + GitHub |
-| Go (pkg.go.dev)   | `github.com/identities-ai/ratify-protocol` | GitHub org         | (inherited)    |
+| Go (pkg.go.dev)   | `github.com/identities-ai/ratify-protocol` (v1), `.../ratify-protocol/v2` (v2) | GitHub org | (inherited) |
 
 Go is the easy case: pkg.go.dev derives everything from the GitHub repo, so
 the GitHub org is the only thing to get right. The other three require
@@ -96,10 +98,25 @@ required-reviewer approval (if you set one), then publish. The package page
 will show the new release within seconds; pip cache invalidation may take a
 few minutes.
 
-If you want to confirm without doing a real release, tag a `v0.0.0-test` →
-the release workflow will run gate-tests, refuse to publish (version mismatch
-against SDK metadata), and exit cleanly without touching PyPI. That's the
-"safe smoke test" for the gate logic.
+If you want to confirm without doing a real release, run the Release
+workflow manually with `dry_run` enabled: it runs gate-tests and builds and
+checks the artifacts, and every publish job is skipped. (A `v0.*` tag is now
+rejected outright by the gate, because it belongs to neither release line.)
+
+### 1.6 The v2 Python distributions
+
+The v2 line publishes two new PyPI projects, `ratify-protocol-v2` and
+`ratify-protocol-native-v2`, from the `publish-pypi-v2` and
+`publish-pypi-native-v2` jobs. Those jobs run only for `v2.*` tags; a `v1.*`
+tag runs the v1 `publish-pypi` and `publish-pypi-native` jobs instead, so one
+tag never publishes the other line's Python packages.
+
+Before the first v2 release, add a pending Trusted Publisher for each of the
+two project names, with the same values as §1.3 (owner `identities-ai`,
+repository `ratify-protocol`, workflow `release.yml`, environment
+`pypi-publish`), and move both projects into the `identities-ai` organization
+once they exist. Until that is done the v2 publish jobs fail at the OIDC
+exchange and nothing is uploaded.
 
 ---
 
@@ -215,6 +232,11 @@ No `NPM_TOKEN` secret is required or used.
 
 The next tag push will exercise the full four-registry pipeline.
 
+v1 versions publish under the `latest` dist-tag. `2.*` versions publish under
+the `v2-alpha` dist-tag (the same tag `publishConfig` names), so a v2
+pre-release never becomes what an unpinned `npm install
+@identities-ai/ratify-protocol` resolves to.
+
 ### 3.4 Provenance attestations
 
 The workflow uses `npm publish --provenance` which creates a Sigstore
@@ -262,12 +284,16 @@ main — the branch ruleset forbids it, releases included; the single-step
    Release workflow.
 5. After it completes, verify each registry ACTUALLY serves the new version
    (a green publish job is not proof — see `RELEASES.md` Appendix A Phase 4):
-   - PyPI: <https://pypi.org/project/ratify-protocol/>
+   - PyPI: <https://pypi.org/project/ratify-protocol/> (v1 tags) or
+     <https://pypi.org/project/ratify-protocol-v2/> and
+     <https://pypi.org/project/ratify-protocol-native-v2/> (v2 tags)
    - crates.io: <https://crates.io/crates/ratify-protocol> and
      <https://crates.io/crates/ratify-c> — the token must be scoped to
      BOTH crates
    - npm: <https://www.npmjs.com/package/@identities-ai/ratify-protocol> (if enabled)
-   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol>
+   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol> (v1
+     tags) or <https://pkg.go.dev/github.com/identities-ai/ratify-protocol/v2>
+     (v2 tags)
    - GitHub Release: <https://github.com/identities-ai/ratify-protocol/releases>
 
 ---

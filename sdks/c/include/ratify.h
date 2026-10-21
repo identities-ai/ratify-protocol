@@ -1,6 +1,6 @@
 /*
  * Ratify Protocol — C/C++ bindings
- * Version: 1.0.0-alpha.20
+ * Version: 2.0.0-alpha.1
  *
  * Cryptographic authorization for AI agents.
  * Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204).
@@ -19,6 +19,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+// Version of the `ratify_v2_*` C ABI. Bumped on any incompatible change to a
+// `ratify_v2_*` signature, struct, or code value.
+#define RATIFY_V2_ABI_VERSION 1
+
+// Protocol major version implemented by the `ratify_v2_*` surface.
+#define RATIFY_V2_PROTOCOL_VERSION 2
+
+// Buffer size (including the trailing NUL) for a v2 key ID written by
+// `ratify_v2_key_id`: 64 lowercase hex characters + NUL.
+#define RATIFY_V2_KEY_ID_BUF_LEN 65
 
 // Return codes for all fallible Ratify C API functions.
 //
@@ -41,6 +52,87 @@ typedef enum RatifyStatus {
     // A required argument contained invalid UTF-8.
     RatifyErrEncoding = 6,
 } RatifyStatus;
+
+// Result codes for `ratify_v2_*` functions. Positive values are Protocol v2
+// failure classes; negative values are ABI errors. Values are stable within
+// one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a `default` case.
+enum RatifyV2Code
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2Ok = 0,
+    RatifyV2Unclassified = 1,
+    RatifyV2Malformed = 2,
+    RatifyV2UnsupportedObjectType = 3,
+    RatifyV2KeyIdMismatch = 4,
+    RatifyV2DelegationDigestMismatch = 5,
+    RatifyV2ChainLinkageMismatch = 6,
+    RatifyV2DuplicateCertificateRef = 7,
+    RatifyV2InvalidSignature = 8,
+    RatifyV2InvalidRequiredScope = 9,
+    RatifyV2ConfigurationInvalid = 10,
+    RatifyV2ExpectedChallengeUnavailable = 11,
+    RatifyV2NamespaceMismatch = 12,
+    RatifyV2StaleReplayEpoch = 13,
+    RatifyV2VerifierIdMismatch = 14,
+    RatifyV2ChallengeMismatch = 15,
+    RatifyV2ChallengeNotFresh = 16,
+    RatifyV2ExpectedAgentMismatch = 17,
+    RatifyV2SessionContextMismatch = 18,
+    RatifyV2ReceiverAudienceRequired = 19,
+    RatifyV2ReceiverAudienceMismatch = 20,
+    RatifyV2ReceiverBindingRejected = 21,
+    RatifyV2ClaimReplay = 22,
+    RatifyV2ClaimStoreUnavailable = 23,
+    RatifyV2StatusKeyBindingMismatch = 24,
+    RatifyV2ReceiptBundleMismatch = 25,
+    RatifyV2BundleHashMismatch = 26,
+    RatifyV2TransactionPartyMismatch = 27,
+    RatifyV2TransactionContextMismatch = 28,
+    RatifyV2TransactionSignatureSetInvalid = 29,
+    RatifyV2RotationStateMismatch = 30,
+    RatifyV2RotationKeyReused = 31,
+    RatifyV2RotationFutureDated = 32,
+    RatifyV2RotationFork = 33,
+    RatifyV2RotationFrozen = 34,
+    RatifyV2RotationRecoveryInvalid = 35,
+    RatifyV2LogStateMismatch = 36,
+    RatifyV2LogGap = 37,
+    RatifyV2LogOrphan = 38,
+    RatifyV2LogFork = 39,
+    RatifyV2LogFrozen = 40,
+    RatifyV2StatusObjectRejected = 41,
+    // A required pointer argument was NULL.
+    RatifyV2ErrNullPointer = -1,
+    // A caller-supplied argument (length, UTF-8, context JSON) was invalid.
+    RatifyV2ErrBadArgument = -2,
+    // An internal error (caught panic). Should not occur.
+    RatifyV2ErrInternal = -3,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2Code;
+#endif // __cplusplus
+
+// Object kinds accepted by `ratify_v2_verify_object`. Values are the SPEC-v2
+// signed object type codes (`kind_object_type_codes` in `objects.json`).
+enum RatifyV2ObjectKind
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2KindDelegationCertificate = 1,
+    RatifyV2KindProofBundle = 2,
+    RatifyV2KindRevocationList = 3,
+    RatifyV2KindKeyRotationStatement = 4,
+    RatifyV2KindRevocationPush = 5,
+    RatifyV2KindWitnessEntry = 6,
+    RatifyV2KindTransactionReceipt = 7,
+    RatifyV2KindVerificationReceipt = 8,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2ObjectKind;
+#endif // __cplusplus
 
 typedef struct RatifyAgent RatifyAgent;
 
@@ -965,6 +1057,38 @@ enum RatifyStatus ratify_session_context_build(const char *verifier_id,
                                                unsigned char *out_context,
                                                char **err_out);
 
+// Compute the Protocol v2 operation request hash. `required_scope` must be a
+// non-NULL registered canonical scope; other string fields may be NULL
+// (empty). `payload_digest` is NULL (absent) or canonical
+// `sha256:<64 lowercase hex>` text. Writes 32 bytes to `out_hash`.
+// Missing output pointers return `RatifyErrNullPointer`; an invalid required
+// scope or malformed digest returns `RatifyErrBadArgument`; invalid UTF-8
+// returns `RatifyErrEncoding`.
+enum RatifyStatus ratify_operation_context_v2_hash(const char *required_scope,
+                                                   const char *operation,
+                                                   const char *resource_id,
+                                                   const char *requested_path,
+                                                   const char *payload_digest,
+                                                   unsigned char *out_hash,
+                                                   char **err_out);
+
+// Build the Protocol v2 session context from canonical verifier, workspace,
+// and agent IDs plus session, invocation, and a 32-byte request hash. The
+// verifier and agent IDs must be non-NULL 64-character lowercase hex strings;
+// workspace_id must be a non-NULL lowercase UUID. NULL session_id and
+// invocation_id mean empty. Missing required ID pointers return
+// `RatifyErrNullPointer`; malformed IDs return `RatifyErrBadArgument`, and
+// invalid UTF-8 returns `RatifyErrEncoding`.
+enum RatifyStatus ratify_session_context_v2_build(const char *verifier_id,
+                                                  const char *workspace_id,
+                                                  const char *agent_id,
+                                                  const char *session_id,
+                                                  const char *invocation_id,
+                                                  const unsigned char *request_hash,
+                                                  uintptr_t request_hash_len,
+                                                  unsigned char *out_context,
+                                                  char **err_out);
+
 // Create an in-memory challenge store holding at most `max_size` pending
 // challenges. The store makes verifier-issued challenges single-use: each
 // is accepted at most once within its freshness window; consuming a
@@ -1044,6 +1168,60 @@ enum RatifyStatus ratify_verify_bundle_opts_with_challenge_store(const char *bun
 // A verifier that pins an identity by id uses this to confirm that a public
 // key it has been given belongs to the principal it pinned (SPEC §15.4).
 char *ratify_derive_id(const char *pub_json, char **err_out);
+
+// Compute the full 256-bit Protocol v2 key ID from a hybrid public key.
+// `pub_json` has the same JSON shape as `ratify_derive_id`. Free the result
+// with `ratify_string_free`; invalid input returns null and sets `err_out`.
+// The v1 symbol and its 128-bit output are unchanged.
+char *ratify_derive_key_id_v2(const char *pub_json, char **err_out);
+
+// Hash exactly 32 decoded Protocol v2 challenge bytes into a 48-byte replay
+// digest. `out_digest` must point to 48 writable bytes. On failure it is
+// zeroed when the declared capacity is at least 48 bytes. Null pointers
+// return `RatifyErrNullPointer`; wrong lengths return `RatifyErrBadArgument`.
+enum RatifyStatus ratify_challenge_claim_digest_v2(const unsigned char *challenge,
+                                                   uintptr_t challenge_len,
+                                                   unsigned char *out_digest,
+                                                   uintptr_t out_digest_len,
+                                                   char **err_out);
+
+// Derive a 64-hex-character Protocol v2 claim ID from a UTF-8 namespace,
+// epoch, and decoded challenge. Namespace is length-delimited and may contain
+// NUL bytes. `out_id` needs at least 65 bytes including the terminator and
+// starts with NUL on failure when writable. Null pointers return
+// `RatifyErrNullPointer`, invalid UTF-8 returns `RatifyErrEncoding`, and
+// empty namespaces, unsafe epochs, or wrong lengths return `RatifyErrBadArgument`.
+enum RatifyStatus ratify_protocol_claim_id_v2(const unsigned char *namespace_,
+                                              uintptr_t namespace_len,
+                                              uint64_t replay_epoch,
+                                              const unsigned char *challenge,
+                                              uintptr_t challenge_len,
+                                              char *out_id,
+                                              uintptr_t out_id_len,
+                                              char **err_out);
+
+// Derive the same ID from a precomputed 48-byte v2 challenge claim digest.
+// `out_id` needs 65 bytes; failure clears its first byte when writable.
+enum RatifyStatus ratify_protocol_claim_id_from_digest_v2(const unsigned char *namespace_,
+                                                          uintptr_t namespace_len,
+                                                          uint64_t replay_epoch,
+                                                          const unsigned char *digest,
+                                                          uintptr_t digest_len,
+                                                          char *out_id,
+                                                          uintptr_t out_id_len,
+                                                          char **err_out);
+
+// Verify both Protocol v2 delegation signature components over the caller's
+// exact caller-provided signable bytes. This primitive does not check that
+// those bytes are a canonical certificate projection, check its key ID, or
+// authorize a delegation. `signable` must be non-null and readable for
+// `signable_len` bytes. Writes 1 or 0 to `valid_out`, including 0 on error.
+enum RatifyStatus ratify_verify_delegation_signature_v2(const unsigned char *signable,
+                                                        uintptr_t signable_len,
+                                                        const char *signature_json,
+                                                        const char *public_key_json,
+                                                        int *valid_out,
+                                                        char **err_out);
 
 // Return the canonical delegation-cert signing bytes as a lowercase hex string.
 char *ratify_delegation_sign_bytes_hex(const char *cert_json, char **err_out);
@@ -1190,6 +1368,99 @@ char *ratify_session_context_bytes_hex(const char *verifier_id,
 // could not be handed to the verification primitives at all. Free with
 // `ratify_string_free`.
 char *ratify_agent_pub_key_json(const struct RatifyAgent *agent, char **err_out);
+
+// Returns `RATIFY_V2_ABI_VERSION` as compiled into this library. A caller
+// built against a header with a different value must not use `ratify_v2_*`.
+uint32_t ratify_v2_abi_version(void);
+
+// Returns the Protocol major version implemented by `ratify_v2_*` (2).
+uint32_t ratify_v2_protocol_version(void);
+
+// Returns the library package version (e.g. "2.0.0-alpha.1"). Statically
+// allocated — do NOT free. Same value as `ratify_version()`.
+const char *ratify_v2_library_version(void);
+
+// Returns the stable spelling for a `ratify_v2_*` result code: "ok", a
+// Protocol v2 failure class (e.g. "invalid_signature"), "null_pointer",
+// "bad_argument", "internal", or "unknown". Statically allocated — do NOT free.
+const char *ratify_v2_error_class_str(int32_t code);
+
+// Derive the full 256-bit v2 key ID
+// (`hex(SHA-256("ratify-key-id-v2\0" || ed25519 || ml_dsa_65))`) and write it
+// as 64 lowercase hex characters plus NUL into `out` (`out_len` >= 65,
+// `RATIFY_V2_KEY_ID_BUF_LEN`). Wrong key lengths return `RatifyV2Malformed`.
+int32_t ratify_v2_key_id(const uint8_t *ed25519,
+                         uintptr_t ed25519_len,
+                         const uint8_t *ml_dsa_65,
+                         uintptr_t ml_dsa_65_len,
+                         char *out,
+                         uintptr_t out_len,
+                         char **err_out);
+
+// Check that `key_id` is a well-formed v2 key ID (64 lowercase hex chars).
+// A 128-bit v1 ID, uppercase hex, or wrong length returns `RatifyV2Malformed`.
+int32_t ratify_v2_key_id_check(const char *key_id, char **err_out);
+
+// Strictly decode a canonical v2 signed object of `kind`
+// (`RatifyV2ObjectKind`) from `wire` and verify it per the SPEC-v2 procedure
+// for that kind. Returns `RatifyV2Ok` or the failure class.
+//
+// `verify_context_json` is required for kinds that verify against
+// caller-authenticated state and may be NULL otherwise:
+//
+// - revocation_list / revocation_push:
+//   `{"bound_issuer_id": "<v2 id>", "status_key": <HybridPublicKey>}`
+// - key_rotation_statement:
+//   `{"rotation_state": {"authority_id", "recovery_epoch", "role", "sequence",
+//   "head_hash_b64", "current_key": <HybridPublicKey>, "used_key_ids": [..]},
+//   "now": <unix>, "future_skew_seconds": <int>}`
+// - witness_entry: `{"witness_key": <HybridPublicKey>, "head": <head>}`
+// - verification_receipt: `{"verifier_key": <HybridPublicKey>, "head": <head>}`
+//
+// `<head>` is `{"log_id", "sequence", "head_hash_b64",
+// "accepted_digests_b64": {"<seq>": "<b64>"}, "frozen"}` plus `"verifier_id"`
+// for a verification receipt. `<HybridPublicKey>` is
+// `{"ed25519": "<b64>", "ml_dsa_65": "<b64>"}`.
+int32_t ratify_v2_verify_object(int32_t kind,
+                                const uint8_t *wire,
+                                uintptr_t wire_len,
+                                const char *verify_context_json,
+                                char **err_out);
+
+// Strictly decode a v2 ProofBundle and run its structural checks (key IDs,
+// delegation digest, duplicate CertificateRef, chain linkage) and every
+// certificate and challenge signature. This is NOT a full live verification:
+// it performs no trust-anchor, challenge, replay, status, or policy checks.
+//
+// When `bundle_hash_out` is non-NULL, the BundleHashV2 of a verified bundle is
+// written there as a NUL-terminated string (`bundle_hash_out_len` bytes
+// available; 128 is sufficient).
+int32_t ratify_v2_proof_bundle_verify_signatures(const uint8_t *wire,
+                                                 uintptr_t wire_len,
+                                                 char *bundle_hash_out,
+                                                 uintptr_t bundle_hash_out_len,
+                                                 char **err_out);
+
+// Verify a v2 VerificationReceipt against a caller-authenticated verifier key
+// and log head. `head_json` uses the `<head>` shape documented on
+// `ratify_v2_verify_object` (including `verifier_id`).
+int32_t ratify_v2_verification_receipt_verify(const uint8_t *wire,
+                                              uintptr_t wire_len,
+                                              const uint8_t *verifier_ed25519,
+                                              uintptr_t verifier_ed25519_len,
+                                              const uint8_t *verifier_ml_dsa_65,
+                                              uintptr_t verifier_ml_dsa_65_len,
+                                              const char *head_json,
+                                              char **err_out);
+
+// Check that a v2 VerificationReceipt is bound to a v2 ProofBundle (bundle
+// hash, verifier ID, agent ID, issuer IDs). Mismatch returns
+// `RatifyV2ReceiptBundleMismatch`.
+int32_t ratify_v2_receipt_bundle_binding_check(const uint8_t *receipt_wire,
+                                               uintptr_t receipt_wire_len,
+                                               const uint8_t *bundle_wire,
+                                               uintptr_t bundle_wire_len,
+                                               char **err_out);
 
 // Register a custom entropy callback for platforms without OS-level RNG.
 //

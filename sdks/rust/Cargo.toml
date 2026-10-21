@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol"
-version = "1.0.0-alpha.20"
+version = "2.0.0-alpha.1"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -18,6 +18,7 @@ std = ["serde_json"]
 
 [dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+curve25519-dalek = "4.1"
 fips204 = "0.4.6"
 rand_core = { version = "0.6" }
 sha2 = "0.10"
@@ -31,6 +32,7 @@ chrono-tz = "0.9"
 
 [dev-dependencies]
 serde_json = "1"
+sha3 = "0.10"
 
 [lib]
 name = "ratify_protocol"

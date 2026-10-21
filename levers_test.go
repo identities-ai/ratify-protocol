@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // ---------------------------------------------------------------------------
@@ -344,6 +344,14 @@ func TestConstraintEvaluator_UnknownTypeFailsClosed(t *testing.T) {
 	}
 	if res.IdentityStatus != "constraint_unknown" {
 		t.Errorf("IdentityStatus = %q, want constraint_unknown", res.IdentityStatus)
+	}
+}
+
+func TestV1VerifierDoesNotTreatV2ReceiverAudienceAsBuiltin(t *testing.T) {
+	bundle, _ := providerBundleWithCustomConstraint(t, string(ConstraintReceiverAudience))
+	result := Verify(bundle, VerifyOptions{})
+	if result.Valid || result.IdentityStatus != IdentityStatusConstraintUnknown {
+		t.Fatalf("v1 verifier accepted a v2-only audience constraint without an explicit evaluator: valid=%t status=%q", result.Valid, result.IdentityStatus)
 	}
 }
 

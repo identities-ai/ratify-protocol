@@ -38,6 +38,10 @@ env:
   # Normalise the ref so both push and workflow_dispatch use the same variable.
   # For push: github.ref_name = "v1.0.0-alpha.8"
   # For workflow_dispatch: inputs.tag = "v1.0.0-alpha.8"
+  # Every job checks out refs/tags/$RELEASE_TAG, never the workflow ref, and
+  # then proves HEAD is the commit the tag points to on origin. A manual run
+  # started from a branch therefore builds, tests, and publishes the tagged
+  # tree, not the branch head.
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
@@ -56,8 +60,40 @@ jobs:
   gate-tests:
     name: Gate — all tests must pass
     runs-on: ubuntu-latest
+    outputs:
+      line: ${{ steps.line.outputs.line }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
+
+      # This tree carries two release lines. A v2.* tag releases the v2 line
+      # (TypeScript, Rust, C, Go module /v2, ratify-protocol-v2 and its native
+      # extra). A v1.* tag releases the v1 line (ratify-protocol and its native
+      # extra, plus the other SDKs only if they are also at that version).
+      # Publish jobs read this output so one tag never publishes the other
+      # line's packages.
+      - name: release line
+        id: line
+        run: |
+          case "$RELEASE_TAG" in
+            v1.*) echo "line=v1" >> "$GITHUB_OUTPUT" ;;
+            v2.*) echo "line=v2" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::tag $RELEASE_TAG is on neither the v1 nor the v2 line"; exit 1 ;;
+          esac
 
       # Go
       - uses: actions/setup-go@v7
@@ -131,6 +167,25 @@ jobs:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
+      # Python v2 (ratify-protocol-v2), same two passes: pure Python first,
+      # then with its own native extra required.
+      - name: Python v2 install
+        working-directory: sdks/python-v2
+        run: pip install -e '.[dev]'
+      - name: Python v2 full test suite
+        working-directory: sdks/python-v2
+        run: pytest -v
+      - name: Build and install the v2 native Python extra
+        working-directory: sdks/python-native-v2
+        run: |
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: Python v2 native-extra test suite
+        working-directory: sdks/python-v2
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
+        run: pytest -v
+
       # Rust
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -156,26 +211,49 @@ jobs:
       - name: C/C++ advanced API tests
         working-directory: sdks/c
         run: cargo test --test advanced
+      - name: C/C++ v2 ABI tests (testvectors/v2)
+        working-directory: sdks/c
+        run: cargo test --test v2_abi
+      - name: C v2 ABI smoke test (system C compiler, testvectors/v2)
+        run: ./sdks/c/scripts/test-v2-c-abi.sh
 
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
-      # declared version. The release-sync script already proves cross-SDK
-      # alignment; here we prove the tag matches that aligned version.
+      # declared version. The release-sync script already proves alignment
+      # within each line; here we prove the tag matches that line's version.
+      # A v2 tag checks the v2 packages and the v2 Python distributions. A v1
+      # tag checks the v1 Python packages and every other SDK, so it fails
+      # while those SDKs are on the v2 line rather than releasing them under a
+      # v1 tag.
       - name: tag matches SDK versions
+        env:
+          LINE: ${{ steps.line.outputs.line }}
         run: |
           set -eu
-          tag="$RELEASE_TAG"          # e.g. v1.0.0-alpha.6
-          tag_clean="${tag#v}"                     # 1.0.0-alpha.6
-          rust_version=$(grep -E '^version = "' sdks/rust/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
-          c_version=$(grep -E '^version = "' sdks/c/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          tag="$RELEASE_TAG"          # e.g. v2.0.0-alpha.1
+          tag_clean="${tag#v}"                     # 2.0.0-alpha.1
+          ver() { grep -E '^version = "' "$1" | head -1 | sed -E 's/.*"(.*)".*/\1/'; }
+          rust_version=$(ver sdks/rust/Cargo.toml)
+          c_version=$(ver sdks/c/Cargo.toml)
           ts_version=$(node -p "require('./sdks/typescript/package.json').version")
-          py_version=$(grep -E '^version = "' sdks/python/pyproject.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
-          # Python uses PEP 440 form (1.0.0a6) — accept either form.
+          # Python uses PEP 440 form (2.0.0a1) — accept either form.
           py_clean_from_tag=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
           [ "$rust_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ rust $rust_version"; exit 1; }
           [ "$c_version"    = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ c $c_version"; exit 1; }
           [ "$ts_version"   = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ ts $ts_version"; exit 1; }
-          [ "$py_version"   = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
-          echo "✓ tag $tag matches all SDK versions"
+          if [ "$LINE" = "v2" ]; then
+            go_module=$(go list -m)
+            pyv2_version=$(ver sdks/python-v2/pyproject.toml)
+            native_v2_version=$(ver sdks/python-native-v2/Cargo.toml)
+            [ "$go_module" = "github.com/identities-ai/ratify-protocol/v2" ] || { echo "::error::v2 tag but Go module is $go_module"; exit 1; }
+            [ "$pyv2_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ python-v2 $pyv2_version"; exit 1; }
+            [ "$native_v2_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ python-native-v2 $native_v2_version"; exit 1; }
+          else
+            py_version=$(ver sdks/python/pyproject.toml)
+            native_version=$(ver sdks/python-native/Cargo.toml)
+            [ "$py_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
+            [ "$native_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ python-native $native_version"; exit 1; }
+          fi
+          echo "✓ tag $tag matches all $LINE SDK versions"
 
   # ──────────────────────────────────────────────────────────────────────────
   # PyPI — Trusted Publisher (OIDC). No long-lived secret. Requires that the
@@ -185,7 +263,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-pypi:
     name: Publish to PyPI
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v1' }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -196,6 +274,21 @@ jobs:
       contents: read   # required by actions/checkout to read the repo
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -248,6 +341,7 @@ jobs:
   build-pypi-native:
     name: Build native extra wheels
     needs: gate-tests
+    if: needs.gate-tests.outputs.line == 'v1'
     permissions:
       contents: read
     strategy:
@@ -265,6 +359,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -295,6 +404,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -344,6 +468,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -365,6 +504,215 @@ jobs:
           packages-dir: dist
           skip-existing: true
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Python v2: ratify-protocol-v2 and its native extra ratify-protocol-native-v2.
+  # These mirror the v1 Python jobs above and run only for v2 tags. They are
+  # separate distributions, so the v1 `ratify-protocol` package and its
+  # existing pins are never touched by a v2 release. The PyPI trusted
+  # publisher for both project names must be configured before the first v2
+  # release; see docs/REGISTRY_SETUP.md.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-pypi-v2:
+    name: Publish v2 Python SDK to PyPI
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v2' }}
+    needs: gate-tests
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol-v2/
+    permissions:
+      id-token: write  # required for OIDC exchange with PyPI
+      contents: read   # required by actions/checkout to read the repo
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: build sdist + wheel
+        working-directory: sdks/python-v2
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -lh dist/
+      - name: assert the wheel is platform-independent
+        working-directory: sdks/python-v2
+        run: |
+          if ! ls dist/*-py3-none-any.whl >/dev/null 2>&1; then
+            echo "::error::ratify-protocol-v2 must publish a py3-none-any wheel."
+            ls -l dist/
+            exit 1
+          fi
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdks/python-v2/dist
+          skip-existing: true
+
+  # Builds wheels only; no environment and no id-token, for the same reason as
+  # build-pypi-native.
+  build-pypi-native-v2:
+    name: Build v2 native extra wheels
+    needs: gate-tests
+    if: needs.gate-tests.outputs.line == 'v2'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64,               manylinux: auto }
+          - { os: ubuntu-latest,  target: aarch64,              manylinux: auto }
+          - { os: macos-latest,   target: aarch64-apple-darwin, manylinux: auto }
+          - { os: macos-latest,   target: x86_64-apple-darwin,  manylinux: auto }
+          - { os: windows-latest, target: x64,                  manylinux: auto }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          working-directory: sdks/python-native-v2
+      # The artifact prefix differs from the v1 job's so neither download
+      # pattern can pick up the other line's wheels.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-v2-wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: sdks/python-native-v2/dist
+
+  verify-pypi-native-v2:
+    name: Verify the v2 native wheel set
+    needs: build-pypi-native-v2
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-v2-wheels-*
+          merge-multiple: true
+          path: dist
+      - name: build sdist
+        working-directory: sdks/python-native-v2
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      - name: the merged artifact set must be complete and flat
+        run: |
+          set -euo pipefail
+          echo "dist/ contains:"; ls -la dist/
+          wheels=$(find dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')
+          sdists=$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')
+          nested=$(find dist -mindepth 2 | wc -l | tr -d ' ')
+          test "$wheels" = "5" || { echo "::error::expected 5 wheels, found $wheels; merge-multiple did not flatten every matrix leg"; exit 1; }
+          test "$sdists" = "1" || { echo "::error::expected 1 sdist, found $sdists"; exit 1; }
+          test "$nested" = "0" || { echo "::error::dist/ has nested paths; merge-multiple left artifacts in per-name directories"; exit 1; }
+          for tag in manylinux_2_17_x86_64 manylinux_2_17_aarch64 macosx_.*arm64 macosx_.*x86_64 win_amd64; do
+            find dist -maxdepth 1 -name '*.whl' | grep -qE "$tag" || { echo "::error::no wheel matching platform tag $tag"; exit 1; }
+          done
+          echo "5 wheels, 1 sdist, flat, every platform present"
+
+  publish-pypi-native-v2:
+    name: Publish v2 native extra to PyPI
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    needs: verify-pypi-native-v2
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol-native-v2/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-v2-wheels-*
+          merge-multiple: true
+          path: dist
+      - name: build sdist
+        working-directory: sdks/python-native-v2
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
   publish-crates:
     name: Publish to crates.io
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
@@ -375,6 +723,21 @@ jobs:
       url: https://crates.io/crates/ratify-protocol
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -440,6 +803,21 @@ jobs:
       id-token: write  # required for OIDC exchange with npm Trusted Publisher
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -465,12 +843,16 @@ jobs:
             echo "Version ${VERSION} already published — skipping."
             exit 0
           fi
-          # Publish with --tag latest in a single OIDC-authenticated command.
-          # Pre-release versions get tagged latest so
-          # 'npm install @identities-ai/ratify-protocol' always resolves to
-          # the newest published version. Stable 1.0.0 will naturally become
-          # latest when it ships.
-          npm publish --access public --provenance --tag latest
+          # v1 versions publish with --tag latest so
+          # 'npm install @identities-ai/ratify-protocol' resolves to the newest
+          # v1 release. v2 pre-releases publish under the v2-alpha dist-tag
+          # (matching publishConfig.tag) so they never become latest by
+          # accident and an unpinned v1 install keeps resolving to v1.
+          case "$VERSION" in
+            2.*) DIST_TAG=v2-alpha ;;
+            *)   DIST_TAG=latest ;;
+          esac
+          npm publish --access public --provenance --tag "$DIST_TAG"
 
   # ──────────────────────────────────────────────────────────────────────────
   # Go: nothing to do. Tag push + pkg.go.dev auto-discovery handle it.
@@ -488,9 +870,15 @@ jobs:
         # prompt pkg.go.dev to index the version sooner. Failures here are
         # non-fatal — pkg.go.dev will pick it up eventually either way.
         continue-on-error: true
+        # v2+ tags live under the /v2 module path (Go semantic import
+        # versioning); the bare path only resolves v0/v1 tags.
         run: |
           tag="$RELEASE_TAG"
-          curl -fsSL "https://proxy.golang.org/github.com/identities-ai/ratify-protocol/@v/${tag}.info" || true
+          case "$tag" in
+            v2.*) module="github.com/identities-ai/ratify-protocol/v2" ;;
+            *)    module="github.com/identities-ai/ratify-protocol" ;;
+          esac
+          curl -fsSL "https://proxy.golang.org/${module}/@v/${tag}.info" || true
 
   # ──────────────────────────────────────────────────────────────────────────
   # Pre-built C/C++ libraries — cross-compile for common targets and upload
@@ -514,6 +902,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -562,13 +965,28 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
+    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-pypi-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: verify checkout is the release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=$(git ls-remote --tags origin)
+          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
+          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_TAG"
       - name: Download C library artifacts
         uses: actions/download-artifact@v8
         with:
@@ -589,10 +1007,31 @@ jobs:
           tag="$RELEASE_TAG"          # v1.0.0-alpha.7
           tag_clean="${tag#v}"                     # 1.0.0-alpha.7
           py_version=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
+          # v2 uses the /v2 Go module path and the separate ratify-protocol-v2
+          # Python distribution.
+          # The summary, spec, and fixture lines are per release line. A v2
+          # summary states only what the v2 corpus verifies at this tag.
+          case "$tag" in
+            v2.*)
+              go_module="github.com/identities-ai/ratify-protocol/v2"; py_dist="ratify-protocol-v2"
+              spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
+              summary="Protocol v2 alpha. V2 uses a separate key ID namespace, wire schemas, and strict dispatch; v1 keys and proofs are never accepted as v2. Shared v2 vectors live in testvectors/v2. At this tag the Go, TypeScript, Python, and Rust SDKs run every testvectors/v2 file, including the stateful VerifyProofBundleV2 ordering, status, log, and rotation vectors. The C ABI verifies v2 key IDs, object decoding, and object signatures against keys.json, objects.json, object-negatives.json, key-rotation-signature.json, and the delegation-signature, operation and session context, and challenge-claim vectors; it does not provide a stateful verifier. This alpha is not a v2 conformance claim; see SPEC-v2.md section 8 and docs/V2_REFERENCE_COMPATIBILITY.md."
+              ;;
+            *)
+              go_module="github.com/identities-ai/ratify-protocol";    py_dist="ratify-protocol"
+              spec_file="SPEC.md"; vectors_dir="testvectors/v1"
+              summary="Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++."
+              ;;
+          esac
           {
             echo "TAG=$tag"
             echo "TAG_CLEAN=$tag_clean"
             echo "PY_VERSION=$py_version"
+            echo "GO_MODULE=$go_module"
+            echo "PY_DIST=$py_dist"
+            echo "SPEC_FILE=$spec_file"
+            echo "VECTORS_DIR=$vectors_dir"
+            echo "SUMMARY=$summary"
           } >> "$GITHUB_ENV"
       - name: create release
         uses: softprops/action-gh-release@v3
@@ -607,16 +1046,16 @@ jobs:
           body: |
             ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
-            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
+            ${{ env.SUMMARY }}
 
             ### Install
 
             ```bash
             # Go
-            go get github.com/identities-ai/ratify-protocol@${{ env.TAG }}
+            go get ${{ env.GO_MODULE }}@${{ env.TAG }}
 
             # Python
-            pip install ratify-protocol==${{ env.PY_VERSION }}
+            pip install ${{ env.PY_DIST }}==${{ env.PY_VERSION }}
 
             # Rust
             cargo add ratify-protocol@${{ env.TAG_CLEAN }}
@@ -631,12 +1070,12 @@ jobs:
             ### Links
 
             - Full developer documentation: [docs.identities.ai](https://docs.identities.ai)
-            - Normative specification: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+            - Normative specification: [${{ env.SPEC_FILE }}](https://github.com/identities-ai/ratify-protocol/blob/${{ env.TAG }}/${{ env.SPEC_FILE }})
             - Threat model: [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
-            - Conformance fixtures: bundled as `ratify-testvectors-${{ env.TAG }}.tar.gz` below
+            - Conformance fixtures: `${{ env.VECTORS_DIR }}`, bundled in `ratify-testvectors-${{ env.TAG }}.tar.gz` below
 
             ### Legal
 
-            - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+            - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities.AI, Inc.
             - **Patent:** U.S. patent application pending.
             - **License:** Apache-2.0 (code) · CC-BY-4.0 (specification); see [docs/LICENSES.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/LICENSES.md).

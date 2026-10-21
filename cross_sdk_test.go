@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // TestCrossSDKByteEquivalence loads testvectors/v1/cross_sdk_vectors.json

@@ -40,3 +40,5 @@ __pycache__/
 # Python native extra build output
 sdks/python-native/target/
 sdks/python-native/dist/
+sdks/python-native-v2/target/
+sdks/python-native-v2/dist/

@@ -148,19 +148,19 @@ func (c *DelegationCert) IsNoExpiry() bool {
 // Unknown Type serializes as `{"type": "<unknown>"}` with no other fields;
 // the verifier catches unknown tags via isConstraintUnknown and fails closed.
 type Constraint struct {
-	Count     int            `json:"count,omitempty"`
-	Currency  string         `json:"currency,omitempty"` // ISO 4217
-	End       string         `json:"end,omitempty"`      // "HH:MM"
-	Lat       float64        `json:"lat,omitempty"`
-	Lon       float64        `json:"lon,omitempty"`
-	MaxAltM   float64        `json:"max_alt_m,omitempty"`
-	MaxAmount float64        `json:"max_amount,omitempty"`
-	MaxLat    float64        `json:"max_lat,omitempty"`
-	MaxLon    float64        `json:"max_lon,omitempty"`
-	MaxMps    float64        `json:"max_mps,omitempty"` // m/s SI
-	MinAltM   float64        `json:"min_alt_m,omitempty"`
-	MinLat    float64        `json:"min_lat,omitempty"`
-	MinLon    float64        `json:"min_lon,omitempty"`
+	Count     int     `json:"count,omitempty"`
+	Currency  string  `json:"currency,omitempty"` // ISO 4217
+	End       string  `json:"end,omitempty"`      // "HH:MM"
+	Lat       float64 `json:"lat,omitempty"`
+	Lon       float64 `json:"lon,omitempty"`
+	MaxAltM   float64 `json:"max_alt_m,omitempty"`
+	MaxAmount float64 `json:"max_amount,omitempty"`
+	MaxLat    float64 `json:"max_lat,omitempty"`
+	MaxLon    float64 `json:"max_lon,omitempty"`
+	MaxMps    float64 `json:"max_mps,omitempty"` // m/s SI
+	MinAltM   float64 `json:"min_alt_m,omitempty"`
+	MinLat    float64 `json:"min_lat,omitempty"`
+	MinLon    float64 `json:"min_lon,omitempty"`
 	// Params carries extension-constraint parameters (SPEC §5.7.1).
 	// Permitted ONLY on non-canonical constraint types, under the
 	// restricted value model enforced by ValidateParamsValue: null, bool,
@@ -347,6 +347,9 @@ const (
 	// exercises of this cert are allowed. Verifier requires a rate-counter
 	// callback in context.
 	ConstraintMaxRate ConstraintType = "max_rate"
+	// ConstraintReceiverAudience restricts a delegation to exact receivers or
+	// authenticated trust domains under the Protocol v2 audience profile.
+	ConstraintReceiverAudience ConstraintType = "ratify.receiver_audience"
 	// ConstraintResourcePath — the operation must target the resource named
 	// by ResourceID and, when PathPrefix is set, a path at or below it under
 	// segment-boundary prefix matching (SPEC §5.7.3). ResourceID is opaque:
@@ -513,18 +516,18 @@ type WitnessEntry struct {
 // `VerifyResult` in a receipt before persisting it. Wire format is
 // unchanged whether receipts are issued or not.
 type VerificationReceipt struct {
-	Version      int             `json:"version"`        // = ProtocolVersion
-	VerifierID   string          `json:"verifier_id"`    // derived ID of verifier's signing key
-	VerifierPub  HybridPublicKey `json:"verifier_pub"`   // the key used to sign this receipt
-	BundleHash   []byte          `json:"bundle_hash"`    // SHA-256 of canonical bundle bytes
-	Decision     string          `json:"decision"`       // identity_status from VerifyResult
+	Version      int             `json:"version"`      // = ProtocolVersion
+	VerifierID   string          `json:"verifier_id"`  // derived ID of verifier's signing key
+	VerifierPub  HybridPublicKey `json:"verifier_pub"` // the key used to sign this receipt
+	BundleHash   []byte          `json:"bundle_hash"`  // SHA-256 of canonical bundle bytes
+	Decision     string          `json:"decision"`     // identity_status from VerifyResult
 	HumanID      string          `json:"human_id,omitempty"`
 	AgentID      string          `json:"agent_id,omitempty"`
 	GrantedScope []string        `json:"granted_scope,omitempty"`
 	ErrorReason  string          `json:"error_reason,omitempty"`
-	VerifiedAt   int64           `json:"verified_at"`     // unix seconds
-	PrevHash     []byte          `json:"prev_hash"`       // 32 bytes; zeros for genesis
-	Signature    HybridSignature `json:"signature"`       // hybrid sig over canonical bytes
+	VerifiedAt   int64           `json:"verified_at"` // unix seconds
+	PrevHash     []byte          `json:"prev_hash"`   // 32 bytes; zeros for genesis
+	Signature    HybridSignature `json:"signature"`   // hybrid sig over canonical bytes
 }
 
 // KeyRotationStatement links an old root key to a new root key. Both keys

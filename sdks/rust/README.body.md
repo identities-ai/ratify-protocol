@@ -144,9 +144,9 @@ cargo test
 
 The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 79 must pass; any failure means this SDK has drifted from the Go reference.
 
-## API added on main (ships in alpha.16, release unpublished)
+## API added in v1 alpha.16
 
-The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; depend on `main` (git) to use it ahead of the release.
+The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 
 - **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a `Constraint`'s `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id` and `requested_path` on `VerifierContext` (SPEC §5.16); `verify_bundle(&bundle, &VerifyOptions { context, ..Default::default() })` evaluates them. Helpers: `normalize_resource_path`, `resource_path_matches`, `validate_resource_constraints`.
 - **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operation_context_bytes`, `operation_context_hash`, `session_context_bytes`, and `build_session_context`; `verifier_context_hash` produces the canonical hash bound into a `VerificationReceipt`.
@@ -155,6 +155,24 @@ The following surface is merged to `main` and ships in alpha.16. The tag is not 
 - **Extension-constraint params.** A `Constraint`'s `params` (typed `ParamsValue`) carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validate_params_value` and `validate_constraint_params`; `is_canonical_constraint_type` guards which types may carry them.
 - **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
 - **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
+
+## Protocol v2 (2.0.0-alpha line)
+
+Version `{{VERSION}}` is a prerelease on the separate v2 line. The v2 API lives
+in the `ratify_protocol::v2` module next to the unchanged v1 API. It covers
+strict decoding and canonical encoding of every v2 signed object, hybrid
+signature verification with full 256-bit v2 key IDs, the stateful live
+verifier `verify_proof_bundle_v2`, the revocation status reducer, witness and
+verification-receipt log heads, key rotation acceptance, and the
+`challenge_claim_digest_v2`, `protocol_claim_id_v2`, and
+`protocol_claim_id_from_digest_v2` replay identifiers.
+
+`cargo test` runs every file in `testvectors/v2`, including the verifier
+ordering, status, log, and rotation sequences. This alpha is not a v2
+conformance claim; the remaining gates are listed in SPEC-v2 §8 and
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+Callers still supply authenticated challenge issuance and an atomic durable
+claim store.
 
 ## License
 

@@ -3,7 +3,7 @@
      Regenerate: python3 scripts/gen-sdk-readmes.py -->
 # ratify-protocol
 
-**Python reference SDK of the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
+**Python reference SDK of the Ratify Protocol — delegated-authority proofs for human-agent and agent-agent interactions.**
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
@@ -24,7 +24,7 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 ## Install
 
 ```bash
-pip install ratify-protocol==1.0.0a20
+pip install ratify-protocol==1.0.0a21
 ```
 
 This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
@@ -34,7 +34,7 @@ This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and 
 One function, `hybrid_keypair_from_seeds`, needs an optional add-on:
 
 ```bash
-pip install 'ratify-protocol[native]==1.0.0a20'
+pip install 'ratify-protocol[native]==1.0.0a21'
 ```
 
 Everything else works without it: verifying proofs, issuing delegations,
@@ -289,9 +289,9 @@ This SDK uses `pqcrypto` which wraps PQClean's ML-DSA-65 implementation. Two thi
 
 **Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API — `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only — it verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
 
-## API added on main (ships in alpha.16, release unpublished)
+## API added in v1 alpha.16
 
-The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; install from `main` to use it ahead of the release.
+The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 
 - **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a `Constraint`'s `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id`, `requested_path`, and `has_resource` on `VerifierContext` (SPEC §5.16); `verify_bundle(bundle, VerifyOptions(context=...))` evaluates them. Helpers: `normalize_resource_path`, `resource_path_matches`, `validate_resource_constraints`.
 - **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operation_context_bytes`, `operation_context_hash`, `session_context_bytes`, and `build_session_context`; `verifier_context_hash` produces the canonical hash bound into a `VerificationReceipt`.

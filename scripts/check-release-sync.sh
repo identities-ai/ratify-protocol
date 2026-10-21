@@ -77,6 +77,15 @@ if not native_match:
     fail("missing version in sdks/python-native/Cargo.toml")
 native_version = native_match.group(1)
 
+# sdks/rust is the v2 crate, so the v1 extension must not build against it
+# through a path dependency. It pins the published v1 crate exactly instead.
+native_core = re.search(r'^ratify-protocol = "=(1\.[^"]+)"$', native_toml, re.M)
+if not native_core:
+    fail(
+        "sdks/python-native/Cargo.toml must pin the v1 ratify-protocol crate "
+        'exactly (ratify-protocol = "=1.x"), not the v2 path crate'
+    )
+
 # The Python SDK pins the optional native extra to an exact version, so the two
 # must move together. If they drift, `pip install ratify-protocol[native]`
 # resolves to nothing and the extra silently becomes uninstallable.
@@ -86,16 +95,63 @@ if not pyproject_native:
 
 
 def py_to_semver(v: str) -> str:
-    return re.sub(r'a(\d+)$', r'-alpha.\1', v)
+    v = re.sub(r'a(\d+)$', r'-alpha.\1', v)
+    v = re.sub(r'b(\d+)$', r'-beta.\1', v)
+    return re.sub(r'rc(\d+)$', r'-rc.\1', v)
 
-if py_to_semver(py_version) != ts_version:
-    fail(f"Python version {py_version} does not match TypeScript {ts_version}")
+def semver_to_py(v: str) -> str:
+    v = re.sub(r'-alpha\.(\d+)$', r'a\1', v)
+    v = re.sub(r'-beta\.(\d+)$', r'b\1', v)
+    return re.sub(r'-rc\.(\d+)$', r'rc\1', v)
+
+# Two release lines live in this tree.
+#   v2: TypeScript, Rust, C, Go (module path /v2), python-v2, python-native-v2
+#   v1: the Python SDK (sdks/python) and its native extra (sdks/python-native)
+# Each line must agree with itself; the lines do not have to agree with each
+# other.
+v2_version = ts_version
+v1_version = py_to_semver(py_version)
+if not v2_version.startswith("2."):
+    fail(f"TypeScript version {v2_version} is not on the v2 line")
+if not v1_version.startswith("1."):
+    fail(f"Python SDK version {py_version} is not on the v1 line")
+
+# v2 Python distribution (ratify-protocol-v2) and its native extra.
+pyv2_toml = read("sdks/python-v2/pyproject.toml")
+pyv2_match = re.search(r'^version = "([^"]+)"$', pyv2_toml, re.M)
+if not pyv2_match:
+    fail("missing version in sdks/python-v2/pyproject.toml")
+pyv2_version = pyv2_match.group(1)
+pyv2_ver_py = read("sdks/python-v2/src/ratify_protocol_v2/_version.py")
+pyv2_init = re.search(r'^__version__ = "([^"]+)"$', pyv2_ver_py, re.M)
+pyv2_native_const = re.search(r'^NATIVE_VERSION = "([^"]+)"$', pyv2_ver_py, re.M)
+if not pyv2_init or not pyv2_native_const:
+    fail("sdks/python-v2/src/ratify_protocol_v2/_version.py must define __version__ and NATIVE_VERSION")
+if pyv2_version != semver_to_py(v2_version):
+    fail(f"python-v2 version {pyv2_version} is not the v2 line {v2_version} in PEP 440 form")
+if pyv2_init.group(1) != pyv2_version:
+    fail(f"python-v2 __version__ {pyv2_init.group(1)} != pyproject {pyv2_version}")
+if pyv2_native_const.group(1) != v2_version:
+    fail(f"python-v2 NATIVE_VERSION {pyv2_native_const.group(1)} != v2 line {v2_version}")
+if not re.search(r'^\s*"tzdata[><=~ ]', pyv2_toml, re.M):
+    fail("sdks/python-v2/pyproject.toml must declare tzdata (time_window needs an IANA database)")
+pyv2_native_pin = re.search(r'"ratify-protocol-native-v2==([^"]+)"', pyv2_toml)
+if not pyv2_native_pin or pyv2_native_pin.group(1) != pyv2_version:
+    got = pyv2_native_pin.group(1) if pyv2_native_pin else "missing"
+    fail(f"ratify-protocol-native-v2 pin {got} does not match python-v2 {pyv2_version}")
+native_v2_toml = read("sdks/python-native-v2/Cargo.toml")
+native_v2_match = re.search(r'^version = "([^"]+)"$', native_v2_toml, re.M)
+if not native_v2_match:
+    fail("missing version in sdks/python-native-v2/Cargo.toml")
+if native_v2_match.group(1) != v2_version:
+    fail(f"python-native-v2 version {native_v2_match.group(1)} does not match v2 line {v2_version}")
+
 if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
 if c_version != ts_version:
     fail(f"C version {c_version} does not match TypeScript {ts_version}")
-if native_version != ts_version:
-    fail(f"Python native extra version {native_version} does not match TypeScript {ts_version}")
+if native_version != v1_version:
+    fail(f"Python native extra version {native_version} does not match the v1 Python SDK {v1_version}")
 if pyproject_native.group(1) != py_version:
     fail(
         f"ratify-protocol-native pin {pyproject_native.group(1)} does not match "
@@ -117,11 +173,14 @@ if not c_banner_match or c_banner_match.group(1) != ts_version:
 install_pins = {
     "sdks/typescript/README.md": [f"npm install @identities-ai/ratify-protocol@{ts_version}"],
     "sdks/python/README.md": [f"pip install ratify-protocol=={py_version}"],
+    "sdks/python-v2/README.md": [f"pip install ratify-protocol-v2=={pyv2_version}"],
+    "sdks/python-native-v2/README.md": [f"pip install 'ratify-protocol-v2[native]=={pyv2_version}'"],
     "sdks/rust/README.md": [f'ratify-protocol = "{rust_version}"'],
-    "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol@v{ts_version}"],
+    "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}"],
     "README.md": [
-        f"go get github.com/identities-ai/ratify-protocol@v{ts_version}",
+        f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}",
         f"pip install ratify-protocol=={py_version}",
+        f"pip install ratify-protocol-v2=={pyv2_version}",
         f"cargo add ratify-protocol@{rust_version}",
     ],
 }
@@ -132,11 +191,21 @@ for path, needles in install_pins.items():
             fail(f"{path} is missing the pinned install command: {needle}")
 
 release_version_re = re.compile(r"\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+|\d+\.\d+\.\d+(?:a|b|rc)\d+")
-current_versions = {ts_version, py_version, rust_version, c_version}
+current_versions = {v2_version, pyv2_version, v1_version, py_version}
+# Older v1 versions that a README may name on purpose, each with the reason.
+# Keep this list short and explicit: anything not here is treated as stale.
+DOCUMENTED_V1_PINS = {
+    # Last published v1 tag. The Go, TypeScript, Rust, and root READMEs keep a
+    # v1 install section that pins it while the v2 line is unpublished.
+    "1.0.0-alpha.20",
+}
 for path in [*install_pins, "sdks/c/README.md"]:
     for found in sorted(set(release_version_re.findall(read(path)))):
-        if found not in current_versions:
-            fail(f"{path} references release version {found} but current is {ts_version} — stale pin?")
+        if found not in current_versions and found not in DOCUMENTED_V1_PINS:
+            fail(
+                f"{path} references release version {found}; current lines are "
+                f"v2 {v2_version} and v1 {v1_version} — stale pin?"
+            )
 
 # One protocol, one description. The canonical tagline must appear on every
 # public face of the project: root README, SPEC subtitle, all five SDK
@@ -162,15 +231,17 @@ for path in tagline_files:
     if CANONICAL_TAGLINE not in read(path).lower().replace("\n// ", " "):
         fail(f"{path} does not carry the canonical tagline ({CANONICAL_TAGLINE!r})")
 
-protocol_tag = f"v{ts_version}"
+protocol_tag = f"v{v2_version}"
 # docs/RELEASES.md is deliberately absent: its version strings are
 # historical (the §3.2 ladder) or illustrative examples, not release-synced.
+# SPEC.md is the v1 specification, so it carries the v1 line's tag.
 must_contain = {
     "README.md": protocol_tag,
-    "SPEC.md": protocol_tag,
+    "SPEC.md": f"v{v1_version}",
     "sdks/go/README.md": protocol_tag,
     "sdks/typescript/README.md": ts_version,
     "sdks/python/README.md": py_version,
+    "sdks/python-v2/README.md": pyv2_version,
     "sdks/rust/README.md": rust_version,
 }
 for path, needle in must_contain.items():
@@ -259,7 +330,10 @@ for path, needles in scope_needles.items():
         if needle not in text:
             fail(f"{path} does not contain scope-count marker: {needle}")
 
-print(f"release-sync: ok ({protocol_tag}, {fixture_count} fixtures, {scope_count} scopes)")
+print(
+    f"release-sync: ok (v2 line {protocol_tag}, v1 line v{v1_version}, "
+    f"{fixture_count} fixtures, {scope_count} scopes)"
+)
 PY
 
 # SDK READMEs are generated from sdks/readme-src/preamble.md + per-SDK

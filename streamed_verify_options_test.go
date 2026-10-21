@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // streamedFixture builds a verified session token plus the agent key needed

@@ -21,7 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // crossSDKDoc is the wire shape of the cross_sdk_vectors.json file.

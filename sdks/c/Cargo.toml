@@ -1,6 +1,6 @@
 [package]
 name = "ratify-c"
-version = "1.0.0-alpha.20"
+version = "2.0.0-alpha.1"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -31,7 +31,7 @@ std = []
 custom-entropy = ["getrandom/custom"]
 
 [dependencies]
-ratify-protocol = { path = "../rust", version = "1.0.0-alpha.20" }
+ratify-protocol = { path = "../rust", version = "2.0.0-alpha.1" }
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }
 
@@ -54,9 +54,14 @@ path = "tests/advanced.rs"
 name = "bounds"
 path = "tests/bounds.rs"
 
+[[test]]
+name = "v2_abi"
+path = "tests/v2_abi.rs"
+
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+hex = "0.4"
 
 # ---------------------------------------------------------------------------
 # Release profile: optimised for embedded / small-footprint targets.

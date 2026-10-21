@@ -3,7 +3,7 @@
      Regenerate: python3 scripts/gen-sdk-readmes.py -->
 # Ratify Protocol — C/C++ SDK
 
-**C and C++ reference SDK of the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
+**C and C++ reference SDK of the Ratify Protocol — delegated-authority proofs for human-agent and agent-agent interactions.**
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 
@@ -373,10 +373,51 @@ The core paths above cover one-shot verification. The full v1.1 surface is expor
 | Multi-party + audit | `ratify_transaction_receipt_*`, `ratify_witness_entry_*`, `ratify_key_rotation_*` | Transaction receipts (§5.14), witness logs (§5.12), key rotation (§5.15) |
 | Scope utilities | `ratify_scope_*`, `ratify_scopes_*`, `ratify_scope_vocabulary` | Expansion, intersection, validation, and vocabulary discovery |
 
-### Available on main; ships in alpha.16 (release unpublished)
+The Protocol v2 C surface includes `ratify_derive_key_id_v2` for the full
+256-bit hybrid key ID, `ratify_verify_delegation_signature_v2` for both signature
+components over exact canonical signable bytes, and separate v2 operation and
+session-context helpers. The signature primitive fixes the delegation object
+code and v2 ML-DSA context. It writes 1 or 0 to `valid_out`, including 0 on
+error. Malformed JSON returns an error status; a parsed but invalid key or
+signature returns success with `valid_out` set to 0. The caller supplies a
+non-null readable buffer and must construct and validate the exact canonical
+signable projection. This function does not parse a certificate, check its key
+ID, or authorize a chain.
+`ratify_challenge_claim_digest_v2` writes 48 digest bytes;
+`ratify_protocol_claim_id_v2` and
+`ratify_protocol_claim_id_from_digest_v2` write a 64-character lowercase ID
+plus NUL. They match `testvectors/v2/challenge-claim.json`. The namespace is
+length-delimited UTF-8, so embedded NUL bytes are supported. These functions
+require caller-provided output capacities and do not issue challenges or make
+durable atomic claims. The digest buffer is zeroed on failure when its declared
+capacity is at least 48 bytes; claim-ID buffers start with NUL on failure when
+their declared capacity is nonzero.
+`ratify_derive_id` and `ratify_verify_delegation_signature` retain their v1
+behavior.
 
-The following are merged to `main` and covered by the test suites now. They ship
-in alpha.16, which is not yet published. Every symbol below is declared
+The separate `ratify_v2_*` ABI (check `ratify_v2_abi_version()` against
+`RATIFY_V2_ABI_VERSION` before use) adds full v2 key ID derivation and checks
+(`ratify_v2_key_id`, `ratify_v2_key_id_check`), strict decoding and signature
+verification of every v2 signed object (`ratify_v2_verify_object`,
+`ratify_v2_proof_bundle_verify_signatures`,
+`ratify_v2_verification_receipt_verify`), and the receipt to bundle binding
+check. Failures return the same language-neutral error classes as the shared
+vectors. `cargo test --test v2_abi` drives this ABI with `keys.json`,
+`objects.json`, `object-negatives.json`, and `key-rotation-signature.json` from
+`testvectors/v2`, and `scripts/test-v2-c-abi.sh` runs the first three through a
+C program compiled against `include/ratify.h`.
+
+The C SDK does not yet expose the stateful v2 live verifier (claim, trust,
+status, audience, and rate callbacks), the revocation status reducer, or log
+and rotation state machines, so it does not run the verifier ordering, status,
+log, or rotation sequence vectors. Use the Go, TypeScript, Python, or Rust SDK
+for a complete v2 verifier in this alpha. This alpha is not a v2 conformance
+claim; see SPEC-v2 §8.
+
+### Added in v1 alpha.16
+
+The following first shipped in the v1 alpha.16 release and are covered by the
+test suites. Every symbol below is declared
 in `include/ratify.h`. The call snippets in this section are abbreviated and omit
 the `RatifyStatus` error checking shown in the complete example above; check every
 returned status in real code.
@@ -497,6 +538,12 @@ cargo test --test bounds
 
 # Conformance tests (79/79 fixtures)
 cargo test --test conformance
+
+# Protocol v2 ABI against testvectors/v2 (keys, objects, object negatives,
+# key-rotation signature), then keys, objects, and object negatives from a
+# compiled C program
+cargo test --test v2_abi
+./scripts/test-v2-c-abi.sh
 
 # Cross-architecture via QEMU (requires `cross`)
 cross test --target aarch64-unknown-linux-gnu

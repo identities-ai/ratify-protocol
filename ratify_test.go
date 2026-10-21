@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // TestDelegationRoundTrip verifies the happy path:

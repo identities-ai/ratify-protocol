@@ -29,3 +29,26 @@ func TestVocabularyMatchesValidScopes(t *testing.T) {
 		t.Error("Vocabulary() must return a fresh copy, not shared backing storage")
 	}
 }
+
+func TestV2ScopeValidationKeepsV1RulesStable(t *testing.T) {
+	if err := ValidateScopes([]string{"custom:*"}); err != nil {
+		t.Fatalf("v1 scope validation changed unexpectedly: %v", err)
+	}
+	if err := ValidateScopesV2([]string{"custom:*"}); err == nil {
+		t.Fatal("v2 accepted custom:*")
+	}
+	if err := ValidateScopesV2([]string{"custom:inventory:read"}); err != nil {
+		t.Fatalf("v2 rejected a custom extension scope: %v", err)
+	}
+	if err := ValidateScopesV2([]string{"execute:tool", "execute:tool"}); err == nil {
+		t.Fatal("v2 accepted a duplicate scope")
+	}
+	if err := ValidateRequiredScopeV2("execute:tool"); err != nil {
+		t.Fatalf("v2 rejected a canonical required scope: %v", err)
+	}
+	for _, scope := range []string{"", "custom:invoice:read", "custom:*", "data:*"} {
+		if err := ValidateRequiredScopeV2(scope); err == nil {
+			t.Errorf("v2 accepted invalid required scope %q", scope)
+		}
+	}
+}

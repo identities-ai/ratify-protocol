@@ -1,6 +1,6 @@
 # {{TITLE}}
 
-**{{SDK_DESC}} of the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
+**{{SDK_DESC}} of the Ratify Protocol — delegated-authority proofs for human-agent and agent-agent interactions.**
 
 Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
 

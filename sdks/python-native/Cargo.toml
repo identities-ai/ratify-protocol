@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol-native"
-version = "1.0.0-alpha.20"
+version = "1.0.0-alpha.21"
 edition = "2021"
 license = "Apache-2.0"
 description = "Native deterministic key generation for the Ratify Protocol Python SDK"
@@ -16,4 +16,7 @@ crate-type = ["cdylib"]
 # 3.10 up, instead of one per interpreter minor version. It must match
 # requires-python in pyproject.toml.
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
-ratify-protocol = { path = "../rust" }
+# Pinned to the last published v1 crate. sdks/rust is now the v2 line, so a
+# path dependency would build this v1 extension against the wrong protocol.
+# The pin is exact: the extension must stay byte-identical with the v1 SDKs.
+ratify-protocol = "=1.0.0-alpha.20"

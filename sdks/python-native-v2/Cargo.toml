@@ -1,0 +1,17 @@
+[package]
+name = "ratify-protocol-native-v2"
+# Lockstep with the ratify-protocol-v2 Python SDK (2.0.0a1 in PEP 440 form).
+version = "2.0.0-alpha.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Native deterministic key generation for the Ratify Protocol v2 Python SDK"
+repository = "https://github.com/identities-ai/ratify-protocol"
+publish = false
+
+[lib]
+name = "ratify_protocol_native_v2"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
+ratify-protocol = { path = "../rust" }

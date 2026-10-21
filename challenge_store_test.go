@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 const wantUnknown = "challenge was not issued by this verifier or has already been used"

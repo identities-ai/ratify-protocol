@@ -36,7 +36,7 @@ JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec 
 
 **Status:** alpha — fixture bytes may change between pre-releases · reference implementation complete · 79 canonical test vectors · cross-language interop proven (Go + TypeScript + Python + Rust + C/C++) · Patent Pending.
 
-Counts and feature descriptions in this README describe `main` (the development branch). Install commands reference the latest published release — see [Releases](https://github.com/identities-ai/ratify-protocol/releases) for its notes and exact fixture set.
+Counts and feature descriptions in this README describe `main` (the development branch). Install commands pin the versions prepared in this tree. This tree carries two release lines: the v2 line (`2.0.0-alpha.1` for Go, TypeScript, Rust, C/C++, and the separate `ratify-protocol-v2` Python distribution) and the v1 Python SDK (`1.0.0a21`). Neither is published yet; a pin installs only once its release appears on [Releases](https://github.com/identities-ai/ratify-protocol/releases), which also lists each release's notes and exact fixture set. The latest published v1 release is `v1.0.0-alpha.20`.
 
 Maintained by Identities AI, Inc. Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
 
@@ -49,6 +49,12 @@ The protocol SDKs provide the portable authority primitive. Executable
 inside real agent platforms and where the receiving system enforces it.
 The [reference index](references/README.md) lists every integration currently
 available, with setup instructions and its endorsement and production status.
+For the in-development breaking v2 profile and upgrade path, read
+[`SPEC-v2.md`](SPEC-v2.md) and
+[`docs/PROTOCOL_V2_MIGRATION.md`](docs/PROTOCOL_V2_MIGRATION.md). The
+reference-by-reference migration and evidence checklist is
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](docs/V2_REFERENCE_COMPATIBILITY.md).
+Released v1 packages remain separate and unchanged.
 
 ---
 
@@ -172,10 +178,17 @@ Pick your language. Each one runs the full 79-fixture conformance suite — the 
 git clone https://github.com/identities-ai/ratify-protocol
 cd ratify-protocol
 go test ./...
-# → ok  github.com/identities-ai/ratify-protocol  0.5s
+# → ok  github.com/identities-ai/ratify-protocol/v2  0.5s
 ```
 
 Or install as a module in your own project:
+
+```bash
+go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-alpha.1
+```
+
+The v2 line uses the `/v2` module path. The v1 module path is unchanged, and
+its latest published tag stays installable:
 
 ```bash
 go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20
@@ -196,7 +209,14 @@ npm test
 ### Python
 
 ```bash
-pip install ratify-protocol==1.0.0a20
+pip install ratify-protocol==1.0.0a21
+```
+
+The v2 Python SDK is a separate distribution that imports as
+`ratify_protocol_v2`, so it installs next to the v1 package:
+
+```bash
+pip install ratify-protocol-v2==2.0.0a1
 ```
 
 Or to run the conformance suite yourself:
@@ -212,8 +232,10 @@ pytest
 ### Rust
 
 ```bash
-cargo add ratify-protocol@1.0.0-alpha.20
+cargo add ratify-protocol@2.0.0-alpha.1
 ```
+
+To stay on v1, pin the published crate exactly: `ratify-protocol = "=1.0.0-alpha.20"`.
 
 Or to run the conformance suite yourself:
 
@@ -373,13 +395,14 @@ The [`docs/AGENT_TO_AGENT.md`](docs/AGENT_TO_AGENT.md) guide shows how these com
 
 The 79 fixtures in `testvectors/v1/` are the canonical conformance set. **Any implementation in any language that passes all 79 is byte-for-byte interoperable with the reference.** This is the contract. (The directory also contains `cross_sdk_vectors.json` — a separate byte-equivalence corpus used by the NxN cross-SDK matrix; it is not one of the 79 canonical fixtures.)
 
-| Implementation | Language | Conformance (`main`) | Install (latest release) |
+| Implementation | Language | Conformance (`main`) | Install (pinned version) |
 |---|---|---|---|
-| `github.com/identities-ai/ratify-protocol` | Go | ✅ 79/79 | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20` |
-| `@identities-ai/ratify-protocol` | TypeScript | ✅ 79/79 | `npm install @identities-ai/ratify-protocol` |
-| `ratify-protocol` | Python | ✅ 79/79 | `pip install ratify-protocol==1.0.0a20` |
-| `ratify-protocol` | Rust | ✅ 79/79 | `cargo add ratify-protocol@1.0.0-alpha.20` |
-| `sdks/c/` (`libratify_c`) | C / C++ | ✅ full C ABI conformance | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
+| `github.com/identities-ai/ratify-protocol/v2` | Go | ✅ 79/79 v1; full `testvectors/v2` | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-alpha.1` |
+| `@identities-ai/ratify-protocol` | TypeScript | ✅ 79/79 v1; full `testvectors/v2` | `npm install @identities-ai/ratify-protocol` |
+| `ratify-protocol` | Python | ✅ 79/79 | `pip install ratify-protocol==1.0.0a21` |
+| `ratify-protocol-v2` | Python (v2) | full `testvectors/v2` | `pip install ratify-protocol-v2==2.0.0a1` |
+| `ratify-protocol` | Rust | ✅ 79/79 v1; full `testvectors/v2` | `cargo add ratify-protocol@2.0.0-alpha.1` |
+| `sdks/c/` (`libratify_c`) | C / C++ | ✅ full v1 C ABI conformance; v2 key, object, and object-negative vectors only (no stateful v2 verifier) | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | *Swift* | — | planned | mobile wallet |
 | *Java / Kotlin* | — | planned | Android / JVM |
 
@@ -422,6 +445,7 @@ This README is the entry point. **[docs.ratifyprotocol.com](https://docs.ratifyp
 ```
 ratify-protocol/
 ├── SPEC.md                Normative protocol specification (CC-BY-4.0)
+├── SPEC-v2.md             Draft breaking v2 profile (not yet released)
 ├── README.md              You are here
 ├── LICENSE                Apache-2.0 (source code)
 ├── docs/LICENSES.md       Per-asset license breakdown
@@ -478,7 +502,7 @@ ratify-protocol/
     ├── REGISTRY_SETUP.md      How the SDK orgs are set up on PyPI/crates.io/npm
     ├── ROADMAP.md             Shipped / planned / v2 work
     ├── SDKS.md                SDK roadmap + conformance contract for new languages
-    ├── TESTING.md             Internal testing guide — four levels
+    ├── TESTING.md             Testing guide — four levels
     ├── TEST_PLAN.md           Testing methodology
     └── TRANSACTION_RECEIPTS.md  Receipt envelope — design rationale (normative text: SPEC §5.14)
 ```

@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "context_policy": {
+    "profile": "ratify.verify.session-context/v1",
+    "require_bound": true,
+    "required_fields": [
+      "verifier_id",
+      "workspace_id",
+      "agent_id",
+      "session_id",
+      "invocation_id",
+      "request_hash"
+    ],
+    "version": 1
+  },
+  "context_policy_digest": "sha384:610c40faa472aa2a4f905988899733758cccf30f243aed35f1f42433228a28dbab1725cb2a4a6811029a8109da0b9b29",
+  "input": {
+    "verifier_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "workspace_id": "00000000-0000-4000-8000-000000000001",
+    "agent_id": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+    "session_id": "session-01",
+    "invocation_id": "invocation-01",
+    "request_hash_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "expected_session_context_hex": "1c6f1471a65a3565c2954e19f9380d795b953f638b2e6bf2262b82cdc39357d2",
+  "operation_input": {
+    "required_scope": "data:read",
+    "operation": "records.get",
+    "resource_id": "customer/123",
+    "requested_path": "/v1/customers/123",
+    "payload_digest_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "expected_request_hash_hex": "06ae35bea047663f0a732f1c161a579f2c244a7fe6f8b1697bfea6c44c3f9631",
+  "invalid_required_scopes": [
+    "",
+    "data:*",
+    "custom:invoice:read",
+    "custom:*",
+    "unregistered:read"
+  ],
+  "empty_payload_operation_input": {
+    "required_scope": "data:read",
+    "operation": "records.get",
+    "resource_id": "customer/123",
+    "requested_path": "/v1/customers/123",
+    "payload_digest_hex": null
+  },
+  "expected_empty_request_hash_hex": "7c8898e3e79cee60099a3bfeef03eb641c3e9112130cdc8052f87a20a98567b5",
+  "expected_empty_session_context_hex": "baf54a0c7cb89b813b2bc4b65b2a960dd9a32becb6c3a7c0ad3c3969fabc7aa3",
+  "verify_api_operation_input": {
+    "required_scope": "data:read",
+    "operation": "records.get",
+    "resource_id": "customer/123",
+    "requested_path": "/v1/customers/123",
+    "payload_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "expected_verify_api_request_hash_hex": "06ae35bea047663f0a732f1c161a579f2c244a7fe6f8b1697bfea6c44c3f9631",
+  "verify_api_payload_digest_decode_cases": [
+    { "name": "absent-null", "encoded": null, "valid": true, "expected_hex": "" },
+    { "name": "canonical", "encoded": "sha256:2222222222222222222222222222222222222222222222222222222222222222", "valid": true, "expected_hex": "2222222222222222222222222222222222222222222222222222222222222222" },
+    { "name": "empty-string", "encoded": "", "valid": false },
+    { "name": "uppercase-prefix", "encoded": "SHA256:2222222222222222222222222222222222222222222222222222222222222222", "valid": false },
+    { "name": "uppercase-hex", "encoded": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "valid": false },
+    { "name": "short-hex", "encoded": "sha256:222222222222222222222222222222222222222222222222222222222222222", "valid": false },
+    { "name": "lowercase-non-hex", "encoded": "sha256:222222222222222222222222222222222222222222222222222222222222222g", "valid": false },
+    { "name": "overlong-hex", "encoded": "sha256:22222222222222222222222222222222222222222222222222222222222222222", "valid": false }
+  ]
+}

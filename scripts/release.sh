@@ -180,7 +180,10 @@ write("sdks/python-native/Cargo.toml", native_toml)
 native_lock_path = root / "sdks/python-native/Cargo.lock"
 if native_lock_path.exists():
     native_lock = read("sdks/python-native/Cargo.lock")
-    for pkg in ("ratify-protocol-native", "ratify-protocol"):
+    # Only the extension itself. Its ratify-protocol dependency is the
+    # published v1 crate pinned exactly in Cargo.toml (sdks/rust is the v2
+    # line); rewriting that entry would break the registry checksum.
+    for pkg in ("ratify-protocol-native",):
         native_lock = re.sub(
             rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
             rf'\g<1>{npm_version}\2',

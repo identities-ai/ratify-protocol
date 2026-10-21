@@ -57,8 +57,35 @@ var wireByteFields = map[string]bool{
 // with a json.Decoder configured with DisallowUnknownFields, as the
 // bundled CLI and reference verifier do.
 func CheckWireJSON(data []byte) error {
+	return checkWireJSON(data, nil, nil, false)
+}
+
+// checkWireJSONV2 also validates top-level v2-only byte fields without
+// changing v1 extension params, where the same strings are application data.
+func checkWireJSONV2(data []byte, topLevelByteFields ...string) error {
+	fields := make(map[string]bool, len(topLevelByteFields))
+	for _, field := range topLevelByteFields {
+		fields[field] = true
+	}
+	return checkWireJSON(data, fields, nil, true)
+}
+
+func checkWireJSONV2WithTextTopLevel(data []byte, topLevelByteFields map[string]bool, topLevelTextFields map[string]bool) error {
+	return checkWireJSON(data, topLevelByteFields, topLevelTextFields, true)
+}
+
+// checkWireJSON validates wire JSON. strictV2 adds the Protocol v2 rules that
+// the released v1 decoders do not apply: an unpaired UTF-16 surrogate escape
+// (which Go's decoder silently replaces with U+FFFD, letting a different
+// string carry a valid signature) and the integer spelling -0 are rejected.
+func checkWireJSON(data []byte, topLevelByteFields map[string]bool, topLevelTextFields map[string]bool, strictV2 bool) error {
 	if !utf8.Valid(data) {
 		return fmt.Errorf("wire: invalid UTF-8")
+	}
+	if strictV2 {
+		if err := rejectUnpairedSurrogateEscapes(data); err != nil {
+			return err
+		}
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -127,7 +154,7 @@ func CheckWireJSON(data []byte) error {
 				f.pendingKey = t
 				f.expectKey = false
 			} else {
-				if f := top(); f != nil && f.keys != nil && wireByteFields[f.pendingKey] {
+				if f := top(); f != nil && f.keys != nil && (wireByteFields[f.pendingKey] && !(len(stack) == 1 && topLevelTextFields[f.pendingKey]) || len(stack) == 1 && topLevelByteFields[f.pendingKey]) {
 					if err := checkCanonicalBase64(f.pendingKey, t); err != nil {
 						return err
 					}
@@ -138,6 +165,13 @@ func CheckWireJSON(data []byte) error {
 			s := t.String()
 			// Integer-formed tokens only; canonical floats (constraint
 			// bounds) are out of scope for the integer domain.
+			// Only a value equal to negative zero is rejected; -0.5 is a valid
+			// float (for example a geo coordinate).
+			if strictV2 && strings.HasPrefix(s, "-") {
+				if f, perr := strconv.ParseFloat(s, 64); perr == nil && f == 0 {
+					return fmt.Errorf("wire: negative zero is not a canonical number")
+				}
+			}
 			if !strings.ContainsAny(s, ".eE") {
 				n, perr := strconv.ParseInt(s, 10, 64)
 				if perr != nil || n > maxSafeInteger || n < -maxSafeInteger {
@@ -193,4 +227,71 @@ func checkCanonicalBase64(key, s string) error {
 		return fmt.Errorf("wire: field %q: non-canonical base64", key)
 	}
 	return nil
+}
+
+// rejectUnpairedSurrogateEscapes scans JSON string literals for \uD800-\uDFFF
+// escapes that do not form a high-low surrogate pair.
+func rejectUnpairedSurrogateEscapes(data []byte) error {
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		if !inString {
+			if c == '"' {
+				inString = true
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = false
+		case '\\':
+			if i+1 >= len(data) {
+				return nil // malformed; the decoder reports it
+			}
+			if data[i+1] != 'u' {
+				i++
+				continue
+			}
+			unit, ok := wireHexUnit(data, i+2)
+			if !ok {
+				return nil // malformed; the decoder reports it
+			}
+			switch {
+			case unit >= 0xD800 && unit <= 0xDBFF:
+				if i+11 < len(data) && data[i+6] == '\\' && data[i+7] == 'u' {
+					if low, ok := wireHexUnit(data, i+8); ok && low >= 0xDC00 && low <= 0xDFFF {
+						i += 11
+						continue
+					}
+				}
+				return fmt.Errorf("wire: unpaired UTF-16 surrogate escape")
+			case unit >= 0xDC00 && unit <= 0xDFFF:
+				return fmt.Errorf("wire: unpaired UTF-16 surrogate escape")
+			}
+			i += 5
+		}
+	}
+	return nil
+}
+
+func wireHexUnit(data []byte, start int) (uint16, bool) {
+	if start+4 > len(data) {
+		return 0, false
+	}
+	var unit uint16
+	for _, c := range data[start : start+4] {
+		var v byte
+		switch {
+		case c >= '0' && c <= '9':
+			v = c - '0'
+		case c >= 'a' && c <= 'f':
+			v = c - 'a' + 10
+		case c >= 'A' && c <= 'F':
+			v = c - 'A' + 10
+		default:
+			return 0, false
+		}
+		unit = unit<<4 | uint16(v)
+	}
+	return unit, true
 }

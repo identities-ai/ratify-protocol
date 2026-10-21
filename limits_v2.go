@@ -43,7 +43,7 @@ const (
 // later malformed-input checks with the same class.
 func checkV2WireSize(data []byte, object, limitName string, limit int) error {
 	if len(data) > limit {
-		return fmt.Errorf("wire v2: %s exceeds %s (%d bytes)", object, limitName, limit)
+		return fmt.Errorf("wire v2: %s exceeds %s (%d bytes); rejected before parsing", object, limitName, limit)
 	}
 	return nil
 }

@@ -511,8 +511,8 @@ func encodeTransactionReceiptV2Canonical(receipt *TransactionReceiptV2) ([]byte,
 // state and policy and are deliberately not inferred by this codec.
 func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxTransactionReceiptBytes {
-		return nil, fmt.Errorf("wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES (%d)", MaxTransactionReceiptBytes)
+	if err := checkV2WireSize(data, "transaction receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", MaxTransactionReceiptBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data, "terms_canonical_json"); err != nil {
 		return nil, err

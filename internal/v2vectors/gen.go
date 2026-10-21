@@ -39,6 +39,7 @@ var Files = []string{
 	"status-sequences.json",
 	"log-sequences.json",
 	"rotation-sequences.json",
+	"limits.json",
 }
 
 // Generate returns the exact bytes of every generated vector file.
@@ -54,6 +55,7 @@ func Generate() (map[string][]byte, error) {
 		"status-sequences.json":       g.statusFile,
 		"log-sequences.json":          g.logFile,
 		"rotation-sequences.json":     g.rotationFile,
+		"limits.json":                 g.limitsFile,
 	}
 	for _, name := range Files {
 		var value any

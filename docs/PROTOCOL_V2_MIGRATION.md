@@ -54,8 +54,9 @@ Use these package-specific major-version boundaries:
 - Python native: keep the released v1 extension intact and use a distinct v2
   distribution and module when v2 native support is ready. Version it in
   lockstep with the Python v2 SDK and reject mismatched extension versions at
-  import time. It provides native key generation, not an independent wire
-  verifier.
+  import time. It is the Python SDK's backend, not an independent wire
+  verifier. From `2.0.0-beta.1` the Python v2 SDK signs only through this
+  native backend (SPEC-v2 §1.3); pure-Python verification remains available.
 
 Every package line must be tested from its published artifact in a clean
 consumer environment. Local workspace imports do not qualify as release evidence.
@@ -71,8 +72,12 @@ remains a release gate.
 
 The schedule for any hosted API retirement is a separate, dated Verify
 announcement. The open Protocol release does not prescribe a universal
-retirement date. The v2 SDK release remains a prerelease until all conformance
-and security gates in `SPEC-v2.md` pass.
+retirement date. Every v2 SDK release is a prerelease. `2.0.0-beta.1` freezes
+the v2 wire and API only after every SDK meets the gates in `SPEC-v2.md` §8.1
+and the internal adversarial review closes; it carries no production security
+claim, and its release notes state that external review has not yet happened.
+`2.0.0` additionally requires external interoperability, an external
+independent review, and a soak (`SPEC-v2.md` §8.2).
 
 ## Do not infer
 

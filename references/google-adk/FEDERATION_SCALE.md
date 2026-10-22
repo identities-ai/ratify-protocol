@@ -201,7 +201,8 @@ count excess) are included to measure discrimination and fail-closed behavior.
 The checked-in result is
 [`evidence/federation-scale-local.json`](evidence/federation-scale-local.json),
 measured on 2026-10-22 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
-with eight requested workers:
+with eight requested workers. This run predates native verification in the
+Python v2 SDK, so the table below is a pre-native measurement:
 
 | Calls | Workers | Allowed | Denied (`constraint_denied`) | Released receipts | Protected actions | Wall seconds | Calls per second | p50 ms | p95 ms | p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -211,14 +212,24 @@ with eight requested workers:
 
 The encoded dual-root presentation (both proofs, base64 as carried in MCP
 `_meta`) is 76,148 bytes. Every allow released two receipts and every denial
-one, and protected actions equal allows in every tier. The run is far slower
-than v1: throughput is about one call per second, latency is seconds, and it
-falls as the tier grows. Two causes are visible in profiles of the same path:
-the Python v2 SDK verifies ML-DSA-65 and canonicalizes the security journal in
-pure Python, and the in-memory reference stores grow with every claim and
-receipt. The 10-call tier ran five workers because the harness splits calls
-into equal batches. Another test process shared the host during part of the
-1,000-call tier.
+one, and protected actions equal allows in every tier. This pre-native run is
+far slower than v1: throughput is about one call per second, latency is
+seconds, and it falls as the tier grows. Two causes were visible in profiles
+of the same path at the time: the Python v2 SDK then verified ML-DSA-65 and
+canonicalized the security journal in pure Python, and the in-memory reference
+stores grow with every claim and receipt. The 10-call tier ran five workers
+because the harness splits calls into equal batches. Another test process
+shared the host during part of the 1,000-call tier.
+
+The Python v2 SDK now verifies natively. On the same Apple M2 Pro host with 8
+worker threads, the same dual-root benchmark measured 13.2, 15.6 and 14.2 calls
+per second for the 10, 100 and 1,000-call tiers. Those figures, the method,
+and the remaining per-decision cost (Python protocol logic such as journal
+snapshot handling, canonical JSON and strict decoding, not signature
+verification) are recorded in the
+[Python v2 SDK performance section](../../sdks/python-v2/README.md#performance).
+The checked-in evidence file and the table above have not been re-run and
+remain the pre-native measurement.
 
 These are single-host measurements of the Python v2 SDK with in-memory
 reference stores. They exclude Gemini latency, ADK reasoning, MCP HTTP,
@@ -226,10 +237,11 @@ status distribution, durable stores, multi-host storage, and Google Cloud
 service latency, and they are not Google capacity claims.
 
 **Why there is no one-million-call v2 tier.** The v1 note records 1,000,000
-calls at 369.693 calls per second with Ratify `1.0.0a20`. The Python v2 SDK
-verifies in pure Python, and each dual-root call runs two full verifications
-with signed status and two receipt publications, so at the measured rate the
-same tier would take roughly two weeks on this host. The in-memory reference
+calls at 369.693 calls per second with Ratify `1.0.0a20`. Each dual-root
+call runs two full verifications with signed status and two receipt
+publications. At the pre-native measured rate the same tier would have taken
+roughly two weeks on this host; at the native rate of about 14 calls per
+second it would still take most of a day. The in-memory reference
 stores also retain every claim and receipt, so memory grows with the call
 count. A meaningful v2 endurance number
 needs a faster v2 verifier and durable stores; it is listed in

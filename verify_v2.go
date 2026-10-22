@@ -88,8 +88,11 @@ type V2VerifyRequest struct {
 	MaxChallengeAgeSeconds int64
 	FutureSkewSeconds      int64
 	Context                ConstraintContextV2
-	StatusKeys             map[string]V2StatusKeyConfig
-	StatusPolicy           RevocationStatusPolicyV2
+	// TZDBVersion is the configured IANA tzdata release for time_window
+	// (SPEC-v2 §5.2, §6.1); it must equal TZDBVersionV2.
+	TZDBVersion  string
+	StatusKeys   map[string]V2StatusKeyConfig
+	StatusPolicy RevocationStatusPolicyV2
 }
 
 // V2VerifyStage names where a verification stopped.
@@ -187,7 +190,7 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 
 	progress := v2EvaluationProgress{trust: "not_evaluated", status: "not_evaluated"}
 	opts := V2LocalAuthorizationOptions{
-		FutureSkewSeconds: req.FutureSkewSeconds, RequiredScope: req.RequiredScope, Context: req.Context,
+		FutureSkewSeconds: req.FutureSkewSeconds, RequiredScope: req.RequiredScope, Context: req.Context, TZDBVersion: req.TZDBVersion,
 		ContextPolicy: req.ContextPolicy, ExpectedChallenge: req.Expected, ClaimToken: token,
 	}
 	// The claim's own consistency (authoritative claim time inside the sealed

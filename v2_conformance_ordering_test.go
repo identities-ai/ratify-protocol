@@ -113,6 +113,7 @@ type v2OrderingInputs struct {
 		RequestedAmountMicros int64  `json:"requested_amount_micros"`
 		RequestedCurrency     string `json:"requested_currency"`
 	} `json:"request_context"`
+	TZDBVersion         string `json:"tzdb_version"`
 	ReceiverBindingHook string `json:"receiver_binding_hook"`
 	Trust               *struct {
 		Mode          string                  `json:"mode"`
@@ -298,7 +299,7 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 	req := ratify.V2VerifyRequest{
 		Bundle: bundle, RequiredScope: in.RequiredScope, VerifierNamespace: in.ConfiguredNamespace,
 		ReplayEpoch: in.ConfiguredReplayEpoch, Now: in.Now, MaxChallengeAgeSeconds: in.MaxChallengeAgeSeconds, FutureSkewSeconds: in.FutureSkewSeconds,
-		StatusPolicy: in.StatusPolicy.lib(), StatusKeys: map[string]ratify.V2StatusKeyConfig{},
+		StatusPolicy: in.StatusPolicy.lib(), StatusKeys: map[string]ratify.V2StatusKeyConfig{}, TZDBVersion: in.TZDBVersion,
 	}
 	for issuer, key := range in.StatusKeys {
 		req.StatusKeys[issuer] = ratify.V2StatusKeyConfig{Epoch: key.Epoch, Key: key.PublicKey}

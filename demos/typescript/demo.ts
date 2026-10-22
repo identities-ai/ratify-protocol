@@ -1,4 +1,7 @@
-// Ratify Protocol v1 — end-to-end narrative demo (TypeScript).
+// Ratify Protocol v1 end-to-end narrative demo (TypeScript).
+//
+// Protocol v1 only. For the Protocol v2 flow (delegate, present, verify,
+// release) see examples/v2/typescript.
 //
 // Run (from repo root):
 //   cd sdks/typescript && npm install && cd ../..
@@ -95,7 +98,7 @@ async function main() {
   kv("Hybrid sig:", "Ed25519 + ML-DSA-65 over challenge || BE(ts)");
 
   // Step 5
-  banner("STEP 5  Verifier runs verifyBundle() — expects meeting:attend");
+  banner("STEP 5  Verifier runs verifyBundle(), expects meeting:attend");
   let result = await verifyBundle(bundle, { required_scope: SCOPE_MEETING_ATTEND });
   if (result.valid) {
     console.log("  ✅  VALID");
@@ -104,7 +107,7 @@ async function main() {
     kv("Status:", result.identity_status);
     kv("Granted scope:", (result.granted_scope ?? []).join(", "));
   } else {
-    console.log(`  ❌  INVALID — ${result.identity_status}: ${result.error_reason}`);
+    console.log(`  ❌  INVALID: ${result.identity_status}: ${result.error_reason}`);
   }
 
   // Attack 1
@@ -155,10 +158,12 @@ async function main() {
       "  • The agent signed a fresh challenge to prove liveness.\n" +
       "  • A verifier checked the bundle in a single function call.\n" +
       "  • Every one of four tampering/misuse scenarios was rejected\n" +
-      "    deterministically — no fuzzy detection, no false positives.\n" +
+      "    deterministically, with no fuzzy detection and no false positives.\n" +
       "  • Signatures are hybrid Ed25519 + ML-DSA-65 (FIPS 204):\n" +
       "    breaking either algorithm alone is insufficient to forge.\n\n" +
-      "  This is the full Ratify Protocol v1, end to end, in one process.",
+      "  This is Ratify Protocol v1, end to end, in one process.\n" +
+      "  For the Protocol v2 flow (delegate, present, verify, release),\n" +
+      "  see examples/v2/ in this repository.",
   );
   console.log();
 }

@@ -1,6 +1,15 @@
-# Ratify Protocol — Runnable Demos
+# Ratify Protocol v1 runnable demos
 
-**End-to-end narrative demos in four languages (Go, Python, Rust, TypeScript). Run one, see the full protocol lifecycle happen in front of you.**
+**End-to-end narrative demos of Ratify Protocol v1 in four languages (Go, Python, Rust, TypeScript). Run one and watch the v1 lifecycle happen in front of you.**
+
+> **Protocol v1.** Every demo in this directory except the NVIDIA reference
+> uses the Protocol v1 API (`verify_bundle()`, unsigned revocation providers,
+> v1 identifiers). They stay here as v1 examples. For Protocol v2 (delegate,
+> present, verify, publish a signed receipt, release) use the runnable programs
+> in [`examples/v2/`](../examples/v2/README.md), which CI runs in Go,
+> TypeScript, Python, Rust and C. The NVIDIA reference in
+> [`nvidia-nooa-delegated-authority/`](nvidia-nooa-delegated-authority/README.md)
+> states its own protocol line.
 
 Each demo walks through:
 
@@ -8,20 +17,20 @@ Each demo walks through:
 2. An AI agent generates its own hybrid keypair.
 3. Alice signs a delegation cert (scope: `meeting:attend`, expires in 7 days).
 4. The agent builds a proof bundle with a fresh challenge signature.
-5. A verifier runs `verify_bundle()` — expected ✅ `VALID`.
+5. A verifier runs `verify_bundle()`, expecting ✅ `VALID`.
 
 Then four negative scenarios:
 
-6. Attacker tampers the cert scope post-signature — rejected with `bad_signature`.
-7. Agent tries to use a `meeting:attend` cert for `meeting:record` — rejected with `scope_denied`.
-8. Verifier's clock reports a future time — cert appears expired, rejected.
-9. Alice revokes the cert — bundle rejected as `revoked`.
+6. Attacker tampers the cert scope post-signature: rejected with `bad_signature`.
+7. Agent tries to use a `meeting:attend` cert for `meeting:record`: rejected with `scope_denied`.
+8. Verifier's clock reports a future time: the cert appears expired and is rejected.
+9. Alice revokes the cert: the bundle is rejected as `revoked`.
 
 Each scenario prints what happened and why, so anyone on the team can read the output and understand the protocol without reading code.
 
 ---
 
-## Start here: bounded tool call
+## Start here: bounded tool call (Protocol v1)
 
 The shortest demo follows a portable authorization across an actual HTTP
 boundary. Alice allows Atlas to call `place_order` up to $5,000, Atlas narrows
@@ -75,7 +84,7 @@ go run ./demos/go
 ### TypeScript
 
 ```bash
-# From repo root — first build the SDK
+# From repo root: first build the SDK
 cd sdks/typescript && node node_modules/typescript/bin/tsc && cd ../..
 # Then install demo deps and run
 cd demos/typescript && npm install && npm run demo
@@ -90,7 +99,7 @@ cd demos/rust && cargo run
 
 ## Reading the output
 
-Every demo prints the same nine scenarios in the same order. You can compare outputs side-by-side across languages — they should all tell the same story, with:
+Every demo prints the same nine scenarios in the same order. You can compare outputs side-by-side across languages. They should all tell the same story, with:
 
 - Different IDs (because each run generates fresh keys)
 - Different signatures (randomness differs, not a bug)
@@ -112,7 +121,7 @@ If any two languages disagree on *what* happens (identity_status values, whether
 
 These demos are narrative, not exhaustive. For the rigorous validation:
 
-- `testvectors/v1/` — 79 canonical fixtures; every SDK reproduces the canonical signable bytes and hashes byte-identically and verifies the reference signatures (signature bytes themselves are not regenerated outside the Go reference; see SPEC §8.3).
+- `testvectors/v1/`: 79 canonical fixtures; every SDK reproduces the canonical signable bytes and hashes byte-identically and verifies the reference signatures (signature bytes themselves are not regenerated outside the Go reference; see SPEC §8.3).
 - Go unit tests: `go test ./...`
 - TS conformance: `cd sdks/typescript && npm test`
 - Python conformance: `cd sdks/python && pytest`

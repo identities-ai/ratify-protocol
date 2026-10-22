@@ -1,4 +1,7 @@
-"""Ratify Protocol v1 — end-to-end narrative demo (Python).
+"""Ratify Protocol v1 end-to-end narrative demo (Python).
+
+Protocol v1 only. For the Protocol v2 flow (delegate, present, verify,
+release) see examples/v2/python.
 
 Walks through the full lifecycle with printed output at each step so you can
 see what the protocol does. No server required; everything is in-process.
@@ -7,10 +10,10 @@ Scenarios:
   1. Alice creates her hybrid root identity.
   2. Alice authorizes an AI agent for `meeting:attend`, 7 days.
   3. The agent receives the cert, builds a proof bundle, verifier checks it.
-  4. Attack: attacker tampers with the cert scope — rejected.
-  5. Attack: agent tries to exercise a scope outside the grant — rejected.
-  6. Attack: expired cert — rejected.
-  7. Revocation: Alice revokes the cert — rejected.
+  4. Attack: attacker tampers with the cert scope: rejected.
+  5. Attack: agent tries to exercise a scope outside the grant: rejected.
+  6. Attack: expired cert: rejected.
+  7. Revocation: Alice revokes the cert: rejected.
 
 Run:
     cd sdks/python && source .venv/bin/activate && pip install -e . && cd ../..
@@ -127,7 +130,7 @@ def run() -> None:
     # -----------------------------------------------------------------
     # Step 5: Verifier checks the bundle
     # -----------------------------------------------------------------
-    banner("STEP 5  Verifier runs verify_bundle() — expects meeting:attend")
+    banner("STEP 5  Verifier runs verify_bundle(), expects meeting:attend")
     result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))
     if result.valid:
         print("  ✅  VALID")
@@ -136,7 +139,7 @@ def run() -> None:
         kv("Status:", result.identity_status)
         kv("Granted scope:", ", ".join(result.granted_scope))
     else:
-        print(f"  ❌  INVALID — {result.identity_status}: {result.error_reason}")
+        print(f"  ❌  INVALID: {result.identity_status}: {result.error_reason}")
 
     # -----------------------------------------------------------------
     # Attack 1: Tampered scope
@@ -212,10 +215,12 @@ def run() -> None:
         "  • The agent signed a fresh challenge to prove liveness.\n"
         "  • A verifier checked the bundle in a single function call.\n"
         "  • Every one of four tampering/misuse scenarios was rejected\n"
-        "    deterministically — no fuzzy detection, no false positives.\n"
+        "    deterministically, with no fuzzy detection and no false positives.\n"
         "  • Signatures are hybrid Ed25519 + ML-DSA-65 (FIPS 204):\n"
         "    breaking either algorithm alone is insufficient to forge.\n\n"
-        "  This is the full Ratify Protocol v1, end to end, in one process."
+        "  This is Ratify Protocol v1, end to end, in one process.\n"
+        "  For the Protocol v2 flow (delegate, present, verify, release),\n"
+        "  see examples/v2/ in this repository."
     )
     print()
 

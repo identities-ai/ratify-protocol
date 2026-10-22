@@ -1,3 +1,6 @@
+// Bounded tool call demo. Protocol v1 only: it uses the v1 verifier API.
+// For the Protocol v2 flow (delegate, present, verify, release) see
+// examples/v2/.
 package main
 
 import (

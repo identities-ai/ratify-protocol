@@ -174,7 +174,9 @@ install_pins = {
     "sdks/typescript/README.md": [f"npm install @identities-ai/ratify-protocol@{ts_version}"],
     "sdks/python/README.md": [f"pip install ratify-protocol=={py_version}"],
     "sdks/python-v2/README.md": [f"pip install ratify-protocol-v2=={pyv2_version}"],
-    "sdks/python-native-v2/README.md": [f"pip install 'ratify-protocol-v2[native]=={pyv2_version}'"],
+    # The native extension is a required dependency of ratify-protocol-v2
+    # (there is no [native] extra), so its README installs the SDK itself.
+    "sdks/python-native-v2/README.md": [f"pip install ratify-protocol-v2=={pyv2_version}"],
     "sdks/rust/README.md": [f'ratify-protocol = "{rust_version}"'],
     "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}"],
     "README.md": [

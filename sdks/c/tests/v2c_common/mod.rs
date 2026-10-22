@@ -1367,6 +1367,13 @@ pub struct Evaluator {
     pub detail: CString,
 }
 
+thread_local! {
+    /// Evaluator callbacks that ran on this thread. SPEC-v2 §1.3 requires a
+    /// C evaluator to run on the thread that made the ABI call.
+    pub static EVALUATOR_CALLS_ON_THIS_THREAD: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
 unsafe extern "C" fn evaluator_tramp(
     user: *mut c_void,
     call: *const RatifyV2EvaluatorCall,
@@ -1375,6 +1382,7 @@ unsafe extern "C" fn evaluator_tramp(
 ) -> i32 {
     let e = &*(user as *const Evaluator);
     e.counts.bump("evaluator");
+    EVALUATOR_CALLS_ON_THIS_THREAD.with(|c| c.set(c.get() + 1));
     let set = |outcome: i32, valid_until: i64| {
         *out = RatifyV2EvaluationResult {
             outcome,
@@ -1392,6 +1400,12 @@ unsafe extern "C" fn evaluator_tramp(
             while ratify_v2_evaluator_call_expired(call) == 0 {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
+            set(1, 0);
+        }
+        "test:late_pass" => {
+            // Ignores the call handle and answers pass only after the 1000 ms
+            // registry deadline (`Setup::evaluator_config`).
+            std::thread::sleep(std::time::Duration::from_millis(1100));
             set(1, 0);
         }
         "fault:invalid_outcome" => set(99, 0),

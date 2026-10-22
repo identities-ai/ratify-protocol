@@ -148,9 +148,7 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
             clear_buffer(claim_record_out);
             let mut req = request(request_json, request_json_len)?;
             req.bundle = bytes(bundle, bundle_len, "bundle")?.to_vec();
-            let inflight = Arc::new(InFlight::default());
-            let _wait = InFlightGuard(Arc::clone(&inflight));
-            req.constraint_evaluators = evaluator_registry(evaluators, &inflight)?;
+            req.constraint_evaluators = evaluator_registry(evaluators)?;
             let (ctx, cancel) = V2Context::background().with_cancel();
             let deps = build_callbacks(callbacks, &Cancel(cancel));
             let result = verify_proof_bundle_v2(&ctx, &req, &deps.callbacks);

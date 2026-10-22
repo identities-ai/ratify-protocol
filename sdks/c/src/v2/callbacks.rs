@@ -3,8 +3,8 @@
 //!
 //! Every callback is a function pointer taking the caller's opaque `user`
 //! pointer first. It runs on the calling thread before the ABI function
-//! returns and is never retained afterwards (constraint evaluators run on a
-//! library worker thread, see `RatifyV2EvaluatorRegistration`). Buffers the
+//! returns and is never retained afterwards, constraint evaluators included
+//! (see `RatifyV2EvaluatorRegistration`). Buffers the
 //! library passes in are valid only until the callback returns. Pointers a
 //! callback writes into an output struct must stay valid until the callback
 //! returns; the library copies them immediately after it returns.
@@ -19,7 +19,7 @@
 use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::os::raw::{c_char, c_void};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use ratify_protocol::v2::*;
@@ -567,8 +567,9 @@ pub struct RatifyV2EvaluationResult {
     pub detail: *const c_char,
 }
 
-/// A pure evaluator: no I/O, clock, or randomness. A non-zero return, an
-/// invalid result, or a timeout is unverifiable.
+/// A pure evaluator: no I/O, clock, or randomness. It runs on the calling
+/// thread. A non-zero return, an invalid result, or an answer at or after
+/// the registry deadline is unverifiable.
 pub type RatifyV2EvaluateFn = Option<
     unsafe extern "C" fn(
         user: *mut c_void,
@@ -591,11 +592,13 @@ pub enum RatifyV2EvaluatorImplementation {
 }
 
 /// One extension evaluator: the `{profile, type}` descriptor sealed into
-/// claims and receipts, and its implementation. A custom evaluator runs on a
-/// library worker thread so the registry timeout can be enforced; the ABI
-/// call does not return until every evaluator call it started has returned,
-/// so `user` is never used after the call. Poll
-/// `ratify_v2_evaluator_call_expired` to return promptly after a timeout.
+/// claims and receipts, and its implementation. A custom evaluator runs
+/// synchronously on the calling thread (SPEC-v2 §1.3) and `user` is never
+/// used after the call. The registry timeout is enforced by elapsed time:
+/// the call is not interrupted, so an answer at or after the deadline is
+/// discarded as `constraint_unverifiable`, and an evaluator that never
+/// returns blocks the ABI call. Poll `ratify_v2_evaluator_call_expired` to
+/// return promptly once the deadline has passed.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct RatifyV2EvaluatorRegistration {
@@ -1674,50 +1677,10 @@ impl Read for CRandom {
 // ---------------------------------------------------------------------------
 // Evaluator registry for one call
 
-/// Tracks evaluator calls running on worker threads; dropping the guard
-/// waits for every one to return so no callback outlives the ABI call.
-#[derive(Default)]
-pub(crate) struct InFlight {
-    count: Mutex<usize>,
-    done: Condvar,
-}
-
-pub(crate) struct InFlightGuard(pub Arc<InFlight>);
-
-impl Drop for InFlightGuard {
-    fn drop(&mut self) {
-        let mut n = self.0.count.lock().unwrap_or_else(|p| p.into_inner());
-        while *n > 0 {
-            n = self.0.done.wait(n).unwrap_or_else(|p| p.into_inner());
-        }
-    }
-}
-
-struct Entered(Arc<InFlight>);
-
-impl Entered {
-    fn new(f: &Arc<InFlight>) -> Self {
-        *f.count.lock().unwrap_or_else(|p| p.into_inner()) += 1;
-        Entered(Arc::clone(f))
-    }
-}
-
-impl Drop for Entered {
-    fn drop(&mut self) {
-        let mut n = self.0.count.lock().unwrap_or_else(|p| p.into_inner());
-        *n -= 1;
-        self.0.done.notify_all();
-    }
-}
-
-fn custom_evaluator(
-    reg: RatifyV2EvaluatorRegistration,
-    inflight: Arc<InFlight>,
-) -> ConstraintEvaluatorFnV2 {
+fn custom_evaluator(reg: RatifyV2EvaluatorRegistration) -> ConstraintEvaluatorFnV2 {
     let reg = Raw(reg);
     Arc::new(
         move |ctx: &V2Context, input: &ConstraintEvaluationInputV2| {
-            let _entered = Entered::new(&inflight);
             let reg = reg.get();
             let f = reg.evaluate.ok_or_else(|| {
                 ConstraintEvaluatorError("custom evaluator has no evaluate callback".into())
@@ -1742,7 +1705,8 @@ fn custom_evaluator(
                 valid_until: 0,
                 detail: std::ptr::null(),
             };
-            // SAFETY: caller-supplied callback; the ABI call waits for it.
+            // SAFETY: caller-supplied callback, invoked on the calling thread
+            // during the ABI call.
             let code = unsafe { f(reg.user, &call, &view, &mut out) };
             if code != 0 {
                 return Err(ConstraintEvaluatorError(format!(
@@ -1767,9 +1731,11 @@ fn custom_evaluator(
 }
 
 /// Build the Rust registry for one call. A NULL config registers none.
+/// Evaluators run on the calling thread (SPEC-v2 §1.3); the timeout is
+/// enforced by elapsed time, so an answer at or after the deadline is
+/// `constraint_unverifiable`.
 pub(crate) unsafe fn evaluator_registry(
     config: *const RatifyV2EvaluatorConfig,
-    inflight: &Arc<InFlight>,
 ) -> AbiResult<Option<ConstraintEvaluatorRegistryV2>> {
     let Some(config) = config.as_ref() else {
         return Ok(None);
@@ -1788,7 +1754,7 @@ pub(crate) unsafe fn evaluator_registry(
             kind: super::cstr(r.constraint_type, "evaluator constraint_type")?.to_string(),
         };
         let evaluate = match r.implementation {
-            0 => custom_evaluator(*r, Arc::clone(inflight)),
+            0 => custom_evaluator(*r),
             1 => standard_max_count_evaluator_v2().evaluate,
             2 => standard_allowed_values_evaluator_v2().evaluate,
             other => {
@@ -1802,9 +1768,10 @@ pub(crate) unsafe fn evaluator_registry(
             evaluate,
         });
     }
-    let registry = ConstraintEvaluatorRegistryV2::new(
+    let registry = ConstraintEvaluatorRegistryV2::new_with_invocation(
         Duration::from_millis(u64::from(config.timeout_ms)),
         registrations,
+        ConstraintEvaluatorInvocationV2::CallingThread,
     )
     .map_err(Failure::from)?;
     Ok(Some(registry))

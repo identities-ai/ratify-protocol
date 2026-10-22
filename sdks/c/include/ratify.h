@@ -952,19 +952,22 @@ typedef struct RatifyV2EvaluationResult {
     const char *detail;
 } RatifyV2EvaluationResult;
 
-// A pure evaluator: no I/O, clock, or randomness. A non-zero return, an
-// invalid result, or a timeout is unverifiable.
+// A pure evaluator: no I/O, clock, or randomness. It runs on the calling
+// thread. A non-zero return, an invalid result, or an answer at or after
+// the registry deadline is unverifiable.
 typedef int32_t (*RatifyV2EvaluateFn)(void *user,
                                       const struct RatifyV2EvaluatorCall *call,
                                       const struct RatifyV2EvaluationInput *input,
                                       struct RatifyV2EvaluationResult *out);
 
 // One extension evaluator: the `{profile, type}` descriptor sealed into
-// claims and receipts, and its implementation. A custom evaluator runs on a
-// library worker thread so the registry timeout can be enforced; the ABI
-// call does not return until every evaluator call it started has returned,
-// so `user` is never used after the call. Poll
-// `ratify_v2_evaluator_call_expired` to return promptly after a timeout.
+// claims and receipts, and its implementation. A custom evaluator runs
+// synchronously on the calling thread (SPEC-v2 §1.3) and `user` is never
+// used after the call. The registry timeout is enforced by elapsed time:
+// the call is not interrupted, so an answer at or after the deadline is
+// discarded as `constraint_unverifiable`, and an evaluator that never
+// returns blocks the ABI call. Poll `ratify_v2_evaluator_call_expired` to
+// return promptly once the deadline has passed.
 typedef struct RatifyV2EvaluatorRegistration {
     const char *constraint_type;
     const char *profile;

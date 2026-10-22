@@ -340,6 +340,33 @@ fn v2c_verifier_ordering_builtin_standard_profiles() {
     run_ordering(true);
 }
 
+/// SPEC-v2 §1.3: a C evaluator runs on the thread that made the ABI call,
+/// and the registry timeout is enforced by elapsed time. An evaluator that
+/// never polls `ratify_v2_evaluator_call_expired` and answers pass only after
+/// the deadline must still produce the `extension_evaluator_timeout`
+/// outcome (constraint_unverifiable), or a slow evaluator could allow.
+#[test]
+fn v2c_evaluators_run_on_the_calling_thread_and_late_answers_time_out() {
+    let f = load("verifier-ordering.json");
+    let mut v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| v["name"] == "extension_evaluator_timeout")
+        .expect("extension_evaluator_timeout vector");
+    let bundle = b64(&f["bundles_b64"][s(&v["bundle"])]);
+    let evaluators = v["constraint_evaluators"].as_array_mut().unwrap();
+    assert_eq!(evaluators.len(), 1);
+    assert_eq!(evaluators[0]["implementation"], "fault:timeout");
+    evaluators[0]["implementation"] = "test:late_pass".into();
+    let before = EVALUATOR_CALLS_ON_THIS_THREAD.with(|c| c.get());
+    let failures = run_vector(&v, &bundle, false);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(
+        EVALUATOR_CALLS_ON_THIS_THREAD.with(|c| c.get()),
+        before + 1,
+        "the evaluator did not run on the calling thread"
+    );
+}
+
 fn party_json(p: &Value) -> Value {
     serde_json::json!({
         "party_id": s(&p["party_id"]),

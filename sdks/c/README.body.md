@@ -434,11 +434,12 @@ the library copies them immediately. A callback returns `0`, a positive class
 (for example `RatifyV2ClockRegressed`), a store sentinel, or
 `RatifyV2ErrCancelled`. A callback failure is always handled fail-closed.
 
-Constraint evaluators are the one exception to "calling thread": the
-registry timeout requires each custom evaluator to run on a library worker
-thread. The ABI call still does not return until every evaluator call it
-started has returned, so no callback outlives the call. A custom evaluator
-should poll `ratify_v2_evaluator_call_expired` and return once it reports 1.
+Constraint evaluators also run on the calling thread (SPEC-v2 §1.3). The
+registry timeout is enforced by elapsed time, not by interrupting the call:
+an evaluator answer returned at or after the deadline is discarded and the
+constraint is `constraint_unverifiable`. An evaluator that never returns
+blocks the ABI call indefinitely, so a custom evaluator should poll
+`ratify_v2_evaluator_call_expired` and return once it reports 1.
 The two standard profiles (`com.ratifyprotocol.max_count/v1`,
 `com.ratifyprotocol.allowed_values/v1`) are built in.
 

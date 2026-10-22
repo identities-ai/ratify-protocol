@@ -287,21 +287,50 @@ v2 API from the package root, next to the unchanged v1 API, and from
 npm dist-tag, so an unpinned install and exact `1.0.0-alpha.20` pins continue
 to resolve to v1.
 
-The v2 API covers strict decoding and canonical encoding of every v2 signed
-object, hybrid signature verification with full 256-bit v2 key IDs, the
-stateful live verifier `verifyProofBundleV2` (pre-claim checks, claim, trust,
-status, audience, rate reservation, and the terminal receipt body), the
-revocation status reducer, witness and verification-receipt log heads, key
-rotation acceptance, and the v2 operation, session-context, and
-challenge-claim helpers. Choose the helpers that match the proof version: v1
-proofs use the v1 API, and v2 proofs use the v2 API.
+Choose the helpers that match the proof version: v1 proofs use the v1 API,
+and v2 proofs use the v2 API. The v2 API follows the Go reference and
+SPEC-v2:
 
-`npm test` runs every file in `testvectors/v2`, including the verifier
-ordering, status, log, and rotation sequences. This alpha is not a v2
-conformance claim; the remaining gates are listed in SPEC-v2 §8 and
+- **Wire layer.** Strict decoding (byte limits checked before parsing,
+  integer-only JSON, `-0` and unpaired surrogate escapes rejected, the
+  timestamp domain) and canonical encoding of every signed object, the
+  closed constraint registry, `keyIDV2`, and every digest of SPEC-v2 §4.
+  Failures carry one of the 49 language-neutral classes in `V2_ERROR_CLASSES`.
+- **Signing.** Only typed signers, one per object (`signDelegationCertV2`,
+  `signProofBundleV2`, ...). Each has a `...WithSigner` form that takes a
+  `SignerV2`, an external signer in direct or external-mu mode; every
+  returned signature is verified before use. No export signs caller-selected
+  bytes. The delegation signer refuses certificates that break the issuer
+  duties of SPEC-v2 §5.1 before any signer method runs.
+- **Live verification.** `verifyProofBundleV2` runs the SPEC-v2 §6 order and
+  returns a committed outcome, which exposes no decision. Only
+  `releaseV2Decision` produces a `V2ReleasedDecision`. Gate a side effect on
+  `await decision.allowed(clock)`, which compares the receiver's clock with
+  the sealed exclusive deadlines.
+- **Status.** Status comes only from signed evidence batches applied to a
+  `SecurityJournalV2` (canonical snapshot, labelled digest, alpha migration).
+  `newV2StatusPublisher` builds a minimal signed-status publisher from the
+  role journal.
+- **Constraints.** `time_window` is evaluated against the embedded IANA
+  tzdata `2025c` (SHA-256 checked at load; host zone data is never used).
+  Extension evaluator profiles, including the two standard profiles, are
+  registered with `newConstraintEvaluatorRegistryV2` and sealed at claim.
+- **Part B.** Interfaces for the claim store, authoritative clock, rate
+  reservation, receipt publisher, independent checkpoint, journal store and
+  challenge issuance, plus recovery of interrupted claims, archival
+  verification, and `verifyTransactionReceiptV2`. In-memory reference
+  implementations, for tests only, are exported from
+  `@identities-ai/ratify-protocol/v2/reference` with `TestOnly` names. They
+  are not durable and must not back a production verifier.
+
+`npm test` runs every file in `testvectors/v2`, including the lifecycle and
+profile scenarios, and verifies every cross-SDK fixture in
+`testvectors/v2/cross-sdk`. `npm run generate:cross-sdk` writes this SDK's
+fixture. This alpha is not a v2 conformance claim; the remaining gates are
+listed in SPEC-v2 §8 and
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
-Callers still supply authenticated challenge issuance and an atomic durable
-claim store.
+A deployment still supplies durable Part B stores and an independent
+checkpoint.
 
 ## License
 

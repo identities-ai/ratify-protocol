@@ -444,8 +444,10 @@ typedef struct RatifyV2Released RatifyV2Released;
 typedef struct RatifyV2RotationJournal RatifyV2RotationJournal;
 
 // One issuer's rollback-protected status reducer state (§5.4). An apply
-// replaces the state only when it succeeds. Use one handle per thread at a
-// time; release with `ratify_v2_status_state_free`.
+// replaces the state only when it succeeds. Applies and epoch transitions
+// are serialized on the handle: each reads, applies, and replaces the state
+// under one lock, so concurrent updates never overwrite each other. Release
+// with `ratify_v2_status_state_free`.
 typedef struct RatifyV2StatusState RatifyV2StatusState;
 
 typedef struct RatifyVerifyResult RatifyVerifyResult;

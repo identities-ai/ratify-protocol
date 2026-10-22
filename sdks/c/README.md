@@ -484,9 +484,12 @@ any failure returns 0.
 
 **Thread safety.** Functions that take no handle are safe to call
 concurrently. A handle is used by one thread at a time; serialize concurrent
-use of one handle yourself. Store callbacks provide the atomicity Part B
-requires (for example a claim store must make the claim atomic across
-threads and processes).
+use of one handle yourself. The status reducer handle
+(`ratify_v2_status_state_*`) also serializes its own updates: each apply or
+epoch transition reads, applies, and replaces the state under one lock, so
+concurrent updates never overwrite each other. Store callbacks provide the
+atomicity Part B requires (for example a claim store must make the claim
+atomic across threads and processes).
 
 **Panics.** Every export catches a panic and returns the internal-failure
 value (see below). A handle in use when a panic is caught is poisoned: every

@@ -57,8 +57,10 @@ unsafe fn key_arg(k: *const RatifyV2PublicKey, name: &str) -> AbiResult<HybridPu
 // Status reducer
 
 /// One issuer's rollback-protected status reducer state (§5.4). An apply
-/// replaces the state only when it succeeds. Use one handle per thread at a
-/// time; release with `ratify_v2_status_state_free`.
+/// replaces the state only when it succeeds. Applies and epoch transitions
+/// are serialized on the handle: each reads, applies, and replaces the state
+/// under one lock, so concurrent updates never overwrite each other. Release
+/// with `ratify_v2_status_state_free`.
 pub struct RatifyV2StatusState {
     pub(crate) poisoned: AtomicBool,
     pub(crate) inner: std::sync::Mutex<RevocationStatusStateV2>,
@@ -71,8 +73,17 @@ impl RatifyV2StatusState {
         self.inner.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    fn set(&self, s: RevocationStatusStateV2) {
-        *self.inner.lock().unwrap_or_else(|p| p.into_inner()) = s;
+    /// Read, transition, and replace the state under one lock. The state is
+    /// replaced only when `f` succeeds, and no other update can interleave
+    /// between the read and the replacement.
+    fn update(
+        &self,
+        f: impl FnOnce(&RevocationStatusStateV2) -> AbiResult<RevocationStatusStateV2>,
+    ) -> AbiResult<()> {
+        let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        let next = f(&guard)?;
+        *guard = next;
+        Ok(())
     }
 }
 
@@ -132,30 +143,37 @@ pub unsafe extern "C" fn ratify_v2_status_state_apply(
             let issuer = cstr(issuer_id, "issuer_id")?;
             let key = key_arg(status_key, "status_key")?;
             let pol = policy_arg(policy)?;
-            let current = st.get();
-            let next = match kind {
-                3 => apply_revocation_list_v2(
-                    &current,
-                    &decode_revocation_list_v2(wire)?,
-                    issuer,
-                    status_key_epoch,
-                    &key,
-                    &pol,
-                    now,
-                )?,
-                5 => apply_revocation_push_v2(
-                    &current,
-                    &decode_revocation_push_v2(wire)?,
-                    issuer,
-                    status_key_epoch,
-                    &key,
-                    &pol,
-                    now,
-                )?,
-                other => return Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
-            };
-            st.set(next);
-            Ok(())
+            match kind {
+                3 => {
+                    let list = decode_revocation_list_v2(wire)?;
+                    st.update(|current| {
+                        Ok(apply_revocation_list_v2(
+                            current,
+                            &list,
+                            issuer,
+                            status_key_epoch,
+                            &key,
+                            &pol,
+                            now,
+                        )?)
+                    })
+                }
+                5 => {
+                    let push = decode_revocation_push_v2(wire)?;
+                    st.update(|current| {
+                        Ok(apply_revocation_push_v2(
+                            current,
+                            &push,
+                            issuer,
+                            status_key_epoch,
+                            &key,
+                            &pol,
+                            now,
+                        )?)
+                    })
+                }
+                other => Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
+            }
         },
     )
 }
@@ -174,14 +192,13 @@ pub unsafe extern "C" fn ratify_v2_status_state_transition_epoch(
         || {},
         || {
             let st = handle(state, "state")?;
-            let next = transition_revocation_status_epoch_v2(
-                &st.get(),
-                cstr(issuer_id, "issuer_id")?,
-                next_epoch,
-                &key_arg(next_status_key, "next_status_key")?,
-            )?;
-            st.set(next);
-            Ok(())
+            let issuer = cstr(issuer_id, "issuer_id")?;
+            let key = key_arg(next_status_key, "next_status_key")?;
+            st.update(|current| {
+                Ok(transition_revocation_status_epoch_v2(
+                    current, issuer, next_epoch, &key,
+                )?)
+            })
         },
     )
 }

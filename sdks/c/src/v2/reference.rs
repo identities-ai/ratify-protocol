@@ -456,7 +456,7 @@ unsafe extern "C" fn br_issuance_persist(
     record: RatifyV2Slice,
 ) -> i32 {
     enter(user, |b| {
-        let rec = match serde_json::from_slice::<Value>(&slice_vec(record))
+        let rec = match super::strict_json(&slice_vec(record))
             .ok()
             .and_then(|v| expected_challenge(&v).ok())
         {

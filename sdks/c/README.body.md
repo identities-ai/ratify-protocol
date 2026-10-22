@@ -421,7 +421,8 @@ the caller and are released only through the matching function:
 `ratify_v2_buffer_free` for a `RatifyV2Buffer`, `ratify_v2_string_free` for a
 `char *`, and `ratify_v2_<handle>_free` for a handle. The library never frees
 caller or callback memory. Structured inputs (requests, heads, policies) are
-JSON with the schemas documented in `ratify.h`; unknown members are rejected.
+JSON with the schemas documented in `ratify.h`; unknown members and repeated
+member names (at any nesting level) are rejected.
 
 **Callbacks.** Every provider and store is a struct of function pointers with
 an opaque `user` pointer: claim store and authoritative clock, trust provider

@@ -1550,6 +1550,54 @@ fn v2c_archival_status_and_log_objects_use_caller_keys() {
     );
 }
 
+/// Structured ABI JSON refuses a repeated member name at every nesting
+/// level. A parser that kept only the last of two equal names would let two
+/// readers of the same bytes disagree about what the caller supplied.
+#[test]
+fn v2c_structured_json_refuses_duplicate_members() {
+    let hash = |text: &str| {
+        buf(|o| unsafe { ratify_v2_operation_context_hash(text.as_ptr(), text.len(), o) })
+    };
+    let op = r#"{"required_scope":"files:read","operation":"read","resource_id":"r1","requested_path":"/a","payload_digest_b64":""}"#;
+    hash(op).expect("well-formed operation context");
+    let top = r#"{"required_scope":"files:read","operation":"read","operation":"write","resource_id":"r1","requested_path":"/a","payload_digest_b64":""}"#;
+    let e = hash(top).expect_err("top-level duplicate member");
+    assert!(e.message.contains("duplicate member"), "{}", e.message);
+
+    // Nested: inside an object inside an array inside the signing input.
+    let (kp, _, _) = Kp::generate();
+    let key = kp.public();
+    let issuer = "f1f0d864b26519693951ba784d29ae70c09bea932842e0667dccd41ba8b8ba71";
+    let issuer_c = cs(issuer);
+    let sign_push = |text: &str| {
+        buf(|o| unsafe {
+            ratify_v2_sign_revocation_push(
+                text.as_ptr(),
+                text.len(),
+                issuer_c.as_ptr(),
+                &key,
+                kp.0,
+                ptr::null(),
+                o,
+            )
+        })
+    };
+    let push = format!(
+        r#"{{"version":2,"issuer_id":"{issuer}","sequence":2,"pushed_at":1799999970,"revoked":[{{"cert_id":"a"}}]}}"#
+    );
+    sign_push(&push).expect("well-formed push");
+    let nested = format!(
+        r#"{{"version":2,"issuer_id":"{issuer}","sequence":2,"pushed_at":1799999970,"revoked":[{{"cert_id":"a","cert_id":"b"}}]}}"#
+    );
+    let e = sign_push(&nested).expect_err("nested duplicate member");
+    assert!(e.message.contains("duplicate member"), "{}", e.message);
+    // Equal names in different objects are not duplicates.
+    let siblings = format!(
+        r#"{{"version":2,"issuer_id":"{issuer}","sequence":2,"pushed_at":1799999970,"revoked":[{{"cert_id":"a"}},{{"cert_id":"b"}}]}}"#
+    );
+    sign_push(&siblings).expect("sibling objects");
+}
+
 /// A rotation statement is signed by two local key pairs or two external
 /// signers. The library exposes no signer that accepts a prepared request for
 /// a library key, so a mixed pair is refused before any callback runs.

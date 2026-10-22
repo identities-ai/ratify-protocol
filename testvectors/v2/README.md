@@ -39,46 +39,37 @@ tests.
 | `keys.json` | 18 fixture keys (seeds, public keys, full 256-bit `key_id_v2`, the v1 128-bit ID of the same key) and 6 invalid v2 key IDs that MUST be rejected wherever a v2 key ID is required. |
 | `objects.json` | 10 positive objects covering all nine codes (14 signatures): wire bytes that MUST re-encode identically, the exact signable projection, `M`, ML-DSA context, external-μ `tr`/`mu`, both signature components, and `delegation_digest`, `BundleHashV2`, `session_context`, `ChallengeClaimDigest`, claim ID with replay epoch, `StatusEvidenceDigest`, `StatementBodyDigest`, the receipt outbox body, and transaction context, party request hash, and party session context. |
 | `object-negatives.json` | 273 single-fault negatives with a language-neutral `expected_error_class`: a mutation of every signed field of every object, each signature component broken separately, component swaps, cross-code and unregistered-code (`0x0000`, `0x000a`, `0xffff`) signatures, wrong ML-DSA contexts, canonical Ed25519 rejections (S+L, identity A and R, non-canonical A, mixed-order A with a cofactored-valid signature), v1 objects and 128-bit IDs, ID/key mismatch, old-key substitution, new-key proof failure, duplicate `(issuer_id, cert_id)`, swapped chain, wrong challenge and session-context lengths, non-canonical encodings, transaction hash/context/signature-set failures, receipt decision/status inconsistencies, and receipt/bundle binding mismatches, and the closed v2 constraint registry (v1 float members, fractions and exponents, out-of-range integers, bad `HH:MM` and `tz`, audience bounds, reserved geo types with v1 members), and every wire timestamp one second past 253402300799 and below 0 (`malformed` at decode). |
-| `verifier-ordering.json` | 124 end-to-end live-verifier cases with scripted Part B dependencies: configuration bounds, pre-claim checks, `time_window` against the pinned IANA tzdata `2025c` (configured `tzdb_version` absent or mismatched, unknown zone, exact local-minute horizon, midnight wrap), replay, signed status evidence applied through an anchored `SecurityJournalV2` (provider, batch, journal and role-separation failures), trust outcomes including `ambiguous`, exclusive status and challenge deadlines, and authoritative-clock rules at finalization. Each names the expected stage (`preflight`, `replay`, `evaluating`, `committed`), error class or committed tuple, the exact receipt outbox body, `verified_at`, allow horizon, sealed rate batch, and the number of times every callback ran. A committed outcome is not a released decision. |
-| `status-sequences.json` | 22 status-reducer scenarios covering the state-to-result table, including exclusive `next_update` and status-age deadlines. |
+| `verifier-ordering.json` | 132 end-to-end live-verifier cases (43 pre-claim, 2 replay, 85 committed, 2 evaluating) with scripted Part B dependencies: decode before configuration bounds and supplied request context (amount and currency) rejected before claim, pre-claim checks, `time_window` against the pinned IANA tzdata `2025c` (configured `tzdb_version` absent or mismatched, unknown zone, exact local-minute horizon, midnight wrap), `max_amount` micro-units, the delegation lifetime bound, replay, signed status evidence applied through an anchored `SecurityJournalV2` (provider, batch, journal including one bounded compare-and-swap retry, and role-separation failures including a status key equal to the verifier key), trust outcomes including `ambiguous`, the post-claim context-policy mismatch, exclusive status and challenge deadlines, and the claim store's finalization compare-and-set rules. Each names the expected stage (`preflight`, `replay`, `evaluating`, `committed`), error class or committed tuple, the exact receipt outbox body, `verified_at`, allow horizon, sealed rate batch, and the number of times every callback ran, including evaluation-progress writes. A committed outcome is not a released decision. |
+| `status-sequences.json` | 22 status-reducer scenarios (112 steps) covering the state-to-result table, including exclusive `next_update` and status-age deadlines. |
 | `security-journal.json` | `SecurityJournalV2` logical snapshot known answers (SPEC-v2 §6.6): the genesis snapshot and digest, 2 transition scenarios (17 steps, each with the anchored head and exact canonical snapshot), version 1 migration, and 6 import negatives. Snapshot bytes after each transition come from the Go reference reducer; digests are recomputed independently. |
-| `lifecycle-scenarios.json` | 17 Part B scripts (78 steps over 9 requests) replayed against each SDK's in-memory reference store: commit, publication, acknowledgement and release (`released`, `pending`, `withheld`, `rejected`), late acknowledgement, release at both exact deadlines, signer failure and retry, corrupt or foreign receipts, wrong acknowledgement, forged committed outcome, clock regression, crash after claim with lease-expiry recovery, proof conflict, and stream-sequence first/duplicate/gap/reorder/concurrent rules. |
+| `lifecycle-scenarios.json` | 26 Part B scripts (127 steps over 14 requests) replayed against each SDK's in-memory reference store: commit, publication, acknowledgement and release (`released`, `pending`, `withheld`, `rejected`), late acknowledgement, release at both exact deadlines, real signer failure and same-body retry, head-of-line blocking, corrupt or foreign receipts, wrong acknowledgement, forged committed outcome, clock regression at claim, during evaluation, and at release, crash after claim with lease-expiry recovery from recorded evaluation progress, lease expiry during the status lookup, late-evaluator fencing after recovery, receipt abandonment, exact-state restore, lost-state restore with a replay-epoch bump, `max_rate` admission at finalization, proof conflict, and stream-sequence first/duplicate/gap/reorder/concurrent rules. |
+| `transaction-verification.json` | 12 composed transaction-receipt verification cases (SPEC-v2 §5.7) with the verifier-ordering provider and journal inputs: all current, untrusted, ambiguous and absent trust, a revoked leaf, an unconfigured status issuer, an expired and a future-issued leaf (with `delegation_expires_at`), a parent without `identity:delegate`, an uncovered scope, and two configuration failures. Each gives the exact per-party result. |
 | `log-sequences.json` | Witness-log and verification-receipt-log sequences: append, idempotent replay including new signature bytes over the same body, gap, orphan, cross-log replay, key substitution, fork freeze, and recovery to a new log ID. |
-| `limits.json` | 28 byte-boundary, count-boundary and timestamp-domain cases: every v2 decoder at its byte limit and limit+1, revoked-reference counts for lists and pushes, witness `entry_data`, and signed timestamps at 253402300799 and one second past it. Large inputs are given as exact construction recipes (`pad`, `repeat_items`) with the expected length and SHA-256. |
+| `limits.json` | 32 byte-boundary, count-boundary and timestamp-domain cases: every v2 decoder at its byte limit and limit+1 (including the status evidence batch), revoked-reference counts for lists and pushes, status evidence batch entries at 64 and 65, witness `entry_data`, and signed timestamps at 253402300799 and one second past it. Large inputs are given as exact construction recipes (`pad`, `repeat_items`, `repeat_item`) with the expected length and SHA-256. |
 | `hedged-signatures.json` | 10 objects from `objects.json`, each with 2 variants whose ML-DSA-65 components were produced by hedged (randomized) signing. Verifiers must accept every variant, derive identical projections and body digests, and treat a re-signed accepted log entry as a replay. Not reproducible: written only by `go run ./cmd/ratify-v2-vectors -hedged`. |
 | `rotation-sequences.json` | AcceptRotation journal: genesis, repeat signatures, skipped sequence, continuation, fork freeze, frozen rejection, invalid recoveries, recovery epoch increase, and rejection of old-epoch statements. |
 
 ## Required for 2.0.0-beta.1
 
 [SPEC-v2 §8](../../SPEC-v2.md#8-conformance-and-release-gates) requires every
-SDK to pass the files below in addition to the generated corpus above. They are
-required for beta. Unless a file also appears in the table above, it is not
-yet part of this corpus.
+SDK to pass every file above. The beta requirements map onto this corpus as
+follows; the last column names what is still missing.
 
-| File | Contents | SPEC-v2 |
-| --- | --- | --- |
-| `limits.json` | Every decoder at exactly its byte limit and at the limit plus one, and every count limit | §2.6 |
-| `numeric-bounds.json` | Timestamp and configuration bounds, exclusive deadlines at the boundary and one past it, checked arithmetic, and clock regression | §2.5, §7.2 |
-| `constraints.json` | The five registered constraint schemas and their evaluation, `time_window` time-zone data mismatch, `max_amount` currency and micro-unit cases, reserved and unregistered types | §5.2 |
-| `security-journal.json` | Canonical `SecurityJournalV2` snapshots, the genesis digest, transition and compaction sequences, invariant failures, and alpha migration | §6.6 |
-| `status-provenance.json` | Evidence batches, rejection of bare provider results, unauthenticated and oversized batches, missing bindings, component-level role separation, journal conflict, and unanchored journals | §6.5 |
-| `provider-failures.json` | Failure of every dependency, verification-call cancellation, and interrupted-evaluation assessments | §6.7, §6.11 |
-| `trust-resolution.json` | Ambiguous candidate records, resolver ambiguity, and root key mismatch | §6.1 |
-| `stream-sequences.json` | First sequence, next sequence, duplicates, reorder, gaps, retries, and concurrent claims | §7.4 |
-| `claim-lifecycle.json` | Replay races, delayed claim, lease expiry and recovery, late worker, signer failure, head-of-line blocking, outbox retention, `receipt_abandoned`, crash and retry | §7.3 to §7.7, §7.11 |
-| `release-sequences.json` | Every `ReleaseV2Decision` result, release at both exact deadlines, idempotent release, clock regression, and attempts to act on a committed outcome without release | §6.9, §7.8, §7.9 |
-| `transaction-verification.json` | Composed transaction verification results and the empty-delegation party rule | §5.7 |
-| `archival.json` | Archival `freshness_unverified` results | §6.10 |
-| `external-signer.json` | Direct and external-μ signer inputs, key-binding mismatch, invalid returned components, and hedged retries | §3.2 |
-| `cross-sdk/` | Fixtures generated by each SDK, with randomized keys and hedged signatures, verified by every other SDK | §8.1 |
-
-The existing files also change for beta: `verifier-ordering.json` adopts the
-§6.2 pre-claim order, status evidence batches (§6.5), and the committed outcome
-(§6.9); `status-sequences.json` adopts the exclusive `next_update` boundary
-(§2.5); `objects.json` adds `StatementBodyDigest` for codes `0x0003` and
-`0x0005`, `RevokedSetDigest`, and `ReceiptOutboxDigest` (§4); and
-`object-negatives.json` adds non-integer numbers and v1-shaped reserved
-constraint types (§2.1, §5.2).
+| Requirement | SPEC-v2 | Where it is covered | Still missing |
+| --- | --- | --- | --- |
+| Byte and count limits | §2.6 | `limits.json` | |
+| Numeric bounds, exclusive deadlines, clock regression | §2.5, §7.2 | `limits.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `lifecycle-scenarios.json` | Checked-arithmetic overflow vectors beyond the timestamp domain |
+| Constraint registry and evaluation | §5.2 | `objects.json`, `object-negatives.json`, `verifier-ordering.json` | |
+| `SecurityJournalV2` snapshots, transitions, migration | §6.6 | `security-journal.json` | Invariant-failure vectors |
+| Status provenance | §6.5 | `verifier-ordering.json`, `limits.json` | |
+| Provider failures, cancellation, interrupted assessments | §6.7, §6.11 | `verifier-ordering.json`, `lifecycle-scenarios.json` | Cancellation is a Go test, not a shared vector |
+| Trust resolution | §6.1 | `verifier-ordering.json` (provider outcomes) | A shared registry resolver producing ambiguity |
+| Stream sequence | §7.4 | `lifecycle-scenarios.json` | Concurrency runs as Go tests on the reference store |
+| Claim lifecycle and release | §6.9, §7.3 to §7.9 | `lifecycle-scenarios.json` | Outbox retention past challenge expiry; receiver action idempotency (managed Verify only) |
+| Composed transaction verification | §5.7 | `transaction-verification.json`, `object-negatives.json` | |
+| Archival results | §6.10 | `object-negatives.json` (proof bundle), Go unit tests | Per-object shared vectors |
+| External signer | §3.2 | `objects.json` (`tr`, `mu`), `hedged-signatures.json`, Go unit tests | Key-binding and invalid-component shared vectors |
+| Cross-SDK fixtures | §8.1 | | `cross-sdk/` fixtures from every SDK |
 
 Error classes are defined in `errors_v2.go` (`V2ErrorClass`). Precedence for a
 single object is: strict decode and field format (`malformed`), then key-ID
@@ -119,21 +110,10 @@ of this pass; "After" is the reference with this corpus.
 
 ### Not covered by this corpus
 
-- Lifecycle items without shared vectors: late-worker fencing after recovery,
-  receipt-log head-of-line blocking, outbox retention, `receipt_abandoned`,
-  restore with and without epoch bump, rate admission at finalization, and
-  receiver action idempotency. Concurrent claims are covered by Go tests on
-  the reference store, not by a shared vector.
-- A post-claim Protocol context-policy `mismatch` cannot be produced through the
-  Go API because preflight already compares the expected session context.
-- Trust ambiguity is vectored only as a provider outcome; there is no shared
-  registry resolver that produces it.
-- External-μ provider integration is pinned only as `tr`/`mu` bytes.
+- The items in the "Still missing" column above.
 - Fuzzed decode and concurrency tests outside Go. Per-SDK coverage of this
   corpus is recorded in
   [`docs/V2_REFERENCE_COMPATIBILITY.md`](../../docs/V2_REFERENCE_COMPATIBILITY.md).
-
-Each item in this list is covered by a file marked required for beta above.
 
 This is still not a v2 conformance badge. `2.0.0-beta.1` requires every SDK to
 pass the complete corpus, including every file required for beta, together

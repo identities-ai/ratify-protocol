@@ -42,6 +42,7 @@ var Files = []string{
 	"limits.json",
 	"security-journal.json",
 	"lifecycle-scenarios.json",
+	"transaction-verification.json",
 }
 
 // Generate returns the exact bytes of every generated vector file.
@@ -49,17 +50,18 @@ func Generate() (map[string][]byte, error) {
 	g := newGen()
 	out := map[string][]byte{}
 	builders := map[string]func() any{
-		"key-rotation-signature.json": g.legacyRotationVector,
-		"keys.json":                   g.keysFile,
-		"objects.json":                g.objectsFile,
-		"object-negatives.json":       g.objectNegativesFile,
-		"verifier-ordering.json":      g.orderingFile,
-		"status-sequences.json":       g.statusFile,
-		"log-sequences.json":          g.logFile,
-		"rotation-sequences.json":     g.rotationFile,
-		"limits.json":                 g.limitsFile,
-		"security-journal.json":       g.journalFile,
-		"lifecycle-scenarios.json":    g.lifecycleFile,
+		"key-rotation-signature.json":   g.legacyRotationVector,
+		"keys.json":                     g.keysFile,
+		"objects.json":                  g.objectsFile,
+		"object-negatives.json":         g.objectNegativesFile,
+		"verifier-ordering.json":        g.orderingFile,
+		"status-sequences.json":         g.statusFile,
+		"log-sequences.json":            g.logFile,
+		"rotation-sequences.json":       g.rotationFile,
+		"limits.json":                   g.limitsFile,
+		"security-journal.json":         g.journalFile,
+		"lifecycle-scenarios.json":      g.lifecycleFile,
+		"transaction-verification.json": g.txVerifyFile,
 	}
 	for _, name := range Files {
 		var value any

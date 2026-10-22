@@ -89,6 +89,47 @@ closure of the internal adversarial review. Embedded v2 target builds remain
 untested. External independent review is a `2.0.0` gate (SPEC-v2 §8.2), not a
 beta gate. v2.0.0-alpha.1 is therefore not a v2 conformance claim.
 
+## Corpus changes pending SDK ports (beta reconciliation)
+
+The Go reference and SPEC-v2 were reconciled for `2.0.0-beta.1` after alpha.1.
+Only the Go reference runs the resulting corpus; the other SDK suites fail
+against it until they are ported, and no SDK other than Go may be described as
+passing it. Changes to `testvectors/v2`:
+
+| File | Change since alpha.1 |
+|---|---|
+| `object-negatives.json` | 224 → 273 negatives: the closed v2 constraint registry and every wire timestamp outside 0..253402300799 |
+| `verifier-ordering.json` | 81 → 132 cases (43 pre-claim, 2 replay, 85 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
+| `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
+| `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
+| `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
+| `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
+| `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
+| `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
+| `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps over 14 requests) against each SDK's in-memory reference store |
+| `transaction-verification.json` | New: 12 composed transaction verification cases |
+
+SDK test files that read these vector files, and therefore fail until ported:
+
+| SDK | Test file | Changed files it reads |
+|---|---|---|
+| TypeScript | `sdks/typescript/test/conformance_v2.test.ts` | `objects.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `log-sequences.json`, `rotation-sequences.json`; also fails on the five new files it does not consume |
+| Python v2 | `sdks/python-v2/tests/test_v2_conformance.py` | Same files as TypeScript, and the same unconsumed-file check |
+| Python v2 | `sdks/python-v2/tests/test_mldsa65_pure.py` | `objects.json`, `object-negatives.json` |
+| Rust | `sdks/rust/tests/v2_conformance.rs` | Same files as TypeScript, with per-file minimum counts, and the same unconsumed-file check |
+| Rust | `sdks/rust/tests/v2_roundtrip.rs` | `objects.json` |
+| C ABI | `sdks/c/tests/v2_abi.rs`, `sdks/c/scripts/test-v2-c-abi.sh` | `objects.json`, `object-negatives.json` (the new timestamp and registry negatives) |
+| C ABI | `sdks/c/src/v2.rs` | `objects.json` (test module) |
+
+Go reference state on this branch: `go test ./...` runs every file in
+`testvectors/v2`; the decoder fuzz targets (`scripts/fuzz-v2.sh`) cover every
+v2 decoder including the status evidence batch, checkpoint acknowledgement,
+journal snapshot import, and archival proof verification. The external signer
+interface is tested with direct signing and with an external-μ provider that
+the tests emulate in software; no hardware security module or key-management
+service has been exercised, and no provider-specific claim is made (SPEC-v2
+§3.2).
+
 ## Fresh v1 baseline runs
 
 These runs were repeated on 2026-10-11 to verify the current pinned v1 references before making v2 changes. They do not establish v2 compatibility.

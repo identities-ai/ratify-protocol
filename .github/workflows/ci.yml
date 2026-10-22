@@ -315,6 +315,96 @@ jobs:
           RATIFY_SDK: local
         run: ./demos/nvidia-nooa-delegated-authority/reference-check-v2.sh
 
+  # The Python v2 reference gates build ratify-protocol-native-v2 from this
+  # tree with maturin and install ratify-protocol-v2 from sdks/python-v2, never
+  # a published package. Each gate fails on any skip and on a test count that
+  # differs from the one it declares.
+  google-adk-reference:
+    name: Google ADK reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: Google ADK reference gate, Protocol v2
+        env:
+          PYTHON: python
+        run: ./references/google-adk/run-reference-check.sh
+
+  langchain-reference:
+    name: LangChain reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: LangChain reference gate, Protocol v2
+        env:
+          PYTHON: python
+        run: ./references/langchain/run-reference-check.sh
+
+  # The gate builds the TypeScript SDK in this tree (a file: dependency of the
+  # reference), rebuilds the plugin runtime from it, and fails on any skip or
+  # on a test count that differs from ratify-reference.json.
+  github-copilot-reference:
+    name: GitHub Copilot reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          check-latest: true
+          cache: 'npm'
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            references/github-copilot/package-lock.json
+
+      - name: GitHub Copilot reference gate, Protocol v2
+        run: ./references/github-copilot/run-reference-check.sh
+
+  # The deterministic scenario matrix (fixture clock, mock actuator; no serial
+  # device or GPIO) against the C SDK built from this tree. macOS matches the
+  # recorded local runs. The gate refuses a header whose version differs from
+  # sdks/c/Cargo.toml and fails on a row count other than ratify-reference.json.
+  edge-sentinel-reference:
+    name: Physical AI edge sentinel reference, Protocol v2 (macOS deterministic matrix)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/c
+
+      - name: build the in-tree C SDK
+        working-directory: sdks/c
+        run: cargo build --release
+
+      - name: assemble the C SDK tree the gate expects
+        run: |
+          sdk="$RUNNER_TEMP/ratify-c"
+          mkdir -p "$sdk/include" "$sdk/lib"
+          cp sdks/c/include/ratify.h "$sdk/include/"
+          cp sdks/c/target/release/libratify_c.a "$sdk/lib/"
+          echo "RATIFY_SDK=$sdk" >> "$GITHUB_ENV"
+
+      - name: edge sentinel reference gate, Protocol v2
+        run: ./references/physical-ai-edge-sentinel/run-reference-check.sh
+
   rust:
     name: Rust SDK conformance
     runs-on: ubuntu-latest

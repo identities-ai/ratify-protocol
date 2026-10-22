@@ -71,7 +71,7 @@ follows; the last column names what is still missing.
 | External signer | §3.2 | `objects.json` (`tr`, `mu`), `hedged-signatures.json`, Go unit tests | Key-binding and invalid-component shared vectors |
 | Cross-SDK fixtures | §8.1 | | `cross-sdk/` fixtures from every SDK |
 
-Error classes are defined in `errors_v2.go` (`V2ErrorClass`). Precedence for a
+Error classes are the closed list of SPEC-v2 §2.7, declared in `errors_v2.go` (`V2ErrorClass`). Precedence for a
 single object is: strict decode and field format (`malformed`), then key-ID
 derivation (`key_id_mismatch`), then delegation digest, duplicate
 CertificateRef, and chain linkage, then signatures. Each vector file documents

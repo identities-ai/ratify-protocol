@@ -81,7 +81,7 @@ func (g *gen) txVerifyReceipt(certs []ratify.DelegationCertV2, scope string) []b
 func (g *gen) txVerifyFile() any {
 	st := g.statusFixtures()
 	f := txVerifyFile{
-		Version: 2,
+		Version:     2,
 		Description: "Composed transaction-receipt verification (SPEC-v2 §5.7). Decode receipt_b64 and call VerifyTransactionReceiptV2 with now, future_skew_seconds, the trust provider, status evidence provider, SecurityJournalV2 store, status_keys and status_policy built exactly as in verifier-ordering.json. expected.error_class: the call fails with that class. expected.result: the exact result; status_evidence_digests is in the canonical order of SPEC-v2 §5.8.",
 		Semantics: map[string]string{
 			"trust":           "as in verifier-ordering.json; null = no trust provider",

@@ -34,11 +34,14 @@ type lifecycleExpectJSON struct {
 	Abandoned []string `json:"abandoned,omitempty"`
 	// Recovered is the expected recovery run by a recover_during_status step.
 	Recovered *lifecycleExpectJSON `json:"recovered,omitempty"`
+	// Outcomes is the sorted multiset of verify_concurrent results.
+	Outcomes []string `json:"outcomes,omitempty"`
 }
 
 type lifecycleStepJSON struct {
 	Op          string              `json:"op"`
 	Request     string              `json:"request,omitempty"`
+	Requests    []string            `json:"requests,omitempty"`
 	Time        int64               `json:"time,omitempty"`
 	Withheld    *bool               `json:"withheld,omitempty"`
 	Mode        string              `json:"mode,omitempty"`
@@ -117,8 +120,9 @@ func (g *gen) lifecycleFile() any {
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
 			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class",
-			"recover":                "RecoverInterruptedClaim for the request's claim ID: the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
-			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there",
+			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
+			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
+			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
 			"publish":                "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
@@ -162,7 +166,7 @@ func (g *gen) lifecycleFile() any {
 		name      string
 		challenge byte
 		seq       int64
-	}{{"S1", 0x11, 1}, {"S1b", 0x12, 1}, {"S1x", 0x11, 2}, {"S2", 0x21, 2}, {"S2b", 0x22, 2}, {"S4", 0x41, 4}} {
+	}{{"S1", 0x11, 1}, {"S1b", 0x12, 1}, {"S1x", 0x11, 2}, {"S2", 0x21, 2}, {"S2b", 0x22, 2}, {"S3", 0x31, 3}, {"S4", 0x41, 4}} {
 		v, bundle := g.lifecycleRequest(r.challenge, r.seq, nil)
 		add(r.name, v, bundle)
 	}
@@ -312,6 +316,28 @@ func (g *gen) lifecycleFile() any {
 		step("verify", "S2", committedAllow),
 		step("verify", "S2b", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stream_sequence_mismatch"}),
 		step("verify", "S1b", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stream_sequence_mismatch"}))
+	sc("cancel_before_claim_consumes_nothing", "a caller that cancels before the claim consumes nothing: verify fails before claim with evaluation_cancelled, no claim exists to recover (claim_not_found), and the same proof then claims, commits and releases",
+		verifyMode("A", "cancel_before_claim", Now, lifecycleExpectJSON{Stage: "preflight", ErrorClass: "evaluation_cancelled"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "claim_not_found"}),
+		step("verify", "A", committedAllow), publish("A", "ok", 1), release("A", released(Now, 1)))
+	sc("cancel_after_claim_keeps_claim_recoverable", "a caller that cancels during the status lookup stops evaluation with nothing committed (evaluation_cancelled); the claim stays in progress for exact retries, recovery is refused while the lease is live, and lease-expiry recovery commits evaluation_interrupted with the cancelled lookup unavailable, which publishes and releases as a non-actionable indeterminate",
+		verifyMode("A", "cancel_during_status", Now, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "evaluation_cancelled"}),
+		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "in_progress"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "claim_lease_live"}),
+		setTime(Now+lifecycleLeaseSeconds),
+		step("recover", "A", interrupted("trusted", "unavailable", "bound")),
+		publish("A", "ok", 1),
+		release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: Now + lifecycleLeaseSeconds, ReceiptSeq: 1}))
+	sc("concurrent_stream_advances", "two different proofs carrying stream_seq 2 for one stream key are verified concurrently after sequence 1: claims are serialized per stream key, so exactly one commits and the other fails before claim with stream_sequence_mismatch; the stream then accepts only sequence 3",
+		step("verify", "S1", committedAllow),
+		lifecycleStepJSON{Op: "verify_concurrent", Requests: []string{"S2", "S2b"}, Expect: lifecycleExpectJSON{Outcomes: []string{"committed", "preflight/stream_sequence_mismatch"}}},
+		step("verify", "S4", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stream_sequence_mismatch"}),
+		step("verify", "S3", committedAllow))
+	sc("outbox_retained_past_challenge_expiry", "a committed allow whose signer fails stays in the receipt outbox past challenge expiry: publication at the expiry still appends the identical sealed body at sequence 1, release is withheld as challenge_expired, and an exact retry after expiry fails before claim",
+		step("verify", "A", committedAllow), publish("A", "signer_failure", 0), setTime(Now+290),
+		publish("A", "ok", 1),
+		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}),
+		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "challenge_not_fresh"}))
 	g.addProfileScenarios(&f, add)
 	return f
 }

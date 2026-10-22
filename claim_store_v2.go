@@ -250,6 +250,11 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 		return zero, "", nil, v2Classify(V2ErrMalformed, fmt.Errorf("v2 signed rate batch: %w", err))
 	}
 	claim.RequiresRate = len(claim.RateBatch) != 0
+	// SPEC-v2 §6.11: cancellation before the claim consumes nothing, so a
+	// caller that has already cancelled never reaches the store.
+	if err := ctx.Err(); err != nil {
+		return zero, "", nil, v2Classify(V2ErrEvaluationCancelled, fmt.Errorf("v2 claim cancelled before the store was called: %w", err))
+	}
 	result, err := store.ClaimV2(ctx, cloneV2ChallengeClaim(claim))
 	if err != nil {
 		return zero, "", nil, err

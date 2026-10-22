@@ -64,8 +64,9 @@ const (
 	// V2ErrClockRegressed: an authoritative clock reading below the
 	// store's high-water mark or below T_claim (SPEC-v2 §7.2).
 	V2ErrClockRegressed V2ErrorClass = "clock_regressed"
-	// V2ErrEvaluationCancelled: the caller's context ended after the claim;
-	// nothing was committed and the claim remains recoverable.
+	// V2ErrEvaluationCancelled: the caller's context ended. After the claim,
+	// nothing was committed and the claim remains recoverable; before the
+	// claim, nothing was consumed (SPEC-v2 §6.11).
 	V2ErrEvaluationCancelled V2ErrorClass = "evaluation_cancelled"
 
 	// Part B claim lifecycle.

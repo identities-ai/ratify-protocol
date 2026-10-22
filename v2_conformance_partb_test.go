@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -213,6 +214,7 @@ type v2LifecycleExpect struct {
 	ContextAssessment string             `json:"context_assessment"`
 	Abandoned         []string           `json:"abandoned"`
 	Recovered         *v2LifecycleExpect `json:"recovered"`
+	Outcomes          []string           `json:"outcomes"`
 }
 
 type v2LifecycleRequest struct {
@@ -264,6 +266,7 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 			Steps              []struct {
 				Op          string            `json:"op"`
 				Request     string            `json:"request"`
+				Requests    []string          `json:"requests"`
 				Time        int64             `json:"time"`
 				Withheld    *bool             `json:"withheld"`
 				Mode        string            `json:"mode"`
@@ -301,7 +304,16 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				return store
 			}
 			recoverStep := func(i int, request string, want v2LifecycleExpect) {
-				outcome, err := ratify.RecoverInterruptedClaimV2(ctx, store, claimIDs[request])
+				claimID := claimIDs[request]
+				if claimID == "" {
+					// Never claimed: the request's own claim ID (claim_not_found).
+					e := f.Requests[request].ExpectedChallenge
+					var err error
+					if claimID, err = ratify.ProtocolClaimIDV2(e.VerifierNamespace, e.ReplayEpoch, unb64(t, e.ValueB64)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				outcome, err := ratify.RecoverInterruptedClaimV2(ctx, store, claimID)
 				if want.ErrorClass != "" {
 					if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
 						t.Fatalf("step %d recover: %v (class %s), want %s", i, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
@@ -314,6 +326,60 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				checkV2CommittedDecision(t, i, outcome, want)
 				committed[request] = outcome
 			}
+			// runVerify runs one verify step. It is safe for concurrent use
+			// with mode "" (verify_concurrent); the maps it writes are guarded.
+			var mapsMu sync.Mutex
+			runVerify := func(i int, name, mode string, at int64, want v2LifecycleExpect) ratify.V2VerifyOutcome {
+				request := f.Requests[name]
+				counts := &v2Counts{}
+				inputs := request.v2OrderingInputs
+				inputs.Now = store.Now()
+				if epochOverride != 0 {
+					inputs.ConfiguredReplayEpoch = epochOverride
+				}
+				req, cb, _ := v2BuildVerifyRequest(t, inputs, unb64(t, f.Bundles[request.Bundle]), counts)
+				cs := claimStore()
+				cb.ClaimStore = cs
+				if sc.RateAtFinalization {
+					cb.Rate = cs.(ratify.V2RateReservationStore)
+				}
+				claimID, err := ratify.ProtocolClaimIDV2(req.VerifierNamespace, req.ReplayEpoch, req.Expected.Value)
+				if err != nil {
+					t.Error(err)
+				}
+				mapsMu.Lock()
+				claimIDs[name], requestOf[claimID] = claimID, name
+				mapsMu.Unlock()
+				vctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				switch mode {
+				case "":
+				case "cancel_before_claim":
+					cancel()
+				default:
+					provider, fired := cb.StatusEvidence, false
+					cb.StatusEvidence = func(c context.Context, r ratify.V2StatusEvidenceRequest) (ratify.V2StatusEvidenceBatch, error) {
+						if !fired {
+							fired = true
+							switch mode {
+							case "cancel_during_status":
+								cancel()
+								return ratify.V2StatusEvidenceBatch{}, c.Err()
+							case "recover_during_status":
+								store.SetTime(at)
+								recoverStep(i, name, *want.Recovered)
+							case "expire_lease_during_status", "regress_clock_during_status":
+								store.SetTime(at)
+							default:
+								t.Fatalf("unknown verify mode %s", mode)
+							}
+						}
+						return provider(c, r)
+					}
+				}
+				outcome, _ := ratify.VerifyProofBundleV2(vctx, req, cb)
+				return outcome
+			}
 			for i, step := range sc.Steps {
 				want := step.Expect
 				now := store.Now()
@@ -324,47 +390,42 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				case "set_ack_withheld":
 					store.SetAcknowledgementWithheld(*step.Withheld)
 				case "verify":
-					counts := &v2Counts{}
-					inputs := request.v2OrderingInputs
-					inputs.Now = now
-					if epochOverride != 0 {
-						inputs.ConfiguredReplayEpoch = epochOverride
-					}
-					req, cb, _ := v2BuildVerifyRequest(t, inputs, unb64(t, f.Bundles[request.Bundle]), counts)
-					cs := claimStore()
-					cb.ClaimStore = cs
-					if sc.RateAtFinalization {
-						cb.Rate = cs.(ratify.V2RateReservationStore)
-					}
-					claimID, err := ratify.ProtocolClaimIDV2(req.VerifierNamespace, req.ReplayEpoch, req.Expected.Value)
-					if err != nil {
-						t.Fatal(err)
-					}
-					claimIDs[step.Request], requestOf[claimID] = claimID, step.Request
-					if step.Mode != "" {
-						provider, fired := cb.StatusEvidence, false
-						cb.StatusEvidence = func(c context.Context, r ratify.V2StatusEvidenceRequest) (ratify.V2StatusEvidenceBatch, error) {
-							if !fired {
-								fired = true
-								store.SetTime(step.Time)
-								switch step.Mode {
-								case "recover_during_status":
-									recoverStep(i, step.Request, *want.Recovered)
-								case "expire_lease_during_status", "regress_clock_during_status":
-								default:
-									t.Fatalf("unknown verify mode %s", step.Mode)
-								}
-							}
-							return provider(c, r)
-						}
-					}
-					outcome, _ := ratify.VerifyProofBundleV2(ctx, req, cb)
+					outcome := runVerify(i, step.Request, step.Mode, step.Time, want)
 					if string(outcome.Stage) != want.Stage || string(outcome.ErrorClass) != want.ErrorClass || want.Disposition != "" && string(outcome.Disposition) != want.Disposition {
 						t.Fatalf("step %d verify %s: stage %s class %s disposition %s (%v), want %+v", i, step.Request, outcome.Stage, outcome.ErrorClass, outcome.Disposition, outcome.Error, want)
 					}
 					if outcome.Stage == ratify.V2StageCommitted {
 						checkV2CommittedDecision(t, i, outcome.Committed, want)
 						committed[step.Request] = outcome.Committed
+					}
+				case "verify_concurrent":
+					results := make([]ratify.V2VerifyOutcome, len(step.Requests))
+					var wg sync.WaitGroup
+					start := make(chan struct{})
+					for k, name := range step.Requests {
+						wg.Add(1)
+						go func(k int, name string) {
+							defer wg.Done()
+							<-start
+							results[k] = runVerify(i, name, "", 0, want)
+						}(k, name)
+					}
+					close(start)
+					wg.Wait()
+					got := []string{}
+					for k, outcome := range results {
+						label := string(outcome.Stage)
+						if outcome.Stage == ratify.V2StagePreflight || outcome.Stage == ratify.V2StageEvaluating {
+							label += "/" + string(outcome.ErrorClass)
+						}
+						got = append(got, label)
+						if outcome.Stage == ratify.V2StageCommitted {
+							committed[step.Requests[k]] = outcome.Committed
+						}
+					}
+					slices.Sort(got)
+					if !slices.Equal(got, want.Outcomes) {
+						t.Fatalf("step %d verify_concurrent %v: %v, want %v", i, step.Requests, got, want.Outcomes)
 					}
 				case "claim_only":
 					bundle, err := ratify.DecodeProofBundleV2(unb64(t, f.Bundles[request.Bundle]))

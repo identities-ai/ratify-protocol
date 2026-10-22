@@ -29,6 +29,10 @@ import (
 // Now is the fixed evaluation time used by every vector.
 const Now int64 = 1800000000
 
+// domainEndNow is 9999-12-31T23:59:00Z, the start of the last minute of the
+// v2 timestamp domain, used only by the timestamp-domain boundary vectors.
+const domainEndNow int64 = 253402300740
+
 // Files lists every file this generator owns, relative to testvectors/v2.
 var Files = []string{
 	"key-rotation-signature.json",

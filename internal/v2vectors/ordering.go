@@ -804,6 +804,24 @@ func (g *gen) terminalScenarios() []scenario {
 		constraintOut("constraint_denied", 0), nil))
 	add(g.terminal("time_window_wraps_midnight", "local 22:30 is inside the wrapping window 22:00-00:10 Pacific/Marquesas; its horizon (next local day 00:11, 09:41:00Z) is later than status freshness", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: "22:00", End: "00:10", TZ: "Pacific/Marquesas"}}}),
 		allow(), nil))
+	// At 9999-12-31T23:59:00Z a window ending at 23:59 UTC would end at
+	// 10000-01-01T00:00:00Z (253402300800), past the timestamp domain. The
+	// window passes and its contribution clamps to 253402300799 (SPEC-v2
+	// §2.5, §5.2); every other deadline here is already at that bound.
+	domainEndCerts := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: "00:00", End: "23:59", TZ: "UTC"}},
+		leafIssued: domainEndNow - 3600, leafExpires: ratify.V2MaxTimestampSeconds, rootIssued: domainEndNow - 3600, rootExpires: ratify.V2MaxTimestampSeconds})
+	add(g.terminal("time_window_horizon_clamped_to_timestamp_domain", "at 9999-12-31T23:59:00Z the window 00:00-23:59 UTC passes; minute 23:59 ends at 253402300800, outside the timestamp domain, so the contribution clamps to 253402300799 and the allow horizon is 253402300799", domainEndCerts,
+		allow(), func(s *scenario) {
+			session := g.fixtureSessionContext(agent)
+			_, s.bundle, _ = g.bundle(bundleSpec{agent: agent, certs: domainEndCerts, session: session, challengeAt: domainEndNow - 10})
+			s.expected.IssuedAt, s.expected.ExpiresAt = domainEndNow-10, ratify.V2MaxTimestampSeconds
+			s.now = domainEndNow
+			s.evidence = map[string]statusProviderJSON{
+				rootID: evidenceBatch(g.object(st["root_domain_end"])), intermediateID: evidenceBatch(g.object(st["intermediate_domain_end"])),
+			}
+			s.out.StatusEvidence = []EvidenceJSON{g.evidence(st["root_domain_end"]), g.evidence(st["intermediate_domain_end"])}
+			s.out.AllowValidUntil = ratify.V2MaxTimestampSeconds
+		}))
 	geo := ratify.ConstraintV2{Type: ratify.ConstraintGeoCircle, Params: map[string]any{"lat_microdegrees": 0, "lon_microdegrees": 0, "radius_mm": 1000}}
 	add(g.terminal("geo_circle_unregistered_in_v2", "geo_circle is not in the v2 registry and fails closed as constraint_unknown", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{geo}}),
 		constraintOut("constraint_unknown", 0), nil))

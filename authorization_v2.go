@@ -549,7 +549,7 @@ func allowHorizonV2(assessment V2LocalAuthorizationAssessment) int64 {
 	if assessment.LocalTimeValidUntil > 0 {
 		horizon = min(horizon, assessment.LocalTimeValidUntil)
 	}
-	return horizon
+	return min(horizon, V2MaxTimestampSeconds)
 }
 
 // localTimeWindowValidUntilV2 bounds an allow at the end of each currently
@@ -591,11 +591,14 @@ func localTimeWindowValidUntilV2(bundle *ProofBundleV2, tzdbVersion string, now 
 			if !zoneEnd.IsZero() && zoneEnd.Before(until) {
 				until = zoneEnd
 			}
-			if !until.After(now) || until.Unix() <= 0 || until.Unix() > maxSafeInteger {
+			if !until.After(now) {
 				return 0, fmt.Errorf("time window has no valid terminal horizon")
 			}
-			if horizon == 0 || until.Unix() < horizon {
-				horizon = until.Unix()
+			// A horizon past the timestamp domain (minute end+1 in year
+			// 10000) is clamped to its upper bound (SPEC-v2 §2.5, §5.2).
+			contribution := min(until.Unix(), V2MaxTimestampSeconds)
+			if horizon == 0 || contribution < horizon {
+				horizon = contribution
 			}
 		}
 	}

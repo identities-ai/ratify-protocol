@@ -69,6 +69,8 @@ type chainSpec struct {
 	rootID      string
 	leafIssued  int64
 	leafExpires int64
+	rootIssued  int64
+	rootExpires int64
 	root        *Key
 }
 
@@ -90,7 +92,7 @@ func (g *gen) chain(s chainSpec) []ratify.DelegationCertV2 {
 		s.root = g.k("root")
 	}
 	leaf, _, _ := g.cert(certSpec{issuer: g.k("intermediate"), subject: g.k("agent"), certID: s.leafID, scope: s.leafScope, constraints: s.leafCons, issuedAt: s.leafIssued, expiresAt: s.leafExpires})
-	root, _, _ := g.cert(certSpec{issuer: s.root, subject: g.k("intermediate"), certID: s.rootID, scope: s.rootScope, constraints: s.rootCons})
+	root, _, _ := g.cert(certSpec{issuer: s.root, subject: g.k("intermediate"), certID: s.rootID, scope: s.rootScope, constraints: s.rootCons, issuedAt: s.rootIssued, expiresAt: s.rootExpires})
 	return []ratify.DelegationCertV2{leaf, root}
 }
 
@@ -128,6 +130,10 @@ func (g *gen) statusFixtures() map[string]statusFixture {
 	addAt("root_age_at_now", "status_root", g.k("root").ID, 1, Now-3660, Now+100)
 	// A correctly shaped intermediate list signed by another issuer's status key.
 	addAt("intermediate_signed_by_party_b", "status_party_b", g.k("intermediate").ID, 1, Now-60, Now+3600)
+	// Fresh at the last minute of the timestamp domain, next_update at its
+	// upper bound (SPEC-v2 §2.5).
+	addAt("root_domain_end", "status_root", g.k("root").ID, 1, domainEndNow-60, ratify.V2MaxTimestampSeconds)
+	addAt("intermediate_domain_end", "status_intermediate", g.k("intermediate").ID, 1, domainEndNow-60, ratify.V2MaxTimestampSeconds)
 	return out
 }
 

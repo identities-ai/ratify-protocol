@@ -19,6 +19,10 @@ func TestLocalTimeWindowValidUntilV2(t *testing.T) {
 		{"inclusive end minute", "10:00", "10:30", "UTC", "2026-10-13T10:30:45Z", "2026-10-13T10:31:00Z"},
 		{"wraps midnight", "23:00", "01:00", "UTC", "2026-10-13T23:30:00Z", "2026-10-14T01:01:00Z"},
 		{"DST transition closes evidence", "01:30", "03:30", "America/New_York", "2026-03-08T06:45:00Z", "2026-03-08T07:00:00Z"},
+		// Minute end+1 begins at 10000-01-01T00:00:00Z (253402300800), past
+		// the timestamp domain: the horizon clamps to 253402300799.
+		{"clamped to the timestamp domain", "00:00", "23:59", "UTC", "9999-12-31T23:59:00Z", "9999-12-31T23:59:59Z"},
+		{"one minute inside the timestamp domain", "00:00", "23:58", "UTC", "9999-12-31T23:58:00Z", "9999-12-31T23:59:00Z"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now, err := time.Parse(time.RFC3339, tc.now)

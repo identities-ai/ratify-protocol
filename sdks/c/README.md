@@ -1,23 +1,25 @@
 <!-- GENERATED FILE — do not edit directly.
      Sources: sdks/readme-src/preamble.md + README.body.md in this directory.
      Regenerate: python3 scripts/gen-sdk-readmes.py -->
-# Ratify Protocol — C/C++ SDK
+# Ratify Protocol C/C++ SDK
 
-**C and C++ reference SDK of the Ratify Protocol — delegated-authority proofs for human-agent and agent-agent interactions.**
+**C and C++ reference SDK of the Ratify Protocol: delegated-authority proofs for human-agent and agent-agent interactions.**
 
-Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
+Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **79 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
 Ratify is an open cryptographic protocol that answers the question: *"Is this AI agent authorized to act, by whom, for what, and under what constraints?"*
 
-A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
+A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof without calling back to whoever issued it. In Protocol v2 the verifier then **releases** the decision: it is actionable only after the verifier's signed receipt has been acknowledged by an independent checkpoint.
 
-Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), single-use challenge acceptance through a pluggable challenge store (SPEC §10), the SessionToken fast path (one hybrid signature verification per turn instead of N+1 — practical for live voice and video) with scope, single-use, and binding enforcement on the streamed path, canonical operation- and session-context binding for middleware custody deployments (SPEC §6.4.9, §15.2.1), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec.
+For Protocol v1, beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), single-use challenge acceptance through a pluggable challenge store (SPEC §10), the SessionToken fast path (one hybrid signature verification per turn instead of N+1) with scope, single-use, and binding enforcement on the streamed path, canonical operation- and session-context binding for middleware custody deployments (SPEC §6.4.9, §15.2.1), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec. Protocol v2 has its own session and stream binding, signed status, receipts, witness entries and key rotation; the SessionToken fast path, A2A mutual presentation, the HTTP and registry bindings, and the geo and speed constraints remain v1-only until Protocol 2.1.
 
-- Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Protocol v1 spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Protocol v2 spec: [SPEC-v2.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC-v2.md), upgrade guide: [docs/PROTOCOL_V2_MIGRATION.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md)
+- Runnable v2 examples in every SDK language: [examples/v2](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
 - Developer docs: [docs.ratifyprotocol.com](https://docs.ratifyprotocol.com)
 
@@ -312,7 +314,7 @@ char *bundle_json = ratify_proof_bundle_to_json(bundle, &err);
 // Send bundle_json to the verifier
 ```
 
-### Verification — simple path
+### Verification (Protocol v1), simple path
 
 ```c
 // Verifier side: just scope + clock — the common embedded path
@@ -331,7 +333,9 @@ if (ratify_verify_result_is_valid(result)) {
 ratify_verify_result_free(result);
 ```
 
-### Verification — full options (revocation, geo constraints, session binding)
+### Verification (Protocol v1), full options (revocation, geo constraints, session binding)
+
+The callback revocation and the geo constraints below are v1 constructions. Protocol v2 takes only signed status from a separate status key, and has no geo or speed constraint until 2.1.
 
 ```c
 // Revocation callback
@@ -397,6 +401,19 @@ their declared capacity is nonzero.
 behavior.
 
 ### Protocol v2 ABI (`ratify_v2_*`)
+
+Version `2.0.0-alpha.1` is a prerelease on the separate v2 line. Review so far is
+internal adversarial review; external independent review is a gate for
+`2.0.0`, and v2 carries no production security claim yet. Runnable C programs
+live in
+[`examples/v2/c`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/c):
+a quickstart (keys, delegation, challenge from the issuance helper, proof,
+verify, receipt, checkpoint, release, `ratify_v2_released_allowed`), signed
+status with a revocation, an exact `custom:` scope with the `max_count/v1`
+evaluator profile, and an external signer. They print the same output as the
+other SDKs' programs, and CI checks it. They link the test-only reference
+stores and are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
 
 The `ratify_v2_*` functions are the complete Protocol v2 surface. They are an
 ABI over the Rust `ratify-protocol` v2 implementation (SPEC-v2 §1.3), not an
@@ -515,8 +532,9 @@ unconsumed. `tests/v2c_public_error_classes.rs` calls every fallible
 limits, every verifier-ordering vector, a release lifecycle against a
 C-implemented in-memory store, and every cross-SDK fixture from a plain C
 program. Because C is an ABI over the Rust implementation, agreement between
-C and Rust is not independent evidence (SPEC-v2 §1.3). This alpha is not a
-2.0.0 conformance claim; see SPEC-v2 §8.
+C and Rust is not independent evidence (SPEC-v2 §1.3). The per-SDK record
+against the gates in SPEC-v2 §8 is in
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
 
 ### Added in v1 alpha.16
 

@@ -3,21 +3,23 @@
      Regenerate: python3 scripts/gen-sdk-readmes.py -->
 # @identities-ai/ratify-protocol
 
-**TypeScript reference SDK of the Ratify Protocol — delegated-authority proofs for human-agent and agent-agent interactions.**
+**TypeScript reference SDK of the Ratify Protocol: delegated-authority proofs for human-agent and agent-agent interactions.**
 
-Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
+Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** on every CI run.
+Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
 Ratify is an open cryptographic protocol that answers the question: *"Is this AI agent authorized to act, by whom, for what, and under what constraints?"*
 
-A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof — offline, without contacting a server — and get a cryptographically certain answer.
+A human issues a signed **delegation cert** to an agent. The agent presents a **proof bundle** when acting. Any third party can **verify** the proof without calling back to whoever issued it. In Protocol v2 the verifier then **releases** the decision: it is actionable only after the verifier's signed receipt has been acknowledged by an independent checkpoint.
 
-Beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), single-use challenge acceptance through a pluggable challenge store (SPEC §10), the SessionToken fast path (one hybrid signature verification per turn instead of N+1 — practical for live voice and video) with scope, single-use, and binding enforcement on the streamed path, canonical operation- and session-context binding for middleware custody deployments (SPEC §6.4.9, §15.2.1), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec.
+For Protocol v1, beyond the one-shot delegate → present → verify round trip, this SDK implements the full v1.1 feature set for continuous and multi-party interactions: session-bound challenges and stream sequence numbers (replay and reorder detection across a multi-turn conversation), single-use challenge acceptance through a pluggable challenge store (SPEC §10), the SessionToken fast path (one hybrid signature verification per turn instead of N+1) with scope, single-use, and binding enforcement on the streamed path, canonical operation- and session-context binding for middleware custody deployments (SPEC §6.4.9, §15.2.1), push-based revocation, multi-party transaction receipts, witness append-only logs, and key rotation statements. All normative in the spec. Protocol v2 has its own session and stream binding, signed status, receipts, witness entries and key rotation; the SessionToken fast path, A2A mutual presentation, the HTTP and registry bindings, and the geo and speed constraints remain v1-only until Protocol 2.1.
 
-- Full protocol spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Protocol v1 spec: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+- Protocol v2 spec: [SPEC-v2.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC-v2.md), upgrade guide: [docs/PROTOCOL_V2_MIGRATION.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md)
+- Runnable v2 examples in every SDK language: [examples/v2](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2)
 - Explainer (how it works, threat model): [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
 - Developer docs: [docs.ratifyprotocol.com](https://docs.ratifyprotocol.com)
 
@@ -27,9 +29,28 @@ Beyond the one-shot delegate → present → verify round trip, this SDK impleme
 npm install @identities-ai/ratify-protocol@2.0.0-alpha.1
 ```
 
-## Three verbs, three examples
+Version `2.0.0-alpha.1` is a Protocol v2 prerelease. It is published under the
+npm dist-tag `next`, so pin it exactly (or install `@next`); an unpinned
+install resolves to the latest v1 release until `2.0.0`. The v2 API is at
+`@identities-ai/ratify-protocol/v2`, and the v1 API stays at the package
+root. To keep the exact v1 release next to it, use an alias:
+`npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
 
-### 1. DELEGATE — a human authorizes an agent
+## Protocol v2 quickstart
+
+Runnable TypeScript programs live in
+[`examples/v2/typescript`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/typescript):
+a quickstart (keys, delegation, challenge from the issuance helper, proof,
+verify, receipt, checkpoint, release, `allowed`), signed status with a
+revocation, an exact `custom:` scope with the `max_count/v1` evaluator
+profile, and an external signer. Each prints the same output as the other
+SDKs' programs, and CI checks it. They use the in-memory reference stores and
+are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
+
+## Three verbs, three examples (Protocol v1 API)
+
+### 1. DELEGATE: a human authorizes an agent
 
 ```ts
 import {
@@ -65,7 +86,7 @@ const cert: DelegationCert = {
 await issueDelegation(cert, alicePriv);
 ```
 
-### 2. PRESENT — an agent builds a proof bundle
+### 2. PRESENT: an agent builds a proof bundle
 
 ```ts
 import {
@@ -89,7 +110,7 @@ const bundle: ProofBundle = {
 // Send bundle (as canonical JSON) over HTTP / your transport
 ```
 
-### 3. VERIFY — any third party checks the proof
+### 3. VERIFY: any third party checks the proof
 
 ```ts
 import { verifyBundle, SCOPE_MEETING_ATTEND } from "@identities-ai/ratify-protocol";
@@ -198,9 +219,10 @@ const bundle = decodeProofBundle(requestBody); // string or Uint8Array
 const result = await verifyBundle(bundle, { required_scope: SCOPE_MEETING_ATTEND });
 ```
 
-### Session tokens
+### Session tokens (Protocol v1 only)
 
-`SessionToken`s cross the wire the same way (`DelegationCert`s too, via `encodeDelegationCert` / `decodeDelegationCert`):
+Session tokens are a v1 construction; Protocol v2 has no session token until
+2.1. `SessionToken`s cross the wire the same way (`DelegationCert`s too, via `encodeDelegationCert` / `decodeDelegationCert`):
 
 ```ts
 import { encodeSessionToken, decodeSessionToken } from "@identities-ai/ratify-protocol";
@@ -290,7 +312,7 @@ No network code in this package. HTTP concerns (challenge issuance, revocation l
 
 **Signing mode.** `@noble/post-quantum` signs ML-DSA-65 with hedged randomization by default, so two signings of the same message produce different bytes. This does NOT affect interop: the signatures verify in Go, Python, Rust, and C/C++, and vice versa. What must match across languages is the canonical signable bytes (SPEC §8.3), and those match byte-for-byte. Only the Go reference generator signs deterministically, so that fixtures regenerate reproducibly; passing `{ extraEntropy: false }` would make this SDK deterministic too, but hedged signing is side-channel hardening and is kept as the default.
 
-## API added in v1 alpha.16
+## v1 API added in alpha.16
 
 The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 
@@ -302,13 +324,14 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 - **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
 - **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
 
-## Protocol v2 (2.0.0-alpha line)
+## Protocol v2 API
 
 Version `2.0.0-alpha.1` is a prerelease on the separate v2 line. It exports the
-v2 API from the package root, next to the unchanged v1 API, and from
-`@identities-ai/ratify-protocol/v2` alone. v2 prereleases use the `v2-alpha`
-npm dist-tag, so an unpinned install and exact `1.0.0-alpha.20` pins continue
-to resolve to v1.
+v2 API from `@identities-ai/ratify-protocol/v2` (and from the package root,
+next to the unchanged v1 API). v2 prereleases use the `next` npm dist-tag, so
+an unpinned install and exact `1.0.0-alpha.20` pins continue to resolve to
+v1. Review so far is internal adversarial review; external independent review
+is a gate for `2.0.0`, and v2 carries no production security claim yet.
 
 Choose the helpers that match the proof version: v1 proofs use the v1 API,
 and v2 proofs use the v2 API. The v2 API follows the Go reference and
@@ -364,8 +387,7 @@ SPEC-v2:
 `npm test` runs every file in `testvectors/v2`, including the lifecycle and
 profile scenarios, and verifies every cross-SDK fixture in
 `testvectors/v2/cross-sdk`. `npm run generate:cross-sdk` writes this SDK's
-fixture. This alpha is not a v2 conformance claim; the remaining gates are
-listed in SPEC-v2 §8 and
+fixture. The per-SDK record against the gates in SPEC-v2 §8 is in
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
 A deployment still supplies durable Part B stores and an independent
 checkpoint.

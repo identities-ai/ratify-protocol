@@ -18,6 +18,7 @@ Placeholders (valid in both preamble and bodies):
   {{VERSION}}       this SDK's line version, npm/cargo form   (2.0.0-alpha.N)
   {{VERSION_TAG}}   this SDK's line version, tag form         (v2.0.0-alpha.N)
   {{VERSION_PYPI}}  this SDK's line version, PEP 440 form     (2.0.0aN)
+  {{PROTOCOL_LINES}} which protocol lines this package implements
 
 The repository carries two release lines. Python is still on the v1 line,
 so its README takes its version from sdks/python/pyproject.toml. Every other
@@ -53,7 +54,7 @@ ALL_NAMES = {
 
 SDKS = {
     "go": {
-        "TITLE": "Ratify Protocol — Go SDK",
+        "TITLE": "Ratify Protocol Go SDK",
         "SDK_DESC": "Go reference implementation",
     },
     "typescript": {
@@ -69,9 +70,27 @@ SDKS = {
         "SDK_DESC": "Rust reference SDK",
     },
     "c": {
-        "TITLE": "Ratify Protocol — C/C++ SDK",
+        "TITLE": "Ratify Protocol C/C++ SDK",
         "SDK_DESC": "C and C++ reference SDK",
     },
+}
+
+
+V2_LINES = (
+    "This package also implements Protocol v2 (version `{{VERSION}}`, a "
+    "prerelease) and runs every file in the shared `testvectors/v2` corpus "
+    "and the cross-SDK fixtures of every other SDK."
+)
+PROTOCOL_LINES = {
+    "go": V2_LINES,
+    "typescript": V2_LINES,
+    "rust": V2_LINES,
+    "c": V2_LINES,
+    "python": (
+        "This package implements Protocol v1 only. Protocol v2 is the separate "
+        "`ratify-protocol-v2` distribution (import `ratify_protocol_v2`), which "
+        "installs next to this one."
+    ),
 }
 
 
@@ -103,8 +122,9 @@ def versions(lang: str) -> dict:
 def render(lang: str) -> str:
     preamble = (ROOT / "sdks/readme-src/preamble.md").read_text()
     body = (ROOT / f"sdks/{lang}/README.body.md").read_text()
-    subs = {**SDKS[lang], "SIBLINGS": siblings(lang), **versions(lang)}
     out = MARKER + preamble.rstrip("\n") + "\n\n" + body
+    out = out.replace("{{PROTOCOL_LINES}}", PROTOCOL_LINES[lang])
+    subs = {**SDKS[lang], "SIBLINGS": siblings(lang), **versions(lang)}
     for key, value in subs.items():
         out = out.replace("{{" + key + "}}", value)
     leftover = re.findall(r"\{\{[A-Z_]+\}\}", out)

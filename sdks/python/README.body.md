@@ -6,6 +6,14 @@ pip install ratify-protocol=={{VERSION_PYPI}}
 
 This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
 
+This is the Protocol v1 SDK. Protocol v2 is the separate
+[`ratify-protocol-v2`](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python-v2)
+distribution (import `ratify_protocol_v2`), which installs next to this
+package. This package carries no v2 API. Runnable v2 programs are in
+[`examples/v2/python`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/python),
+and the upgrade guide is
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
+
 ### Optional: deterministic key generation from seeds
 
 One function, `hybrid_keypair_from_seeds`, needs an optional add-on:
@@ -181,7 +189,7 @@ bundle = decode_proof_bundle(request_body)  # str or bytes
 result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))
 ```
 
-### Session tokens
+### Session tokens (Protocol v1 only)
 
 `SessionToken`s cross the wire the same way (`DelegationCert`s too, via `encode_delegation_cert` / `decode_delegation_cert`):
 
@@ -266,7 +274,7 @@ This SDK uses `pqcrypto` which wraps PQClean's ML-DSA-65 implementation. Two thi
 
 **Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API — `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only — it verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
 
-## API added in v1 alpha.16
+## v1 API added in alpha.16
 
 The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 

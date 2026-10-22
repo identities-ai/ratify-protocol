@@ -84,5 +84,19 @@ the suite against an installed wheel, set `RATIFY_V2_VECTOR_DIR` to that
 directory. Set `RATIFY_REQUIRE_NATIVE=1` to make a missing native extension a
 hard error instead of skipping the signing tests.
 
-This alpha is not a v2 conformance claim; the remaining gates are listed in
-SPEC-v2 §8 of the protocol repository.
+This is a prerelease. Review so far is internal adversarial review; external
+independent review is a gate for `2.0.0` (SPEC-v2 §8), and v2 carries no
+production security claim yet. The per-SDK record is in
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+
+## Examples and upgrading
+
+Runnable programs live in
+[`examples/v2/python`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/python):
+a quickstart (keys, delegation, challenge from the issuance helper, proof,
+verify, receipt, checkpoint, release, `allowed`), signed status with a
+revocation, an exact `custom:` scope with the `max_count/v1` evaluator
+profile, and an external signer. They print the same output as the other
+SDKs' programs, and CI checks it. They use the in-memory reference stores and
+are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).

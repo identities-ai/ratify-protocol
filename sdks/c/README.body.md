@@ -289,7 +289,7 @@ char *bundle_json = ratify_proof_bundle_to_json(bundle, &err);
 // Send bundle_json to the verifier
 ```
 
-### Verification — simple path
+### Verification (Protocol v1), simple path
 
 ```c
 // Verifier side: just scope + clock — the common embedded path
@@ -308,7 +308,9 @@ if (ratify_verify_result_is_valid(result)) {
 ratify_verify_result_free(result);
 ```
 
-### Verification — full options (revocation, geo constraints, session binding)
+### Verification (Protocol v1), full options (revocation, geo constraints, session binding)
+
+The callback revocation and the geo constraints below are v1 constructions. Protocol v2 takes only signed status from a separate status key, and has no geo or speed constraint until 2.1.
 
 ```c
 // Revocation callback
@@ -374,6 +376,19 @@ their declared capacity is nonzero.
 behavior.
 
 ### Protocol v2 ABI (`ratify_v2_*`)
+
+Version `{{VERSION}}` is a prerelease on the separate v2 line. Review so far is
+internal adversarial review; external independent review is a gate for
+`2.0.0`, and v2 carries no production security claim yet. Runnable C programs
+live in
+[`examples/v2/c`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/c):
+a quickstart (keys, delegation, challenge from the issuance helper, proof,
+verify, receipt, checkpoint, release, `ratify_v2_released_allowed`), signed
+status with a revocation, an exact `custom:` scope with the `max_count/v1`
+evaluator profile, and an external signer. They print the same output as the
+other SDKs' programs, and CI checks it. They link the test-only reference
+stores and are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
 
 The `ratify_v2_*` functions are the complete Protocol v2 surface. They are an
 ABI over the Rust `ratify-protocol` v2 implementation (SPEC-v2 §1.3), not an
@@ -492,8 +507,9 @@ unconsumed. `tests/v2c_public_error_classes.rs` calls every fallible
 limits, every verifier-ordering vector, a release lifecycle against a
 C-implemented in-memory store, and every cross-SDK fixture from a plain C
 program. Because C is an ABI over the Rust implementation, agreement between
-C and Rust is not independent evidence (SPEC-v2 §1.3). This alpha is not a
-2.0.0 conformance claim; see SPEC-v2 §8.
+C and Rust is not independent evidence (SPEC-v2 §1.3). The per-SDK record
+against the gates in SPEC-v2 §8 is in
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
 
 ### Added in v1 alpha.16
 

@@ -108,9 +108,8 @@ Side by side in one build:
   `npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
   An unpinned install resolves to v1 until `2.0.0`.
 - **Python:** `ratify-protocol` and `ratify-protocol-v2` are separate
-  distributions with separate import packages and install together. The v2
-  helpers that earlier v1 prereleases carried are no longer in the v1 package;
-  import them from `ratify_protocol_v2`.
+  distributions with separate import packages and install together. The v1
+  package carries no v2 API; import v2 from `ratify_protocol_v2`.
 - **Rust:** the 2.x crate keeps the v1 API at the crate root and adds
   `ratify_protocol::v2`. To keep the exact v1 release, rename it:
   `ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.20" }`.

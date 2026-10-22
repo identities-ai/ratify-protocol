@@ -477,8 +477,11 @@ durable or production-safe, are declared in the header only under
 **Conformance.** The `tests/v2c_*.rs` runners call only `ratify_v2_*`
 exports and run every file in `testvectors/v2` through the C ABI, including
 the verifier ordering, lifecycle and profile scenarios, status, journal,
-publisher, log, rotation, transaction, issuance, and cross-SDK fixtures;
-`tests/v2c_inventory.rs` fails if any corpus file is unconsumed.
+publisher, log, rotation, transaction, issuance, device-state projection,
+and cross-SDK fixtures; `tests/v2c_inventory.rs` fails if any corpus file is
+unconsumed. `tests/v2c_public_error_classes.rs` calls every fallible
+`ratify_v2_*` export with inputs it must reject and requires a §2.7 class
+(the reference class where Go fixes one) or a documented negative code.
 `scripts/test-v2-c-abi.sh` runs keys, objects, negatives, hedged signatures,
 limits, every verifier-ordering vector, a release lifecycle against a
 C-implemented in-memory store, and every cross-SDK fixture from a plain C

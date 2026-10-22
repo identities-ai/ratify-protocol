@@ -1,6 +1,8 @@
 package v2vectors
 
 import (
+	"encoding/hex"
+
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
@@ -40,6 +42,7 @@ type statusStepJSON struct {
 	Policy           *statusPolicyJSON       `json:"policy,omitempty"`
 	ExpectErrorClass string                  `json:"expect_error_class,omitempty"`
 	ExpectState      *statusStateJSON        `json:"expect_state,omitempty"`
+	ExpectBodyDigest string                  `json:"expect_body_digest,omitempty"`
 	ExpectResult     *statusResultExpectJSON `json:"expect_result,omitempty"`
 }
 
@@ -59,10 +62,11 @@ type statusFile struct {
 }
 
 type statusObject struct {
-	wire []byte
-	code uint16
-	seq  int64
-	key  string
+	wire     []byte
+	signable []byte
+	code     uint16
+	seq      int64
+	key      string
 }
 
 type statusBuilder struct {
@@ -92,8 +96,8 @@ func set(v ...string) *[]string {
 
 // fresh list timing relative to Now: updated Now-60, next Now+1800.
 func (b *statusBuilder) listAt(label string, seq, updated, next int64, revoked ...string) *statusBuilder {
-	_, wire, _ := b.g.list(b.g.k(b.key), b.sc.IssuerID, seq, updated, next, revoked...)
-	b.objects[label] = statusObject{wire, codeList, seq, b.key}
+	_, wire, sg := b.g.list(b.g.k(b.key), b.sc.IssuerID, seq, updated, next, revoked...)
+	b.objects[label] = statusObject{wire, sg.signable, codeList, seq, b.key}
 	return b
 }
 
@@ -107,7 +111,7 @@ func (b *statusBuilder) pushAt(label string, seq, pushedAt int64, edNonce byte, 
 		p.Signature.Ed25519 = ed25519WithNonce(b.g.k(b.key), message(codePush, sg.signable), edNonce)
 		wire = must(ratify.EncodeRevocationPushV2(p))
 	}
-	b.objects[label] = statusObject{wire, codePush, seq, b.key}
+	b.objects[label] = statusObject{wire, sg.signable, codePush, seq, b.key}
 	return b
 }
 
@@ -121,7 +125,16 @@ func (b *statusBuilder) apply(label string, now int64, expect *statusStateJSON) 
 	if o.code == codePush {
 		op = "apply_push"
 	}
-	b.sc.Steps = append(b.sc.Steps, statusStepJSON{Op: op, Label: label, WireB64: b64(o.wire), StatusKey: b.key, StatusKeyEpoch: b.epoch, Now: now, ExpectState: expect})
+	b.sc.Steps = append(b.sc.Steps, statusStepJSON{Op: op, Label: label, WireB64: b64(o.wire), StatusKey: b.key, StatusKeyEpoch: b.epoch, Now: now, ExpectState: expect,
+		ExpectBodyDigest: "sha384:" + hex.EncodeToString(sha384(o.signable))})
+	return b
+}
+
+// applyUnrecorded applies an accepted object that adds no observation (a
+// same-set heartbeat or a non-fresh snapshot), so no body digest is expected.
+func (b *statusBuilder) applyUnrecorded(label string, now int64, expect *statusStateJSON) *statusBuilder {
+	b.apply(label, now, expect)
+	b.sc.Steps[len(b.sc.Steps)-1].ExpectBodyDigest = ""
 	return b
 }
 
@@ -220,7 +233,7 @@ func (g *gen) statusFile() any {
 	b.listAt("L1a", 1, T-60, T+1800, "c1").apply("L1a", T, st(true, 1, 1, 0, false, []string{"c1"}, []string{"c1"}))
 	b.listAt("L1b", 1, T-30, T+1800, "c1").apply("L1b", T, st(true, 1, 1, 0, false, []string{"c1"}, []string{"c1"}))
 	b.query("c9", T, nil, "not_revoked", "", "L1b")
-	b.listAt("L1c", 1, T-90, T+1800, "c1").apply("L1c", T, st(true, 1, 1, 0, false, []string{"c1"}, []string{"c1"}))
+	b.listAt("L1c", 1, T-90, T+1800, "c1").applyUnrecorded("L1c", T, st(true, 1, 1, 0, false, []string{"c1"}, []string{"c1"}))
 	b.query("c9", T, nil, "not_revoked", "", "L1b")
 	b.listAt("L1d", 1, T-20, T+1800, "c1", "c2").apply("L1d", T, st(true, 1, 1, 1, true, []string{"c1"}, []string{"c1", "c2"}))
 	b.query("c9", T, nil, "indeterminate", "unavailable", "L1b", "L1d")
@@ -313,7 +326,7 @@ func (g *gen) statusFile() any {
 	b.listAt("L2s", 2, T-7200, T-5400, "c1").apply("L2s", T, &statusStateJSON{Floor: ip(1), MaxObservedSequence: ip(2), ReconciliationRequired: bp(true)})
 	b.query("c9", T, nil, "indeterminate", "unavailable", "L1", "L2s")
 	b.list("L2", 2, "c1").apply("L2", T, st(true, 2, 2, 0, false, []string{"c1"}, []string{"c1"}))
-	b.listAt("L1s", 1, T-7200, T-5400, "c1").apply("L1s", T, st(true, 2, 2, 0, false, []string{"c1"}, []string{"c1"}))
+	b.listAt("L1s", 1, T-7200, T-5400, "c1").applyUnrecorded("L1s", T, st(true, 2, 2, 0, false, []string{"c1"}, []string{"c1"}))
 	b.query("c9", T, nil, "not_revoked", "", "L2")
 	add(b)
 

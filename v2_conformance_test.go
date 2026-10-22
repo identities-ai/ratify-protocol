@@ -733,6 +733,7 @@ func TestV2ConformanceStatusSequences(t *testing.T) {
 				Policy           *v2StatusPolicy `json:"policy"`
 				ExpectErrorClass string          `json:"expect_error_class"`
 				ExpectState      *v2StatusState  `json:"expect_state"`
+				ExpectBodyDigest string          `json:"expect_body_digest"`
 				ExpectResult     *struct {
 					Status   string       `json:"status"`
 					Reason   string       `json:"reason"`
@@ -803,9 +804,28 @@ func TestV2ConformanceStatusSequences(t *testing.T) {
 				if w := step.ExpectState; w != nil {
 					checkV2StatusState(t, fmt.Sprintf("step %d %s %s", i, step.Op, step.Label), state, w)
 				}
+				if step.ExpectBodyDigest != "" && !hasV2ObservationBodyDigest(state, step.StatusKeyEpoch, step.Op, step.ExpectBodyDigest) {
+					t.Errorf("step %d %s %s: no observation with body_digest %s (SPEC-v2 §6.6)", i, step.Op, step.Label, step.ExpectBodyDigest)
+				}
 			}
 		})
 	}
+}
+
+// hasV2ObservationBodyDigest reports whether the journal recorded an
+// observation of the applied object type with the expected unlabelled body
+// digest (SPEC-v2 §6.6).
+func hasV2ObservationBodyDigest(s ratify.RevocationStatusStateV2, epoch uint64, op, want string) bool {
+	code := uint16(3)
+	if op == "apply_push" {
+		code = 5
+	}
+	for _, o := range s.Observations {
+		if o.StatusKeyEpoch == epoch && o.ObjectType == code && "sha384:"+hex.EncodeToString(o.BodyDigest) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func checkV2StatusState(t *testing.T, where string, s ratify.RevocationStatusStateV2, w *v2StatusState) {

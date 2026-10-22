@@ -19,7 +19,6 @@ from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 from .crypto_v2 import (
     delegation_signature_message_v2,
     derive_key_id_v2,
-    sign_delegation_v2,
     verify_delegation_signature_v2,
 )
 from .operation_context_v2 import (
@@ -43,7 +42,7 @@ __all__ = [
     "HybridPrivateKey", "HybridPublicKey", "HybridSignature",
     "keypair_from_seeds_v2",
     "delegation_signature_message_v2", "derive_key_id_v2",
-    "sign_delegation_v2", "verify_delegation_signature_v2",
+    "verify_delegation_signature_v2",
     "decode_payload_digest", "operation_context_v2_bytes",
     "operation_context_v2_hash", "session_context_v2_bytes",
     "session_context_v2_hash",

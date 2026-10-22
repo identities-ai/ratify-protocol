@@ -16,7 +16,7 @@ from typing import Callable, Optional, Protocol
 
 from . import status_state_v2 as ss
 from .context_v2 import Context, require_context
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified, V2ValueError
 from .status_state_v2 import (
     REVOCATION_LIST_CODE,
     REVOCATION_PUSH_CODE,
@@ -106,6 +106,14 @@ def _snap():
     return security_journal_snapshot_v2
 
 
+def _wrap_v2(message: str, exc: BaseException) -> ValueError:
+    """Go ``fmt.Errorf("...: %w", err)``: a new message that keeps the class
+    the wrapped error carries."""
+    if isinstance(exc, V2Error) and exc.error_class != V2ErrorClass.UNCLASSIFIED:
+        return V2ValueError(exc.error_class, message)
+    return ValueError(message)
+
+
 def empty_security_journal_v2() -> SecurityJournalV2:
     """The only valid genesis record."""
     journal = SecurityJournalV2(
@@ -156,7 +164,7 @@ def commit_security_journal_transition_v2(ctx: Context, store, current: Security
     try:
         validate_security_journal_transition_v2(current, nxt)
     except Exception as exc:
-        raise ValueError(f"invalid security journal transition: {exc}") from exc
+        raise _wrap_v2(f"invalid security journal transition: {exc}", exc) from exc
     head = SecurityJournalHeadV2(generation=current.generation, digest=current.digest)
     try:
         store.compare_and_swap(ctx, head, nxt)
@@ -182,10 +190,11 @@ def load_anchored_security_journal_v2(ctx: Context, store) -> SecurityJournalV2:
     try:
         validate_security_journal_v2(current)
     except Exception as exc:
-        raise ValueError(f"validate loaded security journal: {exc}") from exc
+        raise _wrap_v2(f"validate loaded security journal: {exc}", exc) from exc
     return current
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def record_security_key_role_v2(ctx: Context, store, role: str, pub: HybridPublicKey) -> SecurityJournalV2:
     """Durably add a non-status key role after the caller has authenticated
     the trust-configuration event that admits the key."""
@@ -195,6 +204,7 @@ def record_security_key_role_v2(ctx: Context, store, role: str, pub: HybridPubli
     return update_security_journal_v2(ctx, store, lambda journal: register_key_role_v2(journal, role, pub))
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def configure_status_key_epoch_v2(ctx: Context, store, issuer_id: str, epoch: int, pub: HybridPublicKey) -> SecurityJournalV2:
     """Persist an authenticated status-key binding. A first binding starts at
     epoch 1; later bindings advance exactly one epoch and preserve prior-epoch
@@ -221,6 +231,7 @@ def configure_status_key_epoch_v2(ctx: Context, store, issuer_id: str, epoch: in
     return update_security_journal_v2(ctx, store, update)
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def apply_revocation_list_to_journal_v2(
     ctx: Context, store, lst, issuer_id: str, epoch: int, pub: HybridPublicKey,
     policy: RevocationStatusPolicyV2, now: int,
@@ -236,6 +247,7 @@ def apply_revocation_list_to_journal_v2(
     return update_security_journal_v2(ctx, store, update)
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def apply_revocation_push_to_journal_v2(
     ctx: Context, store, push, issuer_id: str, epoch: int, pub: HybridPublicKey,
     policy: RevocationStatusPolicyV2, now: int,
@@ -251,6 +263,7 @@ def apply_revocation_push_to_journal_v2(
     return update_security_journal_v2(ctx, store, update)
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def revocation_status_from_journal_v2(
     ctx: Context, store, issuer_id: str, cert_id: str, epoch: int, pub: HybridPublicKey,
     policy: RevocationStatusPolicyV2, now: int,
@@ -284,6 +297,7 @@ def require_journal_status_key_v2(journal: Optional[SecurityJournalV2], issuer_i
 # Validation
 
 
+@classified(V2ErrorClass.MALFORMED)
 def validate_security_journal_v2(journal: SecurityJournalV2) -> None:
     """Validate record integrity and internal indexes."""
     if (
@@ -343,16 +357,17 @@ def validate_security_journal_v2(journal: SecurityJournalV2) -> None:
             raise ValueError("security journal status state is not at the latest retained issuer epoch")
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def validate_security_journal_transition_v2(current: SecurityJournalV2, nxt: SecurityJournalV2) -> None:
     """Generation continuity and append-only key histories."""
     try:
         validate_security_journal_v2(current)
     except Exception as exc:
-        raise ValueError(f"invalid current journal: {exc}") from exc
+        raise _wrap_v2(f"invalid current journal: {exc}", exc) from exc
     try:
         validate_security_journal_v2(nxt)
     except Exception as exc:
-        raise ValueError(f"invalid next journal: {exc}") from exc
+        raise _wrap_v2(f"invalid next journal: {exc}", exc) from exc
     if nxt.generation != current.generation + 1 or nxt.previous_digest != current.digest:
         raise ValueError("journal generation or predecessor is not contiguous")
     if nxt.version != SECURITY_JOURNAL_VERSION_V2:
@@ -609,6 +624,7 @@ def valid_security_key_role_v2(role: object) -> bool:
     return isinstance(role, str) and role in _ROLES
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def register_key_role_v2(journal: SecurityJournalV2, role: str, pub: HybridPublicKey) -> None:
     """Record a permanent global role assignment. Repeating the identical
     assignment is idempotent; any key-ID or component reuse is denied."""
@@ -632,6 +648,7 @@ def _register_key_role(journal: SecurityJournalV2, role: str, pub: HybridPublicK
     sort_key_role_history_v2(journal.key_role_history)
 
 
+@classified(V2ErrorClass.STATUS_OBJECT_REJECTED)
 def register_status_key_epoch_v2(journal: SecurityJournalV2, issuer_id: str, epoch: int, pub: HybridPublicKey) -> None:
     """Record caller-authenticated status-key history and the corresponding
     permanent global status role before status objects apply."""

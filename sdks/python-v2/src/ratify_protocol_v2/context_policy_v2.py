@@ -11,6 +11,7 @@ from hashlib import sha384
 from typing import Optional
 
 from . import _v2json
+from .errors_v2 import V2ErrorClass, classified
 from .types_v2 import valid_prefixed_digest_v2
 
 VERIFY_SESSION_CONTEXT_PROFILE_V2 = "ratify.verify.session-context/v1"
@@ -99,6 +100,7 @@ class V2ContextPolicyAssessment:
     detail: str = ""
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def new_v2_context_policy(
     profile: str, require_bound: bool, required_fields, expected_session_context: Optional[bytes]
 ) -> V2ContextPolicy:

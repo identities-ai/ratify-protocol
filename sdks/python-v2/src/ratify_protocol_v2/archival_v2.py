@@ -19,7 +19,7 @@ from . import signing_v2 as _sig
 from . import transaction_receipt_v2 as _tx
 from . import verification_receipt_v2 as _vr
 from . import witness_v2 as _wv
-from .errors_v2 import V2Error, V2ErrorClass, classify, error_class_of
+from .errors_v2 import V2Error, V2ErrorClass, classify, error_class_of, classified
 from .types import HybridPublicKey
 
 FRESHNESS_UNVERIFIED_V2 = "freshness_unverified"
@@ -123,6 +123,7 @@ def verify_archival_proof_bundle_v2(data: bytes) -> ArchivalProofBundleResultV2:
     return result
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_delegation_cert_v2(data: bytes) -> ArchivalVerificationV2:
     """Check one stored certificate and its issuer signature under the issuer
     key it carries."""
@@ -138,6 +139,7 @@ def _status_key_id(status_key: HybridPublicKey) -> str:
         return ""
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_revocation_list_v2(data: bytes, issuer_id: str, status_key: HybridPublicKey) -> ArchivalVerificationV2:
     """Check a stored revocation list under a caller-authenticated issuer
     status key."""
@@ -150,6 +152,7 @@ def verify_archival_revocation_list_v2(data: bytes, issuer_id: str, status_key: 
     return _archival_result_v2(_REVOCATION_LIST, digest, _status_key_id(status_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_revocation_push_v2(data: bytes, issuer_id: str, status_key: HybridPublicKey) -> ArchivalVerificationV2:
     """Check a stored revocation push under a caller-authenticated issuer
     status key."""
@@ -162,6 +165,7 @@ def verify_archival_revocation_push_v2(data: bytes, issuer_id: str, status_key: 
     return _archival_result_v2(_REVOCATION_PUSH, digest, _status_key_id(status_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_key_rotation_statement_v2(data: bytes) -> ArchivalVerificationV2:
     """Check a stored rotation statement's old-key authorization and new-key
     proof of possession under the keys it names. It does not establish that
@@ -186,6 +190,7 @@ def verify_archival_key_rotation_statement_v2(data: bytes) -> ArchivalVerificati
     return _archival_result_v2(_KEY_ROTATION_AUTHORIZATION, digest, stmt.old_key_id, stmt.new_key_id)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_witness_entry_v2(data: bytes, witness_public: HybridPublicKey) -> ArchivalVerificationV2:
     """Check a stored witness entry under a caller-authenticated witness key,
     without log position or fork checks."""
@@ -208,6 +213,7 @@ def verify_archival_witness_entry_v2(data: bytes, witness_public: HybridPublicKe
     return _archival_result_v2(_WITNESS_ENTRY, digest, witness_id)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_verification_receipt_v2(data: bytes, verifier_public: HybridPublicKey) -> ArchivalVerificationV2:
     """Check a stored verification receipt under a caller-authenticated
     verifier key, without log position, fork or bundle-binding checks."""
@@ -230,6 +236,7 @@ def verify_archival_verification_receipt_v2(data: bytes, verifier_public: Hybrid
     return _archival_result_v2(_VERIFICATION_RECEIPT, digest, verifier_id)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_archival_transaction_receipt_v2(data: bytes) -> ArchivalVerificationV2:
     """Check a stored transaction receipt: canonical form, every party
     signature, and every embedded proof bundle's signatures, hash and

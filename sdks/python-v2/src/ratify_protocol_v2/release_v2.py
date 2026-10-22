@@ -18,7 +18,7 @@ from typing import Optional
 from . import context_v2
 from .claim_store_v2 import V2AuthoritativeClock
 from .clock_bounds_v2 import valid_v2_timestamp
-from .errors_v2 import V2Error, V2ErrorClass, error_class_of
+from .errors_v2 import V2Error, V2ErrorClass, classified, error_class_of
 from .types import HybridPublicKey
 from .types_v2 import V2CheckpointAcknowledgement, lower_hex_string
 
@@ -256,6 +256,7 @@ class V2ReleasedDecision:
         """A copy of the signed receipt wire verified during release."""
         return bytes(self._get("_receipt_wire", b""))
 
+    @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def receipt(self):
         """A freshly decoded copy of the signed receipt verified during release."""
         from .verification_receipt_v2 import decode_verification_receipt_v2

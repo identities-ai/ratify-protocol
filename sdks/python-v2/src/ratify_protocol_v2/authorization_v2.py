@@ -27,7 +27,7 @@ from .context_policy_v2 import (
     evaluate_proof_bundle_v2_context_policy,
     same_v2_context_policy,
 )
-from .errors_v2 import V2Error
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .limits_v2 import MAX_DELEGATION_CHAIN_DEPTH  # noqa: F401 - re-exported bound
 from .protocol_v2 import ProofBundleV2, bundle_hash_v2, verify_proof_bundle_v2_signatures
 from .scope import intersect_scopes, validate_required_scope_v2, validate_scopes_v2
@@ -459,6 +459,7 @@ def _resolve_claim_proof_bundle_v2_after_status(token: V2EvaluationToken, aggreg
         return assessment
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def resolve_claim_proof_bundle_v2_after_audience(token: V2EvaluationToken, memberships: Optional[list]) -> V2LocalAuthorizationAssessment:
     """Go ``ResolveClaimProofBundleV2AfterAudience``: membership freshness is
     evaluated at the authoritative claim time sealed in the token."""
@@ -516,6 +517,7 @@ def resolve_claim_proof_bundle_v2_after_audience(token: V2EvaluationToken, membe
         return assessment
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def resolve_claim_proof_bundle_v2_after_rate(ctx: context_v2.Context, store: Optional[V2RateReservationStore],
                                              token: V2EvaluationToken) -> V2LocalAuthorizationAssessment:
     """Go ``ResolveClaimProofBundleV2AfterRate``: the final external stage."""

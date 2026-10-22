@@ -18,7 +18,7 @@ from typing import Optional
 from . import security_journal_v2 as sj
 from . import status_state_v2 as ss
 from .context_v2 import Context, require_context
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified
 from .types import HybridPublicKey
 from .types_v2 import MAX_SAFE_INTEGER, is_int
 
@@ -96,12 +96,14 @@ class V2StatusPublisher:
         """A copy of the complete status public key."""
         return _clone_key(self._status_key)
 
+    @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def genesis(self, ctx: Context, updated_at: int) -> V2StatusPublication:
         """Sign the first full list: sequence 1, an empty revoked set."""
         require_context(ctx)
         state = V2StatusPublisherState(issuer_id=self._issuer_id, status_key_id=self._status_key_id, revoked=[])
         return self._list(ctx, state, 1, updated_at)
 
+    @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def heartbeat(self, ctx: Context, state: V2StatusPublisherState, updated_at: int) -> V2StatusPublication:
         """Re-sign the current sequence and revoked set with a later
         updated_at, which refreshes freshness without a new sequence."""
@@ -109,6 +111,7 @@ class V2StatusPublisher:
         self._check_state(state, updated_at)
         return self._list(ctx, state, state.sequence, updated_at)
 
+    @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def revoke(self, ctx: Context, state: V2StatusPublisherState, cert_ids, at: int) -> V2StatusPublication:
         """Advance one sequence: a push carrying exactly the newly revoked
         certificate IDs and the cumulative full list at the same sequence,
@@ -182,6 +185,7 @@ class V2StatusPublisher:
 _CONSTRUCT = object()
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def new_v2_status_publisher(ctx: Context, roles, issuer_key: HybridPublicKey, status_signer, lifetime_seconds: int) -> V2StatusPublisher:
     """Bind an issuer's complete key to a separate status signer using the
     deployment's authenticated role configuration: the anchored

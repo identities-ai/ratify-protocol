@@ -18,7 +18,7 @@ from typing import Optional
 from . import context_v2
 from .challenge_claim_v2 import challenge_claim_digest_v2, protocol_claim_id_v2
 from .clock_bounds_v2 import v2_challenge_time_current
-from .errors_v2 import ClaimProofConflictError, V2Error, V2ErrorClass, classify
+from .errors_v2 import ClaimProofConflictError, V2Error, V2ErrorClass, classify, classified, V2ValueError
 from .protocol_v2 import ProofBundleV2, bundle_hash_v2
 from .types_v2 import clone_constraint_evaluator_refs_v2
 from .verify_v2_preflight import (
@@ -247,6 +247,7 @@ def _token_state(token: object) -> Optional[_V2EvaluationTokenState]:
     return state if isinstance(state, _V2EvaluationTokenState) else None
 
 
+@classified(V2ErrorClass.CLAIM_STORE_UNAVAILABLE)
 def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: ProofBundleV2, preflight: V2PreflightResult,
                           configured_namespace: str, configured_replay_epoch: int, now_unix: int):
     """Go ``ClaimProofBundleV2``. Returns ``(claim, disposition, token)``;
@@ -254,17 +255,17 @@ def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: 
     from .rate_reservation_v2 import signed_v2_rate_reservation_batch
 
     if store is None or not isinstance(ctx, context_v2.Context):
-        raise ValueError("v2 claim store and context are required")
+        raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 claim store and context are required")
     state = _preflight_state(preflight)
     if state is None or (state.context_policy is None and not state.no_context_policy):
-        raise ValueError("v2 successful preflight state is required before claim")
+        raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 successful preflight state is required before claim")
     sealed = _clone_expected_challenge_state_v2(state)
     try:
         bundle_hash = bundle_hash_v2(bundle)
     except Exception:  # noqa: BLE001
         bundle_hash = None
     if bundle_hash is None or bundle_hash != sealed.bundle_hash:
-        raise ValueError("v2 proof bundle differs from successful preflight")
+        raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 proof bundle differs from successful preflight")
     expected = ExpectedChallengeV2(
         value=sealed.value, issued_at=sealed.issued_at, expires_at=sealed.expires_at,
         verifier_namespace=sealed.verifier_namespace, replay_epoch=sealed.replay_epoch, verifier_id=sealed.verifier_id,
@@ -321,6 +322,7 @@ def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: 
     raise ValueError("v2 claim store returned an invalid disposition")
 
 
+@classified(V2ErrorClass.CLAIM_STORE_UNAVAILABLE)
 def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, token: V2EvaluationToken,
                                    terminal_result: bytes, receipt_body: bytes) -> bool:
     """Go ``FinalizeClaimProofBundleV2``: commit a terminal local evaluation
@@ -330,7 +332,7 @@ def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2,
     state = _token_state(token)
     if (not isinstance(ctx, context_v2.Context) or store is None or state is None or len(state.owner_token) != 32
             or state.claim_id == ""):
-        raise ValueError("v2 claim store and valid evaluator capability are required")
+        raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 claim store and valid evaluator capability are required")
     terminal_result = bytes(terminal_result)
     receipt_body = bytes(receipt_body)
     err = ctx.err()
@@ -338,19 +340,19 @@ def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2,
         raise err
     with state.finalization_mu:
         if not state.evaluation_complete:
-            raise ValueError("v2 proof evaluation has not completed")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 proof evaluation has not completed")
         decision, ok = terminal_decision_for_v2_evaluation(state.evaluation_status, state.evaluation_reason)
         if not ok:
-            raise ValueError("v2 proof evaluation has not reached a terminal local result")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 proof evaluation has not reached a terminal local result")
         if not terminal_payload_matches_v2(terminal_result, receipt_body, decision, state.evaluation_reason):
-            raise ValueError("v2 terminal result does not match the completed local evaluation")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result does not match the completed local evaluation")
         if (decision == "allow" and state.allow_valid_until <= 0) or (decision != "allow" and state.allow_valid_until != 0):
-            raise ValueError("v2 terminal result lacks a valid allow freshness horizon")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result lacks a valid allow freshness horizon")
         if state.rate_at_finalization and not is_v2_rate_at_finalization_store(store):
-            raise ValueError("v2 rate-at-finalization requires an atomic rate store")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 rate-at-finalization requires an atomic rate store")
         payload_digest = v2_finalization_payload_digest(terminal_result, receipt_body)
         if state.finalization_started and state.finalization_digest != payload_digest:
-            raise ValueError("v2 evaluator capability cannot change its terminal result or receipt body")
+            raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 evaluator capability cannot change its terminal result or receipt body")
         state.finalization_started = True
         state.finalization_digest = payload_digest
         try:

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from . import _v2json
 from .context_policy_v2 import V2DeferredConstraint
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .types_v2 import is_int, valid_v2_id
 
 MAX_RATE = "max_rate"
@@ -19,15 +20,17 @@ _MAX_IDENTIFIER_LENGTH_BYTES = 512
 _MAX_RATE_WINDOW_SECONDS = 86400
 
 
-class V2RateLimitExceededError(Exception):
+class V2RateLimitExceededError(V2Error):
     """Go ``ErrV2RateLimitExceeded``: a complete atomic batch had no capacity.
 
     Unclassified by design, as in Go: it is a store outcome, not a failure
     class, and the verifier maps it to ``constraint_denied``. Any other store
-    error is unavailable or ambiguous and can never authorize."""
+    error is unavailable or ambiguous and can never authorize. A public
+    function that lets it escape classifies it in place, as Go wraps the
+    sentinel, so ``isinstance`` still recognises it."""
 
     def __init__(self, message: str = "v2 signed rate limit has no remaining capacity"):
-        super().__init__(message)
+        super().__init__(V2ErrorClass.UNCLASSIFIED, message)
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,7 @@ def signed_v2_rate_reservation_batch(bundle) -> list:
     return build_v2_rate_reservation_batch(deferred)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def build_v2_rate_reservation_batch(deferred) -> list:
     """Derive a deterministic atomic reservation request from signed
     ``max_rate`` constraints retained in the claimed proof. Raises

@@ -152,6 +152,7 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
     non-nil returned error."""
 
     def preflight_failure(err: BaseException) -> V2VerifyOutcome:
+        err = classify(V2ErrorClass.CONFIGURATION_INVALID, err)
         return V2VerifyOutcome(stage=V2_STAGE_PREFLIGHT, error=err, error_class=error_class_of(err))
 
     from .constraints_v2 import ConstraintContextV2
@@ -186,7 +187,10 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
     if disposition != V2_CLAIM_CREATED:
         return V2VerifyOutcome(stage=V2_STAGE_REPLAY, disposition=disposition, claim=claim)
 
+    # Every evaluating error reaching here is a claim-store, progress-write,
+    # or finalization failure unless it already carries a class.
     def evaluating(err: BaseException) -> V2VerifyOutcome:
+        err = classify(V2ErrorClass.CLAIM_STORE_UNAVAILABLE, err)
         return V2VerifyOutcome(stage=V2_STAGE_EVALUATING, claim=claim, disposition=disposition, error=err,
                                error_class=error_class_of(err))
 

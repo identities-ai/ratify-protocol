@@ -14,7 +14,7 @@ from typing import Callable, Optional
 
 from .clock_bounds_v2 import v2_challenge_time_current, validate_v2_freshness_configuration
 from .context_policy_v2 import V2ContextPolicy, clone_v2_context_policy, same_v2_context_policy
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified
 from .protocol_v2 import ProofBundleV2, bundle_hash_v2, verify_proof_bundle_v2_signatures
 from .scope import validate_required_scope_v2
 from .signing_v2 import key_id_v2
@@ -201,6 +201,7 @@ def _check_expected_types(expected: ExpectedChallengeV2) -> None:
         raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 expected challenge has a field of the wrong type")
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[ExpectedChallengeV2], policy: Optional[V2ContextPolicy],
                               required_scope: str, configured_namespace: str, configured_replay_epoch: int,
                               now_unix: int, max_age_seconds: int, future_skew_seconds: int) -> V2PreflightResult:
@@ -258,6 +259,7 @@ def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[Expecte
     return V2PreflightResult._seal(state)
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: ExpectedChallengeV2, required_scope: str,
                                        configured_namespace: str, configured_replay_epoch: int, now_unix: int,
                                        max_age_seconds: int, future_skew_seconds: int) -> None:

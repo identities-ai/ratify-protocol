@@ -4,6 +4,7 @@ from __future__ import annotations
 from hashlib import sha256
 import re
 
+from .errors_v2 import V2ErrorClass, classified
 from .scope import validate_required_scope_v2
 
 _OPERATION_TAG = b"ratify/operation-context/v2"
@@ -30,6 +31,7 @@ def _field(value: bytes) -> bytes:
     return len(value).to_bytes(8, "big") + value
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def operation_context_v2_bytes(
     required_scope: str,
     operation: str | None = None,
@@ -54,6 +56,7 @@ def operation_context_v2_bytes(
     return _OPERATION_TAG + b"".join(_field(item) for item in fields)
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def operation_context_v2_hash(
     required_scope: str,
     operation: str | None = None,
@@ -67,6 +70,7 @@ def operation_context_v2_hash(
     )).digest()
 
 
+@classified(V2ErrorClass.MALFORMED)
 def decode_payload_digest(encoded: str | None) -> bytes | None:
     """Decode the Verify API's canonical ``sha256:<lowercase hex>`` value."""
     if encoded is None:
@@ -81,6 +85,7 @@ def decode_payload_digest(encoded: str | None) -> bytes | None:
         raise ValueError("payload digest must be sha256: followed by 64 lowercase hexadecimal characters") from exc
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def session_context_v2_bytes(
     verifier_id: str,
     workspace_id: str,
@@ -109,6 +114,7 @@ def session_context_v2_bytes(
     return _SESSION_TAG + b"".join(_field(item) for item in fields)
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def session_context_v2_hash(
     verifier_id: str,
     workspace_id: str,

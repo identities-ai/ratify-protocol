@@ -12,10 +12,12 @@ from ._v2json import MAX_SAFE_INTEGER, canonical
 from .errors_v2 import (
     V2Error,
     V2ErrorClass,
+    V2ValueError,
     WitnessLogForkError,
     WitnessLogFrozenError,
     WitnessLogGapError,
     WitnessLogOrphanError,
+    classified,
 )
 from .protocol_v2 import (
     _run,
@@ -138,11 +140,13 @@ def _validate_witness_signable_body(body: bytes) -> None:
     validate_witness_entry_v2(entry, False)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def statement_body_digest_v2(object_type: int, signable_body: bytes) -> bytes:
     """StatementBodyDigestV2 for rotation (0x0004), witness (0x0006), and
     verification-receipt (0x0008) signable bodies; each body is schema-validated."""
     if object_type not in (KEY_ROTATION_AUTHORIZATION, WITNESS_ENTRY, VERIFICATION_RECEIPT):
-        raise ValueError(f"object type 0x{object_type:04x} does not use StatementBodyDigestV2")
+        raise V2ValueError(V2ErrorClass.UNSUPPORTED_OBJECT_TYPE,
+                           f"object type 0x{object_type:04x} does not use StatementBodyDigestV2")
     if object_type == VERIFICATION_RECEIPT:
         value = _v2json.check_wire_json(signable_body, ("previous_receipt_hash",), ("bundle_hash",))
     else:
@@ -172,10 +176,12 @@ def statement_body_digest_v2(object_type: int, signable_body: bytes) -> bytes:
     ).digest()
 
 
+@classified(V2ErrorClass.MALFORMED)
 def witness_entry_v2_digest(entry: WitnessEntryV2) -> bytes:
     return statement_body_digest_v2(WITNESS_ENTRY, witness_entry_signable_bytes_v2(entry))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_witness_entry_v2(entry: WitnessEntryV2) -> bytes:
     validate_witness_entry_v2(entry, True)
     wire = canonical({**_witness_signable_dict(entry), "signature": key_dict(entry.signature)})
@@ -201,17 +207,19 @@ def decode_witness_entry_v2(data: bytes) -> WitnessEntryV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_witness_entry_v2(entry: WitnessEntryV2, witness_private: HybridPrivateKey) -> WitnessEntryV2:
     """Go ``SignWitnessEntryV2``: sign the witness body under code 0x0006."""
     return sign_witness_entry_v2_with_signer(background(), entry, _as_signer(witness_private))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_witness_entry_v2_with_signer(ctx: Context, entry: WitnessEntryV2, signer: SignerV2) -> WitnessEntryV2:
     """Go ``SignWitnessEntryV2WithSigner``: the signer's key ID must equal witness_id."""
     validate_witness_entry_v2(entry, False)
     witness_public = signer_public_key_v2(signer)
     if key_id_v2(witness_public) != entry.witness_id:
-        raise V2SigningError("witness_id does not match signing key")
+        raise V2SigningError("witness_id does not match signing key", V2ErrorClass.KEY_ID_MISMATCH)
     body = witness_entry_signable_bytes_v2(entry)
     signature = _sign_v2_statement_with_signer(ctx, WITNESS_ENTRY, body, signer, witness_public)
     result = replace(entry, prev_hash=bytes(entry.prev_hash), entry_data=bytes(entry.entry_data), signature=signature)
@@ -250,6 +258,7 @@ def log_position_result(sequence: int, prev_hash: bytes, digest: bytes, head_seq
     return WitnessEntryV2Result.APPENDED
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_witness_entry_v2(entry: WitnessEntryV2, head: WitnessV2Head, witness_public: HybridPublicKey) -> WitnessEntryV2Result:
     _run(V2ErrorClass.MALFORMED, lambda: validate_witness_entry_v2(entry, True))
     _run(V2ErrorClass.MALFORMED, lambda: encode_witness_entry_v2(entry))

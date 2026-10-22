@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from . import _v2json
 from ._v2json import MAX_SAFE_INTEGER, RawJSON, canonical
-from .errors_v2 import V2Error, V2ErrorClass
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .operation_context_v2 import session_context_v2_hash
 from .protocol_v2 import (
     ProofBundleV2,
@@ -158,6 +158,7 @@ def validate_canonical_transaction_terms_v2(data: bytes) -> None:
         raise ValueError("terms bytes differ from RatifyCanonicalJSON")
 
 
+@classified(V2ErrorClass.MALFORMED)
 def transaction_receipt_v2_sign_bytes(receipt: TransactionReceiptV2) -> bytes:
     """The exact object-type 0x0007 bytes each party signs."""
     if receipt is None or not receipt.parties:
@@ -256,7 +257,7 @@ def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signa
                 party.verifier_id, party.workspace_id, party.agent_id, party.session_id, party.invocation_id,
                 transaction_party_request_hash_v2(transaction_hash, party.required_scope),
             )
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, V2Error):
             expected = None
         if expected is None or bundle.session_context is None or bytes(bundle.session_context) != expected:
             raise V2Error(V2ErrorClass.TRANSACTION_CONTEXT_MISMATCH,
@@ -274,6 +275,7 @@ def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signa
     transaction_receipt_v2_sign_bytes(receipt)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_transaction_receipt_v2_signatures(receipt: TransactionReceiptV2) -> None:
     """Typed party signatures, bundle hashes, party bindings, and the
     transaction-derived session contexts. Trust and status are not resolved."""
@@ -296,6 +298,7 @@ def verify_transaction_receipt_v2_signatures(receipt: TransactionReceiptV2) -> N
         verify_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, signature, party.agent_pub_key)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: str,
                                       key: HybridPrivateKey) -> TransactionReceiptSignatureV2:
     """Go ``SignTransactionReceiptPartyV2``: one party's signature over the
@@ -303,6 +306,7 @@ def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: s
     return sign_transaction_receipt_party_v2_with_signer(background(), receipt, party_id, _as_signer(key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_transaction_receipt_party_v2_with_signer(ctx: Context, receipt: TransactionReceiptV2, party_id: str,
                                                   signer: SignerV2) -> TransactionReceiptSignatureV2:
     """Go ``SignTransactionReceiptPartyV2WithSigner``: the signer's complete
@@ -311,10 +315,12 @@ def sign_transaction_receipt_party_v2_with_signer(ctx: Context, receipt: Transac
         raise V2SigningError("transaction receipt is required")
     party = next((p for p in receipt.parties if p.party_id == party_id), None)
     if party is None:
-        raise V2SigningError(f"party {party_id!r} is not listed in the transaction receipt")
+        raise V2SigningError(f"party {party_id!r} is not listed in the transaction receipt",
+                             V2ErrorClass.TRANSACTION_PARTY_MISMATCH)
     party_public = signer_public_key_v2(signer)
     if not equal_public_keys(party_public, party.agent_pub_key):
-        raise V2SigningError(f"signing key does not match party {party_id!r} agent public key")
+        raise V2SigningError(f"signing key does not match party {party_id!r} agent public key",
+                             V2ErrorClass.KEY_ID_MISMATCH)
     try:
         validate_transaction_receipt_v2(receipt, False)
     except (ValueError, V2Error) as exc:
@@ -345,6 +351,7 @@ def _encode_canonical(receipt: TransactionReceiptV2) -> bytes:
     return encoded
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_transaction_receipt_v2(receipt: TransactionReceiptV2) -> bytes:
     verify_transaction_receipt_v2_signatures(receipt)
     return _encode_canonical(receipt)

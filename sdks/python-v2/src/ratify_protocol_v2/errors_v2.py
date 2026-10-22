@@ -6,7 +6,10 @@ of guessing.
 """
 from __future__ import annotations
 
-from typing import Optional
+import functools
+from typing import Callable, Optional, TypeVar
+
+_F = TypeVar("_F", bound=Callable)
 
 
 class V2ErrorClass:
@@ -142,10 +145,14 @@ def v2_error(error_class: str, message: str) -> V2Error:
 
 
 def classify(error_class: str, exc: Optional[BaseException]) -> Optional[BaseException]:
-    """Go ``v2Classify``: keep an existing class, otherwise attach one."""
+    """Go ``v2Classify``: keep an existing class, otherwise attach one. A
+    :class:`V2Error` that is still unclassified (a typed signing error) is
+    classified in place, so its type and message are kept."""
     if exc is None:
         return None
     if isinstance(exc, V2Error):
+        if exc.error_class == V2ErrorClass.UNCLASSIFIED:
+            exc.error_class = error_class
         return exc
     wrapped = V2Error(error_class, str(exc))
     wrapped.__cause__ = exc
@@ -159,3 +166,39 @@ def error_class_of(exc: Optional[BaseException]) -> str:
     if isinstance(exc, V2Error):
         return exc.error_class
     return V2ErrorClass.UNCLASSIFIED
+
+
+class V2ValueError(V2Error, ValueError):
+    """A classified error raised where the unclassified error was a
+    ``ValueError``; it is still caught by ``except ValueError``."""
+
+
+def classified(error_class: str) -> Callable[[_F], _F]:
+    """Decorate a public v2 function so every error it raises carries a
+    SPEC-v2 §2.7 class: the error's own class when it has one, otherwise
+    ``error_class``, the class of the function's row in the §2.7 table (Go
+    ``defer v2Classify(class, err)``). ``ImportError`` from a missing native
+    extension is an installation failure, not a Protocol error, and passes
+    through unchanged."""
+
+    def decorate(fn: _F) -> _F:
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except V2Error as exc:
+                classify(error_class, exc)
+                raise
+            except ImportError:
+                raise
+            except ValueError as exc:
+                # Stay a ValueError so callers that caught the unclassified
+                # error keep catching it.
+                wrapped = V2ValueError(error_class, str(exc))
+                raise wrapped from exc
+            except Exception as exc:  # noqa: BLE001 - every public v2 error is classified
+                raise classify(error_class, exc) from exc
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorate

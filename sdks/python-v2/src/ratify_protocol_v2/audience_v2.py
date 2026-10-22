@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from .clock_bounds_v2 import V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS, V2_MAX_FUTURE_SKEW_SECONDS, valid_v2_timestamp
 from .context_policy_v2 import V2DeferredConstraint
+from .errors_v2 import V2ErrorClass, classified
 from .rate_reservation_v2 import RECEIVER_AUDIENCE, decode_sealed_constraint_v2
 from .types_v2 import MAX_SAFE_INTEGER, is_int, valid_prefixed_digest_v2
 
@@ -41,6 +42,7 @@ class V2AudienceAssessment:
     fresh_until: int = 0
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def evaluate_receiver_audience_v2(deferred, receiver_id: str, memberships, now: int, future_skew: int) -> V2AudienceAssessment:
     """Evaluate every deferred audience link. A valid nonmatching membership
     takes precedence over unavailable membership in another link. Raises

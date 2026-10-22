@@ -87,7 +87,10 @@ def test_version_1_migration():
     tampered = sj.decode_legacy_security_journal_v1(b64(m["tampered_legacy_record_b64"]))
     with pytest.raises(V2Error) as excinfo:
         snap.migrate_security_journal_v2(tampered)
-    assert error_class_of(excinfo.value) == "configuration_invalid"
+    # The record's own digest check fails, so the reference reports the
+    # malformed class of ValidateSecurityJournalV2 rather than the
+    # configuration_invalid default of the migration.
+    assert error_class_of(excinfo.value) == "malformed"
     # A loaded version 1 record is never used directly: it requires migration.
     assert legacy.version == 1
 

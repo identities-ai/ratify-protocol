@@ -74,17 +74,26 @@ mock actuator); no serial or GPIO output was produced.
 - Matrix wall time on the Pi: 74 s
 - Decision latency on the Pi (challenge to released decision): not measured in this run
 
-## Protocol v2: production binaries, DS3231 RTC, and Arduino (pending)
+## Protocol v2: production binaries, DS3231 RTC, and Arduino (2026-10-22)
 
-Run only with the owner's approval for each actuation.
+Run on the Raspberry Pi 2 with the production binaries from the staged bundle
+(checksums verified), the DS3231 real-time clock, and the Arduino Uno over USB
+serial. The owner approved each hardware step individually and watched the LED.
 
-- Time: `PENDING` (`/dev/rtc0` readable by the receiver and checkpoint users, `clock_trusted=true` on every decision)
-- Process separation: checkpoint run as `PENDING` (separate Unix user or same user)
-- Quarantine: production receiver started with 300 seconds remaining, no override compiled in: `PENDING`
-- Non-actuating checks (monitor, out of scope, zone, signed duration ceiling, local cap, tamper, untrusted root): `PENDING`, actuator count unchanged: `PENDING`
-- Direct physical request, 500 ms: `PENDING`; LED observed by the owner: `PENDING`
-- Captured proof, first presentation: `PENDING`; replay of the same bytes: `PENDING`; total actuator calls: `PENDING`
-- Receiver restart then replay: `PENDING`
+- Time: every decision reported `clock_trusted=true` from the RTC; no clock override is compiled into the production binaries (`test_quarantine_override=false` on every decision)
+- Process separation: the checkpoint ran as a separate process with its own key and storage, under the same Unix user as the receiver (running it as a separate user remains a manual hardening step, see `v2-design.md`)
+- Quarantine: the production receiver started with 300 seconds remaining and accepted no request until it reached 0
+- Non-actuating checks, all after the quarantine, actuator count unchanged at 0:
+  - monitor-scoped delegation: released allow (`authorized`), not actuated, because the scope lacks `physical:actuate`
+  - zone outside the delegation: released deny, `constraint_denied`
+  - signed duration ceiling exceeded: released deny, `constraint_denied`
+  - untrusted root: released deny, `unauthorized`
+  - tampered signature: rejected before claim (preflight)
+  - device local cap exceeded: released allow refused by local policy (`policy_duration_denied`)
+- Authorized request, 500 ms: released allow (`authorized`), actuated once; the owner observed exactly one LED pulse
+- Replay of the same proof bytes: `terminal_replay`, not actuated; total actuator calls 1
+- Receiver restart, quarantine, then replay: rejected at preflight (`challenge_not_fresh`), not actuated. After a restart the 300 second quarantine outlasts the maximum challenge age, so every pre-restart proof is stale before the receiver accepts requests. The deterministic matrix covers the durable-claim replay path (`terminal_replay` after restart) with a fixture clock. The run script now accepts either outcome and fails only on actuation.
+- Whole run: exactly one `actuator: FIRE` line in the receiver log
 
 ## Explicit limits of the v2 evidence
 

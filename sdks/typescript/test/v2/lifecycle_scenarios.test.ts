@@ -1,0 +1,283 @@
+// testvectors/v2/lifecycle-scenarios.json: Part B scripts replayed against
+// the test-only reference store (Go TestV2ConformanceLifecycleScenarios),
+// plus cancellation after claim. The profile_scenarios member is run by
+// profile_scenarios.test.ts.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { protocolClaimIDV2 } from "../../src/challenge_claim_v2.js";
+import { claimProofBundleV2, type ClaimStoreV2 } from "../../src/claim_store_v2.js";
+import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
+import { recoverInterruptedClaimV2 } from "../../src/evaluation_progress_v2.js";
+import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
+import { CommittedV2Outcome, releaseV2Decision, type V2ReceiptCheckpoint, type V2ReleaseConfig, type V2ReleasedDecision } from "../../src/release_v2.js";
+import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2, encodeVerificationReceiptV2 } from "../../src/verification_receipt_v2.js";
+import { verifyProofBundleV2 } from "../../src/verify_v2.js";
+import { preflightProofBundleV2 } from "../../src/verify_v2_preflight.js";
+import {
+  ErrHeadOfLineBlockedTestOnly,
+  ErrLogFrozenTestOnly,
+  ErrSignerUnavailableTestOnly,
+  StoreTestOnly,
+} from "../../src/v2reference/store.js";
+import type { V2AuthoritativeClock } from "../../src/claim_store_v2.js";
+import { type Any, corpusKeyPairs, load, unb64 } from "./helpers.js";
+import { buildVerifyRequest, zeroCounts } from "./verify_harness.js";
+
+const file = load("lifecycle-scenarios.json");
+
+/** Reports acknowledgements for a different entry hash (Go v2WrongEntryCheckpoint). */
+class WrongEntryCheckpoint implements V2ReceiptCheckpoint {
+  constructor(readonly inner: V2ReceiptCheckpoint) {}
+  acknowledgeV2Receipt(logID: string, sequence: number, previous: Uint8Array, entry: Uint8Array) {
+    return this.inner.acknowledgeV2Receipt(logID, sequence, previous, entry);
+  }
+  async getV2Acknowledgement(logID: string, sequence: number) {
+    const ack = await this.inner.getV2Acknowledgement(logID, sequence);
+    const entryHash = Uint8Array.from(ack.entryHash);
+    entryHash[0]! ^= 1;
+    return { ...ack, entryHash };
+  }
+}
+
+export const fixedClock = (now: number): V2AuthoritativeClock => ({ authoritativeTimeV2: async () => now });
+
+/** Committed decision check (test only; applications never parse the body). */
+export function checkCommitted(step: number, c: CommittedV2Outcome, want: Any): void {
+  const body = decodeVerificationReceiptBodyV2(c.receiptBody());
+  assert.equal(body.decision, want.decision, `step ${step} committed decision`);
+  assert.equal(body.decision_reason, want.decision_reason, `step ${step} committed reason`);
+  if (want.trust_assessment) assert.equal(body.trust_assessment, want.trust_assessment, `step ${step} trust`);
+  if (want.status_assessment) assert.equal(body.status_assessment, want.status_assessment, `step ${step} status`);
+  if (want.context_assessment) assert.equal(body.context_assessment, want.context_assessment, `step ${step} context`);
+  assert.equal(c.allowHorizon() ?? 0, want.allow_horizon ?? 0, `step ${step} allow horizon`);
+}
+
+/**
+ * allowed() compares the receiver's time only with the sealed exclusive
+ * deadlines, and changing returned copies never changes the decision.
+ */
+export async function checkReleasedDecisionAllowed(step: number, d: V2ReleasedDecision): Promise<void> {
+  const at = (now: number) => d.allowed(fixedClock(now));
+  const horizon = d.allowHorizon();
+  assert.equal(horizon !== null, d.decision() === "allow", `step ${step} horizon presence`);
+  if (horizon === null) {
+    assert.equal(await at(d.releaseTime()), false, `step ${step}: a released ${d.decision()} is allowed`);
+    return;
+  }
+  const deadline = Math.min(horizon, d.challengeExpiresAt());
+  assert.ok(await at(d.releaseTime()), `step ${step} allowed at release`);
+  assert.ok(await at(deadline - 1), `step ${step} allowed before deadline`);
+  assert.equal(await at(deadline), false, `step ${step} exclusive deadline`);
+  assert.equal(await at(deadline + 1), false, `step ${step} after deadline`);
+  assert.equal(await d.allowed({ authoritativeTimeV2: async () => { throw new Error("clock down"); } }), false);
+  assert.equal(await at(-1), false);
+  const scope = d.grantedScope();
+  const wire = d.receiptWire();
+  const receipt = d.receipt();
+  scope.fill("mutated");
+  wire.fill(0);
+  receipt.decision = "deny";
+  receipt.sequence += 1;
+  const again = d.receipt();
+  assert.ok(again.decision === "allow" && again.sequence === receipt.sequence - 1 && !d.grantedScope().includes("mutated") && (await at(d.releaseTime())),
+    `step ${step}: a returned copy changed the released decision`);
+}
+
+test("lifecycle-scenarios.json: corpus shape", () => {
+  assert.equal(file.version, 2);
+  assert.equal(file.scenarios.length, 28);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 140);
+});
+
+for (const sc of file.scenarios as Any[]) {
+  test(`lifecycle: ${sc.name}`, async () => {
+    const keys = await corpusKeyPairs();
+    const verifier = keys.get(file.verifier_key)!;
+    let store = new StoreTestOnly(sc.start_time, file.lease_seconds, file.log_id, verifier);
+    const committed = new Map<string, CommittedV2Outcome>();
+    const receipts = new Map<string, Uint8Array>();
+    const claimIDs = new Map<string, string>();
+    const requestOf = new Map<string, string>();
+    let epochOverride = 0;
+    const config: V2ReleaseConfig = { verifierPublicKey: verifier.publicKey, logID: file.log_id, claimStore: store, checkpoint: store };
+    const claimStore = (): ClaimStoreV2 => (sc.rate_at_finalization ? store.withRateAtFinalization() : store);
+    const recoverStep = async (i: number, request: string, want: Any) => {
+      try {
+        const outcome = await recoverInterruptedClaimV2(store, claimIDs.get(request)!);
+        assert.equal(want.error_class ?? "", "", `step ${i} recover succeeded, want ${want.error_class}`);
+        checkCommitted(i, outcome, want);
+        committed.set(request, outcome);
+      } catch (err) {
+        if (!want.error_class) throw err;
+        assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} recover class (${(err as Error).message})`);
+      }
+    };
+    for (let i = 0; i < sc.steps.length; i++) {
+      const step = sc.steps[i];
+      const want = step.expect ?? {};
+      const now = store.now;
+      const request = file.requests[step.request];
+      switch (step.op) {
+        case "set_time":
+          store.setTime(step.time);
+          break;
+        case "set_ack_withheld":
+          store.setAcknowledgementWithheld(step.withheld);
+          break;
+        case "verify": {
+          const inputs = { ...request, now, configured_replay_epoch: epochOverride !== 0 ? epochOverride : request.configured_replay_epoch };
+          const { req, cb } = await buildVerifyRequest(inputs, unb64(file.bundles_b64[request.bundle]), zeroCounts());
+          const cs = claimStore();
+          const callbacks = { ...cb, claimStore: cs };
+          if (sc.rate_at_finalization) callbacks.rate = cs as never;
+          const claimID = protocolClaimIDV2(req.verifierNamespace, req.replayEpoch, req.expected!.value);
+          claimIDs.set(step.request, claimID);
+          requestOf.set(claimID, step.request);
+          if (step.mode) {
+            const provider = callbacks.statusEvidence!;
+            let fired = false;
+            callbacks.statusEvidence = async (r, signal) => {
+              if (!fired) {
+                fired = true;
+                store.setTime(step.time);
+                if (step.mode === "recover_during_status") await recoverStep(i, step.request, want.recovered);
+                else if (step.mode !== "expire_lease_during_status" && step.mode !== "regress_clock_during_status") throw new Error(`unknown verify mode ${step.mode}`);
+              }
+              return provider(r, signal);
+            };
+          }
+          const outcome = await verifyProofBundleV2(req, callbacks);
+          assert.equal(outcome.stage, want.stage, `step ${i} verify ${step.request} stage (${outcome.errorClass}: ${outcome.error?.message})`);
+          assert.equal(outcome.errorClass, want.error_class ?? "", `step ${i} verify class (${outcome.error?.message})`);
+          if (want.disposition) assert.equal(outcome.disposition, want.disposition, `step ${i} disposition`);
+          if (outcome.stage === "committed") {
+            checkCommitted(i, outcome.committed!, want);
+            committed.set(step.request, outcome.committed!);
+          }
+          break;
+        }
+        case "claim_only": {
+          const bundle = decodeProofBundleV2(unb64(file.bundles_b64[request.bundle]));
+          const { req } = await buildVerifyRequest(request, new Uint8Array(0), zeroCounts());
+          const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace, req.replayEpoch, now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
+          let disposition = "";
+          let cls = "";
+          try {
+            const out = await claimProofBundleV2(claimStore(), bundle, pre, req.verifierNamespace, req.replayEpoch, now);
+            disposition = out.disposition;
+            claimIDs.set(step.request, out.claim.claimID);
+            requestOf.set(out.claim.claimID, step.request);
+          } catch (err) {
+            cls = v2ErrorClassOf(err);
+          }
+          assert.equal(cls, want.error_class ?? "", `step ${i} claim_only class`);
+          assert.equal(disposition, want.disposition ?? "", `step ${i} claim_only disposition`);
+          break;
+        }
+        case "recover":
+          await recoverStep(i, step.request, want);
+          break;
+        case "publish": {
+          const c = committed.get(step.request)!;
+          if (step.mode === "signer_failure") store.setSignerFailure(true);
+          let wire: Uint8Array | null = null;
+          let err: unknown = null;
+          try {
+            wire = await store.publishV2Receipt(c.claimID(), c.receiptBody());
+          } catch (e) {
+            err = e;
+          }
+          store.setSignerFailure(false);
+          if (want.failed) {
+            const reasons: Record<string, Error> = { head_of_line_blocked: ErrHeadOfLineBlockedTestOnly, signer_unavailable: ErrSignerUnavailableTestOnly, log_frozen: ErrLogFrozenTestOnly };
+            assert.ok(wire === null && errorIs(err, reasons[want.publish_error]!), `step ${i} publish: ${err}, want ${want.publish_error}`);
+            break;
+          }
+          if (err) throw err;
+          const receipt = decodeVerificationReceiptV2(wire!);
+          assert.equal(receipt.sequence, want.receipt_sequence, `step ${i} receipt sequence`);
+          if (step.mode === "corrupt_signature") {
+            receipt.signature.ed25519[0]! ^= 1;
+            wire = encodeVerificationReceiptV2(receipt);
+          }
+          receipts.set(step.request, wire!);
+          break;
+        }
+        case "abandon": {
+          const got = (await store.abandonPendingReceipts()).map((id) => requestOf.get(id));
+          assert.deepEqual(got, want.abandoned, `step ${i} abandon`);
+          break;
+        }
+        case "restore":
+          if (step.mode === "exact") store = store.clone();
+          else if (step.mode === "lost_state_epoch_bump") {
+            store = new StoreTestOnly(now, file.lease_seconds, step.log_id, verifier);
+            epochOverride = step.replay_epoch;
+            config.logID = step.log_id;
+          } else throw new Error(`unknown restore mode ${step.mode}`);
+          config.claimStore = store;
+          config.checkpoint = store;
+          break;
+        case "plant_release":
+          store.plantReleaseTestOnly(committed.get(step.request)!.claimID(), step.time);
+          break;
+        case "release":
+        case "release_forged": {
+          let c = committed.get(step.request) as CommittedV2Outcome;
+          let receipt: Uint8Array | null = receipts.get(step.receipt_of || step.request) ?? null;
+          const cfg: V2ReleaseConfig = { ...config };
+          if (step.checkpoint === "wrong_entry") cfg.checkpoint = new WrongEntryCheckpoint(store);
+          if (step.op === "release_forged") {
+            c = Object.create(CommittedV2Outcome.prototype) as CommittedV2Outcome;
+            receipt = null;
+          }
+          const result = await releaseV2Decision(c, receipt, cfg);
+          assert.deepEqual([result.status, result.reason], [want.release_status, want.release_reason ?? ""], `step ${i} release`);
+          assert.equal(result.decision !== null, result.status === "released");
+          if (result.decision) {
+            const d = result.decision;
+            assert.equal(d.decision(), want.decision, `step ${i} released decision`);
+            assert.equal(d.releaseTime(), want.release_time, `step ${i} release time`);
+            assert.equal(d.receipt().sequence, want.receipt_sequence, `step ${i} released receipt`);
+            await checkReleasedDecisionAllowed(i, d);
+          }
+          break;
+        }
+        default:
+          throw new Error(`unknown op ${step.op}`);
+      }
+    }
+  });
+}
+
+test("lifecycle: cancellation after claim leaves the claim recoverable", async () => {
+  const keys = await corpusKeyPairs();
+  const start = 1800000000;
+  const store = new StoreTestOnly(start, file.lease_seconds, file.log_id, keys.get("verifier")!);
+  const request = { ...file.requests.A, now: start };
+  const bundle = unb64(file.bundles_b64[request.bundle]);
+  const controller = new AbortController();
+  const { req, cb } = await buildVerifyRequest(request, bundle, zeroCounts());
+  const provider = cb.statusEvidence!;
+  const outcome = await verifyProofBundleV2(req, {
+    ...cb, claimStore: store,
+    statusEvidence: async (r, signal) => {
+      controller.abort();
+      await provider(r, signal);
+      throw new Error("cancelled");
+    },
+  }, { signal: controller.signal });
+  assert.equal(outcome.stage, "evaluating");
+  assert.equal(outcome.errorClass, "evaluation_cancelled");
+  assert.equal(outcome.committed, null);
+  const retry = await buildVerifyRequest(request, bundle, zeroCounts());
+  const again = await verifyProofBundleV2(retry.req, { ...retry.cb, claimStore: store });
+  assert.equal(again.stage, "replay");
+  assert.equal(again.disposition, "in_progress");
+  await assert.rejects(recoverInterruptedClaimV2(store, outcome.claim!.claimID), (err) => v2ErrorClassOf(err) === "claim_lease_live");
+  store.setTime(start + file.lease_seconds);
+  const recovered = await recoverInterruptedClaimV2(store, outcome.claim!.claimID);
+  assert.equal(decodeVerificationReceiptBodyV2(recovered.receiptBody()).decision_reason, "evaluation_interrupted");
+});

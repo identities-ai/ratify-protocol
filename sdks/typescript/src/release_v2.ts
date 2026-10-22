@@ -163,6 +163,7 @@ interface ReleasedState {
 }
 
 const releasedStates = new WeakMap<V2ReleasedDecision, ReleasedState>();
+const releasedStateOf = (d: V2ReleasedDecision): ReleasedState | null => releasedStates.get(d) ?? null;
 
 /**
  * The only actionable value of this SDK (SPEC-v2 §6.9). Sealed: its
@@ -180,45 +181,42 @@ export class V2ReleasedDecision {
     Object.freeze(d);
     return d;
   }
-  get #s(): ReleasedState | null {
-    return releasedStates.get(this) ?? null;
-  }
   claimID(): string {
-    return this.#s?.claimID ?? "";
+    return releasedStateOf(this)?.claimID ?? "";
   }
   /** "allow", "deny", or "indeterminate". Use allowed(), not this value, to gate a side effect. */
   decision(): string {
-    return this.#s?.decision ?? "";
+    return releasedStateOf(this)?.decision ?? "";
   }
   reason(): string {
-    return this.#s?.reason ?? "";
+    return releasedStateOf(this)?.reason ?? "";
   }
   identityStatus(): string {
-    return this.#s?.identityStatus ?? "";
+    return releasedStateOf(this)?.identityStatus ?? "";
   }
   grantedScope(): string[] {
-    return [...(this.#s?.grantedScope ?? [])];
+    return [...(releasedStateOf(this)?.grantedScope ?? [])];
   }
   /** A copy of the signed receipt wire verified during release. */
   receiptWire(): Uint8Array {
-    return Uint8Array.from(this.#s?.receiptWire ?? []);
+    return Uint8Array.from(releasedStateOf(this)?.receiptWire ?? []);
   }
   /** A freshly decoded copy of the verified signed receipt. */
   receipt(): VerificationReceiptV2 {
-    const s = this.#s;
+    const s = releasedStateOf(this);
     if (!s || s.receiptWire.length === 0) throw new Error("v2 released decision carries no receipt");
     return decodeVerificationReceiptV2(s.receiptWire);
   }
   /** The checkpoint acknowledgement time of the release. */
   releaseTime(): number {
-    return this.#s?.releaseTime ?? 0;
+    return releasedStateOf(this)?.releaseTime ?? 0;
   }
   challengeExpiresAt(): number {
-    return this.#s?.challengeExpiresAt ?? 0;
+    return releasedStateOf(this)?.challengeExpiresAt ?? 0;
   }
   /** The sealed exclusive allow deadline, or null unless the decision is an allow. */
   allowHorizon(): number | null {
-    const h = this.#s?.allowHorizon ?? 0;
+    const h = releasedStateOf(this)?.allowHorizon ?? 0;
     return h > 0 ? h : null;
   }
   /**
@@ -228,7 +226,7 @@ export class V2ReleasedDecision {
    * false. Call immediately before the side effect.
    */
   async allowed(clock: V2AuthoritativeClock, signal?: AbortSignal): Promise<boolean> {
-    const s = this.#s;
+    const s = releasedStateOf(this);
     if (!s || !clock || s.decision !== "allow" || s.receiptWire.length === 0 || s.allowHorizon <= 0) return false;
     let now: number;
     try {

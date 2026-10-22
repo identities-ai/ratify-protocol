@@ -6,7 +6,7 @@ use fips204::ml_dsa_65;
 use fips204::traits::{SerDes, Signer, Verifier};
 use sha2::{Digest, Sha256, Sha384};
 
-use super::errors::{err, plain, V2Error, V2ErrorClass, V2Result};
+use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use crate::crypto_v2::{validate_ed_public_key, validate_ed_signature};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
@@ -50,16 +50,16 @@ impl V2ObjectType {
 /// Full 256-bit v2 key ID: hex(SHA-256("ratify-key-id-v2\0" || ed25519 || ml_dsa_65)).
 pub fn key_id_v2(key: &HybridPublicKey) -> V2Result<String> {
     if key.ed25519.len() != 32 {
-        return plain(format!(
-            "Ed25519 public key wrong length: {}",
-            key.ed25519.len()
-        ));
+        return err(
+            V2ErrorClass::Malformed,
+            format!("Ed25519 public key wrong length: {}", key.ed25519.len()),
+        );
     }
     if key.ml_dsa_65.len() != ml_dsa_65::PK_LEN {
-        return plain(format!(
-            "ML-DSA-65 public key wrong length: {}",
-            key.ml_dsa_65.len()
-        ));
+        return err(
+            V2ErrorClass::Malformed,
+            format!("ML-DSA-65 public key wrong length: {}", key.ml_dsa_65.len()),
+        );
     }
     let mut h = Sha256::new();
     h.update(b"ratify-key-id-v2\0");
@@ -83,25 +83,22 @@ pub fn v2_mldsa_context(object_type: V2ObjectType) -> Vec<u8> {
     format!("ratify-protocol/2/{:04x}", object_type.code()).into_bytes()
 }
 
-fn ed_seed(private_key: &HybridPrivateKey) -> V2Result<[u8; 32]> {
+pub(crate) fn ed_seed(private_key: &HybridPrivateKey) -> V2Result<[u8; 32]> {
     // The Rust SDK stores the 32-byte seed; a 64-byte seed||public form is
     // also accepted when its public half matches the seed (Go layout).
-    match private_key.ed25519.len() {
-        32 => Ok(private_key.ed25519.as_slice().try_into().expect("32 bytes")),
-        64 => {
-            let seed: [u8; 32] = private_key.ed25519[..32].try_into().expect("32 bytes");
-            if SigningKey::from_bytes(&seed).verifying_key().to_bytes()[..]
-                != private_key.ed25519[32..]
-            {
-                return plain("Ed25519 private key seed and public component do not match");
-            }
-            Ok(seed)
-        }
-        _ => plain("incomplete hybrid private key"),
+    let seed: [u8; 32] = match private_key.ed25519.get(..32).map(<[u8; 32]>::try_from) {
+        Some(Ok(seed)) if matches!(private_key.ed25519.len(), 32 | 64) => seed,
+        _ => return plain("incomplete hybrid private key"),
+    };
+    if private_key.ed25519.len() == 64
+        && SigningKey::from_bytes(&seed).verifying_key().to_bytes()[..] != private_key.ed25519[32..]
+    {
+        return plain("Ed25519 private key seed and public component do not match");
     }
+    Ok(seed)
 }
 
-fn ml_secret(private_key: &HybridPrivateKey) -> V2Result<ml_dsa_65::PrivateKey> {
+pub(crate) fn ml_secret(private_key: &HybridPrivateKey) -> V2Result<ml_dsa_65::PrivateKey> {
     let bytes: [u8; ml_dsa_65::SK_LEN] = private_key
         .ml_dsa_65
         .as_slice()
@@ -113,8 +110,8 @@ fn ml_secret(private_key: &HybridPrivateKey) -> V2Result<ml_dsa_65::PrivateKey> 
 
 /// Derive the hybrid public key of a private key (both components validated).
 pub fn public_key_v2(private_key: &HybridPrivateKey) -> V2Result<HybridPublicKey> {
-    let seed = ed_seed(private_key)?;
-    let ml = ml_secret(private_key)?;
+    let seed = ed_seed(private_key).classify(V2ErrorClass::Malformed)?;
+    let ml = ml_secret(private_key).classify(V2ErrorClass::Malformed)?;
     Ok(HybridPublicKey {
         ed25519: SigningKey::from_bytes(&seed)
             .verifying_key()
@@ -124,24 +121,45 @@ pub fn public_key_v2(private_key: &HybridPrivateKey) -> V2Result<HybridPublicKey
     })
 }
 
-/// Sign `signable` under `object_type` with both mandatory components.
-/// ML-DSA-65 signing is hedged (randomized); Ed25519 is deterministic.
-pub fn sign_v2_statement(
+/// Sign the SDK-computed `M` under the registry context. `hedged` selects
+/// randomized ML-DSA-65 signing; deterministic signing (an all-zero `rnd`,
+/// FIPS 204 §3.4) is used only by fixed test fixtures.
+pub(crate) fn sign_v2_message(
+    seed: &[u8; 32],
+    ml: &ml_dsa_65::PrivateKey,
+    message: &[u8],
+    context: &[u8],
+    hedged: bool,
+) -> V2Result<HybridSignature> {
+    let ed = SigningKey::from_bytes(seed).sign(message);
+    let ml_sig = if hedged {
+        ml.try_sign(message, context)
+    } else {
+        ml.try_sign_with_seed(&[0u8; 32], message, context)
+    }
+    .map_err(|e| V2Error::plain(format!("ML-DSA-65 v2 sign: {e}")))?;
+    Ok(HybridSignature {
+        ed25519: ed.to_bytes().to_vec(),
+        ml_dsa_65: ml_sig.to_vec(),
+    })
+}
+
+/// Deterministic signing for fixed test fixtures only (never exported).
+#[cfg(test)]
+pub(crate) fn sign_v2_statement_deterministic(
     object_type: V2ObjectType,
     signable: &[u8],
     private_key: &HybridPrivateKey,
 ) -> V2Result<HybridSignature> {
     let seed = ed_seed(private_key)?;
     let ml = ml_secret(private_key)?;
-    let message = v2_signing_message(object_type, signable);
-    let ed = SigningKey::from_bytes(&seed).sign(&message);
-    let ml_sig = ml
-        .try_sign(&message, &v2_mldsa_context(object_type))
-        .map_err(|e| V2Error::plain(format!("ML-DSA-65 v2 sign: {e}")))?;
-    Ok(HybridSignature {
-        ed25519: ed.to_bytes().to_vec(),
-        ml_dsa_65: ml_sig.to_vec(),
-    })
+    sign_v2_message(
+        &seed,
+        &ml,
+        &v2_signing_message(object_type, signable),
+        &v2_mldsa_context(object_type),
+        false,
+    )
 }
 
 /// Strict AND verification of both components. An unregistered code is
@@ -187,17 +205,24 @@ fn verify_unclassified(
     validate_ed_public_key(&public_key.ed25519)?;
     validate_ed_signature(&signature.ed25519)?;
     let message = v2_signing_message(object_type, signable);
-    let ed_key = VerifyingKey::from_bytes(&public_key.ed25519[..].try_into().expect("32 bytes"))
+    let ed_bytes: [u8; 32] = public_key.ed25519[..]
+        .try_into()
+        .map_err(|_| "hybrid public key has invalid component length".to_string())?;
+    let ed_key = VerifyingKey::from_bytes(&ed_bytes)
         .map_err(|_| "Ed25519 v2 public key malformed".to_string())?;
     let ed_sig = EdSignature::from_slice(&signature.ed25519)
         .map_err(|_| "Ed25519 v2 signature malformed".to_string())?;
     ed_key
         .verify_strict(&message, &ed_sig)
         .map_err(|_| "Ed25519 v2 signature invalid".to_string())?;
-    let ml_pk =
-        ml_dsa_65::PublicKey::try_from_bytes(public_key.ml_dsa_65[..].try_into().expect("PK_LEN"))
-            .map_err(|_| "ML-DSA-65 public key malformed".to_string())?;
-    let ml_sig: [u8; ml_dsa_65::SIG_LEN] = signature.ml_dsa_65[..].try_into().expect("SIG_LEN");
+    let ml_pk_bytes: [u8; ml_dsa_65::PK_LEN] = public_key.ml_dsa_65[..]
+        .try_into()
+        .map_err(|_| "hybrid public key has invalid component length".to_string())?;
+    let ml_pk = ml_dsa_65::PublicKey::try_from_bytes(ml_pk_bytes)
+        .map_err(|_| "ML-DSA-65 public key malformed".to_string())?;
+    let ml_sig: [u8; ml_dsa_65::SIG_LEN] = signature.ml_dsa_65[..]
+        .try_into()
+        .map_err(|_| "hybrid signature has invalid component length".to_string())?;
     if !ml_pk.verify(&message, &ml_sig, &v2_mldsa_context(object_type)) {
         return Err("ML-DSA-65 v2 signature invalid".into());
     }
@@ -247,4 +272,27 @@ pub(crate) fn lp(value: &[u8]) -> Vec<u8> {
     let mut out = (value.len() as u64).to_be_bytes().to_vec();
     out.extend_from_slice(value);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::generate_hybrid_keypair;
+
+    // Fixed fixtures depend on deterministic signing reproducing the same
+    // bytes, and the registry code must domain-separate every object type.
+    #[test]
+    fn deterministic_signing_is_reproducible_and_bound_to_the_object_type() {
+        let (public, private) = generate_hybrid_keypair();
+        let signable = b"fixture signable bytes";
+        let a = sign_v2_statement_deterministic(V2ObjectType::WitnessEntry, signable, &private)
+            .unwrap();
+        let b = sign_v2_statement_deterministic(V2ObjectType::WitnessEntry, signable, &private)
+            .unwrap();
+        assert_eq!(a, b);
+        verify_v2_statement(V2ObjectType::WitnessEntry, signable, &a, &public).unwrap();
+        let wrong =
+            verify_v2_statement(V2ObjectType::RevocationPush, signable, &a, &public).unwrap_err();
+        assert_eq!(wrong.class, V2ErrorClass::InvalidSignature);
+    }
 }

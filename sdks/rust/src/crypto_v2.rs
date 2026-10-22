@@ -6,12 +6,18 @@
 use alloc::{string::{String, ToString}, vec::Vec};
 
 use curve25519_dalek::{edwards::CompressedEdwardsY, traits::IsIdentity};
-use ed25519_dalek::{Signature as EdSignature, Signer as _, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature as EdSignature, VerifyingKey};
+#[cfg(test)]
+use ed25519_dalek::{Signer as _, SigningKey};
 use fips204::ml_dsa_65;
-use fips204::traits::{SerDes, Signer, Verifier};
+use fips204::traits::{SerDes, Verifier};
+#[cfg(test)]
+use fips204::traits::Signer;
 use sha2::{Digest, Sha256, Sha384};
 
-use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
+#[cfg(test)]
+use crate::types::HybridPrivateKey;
+use crate::types::{HybridPublicKey, HybridSignature};
 
 const SIGNATURE_PREFIX: &[u8] = b"ratify-protocol-signature\0\x02";
 const KEY_ID_PREFIX: &[u8] = b"ratify-key-id-v2\0";
@@ -49,7 +55,9 @@ pub fn derive_key_id_v2(pub_key: &HybridPublicKey) -> Result<String, String> {
 }
 
 /// Sign delegation signable bytes with both v2 components and fixed contexts.
-pub fn sign_delegation_v2(
+/// Test-only: no exported function signs caller-selected bytes (SPEC-v2 §3.2).
+#[cfg(test)]
+pub(crate) fn sign_delegation_v2(
     signable_bytes: &[u8],
     private_key: &HybridPrivateKey,
 ) -> Result<HybridSignature, String> {
@@ -157,9 +165,31 @@ fn little_endian_ge(left: &[u8], right: &[u8; 32]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_ed_public_key, validate_ed_signature};
+    use super::{
+        sign_delegation_v2, validate_ed_public_key, validate_ed_signature, verify_delegation_v2,
+    };
+    use crate::crypto::generate_hybrid_keypair;
+    use crate::v2::{verify_v2_statement, V2ObjectType};
     use curve25519_dalek::edwards::CompressedEdwardsY;
     use ed25519_dalek::{Signer, SigningKey};
+
+    // The delegation helper and the typed registry must produce the same
+    // transcript: a delegation signed one way verifies the other way.
+    #[test]
+    fn delegation_signing_matches_the_typed_registry_transcript() {
+        let (public, private) = generate_hybrid_keypair();
+        let signable = b"delegation signable bytes";
+        let signature = sign_delegation_v2(signable, &private).unwrap();
+        verify_delegation_v2(signable, &signature, &public).unwrap();
+        verify_v2_statement(
+            V2ObjectType::DelegationCertificate,
+            signable,
+            &signature,
+            &public,
+        )
+        .unwrap();
+        assert!(verify_delegation_v2(b"other bytes", &signature, &public).is_err());
+    }
 
     fn mixed_order_encoding() -> [u8; 32] {
         let prime = SigningKey::from_bytes(&[7; 32]).verifying_key();

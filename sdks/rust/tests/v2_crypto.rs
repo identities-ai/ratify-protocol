@@ -5,7 +5,7 @@ use fips204::ml_dsa_65;
 use fips204::traits::{SerDes, Signer};
 use ratify_protocol::{
     delegation_signature_message_v2, derive_key_id_v2, hybrid_keypair_from_seeds,
-    sign_delegation_v2, verify_delegation_v2, HybridPrivateKey, HybridPublicKey, HybridSignature,
+    verify_delegation_v2, HybridPrivateKey, HybridPublicKey, HybridSignature,
 };
 use serde_json::Value;
 use sha3::{
@@ -91,11 +91,9 @@ fn v2_signing_matches_shared_message_key_id_and_signature_vector() {
     let signature = fixture_signature(&v);
     verify_delegation_v2(&decode(&v["signable_bytes"]), &signature, &public)
         .expect("shared cross-language signature vector verifies");
-
-    let generated = sign_delegation_v2(&decode(&v["signable_bytes"]), &private).unwrap();
-    assert_eq!(generated.ed25519, signature.ed25519);
-    verify_delegation_v2(&decode(&v["signable_bytes"]), &generated, &public)
-        .expect("newly signed v2 signature verifies");
+    // Typed signing of the delegation transcript is covered by the object
+    // vectors; no exported function signs caller-selected bytes.
+    let _ = &private;
 }
 
 #[test]

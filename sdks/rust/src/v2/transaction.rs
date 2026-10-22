@@ -1,23 +1,26 @@
 //! Transaction receipts (party statements, object code 0x0007).
 //! Mirrors Go `transaction_receipt_v2.go`.
 
+use super::context::V2Context;
 use super::crypto::{
-    equal_keys, key_id_v2, lp, public_key_v2, sha256, sha384, sign_v2_statement, valid_v2_id,
-    verify_v2_statement, V2ObjectType,
+    equal_keys, key_id_v2, lp, sha256, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
+use super::errors::{V2SignError, V2SignResult};
+use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_TRANSACTION_RECEIPT_BYTES_V2};
+use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
 use super::json::{canonical, node_to_cj, obj, parse_json, parse_wire, JNode, CJ, JV};
 use super::wire::{
-    bundle_hash_of_bytes, bundle_hash_v2, decode_proof_bundle_v2, encode_proof_bundle_v2, safe,
-    validate_required_scope_v2, verify_proof_bundle_v2_signatures, ProofBundleV2,
+    bundle_hash_of_bytes, bundle_hash_v2, decode_proof_bundle_v2, encode_proof_bundle_v2,
+    required_scope_v2, verify_proof_bundle_v2_signatures, ProofBundleV2,
 };
-use crate::operation_context_v2::{build_session_context_v2, SessionContextV2Inputs};
+use super::operation_context::{build_session_context_v2, SessionContextV2Inputs};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
 /// Bound on the complete encoded receipt including embedded bundles.
-pub const MAX_TRANSACTION_RECEIPT_BYTES: usize = 5 << 20;
+pub const MAX_TRANSACTION_RECEIPT_BYTES: usize = MAX_TRANSACTION_RECEIPT_BYTES_V2;
 /// Bound on the number of parties.
-pub const MAX_TRANSACTION_PARTIES: usize = 32;
+pub const MAX_TRANSACTION_PARTIES: usize = super::limits::MAX_TRANSACTION_PARTIES_V2;
 
 /// Canonical application terms bound to one signed v2 proof per party.
 #[derive(Debug, Clone)]
@@ -173,7 +176,7 @@ fn validate(r: &TransactionReceiptV2, require_signatures: bool) -> V2Result<()> 
     use V2ErrorClass::*;
     if r.version != 2
         || r.transaction_id.is_empty()
-        || !safe(r.created_at)
+        || !valid_v2_timestamp(r.created_at)
         || r.terms_schema_uri.is_empty()
         || r.terms_canonical_json.is_empty()
         || r.parties.is_empty()
@@ -208,7 +211,7 @@ fn validate(r: &TransactionReceiptV2, require_signatures: bool) -> V2Result<()> 
                 p.agent_id
             ));
         }
-        validate_required_scope_v2(&p.required_scope)
+        required_scope_v2(&p.required_scope)
             .map_err(|e| e.context(format!("wire v2: party {:?} required_scope", p.party_id)))?;
         let Some(bundle) = &p.proof_bundle else {
             return plain(format!(
@@ -240,6 +243,17 @@ fn validate(r: &TransactionReceiptV2, require_signatures: bool) -> V2Result<()> 
                 p.party_id
             ))
         })?;
+        if bundle.delegations.is_empty() {
+            // SPEC-v2 §5.7: a transaction party must present delegated
+            // authority; an empty chain is rejected, never evaluated.
+            return err(
+                TransactionPartyMismatch,
+                format!(
+                    "wire v2: party {:?} proof bundle has no delegation certificates",
+                    p.party_id
+                ),
+            );
+        }
         if bundle.agent_id != p.agent_id
             || !equal_keys(&bundle.agent_pub_key, &p.agent_pub_key)
             || bundle.verifier_id != p.verifier_id
@@ -353,22 +367,42 @@ pub fn sign_transaction_receipt_party_v2(
     r: &TransactionReceiptV2,
     party_id: &str,
     key: &HybridPrivateKey,
-) -> V2Result<TransactionReceiptSignatureV2> {
+) -> V2SignResult<TransactionReceiptSignatureV2> {
+    sign_transaction_receipt_party_v2_with_signer(&V2Context::background(), r, party_id, &LocalSignerV2::new(key)?)
+}
+
+/// [`sign_transaction_receipt_party_v2`] with an external signer whose
+/// complete key must equal the party agent key.
+pub fn sign_transaction_receipt_party_v2_with_signer(
+    ctx: &V2Context,
+    r: &TransactionReceiptV2,
+    party_id: &str,
+    signer: &dyn SignerV2,
+) -> V2SignResult<TransactionReceiptSignatureV2> {
     let Some(party) = r.parties.iter().find(|p| p.party_id == party_id) else {
-        return plain(format!(
+        return Err(V2SignError::KeyBinding(format!(
             "party {party_id:?} is not listed in the transaction receipt"
-        ));
+        )));
     };
-    if !equal_keys(&public_key_v2(key)?, &party.agent_pub_key) {
-        return plain(format!(
+    let party_public = signer_public_key_v2(signer)?;
+    if !equal_keys(&party_public, &party.agent_pub_key) {
+        return Err(V2SignError::KeyBinding(format!(
             "signing key does not match party {party_id:?} agent public key"
-        ));
+        )));
     }
-    validate(r, false).map_err(|e| e.context("cannot sign invalid transaction receipt"))?;
-    let signable = transaction_receipt_v2_sign_bytes(r)?;
+    validate(r, false)
+        .map_err(|e| e.context("cannot sign invalid transaction receipt"))
+        .classify(V2ErrorClass::Malformed)?;
+    let signable = transaction_receipt_v2_sign_bytes(r).classify(V2ErrorClass::Malformed)?;
     Ok(TransactionReceiptSignatureV2 {
         party_id: party_id.to_string(),
-        signature: sign_v2_statement(V2ObjectType::TransactionPartyStatement, &signable, key)?,
+        signature: sign_v2_statement_with_signer(
+            ctx,
+            V2ObjectType::TransactionPartyStatement,
+            &signable,
+            signer,
+            &party_public,
+        )?,
     })
 }
 
@@ -421,8 +455,8 @@ fn encode_canonical(r: &TransactionReceiptV2) -> V2Result<Vec<u8>> {
         ("transaction_id", CJ::s(&r.transaction_id)),
         ("version", CJ::Int(r.version)),
     ]))?;
-    if encoded.len() > MAX_TRANSACTION_RECEIPT_BYTES {
-        return plain("wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES");
+    if encoded.len() > MAX_TRANSACTION_RECEIPT_BYTES_V2 {
+        return plain("wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES_V2");
     }
     Ok(encoded)
 }
@@ -437,9 +471,12 @@ pub fn encode_transaction_receipt_v2(r: &TransactionReceiptV2) -> V2Result<Vec<u
 /// embedded bundle identity, hashes, and context bindings).
 pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceiptV2> {
     (|| {
-        if data.len() > MAX_TRANSACTION_RECEIPT_BYTES {
-            return plain("wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES");
-        }
+        check_v2_wire_size(
+            data,
+            "transaction receipt",
+            "MAX_TRANSACTION_RECEIPT_BYTES_V2",
+            MAX_TRANSACTION_RECEIPT_BYTES_V2,
+        )?;
         let root = parse_wire(data, &["terms_canonical_json"], &[])?;
         let o = obj(&root)?;
         o.require(TOP, &[])?;

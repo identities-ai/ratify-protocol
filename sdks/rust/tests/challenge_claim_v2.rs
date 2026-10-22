@@ -20,7 +20,7 @@ fn claim_identifiers_match_shared_go_vectors() {
     );
     let primary = &vector["claim_id_input"];
     let namespace = primary["verifier_namespace"].as_str().unwrap();
-    let epoch = primary["replay_epoch"].as_u64().unwrap();
+    let epoch = primary["replay_epoch"].as_i64().unwrap();
     assert_eq!(
         protocol_claim_id_v2(namespace, epoch, &challenge).unwrap(),
         vector["expected_claim_id"].as_str().unwrap()
@@ -31,7 +31,7 @@ fn claim_identifiers_match_shared_go_vectors() {
     );
     for item in vector["additional_claim_id_cases"].as_array().unwrap() {
         let namespace = item["verifier_namespace"].as_str().unwrap();
-        let epoch = item["replay_epoch"].as_u64().unwrap();
+        let epoch = item["replay_epoch"].as_i64().unwrap();
         assert_eq!(
             protocol_claim_id_v2(namespace, epoch, &challenge).unwrap(),
             item["expected_claim_id"].as_str().unwrap()

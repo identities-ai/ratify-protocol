@@ -87,7 +87,7 @@ pub fn resource_path_matches(path_prefix: &str, requested_path: &str) -> bool {
 
 /// Report whether two prefixes are comparable under the prefix relation (one
 /// at or below the other). An absent prefix orders as `/` (SPEC §5.7.3).
-fn resource_paths_nested(a: &str, b: &str) -> bool {
+pub(crate) fn resource_paths_nested(a: &str, b: &str) -> bool {
     let a = if a.is_empty() { "/" } else { a };
     let b = if b.is_empty() { "/" } else { b };
     resource_path_matches(a, b) || resource_path_matches(b, a)

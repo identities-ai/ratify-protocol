@@ -3,14 +3,17 @@
 //! AcceptRotation journal. Mirrors Go `key_rotation_v2.go` and
 //! `key_rotation_journal_v2.go`.
 
+use super::context::V2Context;
 use super::crypto::{
-    equal_keys, key_id_v2, lower_hex, public_key_v2, sha384, sign_v2_statement, valid_v2_id,
-    verify_v2_statement, V2ObjectType,
+    equal_keys, key_id_v2, lower_hex, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
+use super::errors::{V2SignError, V2SignResult};
+use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_KEY_ROTATION_STATEMENT_BYTES_V2};
+use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use super::json::{canonical, node_to_cj, obj, parse_wire, CJ, JV};
 use super::wire::{safe, MAX_SAFE};
-use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature, MAX_PROOF_BUNDLE_BYTES};
+use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
 /// Outcome of a log or journal acceptance check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +91,7 @@ fn validate_statement(s: &KeyRotationStatementV2, signatures: bool) -> V2Result<
     {
         return plain("wire v2: recovery_epoch and sequence must be positive safe integers");
     }
-    if !safe(s.issued_at) || !safe(s.not_before) {
+    if !valid_v2_timestamp(s.issued_at) || !valid_v2_timestamp(s.not_before) {
         return plain("wire v2: issued_at and not_before must be safe integers");
     }
     if !valid_role(&s.role) {
@@ -254,9 +257,12 @@ fn statement_from(o: &super::json::Obj<'_>) -> V2Result<KeyRotationStatementV2> 
 /// Strictly decode one v2 rotation statement.
 pub fn decode_key_rotation_statement_v2(data: &[u8]) -> V2Result<KeyRotationStatementV2> {
     (|| {
-        if data.len() > MAX_PROOF_BUNDLE_BYTES {
-            return plain("wire v2: rotation statement exceeds the wire size limit");
-        }
+        check_v2_wire_size(
+            data,
+            "rotation statement",
+            "MAX_KEY_ROTATION_STATEMENT_BYTES_V2",
+            MAX_KEY_ROTATION_STATEMENT_BYTES_V2,
+        )?;
         let root = parse_wire(data, &["previous_statement_hash"], &[])?;
         let o = obj(&root)?;
         o.require(ROTATION_FIELDS, &[])?;
@@ -279,21 +285,47 @@ pub fn sign_key_rotation_statement_v2(
     s: &KeyRotationStatementV2,
     old_key: &HybridPrivateKey,
     new_key: &HybridPrivateKey,
-) -> V2Result<KeyRotationStatementV2> {
-    validate_statement(s, false)?;
-    if !equal_keys(&public_key_v2(old_key)?, &s.old_key)
-        || !equal_keys(&public_key_v2(new_key)?, &s.new_key)
-    {
-        return plain("rotation private keys do not match the statement keys");
+) -> V2SignResult<KeyRotationStatementV2> {
+    sign_key_rotation_statement_v2_with_signers(
+        &V2Context::background(),
+        s,
+        &LocalSignerV2::new(old_key)?,
+        &LocalSignerV2::new(new_key)?,
+    )
+}
+
+/// [`sign_key_rotation_statement_v2`] with external signers: `old_signer`
+/// signs 0x0004 under the statement old key and `new_signer` signs 0x0009
+/// under the statement new key.
+pub fn sign_key_rotation_statement_v2_with_signers(
+    ctx: &V2Context,
+    s: &KeyRotationStatementV2,
+    old_signer: &dyn SignerV2,
+    new_signer: &dyn SignerV2,
+) -> V2SignResult<KeyRotationStatementV2> {
+    validate_statement(s, false).classify(V2ErrorClass::Malformed)?;
+    let old_pub = signer_public_key_v2(old_signer)?;
+    let new_pub = signer_public_key_v2(new_signer)?;
+    if !equal_keys(&old_pub, &s.old_key) || !equal_keys(&new_pub, &s.new_key) {
+        return Err(V2SignError::KeyBinding(
+            "rotation signer keys do not match the statement keys".into(),
+        ));
     }
-    let signable = key_rotation_statement_v2_signable_bytes(s)?;
+    let signable = key_rotation_statement_v2_signable_bytes(s).classify(V2ErrorClass::Malformed)?;
     let mut out = s.clone();
-    out.old_signature =
-        sign_v2_statement(V2ObjectType::KeyRotationAuthorization, &signable, old_key)?;
-    out.new_signature = sign_v2_statement(
+    out.old_signature = sign_v2_statement_with_signer(
+        ctx,
+        V2ObjectType::KeyRotationAuthorization,
+        &signable,
+        old_signer,
+        &old_pub,
+    )?;
+    out.new_signature = sign_v2_statement_with_signer(
+        ctx,
         V2ObjectType::KeyRotationProofOfPossession,
         &signable,
-        new_key,
+        new_signer,
+        &new_pub,
     )?;
     Ok(out)
 }

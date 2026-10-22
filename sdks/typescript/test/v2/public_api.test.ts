@@ -113,9 +113,11 @@ test("committed outcome: exposes no decision and a forged one is rejected by rel
   assert.deepEqual([result.status, result.reason, result.decision], ["rejected", "release_state_mismatch", null]);
 });
 
-test("package: ./v2 subpath and the 2.0.0-alpha.1 line", () => {
+test("package: ./v2 subpath and the v2 release line", () => {
   const pkg = JSON.parse(JSON.stringify(load("../../sdks/typescript/package.json")));
-  assert.equal(pkg.version, "2.0.0-alpha.1");
+  // Any 2.x version: scripts/release.sh bumps package.json, so pinning one
+  // exact prerelease here would fail the release gate on every bump.
+  assert.match(pkg.version, /^2\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?$/);
   assert.equal(pkg.exports["./v2"].import, "./dist/v2.js");
   assert.equal(pkg.exports["./v2/reference"].import, "./dist/v2reference.js");
 });

@@ -56,6 +56,15 @@ if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; t
   exit 1
 fi
 
+# The version bump below covers the v2 line only. The v1 Python SDK in this
+# tree (sdks/python, sdks/python-native) carries its own version and is not
+# released by this script.
+if [[ ! "$VERSION" =~ ^v2\. ]]; then
+  echo "release: '$VERSION' is not on the v2 line — this script releases v2.x only" >&2
+  usage
+  exit 1
+fi
+
 NPM_VERSION="${VERSION#v}"
 PY_VERSION="$(python - "$NPM_VERSION" <<'PY'
 import re
@@ -115,6 +124,23 @@ def read(path: str) -> str:
 def write(path: str, text: str) -> None:
     (root / path).write_text(text)
 
+def bump_lock(path: str, packages: tuple) -> None:
+    lock = read(path)
+    for pkg in packages:
+        lock = re.sub(
+            rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
+            rf'\g<1>{npm_version}\2',
+            lock,
+            count=1,
+        )
+    write(path, lock)
+
+# This tree releases the v2 line: TypeScript, Rust, C, Go (module /v2), and
+# the ratify-protocol-v2 Python distribution with its native extension. The
+# v1 Python SDK (sdks/python, sdks/python-native) keeps its own version and
+# is not touched here; scripts/check-release-sync.sh checks each line
+# against itself.
+
 pkg_path = root / "sdks/typescript/package.json"
 pkg = json.loads(pkg_path.read_text())
 old_npm = pkg["version"]
@@ -127,33 +153,9 @@ lock["version"] = npm_version
 lock.setdefault("packages", {}).setdefault("", {})["version"] = npm_version
 lock_path.write_text(json.dumps(lock, indent=2) + "\n")
 
-pyproject = read("sdks/python/pyproject.toml")
-old_py_match = re.search(r'^version = "([^"]+)"$', pyproject, re.M)
-if not old_py_match:
-    raise SystemExit("missing Python version")
-old_py = old_py_match.group(1)
-write("sdks/python/pyproject.toml", re.sub(r'^version = "[^"]+"$', f'version = "{py_version}"', pyproject, flags=re.M))
-
-py_init = read("sdks/python/src/ratify_protocol/__init__.py")
-write("sdks/python/src/ratify_protocol/__init__.py", re.sub(r'^__version__ = "[^"]+"$', f'__version__ = "{py_version}"', py_init, flags=re.M))
-
 rust_toml = read("sdks/rust/Cargo.toml")
-old_rust_match = re.search(r'^version = "([^"]+)"$', rust_toml, re.M)
-if not old_rust_match:
-    raise SystemExit("missing Rust version")
-old_rust = old_rust_match.group(1)
 write("sdks/rust/Cargo.toml", re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', rust_toml, count=1, flags=re.M))
-
-rust_lock = read("sdks/rust/Cargo.lock")
-write(
-    "sdks/rust/Cargo.lock",
-    re.sub(
-        r'(\[\[package\]\]\nname = "ratify-protocol"\nversion = ")[^"]+(")',
-        rf'\g<1>{npm_version}\2',
-        rust_lock,
-        count=1,
-    ),
-)
+bump_lock("sdks/rust/Cargo.lock", ("ratify-protocol",))
 
 # C SDK: crate version, the ratify-protocol dependency pin (used by
 # cargo publish to substitute the path dependency), the cbindgen header
@@ -168,78 +170,56 @@ c_toml = re.sub(
     c_toml,
 )
 write("sdks/c/Cargo.toml", c_toml)
-
-# Python native extra: its crate version and the exact-version pin the Python
-# SDK uses to depend on it. The pin must move with the SDK version or
-# `pip install 'ratify-protocol[native]'` resolves to nothing and the extra
-# silently becomes uninstallable.
-native_toml = read("sdks/python-native/Cargo.toml")
-native_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', native_toml, count=1, flags=re.M)
-write("sdks/python-native/Cargo.toml", native_toml)
-
-native_lock_path = root / "sdks/python-native/Cargo.lock"
-if native_lock_path.exists():
-    native_lock = read("sdks/python-native/Cargo.lock")
-    # Only the extension itself. Its ratify-protocol dependency is the
-    # published v1 crate pinned exactly in Cargo.toml (sdks/rust is the v2
-    # line); rewriting that entry would break the registry checksum.
-    for pkg in ("ratify-protocol-native",):
-        native_lock = re.sub(
-            rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
-            rf'\g<1>{npm_version}\2',
-            native_lock,
-        )
-    write("sdks/python-native/Cargo.lock", native_lock)
-
-pyproject_pinned = re.sub(
-    r'("ratify-protocol-native==)[^"]+(")',
-    rf'\g<1>{py_version}\2',
-    read("sdks/python/pyproject.toml"),
-)
-write("sdks/python/pyproject.toml", pyproject_pinned)
-
-c_lock = read("sdks/c/Cargo.lock")
-for pkg in ("ratify-c", "ratify-protocol"):
-    c_lock = re.sub(
-        rf'(\[\[package\]\]\nname = "{pkg}"\nversion = ")[^"]+(")',
-        rf'\g<1>{npm_version}\2',
-        c_lock,
-        count=1,
-    )
-write("sdks/c/Cargo.lock", c_lock)
+bump_lock("sdks/c/Cargo.lock", ("ratify-c", "ratify-protocol"))
 
 cbindgen = read("sdks/c/cbindgen.toml")
 write("sdks/c/cbindgen.toml", re.sub(r'(\* Version: )[^\n"]+', rf'\g<1>{npm_version}', cbindgen, count=1))
+
+# Python v2 distribution and its required native extension. The SDK pins the
+# extension to an exact version, so the two must move together or
+# `pip install ratify-protocol-v2` resolves to nothing.
+pyv2 = read("sdks/python-v2/pyproject.toml")
+old_pyv2_match = re.search(r'^version = "([^"]+)"$', pyv2, re.M)
+if not old_pyv2_match:
+    raise SystemExit("missing version in sdks/python-v2/pyproject.toml")
+old_pyv2 = old_pyv2_match.group(1)
+pyv2 = re.sub(r'^version = "[^"]+"$', f'version = "{py_version}"', pyv2, count=1, flags=re.M)
+pyv2 = re.sub(r'("ratify-protocol-native-v2==)[^"]+(")', rf'\g<1>{py_version}\2', pyv2)
+write("sdks/python-v2/pyproject.toml", pyv2)
+
+pyv2_version_py = read("sdks/python-v2/src/ratify_protocol_v2/_version.py")
+pyv2_version_py = re.sub(r'^__version__ = "[^"]+"$', f'__version__ = "{py_version}"', pyv2_version_py, flags=re.M)
+pyv2_version_py = re.sub(r'^NATIVE_VERSION = "[^"]+"$', f'NATIVE_VERSION = "{npm_version}"', pyv2_version_py, flags=re.M)
+write("sdks/python-v2/src/ratify_protocol_v2/_version.py", pyv2_version_py)
+
+native_v2_toml = read("sdks/python-native-v2/Cargo.toml")
+native_v2_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', native_v2_toml, count=1, flags=re.M)
+native_v2_toml = native_v2_toml.replace(f"({old_pyv2} in PEP 440 form)", f"({py_version} in PEP 440 form)")
+write("sdks/python-native-v2/Cargo.toml", native_v2_toml)
+bump_lock("sdks/python-native-v2/Cargo.lock", ("ratify-protocol-native-v2", "ratify-protocol"))
 
 old_protocol = "v" + old_npm
 # docs/RELEASES.md is deliberately NOT in this list: it contains historical
 # version references (the alpha ladder in §3.2) that a blanket old→new
 # replacement corrupts — this happened at alpha.11, rewriting the alpha.10
 # ladder entry. Its version examples are illustrative, not release-synced.
-# sdks/*/README.md are generated (scripts/gen-sdk-readmes.py) and carry
-# version placeholders in their README.body.md sources — the regenerate
-# step after this block stamps them from package.json. Do not add the
-# generated READMEs here.
+# sdks/{go,typescript,python,rust,c}/README.md are generated
+# (scripts/gen-sdk-readmes.py) and carry version placeholders in their
+# README.body.md sources — the regenerate step after this block stamps them
+# from package.json. Do not add the generated READMEs here. The two Python v2
+# READMEs are hand-written and pin the PEP 440 form.
 paths = [
     "README.md",
-    "SPEC.md",
-    "sdks/typescript/package.json",
-    "sdks/typescript/package-lock.json",
+    "sdks/python-v2/README.md",
+    "sdks/python-native-v2/README.md",
+    "docs/SDKS.md",
 ]
 for path in paths:
     text = read(path)
     text = text.replace(old_protocol, protocol_tag)
     text = text.replace(old_npm, npm_version)
-    text = text.replace(old_rust, npm_version)
-    write(path, text)
-
-py_paths = [
-    "README.md",  # root README pins the pip install command in PEP 440 form
-    "sdks/python/pyproject.toml",
-    "sdks/python/src/ratify_protocol/__init__.py",
-]
-for path in py_paths:
-    text = read(path).replace(old_py, py_version)
+    text = text.replace(f"ratify-protocol-v2=={old_pyv2}", f"ratify-protocol-v2=={py_version}")
+    text = text.replace(f"`{old_pyv2}`", f"`{py_version}`")
     write(path, text)
 PY
 }

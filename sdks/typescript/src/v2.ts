@@ -15,7 +15,6 @@ export {
   V2_OBJECT_TYPE,
   v2SigningMessage,
   v2MLDSAContext,
-  signV2Statement,
   verifyV2StatementReason,
   validateHybridKeyPairV2,
   type HybridKeyPairV2,

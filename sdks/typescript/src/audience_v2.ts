@@ -4,14 +4,20 @@
 
 import { MAX_SAFE_INTEGER_V2, bytesEqual, compareStrings, gInt, gStringArray, parseJSONV2, type JNode } from "./json_v2.js";
 import {
+  V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS,
+  V2_MAX_FUTURE_SKEW_SECONDS,
+  V2_MAX_RATE_WINDOW_SECONDS,
+  validV2Timestamp,
+} from "./clock_bounds_v2.js";
+import {
   CONSTRAINT_RECEIVER_AUDIENCE_V2,
-  constraintCanonicalJSONV2,
-  decodeConstraintV2,
-  validV2ID,
+  decodeConstraintNodeV2,
   validateV2ConstraintFields,
-} from "./protocol_v2_wire.js";
+  type ConstraintV2,
+} from "./constraints_v2.js";
+import { constraintCanonicalJSONV2, validV2ID } from "./protocol_v2_wire.js";
 import { validPrefixedDigestV2 } from "./verification_receipt_v2.js";
-import { MAX_IDENTIFIER_LENGTH_BYTES, type Constraint } from "./types.js";
+import { MAX_IDENTIFIER_LENGTH_BYTES } from "./types.js";
 import { utf8Len } from "./json_v2.js";
 
 const MAX_SAFE = MAX_SAFE_INTEGER_V2;
@@ -48,10 +54,10 @@ export interface V2AudienceAssessment {
 }
 
 /** Decodes and re-checks one sealed deferred constraint's canonical bytes. */
-function sealedConstraint(item: V2DeferredConstraint): { constraint: Constraint; node: JNode } {
+function sealedConstraint(item: V2DeferredConstraint): { constraint: ConstraintV2; node: JNode } {
   const node = parseJSONV2(item.canonicalJSON);
   validateV2ConstraintFields(node);
-  const constraint = decodeConstraintV2(node, "deferred constraint");
+  const constraint = decodeConstraintNodeV2(node);
   if (!bytesEqual(constraintCanonicalJSONV2(constraint), item.canonicalJSON)) {
     throw new Error("v2 deferred constraint is not canonical");
   }
@@ -70,7 +76,7 @@ export function evaluateReceiverAudienceV2(
   now: number,
   futureSkew: number,
 ): V2AudienceAssessment {
-  if (!receiverID || now < -MAX_SAFE || now > MAX_SAFE || futureSkew < 0 || futureSkew > MAX_SAFE) {
+  if (!receiverID || !validV2Timestamp(now) || !Number.isSafeInteger(futureSkew) || futureSkew < 0 || futureSkew > V2_MAX_FUTURE_SKEW_SECONDS) {
     throw new Error("v2 audience requires a sealed receiver and valid security time");
   }
   const links: { exact: string[]; domains: string[]; delegationIndex: number; constraintIndex: number }[] = [];
@@ -97,7 +103,9 @@ export function evaluateReceiverAudienceV2(
     const exact = gStringArray(p.get("exact_receiver_ids"), "exact_receiver_ids") ?? [];
     const domains = gStringArray(p.get("trust_domain_ids"), "trust_domain_ids") ?? [];
     const age = gInt(p.get("max_membership_age_seconds"), "max_membership_age_seconds");
-    if (domains.length > 0 && age <= 0) throw new Error("v2 audience membership age must be positive");
+    if (domains.length > 0 && (age <= 0 || age > V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS)) {
+      throw new Error(`v2 audience membership age must be 1..${V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS} seconds`);
+    }
     if (domains.length > 0 && age < maxAge) maxAge = age;
     links.push({ exact, domains, delegationIndex: item.delegationIndex, constraintIndex: item.constraintIndex });
   }
@@ -124,9 +132,9 @@ export function evaluateReceiverAudienceV2(
       continue;
     }
     const m = membership;
-    if (m.receiverID !== receiverID || !validPrefixedDigestV2(m.evidenceDigest) || m.issuedAt < -MAX_SAFE || m.issuedAt > MAX_SAFE ||
-        m.expiresAt < -MAX_SAFE || m.expiresAt > MAX_SAFE || m.issuedAt >= m.expiresAt || now >= m.expiresAt ||
-        (m.issuedAt > now && m.issuedAt - now > futureSkew) || (now > m.issuedAt && now - m.issuedAt > maxAge)) {
+    if (m.receiverID !== receiverID || !validPrefixedDigestV2(m.evidenceDigest) || !validV2Timestamp(m.issuedAt) ||
+        !validV2Timestamp(m.expiresAt) || m.issuedAt >= m.expiresAt || now >= m.expiresAt ||
+        (m.issuedAt > now && m.issuedAt - now > futureSkew) || (now >= m.issuedAt && now - m.issuedAt >= maxAge)) {
       unavailable = true;
       continue;
     }
@@ -182,11 +190,11 @@ export function buildV2RateReservationBatch(deferred: readonly V2DeferredConstra
       throw new Error("v2 rate constraint has invalid identity or duplicate position");
     }
     seenPositions.add(position);
-    let constraint: Constraint;
+    let constraint: ConstraintV2;
     try {
       const node = parseJSONV2(item.canonicalJSON);
       validateV2ConstraintFields(node);
-      constraint = decodeConstraintV2(node, "rate constraint");
+      constraint = decodeConstraintNodeV2(node);
     } catch (err) {
       throw new Error(`v2 rate constraint is invalid: ${(err as Error).message}`);
     }
@@ -198,7 +206,7 @@ export function buildV2RateReservationBatch(deferred: readonly V2DeferredConstra
     if (item.type === CONSTRAINT_RECEIVER_AUDIENCE_V2) continue;
     const count = constraint.count ?? 0;
     const windowS = constraint.window_s ?? 0;
-    if (count <= 0 || count > MAX_SAFE || windowS <= 0 || windowS > MAX_SAFE) {
+    if (count <= 0 || count > MAX_SAFE || windowS <= 0 || windowS > V2_MAX_RATE_WINDOW_SECONDS) {
       throw new Error("v2 rate constraint has noncanonical or invalid limits");
     }
     const key = JSON.stringify([item.issuerID, item.certID, windowS]);

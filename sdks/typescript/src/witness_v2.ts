@@ -1,7 +1,8 @@
 // Protocol v2 witness entry (0x0006) and caller-head log verification.
 // Port of witness_v2.go.
 
-import { V2_OBJECT_TYPE, signV2Statement, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
 import {
   ErrWitnessLogFork,
   ErrWitnessLogFrozen,

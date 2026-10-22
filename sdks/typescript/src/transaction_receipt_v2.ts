@@ -4,7 +4,8 @@
 
 import { sha256, sha384 } from "@noble/hashes/sha2";
 
-import { V2_OBJECT_TYPE, signV2Statement, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
 import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,

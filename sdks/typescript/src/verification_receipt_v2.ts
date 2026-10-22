@@ -3,7 +3,8 @@
 // pre-signing outbox body. Port of verification_receipt_v2.go and
 // verification_receipt_body_v2.go.
 
-import { V2_OBJECT_TYPE, signV2Statement, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
 import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,

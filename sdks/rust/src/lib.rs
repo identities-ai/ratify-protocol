@@ -5,7 +5,7 @@
 //! migration window; v1-only consumers stay on the 1.0.0-alpha.x releases.
 //!
 //! Delegated-authority proofs for human-agent and agent-agent interactions.
-//! Every signature is hybrid Ed25519 + ML-DSA-65 (FIPS 204), and it verifies
+//! Every signature is a post-quantum hybrid of Ed25519 and ML-DSA-65 (NIST FIPS 204), and it verifies
 //! only when both components verify.
 //!
 //! See docs/EXPLAINED.md and docs/AGENT_TO_AGENT.md in the repository for

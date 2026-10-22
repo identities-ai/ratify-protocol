@@ -30,7 +30,7 @@ Ratify is not agent login, registration, or credential issuance. Ratify starts w
 
 Keep your IAM, OAuth, MCP, A2A, and policy engines. Ratify adds the missing proof and replaces none of them. IAM authenticates the human. MCP and A2A move the request. Policy engines interpret local rules. **Ratify proves delegated authority before the action.**
 
-**Hybrid signatures.** Every signature is a pair: Ed25519 and ML-DSA-65 (NIST FIPS 204), and both must verify. A forger has to break both algorithms, so a break of Ed25519 alone, for example by a future quantum computer, does not let anyone forge a proof while ML-DSA-65 holds.
+**Post-quantum hybrid signatures.** Every signature is a pair: Ed25519 and ML-DSA-65 (NIST FIPS 204), and both must verify. A forger has to break both algorithms, so a break of Ed25519 alone, for example by a future quantum computer, does not let anyone forge a proof while ML-DSA-65 holds.
 
 JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec under CC-BY-4.0.
 
@@ -64,7 +64,7 @@ Released v1 packages remain separate and unchanged.
 ## Protocol v2
 
 Protocol v2 is a separately versioned wire profile for the same idea:
-portable authority proofs with hybrid Ed25519 and ML-DSA-65 signatures. It
+portable authority proofs with post-quantum hybrid Ed25519 and ML-DSA-65 signatures. It
 changes how a verifier reaches a decision:
 
 - **Verify, then release.** Verification commits a terminal result and a

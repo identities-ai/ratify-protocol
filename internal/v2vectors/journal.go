@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -71,6 +72,20 @@ type journalImportNegativeJSON struct {
 	ExpectErrorClass string          `json:"expect_error_class"`
 }
 
+// journalTransitionNegativeJSON is a committed snapshot and a proposed
+// successor that each import against their own head but whose transition
+// violates SPEC-v2 §6.6 (generation and predecessor chaining, append-only
+// key-role and status-key histories, a deny union that never shrinks).
+type journalTransitionNegativeJSON struct {
+	Name             string          `json:"name"`
+	Description      string          `json:"description"`
+	CurrentB64       string          `json:"current_snapshot_b64"`
+	CurrentHead      journalHeadJSON `json:"current_head"`
+	NextB64          string          `json:"next_snapshot_b64"`
+	NextHead         journalHeadJSON `json:"next_head"`
+	ExpectErrorClass string          `json:"expect_error_class"`
+}
+
 type journalFile struct {
 	Version         int                         `json:"version"`
 	Description     string                      `json:"description"`
@@ -80,6 +95,15 @@ type journalFile struct {
 	Scenarios       []journalScenarioJSON       `json:"scenarios"`
 	Migration       journalMigrationJSON        `json:"migration"`
 	ImportNegatives []journalImportNegativeJSON `json:"import_negatives"`
+	// TransitionNegatives are invariant failures between two valid snapshots.
+	TransitionNegatives []journalTransitionNegativeJSON `json:"transition_negatives"`
+}
+
+// edit2 applies f to a parsed copy of a canonical snapshot.
+func edit2(data []byte, f func(map[string]any)) []byte {
+	v := parse(data).(map[string]any)
+	f(v)
+	return canon(v)
 }
 
 func journalDigest(snapshot []byte) string {
@@ -91,6 +115,8 @@ type journalRun struct {
 	store *v2reference.JournalStore
 	sc    journalScenarioJSON
 	last  *ratify.SecurityJournalV2
+	// snapshots holds the anchored snapshot bytes after each step.
+	snapshots [][]byte
 }
 
 func (g *gen) journalRun(name, desc string) *journalRun {
@@ -126,6 +152,7 @@ func (r *journalRun) step(step journalStepJSON, apply func(ctx context.Context) 
 	step.ExpectSnapshot = b64(snapshot)
 	r.sc.Steps = append(r.sc.Steps, step)
 	r.last = &loaded
+	r.snapshots = append(r.snapshots, snapshot)
 	return r
 }
 
@@ -177,7 +204,8 @@ func (g *gen) journalFile() any {
 			"apply_revocation_push":      "ApplyRevocationPush(issuer_id, epoch, key, push, policy, now) committed as one transition",
 			"expect_changed":             "false when the operation is a canonical no-op and the head does not move",
 			"migration":                  "decode legacy_record_b64 (the version 1 alpha record), validate it under the alpha digest (SHA-384 of legacy_digest_input_b64), migrate it to version 2 at generation+1 with previous_digest = legacy digest; tampered_legacy_record_b64 must be refused",
-			"import_negatives":           "import snapshot_b64 against head; it must be refused with expect_error_class",
+			"import_negatives":           "import snapshot_b64 against head; it must be refused with expect_error_class. The invariant_ cases are canonical snapshots whose own digest is the head but which violate an invariant of SPEC-v2 §6.6",
+			"transition_negatives":       "import current_snapshot_b64 against current_head and next_snapshot_b64 against next_head (both import), then validate the transition from current to next (the check every journal store applies before CompareAndSwap commits next): it must be refused with expect_error_class",
 		},
 		GenesisSnapshot: genesisSnapshot, GenesisDigest: genesis.Digest,
 	}
@@ -191,6 +219,7 @@ func (g *gen) journalFile() any {
 	r.configure(root, 2, "status_root_epoch_2", false)
 	r.configure(intermediate, 1, "status_root", true)
 	f.Scenarios = append(f.Scenarios, r.sc)
+	roles := r
 
 	r = g.journalRun("status_reducer_transitions", "bootstrap, contiguous push, semantic duplicate, gap, reconciliation, and an epoch transition that keeps the deny union")
 	r.configure(root, 1, "status_root", false)
@@ -211,6 +240,7 @@ func (g *gen) journalFile() any {
 	r.applyObject(root, 2, "status_root_epoch_2", codeList, n1, Now, false)
 	f.Scenarios = append(f.Scenarios, r.sc)
 	committed := *r.last
+	reducer := r
 
 	// Migration of a version 1 record with the same logical content.
 	legacy := committed
@@ -278,6 +308,107 @@ func (g *gen) journalFile() any {
 	neg("member_name_case", "the member issuers is spelled Issuers", caseVariant, selfHead(caseVariant), "malformed")
 	nullElement := replaceFirst(`"accepted_cert_ids":\["[^"]*"`, `"accepted_cert_ids":[null`)
 	neg("null_array_element", "the first accepted_cert_ids element is null", nullElement, selfHead(nullElement), "malformed")
+	// Invariant failures (SPEC-v2 §6.6): canonical snapshots whose own digest
+	// is the anchored head but which no conforming transition can produce.
+	edit := func(f func(map[string]any)) []byte {
+		v := parse(snapshot).(map[string]any)
+		f(v)
+		return canon(v)
+	}
+	issuer0 := func(v map[string]any) map[string]any { return obj(arr(v["issuers"])[0]) }
+	without := func(list []any, drop func(map[string]any) bool) []any {
+		out := []any{}
+		for _, e := range list {
+			if !drop(obj(e)) {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+	inv := func(name, desc string, f func(map[string]any)) {
+		bad := edit(f)
+		neg("invariant_"+name, desc, bad, selfHead(bad), "malformed")
+	}
+	epoch2ID := g.k("status_root_epoch_2").ID
+	inv("status_binding_without_status_role", "the epoch 2 status-key binding has no matching status key-role binding", func(v map[string]any) {
+		v["key_role_history"] = without(arr(v["key_role_history"]), func(b map[string]any) bool { return b["key_id"] == epoch2ID })
+	})
+	inv("status_epochs_not_contiguous", "the epoch 1 status-key binding is removed, so the issuer's epochs do not run contiguously from 1", func(v map[string]any) {
+		v["status_key_history"] = without(arr(v["status_key_history"]), func(b map[string]any) bool { return b["epoch"] == json.Number("1") })
+	})
+	inv("component_shared_across_bindings", "a second key-role binding with a different key ID reuses an existing binding's Ed25519 component digest", func(v map[string]any) {
+		history := arr(v["key_role_history"])
+		first := obj(history[0])
+		attacker := g.k("attacker")
+		extra := map[string]any{"key_id": attacker.ID, "role": "other", "ed25519_digest": first["ed25519_digest"], "ml_dsa_65_digest": hex.EncodeToString(sha384(attacker.Pub.MLDSA65))}
+		history = append(history, extra)
+		sort.SliceStable(history, func(i, j int) bool {
+			a, b := obj(history[i]), obj(history[j])
+			if a["key_id"] != b["key_id"] {
+				return a["key_id"].(string) < b["key_id"].(string)
+			}
+			return a["role"].(string) < b["role"].(string)
+		})
+		v["key_role_history"] = history
+	})
+	inv("key_role_history_unsorted", "key_role_history is not sorted by key_id", func(v map[string]any) {
+		h := arr(v["key_role_history"])
+		h[0], h[len(h)-1] = h[len(h)-1], h[0]
+	})
+	inv("max_observed_sequence_below_floor", "max_observed_sequence is lowered below the accepted floor and below the retained current-epoch observations", func(v map[string]any) {
+		is := issuer0(v)
+		is["max_observed_sequence"] = addNum(is["floor"], -1)
+	})
+	inv("accepted_set_differs_from_snapshot", "accepted_cert_ids contains an ID that neither the accepted snapshot nor an accepted push revokes", func(v map[string]any) {
+		is := issuer0(v)
+		is["accepted_cert_ids"] = append(arr(is["accepted_cert_ids"]), "c9")
+	})
+	inv("deny_union_shrunk", "deny_union_cert_ids omits c4, which a retained observation revokes: the deny union never shrinks", func(v map[string]any) {
+		is := issuer0(v)
+		kept := []any{}
+		for _, id := range arr(is["deny_union_cert_ids"]) {
+			if id != "c4" {
+				kept = append(kept, id)
+			}
+		}
+		is["deny_union_cert_ids"] = kept
+	})
+	inv("deny_union_without_witness", "deny_union_cert_ids contains c9, which no retained observation revokes", func(v map[string]any) {
+		is := issuer0(v)
+		is["deny_union_cert_ids"] = append(arr(is["deny_union_cert_ids"]), "c9")
+	})
+	inv("fork_without_reconciliation", "fork_sequence is nonzero while reconciliation_required is false and no current-epoch observation is marked fork", func(v map[string]any) {
+		issuer0(v)["fork_sequence"] = json.Number("1")
+	})
+
+	// Transition failures: both snapshots are valid on their own.
+	relabel := func(data []byte, generation uint64, previous string) []byte {
+		v := parse(data).(map[string]any)
+		v["generation"] = json.Number(fmt.Sprint(generation))
+		v["previous_digest"] = previous
+		return canon(v)
+	}
+	headOf := func(data []byte) journalHeadJSON {
+		gen := must(parse(data).(map[string]any)["generation"].(json.Number).Int64())
+		return journalHeadJSON{Generation: uint64(gen), Digest: journalDigest(data)}
+	}
+	trans := func(name, desc string, current, next []byte) {
+		f.TransitionNegatives = append(f.TransitionNegatives, journalTransitionNegativeJSON{Name: name, Description: desc,
+			CurrentB64: b64(current), CurrentHead: headOf(current), NextB64: b64(next), NextHead: headOf(next), ExpectErrorClass: "status_object_rejected"})
+	}
+	trans("generation_skipped", "the successor's generation is the committed generation plus 2", snapshot, relabel(snapshot, committed.Generation+2, committed.Digest))
+	trans("predecessor_mismatch", "the successor's generation is the committed generation plus 1 but previous_digest names another snapshot", snapshot, relabel(snapshot, committed.Generation+1, strings.Repeat("e", 96)))
+	trans("generation_not_advanced", "the committed snapshot is offered as its own successor", snapshot, snapshot)
+	rolesFinal := roles.snapshots[len(roles.snapshots)-1]
+	rolesGen := headOf(rolesFinal).Generation
+	trans("key_role_binding_removed", "the successor drops the verifier key-role binding: key-role history is append-only", rolesFinal, relabel(edit2(rolesFinal, func(v map[string]any) {
+		v["key_role_history"] = without(arr(v["key_role_history"]), func(b map[string]any) bool { return b["role"] == "verifier" })
+	}), rolesGen+1, journalDigest(rolesFinal)))
+	// reducer.snapshots: 0 configure, 1 l1, 2 p2, 3 p2 repeat, 4 p4, 5 l4, ...
+	afterP2, afterP4 := reducer.snapshots[2], reducer.snapshots[4]
+	p4Gen := headOf(afterP4).Generation
+	trans("deny_union_shrinks", "the state after push 2 (deny union c1, c2) is offered as the successor of the state after push 4 (deny union c1, c2, c4): the deny union and the evidence for c4 would be lost", afterP4, relabel(afterP2, p4Gen+1, journalDigest(afterP4)))
+	trans("rollback_to_earlier_epoch", "the epoch 1 state is offered as the successor of the epoch 2 state: it removes the epoch 2 status-key binding and rolls the status-key epoch back", snapshot, relabel(afterP4, committed.Generation+1, committed.Digest))
 	genesisBad := []byte(strings.Replace(genesisSnapshot, strings.Repeat("0", 96), strings.Repeat("1", 96), 1))
 	neg("genesis_with_predecessor", "a genesis snapshot whose previous_digest is not all zeros", genesisBad, journalHeadJSON{Generation: 0, Digest: journalDigest(genesisBad)}, "malformed")
 	return f

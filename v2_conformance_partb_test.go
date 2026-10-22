@@ -71,6 +71,15 @@ func TestV2ConformanceSecurityJournal(t *testing.T) {
 			Head             v2JournalHead `json:"head"`
 			ExpectErrorClass string        `json:"expect_error_class"`
 		} `json:"import_negatives"`
+		TransitionNegatives []struct {
+			Name             string        `json:"name"`
+			Description      string        `json:"description"`
+			CurrentB64       string        `json:"current_snapshot_b64"`
+			CurrentHead      v2JournalHead `json:"current_head"`
+			NextB64          string        `json:"next_snapshot_b64"`
+			NextHead         v2JournalHead `json:"next_head"`
+			ExpectErrorClass string        `json:"expect_error_class"`
+		} `json:"transition_negatives"`
 	}
 	loadV2Vector(t, "security-journal.json", &f)
 	ctx := context.Background()
@@ -153,6 +162,25 @@ func TestV2ConformanceSecurityJournal(t *testing.T) {
 			t.Fatal("migrated a tampered legacy record")
 		}
 	})
+	if len(f.TransitionNegatives) == 0 {
+		t.Fatal("no journal transition negatives")
+	}
+	for _, n := range f.TransitionNegatives {
+		t.Run("transition_"+n.Name, func(t *testing.T) {
+			current, err := ratify.ImportSecurityJournalSnapshotV2(unb64(t, n.CurrentB64), ratify.SecurityJournalHeadV2{Generation: n.CurrentHead.Generation, Digest: n.CurrentHead.Digest})
+			if err != nil {
+				t.Fatalf("current snapshot: %v", err)
+			}
+			next, err := ratify.ImportSecurityJournalSnapshotV2(unb64(t, n.NextB64), ratify.SecurityJournalHeadV2{Generation: n.NextHead.Generation, Digest: n.NextHead.Digest})
+			if err != nil {
+				t.Fatalf("next snapshot: %v", err)
+			}
+			err = ratify.ValidateSecurityJournalTransitionV2(current, next)
+			if err == nil || string(ratify.V2ErrorClassOf(err)) != n.ExpectErrorClass {
+				t.Fatalf("transition error %v (class %q), want class %q", err, ratify.V2ErrorClassOf(err), n.ExpectErrorClass)
+			}
+		})
+	}
 	for _, n := range f.ImportNegatives {
 		t.Run("import_"+n.Name, func(t *testing.T) {
 			_, err := ratify.ImportSecurityJournalSnapshotV2(unb64(t, n.SnapshotB64), ratify.SecurityJournalHeadV2{Generation: n.Head.Generation, Digest: n.Head.Digest})

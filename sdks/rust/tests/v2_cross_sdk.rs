@@ -453,7 +453,7 @@ fn v2_cross_sdk_fixtures() {
     }
     verified.sort();
     println!("COVERAGE cross-sdk fixtures verified: {verified:?}");
-    for required in ["go", "rust"] {
+    for required in ["go", "python", "rust", "typescript"] {
         assert!(verified.iter().any(|v| v == required), "{required}.json is missing");
     }
 }

@@ -21,6 +21,10 @@ cargo +nightly fuzz run proof_bundle_v2 -- -max_total_time=30
 | `transaction_receipt_v2` | `decode_transaction_receipt_v2` | same |
 | `canonical_json_v2` | `canonical_json_v2` | no panic; output is a fixed point |
 | `constraint_v2` | `ConstraintV2::decode` | no panic; decode, canonical encode, decode gives the same constraint and bytes |
+| `status_evidence_batch_v2` | `decode_v2_status_evidence_batch` | no panic; a refusal is `malformed`; at most the object cap; a re-encoded batch round-trips stably |
+| `checkpoint_acknowledgement_v2` | `decode_v2_checkpoint_acknowledgement` | no panic; a refusal is `malformed`; accepted input re-encodes to itself |
+| `journal_snapshot_import_v2` | `import_security_journal_snapshot_v2` | no panic; an imported snapshot re-exports to itself |
+| `archival_proof_bundle_v2` | `verify_archival_proof_bundle_v2` | no panic; never actionable; always `freshness_unverified`; an accepted bundle carries its hash |
 
 Seeding `corpus/<target>/` with the wire objects of `testvectors/v2/objects.json`,
 `object-negatives.json`, `hedged-signatures.json`, and `cross-sdk/*.json` (and each
@@ -38,13 +42,3 @@ report them as round-trip failures:
 - `null` inside a delegation certificate `scope` array decodes as `""`.
 
 `tests/v2_proptest.rs` pins both (`known_gap_*`).
-
-## Still to add
-
-These decoders are not in this crate yet and get targets once the status
-subsystem port lands:
-
-- status evidence batch
-- checkpoint acknowledgement
-- security journal snapshot import
-- archival result objects

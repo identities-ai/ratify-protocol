@@ -126,3 +126,10 @@ path = "fuzz_targets/journal_snapshot_import_v2.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "archival_proof_bundle_v2"
+path = "fuzz_targets/archival_proof_bundle_v2.rs"
+test = false
+doc = false
+bench = false

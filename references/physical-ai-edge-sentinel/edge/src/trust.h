@@ -1,52 +1,51 @@
+/*
+ * Receiver trust configuration, provisioned out of band into the trust
+ * directory:
+ *
+ *   root_pub.json        the pinned root (issuer) public key, complete
+ *   status_pub.json      the root's separate status key (epoch 1)
+ *   agent_pub.json       the agent this device expects to present proofs
+ *   checkpoint_pub.json  the checkpoint process's public key
+ *   policy.conf          local policy (zones, duration cap, workspace)
+ *   status-list.json     the signed status list staged at initialization
+ *
+ * Trust is pinned to complete public keys, never to a key ID alone. Each key
+ * has exactly one role; a status key equal to the root key (the v1 "operator
+ * key signs the revocation list" arrangement) is refused.
+ */
 #ifndef SENTINEL_TRUST_H
 #define SENTINEL_TRUST_H
 
 #include <stdint.h>
 
-#define TRUST_ID_HEX_LEN 32
+#include "ratify.h"
+
 #define TRUST_ZONE_MAX 64
 #define TRUST_MAX_ZONES 8
-
-struct RatifyRevocationList;
+#define TRUST_NAMESPACE "ratify-edge-sentinel"
 
 typedef struct {
-    char pinned_human_id[TRUST_ID_HEX_LEN + 1];
-
-    /* Revocation state. `list` is non-NULL only when the file was present,
-     * its hybrid signature verified against the pinned operator's key, its
-     * issuer_id matched the pinned anchor, and it was inside the freshness
-     * budget. Anything less leaves it NULL and revocation unavailable. */
-    struct RatifyRevocationList *list;
-    int64_t list_updated_at;
-    int64_t revocation_max_age_s;
+    RatifyV2PublicKey root_key, status_key, agent_key, checkpoint_key;
+    char root_id[RATIFY_V2_KEY_ID_BUF_LEN], status_id[RATIFY_V2_KEY_ID_BUF_LEN];
+    char agent_id[RATIFY_V2_KEY_ID_BUF_LEN], checkpoint_id[RATIFY_V2_KEY_ID_BUF_LEN];
+    char *root_json, *status_json, *agent_json;
+    uint64_t status_epoch;
 
     /* Local policy. Stricter than the delegation, never broader. */
-    char    zones[TRUST_MAX_ZONES][TRUST_ZONE_MAX];
-    int     zone_count;
-    int     max_activation_ms;
+    char zones[TRUST_MAX_ZONES][TRUST_ZONE_MAX];
+    int zone_count;
+    int max_activation_ms;
+    char workspace_id[40];
+    int64_t status_max_age_s;
+    int64_t challenge_lifetime_s;
+    int64_t max_challenge_age_s;
+} trust_config;
 
-    int  allow_no_revocation;      /* test build only */
-    int  allow_untrusted_clock;    /* test build only */
-} trust_ctx;
-
-int  trust_load(const char *trust_dir, trust_ctx *t);
-void trust_unload(trust_ctx *t);
-
-int  trust_now(const trust_ctx *t, int64_t *out_now, int *out_trusted);
-
-/* 1 when revocation state is good enough to authorize a sensitive action. */
-int  trust_revocation_ok(const trust_ctx *t);
-
-/* Revocation lookup for the SDK callback: 1 revoked, 0 not revoked,
- * -1 unavailable (fail closed). */
-int  trust_is_revoked(const trust_ctx *t, const char *cert_id);
-
-/* 1 only when the verified bundle's terminal (root) issuer key derives to this
- * device's provisioned anchor identity. Delegations are ordered leaf to root;
- * parsing failure denies. */
-int  trust_bundle_matches_anchor(const trust_ctx *t, const char *bundle_json);
+/* Load and check the trust directory. Returns 0, or -1 with a message. */
+int  trust_load(const char *dir, trust_config *t);
+void trust_unload(trust_config *t);
 
 /* 1 if `zone` is permitted by local policy. An empty policy permits nothing. */
-int  trust_zone_allowed(const trust_ctx *t, const char *zone);
+int  trust_zone_allowed(const trust_config *t, const char *zone);
 
 #endif

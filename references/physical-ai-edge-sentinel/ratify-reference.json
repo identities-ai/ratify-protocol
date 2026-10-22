@@ -2,11 +2,11 @@
   "slug": "physical-ai-edge-sentinel",
   "display_name": "Ratify Edge Physical AI",
   "status": "experimental",
-  "platform": "Linux edge receiver and Arduino Uno actuator",
+  "platform": "Linux edge receiver with a separate checkpoint process, and an Arduino Uno actuator",
   "endorsement": "self-authored, no platform endorsement",
   "agent_adapter": "../../adk/edge_agent.py",
   "evidence": "docs/evidence.md",
-  "tests": 29,
+  "tests": 30,
   "skips": 0,
   "gate": "./run-reference-check.sh"
 }

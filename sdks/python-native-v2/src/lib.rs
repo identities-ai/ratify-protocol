@@ -1,4 +1,5 @@
-//! Native key generation and hybrid signing for the Ratify Protocol v2 Python SDK.
+//! Native key generation, hybrid signing and hybrid verification for the
+//! Ratify Protocol v2 Python SDK.
 //!
 //! A separate distribution and module (`ratify-protocol-native-v2` /
 //! `ratify_protocol_native_v2`) from the v1 extension, so both install
@@ -11,6 +12,13 @@
 //! checks that the two describe the same registered object type and signs
 //! exactly those bytes. It is not a wire verifier: the SDK verifies every
 //! signature returned here with its ordinary verifier before using it.
+//!
+//! Verification: `_verify_hybrid` checks one hybrid signature over an
+//! SDK-computed transcript with the Rust core's strict v2 verifier (canonical
+//! prime-order Ed25519 A and R, S < L, the cofactorless equation, and FIPS 204
+//! ML-DSA-65 under the per-type context). It touches only public data. The
+//! SDK uses it by default and keeps its pure-Python verifier as a fallback;
+//! both must reach the same verdict on every shared vector.
 //!
 //! Key material: a `HybridSigningKey` holds the parsed private keys in Rust
 //! memory and zeroizes them on drop. Constructing one from private-key bytes
@@ -26,6 +34,8 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use ratify_protocol::crypto::hybrid_keypair_from_seeds;
+use ratify_protocol::types::{HybridPublicKey, HybridSignature};
+use ratify_protocol::v2::{verify_v2_message, V2ObjectType};
 use zeroize::Zeroize;
 
 const SIGNATURE_PREFIX: &[u8] = b"ratify-protocol-signature\0\x02";
@@ -39,8 +49,8 @@ fn value_error(msg: &str) -> PyErr {
 }
 
 /// Check that `message` is a v2 transcript for a registered object type and
-/// that `context` is exactly that type's ML-DSA context.
-fn check_transcript(message: &[u8], context: &[u8]) -> PyResult<()> {
+/// that `context` is exactly that type's ML-DSA context; return the type.
+fn check_transcript(message: &[u8], context: &[u8]) -> PyResult<V2ObjectType> {
     if message.len() != MESSAGE_LEN || !message.starts_with(SIGNATURE_PREFIX) {
         return Err(value_error(
             "message is not a 77-byte Ratify v2 signing transcript",
@@ -58,7 +68,8 @@ fn check_transcript(message: &[u8], context: &[u8]) -> PyResult<()> {
             "ML-DSA context does not match the message object type",
         ));
     }
-    Ok(())
+    V2ObjectType::from_code(code)
+        .ok_or_else(|| value_error("message names an unsupported v2 object type"))
 }
 
 /// A hybrid (Ed25519 + ML-DSA-65) private key held in native memory.
@@ -203,6 +214,39 @@ fn hybrid_keypair_from_seeds_py(
     ))
 }
 
+/// Internal to `ratify_protocol_v2`: strictly verify one hybrid signature
+/// over an SDK-computed 77-byte v2 transcript `message` and its ML-DSA
+/// `context`, under the complete public key. Not public API; the SDK's
+/// verifiers are the supported callers. Returns `None` when both components
+/// verify and raises `ValueError` otherwise (a malformed transcript or
+/// context, a wrong component length, a non-canonical or small-order point,
+/// a non-canonical scalar, or a failed Ed25519 or ML-DSA-65 check). The GIL
+/// is released while the signature is checked.
+#[pyfunction]
+#[pyo3(name = "_verify_hybrid")]
+fn verify_hybrid(
+    py: Python<'_>,
+    message: &[u8],
+    context: &[u8],
+    ed25519_public: &[u8],
+    ml_dsa_65_public: &[u8],
+    ed25519_signature: &[u8],
+    ml_dsa_65_signature: &[u8],
+) -> PyResult<()> {
+    let object_type = check_transcript(message, context)?;
+    let public_key = HybridPublicKey {
+        ed25519: ed25519_public.to_vec(),
+        ml_dsa_65: ml_dsa_65_public.to_vec(),
+    };
+    let signature = HybridSignature {
+        ed25519: ed25519_signature.to_vec(),
+        ml_dsa_65: ml_dsa_65_signature.to_vec(),
+    };
+    let message = message.to_vec();
+    py.detach(|| verify_v2_message(object_type, &message, &signature, &public_key))
+        .map_err(|e| PyValueError::new_err(e.message))
+}
+
 /// Distribution version of this extension (Cargo form, e.g. 2.0.0-alpha.1).
 #[pyfunction]
 fn version() -> &'static str {
@@ -213,6 +257,7 @@ fn version() -> &'static str {
 fn ratify_protocol_native_v2(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HybridSigningKey>()?;
     m.add_function(wrap_pyfunction!(hybrid_keypair_from_seeds_py, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_hybrid, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     Ok(())
 }

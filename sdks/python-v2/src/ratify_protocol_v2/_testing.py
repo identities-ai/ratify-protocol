@@ -7,6 +7,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
+from . import signing_v2
 from .signing_v2 import _DETERMINISTIC_FOR_TEST_VECTORS
 
 
@@ -20,3 +21,17 @@ def deterministic_test_vector_signing() -> Iterator[None]:
         yield
     finally:
         _DETERMINISTIC_FOR_TEST_VECTORS.reset(token)
+
+
+@contextmanager
+def pure_python_verification() -> Iterator[None]:
+    """Within this block, hybrid signatures are verified by the pure-Python
+    fallback verifier instead of the native extension, so tests can compare
+    the two. It switches a process-wide setting: do not use it while other
+    threads verify."""
+    saved = signing_v2._NATIVE_VERIFY
+    signing_v2._NATIVE_VERIFY = None
+    try:
+        yield
+    finally:
+        signing_v2._NATIVE_VERIFY = saved

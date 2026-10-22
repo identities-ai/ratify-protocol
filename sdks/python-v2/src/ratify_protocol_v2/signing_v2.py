@@ -3,10 +3,14 @@ typed-signer interface (Go crypto_v2.go and signer_v2.go).
 
 Every object code has its own 77-byte transcript
 ``"ratify-protocol-signature\\x00\\x02" || u16be(code) || SHA-384(signable)``
-and ML-DSA-65 context ``"ratify-protocol/2/<code>"``. Verification is pure
-Python and strict AND: canonical non-identity prime-order Ed25519 A and R,
-canonical S, a valid Ed25519 signature, and a valid ML-DSA-65 signature under
-the code's context.
+and ML-DSA-65 context ``"ratify-protocol/2/<code>"``. Verification is strict
+AND: canonical non-identity prime-order Ed25519 A and R, canonical S, a valid
+cofactorless Ed25519 signature, and a valid ML-DSA-65 signature under the
+code's context. It runs in the ``ratify-protocol-native-v2`` extension (the
+Rust core's strict v2 verifier) whenever the extension is installed; the
+pure-Python verifier here is the fallback for a verify-only environment
+without it, or when ``RATIFY_V2_PURE_VERIFY=1`` is set. Both reach the same
+verdict on every shared vector.
 
 Signing goes only through the typed signing functions, which take either a
 :class:`HybridPrivateKey` or an external :class:`SignerV2` provider. A
@@ -124,6 +128,17 @@ def clone_public_key(pub: HybridPublicKey) -> HybridPublicKey:
 # ---------------------------------------------------------------------------
 # Verification
 
+# The native strict hybrid verifier, or None for the pure-Python fallback.
+# Chosen once at import (see _native.native_verifier); tests switch it only
+# through ratify_protocol_v2._testing.pure_python_verification().
+_NATIVE_VERIFY = _native.native_verifier()
+
+
+def native_verify_enabled() -> bool:
+    """True when hybrid signatures are verified by the native extension,
+    False when the pure-Python fallback verifier is in use."""
+    return _NATIVE_VERIFY is not None
+
 
 def _verify_unclassified(code: int, signable: bytes, sig: HybridSignature, pub: HybridPublicKey) -> None:
     if not isinstance(pub, HybridPublicKey) or not isinstance(sig, HybridSignature):
@@ -134,6 +149,11 @@ def _verify_unclassified(code: int, signable: bytes, sig: HybridSignature, pub: 
         raise ValueError("hybrid public key has invalid component length")
     if len(sig_ed) != 64 or len(sig_ml) != _mldsa65.SIGNATURE_SIZE:
         raise ValueError("hybrid signature has invalid component length")
+    native = _NATIVE_VERIFY
+    if native is not None:
+        # Same checks in the Rust core; raises ValueError on any failure.
+        native(signing_message_v2(code, signable), mldsa_context_v2(code), pub_ed, pub_ml, sig_ed, sig_ml)
+        return
     if not _ed25519_strict.valid_prime_order_point(pub_ed) or not _ed25519_strict.valid_prime_order_point(sig_ed[:32]):
         raise ValueError("Ed25519 v2 public key or R component is not a canonical non-identity prime-order point")
     if not _ed25519_strict.valid_canonical_scalar(sig_ed[32:]):

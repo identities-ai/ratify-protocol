@@ -15,10 +15,18 @@ This is a separate distribution from the v1 SDK. It imports as
 Key generation and signing run only in the required native extension
 `ratify-protocol-native-v2` (constant-time Ed25519 and ML-DSA-65), which pip
 installs with this package. There is no pure-Python signing path: without the
-extension every signer raises `ImportError`. Verification handles only public
-data, is pure Python, and works without the extension. The extension is
+extension every signer raises `ImportError`. Hybrid signature verification
+also runs in the extension by default, through the Rust core's strict v2
+verifier. Verification handles only public data, so the package keeps a
+pure-Python verifier as a fallback: a verify-only install without the
+extension uses it, and `RATIFY_V2_PURE_VERIFY=1` selects it explicitly
+(`signing_v2.native_verify_enabled()` reports which is active). The test suite
+replays every signature check in the shared corpus through both verifiers and
+requires identical verdicts and error classes. The pure-Python verifier is
+about 35 times slower; see [Performance](#performance). The extension is
 versioned in lockstep with this package, and importing `ratify_protocol_v2`
-fails if a mismatched extension is installed.
+fails if a mismatched extension, or one built without native verification, is
+installed.
 
 Every object is signed through a typed signer (`sign_delegation_cert_v2`,
 `sign_proof_bundle_v2`, `sign_revocation_list_v2`, `sign_revocation_push_v2`,

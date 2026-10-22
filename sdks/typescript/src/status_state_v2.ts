@@ -7,7 +7,7 @@
 import { sha384 } from "@noble/hashes/sha2";
 
 import { V2_OBJECT_TYPE } from "./crypto_v2.js";
-import { v2Classify } from "./errors_v2.js";
+import { classifiedAsync, v2Classify } from "./errors_v2.js";
 import { V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_STATUS_LIFETIME_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_SAFE_INTEGER_V2, bytesEqual, canonicalJSONV2, compareBytes, compareStrings, concatBytes, hexOf, isWellFormedString, utf8 } from "./json_v2.js";
 import {
@@ -729,7 +729,7 @@ export function transitionRevocationStatusEpochV2(state: RevocationStatusStateV2
     next.futureDatedObjectObserved = false;
     return next;
   } catch (err) {
-    throw v2Classify("configuration_invalid", err);
+    throw v2Classify("status_object_rejected", err);
   }
 }
 
@@ -804,37 +804,39 @@ export async function revocationStatusForCertV2(
   policy: RevocationStatusPolicyV2,
   now: number,
 ): Promise<RevocationStatusResultV2> {
-  validateRevocationStatusPolicyV2(policy);
-  validateStatusStateBindingV2(state, issuerID, statusKeyEpoch);
-  validateAcceptedStatusStateV2(state);
-  if (certID === "" || !validV2Timestamp(now)) throw new Error("status query has invalid certificate ID or time");
-  const statusKeyID = keyIDV2(statusKey);
-  if (state.issuerID !== issuerID || state.statusKeyEpoch !== statusKeyEpoch || state.statusKeyID !== statusKeyID) {
-    throw new Error("status query does not match the configured issuer status-key binding");
-  }
-  if (state.acceptedSnapshot !== null) {
-    try {
-      await verifyRevocationListV2Signature(state.acceptedSnapshot, issuerID, statusKey);
-    } catch (err) {
-      throw new Error(`accepted status snapshot signature is invalid: ${(err as Error).message}`);
+  return classifiedAsync("configuration_invalid", async () => {
+    validateRevocationStatusPolicyV2(policy);
+    validateStatusStateBindingV2(state, issuerID, statusKeyEpoch);
+    validateAcceptedStatusStateV2(state);
+    if (certID === "" || !validV2Timestamp(now)) throw new Error("status query has invalid certificate ID or time");
+    const statusKeyID = keyIDV2(statusKey);
+    if (state.issuerID !== issuerID || state.statusKeyEpoch !== statusKeyEpoch || state.statusKeyID !== statusKeyID) {
+      throw new Error("status query does not match the configured issuer status-key binding");
     }
-  }
-  if (state.denyUnionCertIDs.includes(certID)) {
-    let evidence = acceptedStatusEvidenceV2(state, issuerID, statusKeyID);
-    for (const o of state.observations) if (o.revokedCertIDs.includes(certID)) evidence = appendStatusEvidenceV2(evidence, issuerID, statusKeyID, o);
-    return { status: "revoked", reason: "", evidence: sortStatusEvidenceV2(evidence), freshUntil: 0 };
-  }
-  const snapshot = state.acceptedSnapshot;
-  if (!state.hasFloor || snapshot === null || policy.maxListLifetimeSeconds === 0 || policy.maxStatusAgeSeconds === 0 ||
-      state.futureDatedObjectObserved || state.reconciliationRequired || state.floor < state.maxObservedSequence ||
-      !containsAllStringSetV2(state.acceptedCertIDs, state.denyUnionCertIDs)) {
-    return { status: "indeterminate", reason: "unavailable", evidence: unavailableStatusEvidenceV2(state, issuerID, statusKeyID), freshUntil: 0 };
-  }
-  if (!revocationListFreshV2(snapshot, policy, now)) {
-    return { status: "indeterminate", reason: "stale", evidence: acceptedStatusEvidenceV2(state, issuerID, statusKeyID), freshUntil: 0 };
-  }
-  return {
-    status: "not_revoked", reason: "", evidence: acceptedStatusEvidenceV2(state, issuerID, statusKeyID),
-    freshUntil: Math.min(snapshot.next_update, snapshot.updated_at + policy.maxStatusAgeSeconds),
-  };
+    if (state.acceptedSnapshot !== null) {
+      try {
+        await verifyRevocationListV2Signature(state.acceptedSnapshot, issuerID, statusKey);
+      } catch (err) {
+        throw new Error(`accepted status snapshot signature is invalid: ${(err as Error).message}`);
+      }
+    }
+    if (state.denyUnionCertIDs.includes(certID)) {
+      let evidence = acceptedStatusEvidenceV2(state, issuerID, statusKeyID);
+      for (const o of state.observations) if (o.revokedCertIDs.includes(certID)) evidence = appendStatusEvidenceV2(evidence, issuerID, statusKeyID, o);
+      return { status: "revoked", reason: "", evidence: sortStatusEvidenceV2(evidence), freshUntil: 0 };
+    }
+    const snapshot = state.acceptedSnapshot;
+    if (!state.hasFloor || snapshot === null || policy.maxListLifetimeSeconds === 0 || policy.maxStatusAgeSeconds === 0 ||
+        state.futureDatedObjectObserved || state.reconciliationRequired || state.floor < state.maxObservedSequence ||
+        !containsAllStringSetV2(state.acceptedCertIDs, state.denyUnionCertIDs)) {
+      return { status: "indeterminate", reason: "unavailable", evidence: unavailableStatusEvidenceV2(state, issuerID, statusKeyID), freshUntil: 0 };
+    }
+    if (!revocationListFreshV2(snapshot, policy, now)) {
+      return { status: "indeterminate", reason: "stale", evidence: acceptedStatusEvidenceV2(state, issuerID, statusKeyID), freshUntil: 0 };
+    }
+    return {
+      status: "not_revoked", reason: "", evidence: acceptedStatusEvidenceV2(state, issuerID, statusKeyID),
+      freshUntil: Math.min(snapshot.next_update, snapshot.updated_at + policy.maxStatusAgeSeconds),
+    };
+  });
 }

@@ -15,7 +15,7 @@ import {
   type ConstraintV2,
 } from "./constraints_v2.js";
 import { V2_OBJECT_TYPE, keyIDV2, verifyV2Statement, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
-import { classified, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classified, classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
   bytesEqual,
@@ -315,16 +315,18 @@ export function decodeDelegationCertV2(data: Uint8Array): DelegationCertV2 {
 }
 
 export function encodeDelegationCertV2(c: DelegationCertV2): Uint8Array {
-  if (!c) throw new Error("v2 delegation certificate is nil");
-  validateDelegationCertV2(c);
-  validateHybridSignatureV2(c.signature);
-  const encoded = canonicalJSONV2(certCanonicalObject(c, false));
-  try {
-    decodeDelegationCertV2(encoded);
-  } catch (err) {
-    throw wrapError("invalid v2 delegation certificate", err);
-  }
-  return encoded;
+  return classified("malformed", () => {
+    if (!c) throw new Error("v2 delegation certificate is nil");
+    validateDelegationCertV2(c);
+    validateHybridSignatureV2(c.signature);
+    const encoded = canonicalJSONV2(certCanonicalObject(c, false));
+    try {
+      decodeDelegationCertV2(encoded);
+    } catch (err) {
+      throw wrapError("invalid v2 delegation certificate", err);
+    }
+    return encoded;
+  });
 }
 
 /**
@@ -333,16 +335,18 @@ export function encodeDelegationCertV2(c: DelegationCertV2): Uint8Array {
  * establish that the issuer is trusted.
  */
 export async function verifyDelegationCertV2Signature(cert: DelegationCertV2): Promise<void> {
-  if (!cert) throw v2Errorf("malformed", "v2 delegation certificate is nil");
-  let signable: Uint8Array;
-  try {
-    validateDelegationCertV2(cert);
-    validateHybridSignatureV2(cert.signature);
-    signable = delegationCertV2SignBytes(cert);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable, cert.signature, cert.issuer_pub_key);
+  return classifiedAsync("malformed", async () => {
+    if (!cert) throw v2Errorf("malformed", "v2 delegation certificate is nil");
+    let signable: Uint8Array;
+    try {
+      validateDelegationCertV2(cert);
+      validateHybridSignatureV2(cert.signature);
+      signable = delegationCertV2SignBytes(cert);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable, cert.signature, cert.issuer_pub_key);
+  });
 }
 
 /**
@@ -362,26 +366,28 @@ export async function signDelegationCertV2(cert: DelegationCertV2, issuer: Hybri
  * set of resource_path constraints. A verifier still applies its own rules.
  */
 export async function signDelegationCertV2WithSigner(cert: DelegationCertV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<DelegationCertV2> {
-  if (!cert) throw new Error("v2 delegation certificate is nil");
-  validateDelegationCertV2(cert);
-  const scopeErr = validateScopesV2(cert.scope);
-  if (scopeErr) throw new Error(`v2 issuer scope: ${scopeErr}`);
-  validateDelegationIssuanceV2(cert);
-  const issuerPub = await signerPublicKeyV2(signer);
-  const issuerID = keyIDV2(issuerPub);
-  if (cert.issuer_id !== issuerID || !equalHybridPublicKeys(cert.issuer_pub_key, issuerPub)) {
-    throw new Error("v2 issuer key does not match certificate issuer");
-  }
-  const prepared = decodeDelegationCertV2(encodeDelegationCertV2({ ...cert, signature: placeholderV2Signature() }));
-  const signable = delegationCertV2SignBytes(prepared);
-  prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.delegationCertificate, signable, signer, issuerPub, opts);
-  const signed = decodeDelegationCertV2(encodeDelegationCertV2(prepared));
-  try {
-    await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable, signed.signature, issuerPub);
-  } catch (err) {
-    throw wrapError("signed v2 delegation certificate failed verification", err);
-  }
-  return signed;
+  return classifiedAsync("malformed", async () => {
+    if (!cert) throw new Error("v2 delegation certificate is nil");
+    validateDelegationCertV2(cert);
+    const scopeErr = validateScopesV2(cert.scope);
+    if (scopeErr) throw new Error(`v2 issuer scope: ${scopeErr}`);
+    validateDelegationIssuanceV2(cert);
+    const issuerPub = await signerPublicKeyV2(signer);
+    const issuerID = keyIDV2(issuerPub);
+    if (cert.issuer_id !== issuerID || !equalHybridPublicKeys(cert.issuer_pub_key, issuerPub)) {
+      throw v2Errorf("key_id_mismatch", "v2 issuer key does not match certificate issuer");
+    }
+    const prepared = decodeDelegationCertV2(encodeDelegationCertV2({ ...cert, signature: placeholderV2Signature() }));
+    const signable = delegationCertV2SignBytes(prepared);
+    prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.delegationCertificate, signable, signer, issuerPub, opts);
+    const signed = decodeDelegationCertV2(encodeDelegationCertV2(prepared));
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable, signed.signature, issuerPub);
+    } catch (err) {
+      throw wrapError("signed v2 delegation certificate failed verification", err);
+    }
+    return signed;
+  });
 }
 
 /**
@@ -448,22 +454,26 @@ export function delegationDigestV2(certs: readonly DelegationCertV2[]): Uint8Arr
 }
 
 export function encodeProofBundleV2(b: ProofBundleV2): Uint8Array {
-  if (!b) throw new Error("v2 proof bundle is nil");
-  const wire = presentationSignableObject(b);
-  wire.challenge_sig = keyWire(b.challenge_sig);
-  wire.delegations = b.delegations === null ? null : b.delegations.map((c) => certCanonicalObject(c, false));
-  const encoded = canonicalJSONV2(wire);
-  try {
-    decodeProofBundleV2(encoded);
-  } catch (err) {
-    throw wrapError("invalid v2 proof bundle", err);
-  }
-  return encoded;
+  return classified("malformed", () => {
+    if (!b) throw new Error("v2 proof bundle is nil");
+    const wire = presentationSignableObject(b);
+    wire.challenge_sig = keyWire(b.challenge_sig);
+    wire.delegations = b.delegations === null ? null : b.delegations.map((c) => certCanonicalObject(c, false));
+    const encoded = canonicalJSONV2(wire);
+    try {
+      decodeProofBundleV2(encoded);
+    } catch (err) {
+      throw wrapError("invalid v2 proof bundle", err);
+    }
+    return encoded;
+  });
 }
 
 /** "sha384:" + hex(SHA-384("ratify-protocol-bundle-v2\0" || canonical signed bundle)). */
 export function bundleHashV2(b: ProofBundleV2): string {
-  return bundleHashOfBytesV2(encodeProofBundleV2(b));
+  return classified("malformed", () => {
+    return bundleHashOfBytesV2(encodeProofBundleV2(b));
+  });
 }
 
 export function bundleHashOfBytesV2(encoded: Uint8Array): string {
@@ -627,8 +637,10 @@ async function verifyProofBundleV2SignaturesOnly(b: ProofBundleV2): Promise<void
  * resolve the root, consume a challenge, query status or decide.
  */
 export async function verifyProofBundleV2Signatures(b: ProofBundleV2): Promise<void> {
-  verifyProofBundleV2Structure(b);
-  await verifyProofBundleV2SignaturesOnly(b);
+  return classifiedAsync("malformed", async () => {
+    verifyProofBundleV2Structure(b);
+    await verifyProofBundleV2SignaturesOnly(b);
+  });
 }
 
 /** Computes the delegation digest and signs the presentation with the agent key. */
@@ -638,24 +650,26 @@ export async function signProofBundleV2(bundle: ProofBundleV2, agent: HybridKeyP
 
 /** signProofBundleV2 through a signer whose key must equal the bundle agent key. */
 export async function signProofBundleV2WithSigner(bundle: ProofBundleV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<ProofBundleV2> {
-  if (!bundle) throw new Error("v2 proof bundle is nil");
-  const agentPub = await signerPublicKeyV2(signer);
-  const agentID = keyIDV2(agentPub);
-  if (bundle.agent_id !== agentID || !equalHybridPublicKeys(bundle.agent_pub_key, agentPub)) {
-    throw new Error("v2 agent key does not match proof bundle agent");
-  }
-  const prepared = decodeProofBundleV2(encodeProofBundleV2({
-    ...bundle, challenge_sig: placeholderV2Signature(), delegation_digest: new Uint8Array(48),
-  }));
-  prepared.delegation_digest = delegationDigestV2(prepared.delegations ?? []);
-  prepared.challenge_sig = await signV2StatementWithSigner(V2_OBJECT_TYPE.challengePresentation, presentationV2SignBytes(prepared), signer, agentPub, opts);
-  const signed = decodeProofBundleV2(encodeProofBundleV2(prepared));
-  try {
-    await verifyProofBundleV2Signatures(signed);
-  } catch (err) {
-    throw wrapError("invalid signed v2 proof bundle", err);
-  }
-  return signed;
+  return classifiedAsync("malformed", async () => {
+    if (!bundle) throw new Error("v2 proof bundle is nil");
+    const agentPub = await signerPublicKeyV2(signer);
+    const agentID = keyIDV2(agentPub);
+    if (bundle.agent_id !== agentID || !equalHybridPublicKeys(bundle.agent_pub_key, agentPub)) {
+      throw new Error("v2 agent key does not match proof bundle agent");
+    }
+    const prepared = decodeProofBundleV2(encodeProofBundleV2({
+      ...bundle, challenge_sig: placeholderV2Signature(), delegation_digest: new Uint8Array(48),
+    }));
+    prepared.delegation_digest = delegationDigestV2(prepared.delegations ?? []);
+    prepared.challenge_sig = await signV2StatementWithSigner(V2_OBJECT_TYPE.challengePresentation, presentationV2SignBytes(prepared), signer, agentPub, opts);
+    const signed = decodeProofBundleV2(encodeProofBundleV2(prepared));
+    try {
+      await verifyProofBundleV2Signatures(signed);
+    } catch (err) {
+      throw wrapError("invalid signed v2 proof bundle", err);
+    }
+    return signed;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -764,59 +778,67 @@ export function decodeRevocationPushV2(data: Uint8Array): RevocationPushV2 {
 }
 
 export function encodeRevocationListV2(l: RevocationListV2): Uint8Array {
-  validateRevocationListV2(l);
-  validateHybridSignatureV2(l.signature);
-  const encoded = canonicalJSONV2({
-    issuer_id: l.issuer_id, next_update: l.next_update, revoked: revokedWire(l.revoked), sequence: l.sequence,
-    signature: keyWire(l.signature), updated_at: l.updated_at, version: l.version,
+  return classified("malformed", () => {
+    validateRevocationListV2(l);
+    validateHybridSignatureV2(l.signature);
+    const encoded = canonicalJSONV2({
+      issuer_id: l.issuer_id, next_update: l.next_update, revoked: revokedWire(l.revoked), sequence: l.sequence,
+      signature: keyWire(l.signature), updated_at: l.updated_at, version: l.version,
+    });
+    decodeRevocationListV2(encoded);
+    return encoded;
   });
-  decodeRevocationListV2(encoded);
-  return encoded;
 }
 
 export function encodeRevocationPushV2(p: RevocationPushV2): Uint8Array {
-  validateRevocationPushV2(p);
-  validateHybridSignatureV2(p.signature);
-  const encoded = canonicalJSONV2({
-    issuer_id: p.issuer_id, pushed_at: p.pushed_at, revoked: revokedWire(p.revoked), sequence: p.sequence,
-    signature: keyWire(p.signature), version: p.version,
+  return classified("malformed", () => {
+    validateRevocationPushV2(p);
+    validateHybridSignatureV2(p.signature);
+    const encoded = canonicalJSONV2({
+      issuer_id: p.issuer_id, pushed_at: p.pushed_at, revoked: revokedWire(p.revoked), sequence: p.sequence,
+      signature: keyWire(p.signature), version: p.version,
+    });
+    decodeRevocationPushV2(encoded);
+    return encoded;
   });
-  decodeRevocationPushV2(encoded);
-  return encoded;
 }
 
 /** Status signatures are checked only against the caller-bound status key. */
 export async function verifyRevocationListV2Signature(l: RevocationListV2, trustedIssuerID: string, statusKey: HybridPublicKey): Promise<void> {
-  try {
-    validateRevocationListV2(l);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  if (trustedIssuerID !== l.issuer_id) {
-    throw v2Errorf("status_key_binding_mismatch", "v2 revocation list issuer does not match authenticated status-key binding");
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.revocationList, revocationListV2SignBytes(l), l.signature, statusKey);
+  return classifiedAsync("malformed", async () => {
+    try {
+      validateRevocationListV2(l);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    if (trustedIssuerID !== l.issuer_id) {
+      throw v2Errorf("status_key_binding_mismatch", "v2 revocation list issuer does not match authenticated status-key binding");
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.revocationList, revocationListV2SignBytes(l), l.signature, statusKey);
+  });
 }
 
 export async function verifyRevocationPushV2Signature(p: RevocationPushV2, trustedIssuerID: string, statusKey: HybridPublicKey): Promise<void> {
-  try {
-    validateRevocationPushV2(p);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  if (trustedIssuerID !== p.issuer_id) {
-    throw v2Errorf("status_key_binding_mismatch", "v2 revocation push issuer does not match authenticated status-key binding");
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.revocationPush, revocationPushV2SignBytes(p), p.signature, statusKey);
+  return classifiedAsync("malformed", async () => {
+    try {
+      validateRevocationPushV2(p);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    if (trustedIssuerID !== p.issuer_id) {
+      throw v2Errorf("status_key_binding_mismatch", "v2 revocation push issuer does not match authenticated status-key binding");
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.revocationPush, revocationPushV2SignBytes(p), p.signature, statusKey);
+  });
 }
 
 async function checkStatusSigner(issuerID: string, boundIssuerID: string, boundStatusKey: HybridPublicKey, signer: SignerV2, kind: string): Promise<HybridPublicKey> {
   if (boundIssuerID === "" || issuerID !== boundIssuerID) {
-    throw new Error(`${kind} issuer does not match caller-authenticated status-key binding`);
+    throw v2Errorf("status_key_binding_mismatch", `${kind} issuer does not match caller-authenticated status-key binding`);
   }
   const derived = await signerPublicKeyV2(signer);
   if (!equalHybridPublicKeys(boundStatusKey, derived)) {
-    throw new Error("status private key does not match caller-authenticated issuer status-key binding");
+    throw v2Errorf("status_key_binding_mismatch", "status private key does not match caller-authenticated issuer status-key binding");
   }
   return derived;
 }
@@ -828,17 +850,19 @@ export async function signRevocationListV2(l: RevocationListV2, boundIssuerID: s
 
 /** signRevocationListV2 through a signer whose key must equal boundStatusKey. */
 export async function signRevocationListV2WithSigner(l: RevocationListV2, boundIssuerID: string, boundStatusKey: HybridPublicKey, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<RevocationListV2> {
-  validateRevocationListV2(l);
-  const derived = await checkStatusSigner(l.issuer_id, boundIssuerID, boundStatusKey, signer, "revocation-list");
-  const prepared = decodeRevocationListV2(encodeRevocationListV2({ ...l, signature: placeholderV2Signature() }));
-  prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.revocationList, revocationListV2SignBytes(prepared), signer, derived, opts);
-  const signed = decodeRevocationListV2(encodeRevocationListV2(prepared));
-  try {
-    await verifyRevocationListV2Signature(signed, boundIssuerID, boundStatusKey);
-  } catch (err) {
-    throw wrapError("signed revocation list failed verification", err);
-  }
-  return signed;
+  return classifiedAsync("malformed", async () => {
+    validateRevocationListV2(l);
+    const derived = await checkStatusSigner(l.issuer_id, boundIssuerID, boundStatusKey, signer, "revocation-list");
+    const prepared = decodeRevocationListV2(encodeRevocationListV2({ ...l, signature: placeholderV2Signature() }));
+    prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.revocationList, revocationListV2SignBytes(prepared), signer, derived, opts);
+    const signed = decodeRevocationListV2(encodeRevocationListV2(prepared));
+    try {
+      await verifyRevocationListV2Signature(signed, boundIssuerID, boundStatusKey);
+    } catch (err) {
+      throw wrapError("signed revocation list failed verification", err);
+    }
+    return signed;
+  });
 }
 
 /** Signs a push under the caller-authenticated status key bound to its issuer. */
@@ -848,17 +872,19 @@ export async function signRevocationPushV2(p: RevocationPushV2, boundIssuerID: s
 
 /** signRevocationPushV2 through a signer whose key must equal boundStatusKey. */
 export async function signRevocationPushV2WithSigner(p: RevocationPushV2, boundIssuerID: string, boundStatusKey: HybridPublicKey, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<RevocationPushV2> {
-  validateRevocationPushV2(p);
-  const derived = await checkStatusSigner(p.issuer_id, boundIssuerID, boundStatusKey, signer, "revocation-push");
-  const prepared = decodeRevocationPushV2(encodeRevocationPushV2({ ...p, signature: placeholderV2Signature() }));
-  prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.revocationPush, revocationPushV2SignBytes(prepared), signer, derived, opts);
-  const signed = decodeRevocationPushV2(encodeRevocationPushV2(prepared));
-  try {
-    await verifyRevocationPushV2Signature(signed, boundIssuerID, boundStatusKey);
-  } catch (err) {
-    throw wrapError("signed revocation push failed verification", err);
-  }
-  return signed;
+  return classifiedAsync("malformed", async () => {
+    validateRevocationPushV2(p);
+    const derived = await checkStatusSigner(p.issuer_id, boundIssuerID, boundStatusKey, signer, "revocation-push");
+    const prepared = decodeRevocationPushV2(encodeRevocationPushV2({ ...p, signature: placeholderV2Signature() }));
+    prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.revocationPush, revocationPushV2SignBytes(prepared), signer, derived, opts);
+    const signed = decodeRevocationPushV2(encodeRevocationPushV2(prepared));
+    try {
+      await verifyRevocationPushV2Signature(signed, boundIssuerID, boundStatusKey);
+    } catch (err) {
+      throw wrapError("signed revocation push failed verification", err);
+    }
+    return signed;
+  });
 }
 
 /**
@@ -866,17 +892,19 @@ export async function signRevocationPushV2WithSigner(p: RevocationPushV2, boundI
  * It does not establish signature validity, freshness or policy.
  */
 export function statusEvidenceDigestV2(objectType: number, object: RevocationListV2 | RevocationPushV2): Uint8Array {
-  let encoded: Uint8Array;
-  if (objectType === V2_OBJECT_TYPE.revocationList) {
-    if (!object || !("next_update" in object)) throw new Error("status evidence type 0x0003 requires RevocationListV2");
-    encoded = encodeRevocationListV2(object);
-  } else if (objectType === V2_OBJECT_TYPE.revocationPush) {
-    if (!object || !("pushed_at" in object)) throw new Error("status evidence type 0x0005 requires RevocationPushV2");
-    encoded = encodeRevocationPushV2(object);
-  } else {
-    throw new Error(`unsupported status evidence object type: ${objectType.toString(16).padStart(4, "0")}`);
-  }
-  return sha384(concatBytes(utf8("ratify-protocol-status-evidence-v2\0"), uint16BE(objectType), encoded));
+  return classified("malformed", () => {
+    let encoded: Uint8Array;
+    if (objectType === V2_OBJECT_TYPE.revocationList) {
+      if (!object || !("next_update" in object)) throw new Error("status evidence type 0x0003 requires RevocationListV2");
+      encoded = encodeRevocationListV2(object);
+    } else if (objectType === V2_OBJECT_TYPE.revocationPush) {
+      if (!object || !("pushed_at" in object)) throw new Error("status evidence type 0x0005 requires RevocationPushV2");
+      encoded = encodeRevocationPushV2(object);
+    } else {
+      throw v2Errorf("unsupported_object_type", `unsupported status evidence object type: ${objectType.toString(16).padStart(4, "0")}`);
+    }
+    return sha384(concatBytes(utf8("ratify-protocol-status-evidence-v2\0"), uint16BE(objectType), encoded));
+  });
 }
 
 export function cloneRevocationListV2(l: RevocationListV2): RevocationListV2 {

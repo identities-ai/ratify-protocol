@@ -10,7 +10,7 @@ import { challengeClaimDigestV2 } from "./challenge_claim_v2.js";
 import { V2_MAX_CHALLENGE_AGE_SECONDS, checkedAddV2, validV2Timestamp } from "./clock_bounds_v2.js";
 import type { V2AuthoritativeClock } from "./claim_store_v2.js";
 import { keyIDV2 } from "./crypto_v2.js";
-import { V2SentinelError, errorIs, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classifiedAsync, errorIs, v2Classify, v2Errorf, V2SentinelError, wrapError } from "./errors_v2.js";
 import { MAX_SAFE_INTEGER_V2, bytesEqual, isWellFormedString, utf8Len } from "./json_v2.js";
 import { validV2ID } from "./protocol_v2_wire.js";
 import { readV2AuthoritativeTime } from "./release_v2.js";
@@ -67,43 +67,45 @@ const MAX_V2_ISSUANCE_ATTEMPTS = 3;
  * (at most three attempts) and never overwrites.
  */
 export async function issueChallengeV2(issuer: V2ChallengeIssuer, req: V2ChallengeIssueRequest, signal?: AbortSignal): Promise<ExpectedChallengeV2> {
-  if (!issuer?.clock || !issuer.store) {
-    throw v2Errorf("configuration_invalid", "v2 challenge issuer requires a context, authoritative clock and issuance store");
-  }
-  validateV2ChallengeIssueRequest(req);
-  const random: V2RandomSource = issuer.random ?? ((n) => globalThis.crypto.getRandomValues(new Uint8Array(n)));
-  let issuedAt: number;
-  try {
-    issuedAt = await readV2AuthoritativeTime(issuer.clock, signal);
-  } catch (err) {
-    throw wrapError("v2 challenge issuance: authoritative clock", err);
-  }
-  const expiresAt = checkedAddV2(issuedAt, req.lifetimeSeconds);
-  if (expiresAt === null || !validV2Timestamp(expiresAt)) {
-    throw v2Errorf("configuration_invalid", "v2 challenge expiry leaves the timestamp domain");
-  }
-  for (let attempt = 0; attempt < MAX_V2_ISSUANCE_ATTEMPTS; attempt++) {
-    let value: Uint8Array;
-    try {
-      value = Uint8Array.from(await random(32));
-    } catch (err) {
-      throw wrapError("v2 challenge issuance: random source", err);
+  return classifiedAsync("claim_store_unavailable", async () => {
+    if (!issuer?.clock || !issuer.store) {
+      throw v2Errorf("configuration_invalid", "v2 challenge issuer requires a context, authoritative clock and issuance store");
     }
-    if (value.length !== 32) throw new Error("v2 challenge issuance: random source: short read");
-    const record: ExpectedChallengeV2 = {
-      value, issuedAt, expiresAt, verifierNamespace: req.verifierNamespace, replayEpoch: req.replayEpoch, verifierID: req.verifierID,
-      expectedAgentID: req.expectedAgentID ?? "", expectedAgentPublicKey: req.expectedAgentPublicKey ?? null,
-      expectedReceiverID: req.expectedReceiverID ?? "", expectedSessionContext: req.expectedSessionContext ?? null,
-    };
+    validateV2ChallengeIssueRequest(req);
+    const random: V2RandomSource = issuer.random ?? ((n) => globalThis.crypto.getRandomValues(new Uint8Array(n)));
+    let issuedAt: number;
     try {
-      await issuer.store.persistV2Challenge(cloneExpectedChallengeV2(record), signal);
+      issuedAt = await readV2AuthoritativeTime(issuer.clock, signal);
     } catch (err) {
-      if (errorIs(err, ErrV2ChallengeIssuanceConflict)) continue;
-      throw wrapError("v2 challenge issuance: the record was not durably persisted, so the challenge is not exposed", err);
+      throw wrapError("v2 challenge issuance: authoritative clock", err);
     }
-    return cloneExpectedChallengeV2(record);
-  }
-  throw new Error(`v2 challenge issuance: ${MAX_V2_ISSUANCE_ATTEMPTS} consecutive key conflicts; the random source is not trustworthy`);
+    const expiresAt = checkedAddV2(issuedAt, req.lifetimeSeconds);
+    if (expiresAt === null || !validV2Timestamp(expiresAt)) {
+      throw v2Errorf("configuration_invalid", "v2 challenge expiry leaves the timestamp domain");
+    }
+    for (let attempt = 0; attempt < MAX_V2_ISSUANCE_ATTEMPTS; attempt++) {
+      let value: Uint8Array;
+      try {
+        value = Uint8Array.from(await random(32));
+      } catch (err) {
+        throw v2Classify("configuration_invalid", wrapError("v2 challenge issuance: random source", err));
+      }
+      if (value.length !== 32) throw v2Errorf("configuration_invalid", "v2 challenge issuance: random source: short read");
+      const record: ExpectedChallengeV2 = {
+        value, issuedAt, expiresAt, verifierNamespace: req.verifierNamespace, replayEpoch: req.replayEpoch, verifierID: req.verifierID,
+        expectedAgentID: req.expectedAgentID ?? "", expectedAgentPublicKey: req.expectedAgentPublicKey ?? null,
+        expectedReceiverID: req.expectedReceiverID ?? "", expectedSessionContext: req.expectedSessionContext ?? null,
+      };
+      try {
+        await issuer.store.persistV2Challenge(cloneExpectedChallengeV2(record), signal);
+      } catch (err) {
+        if (errorIs(err, ErrV2ChallengeIssuanceConflict)) continue;
+        throw wrapError("v2 challenge issuance: the record was not durably persisted, so the challenge is not exposed", err);
+      }
+      return cloneExpectedChallengeV2(record);
+    }
+    throw v2Errorf("configuration_invalid", `v2 challenge issuance: ${MAX_V2_ISSUANCE_ATTEMPTS} consecutive key conflicts; the random source is not trustworthy`);
+  });
 }
 
 /**
@@ -113,23 +115,25 @@ export async function issueChallengeV2(issuer: V2ChallengeIssuer, req: V2Challen
  * pre-claim checks against the returned record.
  */
 export async function loadExpectedChallengeV2(store: V2ChallengeIssuanceStore, namespace: string, replayEpoch: number, challenge: Uint8Array, signal?: AbortSignal): Promise<ExpectedChallengeV2> {
-  if (!store) throw v2Errorf("configuration_invalid", "v2 challenge lookup requires a context and issuance store");
-  let digest: Uint8Array;
-  try {
-    digest = challengeClaimDigestV2(challenge);
-  } catch {
-    throw v2Errorf("expected_challenge_unavailable", "v2 presented challenge is not 32 bytes");
-  }
-  let record: ExpectedChallengeV2;
-  try {
-    record = await store.loadV2Challenge(namespace, replayEpoch, Uint8Array.from(digest), signal);
-  } catch (err) {
-    throw v2Classify("expected_challenge_unavailable", err);
-  }
-  if (!record || !bytesEqual(record.value, challenge) || record.verifierNamespace !== namespace || record.replayEpoch !== replayEpoch) {
-    throw v2Errorf("expected_challenge_unavailable", "v2 issuance store returned a record for another challenge");
-  }
-  return cloneExpectedChallengeV2(record);
+  return classifiedAsync("expected_challenge_unavailable", async () => {
+    if (!store) throw v2Errorf("configuration_invalid", "v2 challenge lookup requires a context and issuance store");
+    let digest: Uint8Array;
+    try {
+      digest = challengeClaimDigestV2(challenge);
+    } catch {
+      throw v2Errorf("expected_challenge_unavailable", "v2 presented challenge is not 32 bytes");
+    }
+    let record: ExpectedChallengeV2;
+    try {
+      record = await store.loadV2Challenge(namespace, replayEpoch, Uint8Array.from(digest), signal);
+    } catch (err) {
+      throw v2Classify("expected_challenge_unavailable", err);
+    }
+    if (!record || !bytesEqual(record.value, challenge) || record.verifierNamespace !== namespace || record.replayEpoch !== replayEpoch) {
+      throw v2Errorf("expected_challenge_unavailable", "v2 issuance store returned a record for another challenge");
+    }
+    return cloneExpectedChallengeV2(record);
+  });
 }
 
 /** Go validateV2ChallengeIssueRequest. */

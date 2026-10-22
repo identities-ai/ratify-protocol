@@ -8,7 +8,7 @@ import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { validConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
 import { MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2, MAX_VERIFICATION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
 import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
-import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
+import { classified, classifiedAsync, v2Classify, v2Errorf } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
   bytesEqual,
@@ -401,17 +401,21 @@ function validateReceiptDecisionV2(r: VerificationReceiptV2): void {
 }
 
 export function verificationReceiptV2Digest(r: VerificationReceiptV2): Uint8Array {
-  validateVerificationReceiptV2(r, false);
-  return statementBodyDigestV2(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r));
+  return classified("malformed", () => {
+    validateVerificationReceiptV2(r, false);
+    return statementBodyDigestV2(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r));
+  });
 }
 
 export function encodeVerificationReceiptV2(r: VerificationReceiptV2): Uint8Array {
-  validateVerificationReceiptV2(r, true);
-  const o = signableObject(r);
-  o.signature = keyWire(r.signature);
-  const data = canonicalJSONV2(o);
-  checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2);
-  return data;
+  return classified("malformed", () => {
+    validateVerificationReceiptV2(r, true);
+    const o = signableObject(r);
+    o.signature = keyWire(r.signature);
+    const data = canonicalJSONV2(o);
+    checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2);
+    return data;
+  });
 }
 
 function decodeEvidence(n: JNode | undefined): StatusEvidenceEntryV2[] | null {
@@ -506,20 +510,24 @@ export function validateVerificationReceiptSignableV2(data: Uint8Array): void {
 }
 
 export async function signVerificationReceiptV2(r: VerificationReceiptV2, verifier: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<VerificationReceiptV2> {
-  validateVerificationReceiptV2(r, false);
-  await validateHybridKeyPairV2(verifier);
-  return signVerificationReceiptV2WithSigner(r, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+  return classifiedAsync("malformed", async () => {
+    validateVerificationReceiptV2(r, false);
+    await validateHybridKeyPairV2(verifier);
+    return signVerificationReceiptV2WithSigner(r, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+  });
 }
 
 /** signVerificationReceiptV2 through a signer whose key ID must equal verifier_id. */
 export async function signVerificationReceiptV2WithSigner(r: VerificationReceiptV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<VerificationReceiptV2> {
-  validateVerificationReceiptV2(r, false);
-  const verifierPublic = await signerPublicKeyV2(signer);
-  if (keyIDV2(verifierPublic) !== r.verifier_id) throw new Error("receipt verifier_id does not match signing key");
-  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), signer, verifierPublic, opts);
-  const result = { ...r, signature };
-  encodeVerificationReceiptV2(result);
-  return result;
+  return classifiedAsync("malformed", async () => {
+    validateVerificationReceiptV2(r, false);
+    const verifierPublic = await signerPublicKeyV2(signer);
+    if (keyIDV2(verifierPublic) !== r.verifier_id) throw v2Errorf("key_id_mismatch", "receipt verifier_id does not match signing key");
+    const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), signer, verifierPublic, opts);
+    const result = { ...r, signature };
+    encodeVerificationReceiptV2(result);
+    return result;
+  });
 }
 
 function validateReceiptV2Head(head: ReceiptV2Head): void {
@@ -532,21 +540,23 @@ function validateReceiptV2Head(head: ReceiptV2Head): void {
  * log head; the receipt never supplies trust in its own key.
  */
 export async function verifyVerificationReceiptV2(r: VerificationReceiptV2, verifierPublic: HybridPublicKey, head: ReceiptV2Head): Promise<V2AppendResult> {
-  try {
-    validateVerificationReceiptV2(r, true);
-    encodeVerificationReceiptV2(r);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  validateReceiptV2Head(head);
-  if (r.log_id !== head.logID || r.verifier_id !== head.verifierID) {
-    throw v2Errorf("log_state_mismatch", "receipt log ID or verifier identity does not match caller-authenticated state");
-  }
-  if (r.verifier_id !== keyIDV2(verifierPublic)) {
-    throw v2Errorf("log_state_mismatch", "receipt verifier_id does not match caller-authenticated key");
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), r.signature, verifierPublic);
-  return logPositionV2(r.sequence, r.previous_receipt_hash, verificationReceiptV2Digest(r), head);
+  return classifiedAsync("malformed", async () => {
+    try {
+      validateVerificationReceiptV2(r, true);
+      encodeVerificationReceiptV2(r);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    validateReceiptV2Head(head);
+    if (r.log_id !== head.logID || r.verifier_id !== head.verifierID) {
+      throw v2Errorf("log_state_mismatch", "receipt log ID or verifier identity does not match caller-authenticated state");
+    }
+    if (r.verifier_id !== keyIDV2(verifierPublic)) {
+      throw v2Errorf("log_state_mismatch", "receipt verifier_id does not match caller-authenticated key");
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), r.signature, verifierPublic);
+    return logPositionV2(r.sequence, r.previous_receipt_hash, verificationReceiptV2Digest(r), head);
+  });
 }
 
 /**
@@ -554,36 +564,38 @@ export async function verifyVerificationReceiptV2(r: VerificationReceiptV2, veri
  * present. It does not establish root trust or current status.
  */
 export function checkVerificationReceiptV2BundleBinding(r: VerificationReceiptV2, bundle: ProofBundleV2): void {
-  try {
-    validateVerificationReceiptV2(r, false);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  try {
-    encodeProofBundleV2(bundle);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  if (r.verifier_id !== bundle.verifier_id || (r.agent_id !== "" && r.agent_id !== bundle.agent_id)) {
-    throw v2Errorf("receipt_bundle_mismatch", "receipt verifier or agent ID does not match the proof bundle");
-  }
-  const certs = bundle.delegations ?? [];
-  const roleKeyIDs = new Set([bundle.verifier_id, bundle.agent_id]);
-  for (const c of certs) {
-    roleKeyIDs.add(c.issuer_id);
-    roleKeyIDs.add(c.subject_id);
-  }
-  for (const e of r.status_evidence_digests ?? []) {
-    if (roleKeyIDs.has(e.status_key_id)) {
-      throw v2Errorf("receipt_bundle_mismatch", "receipt status key ID overlaps a proof or verifier key role");
+  return classified("receipt_bundle_mismatch", () => {
+    try {
+      validateVerificationReceiptV2(r, false);
+    } catch (err) {
+      throw v2Classify("malformed", err);
     }
-  }
-  if (r.bundle_hash !== bundleHashV2(bundle)) throw v2Errorf("receipt_bundle_mismatch", "receipt bundle_hash does not match the proof bundle");
-  const issuerIDs = [...new Set(certs.map((c) => c.issuer_id))].sort(compareStrings);
-  const got = r.issuer_ids ?? [];
-  if (issuerIDs.length !== got.length || issuerIDs.some((id, i) => id !== got[i])) {
-    throw v2Errorf("receipt_bundle_mismatch", "receipt issuer_ids do not match the proof bundle chain");
-  }
+    try {
+      encodeProofBundleV2(bundle);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    if (r.verifier_id !== bundle.verifier_id || (r.agent_id !== "" && r.agent_id !== bundle.agent_id)) {
+      throw v2Errorf("receipt_bundle_mismatch", "receipt verifier or agent ID does not match the proof bundle");
+    }
+    const certs = bundle.delegations ?? [];
+    const roleKeyIDs = new Set([bundle.verifier_id, bundle.agent_id]);
+    for (const c of certs) {
+      roleKeyIDs.add(c.issuer_id);
+      roleKeyIDs.add(c.subject_id);
+    }
+    for (const e of r.status_evidence_digests ?? []) {
+      if (roleKeyIDs.has(e.status_key_id)) {
+        throw v2Errorf("receipt_bundle_mismatch", "receipt status key ID overlaps a proof or verifier key role");
+      }
+    }
+    if (r.bundle_hash !== bundleHashV2(bundle)) throw v2Errorf("receipt_bundle_mismatch", "receipt bundle_hash does not match the proof bundle");
+    const issuerIDs = [...new Set(certs.map((c) => c.issuer_id))].sort(compareStrings);
+    const got = r.issuer_ids ?? [];
+    if (issuerIDs.length !== got.length || issuerIDs.some((id, i) => id !== got[i])) {
+      throw v2Errorf("receipt_bundle_mismatch", "receipt issuer_ids do not match the proof bundle chain");
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -594,20 +606,22 @@ export function checkVerificationReceiptV2BundleBinding(r: VerificationReceiptV2
  * position, previous hash and signature; the caller binds it to its claim.
  */
 export function verificationReceiptV2Body(r: VerificationReceiptV2): Uint8Array {
-  if (!r) throw new Error("wire v2: receipt body is nil");
-  const candidate: VerificationReceiptV2 = {
-    ...r, log_id: "0123456789abcdef0123456789abcdef", sequence: 1, previous_receipt_hash: new Uint8Array(48),
-    signature: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
-  };
-  validateVerificationReceiptV2(candidate, false);
-  // Reserve the largest log envelope before commit.
-  const prev = new Uint8Array(48);
-  prev[0] = 1;
-  encodeVerificationReceiptV2({
-    ...candidate, sequence: MAX_SAFE, previous_receipt_hash: prev,
-    signature: { ed25519: new Uint8Array(64), ml_dsa_65: new Uint8Array(3309) },
+  return classified("malformed", () => {
+    if (!r) throw new Error("wire v2: receipt body is nil");
+    const candidate: VerificationReceiptV2 = {
+      ...r, log_id: "0123456789abcdef0123456789abcdef", sequence: 1, previous_receipt_hash: new Uint8Array(48),
+      signature: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
+    };
+    validateVerificationReceiptV2(candidate, false);
+    // Reserve the largest log envelope before commit.
+    const prev = new Uint8Array(48);
+    prev[0] = 1;
+    encodeVerificationReceiptV2({
+      ...candidate, sequence: MAX_SAFE, previous_receipt_hash: prev,
+      signature: { ed25519: new Uint8Array(64), ml_dsa_65: new Uint8Array(3309) },
+    });
+    return canonicalJSONV2(bodyObject(r));
   });
-  return canonicalJSONV2(bodyObject(r));
 }
 
 function emptyReceiptEnvelope(): Pick<VerificationReceiptV2, "log_id" | "sequence" | "previous_receipt_hash" | "signature"> {
@@ -636,33 +650,39 @@ export function decodeVerificationReceiptBodyV2(data: Uint8Array): VerificationR
 
 /** Assigns the next position in a caller-authenticated receipt log to a prepared body. */
 export function bindVerificationReceiptBodyV2(data: Uint8Array, head: ReceiptV2Head): VerificationReceiptV2 {
-  validateReceiptV2Head(head);
-  if (head.frozen || head.sequence === MAX_SAFE) throw new Error("wire v2: receipt log cannot accept another entry");
-  const receipt = decodeVerificationReceiptBodyV2(data);
-  if (receipt.verifier_id !== head.verifierID) throw new Error("wire v2: prepared receipt verifier differs from authenticated log");
-  receipt.log_id = head.logID;
-  receipt.sequence = head.sequence + 1;
-  receipt.previous_receipt_hash = Uint8Array.from(head.headHash);
-  validateVerificationReceiptV2(receipt, false);
-  return receipt;
+  return classified("malformed", () => {
+    validateReceiptV2Head(head);
+    if (head.frozen || head.sequence === MAX_SAFE) throw new Error("wire v2: receipt log cannot accept another entry");
+    const receipt = decodeVerificationReceiptBodyV2(data);
+    if (receipt.verifier_id !== head.verifierID) throw new Error("wire v2: prepared receipt verifier differs from authenticated log");
+    receipt.log_id = head.logID;
+    receipt.sequence = head.sequence + 1;
+    receipt.previous_receipt_hash = Uint8Array.from(head.headHash);
+    validateVerificationReceiptV2(receipt, false);
+    return receipt;
+  });
 }
 
 /** Binds and signs an exact prepared body with a local verifier key. */
 export async function signPreparedVerificationReceiptV2(data: Uint8Array, head: ReceiptV2Head, verifier: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<VerificationReceiptV2> {
-  await validateHybridKeyPairV2(verifier);
-  return signPreparedVerificationReceiptV2WithSigner(data, head, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+  return classifiedAsync("malformed", async () => {
+    await validateHybridKeyPairV2(verifier);
+    return signPreparedVerificationReceiptV2WithSigner(data, head, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+  });
 }
 
 /** signPreparedVerificationReceiptV2 with an external verifier signer. */
 export async function signPreparedVerificationReceiptV2WithSigner(data: Uint8Array, head: ReceiptV2Head, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<VerificationReceiptV2> {
-  const bound = bindVerificationReceiptBodyV2(data, head);
-  const signed = await signVerificationReceiptV2WithSigner(bound, signer, opts);
-  let body: Uint8Array | null = null;
-  try {
-    body = verificationReceiptV2Body(signed);
-  } catch {
-    body = null;
-  }
-  if (body === null || !bytesEqual(body, data)) throw new Error("wire v2: signed receipt differs from prepared body");
-  return signed;
+  return classifiedAsync("malformed", async () => {
+    const bound = bindVerificationReceiptBodyV2(data, head);
+    const signed = await signVerificationReceiptV2WithSigner(bound, signer, opts);
+    let body: Uint8Array | null = null;
+    try {
+      body = verificationReceiptV2Body(signed);
+    } catch {
+      body = null;
+    }
+    if (body === null || !bytesEqual(body, data)) throw new Error("wire v2: signed receipt differs from prepared body");
+    return signed;
+  });
 }

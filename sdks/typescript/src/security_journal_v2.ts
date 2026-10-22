@@ -6,7 +6,7 @@
 import { sha384 } from "@noble/hashes/sha2";
 
 import { keyIDV2 } from "./crypto_v2.js";
-import { V2SentinelError, errorIs, wrapError } from "./errors_v2.js";
+import { classified, classifiedAsync, errorIs, V2SentinelError, wrapError } from "./errors_v2.js";
 import { MAX_SAFE_INTEGER_V2, compareStrings, hexOf } from "./json_v2.js";
 import type { RevocationListV2, RevocationPushV2 } from "./protocol_v2_wire.js";
 import {
@@ -192,8 +192,10 @@ export async function loadAnchoredSecurityJournalV2(store: SecurityJournalStoreV
 
 /** Durably adds a non-status key role after the caller authenticated its admission. */
 export async function recordSecurityKeyRoleV2(store: SecurityJournalStoreV2, role: string, pub: HybridPublicKey, signal?: AbortSignal): Promise<SecurityJournalV2> {
-  if (role === "status") throw new Error("status keys must be recorded with their issuer and epoch");
-  return updateSecurityJournalV2(store, (journal) => registerKeyRoleV2(journal, role, pub), signal);
+  return classifiedAsync("status_object_rejected", async () => {
+    if (role === "status") throw new Error("status keys must be recorded with their issuer and epoch");
+    return updateSecurityJournalV2(store, (journal) => registerKeyRoleV2(journal, role, pub), signal);
+  });
 }
 
 /**
@@ -201,24 +203,26 @@ export async function recordSecurityKeyRoleV2(store: SecurityJournalStoreV2, rol
  * epoch 1; later bindings advance exactly one epoch and keep prior denials.
  */
 export async function configureStatusKeyEpochV2(store: SecurityJournalStoreV2, issuerID: string, epoch: number, pub: HybridPublicKey, signal?: AbortSignal): Promise<SecurityJournalV2> {
-  return updateSecurityJournalV2(store, (journal) => {
-    registerStatusKeyEpochV2(journal, issuerID, epoch, pub);
-    const prior = journal.statusByIssuer.get(issuerID);
-    if (prior !== undefined) {
-      if (epoch === prior.statusKeyEpoch) {
-        requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
+  return classifiedAsync("status_object_rejected", async () => {
+    return updateSecurityJournalV2(store, (journal) => {
+      registerStatusKeyEpochV2(journal, issuerID, epoch, pub);
+      const prior = journal.statusByIssuer.get(issuerID);
+      if (prior !== undefined) {
+        if (epoch === prior.statusKeyEpoch) {
+          requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
+          return;
+        }
+        journal.statusByIssuer.set(issuerID, transitionRevocationStatusEpochV2(prior, issuerID, epoch, pub));
         return;
       }
-      journal.statusByIssuer.set(issuerID, transitionRevocationStatusEpochV2(prior, issuerID, epoch, pub));
-      return;
-    }
-    if (epoch !== 1) throw new Error("first status-key epoch must be 1");
-    const state = emptyRevocationStatusStateV2();
-    state.issuerID = issuerID;
-    state.statusKeyEpoch = epoch;
-    state.statusKeyID = keyIDV2(pub);
-    journal.statusByIssuer.set(issuerID, state);
-  }, signal);
+      if (epoch !== 1) throw new Error("first status-key epoch must be 1");
+      const state = emptyRevocationStatusStateV2();
+      state.issuerID = issuerID;
+      state.statusKeyEpoch = epoch;
+      state.statusKeyID = keyIDV2(pub);
+      journal.statusByIssuer.set(issuerID, state);
+    }, signal);
+  });
 }
 
 /** Authenticates, reduces, and atomically persists one full snapshot. */
@@ -226,11 +230,13 @@ export async function applyRevocationListToJournalV2(
   store: SecurityJournalStoreV2, list: RevocationListV2, issuerID: string, epoch: number, pub: HybridPublicKey,
   policy: RevocationStatusPolicyV2, now: number, signal?: AbortSignal,
 ): Promise<SecurityJournalV2> {
-  return updateSecurityJournalV2(store, async (journal) => {
-    requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
-    const state = await applyRevocationListV2(journal.statusByIssuer.get(issuerID)!, list, issuerID, epoch, pub, policy, now);
-    journal.statusByIssuer.set(issuerID, state);
-  }, signal);
+  return classifiedAsync("status_object_rejected", async () => {
+    return updateSecurityJournalV2(store, async (journal) => {
+      requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
+      const state = await applyRevocationListV2(journal.statusByIssuer.get(issuerID)!, list, issuerID, epoch, pub, policy, now);
+      journal.statusByIssuer.set(issuerID, state);
+    }, signal);
+  });
 }
 
 /** Authenticates, reduces, and atomically persists one push. */
@@ -238,11 +244,13 @@ export async function applyRevocationPushToJournalV2(
   store: SecurityJournalStoreV2, push: RevocationPushV2, issuerID: string, epoch: number, pub: HybridPublicKey,
   policy: RevocationStatusPolicyV2, now: number, signal?: AbortSignal,
 ): Promise<SecurityJournalV2> {
-  return updateSecurityJournalV2(store, async (journal) => {
-    requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
-    const state = await applyRevocationPushV2(journal.statusByIssuer.get(issuerID)!, push, issuerID, epoch, pub, policy, now);
-    journal.statusByIssuer.set(issuerID, state);
-  }, signal);
+  return classifiedAsync("status_object_rejected", async () => {
+    return updateSecurityJournalV2(store, async (journal) => {
+      requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
+      const state = await applyRevocationPushV2(journal.statusByIssuer.get(issuerID)!, push, issuerID, epoch, pub, policy, now);
+      journal.statusByIssuer.set(issuerID, state);
+    }, signal);
+  });
 }
 
 const unavailableResult = (): RevocationStatusResultV2 => ({ status: "indeterminate", reason: "unavailable", evidence: [], freshUntil: 0 });
@@ -256,10 +264,12 @@ export async function revocationStatusFromJournalV2(
   store: SecurityJournalStoreV2, issuerID: string, certID: string, epoch: number, pub: HybridPublicKey,
   policy: RevocationStatusPolicyV2, now: number, signal?: AbortSignal,
 ): Promise<RevocationStatusResultV2> {
-  if (!store) throw new Error("security journal store is required");
-  const journal = await loadAnchoredSecurityJournalV2(store, signal);
-  requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
-  return revocationStatusForCertV2(journal.statusByIssuer.get(issuerID)!, issuerID, certID, epoch, pub, policy, now);
+  return classifiedAsync("status_object_rejected", async () => {
+    if (!store) throw new Error("security journal store is required");
+    const journal = await loadAnchoredSecurityJournalV2(store, signal);
+    requireJournalStatusKeyV2(journal, issuerID, epoch, pub);
+    return revocationStatusForCertV2(journal.statusByIssuer.get(issuerID)!, issuerID, certID, epoch, pub, policy, now);
+  });
 }
 
 export { unavailableResult as unavailableV2StatusResult };
@@ -279,138 +289,142 @@ export function requireJournalStatusKeyV2(journal: SecurityJournalV2, issuerID: 
 
 /** Validates record integrity and internal indexes. */
 export function validateSecurityJournalV2(journal: SecurityJournalV2): void {
-  if (!journal || (journal.version !== SECURITY_JOURNAL_VERSION_V2 && journal.version !== SECURITY_JOURNAL_LEGACY_VERSION_V2) ||
-      !(journal.statusByIssuer instanceof Map) || !Array.isArray(journal.keyRoleHistory) || !Array.isArray(journal.statusKeyHistory)) {
-    throw new Error("security journal has unsupported or incomplete shape");
-  }
-  if (!Number.isSafeInteger(journal.generation) || journal.generation < 0) throw new Error("security journal generation is invalid");
-  if (journal.generation === 0 && journal.previousDigest !== "") throw new Error("security journal genesis has a predecessor");
-  if (journal.generation === 0 && (journal.statusByIssuer.size !== 0 || journal.keyRoleHistory.length !== 0 || journal.statusKeyHistory.length !== 0)) {
-    throw new Error("security journal genesis must be empty");
-  }
-  if (journal.generation > 0 && (journal.previousDigest === "" || journal.previousDigest.length !== 96)) {
-    throw new Error("security journal record is missing its predecessor digest");
-  }
-  if (journal.digest !== securityJournalDigestV2(journal)) throw new Error("security journal digest mismatch");
-  for (const [issuerID, state] of journal.statusByIssuer) {
-    if (issuerID === "" || state.issuerID !== issuerID || !(state.statusKeyEpoch > 0)) {
-      throw new Error("security journal contains a misbound issuer status state");
+  return classified("malformed", () => {
+    if (!journal || (journal.version !== SECURITY_JOURNAL_VERSION_V2 && journal.version !== SECURITY_JOURNAL_LEGACY_VERSION_V2) ||
+        !(journal.statusByIssuer instanceof Map) || !Array.isArray(journal.keyRoleHistory) || !Array.isArray(journal.statusKeyHistory)) {
+      throw new Error("security journal has unsupported or incomplete shape");
     }
-    try {
-      validateStatusStateBindingV2(state, issuerID, state.statusKeyEpoch);
-    } catch (err) {
-      throw wrapError(`invalid status state for issuer "${issuerID}"`, err);
+    if (!Number.isSafeInteger(journal.generation) || journal.generation < 0) throw new Error("security journal generation is invalid");
+    if (journal.generation === 0 && journal.previousDigest !== "") throw new Error("security journal genesis has a predecessor");
+    if (journal.generation === 0 && (journal.statusByIssuer.size !== 0 || journal.keyRoleHistory.length !== 0 || journal.statusKeyHistory.length !== 0)) {
+      throw new Error("security journal genesis must be empty");
     }
-    try {
-      validateAcceptedStatusStateV2(state);
-    } catch (err) {
-      throw wrapError(`invalid accepted status state for issuer "${issuerID}"`, err);
+    if (journal.generation > 0 && (journal.previousDigest === "" || journal.previousDigest.length !== 96)) {
+      throw new Error("security journal record is missing its predecessor digest");
     }
-    const binding = statusBindingAtEpochV2(journal.statusKeyHistory, issuerID, state.statusKeyEpoch);
-    if (binding === null || binding.statusKeyID !== state.statusKeyID) throw new Error("current status state has no matching retained key binding");
-    let maxObserved = 0;
-    const retired: string[] = [];
-    for (const old of journal.statusKeyHistory) {
-      if (old.issuerID === issuerID && old.epoch < state.statusKeyEpoch) retired.push(old.statusKeyID);
-    }
-    for (const o of state.observations) {
-      const ob = statusBindingAtEpochV2(journal.statusKeyHistory, issuerID, o.statusKeyEpoch);
-      if (ob === null || o.statusKeyID !== ob.statusKeyID || !(o.sequence > 0) || o.sequence > MAX_SAFE ||
-          o.evidenceDigest.length !== 48 || o.bodyDigest.length !== 48 || (o.objectType !== LIST && o.objectType !== PUSH)) {
-        throw new Error("security journal contains malformed or misbound status evidence");
+    if (journal.digest !== securityJournalDigestV2(journal)) throw new Error("security journal digest mismatch");
+    for (const [issuerID, state] of journal.statusByIssuer) {
+      if (issuerID === "" || state.issuerID !== issuerID || !(state.statusKeyEpoch > 0)) {
+        throw new Error("security journal contains a misbound issuer status state");
       }
-      if (o.statusKeyEpoch === state.statusKeyEpoch && o.sequence > maxObserved) maxObserved = o.sequence;
+      try {
+        validateStatusStateBindingV2(state, issuerID, state.statusKeyEpoch);
+      } catch (err) {
+        throw wrapError(`invalid status state for issuer "${issuerID}"`, err);
+      }
+      try {
+        validateAcceptedStatusStateV2(state);
+      } catch (err) {
+        throw wrapError(`invalid accepted status state for issuer "${issuerID}"`, err);
+      }
+      const binding = statusBindingAtEpochV2(journal.statusKeyHistory, issuerID, state.statusKeyEpoch);
+      if (binding === null || binding.statusKeyID !== state.statusKeyID) throw new Error("current status state has no matching retained key binding");
+      let maxObserved = 0;
+      const retired: string[] = [];
+      for (const old of journal.statusKeyHistory) {
+        if (old.issuerID === issuerID && old.epoch < state.statusKeyEpoch) retired.push(old.statusKeyID);
+      }
+      for (const o of state.observations) {
+        const ob = statusBindingAtEpochV2(journal.statusKeyHistory, issuerID, o.statusKeyEpoch);
+        if (ob === null || o.statusKeyID !== ob.statusKeyID || !(o.sequence > 0) || o.sequence > MAX_SAFE ||
+            o.evidenceDigest.length !== 48 || o.bodyDigest.length !== 48 || (o.objectType !== LIST && o.objectType !== PUSH)) {
+          throw new Error("security journal contains malformed or misbound status evidence");
+        }
+        if (o.statusKeyEpoch === state.statusKeyEpoch && o.sequence > maxObserved) maxObserved = o.sequence;
+      }
+      if (state.maxObservedSequence !== maxObserved || !equalStringSetsV2(state.retiredStatusKeyIDs, retired)) {
+        throw new Error("status state does not match retained sequence and key history");
+      }
     }
-    if (state.maxObservedSequence !== maxObserved || !equalStringSetsV2(state.retiredStatusKeyIDs, retired)) {
-      throw new Error("status state does not match retained sequence and key history");
+    validateKeyRoleHistoryV2(journal.keyRoleHistory);
+    validateStatusKeyHistoryV2(journal.statusKeyHistory, journal.keyRoleHistory);
+    const latest = new Map<string, number>();
+    for (const b of journal.statusKeyHistory) if (b.epoch > (latest.get(b.issuerID) ?? 0)) latest.set(b.issuerID, b.epoch);
+    for (const [issuerID, epoch] of latest) {
+      const state = journal.statusByIssuer.get(issuerID);
+      if (state === undefined || state.statusKeyEpoch !== epoch) {
+        throw new Error("security journal status state is not at the latest retained issuer epoch");
+      }
     }
-  }
-  validateKeyRoleHistoryV2(journal.keyRoleHistory);
-  validateStatusKeyHistoryV2(journal.statusKeyHistory, journal.keyRoleHistory);
-  const latest = new Map<string, number>();
-  for (const b of journal.statusKeyHistory) if (b.epoch > (latest.get(b.issuerID) ?? 0)) latest.set(b.issuerID, b.epoch);
-  for (const [issuerID, epoch] of latest) {
-    const state = journal.statusByIssuer.get(issuerID);
-    if (state === undefined || state.statusKeyEpoch !== epoch) {
-      throw new Error("security journal status state is not at the latest retained issuer epoch");
-    }
-  }
+  });
 }
 
 /** Generation continuity and append-only key histories (Go ValidateSecurityJournalTransitionV2). */
 export function validateSecurityJournalTransitionV2(current: SecurityJournalV2, next: SecurityJournalV2): void {
-  try {
-    validateSecurityJournalV2(current);
-  } catch (err) {
-    throw wrapError("invalid current journal", err);
-  }
-  try {
-    validateSecurityJournalV2(next);
-  } catch (err) {
-    throw wrapError("invalid next journal", err);
-  }
-  if (next.generation !== current.generation + 1 || next.previousDigest !== current.digest) {
-    throw new Error("journal generation or predecessor is not contiguous");
-  }
-  if (next.version !== SECURITY_JOURNAL_VERSION_V2) throw new Error(`journal transitions must produce a version ${SECURITY_JOURNAL_VERSION_V2} record`);
-  if (current.version === SECURITY_JOURNAL_LEGACY_VERSION_V2 && !sameSecurityJournalContentV2(current, next)) {
-    throw new Error("journal migration must not change logical content");
-  }
-  if (!appendOnly(current.keyRoleHistory, next.keyRoleHistory, sameRoleBinding) ||
-      !appendOnly(current.statusKeyHistory, next.statusKeyHistory, sameStatusBinding)) {
-    throw new Error("journal key binding history was removed or rewritten");
-  }
-  for (const [issuerID, state] of current.statusByIssuer) {
-    const nextState = next.statusByIssuer.get(issuerID);
-    if (nextState === undefined || !containsAllStringSetV2(nextState.denyUnionCertIDs, state.denyUnionCertIDs)) {
-      throw new Error("journal transition removed issuer status or a retained revocation");
+  return classified("status_object_rejected", () => {
+    try {
+      validateSecurityJournalV2(current);
+    } catch (err) {
+      throw wrapError("invalid current journal", err);
     }
-    const nextKeys = new Set(nextState.observations.map(securityObservationKeyV2));
-    const nextSemantic = new Map<string, RevocationObservationV2>();
-    for (const o of nextState.observations) nextSemantic.set(securityObservationSemanticKeyV2(o), o);
-    for (const old of state.observations) {
-      if (nextKeys.has(securityObservationKeyV2(old))) continue;
-      if (!mustRetainStatusObservationV2(nextState, old)) continue;
-      const compacted = nextSemantic.get(securityObservationSemanticKeyV2(old));
-      if (compacted === undefined || !containsAllStringSetV2(compacted.revokedCertIDs, old.revokedCertIDs) ||
-          (old.fork && !compacted.fork) || (old.gap && nextState.reconciliationRequired && !compacted.gap) ||
-          (old.futureDated && nextState.futureDatedObjectObserved && !compacted.futureDated)) {
-        throw new Error("journal transition removed authenticated status evidence");
-      }
+    try {
+      validateSecurityJournalV2(next);
+    } catch (err) {
+      throw wrapError("invalid next journal", err);
     }
-    if (nextState.statusKeyEpoch < state.statusKeyEpoch) throw new Error("journal transition rolled back a status-key epoch");
-    if (nextState.statusKeyEpoch > state.statusKeyEpoch) {
-      if (nextState.statusKeyID === state.statusKeyID || state.retiredStatusKeyIDs.includes(nextState.statusKeyID) ||
-          !equalStringSetsV2(nextState.retiredStatusKeyIDs, [...state.retiredStatusKeyIDs, state.statusKeyID]) ||
-          nextState.hasFloor || nextState.floor !== 0 || nextState.acceptedSnapshot !== null || nextState.acceptedCertIDs.length !== 0 ||
-          nextState.hasPrecedingCheckpoint || nextState.precedingFloor !== 0 || nextState.precedingAcceptedCertIDs.length !== 0 ||
-          nextState.maxObservedSequence !== 0 || nextState.forkSequence !== 0 || nextState.reconciliationRequired || nextState.futureDatedObjectObserved) {
-        throw new Error("status-key epoch transition did not perform the required fail-closed reset");
+    if (next.generation !== current.generation + 1 || next.previousDigest !== current.digest) {
+      throw new Error("journal generation or predecessor is not contiguous");
+    }
+    if (next.version !== SECURITY_JOURNAL_VERSION_V2) throw new Error(`journal transitions must produce a version ${SECURITY_JOURNAL_VERSION_V2} record`);
+    if (current.version === SECURITY_JOURNAL_LEGACY_VERSION_V2 && !sameSecurityJournalContentV2(current, next)) {
+      throw new Error("journal migration must not change logical content");
+    }
+    if (!appendOnly(current.keyRoleHistory, next.keyRoleHistory, sameRoleBinding) ||
+        !appendOnly(current.statusKeyHistory, next.statusKeyHistory, sameStatusBinding)) {
+      throw new Error("journal key binding history was removed or rewritten");
+    }
+    for (const [issuerID, state] of current.statusByIssuer) {
+      const nextState = next.statusByIssuer.get(issuerID);
+      if (nextState === undefined || !containsAllStringSetV2(nextState.denyUnionCertIDs, state.denyUnionCertIDs)) {
+        throw new Error("journal transition removed issuer status or a retained revocation");
       }
-      for (const o of nextState.observations) {
-        if (o.statusKeyEpoch >= nextState.statusKeyEpoch) {
-          throw new Error("status-key epoch transition contains evidence from the new epoch before bootstrap");
+      const nextKeys = new Set(nextState.observations.map(securityObservationKeyV2));
+      const nextSemantic = new Map<string, RevocationObservationV2>();
+      for (const o of nextState.observations) nextSemantic.set(securityObservationSemanticKeyV2(o), o);
+      for (const old of state.observations) {
+        if (nextKeys.has(securityObservationKeyV2(old))) continue;
+        if (!mustRetainStatusObservationV2(nextState, old)) continue;
+        const compacted = nextSemantic.get(securityObservationSemanticKeyV2(old));
+        if (compacted === undefined || !containsAllStringSetV2(compacted.revokedCertIDs, old.revokedCertIDs) ||
+            (old.fork && !compacted.fork) || (old.gap && nextState.reconciliationRequired && !compacted.gap) ||
+            (old.futureDated && nextState.futureDatedObjectObserved && !compacted.futureDated)) {
+          throw new Error("journal transition removed authenticated status evidence");
+        }
+      }
+      if (nextState.statusKeyEpoch < state.statusKeyEpoch) throw new Error("journal transition rolled back a status-key epoch");
+      if (nextState.statusKeyEpoch > state.statusKeyEpoch) {
+        if (nextState.statusKeyID === state.statusKeyID || state.retiredStatusKeyIDs.includes(nextState.statusKeyID) ||
+            !equalStringSetsV2(nextState.retiredStatusKeyIDs, [...state.retiredStatusKeyIDs, state.statusKeyID]) ||
+            nextState.hasFloor || nextState.floor !== 0 || nextState.acceptedSnapshot !== null || nextState.acceptedCertIDs.length !== 0 ||
+            nextState.hasPrecedingCheckpoint || nextState.precedingFloor !== 0 || nextState.precedingAcceptedCertIDs.length !== 0 ||
+            nextState.maxObservedSequence !== 0 || nextState.forkSequence !== 0 || nextState.reconciliationRequired || nextState.futureDatedObjectObserved) {
+          throw new Error("status-key epoch transition did not perform the required fail-closed reset");
+        }
+        for (const o of nextState.observations) {
+          if (o.statusKeyEpoch >= nextState.statusKeyEpoch) {
+            throw new Error("status-key epoch transition contains evidence from the new epoch before bootstrap");
+          }
+        }
+      }
+      if (nextState.statusKeyEpoch === state.statusKeyEpoch && state.hasFloor && (!nextState.hasFloor || nextState.floor < state.floor)) {
+        throw new Error("journal transition rolled back the accepted status floor");
+      }
+      if (nextState.statusKeyEpoch === state.statusKeyEpoch && nextState.maxObservedSequence < state.maxObservedSequence) {
+        throw new Error("journal transition rolled back the observed status sequence");
+      }
+      if (nextState.statusKeyEpoch === state.statusKeyEpoch && state.reconciliationRequired && !nextState.reconciliationRequired) {
+        if (!hasAcceptedSnapshotAfterV2(nextState, state.statusKeyEpoch, state.maxObservedSequence, state.forkSequence, state.denyUnionCertIDs) ||
+            !containsAllStringSetV2(nextState.acceptedCertIDs, state.denyUnionCertIDs)) {
+          throw new Error("journal transition cleared reconciliation without a caught-up full snapshot");
         }
       }
     }
-    if (nextState.statusKeyEpoch === state.statusKeyEpoch && state.hasFloor && (!nextState.hasFloor || nextState.floor < state.floor)) {
-      throw new Error("journal transition rolled back the accepted status floor");
-    }
-    if (nextState.statusKeyEpoch === state.statusKeyEpoch && nextState.maxObservedSequence < state.maxObservedSequence) {
-      throw new Error("journal transition rolled back the observed status sequence");
-    }
-    if (nextState.statusKeyEpoch === state.statusKeyEpoch && state.reconciliationRequired && !nextState.reconciliationRequired) {
-      if (!hasAcceptedSnapshotAfterV2(nextState, state.statusKeyEpoch, state.maxObservedSequence, state.forkSequence, state.denyUnionCertIDs) ||
-          !containsAllStringSetV2(nextState.acceptedCertIDs, state.denyUnionCertIDs)) {
-        throw new Error("journal transition cleared reconciliation without a caught-up full snapshot");
+    for (const [issuerID, state] of next.statusByIssuer) {
+      if (!current.statusByIssuer.has(issuerID) && statusBindingAtEpochV2(next.statusKeyHistory, issuerID, state.statusKeyEpoch) === null) {
+        throw new Error("new issuer status state lacks authenticated key history");
       }
     }
-  }
-  for (const [issuerID, state] of next.statusByIssuer) {
-    if (!current.statusByIssuer.has(issuerID) && statusBindingAtEpochV2(next.statusKeyHistory, issuerID, state.statusKeyEpoch) === null) {
-      throw new Error("new issuer status state lacks authenticated key history");
-    }
-  }
+  });
 }
 
 /** Go pruneSecurityJournalObservationsV2: compacts every issuer state in place. */
@@ -446,8 +460,10 @@ export function validSecurityKeyRoleV2(role: string): boolean {
  * assignment is idempotent; any key-ID or component reuse is denied.
  */
 export function registerKeyRoleV2(journal: SecurityJournalV2, role: string, pub: HybridPublicKey): void {
-  if (!journal || !validSecurityKeyRoleV2(role) || role === "status") throw new Error("security key role is invalid");
-  registerKeyRoleUncheckedV2(journal, role, pub);
+  return classified("status_object_rejected", () => {
+    if (!journal || !validSecurityKeyRoleV2(role) || role === "status") throw new Error("security key role is invalid");
+    registerKeyRoleUncheckedV2(journal, role, pub);
+  });
 }
 
 function registerKeyRoleUncheckedV2(journal: SecurityJournalV2, role: string, pub: HybridPublicKey): void {
@@ -465,23 +481,25 @@ function registerKeyRoleUncheckedV2(journal: SecurityJournalV2, role: string, pu
 
 /** Records caller-authenticated status-key history and the permanent status role. */
 export function registerStatusKeyEpochV2(journal: SecurityJournalV2, issuerID: string, epoch: number, pub: HybridPublicKey): void {
-  if (!journal || issuerID === "" || !Number.isSafeInteger(epoch) || epoch <= 0) throw new Error("status-key binding has invalid issuer or epoch");
-  const binding = statusKeyBindingV2(issuerID, epoch, pub);
-  for (const existing of journal.statusKeyHistory) {
-    if (existing.issuerID === issuerID && existing.epoch === epoch) {
-      if (sameStatusBinding(existing, binding)) return;
-      throw new Error("status-key epoch is permanently bound to a different key");
+  return classified("status_object_rejected", () => {
+    if (!journal || issuerID === "" || !Number.isSafeInteger(epoch) || epoch <= 0) throw new Error("status-key binding has invalid issuer or epoch");
+    const binding = statusKeyBindingV2(issuerID, epoch, pub);
+    for (const existing of journal.statusKeyHistory) {
+      if (existing.issuerID === issuerID && existing.epoch === epoch) {
+        if (sameStatusBinding(existing, binding)) return;
+        throw new Error("status-key epoch is permanently bound to a different key");
+      }
+      if (existing.statusKeyID === binding.statusKeyID || existing.ed25519Digest === binding.ed25519Digest || existing.mlDsa65Digest === binding.mlDsa65Digest) {
+        throw new Error("status key was previously bound in this deployment");
+      }
     }
-    if (existing.statusKeyID === binding.statusKeyID || existing.ed25519Digest === binding.ed25519Digest || existing.mlDsa65Digest === binding.mlDsa65Digest) {
-      throw new Error("status key was previously bound in this deployment");
-    }
-  }
-  let highest = 0;
-  for (const existing of journal.statusKeyHistory) if (existing.issuerID === issuerID && existing.epoch > highest) highest = existing.epoch;
-  if (epoch !== highest + 1) throw new Error("status-key epoch must advance by one from retained issuer history");
-  registerKeyRoleUncheckedV2(journal, "status", pub);
-  journal.statusKeyHistory.push(binding);
-  sortStatusKeyHistoryV2(journal.statusKeyHistory);
+    let highest = 0;
+    for (const existing of journal.statusKeyHistory) if (existing.issuerID === issuerID && existing.epoch > highest) highest = existing.epoch;
+    if (epoch !== highest + 1) throw new Error("status-key epoch must advance by one from retained issuer history");
+    registerKeyRoleUncheckedV2(journal, "status", pub);
+    journal.statusKeyHistory.push(binding);
+    sortStatusKeyHistoryV2(journal.statusKeyHistory);
+  });
 }
 
 /** The key-role binding of a complete key: its key ID and SHA-384 of each component. */

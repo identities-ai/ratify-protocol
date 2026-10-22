@@ -6,6 +6,7 @@ import { sha384 } from "@noble/hashes/sha2";
 import { bytesEqual, canonicalJSONV2, hexOf, isWellFormedString } from "./json_v2.js";
 import type { ProofBundleV2 } from "./protocol_v2_wire.js";
 import { validPrefixedDigestV2 } from "./verification_receipt_v2.js";
+import { classified } from "./errors_v2.js";
 
 const VERIFY_SESSION_CONTEXT_PROFILE_V2 = "ratify.verify.session-context/v1";
 const VERIFY_SESSION_CONTEXT_FIELDS_V2 = ["verifier_id", "workspace_id", "agent_id", "session_id", "invocation_id", "request_hash"];
@@ -41,35 +42,37 @@ export function newV2ContextPolicy(
   requiredFields: readonly string[] | null,
   expectedSessionContext: Uint8Array | null,
 ): V2ContextPolicy {
-  if (typeof profile !== "string" || profile === "" || !isWellFormedString(profile)) {
-    throw new Error("v2 context policy profile must be non-empty valid UTF-8");
-  }
-  const fields = [...(requiredFields ?? [])];
-  const seen = new Set<string>();
-  fields.forEach((field, i) => {
-    if (typeof field !== "string" || field === "" || !isWellFormedString(field)) {
-      throw new Error(`v2 context policy field ${i} is empty or invalid UTF-8`);
+  return classified("configuration_invalid", () => {
+    if (typeof profile !== "string" || profile === "" || !isWellFormedString(profile)) {
+      throw new Error("v2 context policy profile must be non-empty valid UTF-8");
     }
-    if (seen.has(field)) throw new Error(`v2 context policy has duplicate field ${JSON.stringify(field)}`);
-    seen.add(field);
-  });
-  const expectedLength = expectedSessionContext?.length ?? 0;
-  if (requireBound && (fields.length === 0 || expectedLength !== 32)) {
-    throw new Error("bound v2 context policy requires fields and a 32-byte authenticated context");
-  }
-  if (!requireBound && expectedLength !== 0) throw new Error("unbound v2 context policy cannot carry an expected context");
-  if (profile === VERIFY_SESSION_CONTEXT_PROFILE_V2 &&
-      (!requireBound || fields.length !== VERIFY_SESSION_CONTEXT_FIELDS_V2.length || fields.some((f, i) => f !== VERIFY_SESSION_CONTEXT_FIELDS_V2[i]))) {
-    throw new Error("Ratify Verify session-context policy must require the canonical field set");
-  }
-  const encoded = canonicalJSONV2({ profile, require_bound: requireBound, required_fields: fields, version: 1 });
-  return Object.freeze({
-    [policyBrand]: true as const,
-    profile,
-    requireBound,
-    requiredFields: Object.freeze(fields),
-    expectedSessionContext: expectedSessionContext === null || expectedSessionContext === undefined ? null : Uint8Array.from(expectedSessionContext),
-    digest: "sha384:" + hexOf(sha384(encoded)),
+    const fields = [...(requiredFields ?? [])];
+    const seen = new Set<string>();
+    fields.forEach((field, i) => {
+      if (typeof field !== "string" || field === "" || !isWellFormedString(field)) {
+        throw new Error(`v2 context policy field ${i} is empty or invalid UTF-8`);
+      }
+      if (seen.has(field)) throw new Error(`v2 context policy has duplicate field ${JSON.stringify(field)}`);
+      seen.add(field);
+    });
+    const expectedLength = expectedSessionContext?.length ?? 0;
+    if (requireBound && (fields.length === 0 || expectedLength !== 32)) {
+      throw new Error("bound v2 context policy requires fields and a 32-byte authenticated context");
+    }
+    if (!requireBound && expectedLength !== 0) throw new Error("unbound v2 context policy cannot carry an expected context");
+    if (profile === VERIFY_SESSION_CONTEXT_PROFILE_V2 &&
+        (!requireBound || fields.length !== VERIFY_SESSION_CONTEXT_FIELDS_V2.length || fields.some((f, i) => f !== VERIFY_SESSION_CONTEXT_FIELDS_V2[i]))) {
+      throw new Error("Ratify Verify session-context policy must require the canonical field set");
+    }
+    const encoded = canonicalJSONV2({ profile, require_bound: requireBound, required_fields: fields, version: 1 });
+    return Object.freeze({
+      [policyBrand]: true as const,
+      profile,
+      requireBound,
+      requiredFields: Object.freeze(fields),
+      expectedSessionContext: expectedSessionContext === null || expectedSessionContext === undefined ? null : Uint8Array.from(expectedSessionContext),
+      digest: "sha384:" + hexOf(sha384(encoded)),
+    });
   });
 }
 

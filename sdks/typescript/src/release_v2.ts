@@ -12,7 +12,7 @@ import { validV2Timestamp } from "./clock_bounds_v2.js";
 import type { V2CheckpointAcknowledgement } from "./checkpoint_ack_v2.js";
 import type { V2AuthoritativeClock, V2ChallengeClaim } from "./claim_store_v2.js";
 import { V2_OBJECT_TYPE, keyIDV2, verifyV2Statement } from "./crypto_v2.js";
-import { V2SentinelError, errorIs, v2ErrorClassOf } from "./errors_v2.js";
+import { classified, errorIs, v2ErrorClassOf, V2SentinelError } from "./errors_v2.js";
 import { bytesEqual, concatBytes, hexOf, utf8 } from "./json_v2.js";
 import { lowerHexString } from "./protocol_v2_wire.js";
 import type { HybridPublicKey } from "./types.js";
@@ -203,9 +203,11 @@ export class V2ReleasedDecision {
   }
   /** A freshly decoded copy of the verified signed receipt. */
   receipt(): VerificationReceiptV2 {
-    const s = releasedStateOf(this);
-    if (!s || s.receiptWire.length === 0) throw new Error("v2 released decision carries no receipt");
-    return decodeVerificationReceiptV2(s.receiptWire);
+    return classified("configuration_invalid", () => {
+      const s = releasedStateOf(this);
+      if (!s || s.receiptWire.length === 0) throw new Error("v2 released decision carries no receipt");
+      return decodeVerificationReceiptV2(s.receiptWire);
+    });
   }
   /** The checkpoint acknowledgement time of the release. */
   releaseTime(): number {

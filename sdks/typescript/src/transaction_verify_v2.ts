@@ -5,7 +5,7 @@
 import { FRESHNESS_UNVERIFIED_V2 } from "./archival_v2.js";
 import { V2_MAX_DELEGATION_LIFETIME_SECONDS, V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_TIMESTAMP_SECONDS, checkedAddV2, validV2Timestamp } from "./clock_bounds_v2.js";
 import { keyIDV2 } from "./crypto_v2.js";
-import { v2Errorf } from "./errors_v2.js";
+import { classifiedAsync, v2Classify, v2Errorf } from "./errors_v2.js";
 import { equalHybridPublicKeys, type DelegationCertV2 } from "./protocol_v2_wire.js";
 import { SCOPE_IDENTITY_DELEGATE_V2, intersectScopesV2, validateScopesV2 } from "./scope_v2.js";
 import type { SecurityJournalStoreV2 } from "./security_journal_v2.js";
@@ -65,18 +65,20 @@ export interface TransactionReceiptVerificationV2 {
  * scope (Go VerifyTransactionReceiptV2). It never claims a challenge.
  */
 export async function verifyTransactionReceiptV2(req: TransactionVerifyRequestV2, sources: TransactionVerifySourcesV2, signal?: AbortSignal): Promise<TransactionReceiptVerificationV2> {
-  if (!validV2Timestamp(req.now)) throw v2Errorf("configuration_invalid", `transaction verification time is outside 0..${V2_MAX_TIMESTAMP_SECONDS}`);
-  if (!Number.isSafeInteger(req.futureSkewSeconds) || req.futureSkewSeconds < 0 || req.futureSkewSeconds > V2_MAX_FUTURE_SKEW_SECONDS) {
-    throw v2Errorf("configuration_invalid", `transaction verification future skew must be 0..${V2_MAX_FUTURE_SKEW_SECONDS} seconds`);
-  }
-  validateV2StatusConfiguration(sources.statusKeys ?? null, sources.statusPolicy);
-  const receipt = await decodeTransactionReceiptV2(req.receipt);
-  const result: TransactionReceiptVerificationV2 = { transaction_id: receipt.transaction_id, actionable: false, parties: [] };
-  for (const party of receipt.parties) {
-    if (signal?.aborted) throw signal.reason ?? new Error("cancelled");
-    result.parties.push(await verifyTransactionPartyV2(party, req, sources, signal));
-  }
-  return result;
+  return classifiedAsync("configuration_invalid", async () => {
+    if (!validV2Timestamp(req.now)) throw v2Errorf("configuration_invalid", `transaction verification time is outside 0..${V2_MAX_TIMESTAMP_SECONDS}`);
+    if (!Number.isSafeInteger(req.futureSkewSeconds) || req.futureSkewSeconds < 0 || req.futureSkewSeconds > V2_MAX_FUTURE_SKEW_SECONDS) {
+      throw v2Errorf("configuration_invalid", `transaction verification future skew must be 0..${V2_MAX_FUTURE_SKEW_SECONDS} seconds`);
+    }
+    validateV2StatusConfiguration(sources.statusKeys ?? null, sources.statusPolicy);
+    const receipt = await decodeTransactionReceiptV2(req.receipt);
+    const result: TransactionReceiptVerificationV2 = { transaction_id: receipt.transaction_id, actionable: false, parties: [] };
+    for (const party of receipt.parties) {
+      if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("cancelled"));
+      result.parties.push(await verifyTransactionPartyV2(party, req, sources, signal));
+    }
+    return result;
+  });
 }
 
 async function verifyTransactionPartyV2(party: TransactionReceiptPartyV2, req: TransactionVerifyRequestV2, sources: TransactionVerifySourcesV2, signal?: AbortSignal): Promise<TransactionPartyVerificationV2> {
@@ -93,7 +95,7 @@ async function verifyTransactionPartyV2(party: TransactionReceiptPartyV2, req: T
     try {
       resolution = await sources.trust([...chain], signal);
     } catch (err) {
-      if (signal?.aborted) throw signal.reason ?? err;
+      if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? err);
       resolution = null;
     }
     if (resolution?.outcome === "trusted" && resolution.rootKey) {

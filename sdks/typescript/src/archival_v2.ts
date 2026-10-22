@@ -3,7 +3,7 @@
 // is never actionable: no challenge is consumed and no provider is invoked.
 
 import { V2_OBJECT_TYPE, keyIDV2, verifyV2Statement } from "./crypto_v2.js";
-import { v2Classify, v2ErrorClassOf, v2Errorf, wrapError, type V2ErrorClass } from "./errors_v2.js";
+import { classifiedAsync, v2Classify, v2ErrorClassOf, v2Errorf, wrapError, type V2ErrorClass } from "./errors_v2.js";
 import { canonicalJSONV2, compareStrings, hexOf } from "./json_v2.js";
 import { decodeKeyRotationStatementV2, keyRotationStatementV2Digest, keyRotationStatementV2SignBytes } from "./key_rotation_v2.js";
 import {
@@ -104,35 +104,41 @@ export async function verifyArchivalProofBundleV2(data: Uint8Array): Promise<Arc
 
 /** A stored certificate under the issuer key it carries. */
 export async function verifyArchivalDelegationCertV2(data: Uint8Array): Promise<ArchivalVerificationV2> {
-  const cert = decodeDelegationCertV2(data);
-  await verifyDelegationCertV2Signature(cert);
-  return archivalResultV2(V2_OBJECT_TYPE.delegationCertificate, null, cert.issuer_id);
+  return classifiedAsync("malformed", async () => {
+    const cert = decodeDelegationCertV2(data);
+    await verifyDelegationCertV2Signature(cert);
+    return archivalResultV2(V2_OBJECT_TYPE.delegationCertificate, null, cert.issuer_id);
+  });
 }
 
 /** A stored revocation list under a caller-authenticated issuer status key. */
 export async function verifyArchivalRevocationListV2(data: Uint8Array, issuerID: string, statusKey: HybridPublicKey): Promise<ArchivalVerificationV2> {
-  const list = decodeRevocationListV2(data);
-  await verifyRevocationListV2Signature(list, issuerID, statusKey);
-  let digest: Uint8Array;
-  try {
-    digest = statusEvidenceDigestV2(V2_OBJECT_TYPE.revocationList, list);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  return archivalResultV2(V2_OBJECT_TYPE.revocationList, digest, keyIDV2(statusKey));
+  return classifiedAsync("malformed", async () => {
+    const list = decodeRevocationListV2(data);
+    await verifyRevocationListV2Signature(list, issuerID, statusKey);
+    let digest: Uint8Array;
+    try {
+      digest = statusEvidenceDigestV2(V2_OBJECT_TYPE.revocationList, list);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    return archivalResultV2(V2_OBJECT_TYPE.revocationList, digest, keyIDV2(statusKey));
+  });
 }
 
 /** A stored revocation push under a caller-authenticated issuer status key. */
 export async function verifyArchivalRevocationPushV2(data: Uint8Array, issuerID: string, statusKey: HybridPublicKey): Promise<ArchivalVerificationV2> {
-  const push = decodeRevocationPushV2(data);
-  await verifyRevocationPushV2Signature(push, issuerID, statusKey);
-  let digest: Uint8Array;
-  try {
-    digest = statusEvidenceDigestV2(V2_OBJECT_TYPE.revocationPush, push);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  return archivalResultV2(V2_OBJECT_TYPE.revocationPush, digest, keyIDV2(statusKey));
+  return classifiedAsync("malformed", async () => {
+    const push = decodeRevocationPushV2(data);
+    await verifyRevocationPushV2Signature(push, issuerID, statusKey);
+    let digest: Uint8Array;
+    try {
+      digest = statusEvidenceDigestV2(V2_OBJECT_TYPE.revocationPush, push);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    return archivalResultV2(V2_OBJECT_TYPE.revocationPush, digest, keyIDV2(statusKey));
+  });
 }
 
 /**
@@ -140,64 +146,70 @@ export async function verifyArchivalRevocationPushV2(data: Uint8Array, issuerID:
  * establish that old_key was the authority's current key.
  */
 export async function verifyArchivalKeyRotationStatementV2(data: Uint8Array): Promise<ArchivalVerificationV2> {
-  const stmt = decodeKeyRotationStatementV2(data);
-  let signable: Uint8Array;
-  try {
-    signable = keyRotationStatementV2SignBytes(stmt);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  try {
-    await verifyV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, stmt.old_signature, stmt.old_key);
-  } catch (err) {
-    throw wrapError("old-key rotation authorization", err);
-  }
-  try {
-    await verifyV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, stmt.new_signature, stmt.new_key);
-  } catch (err) {
-    throw wrapError("new-key proof of possession", err);
-  }
-  return archivalResultV2(V2_OBJECT_TYPE.keyRotationAuthorization, keyRotationStatementV2Digest(stmt), stmt.old_key_id, stmt.new_key_id);
+  return classifiedAsync("malformed", async () => {
+    const stmt = decodeKeyRotationStatementV2(data);
+    let signable: Uint8Array;
+    try {
+      signable = keyRotationStatementV2SignBytes(stmt);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, stmt.old_signature, stmt.old_key);
+    } catch (err) {
+      throw wrapError("old-key rotation authorization", err);
+    }
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, stmt.new_signature, stmt.new_key);
+    } catch (err) {
+      throw wrapError("new-key proof of possession", err);
+    }
+    return archivalResultV2(V2_OBJECT_TYPE.keyRotationAuthorization, keyRotationStatementV2Digest(stmt), stmt.old_key_id, stmt.new_key_id);
+  });
 }
 
 /** A stored witness entry under a caller-authenticated witness key (no log checks). */
 export async function verifyArchivalWitnessEntryV2(data: Uint8Array, witnessPublic: HybridPublicKey): Promise<ArchivalVerificationV2> {
-  const entry = decodeWitnessEntryV2(data);
-  let witnessID = "";
-  try {
-    witnessID = keyIDV2(witnessPublic);
-  } catch {
-    witnessID = "";
-  }
-  if (witnessID === "" || witnessID !== entry.witness_id) throw v2Errorf("key_id_mismatch", "witness key does not match witness_id");
-  let body: Uint8Array;
-  try {
-    body = witnessEntryV2SignBytes(entry);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.witnessEntry, body, entry.signature, witnessPublic);
-  return archivalResultV2(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2Digest(entry), witnessID);
+  return classifiedAsync("malformed", async () => {
+    const entry = decodeWitnessEntryV2(data);
+    let witnessID = "";
+    try {
+      witnessID = keyIDV2(witnessPublic);
+    } catch {
+      witnessID = "";
+    }
+    if (witnessID === "" || witnessID !== entry.witness_id) throw v2Errorf("key_id_mismatch", "witness key does not match witness_id");
+    let body: Uint8Array;
+    try {
+      body = witnessEntryV2SignBytes(entry);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.witnessEntry, body, entry.signature, witnessPublic);
+    return archivalResultV2(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2Digest(entry), witnessID);
+  });
 }
 
 /** A stored verification receipt under a caller-authenticated verifier key (no log or bundle checks). */
 export async function verifyArchivalVerificationReceiptV2(data: Uint8Array, verifierPublic: HybridPublicKey): Promise<ArchivalVerificationV2> {
-  const receipt = decodeVerificationReceiptV2(data);
-  let verifierID = "";
-  try {
-    verifierID = keyIDV2(verifierPublic);
-  } catch {
-    verifierID = "";
-  }
-  if (verifierID === "" || verifierID !== receipt.verifier_id) throw v2Errorf("key_id_mismatch", "verifier key does not match verifier_id");
-  let body: Uint8Array;
-  try {
-    body = verificationReceiptV2SignBytes(receipt);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.verificationReceipt, body, receipt.signature, verifierPublic);
-  return archivalResultV2(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2Digest(receipt), verifierID);
+  return classifiedAsync("malformed", async () => {
+    const receipt = decodeVerificationReceiptV2(data);
+    let verifierID = "";
+    try {
+      verifierID = keyIDV2(verifierPublic);
+    } catch {
+      verifierID = "";
+    }
+    if (verifierID === "" || verifierID !== receipt.verifier_id) throw v2Errorf("key_id_mismatch", "verifier key does not match verifier_id");
+    let body: Uint8Array;
+    try {
+      body = verificationReceiptV2SignBytes(receipt);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.verificationReceipt, body, receipt.signature, verifierPublic);
+    return archivalResultV2(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2Digest(receipt), verifierID);
+  });
 }
 
 /**
@@ -205,6 +217,8 @@ export async function verifyArchivalVerificationReceiptV2(data: Uint8Array, veri
  * every embedded bundle's signatures, hash and transaction context.
  */
 export async function verifyArchivalTransactionReceiptV2(data: Uint8Array): Promise<ArchivalVerificationV2> {
-  const receipt = await decodeTransactionReceiptV2(data);
-  return archivalResultV2(V2_OBJECT_TYPE.transactionPartyStatement, null, ...receipt.parties.map((p) => p.agent_id));
+  return classifiedAsync("malformed", async () => {
+    const receipt = await decodeTransactionReceiptV2(data);
+    return archivalResultV2(V2_OBJECT_TYPE.transactionPartyStatement, null, ...receipt.parties.map((p) => p.agent_id));
+  });
 }

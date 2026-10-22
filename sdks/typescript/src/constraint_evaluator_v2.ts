@@ -13,7 +13,7 @@ import { sha384 } from "@noble/hashes/sha2";
 
 import { V2_MAX_TIMESTAMP_SECONDS } from "./clock_bounds_v2.js";
 import { ConstraintUnverifiableError, v2IntegerField, type ConstraintContextV2, type ConstraintV2 } from "./constraints_v2.js";
-import { v2Classify, v2Errorf } from "./errors_v2.js";
+import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
 import { MAX_SAFE_INTEGER_V2, canonicalJSONV2, compareStrings, concatBytes, hexOf, isValidUTF8, isWellFormedString, parseJSONV2, utf8, utf8Len, type JNode } from "./json_v2.js";
 import type { ProofBundleV2 } from "./protocol_v2_wire.js";
 
@@ -124,28 +124,30 @@ export class ConstraintEvaluatorRegistryV2 {
  * extension type registered once. A violation is configuration_invalid.
  */
 export function newConstraintEvaluatorRegistryV2(timeoutMs: number, ...registrations: ConstraintEvaluatorRegistrationV2[]): ConstraintEvaluatorRegistryV2 {
-  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_CONSTRAINT_EVALUATOR_TIMEOUT_MS_V2) {
-    throw v2Errorf("configuration_invalid", `v2 constraint evaluator timeout must be in (0, ${MAX_CONSTRAINT_EVALUATOR_TIMEOUT_MS_V2}] ms`);
-  }
-  if (registrations.length > MAX_CONSTRAINT_EVALUATORS_V2) {
-    throw v2Errorf("configuration_invalid", `v2 constraint evaluator registry holds at most ${MAX_CONSTRAINT_EVALUATORS_V2} profiles`);
-  }
-  const entries = new Map<string, RegisteredConstraintEvaluatorV2>();
-  registrations.forEach((registration, i) => {
-    if (!registration || typeof registration.evaluate !== "function") {
-      throw v2Errorf("configuration_invalid", `v2 constraint evaluator ${i} has no implementation`);
+  return classified("configuration_invalid", () => {
+    if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_CONSTRAINT_EVALUATOR_TIMEOUT_MS_V2) {
+      throw v2Errorf("configuration_invalid", `v2 constraint evaluator timeout must be in (0, ${MAX_CONSTRAINT_EVALUATOR_TIMEOUT_MS_V2}] ms`);
     }
-    let digest: string;
-    try {
-      digest = constraintProfileDigestV2(registration.descriptor);
-    } catch (err) {
-      throw v2Classify("configuration_invalid", err);
+    if (registrations.length > MAX_CONSTRAINT_EVALUATORS_V2) {
+      throw v2Errorf("configuration_invalid", `v2 constraint evaluator registry holds at most ${MAX_CONSTRAINT_EVALUATORS_V2} profiles`);
     }
-    const type = registration.descriptor.type;
-    if (entries.has(type)) throw v2Errorf("configuration_invalid", `v2 constraint type ${JSON.stringify(type)} is registered more than once`);
-    entries.set(type, Object.freeze({ ref: Object.freeze({ type, profile_digest: digest }), evaluate: registration.evaluate }));
+    const entries = new Map<string, RegisteredConstraintEvaluatorV2>();
+    registrations.forEach((registration, i) => {
+      if (!registration || typeof registration.evaluate !== "function") {
+        throw v2Errorf("configuration_invalid", `v2 constraint evaluator ${i} has no implementation`);
+      }
+      let digest: string;
+      try {
+        digest = constraintProfileDigestV2(registration.descriptor);
+      } catch (err) {
+        throw v2Classify("configuration_invalid", err);
+      }
+      const type = registration.descriptor.type;
+      if (entries.has(type)) throw v2Errorf("configuration_invalid", `v2 constraint type ${JSON.stringify(type)} is registered more than once`);
+      entries.set(type, Object.freeze({ ref: Object.freeze({ type, profile_digest: digest }), evaluate: registration.evaluate }));
+    });
+    return ConstraintEvaluatorRegistryV2.create({ timeoutMs, entries });
   });
-  return ConstraintEvaluatorRegistryV2.create({ timeoutMs, entries });
 }
 
 /**
@@ -153,10 +155,12 @@ export function newConstraintEvaluatorRegistryV2(timeoutMs: number, ...registrat
  * || 0x00 || RatifyCanonicalJSON({"profile":profile,"type":type})).
  */
 export function constraintProfileDigestV2(d: ConstraintProfileDescriptorV2): string {
-  if (!d || !validExtensionTypeV2(d.type)) throw new Error(`v2 constraint profile type ${JSON.stringify(d?.type)} is not a registrable extension type`);
-  if (!validProfileIDV2(d.profile)) throw new Error(`v2 constraint profile identifier ${JSON.stringify(d.profile)} is invalid`);
-  const body = canonicalJSONV2({ profile: d.profile, type: d.type });
-  return "sha384:" + hexOf(sha384(concatBytes(utf8(PROFILE_DIGEST_LABEL), new Uint8Array([0]), body)));
+  return classified("configuration_invalid", () => {
+    if (!d || !validExtensionTypeV2(d.type)) throw new Error(`v2 constraint profile type ${JSON.stringify(d?.type)} is not a registrable extension type`);
+    if (!validProfileIDV2(d.profile)) throw new Error(`v2 constraint profile identifier ${JSON.stringify(d.profile)} is invalid`);
+    const body = canonicalJSONV2({ profile: d.profile, type: d.type });
+    return "sha384:" + hexOf(sha384(concatBytes(utf8(PROFILE_DIGEST_LABEL), new Uint8Array([0]), body)));
+  });
 }
 
 const LABEL_RE = /^[a-z0-9_-]+$/;

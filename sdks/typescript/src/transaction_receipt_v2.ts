@@ -8,7 +8,7 @@ import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2S
 import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_TRANSACTION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
 import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
-import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classified, classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
   RawJSON,
@@ -94,18 +94,20 @@ const byPartyID = (a: { party_id: string }, b: { party_id: string }) => compareB
 
 /** The exact 0x0007 signable bytes: proof bundles and signatures excluded, parties sorted. */
 export function transactionReceiptV2SignBytes(r: TransactionReceiptV2): Uint8Array {
-  if (!r || !r.parties || r.parties.length === 0) throw new Error("v2 transaction receipt and parties are required");
-  if (r.parties.length > MAX_TRANSACTION_PARTIES) {
-    throw new Error(`v2 transaction receipt exceeds MAX_TRANSACTION_PARTIES (${MAX_TRANSACTION_PARTIES})`);
-  }
-  const parties = r.parties.map((p) => ({
-    agent_id: p.agent_id, agent_pub_key: keyWire(p.agent_pub_key), invocation_id: p.invocation_id, party_id: p.party_id,
-    proof_bundle_hash: p.proof_bundle_hash, required_scope: p.required_scope, role: p.role, session_id: p.session_id,
-    verifier_id: p.verifier_id, workspace_id: p.workspace_id,
-  })).sort(byPartyID);
-  return canonicalJSONV2({
-    created_at: r.created_at, parties, terms_canonical_json: r.terms_canonical_json,
-    terms_schema_uri: r.terms_schema_uri, transaction_id: r.transaction_id, version: r.version,
+  return classified("malformed", () => {
+    if (!r || !r.parties || r.parties.length === 0) throw new Error("v2 transaction receipt and parties are required");
+    if (r.parties.length > MAX_TRANSACTION_PARTIES) {
+      throw new Error(`v2 transaction receipt exceeds MAX_TRANSACTION_PARTIES (${MAX_TRANSACTION_PARTIES})`);
+    }
+    const parties = r.parties.map((p) => ({
+      agent_id: p.agent_id, agent_pub_key: keyWire(p.agent_pub_key), invocation_id: p.invocation_id, party_id: p.party_id,
+      proof_bundle_hash: p.proof_bundle_hash, required_scope: p.required_scope, role: p.role, session_id: p.session_id,
+      verifier_id: p.verifier_id, workspace_id: p.workspace_id,
+    })).sort(byPartyID);
+    return canonicalJSONV2({
+      created_at: r.created_at, parties, terms_canonical_json: r.terms_canonical_json,
+      terms_schema_uri: r.terms_schema_uri, transaction_id: r.transaction_id, version: r.version,
+    });
   });
 }
 
@@ -252,63 +254,69 @@ async function validateTransactionReceiptV2(r: TransactionReceiptV2, requireSign
  * transaction-derived session context. Does not resolve trust or status.
  */
 export async function verifyTransactionReceiptV2Signatures(r: TransactionReceiptV2): Promise<void> {
-  try {
-    await validateTransactionReceiptV2(r, true);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  let signable: Uint8Array;
-  try {
-    signable = transactionReceiptV2SignBytes(r);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  const signatures = new Map<string, HybridSignature>();
-  for (const item of r.party_signatures) {
-    if (signatures.has(item.party_id)) {
-      throw v2Errorf("transaction_signature_set_invalid", `v2 transaction receipt has duplicate signature for party ${JSON.stringify(item.party_id)}`);
-    }
-    signatures.set(item.party_id, item.signature);
-  }
-  if (signatures.size !== r.parties.length) {
-    throw v2Errorf("transaction_signature_set_invalid", "v2 transaction receipt must contain exactly one signature per party");
-  }
-  for (const p of r.parties) {
-    const sig = signatures.get(p.party_id);
-    if (!sig) throw v2Errorf("transaction_signature_set_invalid", `v2 transaction receipt is missing signature for party ${JSON.stringify(p.party_id)}`);
+  return classifiedAsync("malformed", async () => {
     try {
-      await verifyV2Statement(V2_OBJECT_TYPE.transactionPartyStatement, signable, sig, p.agent_pub_key);
+      await validateTransactionReceiptV2(r, true);
     } catch (err) {
-      throw wrapError(`v2 transaction receipt signature for party ${JSON.stringify(p.party_id)}`, err);
+      throw v2Classify("malformed", err);
     }
-  }
+    let signable: Uint8Array;
+    try {
+      signable = transactionReceiptV2SignBytes(r);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    const signatures = new Map<string, HybridSignature>();
+    for (const item of r.party_signatures) {
+      if (signatures.has(item.party_id)) {
+        throw v2Errorf("transaction_signature_set_invalid", `v2 transaction receipt has duplicate signature for party ${JSON.stringify(item.party_id)}`);
+      }
+      signatures.set(item.party_id, item.signature);
+    }
+    if (signatures.size !== r.parties.length) {
+      throw v2Errorf("transaction_signature_set_invalid", "v2 transaction receipt must contain exactly one signature per party");
+    }
+    for (const p of r.parties) {
+      const sig = signatures.get(p.party_id);
+      if (!sig) throw v2Errorf("transaction_signature_set_invalid", `v2 transaction receipt is missing signature for party ${JSON.stringify(p.party_id)}`);
+      try {
+        await verifyV2Statement(V2_OBJECT_TYPE.transactionPartyStatement, signable, sig, p.agent_pub_key);
+      } catch (err) {
+        throw wrapError(`v2 transaction receipt signature for party ${JSON.stringify(p.party_id)}`, err);
+      }
+    }
+  });
 }
 
 /** Signs the shared transaction statement with one listed party's key. */
 export async function signTransactionReceiptPartyV2(r: TransactionReceiptV2, partyID: string, key: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<TransactionReceiptSignatureV2> {
-  if (!r) throw new Error("transaction receipt is required");
-  const party = r.parties.find((p) => p.party_id === partyID);
-  if (!party) throw new Error(`party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
-  await validateHybridKeyPairV2(key);
-  return signTransactionReceiptPartyV2WithSigner(r, partyID, await newLocalSignerV2(key, { deterministic: opts.deterministic }));
+  return classifiedAsync("malformed", async () => {
+    if (!r) throw new Error("transaction receipt is required");
+    const party = r.parties.find((p) => p.party_id === partyID);
+    if (!party) throw v2Errorf("transaction_party_mismatch", `party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
+    await validateHybridKeyPairV2(key);
+    return signTransactionReceiptPartyV2WithSigner(r, partyID, await newLocalSignerV2(key, { deterministic: opts.deterministic }));
+  });
 }
 
 /** signTransactionReceiptPartyV2 through a signer whose key must equal the party agent key. */
 export async function signTransactionReceiptPartyV2WithSigner(r: TransactionReceiptV2, partyID: string, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<TransactionReceiptSignatureV2> {
-  if (!r) throw new Error("transaction receipt is required");
-  const party = r.parties.find((p) => p.party_id === partyID);
-  if (!party) throw new Error(`party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
-  const partyPublic = await signerPublicKeyV2(signer);
-  if (!equalHybridPublicKeys(partyPublic, party.agent_pub_key)) {
-    throw new Error(`signing key does not match party ${JSON.stringify(partyID)} agent public key`);
-  }
-  try {
-    await validateTransactionReceiptV2(r, false);
-  } catch (err) {
-    throw wrapError("cannot sign invalid transaction receipt", err);
-  }
-  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.transactionPartyStatement, transactionReceiptV2SignBytes(r), signer, partyPublic, opts);
-  return { party_id: partyID, signature };
+  return classifiedAsync("malformed", async () => {
+    if (!r) throw new Error("transaction receipt is required");
+    const party = r.parties.find((p) => p.party_id === partyID);
+    if (!party) throw v2Errorf("transaction_party_mismatch", `party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
+    const partyPublic = await signerPublicKeyV2(signer);
+    if (!equalHybridPublicKeys(partyPublic, party.agent_pub_key)) {
+      throw v2Errorf("key_id_mismatch", `signing key does not match party ${JSON.stringify(partyID)} agent public key`);
+    }
+    try {
+      await validateTransactionReceiptV2(r, false);
+    } catch (err) {
+      throw wrapError("cannot sign invalid transaction receipt", err);
+    }
+    const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.transactionPartyStatement, transactionReceiptV2SignBytes(r), signer, partyPublic, opts);
+    return { party_id: partyID, signature };
+  });
 }
 
 function encodeTransactionReceiptV2Canonical(r: TransactionReceiptV2): Uint8Array {
@@ -330,8 +338,10 @@ function encodeTransactionReceiptV2Canonical(r: TransactionReceiptV2): Uint8Arra
 
 /** Canonical wire JSON after validating every party and embedded proof signature. */
 export async function encodeTransactionReceiptV2(r: TransactionReceiptV2): Promise<Uint8Array> {
-  await verifyTransactionReceiptV2Signatures(r);
-  return encodeTransactionReceiptV2Canonical(r);
+  return classifiedAsync("malformed", async () => {
+    await verifyTransactionReceiptV2Signatures(r);
+    return encodeTransactionReceiptV2Canonical(r);
+  });
 }
 
 /**

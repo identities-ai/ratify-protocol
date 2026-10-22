@@ -88,7 +88,82 @@ def require_fields(obj: Any, names, nullable=()) -> dict:
             raise ValueError(f'wire v2: required field "{name}" is missing')
         if obj[name] is None and name not in nullable:
             raise ValueError(f'wire v2: required field "{name}" must not be null')
+    check_v2_schema_key_case(obj)
+    reject_v2_unexpected_null(obj)
     return obj
+
+
+# Every member name of a v2 schema. A member name that differs from one of
+# these only by case (ASCII or Unicode simple case folding) is malformed at
+# any nesting level outside constraint ``params`` (Go ``v2SchemaFieldNames``).
+V2_SCHEMA_FIELD_NAMES = frozenset((
+    "version cert_id issuer_id issuer_pub_key subject_id subject_pub_key scope constraints signature ed25519 "
+    "ml_dsa_65 issued_at expires_at verifier_id agent_id agent_pub_key delegations delegation_digest challenge "
+    "challenge_at challenge_sig session_context stream_id stream_seq type params count currency end lat lon "
+    "max_alt_m max_amount max_amount_micros max_lat max_lon max_mps min_alt_m min_lat min_lon path_prefix points "
+    "radius_m resource_id start tz window_s exact_receiver_ids trust_domain_ids max_membership_age_seconds "
+    "next_update sequence pushed_at revoked authority_id recovery_epoch role previous_statement_hash old_key "
+    "new_key old_key_id new_key_id not_before old_signature new_signature log_id bundle_hash issuer_ids decision "
+    "decision_reason identity_status trust_assessment status_assessment challenge_assessment context_assessment "
+    "context_policy_digest verified_at required_scope granted_scope status_evidence_digests previous_receipt_hash "
+    "human_id status_key_id object_type_code digest transaction_id created_at terms_schema_uri "
+    "terms_canonical_json parties party_id proof_bundle_hash proof_bundle party_signatures invocation_id "
+    "workspace_id session_id").split())
+
+# The only v2 schema members whose value may be null (SPEC-v2 §2.1). Every
+# other null, including every array element, is malformed.
+V2_NULLABLE_MEMBERS = frozenset((
+    "session_context", "stream_id", "stream_seq", "context_policy_digest",
+    "floor", "accepted_snapshot", "preceding_checkpoint",
+))
+
+# Go strings.EqualFold folds these non-ASCII letters onto ASCII ones.
+_SIMPLE_FOLD_TO_ASCII = {"\u017f": "s", "\u212a": "k"}
+
+
+def _equal_fold_ascii_name(key: str, name: str) -> bool:
+    """Go ``strings.EqualFold(key, name)`` for an ASCII lowercase ``name``."""
+    if len(key) != len(name):
+        return False
+    for a, b in zip(key, name):
+        if a == b:
+            continue
+        if ("A" <= a <= "Z" and chr(ord(a) + 32) == b) or _SIMPLE_FOLD_TO_ASCII.get(a) == b:
+            continue
+        return False
+    return True
+
+
+def check_v2_schema_key_case(value: Any) -> None:
+    """Go ``checkV2SchemaKeyCase``: reject a member name that equals a v2
+    schema name under case folding but differs from it in any byte."""
+    if isinstance(value, dict):
+        for key, member in value.items():
+            if key not in V2_SCHEMA_FIELD_NAMES:
+                for name in V2_SCHEMA_FIELD_NAMES:
+                    if _equal_fold_ascii_name(key, name):
+                        raise ValueError(f'wire v2: field "{key}" has incorrect case; use "{name}"')
+            if key != "params":
+                check_v2_schema_key_case(member)
+    elif isinstance(value, list):
+        for item in value:
+            check_v2_schema_key_case(item)
+
+
+def reject_v2_unexpected_null(value: Any, path: str = "$") -> None:
+    """Go ``rejectV2UnexpectedNull``: null only as the value of a member in
+    :data:`V2_NULLABLE_MEMBERS`; values inside ``params`` follow the general
+    value model and are not checked here."""
+    if value is None:
+        raise ValueError(f"wire v2: {path} must not be null")
+    if isinstance(value, dict):
+        for key, member in value.items():
+            if key == "params" or (member is None and key in V2_NULLABLE_MEMBERS):
+                continue
+            reject_v2_unexpected_null(member, f"{path}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            reject_v2_unexpected_null(item, f"{path}[{i}]")
 
 
 def check_keys(obj: dict, allowed, where: str = "object") -> None:
@@ -154,6 +229,8 @@ def decode_public_key(value: Any, key: str = "public key") -> HybridPublicKey:
     if not isinstance(value, dict):
         raise ValueError(f"wire v2: {key} must be an object")
     check_keys(value, ("ed25519", "ml_dsa_65"), key)
+    if "ed25519" not in value or "ml_dsa_65" not in value:
+        raise ValueError(f"wire v2: {key} must have both ed25519 and ml_dsa_65 members")
     return HybridPublicKey(ed25519=get_bytes(value, "ed25519") or b"", ml_dsa_65=get_bytes(value, "ml_dsa_65") or b"")
 
 

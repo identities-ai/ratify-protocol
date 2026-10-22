@@ -373,14 +373,14 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
         party_spans = _v2json.raw_array_spans(text, top_spans["parties"][0])
         party_values = []
         for raw_party, span in zip(raw_parties, party_spans):
-            raw_party = {} if raw_party is None else raw_party
             if not isinstance(raw_party, dict):
                 raise ValueError("wire v2: transaction party must be an object")
             check_keys(raw_party, _PARTY_FIELDS, "transaction party")
-            raw_bundle = None
-            if "proof_bundle" in raw_party:
-                member = _v2json.raw_member_spans(text, span[0])["proof_bundle"]
-                raw_bundle = text[member[0]:member[1]].encode("utf-8")
+            require_fields(raw_party, _PARTY_FIELDS)
+            if not isinstance(raw_party["proof_bundle"], dict):
+                raise ValueError("wire v2: party proof_bundle must be a JSON object")
+            member = _v2json.raw_member_spans(text, span[0])["proof_bundle"]
+            raw_bundle = text[member[0]:member[1]].encode("utf-8")
             party_values.append((dict(
                 party_id=get_str(raw_party, "party_id"), role=get_str(raw_party, "role"),
                 agent_id=get_str(raw_party, "agent_id"),
@@ -392,10 +392,10 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
             ), raw_bundle))
         signatures = []
         for raw_sig in raw_signatures:
-            raw_sig = {} if raw_sig is None else raw_sig
             if not isinstance(raw_sig, dict):
                 raise ValueError("wire v2: party signature must be an object")
             check_keys(raw_sig, ("party_id", "signature"), "party signature")
+            require_fields(raw_sig, ("party_id", "signature"))
             signatures.append(TransactionReceiptSignatureV2(get_str(raw_sig, "party_id"),
                                                             decode_signature(raw_sig.get("signature"))))
         version = get_int(obj, "version")
@@ -406,8 +406,6 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
         parties = []
         for fields, raw_bundle in party_values:
             party_id = fields["party_id"]
-            if not raw_bundle:
-                raise ValueError("wire v2: party proof_bundle is required")
             actual = "sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + raw_bundle).hexdigest()
             if fields["proof_bundle_hash"] != actual:
                 raise V2Error(V2ErrorClass.BUNDLE_HASH_MISMATCH,

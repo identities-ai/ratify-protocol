@@ -23,8 +23,10 @@ import (
 // verifier may register, in caller-authenticated configuration, an evaluator
 // profile for an exact extension type. The profile is identified by a digest
 // over a canonical descriptor that names the type and a versioned profile
-// identifier whose semantics are published separately; the certificate and
-// the proof never select a profile or code. The registry entries used by a
+// identifier, which must name one immutable published definition; the
+// digest identifies the profile and proves nothing about an implementation.
+// The certificate and the proof never select a profile or code. The registry
+// entries used by a
 // chain are sealed with the challenge claim and recorded, sorted by type, in
 // the signed receipt member constraint_evaluators.
 
@@ -62,7 +64,11 @@ const (
 )
 
 // ConstraintProfileDescriptorV2 is the canonical object whose digest
-// identifies an evaluator profile: {"profile":<id>,"type":<type>}.
+// identifies an evaluator profile: {"profile":<id>,"type":<type>}. The digest
+// names the profile identifier bound to the type; it is not evidence that two
+// implementations of that identifier behave alike. Interoperability for a
+// profile comes from its conformance vectors (SPEC-v2 §5.2), which for the
+// standard profiles are testvectors/v2/evaluator-profiles.json.
 type ConstraintProfileDescriptorV2 struct {
 	Profile string         `json:"profile"`
 	Type    ConstraintType `json:"type"`

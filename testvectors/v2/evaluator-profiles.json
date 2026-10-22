@@ -1,0 +1,1405 @@
+{
+  "version": 1,
+  "description": "Exhaustive semantics of the two standard extension evaluator profiles (SPEC-v2 §5.2): com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1. An SDK that claims either profile MUST return the listed outcome for every case. profile_digest is a profile identifier digest computed from the specification formula; matching it says which identifier was bound, not that two implementations behave alike. These cases are that evidence.",
+  "semantics": {
+    "case": "invoke the profile's standard implementation with params (the canonical RatifyCanonicalJSON of params, or no params when params_absent is true) and the authenticated request context; the outcome is pass (with no horizon), denied, or unverifiable. Every params value here is inside the restricted value model, so a verifier would pass it to the evaluator after claim",
+    "context": "extension_counts maps names to integers 0..2^53-1; extension_values maps names to valid UTF-8 of at most 512 bytes. A count is never read as a value or a value as a count",
+    "context_bounds": "validate the extension request context before claim: error_class configuration_invalid, or none when it is within bounds (at most 64 counts and 64 values; names 1 to 128 bytes of a-z, 0-9, _, ., :, and -; counts 0..2^53-1; values valid UTF-8 of at most 512 bytes)",
+    "order": "params are checked first: params outside the profile's exact shape are denied whatever the context holds; then a missing context entry is unverifiable; then the comparison decides"
+  },
+  "profiles": [
+    {
+      "profile": "com.ratifyprotocol.max_count/v1",
+      "type": "com.ratifyprotocol.max_count",
+      "profile_digest": "sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b",
+      "cases": [
+        {
+          "name": "below_max_passes",
+          "params": {
+            "counter": "nodes",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "equal_to_max_passes",
+          "params": {
+            "counter": "nodes",
+            "max": 5
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "one_above_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": 4
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "zero_max_zero_count_passes",
+          "params": {
+            "counter": "nodes",
+            "max": 0
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 0
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "zero_max_one_count_denied",
+          "params": {
+            "counter": "nodes",
+            "max": 0
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 1
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "largest_max_largest_count_passes",
+          "params": {
+            "counter": "nodes",
+            "max": 9007199254740991
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 9007199254740991
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "largest_count_above_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": 9007199254740990
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 9007199254740991
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "counter_absent_from_context_unverifiable",
+          "params": {
+            "counter": "nodes",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "other": 1
+            }
+          },
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "empty_context_unverifiable",
+          "params": {
+            "counter": "nodes",
+            "max": 10
+          },
+          "context": {},
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "counter_only_in_values_unverifiable",
+          "params": {
+            "counter": "nodes",
+            "max": 10
+          },
+          "context": {
+            "extension_values": {
+              "nodes": "5"
+            }
+          },
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "counter_name_128_bytes_passes",
+          "params": {
+            "counter": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn": 10
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "counter_name_with_all_name_characters_passes",
+          "params": {
+            "counter": "a-z_0.9:x",
+            "max": 1
+          },
+          "context": {
+            "extension_counts": {
+              "a-z_0.9:x": 1
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "params_absent_denied",
+          "params_absent": true,
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_empty_object_denied",
+          "params": {},
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_array_denied",
+          "params": [
+            "nodes",
+            10
+          ],
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_string_denied",
+          "params": "nodes",
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_integer_denied",
+          "params": 10,
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_null_denied",
+          "params": null,
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "missing_max_denied",
+          "params": {
+            "counter": "nodes"
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "missing_counter_denied",
+          "params": {
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "extra_member_denied",
+          "params": {
+            "counter": "nodes",
+            "max": 10,
+            "window_s": 60
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "negative_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": -1
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "most_negative_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": -9007199254740991
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "string_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": "10"
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "boolean_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": true
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "null_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": null
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "array_max_denied",
+          "params": {
+            "counter": "nodes",
+            "max": [
+              10
+            ]
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "integer_counter_denied",
+          "params": {
+            "counter": 7,
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "7": 1
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "null_counter_denied",
+          "params": {
+            "counter": null,
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "empty_counter_denied",
+          "params": {
+            "counter": "",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "uppercase_counter_denied",
+          "params": {
+            "counter": "Nodes",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 1
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "counter_with_space_denied",
+          "params": {
+            "counter": "node count",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "counter_name_129_bytes_denied",
+          "params": {
+            "counter": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            "max": 10
+          },
+          "context": {
+            "extension_counts": {
+              "nodes": 5
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "invalid_params_denied_before_missing_context",
+          "params": {
+            "counter": "nodes",
+            "max": -1
+          },
+          "context": {},
+          "outcome": "denied"
+        }
+      ]
+    },
+    {
+      "profile": "com.ratifyprotocol.allowed_values/v1",
+      "type": "com.ratifyprotocol.allowed_values",
+      "profile_digest": "sha384:2c9b719e7477c342038f4900461db15c12d8d0d4131026cb4b820a3ee8e566e49d882a62c9846fa5047d606163bd8015",
+      "cases": [
+        {
+          "name": "listed_value_passes",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "single_allowed_value_passes",
+          "params": {
+            "allowed": [
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "unlisted_value_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "ap-south-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "case_differs_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "EU-WEST-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "prefix_of_allowed_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "allowed_value_plus_suffix_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1a"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "empty_value_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": ""
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "unicode_normalization_not_applied_denied",
+          "params": {
+            "allowed": [
+              "café"
+            ],
+            "field": "word"
+          },
+          "context": {
+            "extension_values": {
+              "word": "café"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "unicode_exact_bytes_pass",
+          "params": {
+            "allowed": [
+              "café"
+            ],
+            "field": "word"
+          },
+          "context": {
+            "extension_values": {
+              "word": "café"
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "sixty_four_allowed_last_passes",
+          "params": {
+            "allowed": [
+              "v",
+              "vx",
+              "vxx",
+              "vxxx",
+              "vxxxx",
+              "vxxxxx",
+              "vxxxxxx",
+              "vxxxxxxx",
+              "vxxxxxxxx",
+              "vxxxxxxxxx",
+              "vxxxxxxxxxx",
+              "vxxxxxxxxxxx",
+              "vxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            ],
+            "field": "v"
+          },
+          "context": {
+            "extension_values": {
+              "v": "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "value_512_bytes_passes",
+          "params": {
+            "allowed": [
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "field": "blob"
+          },
+          "context": {
+            "extension_values": {
+              "blob": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          },
+          "outcome": "pass"
+        },
+        {
+          "name": "field_absent_from_context_unverifiable",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "zone": "eu-west-1"
+            }
+          },
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "empty_context_unverifiable",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {},
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "field_only_in_counts_unverifiable",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_counts": {
+              "region": 1
+            }
+          },
+          "outcome": "unverifiable"
+        },
+        {
+          "name": "params_absent_denied",
+          "params_absent": true,
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_empty_object_denied",
+          "params": {},
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_array_denied",
+          "params": [
+            "us-east-1",
+            "eu-west-1"
+          ],
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "params_null_denied",
+          "params": null,
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "missing_allowed_denied",
+          "params": {
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "missing_field_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ]
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "extra_member_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "region",
+            "mode": "exact"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "empty_allowed_denied",
+          "params": {
+            "allowed": [],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "sixty_five_allowed_denied",
+          "params": {
+            "allowed": [
+              "v",
+              "vx",
+              "vxx",
+              "vxxx",
+              "vxxxx",
+              "vxxxxx",
+              "vxxxxxx",
+              "vxxxxxxx",
+              "vxxxxxxxx",
+              "vxxxxxxxxx",
+              "vxxxxxxxxxx",
+              "vxxxxxxxxxxx",
+              "vxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "overflow"
+            ],
+            "field": "v"
+          },
+          "context": {
+            "extension_values": {
+              "v": "v"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "duplicate_allowed_denied",
+          "params": {
+            "allowed": [
+              "eu-west-1",
+              "eu-west-1"
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "empty_allowed_entry_denied",
+          "params": {
+            "allowed": [
+              "eu-west-1",
+              ""
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "allowed_entry_513_bytes_denied",
+          "params": {
+            "allowed": [
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "field": "blob"
+          },
+          "context": {
+            "extension_values": {
+              "blob": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "integer_allowed_entry_denied",
+          "params": {
+            "allowed": [
+              "eu-west-1",
+              7
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "null_allowed_entry_denied",
+          "params": {
+            "allowed": [
+              "eu-west-1",
+              null
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "nested_array_allowed_entry_denied",
+          "params": {
+            "allowed": [
+              [
+                "eu-west-1"
+              ]
+            ],
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "allowed_string_denied",
+          "params": {
+            "allowed": "eu-west-1",
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "allowed_object_denied",
+          "params": {
+            "allowed": {
+              "eu-west-1": true
+            },
+            "field": "region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "integer_field_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": 1
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "empty_field_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": ""
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "uppercase_field_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "Region"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "field_name_129_bytes_denied",
+          "params": {
+            "allowed": [
+              "us-east-1",
+              "eu-west-1"
+            ],
+            "field": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+          },
+          "context": {
+            "extension_values": {
+              "region": "eu-west-1"
+            }
+          },
+          "outcome": "denied"
+        },
+        {
+          "name": "invalid_params_denied_before_missing_context",
+          "params": {
+            "allowed": [],
+            "field": "region"
+          },
+          "context": {},
+          "outcome": "denied"
+        }
+      ]
+    }
+  ],
+  "context_bounds": [
+    {
+      "name": "sixty_four_counts_accepted",
+      "context": {
+        "extension_counts": {
+          "k": 1,
+          "kx": 1,
+          "kxx": 1,
+          "kxxx": 1,
+          "kxxxx": 1,
+          "kxxxxx": 1,
+          "kxxxxxx": 1,
+          "kxxxxxxx": 1,
+          "kxxxxxxxx": 1,
+          "kxxxxxxxxx": 1,
+          "kxxxxxxxxxx": 1,
+          "kxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1
+        }
+      }
+    },
+    {
+      "name": "sixty_five_counts_rejected",
+      "context": {
+        "extension_counts": {
+          "k": 1,
+          "kx": 1,
+          "kxx": 1,
+          "kxxx": 1,
+          "kxxxx": 1,
+          "kxxxxx": 1,
+          "kxxxxxx": 1,
+          "kxxxxxxx": 1,
+          "kxxxxxxxx": 1,
+          "kxxxxxxxxx": 1,
+          "kxxxxxxxxxx": 1,
+          "kxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1,
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": 1
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "sixty_five_values_rejected",
+      "context": {
+        "extension_values": {
+          "k": "v",
+          "kx": "v",
+          "kxx": "v",
+          "kxxx": "v",
+          "kxxxx": "v",
+          "kxxxxx": "v",
+          "kxxxxxx": "v",
+          "kxxxxxxx": "v",
+          "kxxxxxxxx": "v",
+          "kxxxxxxxxx": "v",
+          "kxxxxxxxxxx": "v",
+          "kxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v",
+          "kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "v"
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "largest_count_accepted",
+      "context": {
+        "extension_counts": {
+          "n": 9007199254740991
+        }
+      }
+    },
+    {
+      "name": "count_above_safe_integer_rejected",
+      "context": {
+        "extension_counts": {
+          "n": 9007199254740992
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "negative_count_rejected",
+      "context": {
+        "extension_counts": {
+          "n": -1
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "value_512_bytes_accepted",
+      "context": {
+        "extension_values": {
+          "v": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "value_513_bytes_rejected",
+      "context": {
+        "extension_values": {
+          "v": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "empty_value_accepted",
+      "context": {
+        "extension_values": {
+          "v": ""
+        }
+      }
+    },
+    {
+      "name": "name_128_bytes_accepted",
+      "context": {
+        "extension_counts": {
+          "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn": 1
+        }
+      }
+    },
+    {
+      "name": "name_129_bytes_rejected",
+      "context": {
+        "extension_counts": {
+          "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn": 1
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "uppercase_name_rejected",
+      "context": {
+        "extension_values": {
+          "Region": "x"
+        }
+      },
+      "error_class": "configuration_invalid"
+    },
+    {
+      "name": "empty_name_rejected",
+      "context": {
+        "extension_counts": {
+          "": 1
+        }
+      },
+      "error_class": "configuration_invalid"
+    }
+  ]
+}

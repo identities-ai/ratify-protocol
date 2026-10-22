@@ -81,6 +81,16 @@ impl std::fmt::Debug for V2StatusPublisher {
     }
 }
 
+fn check_lifetime(lifetime_seconds: i64) -> V2Result<()> {
+    if !(1..=V2_MAX_STATUS_LIFETIME_SECONDS).contains(&lifetime_seconds) {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            format!("v2 status list lifetime must be 1..{V2_MAX_STATUS_LIFETIME_SECONDS} seconds"),
+        );
+    }
+    Ok(())
+}
+
 fn config_invalid(e: V2Error) -> V2Error {
     e.classify(V2ErrorClass::ConfigurationInvalid)
 }
@@ -98,19 +108,20 @@ fn config_invalid(e: V2Error) -> V2Error {
 /// `lifetime_seconds` sets `next_update - updated_at` for every full list and
 /// is 1..86400; it must not exceed the relying verifiers' configured maximum
 /// list lifetime.
-pub fn new_v2_status_publisher_with_private_key(
+pub fn new_v2_status_publisher_with_key(
     ctx: &V2Context,
     roles: &dyn SecurityJournalStoreV2,
     issuer_key: &HybridPublicKey,
     status_private_key: &HybridPrivateKey,
     lifetime_seconds: i64,
 ) -> V2Result<V2StatusPublisher> {
+    check_lifetime(lifetime_seconds)?;
     let signer = LocalSignerV2::owned(status_private_key)
         .map_err(|e| V2Error::new(V2ErrorClass::ConfigurationInvalid, e.to_string()))?;
     new_v2_status_publisher(ctx, roles, issuer_key, Arc::new(signer), lifetime_seconds)
 }
 
-/// [`new_v2_status_publisher_with_private_key`] with an external status
+/// [`new_v2_status_publisher_with_key`] with an external status
 /// signer (HSM, KMS, remote service). Every signature it returns is verified
 /// under its public key before use.
 pub fn new_v2_status_publisher(
@@ -120,12 +131,7 @@ pub fn new_v2_status_publisher(
     status_signer: Arc<dyn SignerV2>,
     lifetime_seconds: i64,
 ) -> V2Result<V2StatusPublisher> {
-    if !(1..=V2_MAX_STATUS_LIFETIME_SECONDS).contains(&lifetime_seconds) {
-        return err(
-            V2ErrorClass::ConfigurationInvalid,
-            format!("v2 status list lifetime must be 1..{V2_MAX_STATUS_LIFETIME_SECONDS} seconds"),
-        );
-    }
+    check_lifetime(lifetime_seconds)?;
     let issuer_binding = key_role_binding_v2("issuer", issuer_key)
         .map_err(|e| config_invalid(e.context("v2 status publisher issuer key")))?;
     let status_key = signer_public_key_v2(status_signer.as_ref())

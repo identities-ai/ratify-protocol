@@ -10,7 +10,7 @@ use std::sync::Arc;
 use ratify_protocol::v2::reference::JournalStore;
 use ratify_protocol::v2::{
     apply_revocation_list_to_journal_v2, apply_revocation_push_to_journal_v2,
-    configure_status_key_epoch_v2, new_v2_status_publisher, record_security_key_role_v2,
+    configure_status_key_epoch_v2, new_v2_status_publisher, new_v2_status_publisher_with_key, record_security_key_role_v2,
     revocation_status_from_journal_v2, verify_revocation_list_v2_signature,
     verify_revocation_push_v2_signature, RevokedCertV2, SignRequestV2, SignerModeV2,
     SignerV2, V2Context, V2ErrorClass, V2SignResult, V2StatusPublication, V2StatusPublisherState,
@@ -59,9 +59,12 @@ fn v2_conformance_status_publisher() {
     assert!(!scenarios_json.is_empty(), "no status publisher scenarios");
     let pol = policy(&f["status_policy"]);
     let (mut scenarios, mut steps) = (0usize, 0usize);
-    for sc in scenarios_json {
+    // Every scenario runs twice: once with an external status signer and
+    // once with the status key held in process. Both constructors apply the
+    // same refusals and sign the same objects.
+    for (sc, via_key) in scenarios_json.iter().flat_map(|sc| [(sc, false), (sc, true)]) {
         scenarios += 1;
-        let name = s(&sc["name"]);
+        let name = format!("{} ({})", s(&sc["name"]), if via_key { "key" } else { "signer" });
         let ctx = V2Context::background();
         let issuer_key = fx.public(&s(&sc["issuer"]));
         let status_key = fx.public(&s(&sc["status_key"]));
@@ -99,13 +102,17 @@ fn v2_conformance_status_publisher() {
             inner: ProviderSigner::new(private),
             calls: calls.clone(),
         });
-        let publisher = new_v2_status_publisher(
-            &ctx,
-            &journal,
-            &issuer_key,
-            signer,
-            i(&sc["lifetime_seconds"]),
-        );
+        let publisher = if via_key {
+            new_v2_status_publisher_with_key(
+                &ctx,
+                &journal,
+                &issuer_key,
+                private,
+                i(&sc["lifetime_seconds"]),
+            )
+        } else {
+            new_v2_status_publisher(&ctx, &journal, &issuer_key, signer, i(&sc["lifetime_seconds"]))
+        };
         match s(&sc["publisher"]).as_str() {
             "ok" => {
                 if let Err(e) = &publisher {
@@ -245,7 +252,8 @@ fn v2_conformance_status_publisher() {
             publications.push(pubn);
         }
     }
-    assert_eq!((scenarios, steps), (13, 39));
+    assert_eq!((scenarios, steps), (26, 78), "both constructors run every scenario");
+    let (scenarios, steps) = (scenarios / 2, steps / 2);
     let readme = readme_line("status-publisher.json");
     assert!(
         readme.contains(&format!(

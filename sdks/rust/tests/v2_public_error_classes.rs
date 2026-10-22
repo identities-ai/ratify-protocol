@@ -324,7 +324,7 @@ fn v2_public_api_errors_are_classified() {
     record_security_key_role_v2(&ctx, &journal, "issuer", &public).unwrap();
     configure_status_key_epoch_v2(&ctx, &journal, &key_id, 1, &status_public).unwrap();
     let publisher =
-        new_v2_status_publisher_with_private_key(&ctx, &journal, &public, &status_private, 3600)
+        new_v2_status_publisher_with_key(&ctx, &journal, &public, &status_private, 3600)
             .expect("publisher");
 
     let store = Store::new(1_800_000_000, 30, "0123456789abcdef0123456789abcdef", &private).unwrap();
@@ -443,9 +443,9 @@ fn v2_public_api_errors_are_classified() {
         ),
         // Signing.
         (
-            "NewV2StatusPublisherWithPrivateKey invalid key",
+            "NewV2StatusPublisherWithKey",
             Some(ConfigurationInvalid),
-            class(new_v2_status_publisher_with_private_key(&ctx, &journal, &public, &empty_private(), 3600)),
+            class(new_v2_status_publisher_with_key(&ctx, &journal, &public, &empty_private(), 3600)),
         ),
         ("SignDelegationCertV2", Some(Malformed), sign_class(sign_delegation_cert_v2(&zero_cert(), &private))),
         (

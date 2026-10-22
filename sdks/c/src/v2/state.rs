@@ -565,8 +565,10 @@ fn publisher_state_json(s: &V2StatusPublisherState) -> Value {
 /// One status publisher transition for the issuer whose complete key is
 /// `issuer_key`. The publisher is constructed from the authenticated role
 /// configuration in `journal_store` (a status key outside it is refused with
-/// `configuration_invalid`) and signs with exactly one of `local` /
-/// `external`. `state_json` is the publisher state JSON (`{"issuer_id",
+/// `configuration_invalid`) and signs with exactly one of `local` (the
+/// status key pair held by the library, signed only through the typed
+/// revocation signers) or `external`; both apply the same refusals.
+/// `state_json` is the publisher state JSON (`{"issuer_id",
 /// "status_key_id", "sequence", "updated_at", "revoked"}`) returned by the
 /// previous transition (ignored for genesis); `cert_ids_json` is a JSON
 /// array (revoke only). Writes the signed list, the signed push (empty
@@ -624,7 +626,7 @@ pub unsafe extern "C" fn ratify_v2_status_publish(
             }
             let (_sctx, cancel) = V2Context::background().with_cancel();
             let publisher = match build(local, external, "status", &cancel)? {
-                Built::Local(key) => new_v2_status_publisher_with_private_key(
+                Built::Local(key) => new_v2_status_publisher_with_key(
                     &ctx,
                     &j,
                     &issuer,

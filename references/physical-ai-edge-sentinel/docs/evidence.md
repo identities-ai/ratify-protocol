@@ -6,7 +6,7 @@ port is kept below as dated history; it is not v2 evidence.
 ## Protocol v2: local gate
 
 - Validation date: 2026-10-22
-- Reference source revision: `PENDING_SOURCE_REVISION`
+- Reference source revision: `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`
 - Host: macOS development machine (Apple Silicon), not the ARMv7 target
 - SDK: Ratify C SDK `2.0.0-alpha.1` (`ratify_v2_*` ABI version 2), built from `sdks/c` at the same revision, static library, no test-reference stores
 - Command: `RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh`
@@ -59,13 +59,15 @@ checkpoint refusing when its capacity is used.
 
 ## Protocol v2: Raspberry Pi 2 ARMv7 (pending)
 
-The ARMv7 bundle is built; the run has not been performed. Fill each field
-from the run.
+The ARMv7 bundle is built from the revision below; it has not yet been
+executed on ARM hardware or under emulation. Fill each `PENDING` field from
+the run.
 
 - Target: Raspberry Pi 2 Model B Rev 1.1, ARMv7l, `PENDING_OS`
-- Build: C SDK cross-compiled with `cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36`; binaries cross-compiled with `zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7`, static Ratify library, dynamic glibc and libgcc_s
-- Source revision: `PENDING_SOURCE_REVISION`
-- Binary SHA-256: `edge` `PENDING`, `edge-checkpoint` `PENDING`, `edge-test` `PENDING`, `edge-checkpoint-test` `PENDING`, `controller` `PENDING`
+- Build: C SDK cross-compiled with `cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36` (rustc 1.95.0, cargo-zigbuild 0.22.3, zig 0.16.0); binaries cross-compiled with `zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7`, stripped, Ratify library linked statically, glibc linked dynamically (highest symbol version `GLIBC_2.34`)
+- SDK SHA-256: `ratify.h` `ef0242f72b614fb3775368462acb3e3e0597f3ba3b8cfa16e38e1630707c6cec`, `libratify_c.a` (armv7) `0e2d3c16aeb565c7820eb1dd6e17f93a432df06de91f214665802be33c2dec25`
+- Source revision: `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`
+- Binary SHA-256: `edge` `7cce2b13ce71d1d6eaff4648f8fe3ceece052f6d559c0a32c733b834331e3237`, `edge-checkpoint` `f1532188d7b053b2d58f2cc15581d539e03fcc4e7b8d81ff71b590d453608f7b`, `edge-test` `765bbb4fef524dd4b7315ed5a8f95a773a94dee8f0d718ab8989a0023b7a5806`, `edge-checkpoint-test` `7e8029e80f87d3b3dbcc2115350ac82ca677971820b4b43a0f63ca92260d8e94`, `controller` `5d827e26d45d03b3555fb074b5b27e9586be7985a2c09c07e2ee0ff3854830f1`
 - Deterministic matrix on the Pi (mock actuator): `PENDING` passed, `PENDING` failed, `PENDING` skipped
 - Matrix wall time on the Pi: `PENDING`
 - Decision latency on the Pi (challenge to released decision): `PENDING`

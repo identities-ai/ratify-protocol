@@ -41,6 +41,7 @@ SIGNATURE_CORPUS_MODULES = [
     "test_cross_sdk_v2.py",  # cross-sdk/*.json from every SDK
     "test_crypto_v2.py",  # strict Ed25519 encodings and component lengths
     "test_archival_v2.py",
+    "test_archival_signer_digest_v2.py",  # archival.json, external-signer.json, digest-functions.json
     "test_transaction_verification_v2.py",
 ]
 

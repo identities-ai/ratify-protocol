@@ -177,6 +177,12 @@ func (c *DeviceComponentTestOnly) Commit(ctx context.Context, logID string, sequ
 	// clock source may itself take the store lock, which is held while the
 	// store anchors state here.
 	now, clockErr := c.clock.AuthoritativeTimeV2(ctx)
+	return c.commitAt(now, clockErr, logID, sequence, previousEntryHash, entryHash, state)
+}
+
+// commitAt is Commit with a security-clock reading taken before any lock,
+// so a caller may hold the primary's anchor lock across it.
+func (c *DeviceComponentTestOnly) commitAt(now int64, clockErr error, logID string, sequence int64, previousEntryHash, entryHash, state []byte) (DeviceAcknowledgementTestOnly, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.frozen {
@@ -317,15 +323,23 @@ func (d *DeviceCheckpointTestOnly) toAck(a DeviceAcknowledgementTestOnly) (ratif
 
 // AcknowledgeV2Receipt submits the primary's appended entry with the
 // primary's anchored complete-state digest, which already covers the append.
+// The security clock is read first, with no lock held, because the clock
+// source may take the store lock, which precedes the anchor lock. The anchor
+// lock is then held from composing the anchored digest through the component
+// commit, so a concurrent anchored change cannot advance the component's
+// digest in between and make the submission a spurious state mismatch.
 func (d *DeviceCheckpointTestOnly) AcknowledgeV2Receipt(ctx context.Context, logID string, sequence int64, previousEntryHash, entryHash []byte) (ratify.V2CheckpointAcknowledgement, error) {
 	if appended, ok := d.primary.appendedEntry(sequence); !ok || !bytes.Equal(appended, entryHash) {
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
-	state, err := d.device.anchoredDigest()
-	if err != nil {
-		return ratify.V2CheckpointAcknowledgement{}, err
+	now, clockErr := d.component.clock.AuthoritativeTimeV2(ctx)
+	d.device.mu.Lock()
+	state, err := d.device.composeLocked(d.device.lastStore)
+	var ack DeviceAcknowledgementTestOnly
+	if err == nil {
+		ack, err = d.component.commitAt(now, clockErr, logID, sequence, previousEntryHash, entryHash, state)
 	}
-	ack, err := d.component.Commit(ctx, logID, sequence, previousEntryHash, entryHash, state)
+	d.device.mu.Unlock()
 	if err != nil {
 		return ratify.V2CheckpointAcknowledgement{}, err
 	}

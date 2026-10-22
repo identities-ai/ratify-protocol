@@ -4,12 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 func newTestDevice(t *testing.T) (*DevicePrimaryTestOnly, *DeviceComponentTestOnly, *DeviceCheckpointTestOnly) {
+	t.Helper()
+	return newTestDeviceWithCapacity(t, 4)
+}
+
+func newTestDeviceWithCapacity(t *testing.T, capacity int) (*DevicePrimaryTestOnly, *DeviceComponentTestOnly, *DeviceCheckpointTestOnly) {
 	t.Helper()
 	_, priv, err := ratify.GenerateHybridKeypair()
 	if err != nil {
@@ -24,7 +31,7 @@ func newTestDevice(t *testing.T) (*DevicePrimaryTestOnly, *DeviceComponentTestOn
 	if err != nil {
 		t.Fatal(err)
 	}
-	component, err := NewDeviceComponentTestOnly(bytes.Repeat([]byte{7}, 32), 4, store)
+	component, err := NewDeviceComponentTestOnly(bytes.Repeat([]byte{7}, 32), capacity, store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,5 +193,49 @@ func TestDeviceComponentFreezesOnFork(t *testing.T) {
 	}
 	if err := component.ProvisionState(state); err == nil {
 		t.Fatal("a provisioned component was provisioned again")
+	}
+}
+
+// An acknowledgement racing anchored state changes never sees a stale
+// anchored digest: the primary holds its anchor lock from composing the
+// digest through the component commit, so a concurrent claim anchors either
+// before or after it, never between (SPEC-v2 §7.13).
+func TestDeviceAcknowledgementRacingClaimsNeverMismatches(t *testing.T) {
+	ctx := context.Background()
+	const entries, workers, claimsPerRound = 16, 4, 2
+	primary, _, device := newTestDeviceWithCapacity(t, entries)
+	store := primary.Store
+	for sequence := int64(1); sequence <= entries; sequence++ {
+		// Append an entry through the anchored change path, then acknowledge it
+		// while claim workers anchor new state concurrently.
+		store.mu.Lock()
+		err := store.changeLocked(func() {
+			store.outbox = append(store.outbox, outboxEntry{claimID: fmt.Sprintf("entry-%d", sequence), body: []byte("{}"), wire: []byte{1}, digest: bytes.Repeat([]byte{byte(sequence)}, 48)})
+		})
+		store.mu.Unlock()
+		if err != nil {
+			t.Fatalf("append %d: %v", sequence, err)
+		}
+		var wg sync.WaitGroup
+		for worker := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for n := range claimsPerRound {
+					id := fmt.Sprintf("claim-%d-%d-%d", sequence, worker, n)
+					if _, err := store.ClaimV2(ctx, ratify.V2ChallengeClaim{ClaimID: id, Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300}); err != nil {
+						t.Errorf("claim %s: %v", id, err)
+					}
+				}
+			}()
+		}
+		_, ackErr := device.Resubmit(ctx, sequence)
+		wg.Wait()
+		if ackErr != nil {
+			t.Fatalf("acknowledging sequence %d while claims race: %v", sequence, ackErr)
+		}
+	}
+	if got := device.Startup(); got != DeviceReady {
+		t.Fatalf("startup after the race: %s", got)
 	}
 }

@@ -14,7 +14,7 @@ const file = load("verifier-ordering.json");
 
 test("verifier-ordering.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.vectors.length, 194);
+  assert.equal(file.vectors.length, 200);
 });
 
 for (const v of file.vectors as Any[]) {

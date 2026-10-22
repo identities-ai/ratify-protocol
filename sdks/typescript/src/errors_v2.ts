@@ -131,7 +131,7 @@ export function v2Errorf(v2Class: V2ErrorClass, message: string, cause?: unknown
 
 /** Go v2Classify: keep an existing class, otherwise attach this one. */
 export function v2Classify(v2Class: V2ErrorClass, err: unknown): Error {
-  if (findV2Error(err)) return err as Error;
+  if (v2ErrorClassOf(err) !== "unclassified") return err as Error;
   const message = err instanceof Error ? err.message : String(err);
   return new V2Error(v2Class, message, err);
 }
@@ -155,6 +155,15 @@ export function v2ErrorClassOf(err: unknown): V2ErrorClass | "" {
 export function classified<T>(v2Class: V2ErrorClass, fn: () => T): T {
   try {
     return fn();
+  } catch (err) {
+    throw v2Classify(v2Class, err);
+  }
+}
+
+/** Async classified: classifies a rejection with v2Class unless it already has a class. */
+export async function classifiedAsync<T>(v2Class: V2ErrorClass, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
   } catch (err) {
     throw v2Classify(v2Class, err);
   }

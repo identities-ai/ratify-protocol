@@ -8,7 +8,7 @@ import { challengeClaimDigestV2, protocolClaimIDV2 } from "./challenge_claim_v2.
 import { v2ChallengeTimeCurrent } from "./clock_bounds_v2.js";
 import { CONSTRAINT_MAX_RATE_V2 } from "./constraints_v2.js";
 import { cloneConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
-import { ErrV2RateLimitExceeded, errorIs, v2Classify, wrapError } from "./errors_v2.js";
+import { classifiedAsync, errorIs, ErrV2RateLimitExceeded, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import { bytesEqual, concatBytes, hexOf, isValidUTF8, parseJSONV2, uint64BE } from "./json_v2.js";
 import { bundleHashV2, constraintCanonicalJSONV2, type ProofBundleV2 } from "./protocol_v2_wire.js";
 import type { V2LocalAuthorizationAssessment } from "./authorization_v2.js";
@@ -213,73 +213,75 @@ export async function claimProofBundleV2(
   nowUnix: number,
   signal?: AbortSignal,
 ): Promise<V2ClaimOutcome> {
-  if (!store) throw new Error("v2 claim store and context are required");
-  const state = preflightStateV2(preflight);
-  if (!state || (state.contextPolicy === null && !state.noContextPolicy)) {
-    throw new Error("v2 successful preflight state is required before claim");
-  }
-  const sealed = cloneExpectedChallengeStateV2(state);
-  let bundleHash: string;
-  try {
-    bundleHash = bundleHashV2(bundle);
-  } catch {
-    throw new Error("v2 proof bundle differs from successful preflight");
-  }
-  if (bundleHash !== sealed.bundleHash) throw new Error("v2 proof bundle differs from successful preflight");
-  try {
-    await validateProofBundleV2Preflight(bundle, {
-      value: sealed.value, issuedAt: sealed.issuedAt, expiresAt: sealed.expiresAt,
-      verifierNamespace: sealed.verifierNamespace, replayEpoch: sealed.replayEpoch, verifierID: sealed.verifierID,
-      expectedAgentID: sealed.expectedAgentID, expectedAgentPublicKey: sealed.expectedAgentPublicKey,
-      expectedReceiverID: sealed.expectedReceiverID, expectedSessionContext: sealed.expectedSessionContext,
-      contextPolicy: sealed.contextPolicy,
-    }, sealed.requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, sealed.maxAge, sealed.futureSkew);
-  } catch (err) {
-    throw wrapError("v2 claim-time preflight", err);
-  }
-  const challengeDigest = challengeClaimDigestV2(sealed.value);
-  const claimID = protocolClaimIDV2(sealed.verifierNamespace, sealed.replayEpoch, sealed.value);
-  const claim: V2ChallengeClaim = {
-    claimID, namespace: sealed.verifierNamespace, replayEpoch: sealed.replayEpoch,
-    challengeDigest: "sha384:" + hexOf(challengeDigest), proofDigest: bundleHash, bundleHash: sealed.bundleHash,
-    issuerIDs: [...sealed.issuerIDs], requiredScope: sealed.requiredScope, contextPolicyDigest: sealed.contextPolicyDigest,
-    verifierID: sealed.verifierID, agentID: bundle.agent_id, requiresRate: false, rateBatch: [],
-    issuedAt: sealed.issuedAt, expiresAt: sealed.expiresAt, maxAgeSeconds: sealed.maxAge, clockSkewSeconds: sealed.futureSkew,
-    streamID: bundle.stream_id === null ? null : Uint8Array.from(bundle.stream_id),
-    streamSeq: bundle.stream_seq,
-    constraintEvaluators: cloneConstraintEvaluatorRefsV2(sealed.evaluatorRefs),
-  };
-  try {
-    claim.rateBatch = signedV2RateReservationBatch(bundle);
-  } catch (err) {
-    throw v2Classify("malformed", wrapError("v2 signed rate batch", err));
-  }
-  claim.requiresRate = claim.rateBatch.length !== 0;
-  const result = await store.claimV2(cloneV2ChallengeClaim(claim), signal);
-  switch (result?.disposition) {
-    case "created": {
-      if (!(result.ownerToken instanceof Uint8Array) || result.ownerToken.length !== 32) {
-        throw new Error("v2 claim store returned an invalid evaluator owner token");
-      }
-      const claimTimeValid = v2ChallengeTimeCurrent(result.claimedAt, sealed.issuedAt, sealed.expiresAt, sealed.maxAge, sealed.futureSkew);
-      const token = V2EvaluationToken.create({
-        claimID: claim.claimID, proofDigest: claim.proofDigest, requiredScope: sealed.requiredScope, futureSkew: sealed.futureSkew,
-        expected: sealed, used: false, evaluationComplete: false, mutex: new AsyncMutex(), finalizationDigest: null,
-        finalizationStarted: false, claimTimeValid, claimedAt: result.claimedAt, evaluatedAt: 0,
-        rateBatch: claim.rateBatch.map((r) => ({ ...r })), rateAtFinalization: false, allowValidUntil: 0,
-        ownerToken: Uint8Array.from(result.ownerToken), evaluationStatus: "", evaluationReason: "", pendingAssessment: null,
-      });
-      return { claim, disposition: "created", token };
+  return classifiedAsync("claim_store_unavailable", async () => {
+    if (!store) throw v2Errorf("configuration_invalid", "v2 claim store and context are required");
+    const state = preflightStateV2(preflight);
+    if (!state || (state.contextPolicy === null && !state.noContextPolicy)) {
+      throw v2Errorf("configuration_invalid", "v2 successful preflight state is required before claim");
     }
-    case "in_progress":
-    case "terminal_replay":
-      if (result.ownerToken !== null && result.ownerToken !== undefined && result.ownerToken.length !== 0) {
-        throw new Error("v2 exact retry must not receive evaluator ownership");
+    const sealed = cloneExpectedChallengeStateV2(state);
+    let bundleHash: string;
+    try {
+      bundleHash = bundleHashV2(bundle);
+    } catch {
+      throw v2Errorf("configuration_invalid", "v2 proof bundle differs from successful preflight");
+    }
+    if (bundleHash !== sealed.bundleHash) throw v2Errorf("configuration_invalid", "v2 proof bundle differs from successful preflight");
+    try {
+      await validateProofBundleV2Preflight(bundle, {
+        value: sealed.value, issuedAt: sealed.issuedAt, expiresAt: sealed.expiresAt,
+        verifierNamespace: sealed.verifierNamespace, replayEpoch: sealed.replayEpoch, verifierID: sealed.verifierID,
+        expectedAgentID: sealed.expectedAgentID, expectedAgentPublicKey: sealed.expectedAgentPublicKey,
+        expectedReceiverID: sealed.expectedReceiverID, expectedSessionContext: sealed.expectedSessionContext,
+        contextPolicy: sealed.contextPolicy,
+      }, sealed.requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, sealed.maxAge, sealed.futureSkew);
+    } catch (err) {
+      throw wrapError("v2 claim-time preflight", err);
+    }
+    const challengeDigest = challengeClaimDigestV2(sealed.value);
+    const claimID = protocolClaimIDV2(sealed.verifierNamespace, sealed.replayEpoch, sealed.value);
+    const claim: V2ChallengeClaim = {
+      claimID, namespace: sealed.verifierNamespace, replayEpoch: sealed.replayEpoch,
+      challengeDigest: "sha384:" + hexOf(challengeDigest), proofDigest: bundleHash, bundleHash: sealed.bundleHash,
+      issuerIDs: [...sealed.issuerIDs], requiredScope: sealed.requiredScope, contextPolicyDigest: sealed.contextPolicyDigest,
+      verifierID: sealed.verifierID, agentID: bundle.agent_id, requiresRate: false, rateBatch: [],
+      issuedAt: sealed.issuedAt, expiresAt: sealed.expiresAt, maxAgeSeconds: sealed.maxAge, clockSkewSeconds: sealed.futureSkew,
+      streamID: bundle.stream_id === null ? null : Uint8Array.from(bundle.stream_id),
+      streamSeq: bundle.stream_seq,
+      constraintEvaluators: cloneConstraintEvaluatorRefsV2(sealed.evaluatorRefs),
+    };
+    try {
+      claim.rateBatch = signedV2RateReservationBatch(bundle);
+    } catch (err) {
+      throw v2Classify("malformed", wrapError("v2 signed rate batch", err));
+    }
+    claim.requiresRate = claim.rateBatch.length !== 0;
+    const result = await store.claimV2(cloneV2ChallengeClaim(claim), signal);
+    switch (result?.disposition) {
+      case "created": {
+        if (!(result.ownerToken instanceof Uint8Array) || result.ownerToken.length !== 32) {
+          throw new Error("v2 claim store returned an invalid evaluator owner token");
+        }
+        const claimTimeValid = v2ChallengeTimeCurrent(result.claimedAt, sealed.issuedAt, sealed.expiresAt, sealed.maxAge, sealed.futureSkew);
+        const token = V2EvaluationToken.create({
+          claimID: claim.claimID, proofDigest: claim.proofDigest, requiredScope: sealed.requiredScope, futureSkew: sealed.futureSkew,
+          expected: sealed, used: false, evaluationComplete: false, mutex: new AsyncMutex(), finalizationDigest: null,
+          finalizationStarted: false, claimTimeValid, claimedAt: result.claimedAt, evaluatedAt: 0,
+          rateBatch: claim.rateBatch.map((r) => ({ ...r })), rateAtFinalization: false, allowValidUntil: 0,
+          ownerToken: Uint8Array.from(result.ownerToken), evaluationStatus: "", evaluationReason: "", pendingAssessment: null,
+        });
+        return { claim, disposition: "created", token };
       }
-      return { claim, disposition: result.disposition, token: null };
-    default:
-      throw new Error("v2 claim store returned an invalid disposition");
-  }
+      case "in_progress":
+      case "terminal_replay":
+        if (result.ownerToken !== null && result.ownerToken !== undefined && result.ownerToken.length !== 0) {
+          throw new Error("v2 exact retry must not receive evaluator ownership");
+        }
+        return { claim, disposition: result.disposition, token: null };
+      default:
+        throw new Error("v2 claim store returned an invalid disposition");
+    }
+  });
 }
 
 /** Go terminalDecisionForV2Evaluation: the decision for a terminal status/reason, or null. */
@@ -343,44 +345,46 @@ export async function finalizeClaimProofBundleV2(
   receiptBody: Uint8Array,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const state = tokenStateV2(token);
-  if (!store || !state || state.ownerToken.length !== 32 || state.claimID === "") {
-    throw new Error("v2 claim store and valid evaluator capability are required");
-  }
-  const terminal = Uint8Array.from(terminalResult);
-  const body = Uint8Array.from(receiptBody);
-  if (signal?.aborted) throw signal.reason ?? new Error("cancelled");
-  return withTokenLockV2(state, async () => {
-    if (!state.evaluationComplete) throw new Error("v2 proof evaluation has not completed");
-    const decision = terminalDecisionForV2Evaluation(state.evaluationStatus, state.evaluationReason);
-    if (decision === null) throw new Error("v2 proof evaluation has not reached a terminal local result");
-    if (!terminalPayloadMatchesV2(terminal, body, decision, state.evaluationReason)) {
-      throw new Error("v2 terminal result does not match the completed local evaluation");
+  return classifiedAsync("claim_store_unavailable", async () => {
+    const state = tokenStateV2(token);
+    if (!store || !state || state.ownerToken.length !== 32 || state.claimID === "") {
+      throw v2Errorf("configuration_invalid", "v2 claim store and valid evaluator capability are required");
     }
-    if ((decision === "allow" && state.allowValidUntil <= 0) || (decision !== "allow" && state.allowValidUntil !== 0)) {
-      throw new Error("v2 terminal result lacks a valid allow freshness horizon");
-    }
-    if (state.rateAtFinalization && !isV2RateAtFinalizationStore(store)) {
-      throw new Error("v2 rate-at-finalization requires an atomic rate store");
-    }
-    const digest = v2FinalizationPayloadDigest(terminal, body);
-    if (state.finalizationStarted && !bytesEqual(state.finalizationDigest, digest)) {
-      throw new Error("v2 evaluator capability cannot change its terminal result or receipt body");
-    }
-    state.finalizationStarted = true;
-    state.finalizationDigest = digest;
-    try {
-      return await store.finalizeV2Claim(state.claimID, Uint8Array.from(state.ownerToken), terminal, body, state.allowValidUntil, signal);
-    } catch (err) {
-      if (state.rateAtFinalization && decision === "allow" && err === ErrV2RateLimitExceeded && isV2RateAtFinalizationStore(store)) {
-        state.evaluationStatus = "constraint_denied";
-        state.evaluationReason = "constraint_denied";
-        state.allowValidUntil = 0;
-        state.rateAtFinalization = false;
-        state.finalizationStarted = false;
-        state.finalizationDigest = null;
+    const terminal = Uint8Array.from(terminalResult);
+    const body = Uint8Array.from(receiptBody);
+    if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("cancelled"));
+    return withTokenLockV2(state, async () => {
+      if (!state.evaluationComplete) throw v2Errorf("configuration_invalid", "v2 proof evaluation has not completed");
+      const decision = terminalDecisionForV2Evaluation(state.evaluationStatus, state.evaluationReason);
+      if (decision === null) throw v2Errorf("configuration_invalid", "v2 proof evaluation has not reached a terminal local result");
+      if (!terminalPayloadMatchesV2(terminal, body, decision, state.evaluationReason)) {
+        throw v2Errorf("configuration_invalid", "v2 terminal result does not match the completed local evaluation");
       }
-      throw err;
-    }
+      if ((decision === "allow" && state.allowValidUntil <= 0) || (decision !== "allow" && state.allowValidUntil !== 0)) {
+        throw v2Errorf("configuration_invalid", "v2 terminal result lacks a valid allow freshness horizon");
+      }
+      if (state.rateAtFinalization && !isV2RateAtFinalizationStore(store)) {
+        throw v2Errorf("configuration_invalid", "v2 rate-at-finalization requires an atomic rate store");
+      }
+      const digest = v2FinalizationPayloadDigest(terminal, body);
+      if (state.finalizationStarted && !bytesEqual(state.finalizationDigest, digest)) {
+        throw v2Errorf("configuration_invalid", "v2 evaluator capability cannot change its terminal result or receipt body");
+      }
+      state.finalizationStarted = true;
+      state.finalizationDigest = digest;
+      try {
+        return await store.finalizeV2Claim(state.claimID, Uint8Array.from(state.ownerToken), terminal, body, state.allowValidUntil, signal);
+      } catch (err) {
+        if (state.rateAtFinalization && decision === "allow" && err === ErrV2RateLimitExceeded && isV2RateAtFinalizationStore(store)) {
+          state.evaluationStatus = "constraint_denied";
+          state.evaluationReason = "constraint_denied";
+          state.allowValidUntil = 0;
+          state.rateAtFinalization = false;
+          state.finalizationStarted = false;
+          state.finalizationDigest = null;
+        }
+        throw err;
+      }
+    });
   });
 }

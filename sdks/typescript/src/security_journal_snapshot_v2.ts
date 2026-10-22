@@ -9,7 +9,7 @@
 
 import { sha384 } from "@noble/hashes/sha2";
 
-import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classified, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   RawJSON,
   base64DecodeCanonical,
@@ -156,15 +156,17 @@ export function securityJournalDigestV2(journal: SecurityJournalV2): string {
 
 /** Validates a version 2 journal and returns its canonical snapshot bytes. */
 export function exportSecurityJournalSnapshotV2(journal: SecurityJournalV2): Uint8Array {
-  if (journal.version !== SECURITY_JOURNAL_VERSION_V2) {
-    throw v2Errorf("configuration_invalid", `only version ${SECURITY_JOURNAL_VERSION_V2} security journals can be exported; migrate first`);
-  }
-  try {
-    validateSecurityJournalV2(journal);
-  } catch (err) {
-    throw v2Classify("configuration_invalid", err);
-  }
-  return securityJournalSnapshotBytesV2(journal);
+  return classified("configuration_invalid", () => {
+    if (journal.version !== SECURITY_JOURNAL_VERSION_V2) {
+      throw v2Errorf("configuration_invalid", `only version ${SECURITY_JOURNAL_VERSION_V2} security journals can be exported; migrate first`);
+    }
+    try {
+      validateSecurityJournalV2(journal);
+    } catch (err) {
+      throw v2Classify("configuration_invalid", err);
+    }
+    return securityJournalSnapshotBytesV2(journal);
+  });
 }
 
 // --- import -----------------------------------------------------------------
@@ -563,27 +565,29 @@ export function decodeLegacySecurityJournalV1(data: Uint8Array): SecurityJournal
  * anchored compare-and-swap from the legacy head.
  */
 export function migrateSecurityJournalV2(legacy: SecurityJournalV2): SecurityJournalV2 {
-  if (!legacy || legacy.version !== SECURITY_JOURNAL_LEGACY_VERSION_V2) {
-    throw v2Errorf("configuration_invalid", `security journal migration requires a version ${SECURITY_JOURNAL_LEGACY_VERSION_V2} record`);
-  }
-  try {
-    validateSecurityJournalV2(legacy);
-  } catch (err) {
-    throw v2Classify("configuration_invalid", err);
-  }
-  const next = cloneSecurityJournalV2(legacy);
-  if (legacy.generation >= Number.MAX_SAFE_INTEGER) throw v2Errorf("configuration_invalid", "security journal generation exhausted");
-  next.version = SECURITY_JOURNAL_VERSION_V2;
-  next.generation = legacy.generation + 1;
-  next.previousDigest = legacy.digest;
-  canonicalizeSecurityJournalV2(next);
-  next.digest = securityJournalDigestV2(next);
-  try {
-    validateSecurityJournalTransitionV2(legacy, next);
-  } catch (err) {
-    throw v2Classify("configuration_invalid", err);
-  }
-  return next;
+  return classified("configuration_invalid", () => {
+    if (!legacy || legacy.version !== SECURITY_JOURNAL_LEGACY_VERSION_V2) {
+      throw v2Errorf("configuration_invalid", `security journal migration requires a version ${SECURITY_JOURNAL_LEGACY_VERSION_V2} record`);
+    }
+    try {
+      validateSecurityJournalV2(legacy);
+    } catch (err) {
+      throw v2Classify("configuration_invalid", err);
+    }
+    const next = cloneSecurityJournalV2(legacy);
+    if (legacy.generation >= Number.MAX_SAFE_INTEGER) throw v2Errorf("configuration_invalid", "security journal generation exhausted");
+    next.version = SECURITY_JOURNAL_VERSION_V2;
+    next.generation = legacy.generation + 1;
+    next.previousDigest = legacy.digest;
+    canonicalizeSecurityJournalV2(next);
+    next.digest = securityJournalDigestV2(next);
+    try {
+      validateSecurityJournalTransitionV2(legacy, next);
+    } catch (err) {
+      throw v2Classify("configuration_invalid", err);
+    }
+    return next;
+  });
 }
 
 /** Compares two journals' logical content, ignoring version, generation and digests. */

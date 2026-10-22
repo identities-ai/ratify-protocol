@@ -10,7 +10,7 @@ import {
   type RegisteredConstraintEvaluatorV2,
 } from "./constraint_evaluator_v2.js";
 import { isValidV2ContextPolicy, sameV2ContextPolicy, type V2ContextPolicy } from "./context_policy_v2.js";
-import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import { MAX_SAFE_INTEGER_V2, bytesEqual, compareStrings } from "./json_v2.js";
 import { bundleHashV2, equalHybridPublicKeys, keyIDV2, validV2ID, verifyProofBundleV2Signatures, type ProofBundleV2 } from "./protocol_v2_wire.js";
 import { validateRequiredScopeV2 } from "./scope_v2.js";
@@ -165,67 +165,69 @@ export async function validateProofBundleV2Preflight(
   maxAgeSeconds: number,
   futureSkewSeconds: number,
 ): Promise<void> {
-  const policy = expected.contextPolicy ?? null;
-  const expectedSession = sessionCtx(expected);
-  if (policy !== null) {
-    if (!isValidV2ContextPolicy(policy) || !validPrefixedDigestV2(policy.digest)) {
-      throw v2Errorf("configuration_invalid", "v2 expected context policy is invalid");
+  return classifiedAsync("configuration_invalid", async () => {
+    const policy = expected.contextPolicy ?? null;
+    const expectedSession = sessionCtx(expected);
+    if (policy !== null) {
+      if (!isValidV2ContextPolicy(policy) || !validPrefixedDigestV2(policy.digest)) {
+        throw v2Errorf("configuration_invalid", "v2 expected context policy is invalid");
+      }
+      if (policy.requireBound && expectedSession !== null && !bytesEqual(expectedSession, policy.expectedSessionContext)) {
+        throw v2Errorf("configuration_invalid", "v2 expected context does not match its policy");
+      }
+      if (!policy.requireBound && expectedSession !== null) {
+        throw v2Errorf("configuration_invalid", "unbound v2 context policy cannot have an expected session context");
+      }
     }
-    if (policy.requireBound && expectedSession !== null && !bytesEqual(expectedSession, policy.expectedSessionContext)) {
-      throw v2Errorf("configuration_invalid", "v2 expected context does not match its policy");
-    }
-    if (!policy.requireBound && expectedSession !== null) {
-      throw v2Errorf("configuration_invalid", "unbound v2 context policy cannot have an expected session context");
-    }
-  }
-  const scopeErr = validateRequiredScopeV2(requiredScope);
-  if (scopeErr) throw v2Errorf("invalid_required_scope", `v2 request scope: ${scopeErr}`);
-  try {
-    await verifyProofBundleV2Signatures(bundle);
-  } catch (err) {
-    throw wrapError("v2 cryptographic preflight", err);
-  }
-  if (configuredNamespace === "" || expected.verifierNamespace !== configuredNamespace) {
-    throw v2Errorf("namespace_mismatch", "v2 challenge verifier namespace mismatch");
-  }
-  const epochOK = (n: number) => Number.isSafeInteger(n) && n >= 0 && n <= MAX_SAFE_INTEGER_V2;
-  if (!epochOK(configuredReplayEpoch) || !epochOK(expected.replayEpoch) || expected.replayEpoch !== configuredReplayEpoch) {
-    throw v2Errorf("stale_replay_epoch", "v2 challenge replay epoch is stale");
-  }
-  if (!expected.verifierID || expected.verifierID !== bundle.verifier_id || !validV2ID(expected.verifierID)) {
-    throw v2Errorf("verifier_id_mismatch", "v2 challenge verifier ID mismatch");
-  }
-  if (expected.value?.length !== 32 || !bytesEqual(bundle.challenge, expected.value) || bundle.challenge_at !== expected.issuedAt) {
-    throw v2Errorf("challenge_mismatch", "v2 proof does not match authenticated challenge issuance");
-  }
-  if (!validV2Timestamp(expected.issuedAt) || !validV2Timestamp(expected.expiresAt) || expected.expiresAt <= expected.issuedAt) {
-    throw v2Errorf("configuration_invalid", `v2 authenticated challenge time bounds are invalid (0..${V2_MAX_TIMESTAMP_SECONDS})`);
-  }
-  validateV2FreshnessConfiguration(nowUnix, maxAgeSeconds, futureSkewSeconds);
-  if (!v2ChallengeTimeCurrent(nowUnix, expected.issuedAt, expected.expiresAt, maxAgeSeconds, futureSkewSeconds)) {
-    throw v2Errorf("challenge_not_fresh", "v2 challenge is not fresh (future-dated, expired, or beyond maximum age)");
-  }
-  const key = agentKey(expected);
-  if ((agentID(expected) === "") !== (key === null)) {
-    throw v2Errorf("configuration_invalid", "v2 expected agent ID and public key must be configured together");
-  }
-  if (key !== null) {
-    let id: string;
+    const scopeErr = validateRequiredScopeV2(requiredScope);
+    if (scopeErr) throw v2Errorf("invalid_required_scope", `v2 request scope: ${scopeErr}`);
     try {
-      id = keyIDV2(key);
+      await verifyProofBundleV2Signatures(bundle);
     } catch (err) {
-      throw v2Errorf("configuration_invalid", `v2 expected agent key: ${(err as Error).message}`, err);
+      throw wrapError("v2 cryptographic preflight", err);
     }
-    if (id !== agentID(expected) || bundle.agent_id !== id || !equalHybridPublicKeys(bundle.agent_pub_key, key)) {
-      throw v2Errorf("expected_agent_mismatch", "v2 presentation does not match authenticated expected agent");
+    if (configuredNamespace === "" || expected.verifierNamespace !== configuredNamespace) {
+      throw v2Errorf("namespace_mismatch", "v2 challenge verifier namespace mismatch");
     }
-  }
-  if (expectedSession !== null) {
-    if (expectedSession.length !== 32 || bundle.session_context === null || !bytesEqual(bundle.session_context, expectedSession)) {
-      throw v2Errorf("session_context_mismatch", "v2 presentation does not match expected session context");
+    const epochOK = (n: number) => Number.isSafeInteger(n) && n >= 0 && n <= MAX_SAFE_INTEGER_V2;
+    if (!epochOK(configuredReplayEpoch) || !epochOK(expected.replayEpoch) || expected.replayEpoch !== configuredReplayEpoch) {
+      throw v2Errorf("stale_replay_epoch", "v2 challenge replay epoch is stale");
     }
-  }
-  checkExactReceiverAudienceV2(bundle, receiverID(expected));
+    if (!expected.verifierID || expected.verifierID !== bundle.verifier_id || !validV2ID(expected.verifierID)) {
+      throw v2Errorf("verifier_id_mismatch", "v2 challenge verifier ID mismatch");
+    }
+    if (expected.value?.length !== 32 || !bytesEqual(bundle.challenge, expected.value) || bundle.challenge_at !== expected.issuedAt) {
+      throw v2Errorf("challenge_mismatch", "v2 proof does not match authenticated challenge issuance");
+    }
+    if (!validV2Timestamp(expected.issuedAt) || !validV2Timestamp(expected.expiresAt) || expected.expiresAt <= expected.issuedAt) {
+      throw v2Errorf("configuration_invalid", `v2 authenticated challenge time bounds are invalid (0..${V2_MAX_TIMESTAMP_SECONDS})`);
+    }
+    validateV2FreshnessConfiguration(nowUnix, maxAgeSeconds, futureSkewSeconds);
+    if (!v2ChallengeTimeCurrent(nowUnix, expected.issuedAt, expected.expiresAt, maxAgeSeconds, futureSkewSeconds)) {
+      throw v2Errorf("challenge_not_fresh", "v2 challenge is not fresh (future-dated, expired, or beyond maximum age)");
+    }
+    const key = agentKey(expected);
+    if ((agentID(expected) === "") !== (key === null)) {
+      throw v2Errorf("configuration_invalid", "v2 expected agent ID and public key must be configured together");
+    }
+    if (key !== null) {
+      let id: string;
+      try {
+        id = keyIDV2(key);
+      } catch (err) {
+        throw v2Errorf("configuration_invalid", `v2 expected agent key: ${(err as Error).message}`, err);
+      }
+      if (id !== agentID(expected) || bundle.agent_id !== id || !equalHybridPublicKeys(bundle.agent_pub_key, key)) {
+        throw v2Errorf("expected_agent_mismatch", "v2 presentation does not match authenticated expected agent");
+      }
+    }
+    if (expectedSession !== null) {
+      if (expectedSession.length !== 32 || bundle.session_context === null || !bytesEqual(bundle.session_context, expectedSession)) {
+        throw v2Errorf("session_context_mismatch", "v2 presentation does not match expected session context");
+      }
+    }
+    checkExactReceiverAudienceV2(bundle, receiverID(expected));
+  });
 }
 
 /** The application's pure pre-consumption receiver-binding hook. Throw to reject. */
@@ -317,6 +319,6 @@ export function preflightProofBundleV2(
   maxAgeSeconds: number,
   futureSkewSeconds: number,
 ): Promise<V2PreflightResult> {
-  return preflightProofBundleV2Internal(bundle, expected, policy, false, null, null, requiredScope, configuredNamespace,
-    configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds);
+  return classifiedAsync("configuration_invalid", () => preflightProofBundleV2Internal(bundle, expected, policy, false, null, null,
+    requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds));
 }

@@ -6,11 +6,12 @@ import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
 import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
+  classified,
+  classifiedAsync,
   ErrWitnessLogFork,
   ErrWitnessLogFrozen,
   ErrWitnessLogGap,
   ErrWitnessLogOrphan,
-  classified,
   v2Classify,
   v2Errorf,
   wrapError,
@@ -24,6 +25,7 @@ import {
   gInt,
   gString,
   gStruct,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   type JNode,
 } from "./json_v2.js";
@@ -115,6 +117,7 @@ export function validateWitnessSignableBodyV2(root: JNode, body: Uint8Array): vo
   let e: WitnessEntryV2;
   try {
     requireV2Fields(root, WITNESS_SIGNABLE_FIELDS);
+    rejectV2UnexpectedNull(root);
     e = decodeWitnessStruct(root, WITNESS_SIGNABLE_FIELDS);
   } catch (err) {
     throw wrapError("witness signable body", err);
@@ -135,16 +138,20 @@ export function witnessEntryV2SignBytes(e: WitnessEntryV2): Uint8Array {
 }
 
 export function witnessEntryV2Digest(e: WitnessEntryV2): Uint8Array {
-  return statementBodyDigestV2(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e));
+  return classified("malformed", () => {
+    return statementBodyDigestV2(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e));
+  });
 }
 
 export function encodeWitnessEntryV2(e: WitnessEntryV2): Uint8Array {
-  validateWitnessEntryV2(e, true);
-  const o = witnessSignableObject(e);
-  o.signature = keyWire(e.signature);
-  const wire = canonicalJSONV2(o);
-  checkV2WireSize(wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
-  return wire;
+  return classified("malformed", () => {
+    validateWitnessEntryV2(e, true);
+    const o = witnessSignableObject(e);
+    o.signature = keyWire(e.signature);
+    const wire = canonicalJSONV2(o);
+    checkV2WireSize(wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
+    return wire;
+  });
 }
 
 export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
@@ -152,6 +159,7 @@ export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
     checkV2WireSize(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
     const root = checkWireJSONV2(data);
     requireV2Fields(root, WITNESS_ENTRY_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const e = decodeWitnessStruct(root, WITNESS_ENTRY_V2_FIELDS);
     validateWitnessEntryV2(e, true);
     let canonical: Uint8Array | null = null;
@@ -166,22 +174,26 @@ export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
 }
 
 export async function signWitnessEntryV2(e: WitnessEntryV2, witness: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<WitnessEntryV2> {
-  validateWitnessEntryV2(e, false);
-  await validateHybridKeyPairV2(witness);
-  return signWitnessEntryV2WithSigner(e, await newLocalSignerV2(witness, { deterministic: opts.deterministic }));
+  return classifiedAsync("malformed", async () => {
+    validateWitnessEntryV2(e, false);
+    await validateHybridKeyPairV2(witness);
+    return signWitnessEntryV2WithSigner(e, await newLocalSignerV2(witness, { deterministic: opts.deterministic }));
+  });
 }
 
 /** signWitnessEntryV2 through a signer whose key ID must equal witness_id. */
 export async function signWitnessEntryV2WithSigner(e: WitnessEntryV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<WitnessEntryV2> {
-  validateWitnessEntryV2(e, false);
-  const witnessPublic = await signerPublicKeyV2(signer);
-  if (keyIDV2(witnessPublic) !== e.witness_id) throw new Error("witness_id does not match signing key");
-  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), signer, witnessPublic, opts);
-  const result: WitnessEntryV2 = {
-    ...e, prev_hash: Uint8Array.from(e.prev_hash), entry_data: Uint8Array.from(e.entry_data ?? []), signature,
-  };
-  encodeWitnessEntryV2(result);
-  return result;
+  return classifiedAsync("malformed", async () => {
+    validateWitnessEntryV2(e, false);
+    const witnessPublic = await signerPublicKeyV2(signer);
+    if (keyIDV2(witnessPublic) !== e.witness_id) throw v2Errorf("key_id_mismatch", "witness_id does not match signing key");
+    const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), signer, witnessPublic, opts);
+    const result: WitnessEntryV2 = {
+      ...e, prev_hash: Uint8Array.from(e.prev_hash), entry_data: Uint8Array.from(e.entry_data ?? []), signature,
+    };
+    encodeWitnessEntryV2(result);
+    return result;
+  });
 }
 
 /** Shared caller-head validation for witness and receipt logs. */
@@ -229,17 +241,19 @@ export function logPositionV2(sequence: number, prevHash: Uint8Array, digest: Ui
  * evidence; the caller must durably freeze the log. Never mutates state.
  */
 export async function verifyWitnessEntryV2(e: WitnessEntryV2, head: WitnessV2Head, witnessPublic: HybridPublicKey): Promise<V2AppendResult> {
-  try {
-    validateWitnessEntryV2(e, true);
-    encodeWitnessEntryV2(e);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  validateLogHeadV2(head, "witness");
-  const witnessID = keyIDV2(witnessPublic);
-  if (e.witness_id !== witnessID || e.log_id !== head.logID) {
-    throw v2Errorf("log_state_mismatch", "witness entry key or log ID does not match caller-authenticated state");
-  }
-  await verifyV2Statement(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), e.signature, witnessPublic);
-  return logPositionV2(e.sequence, e.prev_hash, witnessEntryV2Digest(e), head);
+  return classifiedAsync("malformed", async () => {
+    try {
+      validateWitnessEntryV2(e, true);
+      encodeWitnessEntryV2(e);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    validateLogHeadV2(head, "witness");
+    const witnessID = keyIDV2(witnessPublic);
+    if (e.witness_id !== witnessID || e.log_id !== head.logID) {
+      throw v2Errorf("log_state_mismatch", "witness entry key or log ID does not match caller-authenticated state");
+    }
+    await verifyV2Statement(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), e.signature, witnessPublic);
+    return logPositionV2(e.sequence, e.prev_hash, witnessEntryV2Digest(e), head);
+  });
 }

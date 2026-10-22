@@ -18,6 +18,7 @@ import { MAX_SAFE_INTEGER_V2, canonicalJSONV2, checkV2Nulls, gAny, parseJSONV2, 
 import { normalizeResourcePath, resourcePathMatches, validateParamsValue } from "./resource_path.js";
 import { loadV2TimeZone, type V2TimeZone } from "./tzdb_v2.js";
 import { MAX_IDENTIFIER_LENGTH_BYTES } from "./types.js";
+import { classified } from "./errors_v2.js";
 
 export const CONSTRAINT_TIME_WINDOW_V2 = "time_window";
 export const CONSTRAINT_MAX_AMOUNT_V2 = "max_amount";
@@ -132,9 +133,11 @@ export function constraintWireObjectV2(c: ConstraintV2): Record<string, unknown>
  * validated against the closed registry.
  */
 export function encodeConstraintV2(c: ConstraintV2): Uint8Array {
-  const out = canonicalJSONV2(constraintWireObjectV2(c));
-  validateV2ConstraintFields(parseJSONV2(out));
-  return out;
+  return classified("malformed", () => {
+    const out = canonicalJSONV2(constraintWireObjectV2(c));
+    validateV2ConstraintFields(parseJSONV2(out));
+    return out;
+  });
 }
 
 /** Go ConstraintV2.UnmarshalJSON: strict decode of one constraint node. */

@@ -9,7 +9,7 @@
 // objects, so a crash can never sign two different bodies at one sequence.
 
 import { V2_MAX_STATUS_LIFETIME_SECONDS, checkedAddV2, validV2Timestamp } from "./clock_bounds_v2.js";
-import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
+import { classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import { compareStrings, isWellFormedString, utf8Len } from "./json_v2.js";
 import { MAX_REVOCATION_LIST_REFS_V2, MAX_REVOCATION_PUSH_REFS_V2 } from "./limits_v2.js";
 import {
@@ -72,52 +72,54 @@ export class V2StatusPublisher {
    * lifetimeSeconds (1..86400) sets next_update - updated_at.
    */
   static async create(roles: SecurityJournalStoreV2 | null | undefined, issuerKey: HybridPublicKey, statusSigner: SignerV2 | null | undefined, lifetimeSeconds: number, signal?: AbortSignal): Promise<V2StatusPublisher> {
-    if (!Number.isSafeInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > V2_MAX_STATUS_LIFETIME_SECONDS) {
-      throw v2Errorf("configuration_invalid", `v2 status list lifetime must be 1..${V2_MAX_STATUS_LIFETIME_SECONDS} seconds`);
-    }
-    if (!roles) throw v2Errorf("configuration_invalid", "v2 status publisher requires the authenticated role configuration");
-    let issuerBinding;
-    try {
-      issuerBinding = keyRoleBindingV2("issuer", issuerKey);
-    } catch (err) {
-      throw v2Classify("configuration_invalid", wrapError("v2 status publisher issuer key", err));
-    }
-    if (!statusSigner) throw v2Errorf("configuration_invalid", "v2 status publisher requires a status signer");
-    let statusKey: HybridPublicKey;
-    let statusBinding;
-    try {
-      statusKey = await signerPublicKeyV2(statusSigner);
-      statusBinding = keyRoleBindingV2("status", statusKey);
-    } catch (err) {
-      throw v2Classify("configuration_invalid", err);
-    }
-    let journal;
-    try {
-      journal = await loadAnchoredSecurityJournalV2(roles, signal);
-    } catch (err) {
-      throw v2Classify("configuration_invalid", wrapError("v2 status publisher role configuration", err));
-    }
-    let issuerKnown = false;
-    for (const b of journal.keyRoleHistory) {
-      if (b.role === "status") continue;
-      if (b.keyID === issuerBinding.keyID && b.ed25519Digest === issuerBinding.ed25519Digest && b.mlDsa65Digest === issuerBinding.mlDsa65Digest) {
-        issuerKnown = true;
+    return classifiedAsync("configuration_invalid", async () => {
+      if (!Number.isSafeInteger(lifetimeSeconds) || lifetimeSeconds < 1 || lifetimeSeconds > V2_MAX_STATUS_LIFETIME_SECONDS) {
+        throw v2Errorf("configuration_invalid", `v2 status list lifetime must be 1..${V2_MAX_STATUS_LIFETIME_SECONDS} seconds`);
       }
-      if (b.keyID === statusBinding.keyID || b.ed25519Digest === statusBinding.ed25519Digest || b.mlDsa65Digest === statusBinding.mlDsa65Digest ||
-          b.ed25519Digest === statusBinding.mlDsa65Digest || b.mlDsa65Digest === statusBinding.ed25519Digest) {
-        throw v2Errorf("configuration_invalid", `v2 status key reuses the key or a component of recorded ${b.role} key ${b.keyID}; status keys must be role-separated`);
+      if (!roles) throw v2Errorf("configuration_invalid", "v2 status publisher requires the authenticated role configuration");
+      let issuerBinding;
+      try {
+        issuerBinding = keyRoleBindingV2("issuer", issuerKey);
+      } catch (err) {
+        throw v2Classify("configuration_invalid", wrapError("v2 status publisher issuer key", err));
       }
-    }
-    if (!issuerKnown) throw v2Errorf("configuration_invalid", "v2 status publisher issuer key is not recorded under a non-status role");
-    let current: StatusKeyBindingV2 | null = null;
-    for (const b of journal.statusKeyHistory) {
-      if (b.issuerID === issuerBinding.keyID && b.epoch > (current?.epoch ?? 0)) current = b;
-    }
-    if (current === null || current.statusKeyID !== statusBinding.keyID || current.ed25519Digest !== statusBinding.ed25519Digest ||
-        current.mlDsa65Digest !== statusBinding.mlDsa65Digest) {
-      throw v2Errorf("configuration_invalid", "v2 status signer is not the issuer's current configured status key");
-    }
-    return new V2StatusPublisher(issuerBinding.keyID, cloneHybridPublicKey(statusKey), statusBinding.keyID, statusSigner, lifetimeSeconds);
+      if (!statusSigner) throw v2Errorf("configuration_invalid", "v2 status publisher requires a status signer");
+      let statusKey: HybridPublicKey;
+      let statusBinding;
+      try {
+        statusKey = await signerPublicKeyV2(statusSigner);
+        statusBinding = keyRoleBindingV2("status", statusKey);
+      } catch (err) {
+        throw v2Classify("configuration_invalid", err);
+      }
+      let journal;
+      try {
+        journal = await loadAnchoredSecurityJournalV2(roles, signal);
+      } catch (err) {
+        throw v2Classify("configuration_invalid", wrapError("v2 status publisher role configuration", err));
+      }
+      let issuerKnown = false;
+      for (const b of journal.keyRoleHistory) {
+        if (b.role === "status") continue;
+        if (b.keyID === issuerBinding.keyID && b.ed25519Digest === issuerBinding.ed25519Digest && b.mlDsa65Digest === issuerBinding.mlDsa65Digest) {
+          issuerKnown = true;
+        }
+        if (b.keyID === statusBinding.keyID || b.ed25519Digest === statusBinding.ed25519Digest || b.mlDsa65Digest === statusBinding.mlDsa65Digest ||
+            b.ed25519Digest === statusBinding.mlDsa65Digest || b.mlDsa65Digest === statusBinding.ed25519Digest) {
+          throw v2Errorf("configuration_invalid", `v2 status key reuses the key or a component of recorded ${b.role} key ${b.keyID}; status keys must be role-separated`);
+        }
+      }
+      if (!issuerKnown) throw v2Errorf("configuration_invalid", "v2 status publisher issuer key is not recorded under a non-status role");
+      let current: StatusKeyBindingV2 | null = null;
+      for (const b of journal.statusKeyHistory) {
+        if (b.issuerID === issuerBinding.keyID && b.epoch > (current?.epoch ?? 0)) current = b;
+      }
+      if (current === null || current.statusKeyID !== statusBinding.keyID || current.ed25519Digest !== statusBinding.ed25519Digest ||
+          current.mlDsa65Digest !== statusBinding.mlDsa65Digest) {
+        throw v2Errorf("configuration_invalid", "v2 status signer is not the issuer's current configured status key");
+      }
+      return new V2StatusPublisher(issuerBinding.keyID, cloneHybridPublicKey(statusKey), statusBinding.keyID, statusSigner, lifetimeSeconds);
+    });
   }
 
   /** The issuer ID a verifier configures. */
@@ -132,13 +134,17 @@ export class V2StatusPublisher {
 
   /** Signs the first full list: sequence 1, an empty revoked set. */
   async genesis(updatedAt: number, signal?: AbortSignal): Promise<V2StatusPublication> {
-    return this.#list({ issuerID: this.#issuerID, statusKeyID: this.#statusKeyID, sequence: 0, updatedAt: 0, revoked: [] }, 1, updatedAt, signal);
+    return classifiedAsync("configuration_invalid", async () => {
+      return this.#list({ issuerID: this.#issuerID, statusKeyID: this.#statusKeyID, sequence: 0, updatedAt: 0, revoked: [] }, 1, updatedAt, signal);
+    });
   }
 
   /** Re-signs the current sequence and set with a strictly later updated_at. */
   async heartbeat(state: V2StatusPublisherState, updatedAt: number, signal?: AbortSignal): Promise<V2StatusPublication> {
-    this.#checkState(state, updatedAt);
-    return this.#list(state, state.sequence, updatedAt, signal);
+    return classifiedAsync("configuration_invalid", async () => {
+      this.#checkState(state, updatedAt);
+      return this.#list(state, state.sequence, updatedAt, signal);
+    });
   }
 
   /**
@@ -147,31 +153,33 @@ export class V2StatusPublisher {
    * must be new, unique, and 1..512 bytes of UTF-8.
    */
   async revoke(state: V2StatusPublisherState, certIDs: readonly string[], at: number, signal?: AbortSignal): Promise<V2StatusPublication> {
-    this.#checkState(state, at);
-    if (!Array.isArray(certIDs) || certIDs.length === 0 || certIDs.length > MAX_REVOCATION_PUSH_REFS_V2) {
-      throw new Error(`v2 status revocation must name 1..${MAX_REVOCATION_PUSH_REFS_V2} certificate IDs`);
-    }
-    const added = [...certIDs].sort(compareStrings);
-    const existing = new Set(state.revoked);
-    added.forEach((id, i) => {
-      if (typeof id !== "string" || id === "" || utf8Len(id) > MAX_IDENTIFIER_LENGTH_BYTES || !isWellFormedString(id) || (i > 0 && added[i - 1] === id)) {
-        throw new Error(`v2 status revocation IDs must be unique UTF-8 of 1..${MAX_IDENTIFIER_LENGTH_BYTES} bytes`);
+    return classifiedAsync("configuration_invalid", async () => {
+      this.#checkState(state, at);
+      if (!Array.isArray(certIDs) || certIDs.length === 0 || certIDs.length > MAX_REVOCATION_PUSH_REFS_V2) {
+        throw new Error(`v2 status revocation must name 1..${MAX_REVOCATION_PUSH_REFS_V2} certificate IDs`);
       }
-      if (existing.has(id)) throw new Error(`v2 certificate "${id}" is already revoked; revocation is monotonic`);
+      const added = [...certIDs].sort(compareStrings);
+      const existing = new Set(state.revoked);
+      added.forEach((id, i) => {
+        if (typeof id !== "string" || id === "" || utf8Len(id) > MAX_IDENTIFIER_LENGTH_BYTES || !isWellFormedString(id) || (i > 0 && added[i - 1] === id)) {
+          throw new Error(`v2 status revocation IDs must be unique UTF-8 of 1..${MAX_IDENTIFIER_LENGTH_BYTES} bytes`);
+        }
+        if (existing.has(id)) throw new Error(`v2 certificate "${id}" is already revoked; revocation is monotonic`);
+      });
+      if (state.revoked.length + added.length > MAX_REVOCATION_LIST_REFS_V2) {
+        throw new Error(`v2 status list would exceed ${MAX_REVOCATION_LIST_REFS_V2} revoked references`);
+      }
+      const sequence = state.sequence + 1;
+      if (sequence > Number.MAX_SAFE_INTEGER) throw new Error("v2 status sequence is exhausted");
+      const push = await signRevocationPushV2WithSigner({
+        version: 2, issuer_id: this.#issuerID, sequence, pushed_at: at, revoked: added.map((cert_id) => ({ cert_id })),
+        signature: placeholderV2Signature(),
+      }, this.#issuerID, this.#statusKey, this.#signer, { signal });
+      const next: V2StatusPublisherState = { ...state, revoked: [...state.revoked, ...added].sort(compareStrings) };
+      const out = await this.#list(next, sequence, at, signal);
+      out.push = push;
+      return out;
     });
-    if (state.revoked.length + added.length > MAX_REVOCATION_LIST_REFS_V2) {
-      throw new Error(`v2 status list would exceed ${MAX_REVOCATION_LIST_REFS_V2} revoked references`);
-    }
-    const sequence = state.sequence + 1;
-    if (sequence > Number.MAX_SAFE_INTEGER) throw new Error("v2 status sequence is exhausted");
-    const push = await signRevocationPushV2WithSigner({
-      version: 2, issuer_id: this.#issuerID, sequence, pushed_at: at, revoked: added.map((cert_id) => ({ cert_id })),
-      signature: placeholderV2Signature(),
-    }, this.#issuerID, this.#statusKey, this.#signer, { signal });
-    const next: V2StatusPublisherState = { ...state, revoked: [...state.revoked, ...added].sort(compareStrings) };
-    const out = await this.#list(next, sequence, at, signal);
-    out.push = push;
-    return out;
   }
 
   #checkState(state: V2StatusPublisherState, at: number): void {

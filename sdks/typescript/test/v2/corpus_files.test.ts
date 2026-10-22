@@ -36,6 +36,7 @@ const RUNNERS: Record<string, string> = {
   "challenge-issuance.json": "challenge_issuance.test.ts",
   "status-publisher.json": "status_publisher.test.ts",
   "evaluator-profiles.json": "evaluator_profiles.test.ts",
+  "device-state.json": "device_state.test.ts",
   "cross-sdk": "cross_sdk_v2.test.ts",
 };
 

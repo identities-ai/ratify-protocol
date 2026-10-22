@@ -30,13 +30,13 @@ import {
 } from "./constraints_v2.js";
 import { extensionParamsJSONV2, runConstraintEvaluatorV2 } from "./constraint_evaluator_v2.js";
 import { evaluateProofBundleV2ContextPolicy, sameV2ContextPolicy, type V2ContextPolicy } from "./context_policy_v2.js";
-import { ErrV2RateLimitExceeded, errorIs } from "./errors_v2.js";
+import { classifiedAsync, errorIs, ErrV2RateLimitExceeded, v2Classify } from "./errors_v2.js";
 import { bytesEqual, compareStrings } from "./json_v2.js";
 import { bundleHashV2, constraintCanonicalJSONV2, equalHybridPublicKeys, verifyProofBundleV2Signatures, type ProofBundleV2 } from "./protocol_v2_wire.js";
 import { SCOPE_IDENTITY_DELEGATE_V2, intersectScopesV2, validateRequiredScopeV2, validateScopesV2 } from "./scope_v2.js";
 import type { V2CertificateStatusCheck, V2StatusAssessment } from "./status_evaluation_v2.js";
 import type { HybridPublicKey } from "./types.js";
-import { loadV2TimeZone } from "./tzdb_v2.js";
+import { loadV2TimeZone, type V2TimeZone } from "./tzdb_v2.js";
 import type { StatusEvidenceEntryV2 } from "./verification_receipt_v2.js";
 import { matchesExpectedChallengeV2, type ExpectedChallengeStateV2, type ExpectedChallengeV2 } from "./verify_v2_preflight.js";
 
@@ -169,7 +169,7 @@ export function localTimeWindowValidUntilV2(bundle: ProofBundleV2, tzdbVersion: 
       const zone = loadV2TimeZone(tzdbVersion, c.tz ?? "");
       const start = parseHHMMV2(c.start ?? "");
       const end = parseHHMMV2(c.end ?? "");
-      const { offset, end: zoneEnd } = zone.lookup(now);
+      const { offset } = zone.lookup(now);
       const local = now + offset;
       const localDay = Math.floor(local / 86400);
       const minute = Math.floor((local - localDay * 86400) / 60);
@@ -180,13 +180,41 @@ export function localTimeWindowValidUntilV2(bundle: ProofBundleV2, tzdbVersion: 
       // Local midnight of the evaluation day plus (end + 1) minutes, as UTC
       // wall time, minus the current offset (Go time.Date normalization).
       let until = (localDay + dayOffset) * 86400 + (end + 1) * 60 - offset;
-      if (zoneEnd !== null && zoneEnd < until) until = zoneEnd;
+      const change = nextUTCOffsetChangeV2(zone, now);
+      if (change !== null && change < until) until = change;
       if (!(until > now)) throw new Error("time window has no valid terminal horizon");
       const contribution = Math.min(until, V2_MAX_TIMESTAMP_SECONDS);
       if (horizon === 0 || contribution < horizon) horizon = contribution;
     }
   }
   return horizon;
+}
+
+/**
+ * The first instant after now at which the UTC offset of zone differs from its
+ * offset at now (SPEC-v2 §5.2; Go nextUTCOffsetChangeV2), or null when the
+ * offset never changes again within the timestamp domain. A period bound that
+ * keeps the offset (an abbreviation or DST-flag change, or the start of a
+ * year plus 365 days reported past a year's last footer transition) is not
+ * an offset change, so the search steps past it.
+ */
+function nextUTCOffsetChangeV2(zone: V2TimeZone, now: number): number | null {
+  const { offset } = zone.lookup(now);
+  let candidate = now;
+  while (candidate <= V2_MAX_TIMESTAMP_SECONDS) {
+    let end = zone.lookup(candidate).end;
+    if (end === null) return null;
+    if (!(end > candidate)) {
+      // The leap-year bound can equal the instant it was computed from;
+      // resume at the next UTC year, which has no footer transition before it.
+      const next = new Date(0);
+      next.setUTCFullYear(new Date(candidate * 1000).getUTCFullYear() + 1, 0, 1);
+      end = next.getTime() / 1000;
+    }
+    if (zone.lookup(end).offset !== offset) return end;
+    candidate = end;
+  }
+  return null;
 }
 
 function constraintStatusOf(err: unknown): string {
@@ -500,54 +528,56 @@ export async function resolveClaimProofBundleV2AfterStatus(
  * uses the authoritative claim time sealed in the token.
  */
 export async function resolveClaimProofBundleV2AfterAudience(token: V2EvaluationToken, memberships: readonly V2AudienceMembership[] | null): Promise<V2LocalAuthorizationAssessment> {
-  const state = tokenStateV2(token);
-  if (!state) throw new Error("v2 claim evaluator capability is required");
-  return withTokenLockV2(state, () => {
-    const pending = state.pendingAssessment;
-    if (!state.evaluationComplete || state.evaluationStatus !== "pending_external_checks" || pending === null || pending.statusAssessment !== "current" ||
-        (pending.localPolicyFailure !== null && !combinableWithAudienceV2(pending.localPolicyFailure, pending.deferred))) {
-      throw new Error("v2 claim does not have current status and pending audience checks");
-    }
-    const a = cloneV2LocalAuthorizationAssessment(pending);
-    if (a.bundleHash !== state.expected.bundleHash || a.requiredScope !== state.expected.requiredScope) {
-      state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
-      throw new Error("pending audience assessment differs from its claimed proof");
-    }
-    let r;
-    try {
-      r = evaluateReceiverAudienceV2(a.deferred, state.expected.expectedReceiverID, memberships, state.evaluatedAt, state.futureSkew);
-    } catch (err) {
-      state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
-      throw err;
-    }
-    a.audienceEvidenceDigests = [...r.evidenceDigests];
-    a.audienceFreshUntil = r.freshUntil;
-    const local = a.localPolicyFailure;
-    if (local !== null) {
-      if (r.status === "passed" || constraintPrecedenceV2(local.status) > constraintPrecedenceV2(r.status)) {
-        a.status = local.status; a.reason = local.reason; a.detail = local.detail;
-      } else {
-        a.status = r.status; a.reason = r.status; a.detail = "receiver audience did not authorize this receiver";
+  return classifiedAsync("configuration_invalid", async () => {
+    const state = tokenStateV2(token);
+    if (!state) throw new Error("v2 claim evaluator capability is required");
+    return withTokenLockV2(state, () => {
+      const pending = state.pendingAssessment;
+      if (!state.evaluationComplete || state.evaluationStatus !== "pending_external_checks" || pending === null || pending.statusAssessment !== "current" ||
+          (pending.localPolicyFailure !== null && !combinableWithAudienceV2(pending.localPolicyFailure, pending.deferred))) {
+        throw new Error("v2 claim does not have current status and pending audience checks");
       }
-      a.deferred = [];
-      state.pendingAssessment = null;
-    } else if (r.status !== "passed") {
-      a.status = r.status; a.reason = r.status; a.detail = "receiver audience did not authorize this receiver";
-      state.pendingAssessment = null;
-    } else {
-      a.deferred = a.deferred.filter((d) => d.type !== CONSTRAINT_RECEIVER_AUDIENCE_V2);
-      if (a.deferred.length === 0) {
-        a.status = "authorized_agent"; a.reason = "authorized"; a.detail = "proof, status, audience, and local authorization checks passed";
-        state.allowValidUntil = allowHorizonV2(a);
+      const a = cloneV2LocalAuthorizationAssessment(pending);
+      if (a.bundleHash !== state.expected.bundleHash || a.requiredScope !== state.expected.requiredScope) {
+        state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
+        throw new Error("pending audience assessment differs from its claimed proof");
+      }
+      let r;
+      try {
+        r = evaluateReceiverAudienceV2(a.deferred, state.expected.expectedReceiverID, memberships, state.evaluatedAt, state.futureSkew);
+      } catch (err) {
+        state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
+        throw err;
+      }
+      a.audienceEvidenceDigests = [...r.evidenceDigests];
+      a.audienceFreshUntil = r.freshUntil;
+      const local = a.localPolicyFailure;
+      if (local !== null) {
+        if (r.status === "passed" || constraintPrecedenceV2(local.status) > constraintPrecedenceV2(r.status)) {
+          a.status = local.status; a.reason = local.reason; a.detail = local.detail;
+        } else {
+          a.status = r.status; a.reason = r.status; a.detail = "receiver audience did not authorize this receiver";
+        }
+        a.deferred = [];
+        state.pendingAssessment = null;
+      } else if (r.status !== "passed") {
+        a.status = r.status; a.reason = r.status; a.detail = "receiver audience did not authorize this receiver";
         state.pendingAssessment = null;
       } else {
-        a.status = "pending_external_checks"; a.reason = "rate_reservation_required"; a.detail = "audience passed; rate reservation remains";
-        state.pendingAssessment = cloneV2LocalAuthorizationAssessment(a);
+        a.deferred = a.deferred.filter((d) => d.type !== CONSTRAINT_RECEIVER_AUDIENCE_V2);
+        if (a.deferred.length === 0) {
+          a.status = "authorized_agent"; a.reason = "authorized"; a.detail = "proof, status, audience, and local authorization checks passed";
+          state.allowValidUntil = allowHorizonV2(a);
+          state.pendingAssessment = null;
+        } else {
+          a.status = "pending_external_checks"; a.reason = "rate_reservation_required"; a.detail = "audience passed; rate reservation remains";
+          state.pendingAssessment = cloneV2LocalAuthorizationAssessment(a);
+        }
       }
-    }
-    state.evaluationStatus = a.status;
-    state.evaluationReason = a.reason;
-    return a;
+      state.evaluationStatus = a.status;
+      state.evaluationReason = a.reason;
+      return a;
+    });
   });
 }
 
@@ -561,59 +591,61 @@ function sameBatch(a: readonly { issuerID: string; certID: string; windowS: numb
  * authorizes; claim recovery releases any provisional rows.
  */
 export async function resolveClaimProofBundleV2AfterRate(store: V2RateReservationStore | null | undefined, token: V2EvaluationToken, signal?: AbortSignal): Promise<V2LocalAuthorizationAssessment> {
-  const state = tokenStateV2(token);
-  if (!state) throw new Error("v2 rate evaluation requires context and claim capability");
-  if (signal?.aborted) throw signal.reason ?? new Error("cancelled");
-  return withTokenLockV2(state, async () => {
-    const pending = state.pendingAssessment;
-    if (!state.evaluationComplete || state.evaluationStatus !== "pending_external_checks" || pending === null || pending.statusAssessment !== "current" || pending.localPolicyFailure !== null) {
-      throw new Error("v2 claim does not have current status and pending rate checks");
-    }
-    const a = cloneV2LocalAuthorizationAssessment(pending);
-    if (a.bundleHash !== state.expected.bundleHash || a.requiredScope !== state.expected.requiredScope || state.rateBatch.length === 0) {
-      state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
-      throw new Error("pending rate assessment differs from its claimed proof");
-    }
-    if (a.deferred.some((d) => d.type !== CONSTRAINT_MAX_RATE_V2)) throw new Error("audience or unknown checks remain before rate reservation");
-    let batch;
-    try {
-      batch = buildV2RateReservationBatch(a.deferred);
-    } catch {
-      batch = null;
-    }
-    if (batch === null || !sameBatch(batch, state.rateBatch)) {
-      state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
-      throw new Error("pending rate checks differ from sealed signed batch");
-    }
-    let err: unknown = null;
-    if (!store) err = new Error("v2 rate reservation store is unavailable");
-    else if (isV2RateAtFinalizationStore(store)) {
-      state.rateAtFinalization = true;
-      a.rateAdmissionDeferred = true;
-    } else {
-      try {
-        await store.reserveV2RateBatch(state.claimID, Uint8Array.from(state.ownerToken), a.bundleHash, batch.map((r) => ({ ...r })), signal);
-      } catch (e) {
-        err = e ?? new Error("rate store failed");
+  return classifiedAsync("configuration_invalid", async () => {
+    const state = tokenStateV2(token);
+    if (!state) throw new Error("v2 rate evaluation requires context and claim capability");
+    if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("cancelled"));
+    return withTokenLockV2(state, async () => {
+      const pending = state.pendingAssessment;
+      if (!state.evaluationComplete || state.evaluationStatus !== "pending_external_checks" || pending === null || pending.statusAssessment !== "current" || pending.localPolicyFailure !== null) {
+        throw new Error("v2 claim does not have current status and pending rate checks");
       }
-    }
-    if (err === null) {
-      a.status = "authorized_agent"; a.reason = "authorized";
-      a.detail = state.rateAtFinalization
-        ? "proof, status, and audience passed; rate admission is deferred to durable finalization"
-        : "proof, status, audience, and rate checks passed";
-      state.allowValidUntil = allowHorizonV2(a);
-    } else if (errorIs(err, ErrV2RateLimitExceeded)) {
-      a.status = "constraint_denied"; a.reason = "constraint_denied"; a.detail = "signed rate limit has no remaining capacity";
-    } else {
-      a.status = "constraint_unverifiable"; a.reason = "constraint_unverifiable"; a.detail = "rate reservation could not be verified";
-      a.rateStoreUnavailable = true;
-    }
-    a.deferred = [];
-    state.pendingAssessment = null;
-    state.evaluationStatus = a.status;
-    state.evaluationReason = a.reason;
-    return a;
+      const a = cloneV2LocalAuthorizationAssessment(pending);
+      if (a.bundleHash !== state.expected.bundleHash || a.requiredScope !== state.expected.requiredScope || state.rateBatch.length === 0) {
+        state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
+        throw new Error("pending rate assessment differs from its claimed proof");
+      }
+      if (a.deferred.some((d) => d.type !== CONSTRAINT_MAX_RATE_V2)) throw new Error("audience or unknown checks remain before rate reservation");
+      let batch;
+      try {
+        batch = buildV2RateReservationBatch(a.deferred);
+      } catch {
+        batch = null;
+      }
+      if (batch === null || !sameBatch(batch, state.rateBatch)) {
+        state.evaluationStatus = "authorization_unverified"; state.evaluationReason = "evaluation_interrupted"; state.pendingAssessment = null;
+        throw new Error("pending rate checks differ from sealed signed batch");
+      }
+      let err: unknown = null;
+      if (!store) err = new Error("v2 rate reservation store is unavailable");
+      else if (isV2RateAtFinalizationStore(store)) {
+        state.rateAtFinalization = true;
+        a.rateAdmissionDeferred = true;
+      } else {
+        try {
+          await store.reserveV2RateBatch(state.claimID, Uint8Array.from(state.ownerToken), a.bundleHash, batch.map((r) => ({ ...r })), signal);
+        } catch (e) {
+          err = e ?? new Error("rate store failed");
+        }
+      }
+      if (err === null) {
+        a.status = "authorized_agent"; a.reason = "authorized";
+        a.detail = state.rateAtFinalization
+          ? "proof, status, and audience passed; rate admission is deferred to durable finalization"
+          : "proof, status, audience, and rate checks passed";
+        state.allowValidUntil = allowHorizonV2(a);
+      } else if (errorIs(err, ErrV2RateLimitExceeded)) {
+        a.status = "constraint_denied"; a.reason = "constraint_denied"; a.detail = "signed rate limit has no remaining capacity";
+      } else {
+        a.status = "constraint_unverifiable"; a.reason = "constraint_unverifiable"; a.detail = "rate reservation could not be verified";
+        a.rateStoreUnavailable = true;
+      }
+      a.deferred = [];
+      state.pendingAssessment = null;
+      state.evaluationStatus = a.status;
+      state.evaluationReason = a.reason;
+      return a;
+    });
   });
 }
 

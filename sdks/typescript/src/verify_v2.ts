@@ -144,7 +144,7 @@ const aborted = (signal?: AbortSignal): Error | null =>
 export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCallbacks, opts: V2VerifyOptions = {}): Promise<V2VerifyOutcome> {
   const signal = opts.signal;
   const preflightFailure = (err: unknown): V2VerifyOutcome => {
-    const e = err instanceof Error ? err : new Error(String(err));
+    const e = v2Classify("configuration_invalid", err instanceof Error ? err : new Error(String(err)));
     return { stage: "preflight", error: e, errorClass: v2ErrorClassOf(e), disposition: "", claim: null, committed: null };
   };
   if (!cb?.claimStore) return preflightFailure(v2Errorf("configuration_invalid", "v2 verification requires a context and claim store"));
@@ -173,8 +173,10 @@ export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCall
   if (disposition !== "created" || token === null) {
     return { stage: "replay", error: null, errorClass: "", disposition, claim, committed: null };
   }
+  // Every evaluating error reaching here is a claim-store, progress-write,
+  // or finalization failure unless it already carries a class.
   const evaluating = (err: unknown): V2VerifyOutcome => {
-    const e = err instanceof Error ? err : new Error(String(err));
+    const e = v2Classify("claim_store_unavailable", err instanceof Error ? err : new Error(String(err)));
     return { stage: "evaluating", error: e, errorClass: v2ErrorClassOf(e), disposition, claim, committed: null };
   };
   const cancelled = (err: Error) => evaluating(v2Classify("evaluation_cancelled", wrapError("v2 evaluation cancelled before commit", err)));

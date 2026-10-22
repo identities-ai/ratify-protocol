@@ -15,7 +15,7 @@ import {
   verifyV2Statement,
   type HybridKeyPairV2,
 } from "./crypto_v2.js";
-import { v2Classify, wrapError } from "./errors_v2.js";
+import { classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import { concatBytes } from "./json_v2.js";
 import type { HybridPublicKey, HybridSignature } from "./types.js";
 
@@ -108,7 +108,7 @@ class LocalSignerV2 implements SignerV2 {
     return SIGNER_MODE_DIRECT_V2;
   }
   async signV2(req: SignRequestV2, signal?: AbortSignal): Promise<HybridSignature> {
-    if (signal?.aborted) throw signal.reason ?? new Error("signing cancelled");
+    if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("signing cancelled"));
     if (req.mode !== SIGNER_MODE_DIRECT_V2 || req.message.length !== V2_SIGNING_MESSAGE_SIZE || !req.mlDsaContext || req.mlDsaContext.length === 0) {
       throw new Error("local v2 signer supports only direct-mode requests");
     }
@@ -125,8 +125,10 @@ class LocalSignerV2 implements SignerV2 {
 
 /** A direct-mode SignerV2 backed by an in-process hybrid key pair. */
 export async function newLocalSignerV2(pair: HybridKeyPairV2, opts: LocalSignerOptionsV2 = {}): Promise<SignerV2> {
-  await validateHybridKeyPairV2(pair);
-  return new LocalSignerV2(pair, opts.deterministic === true);
+  return classifiedAsync("configuration_invalid", async () => {
+    await validateHybridKeyPairV2(pair);
+    return new LocalSignerV2(pair, opts.deterministic === true);
+  });
 }
 
 /**
@@ -153,13 +155,13 @@ export const V2_SIGNING_MESSAGE_SIZE = 77;
  * have exact component lengths.
  */
 export async function signerPublicKeyV2(signer: SignerV2 | null | undefined): Promise<HybridPublicKey> {
-  if (!signer) throw new Error("v2 signer is required");
+  if (!signer) throw v2Errorf("configuration_invalid", "v2 signer is required");
   if (localSigners.has(signer)) await (signer as LocalSignerV2).validate();
   const pub = signer.publicKeyV2();
   try {
     keyIDV2Unclassified(pub);
   } catch (err) {
-    throw wrapError("v2 signer public key", err);
+    throw v2Errorf("configuration_invalid", `v2 signer public key: ${(err as Error).message}`, err);
   }
   return { ed25519: Uint8Array.from(pub.ed25519), ml_dsa_65: Uint8Array.from(pub.ml_dsa_65) };
 }
@@ -188,7 +190,7 @@ export async function signV2StatementWithSigner(
   opts: SignOptionsV2 = {},
 ): Promise<HybridSignature> {
   const before = aborted(opts.signal);
-  if (before) throw before;
+  if (before) throw v2Classify("evaluation_cancelled", before);
   const message = v2SigningMessage(objectType, signable);
   const mlContext = v2MLDSAContext(objectType);
   const keyId = keyIDV2Unclassified(pub);
@@ -200,24 +202,24 @@ export async function signV2StatementWithSigner(
   } else if (mode === SIGNER_MODE_EXTERNAL_MU_V2) {
     req = { mode, message, mlDsaContext: null, mlDsaMu: externalMuV2(pub.ml_dsa_65, mlContext, message), publicKey, keyId };
   } else {
-    throw new Error(`v2 signer reports an unsupported mode ${String(mode)}`);
+    throw v2Errorf("configuration_invalid", `v2 signer reports an unsupported mode ${String(mode)}`);
   }
   let signature: HybridSignature;
   try {
     signature = await signer.signV2(req, opts.signal);
   } catch (err) {
-    throw wrapError("v2 signer", err);
+    throw v2Classify("configuration_invalid", wrapError("v2 signer", err));
   }
   const after = aborted(opts.signal);
-  if (after) throw after;
+  if (after) throw v2Classify("evaluation_cancelled", after);
   if (!signature || !(signature.ed25519 instanceof Uint8Array) || !(signature.ml_dsa_65 instanceof Uint8Array)) {
-    throw new Error("v2 signer returned a signature that does not verify: missing component");
+    throw v2Errorf("invalid_signature", "v2 signer returned a signature that does not verify: missing component");
   }
   const copy: HybridSignature = { ed25519: Uint8Array.from(signature.ed25519), ml_dsa_65: Uint8Array.from(signature.ml_dsa_65) };
   try {
     await verifyV2Statement(objectType, signable, copy, pub);
   } catch (err) {
-    throw wrapError("v2 signer returned a signature that does not verify", err);
+    throw v2Errorf("invalid_signature", `v2 signer returned a signature that does not verify: ${(err as Error).message}`, err);
   }
   return copy;
 }

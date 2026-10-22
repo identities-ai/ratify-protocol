@@ -4,7 +4,7 @@
 
 [Ratify Protocol](https://ratifyprotocol.com) is an open protocol for proving delegated authority. A principal signs a bounded delegation naming what an agent may do, and any receiver can verify that proof offline, before acting, without calling the issuer. Signatures are hybrid Ed25519 and ML-DSA-65.
 
-This experimental reference is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture.
+This experimental reference runs Ratify Protocol v2 (`2.0.0-alpha.1`, a prerelease) through the C ABI on a Linux receiver, with a separate checkpoint process, in front of a safe Arduino actuator. It is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture. Protocol v2 has had internal adversarial review only and carries no production security claim yet.
 
 **Start here:** [run it](#use-it-now) · [evidence and limitations](#evidence-security-status-and-limitations) · [open source or Ratify Verify](#which-path-should-i-use)
 
@@ -16,16 +16,20 @@ Robots, farm equipment, instruments, and edge devices need to decide whether an 
 | --- | --- | --- |
 | Can this process reach the receiver? | Usually yes | Not its purpose |
 | Did a recognized principal authorize this action? | Not expressed by reachability alone | Signed delegation is checked |
-| Is the requested scope and duration within bounds? | Often application-specific | Receiver evaluates proof and local policy |
-| Can the decision be checked without a network call? | Depends on deployment | Yes, after proof presentation |
+| Is the requested zone, resource, and duration within bounds? | Often application-specific | Signed constraints, then local policy |
+| Can the decision be checked without a network call? | Depends on deployment | Yes, with staged signed status |
+| Is there a signed record before anything moves? | Usually not | A signed receipt, acknowledged by a separate process, before release |
 
 ```mermaid
 flowchart LR
   I[Agent identity and network access] --> C{Receiver checks}
-  D[Signed delegation and fresh proof] --> C
+  D[Signed delegation and proof bound to this action] --> C
+  S[Signed status from a separate status key] --> C
   P[Local device policy] --> C
-  C -->|allow, all checks pass| A[Bounded actuator command]
-  C -->|deny, any check fails| X[No actuator command]
+  C -->|released allow, all checks pass| G[Release gate at the authoritative clock]
+  G -->|still inside both deadlines| A[One bounded actuator command]
+  C -->|deny, replay, pending, or withheld| X[No actuator command]
+  G -->|deadline passed| X
 ```
 
 This matters when an agent can call a tool but must not have unlimited authority: agricultural equipment, warehouse robots, drones, laboratory instruments, charging systems, and other edge-controlled devices. Ratify complements IAM, OAuth, MCP, A2A, and local policy; it does not replace them.
@@ -34,122 +38,127 @@ This matters when an agent can call a tool but must not have unlimited authority
 
 | Role | What it decides or builds | This reference uses |
 | --- | --- | --- |
-| Principal | Sets the authority ceiling and signs the delegation | Ratify SDK or Ratify Verify |
-| Agent operator | Presents the proof and action request | Deterministic controller or the Google ADK adapter in `adk/` |
-| Receiver operator | Pins the trust root, local policy, and actuator mapping | Linux receiver in `edge/` |
+| Principal | Sets the authority ceiling, signs the delegation, and publishes signed status with a separate status key | `controller/controller.c` with demonstration keys in files |
+| Agent operator | Requests a challenge for one action and presents the proof | `controller/controller.c`; the Google ADK adapter in `adk/` targets the v1 receiver and has not been ported |
+| Receiver operator | Pins the root, status, agent, and checkpoint keys, sets local policy, runs the receiver and the checkpoint, maps the actuator | `edge/` (about 4,000 lines of C, most of it the durable stores, the checkpoint, and small SHA-2 and base64 helpers; the verification itself is library calls) |
 | Actuator operator | Connects and programs the safe output device | Arduino sketch in `arduino/` |
 | Platform vendor | No change required to its platform | Ratify is independent of an agent framework |
 
-The Arduino is an actuator, not the authorization boundary. It does not verify proofs, hold keys, enforce local policy, or provide trusted time. Direct access to the Arduino is outside this reference's security boundary.
+The receiver operator has real configuration to decide: the trusted root, the status freshness budget, the zone allowlist, the duration cap, the clock, and which user runs the checkpoint. The Arduino is an untrusted actuator, not the authorization boundary. It does not verify proofs, hold keys, enforce local policy, or provide trusted time. Direct access to the Arduino is outside this reference's security boundary.
 
 ## What does this reference do?
 
 The example delegation authorizes a bounded farm action:
 
 ```text
-scope       physical:actuate
-zone        greenhouse-b
-resource    irrigation-valve-3
-duration    20 seconds maximum
-expiry      signed delegation expiry
+scope        physical:actuate
+constraint   resource_path  resource_id = greenhouse-b, path_prefix = /irrigation-valve-3
+constraint   com.ratifyprotocol.max_count  duration_ms <= 20000 (standard max_count/v1 profile)
+validity     signed issued_at and expires_at
+local cap    zone greenhouse-b only, 1000 ms maximum (device policy)
 ```
 
-The current hardware maps that valve action to a short LED command over USB serial. No hazardous device is connected.
+Protocol v2.0 has no registered geofence or activation-duration constraint; both arrive no earlier than Protocol 2.1. The zone is therefore a lexical resource identifier checked by `resource_path`, not a location, and the duration ceiling is an extension constraint evaluated by the standard `max_count/v1` profile plus the device's own cap. The current hardware maps the valve action to a short LED command over USB serial. No hazardous device is connected.
 
 ```mermaid
 sequenceDiagram
     participant P as Principal
-    participant A as Agent or controller
-    participant E as Linux edge receiver
+    participant A as Agent (controller)
+    participant E as Edge receiver
+    participant K as Checkpoint process
     participant R as Arduino actuator
-    P->>A: signed bounded delegation
-    A->>E: proof bundle and action request
-    E->>E: verify signatures, anchor, freshness, scope, policy
-    alt allow, authorized physical actuation
-        E->>R: bounded actuator command
+    P->>A: signed delegation with zone, resource, and duration ceiling
+    A->>E: challenge request naming zone, resource, duration, invocation
+    E->>K: anchor the issued challenge
+    K-->>E: signed acknowledgement
+    E-->>A: challenge bound to that action and this agent
+    A->>E: proof bundle signed over the challenge and session context
+    E->>E: live v2 verification, claim, constraints, signed status
+    E->>K: anchor the claim and result, submit the signed receipt
+    K-->>E: signed receipt acknowledgement
+    E->>E: release, then local policy
+    alt released allow, release gate passes
+        E->>R: RATIFY_ALLOW FIRE 500
         R-->>E: LED output
-    else deny, expired, replayed, altered, or out of scope
-        E-->>A: denial decision
+    else deny, replay, tampered, expired, revoked, out of scope, or recovering
+        E-->>A: decision record
         Note over R: no actuator command
     end
 ```
 
-The Linux receiver is the enforcement boundary. The agent, model, transport, and Arduino cannot turn a denied receiver decision into an authorized decision inside this reference.
+The Linux receiver is the enforcement boundary. Only a released Protocol v2 allow for `physical:actuate`, within local policy, and confirmed by `ratify_v2_released_allowed` at the receiver's authoritative clock immediately before the write, can reach the actuator. The agent, model, transport, checkpoint, and Arduino cannot turn a refused decision into an actuation inside this reference.
 
 ## What the reference proves
 
-The deterministic gate runs the 16-row protocol matrix and observes the protected effect:
+The deterministic gate runs a 30-row scenario matrix against the test builds with a fixture clock and a mock actuator. It never writes to a serial device or GPIO line. Every row asserts the receiver's recorded stage and outcome and whether the actuator fired, and the run asserts the exact invocation count.
 
-| Tested case | Decision | Actuator handler |
+| Tested case | Receiver outcome | Actuator |
 | --- | --- | --- |
-| authorized actuation | authorized | invoked |
-| monitor-only request | authorized | not invoked |
-| replayed proof | invalid | not invoked |
-| expired proof | invalid | not invoked |
-| wrong scope | invalid or denied | not invoked |
-| wrong agent | invalid or denied | not invoked |
-| revoked certificate | revoked | not invoked |
-| unavailable revocation state | unavailable | not invoked |
+| authorized `physical:actuate` | released allow | fired |
+| authorized `infrastructure:monitor` | released allow | not fired |
+| scope outside the delegation | released deny, `scope_denied` | not fired |
+| zone outside the delegation | released deny, `constraint_denied` | not fired |
+| duration above the signed ceiling | released deny, `constraint_denied` | not fired |
+| duration above the local cap only | released allow, refused by local policy | not fired |
+| altered challenge signature | refused before claim, `invalid_signature` | not fired |
+| action changed after the challenge | refused before claim | not fired |
+| chain from an untrusted root | released deny, `unauthorized` | not fired |
+| first presentation of a captured proof | released allow | fired |
+| same proof again | replay, nothing disclosed | not fired |
+| challenge presented after expiry | refused before claim, `challenge_not_fresh` | not fired |
+| certificate revoked by a signed push | released deny, `delegation_revoked` | not fired |
+| delegation past its expiry | released deny, `delegation_expired` | not fired |
+| replay after a receiver restart | replay (durable claim store) | not fired |
+| actuation during post-boot quarantine | refused | not fired |
+| clock moved backward | no challenge issued, `clock_regressed` | not fired |
+| checkpoint stopped | no challenge issued | not fired |
+| receiver state restored from an earlier copy | receiver stays recovering, refuses everything | not fired |
+| root key reused as the status key | publisher and receiver both refuse | not applicable |
 
-The local gate result is recorded in [`ratify-reference.json`](ratify-reference.json) and checked by the reference gate. The final Pi 2 ARMv7 serial integration run for this five-input context implementation also passed: two authorized invocations, monitor authorization without actuation, and replay denial. This is evidence of the receiver-to-actuator path, not a claim that the Arduino verifies authorization.
+The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evidence.md). The local gate result is **30 passed, 0 failed, 0 skipped**, with 5 actuator invocations in total, all to the mock.
 
 ## Use it now
 
-Prerequisites: a Linux machine with the current Ratify C SDK source, a C compiler, `make`, and optionally a Raspberry Pi 2 or similar ARMv7 device. The deterministic gate does not require an Arduino, model API, cloud account, or trusted RTC.
+Prerequisites: a C compiler, `make`, and a Ratify C SDK `2.0.0-alpha.1` tree containing `include/ratify.h` and `lib/libratify_c.a`, built from `sdks/c` in this repository. The gate needs no Arduino, model API, cloud account, or RTC.
 
-1. Clone the protocol repository and enter this reference:
+1. Clone the protocol repository and build the C SDK:
 
    ```sh
    git clone https://github.com/identities-ai/ratify-protocol
-   cd ratify-protocol/references/physical-ai-edge-sentinel
+   cd ratify-protocol/sdks/c && cargo build --release && cd ../..
+   mkdir -p /tmp/ratify-c/include /tmp/ratify-c/lib
+   cp sdks/c/include/ratify.h /tmp/ratify-c/include/
+   cp sdks/c/target/release/libratify_c.a /tmp/ratify-c/lib/
    ```
 
-2. Build or locate the current C SDK, then run the clean gate:
+2. Run the gate from the reference directory:
 
    ```sh
-   RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh
+   cd references/physical-ai-edge-sentinel
+   RATIFY_SDK=/tmp/ratify-c ./run-reference-check.sh
    ```
 
-3. For the optional safe hardware path, upload `arduino/ratify_actuator/ratify_actuator.ino` with Arduino IDE, connect the Uno by USB, and run:
+3. For the Raspberry Pi 2 (ARMv7), cross-build the SDK and the binaries:
 
    ```sh
-   ./edge/edge --trust trust --serial /dev/ttyACM0 --baud 115200
+   cd sdks/c && cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36
+   # then, with RATIFY_SDK pointing at the armv7 include and lib:
+   make -C references/physical-ai-edge-sentinel/edge RATIFY_SDK=/path/to/ratify-c-armv7 \
+     CC="zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7" UNAME_S=Linux all test-bins
    ```
 
-   To run the complete end-to-end matrix with the real serial actuator, build `edge-test` and run from `edge/`:
+   On the Pi, `BIN_DIR=/path/to/binaries ./edge/tests/scenarios.sh` runs the same matrix with the mock actuator.
+
+4. The hardware path uses the production binaries, the DS3231 RTC, and the Arduino. Upload `arduino/ratify_actuator/ratify_actuator.ino`, initialize the checkpoint and the receiver, and start both:
 
    ```sh
-   SERIAL_DEVICE=/dev/ttyACM0 ./tests/e2e.sh
+   edge-checkpoint --init --dir ckpt
+   edge-checkpoint --dir ckpt --socket ckpt.sock &
+   edge --init --state state --trust trust --checkpoint ckpt.sock
+   edge --state state --trust trust --checkpoint ckpt.sock --serial /dev/ttyACM0 --baud 115200
    ```
 
-   This starts the controller, provisions a temporary trust directory with an operator public key and its derived identity, starts the edge verifier, obtains fresh challenges, and presents authorized, monitor, and replay cases. The script asserts both each decision status and the number of actuator invocations. It uses the test clock and quarantine overrides because no DS3231 is installed; it does not represent production clock behavior.
-
-   The restart-replay quarantine case is likewise a test-build scenario:
-
-   ```sh
-   EDGE_BIN=./edge-test ./tests/restart_replay.sh
-   ```
-
-   The production `edge` binary is intentionally not used for this case before a trusted RTC is installed, because it must refuse to issue challenges without trusted time.
-
-The shipped production receiver fails closed without trusted time and revocation state. The local test build is used for the pre-RTC demonstration only; do not attach a hazardous actuator.
-
-## Run through Google ADK
-
-The deterministic controller above is the default because a gate should not depend on a model behaving. The Google ADK path exists to show the same boundary holding when a real agent framework drives it, and the adapter in [`../../adk/edge_agent.py`](../../adk/edge_agent.py) is a real ADK `FunctionTool` rather than a stand-in.
-
-Four layers, and it is worth being precise about which one decides:
-
-| Layer | What it does | What it can reach |
-| --- | --- | --- |
-| **The model** (Gemini through ADK) | Decides *whether* to ask for an action and with what zone and duration | Two arguments. It never sees the delegation, the proof bundle, or any key |
-| **The ADK adapter** | Requests a challenge, signs the operation context outside model context, presents the proof | The agent's private key, which never enters a tool argument or a prompt |
-| **The Linux receiver** | Verifies the signature chain, trust anchor, freshness, scope, zone, duration and local policy, then decides | The actuator, and only after an allow |
-| **The Arduino** | Executes a command that already passed | Nothing. It verifies nothing and can refuse nothing |
-
-The model is not a security boundary here, and nothing depends on it choosing well. A model that asks for the wrong zone, too long a duration, or an action outside the delegation gets the same denial as an attacker would: the receiver never reaches the actuator. That is the point of running the framework path at all.
-
-Setup is in [`../../adk/README.md`](../../adk/README.md): the pinned environment, the receiver address, and how the authority fixture is issued. The adapter needs the receiver running first, because it asks it for a challenge before it can sign anything.
+   The production receiver refuses to decide without the RTC and refuses actuation for 300 seconds after start. Run the checkpoint as a separate Unix user (`--allow-uid` names the receiver's user) so the receiver cannot read the checkpoint's key; see [`docs/v2-design.md`](docs/v2-design.md) for what that separation does and does not protect on a Pi.
 
 ## Which path should I use?
 
@@ -157,26 +166,47 @@ Use this open reference when you need inspectable source, a deterministic local 
 
 ## What is cryptographically bound?
 
-Ratify signatures bind the delegation and proof fields defined by the protocol, including issuer and subject identities, delegated scope, constraints, expiry, and a fresh challenge response. This edge transport also derives a session context from the requested scope, zone, duration, resource identifier, and invocation identifier. The challenge store binds that context, and the receiver recomputes and requires the same context before accepting the proof; changing any of those inputs fails closed. The receiver separately applies its pinned-root comparison, current time, revocation state, and local device policy. The Arduino serial command is not cryptographically bound and must not be treated as an authorization proof.
+- **Delegation certificate, signed by the root key:** the issuer and subject complete public keys and IDs, the scope, the `resource_path` constraint (zone and resource), the `max_count` duration ceiling, and the validity window.
+- **Proof bundle, signed by the agent key:** the challenge and its issuance time, the receiver's verifier ID, the delegation digest, and the session context. The session context binds the verifier ID, the device workspace ID, the agent ID, the invocation ID, and a request hash over the scope, operation, zone, resource path, and a SHA-256 digest of the canonical payload `{"duration_ms", "resource", "zone"}`. A proof made for one action cannot be presented for another.
+- **Status, signed by the separate status key:** revocation lists and pushes for the root's certificates.
+- **Receipts, signed by the receiver's verifier key,** and **acknowledgements, signed by the checkpoint's key** as witness entries.
+
+Not bound: the receiver's local policy file, its reading of the RTC, and the Arduino serial command. The serial command is not an authorization proof.
 
 ## Repository map
 
 | Path | Purpose |
 | --- | --- |
-| `edge/` | Linux verifier, policy, replay store, and actuator adapters |
-| `controller/` | Deterministic controller that provisions and presents test proofs |
-| `scenarios/` | Positive and negative protocol fixtures |
+| `edge/src/verifier.c` | v2 decision path: issuance, live verification, publication, release, local policy, release gate |
+| `edge/src/store.c` | Durable claim, issuance, release, journal, and receipt-log stores behind the C callbacks, anchored in the checkpoint |
+| `edge/checkpoint/checkpoint.c` | Separate checkpoint process with its own key and storage |
+| `edge/src/actx.c` | The action context shared by the receiver and the controller |
+| `edge/src/clock.c` | RTC clock; fixture clock in test builds only |
+| `edge/actuator/` | Guarded actuator: mock, serial, or GPIO |
+| `edge/tests/scenarios.sh` | The deterministic scenario matrix |
+| `controller/` | Principal, status publisher, and agent for demonstrations |
 | `arduino/ratify_actuator/` | Safe Uno serial actuator sketch |
+| `edge/smoke/` | v1 latency measurement tool (alpha.18 to alpha.20 history) |
 | `run-reference-check.sh` | Clean, reproducible reference gate |
-| `docs/evidence.md` | Hardware and software evidence with explicit limits |
-| `../../adk/` | Google ADK tool adapter and setup instructions |
+| `docs/v2-design.md` | Key roles, profile analysis, and limits of the Pi deployment |
+| `docs/evidence.md` | v2 evidence, and v1 hardware evidence as dated history |
 | `ratify-reference.json` | Reference metadata and gate declaration |
 
 ## Evidence, security status, and limitations
 
-Evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-11, the alpha.20 C SDK and production receiver were rebuilt for Raspberry Pi 2 ARMv7. The 29-case core suite passed. With the DS3231 clock trusted and production quarantine left intact, the receiver allowed one 500 ms LED action, allowed a captured proof once, then denied its replay without another actuator call. No quarantine override was compiled into or enabled for the production binary.
+v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The ARMv7 build for the Raspberry Pi 2 is prepared; the v2 hardware run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, has not yet been performed, and its section of the evidence file is a placeholder.
 
-The Google ADK adapter is implemented and statically checked, but the Pi run used the deterministic C controller rather than a live ADK model runner. The Arduino does not independently authorize actions. The run does not establish trusted time through power loss or network loss, replay protection across restart, or suitability for hazardous, safety-critical, or regulated actuation. The receiver's anchor check selects the terminal issuer in multi-hop bundles ordered leaf to root. This is v1 alpha.20 evidence only; v2 has not been implemented or tested.
+Earlier hardware evidence is v1 only and kept as dated history: on 2026-10-11 the alpha.20 C SDK and v1 production receiver ran on the Pi 2 with the DS3231 RTC, allowed one 500 ms LED action, and denied a captured proof's replay without another actuator call.
+
+Limits that apply now:
+
+- **Not single-device offline profile conformance.** The checkpoint is a second process on the same host, which SPEC-v2 §7.13 says never qualifies, and its anchored digest is not the normative complete-state projection. On a Pi without a secure element, root or physical access to the SD card can roll back the receiver and the checkpoint together without detection. The design note states which profile properties the separation does and does not provide.
+- **No recovery authority.** A receiver that detects a mismatch stays recovering until an operator re-provisions it.
+- **Revocation exposure of up to one hour** plus delivery time, set by the status lifetime and freshness budget.
+- **Demonstration keys in files.** Root, status, agent, verifier, and checkpoint keys are seed files; a deployment needs an HSM, KMS, TPM, or secure element.
+- **No `max_rate`, streams, or receiver audience,** and no compaction of either process's state.
+- **The Google ADK adapter** in `adk/` speaks the v1 receiver's interface and does not work with this receiver.
+- **Not for hazardous, safety-critical, or regulated actuation.** The Arduino does not authorize anything.
 
 ## Open source status
 

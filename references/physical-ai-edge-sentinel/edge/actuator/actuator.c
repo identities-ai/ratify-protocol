@@ -122,17 +122,16 @@ static void gpio_set(int value)
 }
 #endif
 
-int actuator_fire(const sentinel_decision *d, int duration_ms)
+int actuator_fire(uint64_t token, int duration_ms, const char *label)
 {
-    /* Three independent conditions, all required. A decision that was not
-     * produced by the bound verifier cannot satisfy the token check no matter
-     * what its allow flag says. */
+    /* Only the release gate holds the bound token, so no other path in the
+     * process can reach the output. */
     if (bound_token == 0) {
-        fprintf(stderr, "actuator: refused — not bound to a verifier\n");
+        fprintf(stderr, "actuator: refused, not bound to a verifier\n");
         return -1;
     }
-    if (!d || !d->allow || d->actuator_token != bound_token) {
-        fprintf(stderr, "actuator: refused — no valid allow token\n");
+    if (token != bound_token) {
+        fprintf(stderr, "actuator: refused, no valid release token\n");
         return -1;
     }
 
@@ -148,8 +147,12 @@ int actuator_fire(const sentinel_decision *d, int duration_ms)
     }
 
     invocations++;
-    printf("actuator: FIRE %d ms (agent=%s status=%s)\n",
-           duration_ms, d->agent_id, d->status);
+    printf("actuator: FIRE %d ms (%s, %s)\n", duration_ms,
+           serial_fd >= 0 ? "serial" :
+#ifdef __linux__
+           gpio_fd >= 0 ? "gpio" :
+#endif
+           "mock", label ? label : "");
     fflush(stdout);
 
 #ifdef __linux__

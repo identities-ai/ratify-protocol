@@ -2,23 +2,24 @@
  * Guarded actuator adapter.
  *
  * The only module permitted to cause the demo action. Its entry point requires
- * an allow token that only the verifier can mint, so no other caller in the
- * process can reach the actuator even by accident. Checkpoint A ships the
- * simulator; GPIO lands with checkpoint B.
+ * the process-random token that only the release gate hands out, and the gate
+ * hands it out only for a released Protocol v2 allow that passed local policy
+ * and ratify_v2_released_allowed at that moment. Without a GPIO line or a
+ * serial device the adapter is a mock that only counts invocations.
  */
 #ifndef SENTINEL_ACTUATOR_H
 #define SENTINEL_ACTUATOR_H
 
-#include "sentinel.h"
+#include <stdint.h>
 
 /* Bind this actuator to one verifier's token. Called once at startup by the
  * process that owns the verifier; the token is process-random. */
 void actuator_bind(uint64_t token);
 
-/* Fire the actuator. Returns 0 on success, -1 if the decision does not carry a
- * valid allow token. A refused call is a defect in the caller, not a policy
- * denial, and is reported loudly. */
-int actuator_fire(const sentinel_decision *d, int duration_ms);
+/* Fire the actuator. Returns 0 on success, -1 if `token` is not the bound
+ * token. A refused call is a defect in the caller, not a policy denial, and
+ * is reported loudly. */
+int actuator_fire(uint64_t token, int duration_ms, const char *label);
 
 /* Drive a real GPIO line instead of the simulator, via the gpiochip character
  * device (no libgpiod dependency). Returns 0 on success. Must be called before

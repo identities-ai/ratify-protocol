@@ -1,88 +1,95 @@
 /*
- * Ratify Edge Sentinel — edge receiver core.
+ * Ratify Edge Sentinel: the Protocol v2 edge receiver core.
  *
- * Checkpoint A covers the security core only: trust anchor, clock, challenge
- * store, verification, and the guarded actuator token. No transport, no GPIO.
+ * The decision path is the library's live verifier (ratify_v2_verify_proof_
+ * bundle) over this receiver's durable C stores, followed by receipt
+ * publication, checkpoint acknowledgement, and ratify_v2_release_decision.
+ * Only a released allow, checked against local policy and then against
+ * ratify_v2_released_allowed immediately before the write, can reach the
+ * actuator.
  */
 #ifndef SENTINEL_H
 #define SENTINEL_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#define SENTINEL_ID_HEX_LEN 32           /* human_id / agent_id, per SPEC §7 */
-#define SENTINEL_CHALLENGE_BYTES 32
-#define SENTINEL_CHALLENGE_HEX (SENTINEL_CHALLENGE_BYTES * 2)
-#define SENTINEL_CHALLENGE_TTL_S 300     /* CHALLENGE_WINDOW_SECONDS */
-#define SENTINEL_QUARANTINE_S 300        /* FR10 */
-#define SENTINEL_MAX_BUNDLE_BYTES 131072 /* MAX_PROOF_BUNDLE_BYTES */
-#define SENTINEL_REASON_MAX 160
+#include "actx.h"
+#include "ratify.h"
 
-/* Application-level denial reasons. These are OURS, deliberately distinct from
- * the SDK's closed identity_status enum: the anchor check in particular has no
- * SDK status because the SDK cannot know which principal we trust (SPEC §15.4). */
-#define SENTINEL_REASON_ANCHOR_MISMATCH "anchor_mismatch"
-#define SENTINEL_REASON_QUARANTINE      "post_boot_quarantine"
-#define SENTINEL_REASON_NO_CLOCK        "clock_untrusted"
-#define SENTINEL_REASON_OVERSIZE        "request_too_large"
-#define SENTINEL_REASON_ZONE            "policy_zone_denied"
-#define SENTINEL_REASON_DURATION        "policy_duration_denied"
-#define SENTINEL_REASON_REVOCATION      "revocation_state_unavailable"
+#define SENTINEL_QUARANTINE_S 300
+#define SENTINEL_MAX_BUNDLE_BYTES 131072
+#define SENTINEL_TEXT_MAX 96
 
-typedef struct {
-    int      allow;
-    /* The SDK's identity_status (closed enum, SPEC §5.9) or one of our
-     * application reasons above. Assert on THIS, not on the detail text:
-     * `expired` and `revoked` do not prefix their error_reason with the
-     * status name, unlike every other failure. */
-    char     status[SENTINEL_REASON_MAX];
-    char     reason[SENTINEL_REASON_MAX];   /* SDK error_reason detail */
-    char     human_id[SENTINEL_ID_HEX_LEN + 1];
-    char     agent_id[SENTINEL_ID_HEX_LEN + 1];
-    int64_t  decided_at;
-    int      clock_trusted;
-    int      quarantine_override;           /* FR13: test builds only, always logged */
-    uint64_t actuator_token;                /* 0 unless allow; see actuator.h */
-} sentinel_decision;
-
-/* What the caller is asking for. Zone and duration are LOCAL POLICY inputs,
- * not Ratify constraints: the protocol has no activation-duration constraint,
- * and zone identity here is a device-local concept rather than a resource
- * profile. Keeping them in a separate struct keeps that boundary visible. */
-typedef struct {
-    const char *scope;
-    const char *zone;
-    int         duration_ms;
-    const char *resource_id;
-    const char *invocation_id;
-} sentinel_request;
+/* Application reasons, distinct from the SDK's error classes. */
+#define SENTINEL_REASON_QUARANTINE "post_boot_quarantine"
+#define SENTINEL_REASON_NO_CLOCK "clock_untrusted"
+#define SENTINEL_REASON_OVERSIZE "request_too_large"
+#define SENTINEL_REASON_RECOVERING "device_recovering"
+#define SENTINEL_REASON_ZONE "policy_zone_denied"
+#define SENTINEL_REASON_DURATION "policy_duration_denied"
+#define SENTINEL_REASON_REQUEST "request_invalid"
 
 typedef struct sentinel_ctx sentinel_ctx;
+struct RatifyV2Released;
 
-/* Load trust material from `trust_dir` and start the quarantine clock.
- * Requires `trust_dir/pinned_human_id` to hold 32 lowercase hex characters.
- * Returns 0 on success, -1 with a message on stderr otherwise. */
-int  sentinel_init(const char *trust_dir, sentinel_ctx **out);
+typedef struct {
+    int64_t serial;                      /* decision number in this process */
+    /* "device", "preflight", "replay", "evaluating", or "committed" */
+    char stage[16];
+    /* The Protocol class for preflight, replay, and evaluating outcomes,
+     * the release status for committed ones, or an application reason. */
+    char status[SENTINEL_TEXT_MAX];
+    char release[16];                    /* released, pending, withheld, rejected */
+    char decision[16];                   /* allow, deny, indeterminate (released only) */
+    char reason[SENTINEL_TEXT_MAX];      /* released decision reason */
+    char identity_status[SENTINEL_TEXT_MAX];
+    char local_policy[SENTINEL_TEXT_MAX];/* "" or a local policy denial */
+    char claim_id[80];
+    int64_t decided_at;
+    int clock_trusted;
+    int quarantine_override;
+    int actionable;                      /* released allow that passed local policy */
+    struct RatifyV2Released *released;   /* owned; freed by sentinel_decision_free */
+} sentinel_decision;
+
+typedef struct {
+    char challenge_b64[64];
+    char session_context_b64[64];
+    char verifier_id[RATIFY_V2_KEY_ID_BUF_LEN];
+    int64_t issued_at, expires_at;
+} sentinel_challenge;
+
+/* Initialize a new receiver: create the state directory, record key roles,
+ * configure the root's status key, stage the signed status list from the
+ * trust directory, and provision the checkpoint with the genesis digest. */
+int  sentinel_initialize(const char *state_dir, const char *trust_dir, const char *checkpoint_socket);
+
+/* Open an initialized receiver. A state that does not match the checkpoint
+ * opens in the recovering state; every request is then refused. */
+int  sentinel_open(const char *state_dir, const char *trust_dir, const char *checkpoint_socket, sentinel_ctx **out);
 void sentinel_free(sentinel_ctx *ctx);
 
-/* Issue a fresh single-use challenge bound to the request operation context.
- * Both hex outputs must hold SENTINEL_CHALLENGE_HEX + 1 bytes. Returns 0 on
- * success. */
-int  sentinel_issue_challenge(sentinel_ctx *ctx, const sentinel_request *req,
-                              char *out_hex, char *out_context_hex,
-                              int64_t *out_expires_at);
+/* Issue a challenge bound to the action's session context. */
+int  sentinel_issue_challenge(sentinel_ctx *ctx, const actx_action *action, sentinel_challenge *out,
+                              char reason[SENTINEL_TEXT_MAX]);
 
-/* Verify a presented bundle and decide. `bundle_json` must be NUL-terminated
- * and no longer than SENTINEL_MAX_BUNDLE_BYTES. Never returns allow without
- * having consumed a challenge this verifier issued. */
-void sentinel_decide(sentinel_ctx *ctx, const char *bundle_json,
-                     size_t bundle_len, const sentinel_request *req,
+/* Verify, publish, acknowledge, and release. Never actuates. */
+void sentinel_decide(sentinel_ctx *ctx, const char *bundle, size_t bundle_len, const actx_action *action,
                      sentinel_decision *out);
+void sentinel_decision_free(sentinel_decision *d);
 
-/* Seconds remaining in the post-boot quarantine; 0 once elapsed. */
-int64_t sentinel_quarantine_remaining(const sentinel_ctx *ctx);
+/* The release gate: 1 only when `d` is an actionable released allow and the
+ * authoritative clock reads before both sealed deadlines right now. On 1,
+ * `*token` is the actuator token. Call immediately before the write. */
+int  sentinel_release_gate(sentinel_ctx *ctx, const sentinel_decision *d, uint64_t *token);
 
-/* Exposed so the owning process can bind the actuator once at startup. */
+/* Apply a signed status object (kind 3 list or 5 push) to the anchored
+ * journal and make it available as evidence. */
+int  sentinel_stage_status(sentinel_ctx *ctx, int kind, const uint8_t *wire, size_t len, char reason[SENTINEL_TEXT_MAX]);
+
+int64_t  sentinel_quarantine_remaining(const sentinel_ctx *ctx);
 uint64_t sentinel_actuator_token(const sentinel_ctx *ctx);
+const char *sentinel_health(const sentinel_ctx *ctx);
 
 #endif /* SENTINEL_H */

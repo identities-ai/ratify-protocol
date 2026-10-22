@@ -25,8 +25,13 @@ use std::time::Duration;
 use ratify_protocol::v2::*;
 use ratify_protocol::HybridPublicKey;
 
-use super::marshal::{claim_from_json, claim_json, constraint_context_json, expected_challenge, expected_challenge_json, progress_from_json, progress_json, to_bytes};
-use super::{code_class, code_str, AbiResult, Failure, RatifyV2Code, RatifyV2PublicKey, RatifyV2Slice};
+use super::marshal::{
+    claim_from_json, claim_json, constraint_context_json, expected_challenge,
+    expected_challenge_json, progress_from_json, progress_json, to_bytes,
+};
+use super::{
+    code_class, code_str, AbiResult, Failure, RatifyV2Code, RatifyV2PublicKey, RatifyV2Slice,
+};
 
 /// Reads an authoritative clock (integer Unix seconds). A reading below the
 /// greatest reading already returned must fail with `RatifyV2ClockRegressed`.
@@ -104,8 +109,13 @@ pub struct RatifyV2InterruptedClaim {
 }
 
 /// Creates a claim atomically.
-pub type RatifyV2ClaimFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, claim: *const RatifyV2ClaimView, out: *mut RatifyV2ClaimResult) -> i32>;
+pub type RatifyV2ClaimFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        claim: *const RatifyV2ClaimView,
+        out: *mut RatifyV2ClaimResult,
+    ) -> i32,
+>;
 /// Commits a terminal result under the owner token and live lease, reading
 /// T_final inside the compare-and-set. `*committed` is 1 when it commits, 0
 /// for an identical repeat.
@@ -122,12 +132,22 @@ pub type RatifyV2FinalizeFn = Option<
 >;
 /// Persists an evaluation progress record under the owner token.
 pub type RatifyV2RecordProgressFn = Option<
-    unsafe extern "C" fn(user: *mut c_void, claim_id: *const c_char, owner_token: RatifyV2Slice, progress: RatifyV2Slice) -> i32,
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        claim_id: *const c_char,
+        owner_token: RatifyV2Slice,
+        progress: RatifyV2Slice,
+    ) -> i32,
 >;
 /// Loads an interrupted claim (fails with `RatifyV2ClaimLeaseLive` while the
 /// lease is live).
-pub type RatifyV2LoadInterruptedFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, claim_id: *const c_char, out: *mut RatifyV2InterruptedClaim) -> i32>;
+pub type RatifyV2LoadInterruptedFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        claim_id: *const c_char,
+        out: *mut RatifyV2InterruptedClaim,
+    ) -> i32,
+>;
 /// Commits only `indeterminate/evaluation_interrupted` after the lease
 /// expired. `*committed` as for finalize.
 pub type RatifyV2RecoverFn = Option<
@@ -207,11 +227,17 @@ pub struct RatifyV2ReleaseRecord {
     pub ack_timestamp: i64,
 }
 
-pub type RatifyV2LoadTerminalFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, claim_id: *const c_char, out: *mut RatifyV2TerminalClaim) -> i32>;
+pub type RatifyV2LoadTerminalFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        claim_id: *const c_char,
+        out: *mut RatifyV2TerminalClaim,
+    ) -> i32,
+>;
 /// Records a release; an identical repeat is 0, a different existing record
 /// is `RatifyV2StoreReleaseStateMismatch`.
-pub type RatifyV2RecordReleaseFn = Option<unsafe extern "C" fn(user: *mut c_void, record: *const RatifyV2ReleaseRecord) -> i32>;
+pub type RatifyV2RecordReleaseFn =
+    Option<unsafe extern "C" fn(user: *mut c_void, record: *const RatifyV2ReleaseRecord) -> i32>;
 
 /// The claim-store view release needs, with its authoritative clock.
 #[repr(C)]
@@ -245,7 +271,12 @@ pub type RatifyV2AcknowledgeFn = Option<
 /// Returns an acknowledgement, `RatifyV2StoreAcknowledgementNotFound`, or
 /// another code for unavailability.
 pub type RatifyV2GetAcknowledgementFn = Option<
-    unsafe extern "C" fn(user: *mut c_void, log_id: *const c_char, sequence: i64, out: *mut RatifyV2Acknowledgement) -> i32,
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        log_id: *const c_char,
+        sequence: i64,
+        out: *mut RatifyV2Acknowledgement,
+    ) -> i32,
 >;
 
 /// The caller-configured independent checkpoint (§7.8).
@@ -266,7 +297,8 @@ pub struct RatifyV2JournalSnapshot {
     pub digest: *const c_char,
 }
 
-pub type RatifyV2JournalLoadFn = Option<unsafe extern "C" fn(user: *mut c_void, out: *mut RatifyV2JournalSnapshot) -> i32>;
+pub type RatifyV2JournalLoadFn =
+    Option<unsafe extern "C" fn(user: *mut c_void, out: *mut RatifyV2JournalSnapshot) -> i32>;
 /// Atomically replaces the stored state with `next` only while the anchored
 /// head equals the expected head; otherwise `RatifyV2StoreJournalConflict`.
 pub type RatifyV2JournalCasFn = Option<
@@ -360,8 +392,13 @@ pub struct RatifyV2StatusBatch {
     pub count: usize,
 }
 
-pub type RatifyV2StatusFetchFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, request: *const RatifyV2StatusRequest, out: *mut RatifyV2StatusBatch) -> i32>;
+pub type RatifyV2StatusFetchFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        request: *const RatifyV2StatusRequest,
+        out: *mut RatifyV2StatusBatch,
+    ) -> i32,
+>;
 
 /// The status evidence provider: signed objects only, never a status result.
 #[repr(C)]
@@ -423,8 +460,13 @@ pub struct RatifyV2AudienceCallbacks {
 /// The application's pure pre-claim receiver-binding hook. `bundle` is the
 /// canonical proof bundle; `expected_challenge` is the ExpectedChallenge JSON.
 /// Return 0 to accept; anything else rejects (`receiver_binding_rejected`).
-pub type RatifyV2ReceiverBindingFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, bundle: RatifyV2Slice, expected_challenge: RatifyV2Slice) -> i32>;
+pub type RatifyV2ReceiverBindingFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        bundle: RatifyV2Slice,
+        expected_challenge: RatifyV2Slice,
+    ) -> i32,
+>;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -479,7 +521,8 @@ pub struct RatifyV2IssuanceStoreCallbacks {
 }
 
 /// Fills `len` bytes of `buf` with random bytes; non-zero fails.
-pub type RatifyV2RandomFn = Option<unsafe extern "C" fn(user: *mut c_void, buf: *mut u8, len: usize) -> i32>;
+pub type RatifyV2RandomFn =
+    Option<unsafe extern "C" fn(user: *mut c_void, buf: *mut u8, len: usize) -> i32>;
 
 /// An alternative random source for challenge issuance.
 #[repr(C)]
@@ -574,8 +617,13 @@ pub struct RatifyV2EvaluatorConfig {
 
 /// 1 when the evaluator call's deadline has passed (return now), else 0.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_evaluator_call_expired(call: *const RatifyV2EvaluatorCall) -> i32 {
-    crate::guard::ffi_guard(|| 1, || call.as_ref().map_or(1, |c| i32::from(c.ctx.is_done())))
+pub unsafe extern "C" fn ratify_v2_evaluator_call_expired(
+    call: *const RatifyV2EvaluatorCall,
+) -> i32 {
+    crate::guard::ffi_guard(
+        || 1,
+        || call.as_ref().map_or(1, |c| i32::from(c.ctx.is_done())),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -631,14 +679,21 @@ pub(crate) fn store_error(code: i32, cancel: &Cancel, what: &str) -> V2StoreErro
         c if c == RatifyV2StoreClaimProofConflict as i32 => V2StoreError::ClaimProofConflict,
         c if c == RatifyV2StoreRateLimitExceeded as i32 => V2StoreError::RateLimitExceeded,
         c if c == RatifyV2StoreReleaseStateMismatch as i32 => V2StoreError::ReleaseStateMismatch,
-        c if c == RatifyV2StoreAcknowledgementNotFound as i32 => V2StoreError::AcknowledgementNotFound,
+        c if c == RatifyV2StoreAcknowledgementNotFound as i32 => {
+            V2StoreError::AcknowledgementNotFound
+        }
         c if c == RatifyV2StoreIssuanceConflict as i32 => V2StoreError::ChallengeIssuanceConflict,
         c if c == RatifyV2StoreIssuanceNotFound as i32 => V2StoreError::ChallengeIssuanceNotFound,
         _ => V2StoreError::Unavailable(message),
     }
 }
 
-fn call_now(f: RatifyV2NowFn, user: *mut c_void, cancel: &Cancel, what: &str) -> Result<i64, V2StoreError> {
+fn call_now(
+    f: RatifyV2NowFn,
+    user: *mut c_void,
+    cancel: &Cancel,
+    what: &str,
+) -> Result<i64, V2StoreError> {
     let f = f.ok_or_else(|| missing(what))?;
     let mut now = 0i64;
     // SAFETY: caller-supplied callback and user pointer.
@@ -676,7 +731,12 @@ pub(crate) struct CClaimStore {
 unsafe impl Send for CClaimStore {}
 unsafe impl Sync for CClaimStore {}
 
-fn committed_result(code: i32, committed: i32, cancel: &Cancel, what: &str) -> Result<bool, V2StoreError> {
+fn committed_result(
+    code: i32,
+    committed: i32,
+    cancel: &Cancel,
+    what: &str,
+) -> Result<bool, V2StoreError> {
     if code != 0 {
         return Err(store_error(code, cancel, what));
     }
@@ -690,12 +750,23 @@ impl V2AuthoritativeClock for CClaimStore {
 }
 
 impl ClaimStoreV2 for CClaimStore {
-    fn claim_v2(&self, _ctx: &V2Context, claim: V2ChallengeClaim) -> Result<V2ClaimResult, V2StoreError> {
+    fn claim_v2(
+        &self,
+        _ctx: &V2Context,
+        claim: V2ChallengeClaim,
+    ) -> Result<V2ClaimResult, V2StoreError> {
         let f = self.cb.claim.ok_or_else(|| missing("claim"))?;
         let record = claim_json(&claim);
-        let (id, ns, agent) = (cs(&claim.claim_id), cs(&claim.namespace), cs(&claim.agent_id));
-        let rate_strings: Vec<(CString, CString)> =
-            claim.rate_batch.iter().map(|r| (cs(&r.issuer_id), cs(&r.cert_id))).collect();
+        let (id, ns, agent) = (
+            cs(&claim.claim_id),
+            cs(&claim.namespace),
+            cs(&claim.agent_id),
+        );
+        let rate_strings: Vec<(CString, CString)> = claim
+            .rate_batch
+            .iter()
+            .map(|r| (cs(&r.issuer_id), cs(&r.cert_id)))
+            .collect();
         let rate: Vec<RatifyV2RateReservation> = claim
             .rate_batch
             .iter()
@@ -721,7 +792,11 @@ impl ClaimStoreV2 for CClaimStore {
             stream_id: RatifyV2Slice::of(&stream_id),
             has_stream_seq: i32::from(claim.stream_seq.is_some()),
             stream_seq: claim.stream_seq.unwrap_or(0),
-            rate_batch: if rate.is_empty() { std::ptr::null() } else { rate.as_ptr() },
+            rate_batch: if rate.is_empty() {
+                std::ptr::null()
+            } else {
+                rate.as_ptr()
+            },
             rate_batch_len: rate.len(),
             record: RatifyV2Slice::of(&record),
         };
@@ -739,7 +814,11 @@ impl ClaimStoreV2 for CClaimStore {
             1 => V2ClaimDisposition::Created,
             2 => V2ClaimDisposition::InProgress,
             3 => V2ClaimDisposition::TerminalReplay,
-            other => return Err(V2StoreError::Unavailable(format!("claim callback returned disposition {other}"))),
+            other => {
+                return Err(V2StoreError::Unavailable(format!(
+                    "claim callback returned disposition {other}"
+                )))
+            }
         };
         Ok(V2ClaimResult {
             disposition,
@@ -783,19 +862,36 @@ impl ClaimStoreV2 for CClaimStore {
         owner_token: &[u8],
         progress: V2EvaluationProgress,
     ) -> Result<(), V2StoreError> {
-        let f = self.cb.record_progress.ok_or_else(|| missing("record_progress"))?;
+        let f = self
+            .cb
+            .record_progress
+            .ok_or_else(|| missing("record_progress"))?;
         let id = cs(claim_id);
         let record = progress_json(&progress);
         // SAFETY: caller-supplied callback.
-        let code = unsafe { f(self.cb.user, id.as_ptr(), RatifyV2Slice::of(owner_token), RatifyV2Slice::of(&record)) };
+        let code = unsafe {
+            f(
+                self.cb.user,
+                id.as_ptr(),
+                RatifyV2Slice::of(owner_token),
+                RatifyV2Slice::of(&record),
+            )
+        };
         if code != 0 {
             return Err(store_error(code, &self.cancel, "record_progress"));
         }
         Ok(())
     }
 
-    fn load_v2_interrupted_claim(&self, _ctx: &V2Context, claim_id: &str) -> Result<V2InterruptedClaim, V2StoreError> {
-        let f = self.cb.load_interrupted.ok_or_else(|| missing("load_interrupted"))?;
+    fn load_v2_interrupted_claim(
+        &self,
+        _ctx: &V2Context,
+        claim_id: &str,
+    ) -> Result<V2InterruptedClaim, V2StoreError> {
+        let f = self
+            .cb
+            .load_interrupted
+            .ok_or_else(|| missing("load_interrupted"))?;
         let id = cs(claim_id);
         let mut out = RatifyV2InterruptedClaim {
             record: RatifyV2Slice::empty(),
@@ -809,13 +905,15 @@ impl ClaimStoreV2 for CClaimStore {
         }
         // SAFETY: output pointers valid until copied.
         let (record, progress) = unsafe { (slice_vec(out.record), slice_vec(out.progress)) };
-        let claim = claim_from_json(&record)
-            .map_err(|f| V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message)))?;
+        let claim = claim_from_json(&record).map_err(|f| {
+            V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message))
+        })?;
         let progress = if progress.is_empty() {
             initial_v2_evaluation_progress()
         } else {
-            progress_from_json(&progress)
-                .map_err(|f| V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message)))?
+            progress_from_json(&progress).map_err(|f| {
+                V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message))
+            })?
         };
         Ok(V2InterruptedClaim {
             claim,
@@ -898,7 +996,10 @@ impl V2RateReservationStore for CRate {
     ) -> Result<(), V2StoreError> {
         let f = self.cb.reserve.ok_or_else(|| missing("reserve"))?;
         let (id, hash) = (cs(claim_id), cs(bundle_hash));
-        let strings: Vec<(CString, CString)> = batch.iter().map(|r| (cs(&r.issuer_id), cs(&r.cert_id))).collect();
+        let strings: Vec<(CString, CString)> = batch
+            .iter()
+            .map(|r| (cs(&r.issuer_id), cs(&r.cert_id)))
+            .collect();
         let items: Vec<RatifyV2RateReservation> = batch
             .iter()
             .zip(&strings)
@@ -916,7 +1017,11 @@ impl V2RateReservationStore for CRate {
                 id.as_ptr(),
                 RatifyV2Slice::of(owner_token),
                 hash.as_ptr(),
-                if items.is_empty() { std::ptr::null() } else { items.as_ptr() },
+                if items.is_empty() {
+                    std::ptr::null()
+                } else {
+                    items.as_ptr()
+                },
                 items.len(),
             )
         };
@@ -948,13 +1053,25 @@ unsafe impl Sync for CReleaseStore {}
 
 impl V2AuthoritativeClock for CReleaseStore {
     fn authoritative_time_v2(&self, _ctx: &V2Context) -> Result<i64, V2StoreError> {
-        call_now(self.cb.now, self.cb.user, &self.cancel, "release store clock")
+        call_now(
+            self.cb.now,
+            self.cb.user,
+            &self.cancel,
+            "release store clock",
+        )
     }
 }
 
 impl V2ReleaseClaimStore for CReleaseStore {
-    fn load_v2_terminal_claim(&self, _ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError> {
-        let f = self.cb.load_terminal.ok_or_else(|| missing("load_terminal"))?;
+    fn load_v2_terminal_claim(
+        &self,
+        _ctx: &V2Context,
+        claim_id: &str,
+    ) -> Result<V2TerminalClaimRecord, V2StoreError> {
+        let f = self
+            .cb
+            .load_terminal
+            .ok_or_else(|| missing("load_terminal"))?;
         let id = cs(claim_id);
         let mut out = RatifyV2TerminalClaim {
             terminal: 0,
@@ -991,8 +1108,15 @@ impl V2ReleaseClaimStore for CReleaseStore {
         }
     }
 
-    fn record_v2_release(&self, _ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError> {
-        let f = self.cb.record_release.ok_or_else(|| missing("record_release"))?;
+    fn record_v2_release(
+        &self,
+        _ctx: &V2Context,
+        record: V2ReleaseRecord,
+    ) -> Result<(), V2StoreError> {
+        let f = self
+            .cb
+            .record_release
+            .ok_or_else(|| missing("record_release"))?;
         let id = cs(&record.claim_id);
         let view = RatifyV2ReleaseRecord {
             claim_id: id.as_ptr(),
@@ -1096,7 +1220,10 @@ unsafe impl Sync for CJournal {}
 fn journal_error(code: i32, cancel: &Cancel, what: &str) -> V2Error {
     cancel.note(code);
     let message = format!("journal {what} callback returned {}", code_str(code));
-    V2Error::new(code_class(code).unwrap_or(V2ErrorClass::StatusObjectRejected), message)
+    V2Error::new(
+        code_class(code).unwrap_or(V2ErrorClass::StatusObjectRejected),
+        message,
+    )
 }
 
 impl SecurityJournalStoreV2 for CJournal {
@@ -1104,10 +1231,12 @@ impl SecurityJournalStoreV2 for CJournal {
     /// the snapshot's own digest; the reported head is returned unchanged, so
     /// the verifier's own head check applies exactly as for any store.
     fn load(&self, _ctx: &V2Context) -> V2Result<(SecurityJournalV2, SecurityJournalHeadV2)> {
-        let f = self
-            .cb
-            .load
-            .ok_or_else(|| V2Error::new(V2ErrorClass::StatusObjectRejected, "journal load callback is not set"))?;
+        let f = self.cb.load.ok_or_else(|| {
+            V2Error::new(
+                V2ErrorClass::StatusObjectRejected,
+                "journal load callback is not set",
+            )
+        })?;
         let mut out = RatifyV2JournalSnapshot {
             snapshot: RatifyV2Slice::empty(),
             generation: 0,
@@ -1154,11 +1283,24 @@ impl SecurityJournalStoreV2 for CJournal {
             digest: next_digest.as_ptr(),
         };
         // SAFETY: caller-supplied callback.
-        let code = unsafe { f(self.cb.user, expected.generation, expected_digest.as_ptr(), &view) };
+        let code = unsafe {
+            f(
+                self.cb.user,
+                expected.generation,
+                expected_digest.as_ptr(),
+                &view,
+            )
+        };
         match code {
             0 => Ok(()),
-            c if c == RatifyV2Code::RatifyV2StoreJournalConflict as i32 => Err(SecurityJournalStoreErrorV2::Conflict),
-            c => Err(SecurityJournalStoreErrorV2::Failed(journal_error(c, &self.cancel, "compare_and_swap"))),
+            c if c == RatifyV2Code::RatifyV2StoreJournalConflict as i32 => {
+                Err(SecurityJournalStoreErrorV2::Conflict)
+            }
+            c => Err(SecurityJournalStoreErrorV2::Failed(journal_error(
+                c,
+                &self.cancel,
+                "compare_and_swap",
+            ))),
         }
     }
 }
@@ -1192,13 +1334,18 @@ pub(crate) fn trust_provider(cb: RatifyV2TrustCallbacks, cancel: Cancel) -> V2Tr
     let cb = Raw(cb);
     Arc::new(move |_ctx: &V2Context, chain: &[DelegationCertV2]| {
         let cb = cb.get();
-        let f = cb.resolve.ok_or_else(|| V2ProviderError::new("trust resolve callback is not set"))?;
+        let f = cb
+            .resolve
+            .ok_or_else(|| V2ProviderError::new("trust resolve callback is not set"))?;
         let mut strings = Vec::new();
         let mut keys = Vec::new();
         let mut wires = Vec::new();
         for c in chain {
             strings.push((cs(&c.cert_id), cs(&c.issuer_id), cs(&c.subject_id)));
-            keys.push((key_struct(&c.issuer_pub_key), key_struct(&c.subject_pub_key)));
+            keys.push((
+                key_struct(&c.issuer_pub_key),
+                key_struct(&c.subject_pub_key),
+            ));
             wires.push(encode_delegation_cert_v2(c).unwrap_or_default());
         }
         let views: Vec<RatifyV2CertView> = (0..chain.len())
@@ -1217,22 +1364,37 @@ pub(crate) fn trust_provider(cb: RatifyV2TrustCallbacks, cancel: Cancel) -> V2Tr
             ml_dsa_65: Vec::new(),
         });
         // SAFETY: caller-supplied callback; views outlive the call.
-        let code = unsafe { f(cb.user, views.as_ptr(), views.len(), &mut outcome, &mut root) };
+        let code = unsafe {
+            f(
+                cb.user,
+                views.as_ptr(),
+                views.len(),
+                &mut outcome,
+                &mut root,
+            )
+        };
         if code != 0 {
             cancel.note(code);
-            return Err(V2ProviderError::new(format!("trust callback returned {}", code_str(code))));
+            return Err(V2ProviderError::new(format!(
+                "trust callback returned {}",
+                code_str(code)
+            )));
         }
         let outcome = match outcome {
             1 => V2TrustOutcome::Trusted,
             2 => V2TrustOutcome::Untrusted,
             3 => V2TrustOutcome::Unavailable,
             4 => V2TrustOutcome::Ambiguous,
-            other => return Err(V2ProviderError::new(format!("trust callback returned outcome {other}"))),
+            other => {
+                return Err(V2ProviderError::new(format!(
+                    "trust callback returned outcome {other}"
+                )))
+            }
         };
         Ok(V2TrustResolution {
             outcome,
             root_key: if outcome == V2TrustOutcome::Trusted {
-                root.to_hybrid()
+                root.as_hybrid()
             } else {
                 HybridPublicKey {
                     ed25519: Vec::new(),
@@ -1243,13 +1405,22 @@ pub(crate) fn trust_provider(cb: RatifyV2TrustCallbacks, cancel: Cancel) -> V2Tr
     })
 }
 
-pub(crate) fn status_provider(cb: RatifyV2StatusEvidenceCallbacks, cancel: Cancel) -> V2StatusEvidenceProvider {
+pub(crate) fn status_provider(
+    cb: RatifyV2StatusEvidenceCallbacks,
+    cancel: Cancel,
+) -> V2StatusEvidenceProvider {
     let cb = Raw(cb);
     Arc::new(move |_ctx: &V2Context, r: &V2StatusEvidenceRequest| {
         let cb = cb.get();
-        let f = cb.fetch.ok_or_else(|| V2StatusProviderError::new("status fetch callback is not set"))?;
+        let f = cb
+            .fetch
+            .ok_or_else(|| V2StatusProviderError::new("status fetch callback is not set"))?;
         let (issuer, key_id) = (cs(&r.issuer_id), cs(&r.status_key_id));
-        let ref_strings: Vec<(CString, CString)> = r.refs.iter().map(|x| (cs(&x.issuer_id), cs(&x.cert_id))).collect();
+        let ref_strings: Vec<(CString, CString)> = r
+            .refs
+            .iter()
+            .map(|x| (cs(&x.issuer_id), cs(&x.cert_id)))
+            .collect();
         let refs: Vec<RatifyV2CertRef> = ref_strings
             .iter()
             .map(|(i, c)| RatifyV2CertRef {
@@ -1261,7 +1432,11 @@ pub(crate) fn status_provider(cb: RatifyV2StatusEvidenceCallbacks, cancel: Cance
             issuer_id: issuer.as_ptr(),
             status_key_epoch: r.status_key_epoch,
             status_key_id: key_id.as_ptr(),
-            refs: if refs.is_empty() { std::ptr::null() } else { refs.as_ptr() },
+            refs: if refs.is_empty() {
+                std::ptr::null()
+            } else {
+                refs.as_ptr()
+            },
             refs_len: refs.len(),
         };
         let mut out = RatifyV2StatusBatch {
@@ -1272,12 +1447,17 @@ pub(crate) fn status_provider(cb: RatifyV2StatusEvidenceCallbacks, cancel: Cance
         let code = unsafe { f(cb.user, &req, &mut out) };
         if code != 0 {
             cancel.note(code);
-            return Err(V2StatusProviderError::new(format!("status callback returned {}", code_str(code))));
+            return Err(V2StatusProviderError::new(format!(
+                "status callback returned {}",
+                code_str(code)
+            )));
         }
         let mut objects = Vec::new();
         if out.count > 0 {
             if out.objects.is_null() {
-                return Err(V2StatusProviderError::new("status callback returned a NULL batch"));
+                return Err(V2StatusProviderError::new(
+                    "status callback returned a NULL batch",
+                ));
             }
             // SAFETY: the callback reported `count` readable entries.
             for o in unsafe { std::slice::from_raw_parts(out.objects, out.count) } {
@@ -1292,82 +1472,114 @@ pub(crate) fn status_provider(cb: RatifyV2StatusEvidenceCallbacks, cancel: Cance
     })
 }
 
-pub(crate) fn audience_provider(cb: RatifyV2AudienceCallbacks, cancel: Cancel) -> V2AudienceProvider {
+pub(crate) fn audience_provider(
+    cb: RatifyV2AudienceCallbacks,
+    cancel: Cancel,
+) -> V2AudienceProvider {
     let cb = Raw(cb);
-    Arc::new(move |_ctx: &V2Context, deferred: &[V2DeferredConstraint], receiver_id: &str| {
-        let cb = cb.get();
-        let f = cb.lookup.ok_or_else(|| V2ProviderError::new("audience lookup callback is not set"))?;
-        let strings: Vec<(CString, CString, CString)> =
-            deferred.iter().map(|d| (cs(&d.issuer_id), cs(&d.cert_id), cs(&d.kind))).collect();
-        let views: Vec<RatifyV2DeferredConstraint> = deferred
-            .iter()
-            .zip(&strings)
-            .map(|(d, (i, c, k))| RatifyV2DeferredConstraint {
-                delegation_index: d.delegation_index,
-                constraint_index: d.constraint_index,
-                issuer_id: i.as_ptr(),
-                cert_id: c.as_ptr(),
-                constraint_type: k.as_ptr(),
-                canonical_json: RatifyV2Slice::of(&d.canonical_json),
-            })
-            .collect();
-        let receiver = cs(receiver_id);
-        let mut out = RatifyV2AudienceResult {
-            memberships: std::ptr::null(),
-            count: 0,
-        };
-        // SAFETY: caller-supplied callback.
-        let code = unsafe { f(cb.user, views.as_ptr(), views.len(), receiver.as_ptr(), &mut out) };
-        if code != 0 {
-            cancel.note(code);
-            return Err(V2ProviderError::new(format!("audience callback returned {}", code_str(code))));
-        }
-        let mut memberships = Vec::new();
-        if out.count > 0 {
-            if out.memberships.is_null() {
-                return Err(V2ProviderError::new("audience callback returned NULL memberships"));
+    Arc::new(
+        move |_ctx: &V2Context, deferred: &[V2DeferredConstraint], receiver_id: &str| {
+            let cb = cb.get();
+            let f = cb
+                .lookup
+                .ok_or_else(|| V2ProviderError::new("audience lookup callback is not set"))?;
+            let strings: Vec<(CString, CString, CString)> = deferred
+                .iter()
+                .map(|d| (cs(&d.issuer_id), cs(&d.cert_id), cs(&d.kind)))
+                .collect();
+            let views: Vec<RatifyV2DeferredConstraint> = deferred
+                .iter()
+                .zip(&strings)
+                .map(|(d, (i, c, k))| RatifyV2DeferredConstraint {
+                    delegation_index: d.delegation_index,
+                    constraint_index: d.constraint_index,
+                    issuer_id: i.as_ptr(),
+                    cert_id: c.as_ptr(),
+                    constraint_type: k.as_ptr(),
+                    canonical_json: RatifyV2Slice::of(&d.canonical_json),
+                })
+                .collect();
+            let receiver = cs(receiver_id);
+            let mut out = RatifyV2AudienceResult {
+                memberships: std::ptr::null(),
+                count: 0,
+            };
+            // SAFETY: caller-supplied callback.
+            let code = unsafe {
+                f(
+                    cb.user,
+                    views.as_ptr(),
+                    views.len(),
+                    receiver.as_ptr(),
+                    &mut out,
+                )
+            };
+            if code != 0 {
+                cancel.note(code);
+                return Err(V2ProviderError::new(format!(
+                    "audience callback returned {}",
+                    code_str(code)
+                )));
             }
-            // SAFETY: the callback reported `count` readable entries.
-            for m in unsafe { std::slice::from_raw_parts(out.memberships, out.count) } {
-                let mut domains = Vec::new();
-                if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
-                    // SAFETY: as above.
-                    for d in unsafe { std::slice::from_raw_parts(m.trust_domain_ids, m.trust_domain_ids_len) } {
-                        // SAFETY: as above.
-                        domains.push(unsafe { owned(*d) });
-                    }
+            let mut memberships = Vec::new();
+            if out.count > 0 {
+                if out.memberships.is_null() {
+                    return Err(V2ProviderError::new(
+                        "audience callback returned NULL memberships",
+                    ));
                 }
-                memberships.push(V2AudienceMembership {
-                    delegation_index: m.delegation_index,
-                    constraint_index: m.constraint_index,
-                    // SAFETY: as above.
-                    receiver_id: unsafe { owned(m.receiver_id) },
-                    trust_domain_ids: domains,
-                    issued_at: m.issued_at,
-                    expires_at: m.expires_at,
-                    // SAFETY: as above.
-                    evidence_digest: unsafe { owned(m.evidence_digest) },
-                });
+                // SAFETY: the callback reported `count` readable entries.
+                for m in unsafe { std::slice::from_raw_parts(out.memberships, out.count) } {
+                    let mut domains = Vec::new();
+                    if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
+                        // SAFETY: as above.
+                        for d in unsafe {
+                            std::slice::from_raw_parts(m.trust_domain_ids, m.trust_domain_ids_len)
+                        } {
+                            // SAFETY: as above.
+                            domains.push(unsafe { owned(*d) });
+                        }
+                    }
+                    memberships.push(V2AudienceMembership {
+                        delegation_index: m.delegation_index,
+                        constraint_index: m.constraint_index,
+                        // SAFETY: as above.
+                        receiver_id: unsafe { owned(m.receiver_id) },
+                        trust_domain_ids: domains,
+                        issued_at: m.issued_at,
+                        expires_at: m.expires_at,
+                        // SAFETY: as above.
+                        evidence_digest: unsafe { owned(m.evidence_digest) },
+                    });
+                }
             }
-        }
-        Ok(memberships)
-    })
+            Ok(memberships)
+        },
+    )
 }
 
 pub(crate) fn receiver_binding_hook(cb: RatifyV2ReceiverBindingCallbacks) -> V2ReceiverBindingHook {
     let cb = Raw(cb);
-    Arc::new(move |bundle: &ProofBundleV2, expected: &ExpectedChallengeV2| {
-        let cb = cb.get();
-        let f = cb.check.ok_or_else(|| V2ProviderError::new("receiver binding callback is not set"))?;
-        let wire = encode_proof_bundle_v2(bundle).map_err(|e| V2ProviderError::new(e.message))?;
-        let exp = to_bytes(&expected_challenge_json(expected));
-        // SAFETY: caller-supplied callback.
-        let code = unsafe { f(cb.user, RatifyV2Slice::of(&wire), RatifyV2Slice::of(&exp)) };
-        if code != 0 {
-            return Err(V2ProviderError::new(format!("receiver binding callback returned {}", code_str(code))));
-        }
-        Ok(())
-    })
+    Arc::new(
+        move |bundle: &ProofBundleV2, expected: &ExpectedChallengeV2| {
+            let cb = cb.get();
+            let f = cb
+                .check
+                .ok_or_else(|| V2ProviderError::new("receiver binding callback is not set"))?;
+            let wire =
+                encode_proof_bundle_v2(bundle).map_err(|e| V2ProviderError::new(e.message))?;
+            let exp = to_bytes(&expected_challenge_json(expected));
+            // SAFETY: caller-supplied callback.
+            let code = unsafe { f(cb.user, RatifyV2Slice::of(&wire), RatifyV2Slice::of(&exp)) };
+            if code != 0 {
+                return Err(V2ProviderError::new(format!(
+                    "receiver binding callback returned {}",
+                    code_str(code)
+                )));
+            }
+            Ok(())
+        },
+    )
 }
 
 /// A C challenge issuance store.
@@ -1380,14 +1592,24 @@ unsafe impl Send for CIssuance {}
 unsafe impl Sync for CIssuance {}
 
 impl V2ChallengeIssuanceStore for CIssuance {
-    fn persist_v2_challenge(&self, _ctx: &V2Context, record: ExpectedChallengeV2) -> Result<(), V2StoreError> {
+    fn persist_v2_challenge(
+        &self,
+        _ctx: &V2Context,
+        record: ExpectedChallengeV2,
+    ) -> Result<(), V2StoreError> {
         let f = self.cb.persist.ok_or_else(|| missing("issuance persist"))?;
         let digest = challenge_claim_digest_v2(&record.value).map_err(V2StoreError::Classified)?;
         let ns = cs(&record.verifier_namespace);
         let json = to_bytes(&expected_challenge_json(&record));
         // SAFETY: caller-supplied callback.
         let code = unsafe {
-            f(self.cb.user, ns.as_ptr(), record.replay_epoch, RatifyV2Slice::of(&digest), RatifyV2Slice::of(&json))
+            f(
+                self.cb.user,
+                ns.as_ptr(),
+                record.replay_epoch,
+                RatifyV2Slice::of(&digest),
+                RatifyV2Slice::of(&json),
+            )
         };
         if code != 0 {
             return Err(store_error(code, &self.cancel, "issuance persist"));
@@ -1406,7 +1628,15 @@ impl V2ChallengeIssuanceStore for CIssuance {
         let ns = cs(namespace);
         let mut out = RatifyV2Slice::empty();
         // SAFETY: caller-supplied callback.
-        let code = unsafe { f(self.cb.user, ns.as_ptr(), replay_epoch, RatifyV2Slice::of(claim_digest), &mut out) };
+        let code = unsafe {
+            f(
+                self.cb.user,
+                ns.as_ptr(),
+                replay_epoch,
+                RatifyV2Slice::of(claim_digest),
+                &mut out,
+            )
+        };
         if code != 0 {
             return Err(store_error(code, &self.cancel, "issuance load"));
         }
@@ -1414,7 +1644,8 @@ impl V2ChallengeIssuanceStore for CIssuance {
         let data = unsafe { slice_vec(out) };
         let v: serde_json::Value = serde_json::from_slice(&data)
             .map_err(|e| V2StoreError::Unavailable(format!("issuance record is not JSON: {e}")))?;
-        expected_challenge(&v).map_err(|f| V2StoreError::Unavailable(format!("issuance record: {}", f.message)))
+        expected_challenge(&v)
+            .map_err(|f| V2StoreError::Unavailable(format!("issuance record: {}", f.message)))
     }
 }
 
@@ -1431,7 +1662,10 @@ impl Read for CRandom {
         // SAFETY: caller-supplied callback filling our buffer.
         let code = unsafe { f(self.0.user, buf.as_mut_ptr(), buf.len()) };
         if code != 0 {
-            return Err(std::io::Error::other(format!("random source returned {}", code_str(code))));
+            return Err(std::io::Error::other(format!(
+                "random source returned {}",
+                code_str(code)
+            )));
         }
         Ok(buf.len())
     }
@@ -1476,52 +1710,60 @@ impl Drop for Entered {
     }
 }
 
-fn custom_evaluator(reg: RatifyV2EvaluatorRegistration, inflight: Arc<InFlight>) -> ConstraintEvaluatorFnV2 {
+fn custom_evaluator(
+    reg: RatifyV2EvaluatorRegistration,
+    inflight: Arc<InFlight>,
+) -> ConstraintEvaluatorFnV2 {
     let reg = Raw(reg);
-    Arc::new(move |ctx: &V2Context, input: &ConstraintEvaluationInputV2| {
-        let _entered = Entered::new(&inflight);
-        let reg = reg.get();
-        let f = reg
-            .evaluate
-            .ok_or_else(|| ConstraintEvaluatorError("custom evaluator has no evaluate callback".into()))?;
-        let (kind, issuer, cert) = (cs(&input.kind), cs(&input.issuer_id), cs(&input.cert_id));
-        let context = to_bytes(&constraint_context_json(&input.context));
-        let params = input.params_json.clone().unwrap_or_default();
-        let view = RatifyV2EvaluationInput {
-            constraint_type: kind.as_ptr(),
-            has_params: i32::from(input.params_json.is_some()),
-            params_json: RatifyV2Slice::of(&params),
-            delegation_index: input.delegation_index,
-            constraint_index: input.constraint_index,
-            issuer_id: issuer.as_ptr(),
-            cert_id: cert.as_ptr(),
-            request_context_json: RatifyV2Slice::of(&context),
-            evaluation_time: input.evaluation_time,
-        };
-        let call = RatifyV2EvaluatorCall { ctx: ctx.clone() };
-        let mut out = RatifyV2EvaluationResult {
-            outcome: 0,
-            valid_until: 0,
-            detail: std::ptr::null(),
-        };
-        // SAFETY: caller-supplied callback; the ABI call waits for it.
-        let code = unsafe { f(reg.user, &call, &view, &mut out) };
-        if code != 0 {
-            return Err(ConstraintEvaluatorError(format!("evaluator returned {}", code_str(code))));
-        }
-        let outcome = match out.outcome {
-            1 => ConstraintOutcomeV2::Pass,
-            2 => ConstraintOutcomeV2::Denied,
-            3 => ConstraintOutcomeV2::Unverifiable,
-            _ => ConstraintOutcomeV2::Invalid,
-        };
-        Ok(ConstraintEvaluationResultV2 {
-            outcome,
-            valid_until: out.valid_until,
-            // SAFETY: output pointer valid until copied.
-            detail: unsafe { owned(out.detail) },
-        })
-    })
+    Arc::new(
+        move |ctx: &V2Context, input: &ConstraintEvaluationInputV2| {
+            let _entered = Entered::new(&inflight);
+            let reg = reg.get();
+            let f = reg.evaluate.ok_or_else(|| {
+                ConstraintEvaluatorError("custom evaluator has no evaluate callback".into())
+            })?;
+            let (kind, issuer, cert) = (cs(&input.kind), cs(&input.issuer_id), cs(&input.cert_id));
+            let context = to_bytes(&constraint_context_json(&input.context));
+            let params = input.params_json.clone().unwrap_or_default();
+            let view = RatifyV2EvaluationInput {
+                constraint_type: kind.as_ptr(),
+                has_params: i32::from(input.params_json.is_some()),
+                params_json: RatifyV2Slice::of(&params),
+                delegation_index: input.delegation_index,
+                constraint_index: input.constraint_index,
+                issuer_id: issuer.as_ptr(),
+                cert_id: cert.as_ptr(),
+                request_context_json: RatifyV2Slice::of(&context),
+                evaluation_time: input.evaluation_time,
+            };
+            let call = RatifyV2EvaluatorCall { ctx: ctx.clone() };
+            let mut out = RatifyV2EvaluationResult {
+                outcome: 0,
+                valid_until: 0,
+                detail: std::ptr::null(),
+            };
+            // SAFETY: caller-supplied callback; the ABI call waits for it.
+            let code = unsafe { f(reg.user, &call, &view, &mut out) };
+            if code != 0 {
+                return Err(ConstraintEvaluatorError(format!(
+                    "evaluator returned {}",
+                    code_str(code)
+                )));
+            }
+            let outcome = match out.outcome {
+                1 => ConstraintOutcomeV2::Pass,
+                2 => ConstraintOutcomeV2::Denied,
+                3 => ConstraintOutcomeV2::Unverifiable,
+                _ => ConstraintOutcomeV2::Invalid,
+            };
+            Ok(ConstraintEvaluationResultV2 {
+                outcome,
+                valid_until: out.valid_until,
+                // SAFETY: output pointer valid until copied.
+                detail: unsafe { owned(out.detail) },
+            })
+        },
+    )
 }
 
 /// Build the Rust registry for one call. A NULL config registers none.
@@ -1529,7 +1771,9 @@ pub(crate) unsafe fn evaluator_registry(
     config: *const RatifyV2EvaluatorConfig,
     inflight: &Arc<InFlight>,
 ) -> AbiResult<Option<ConstraintEvaluatorRegistryV2>> {
-    let Some(config) = config.as_ref() else { return Ok(None) };
+    let Some(config) = config.as_ref() else {
+        return Ok(None);
+    };
     let regs: &[RatifyV2EvaluatorRegistration] = if config.count == 0 {
         &[]
     } else if config.registrations.is_null() {
@@ -1547,12 +1791,22 @@ pub(crate) unsafe fn evaluator_registry(
             0 => custom_evaluator(*r, Arc::clone(inflight)),
             1 => standard_max_count_evaluator_v2().evaluate,
             2 => standard_allowed_values_evaluator_v2().evaluate,
-            other => return Err(super::bad_arg(format!("evaluator implementation {other} is not defined"))),
+            other => {
+                return Err(super::bad_arg(format!(
+                    "evaluator implementation {other} is not defined"
+                )))
+            }
         };
-        registrations.push(ConstraintEvaluatorRegistrationV2 { descriptor, evaluate });
+        registrations.push(ConstraintEvaluatorRegistrationV2 {
+            descriptor,
+            evaluate,
+        });
     }
-    let registry = ConstraintEvaluatorRegistryV2::new(Duration::from_millis(u64::from(config.timeout_ms)), registrations)
-        .map_err(Failure::from)?;
+    let registry = ConstraintEvaluatorRegistryV2::new(
+        Duration::from_millis(u64::from(config.timeout_ms)),
+        registrations,
+    )
+    .map_err(Failure::from)?;
     Ok(Some(registry))
 }
 
@@ -1562,9 +1816,14 @@ pub(crate) struct VerifyDeps {
 }
 
 /// Build the Rust callbacks from the C struct for one call.
-pub(crate) unsafe fn build_callbacks(cb: *const RatifyV2VerifyCallbacks, cancel: &Cancel) -> VerifyDeps {
+pub(crate) unsafe fn build_callbacks(
+    cb: *const RatifyV2VerifyCallbacks,
+    cancel: &Cancel,
+) -> VerifyDeps {
     let mut out = V2VerifyCallbacks::default();
-    let Some(cb) = cb.as_ref() else { return VerifyDeps { callbacks: out } };
+    let Some(cb) = cb.as_ref() else {
+        return VerifyDeps { callbacks: out };
+    };
     let claim = cb.claim_store.as_ref().map(|c| {
         Arc::new(CClaimStore {
             cb: *c,

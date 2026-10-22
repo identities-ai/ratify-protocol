@@ -182,6 +182,69 @@ enum RatifyV2Code
 typedef int32_t RatifyV2Code;
 #endif // __cplusplus
 
+// Claim dispositions.
+enum RatifyV2Disposition
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2DispositionNone = 0,
+    RatifyV2DispositionCreated = 1,
+    RatifyV2DispositionInProgress = 2,
+    RatifyV2DispositionTerminalReplay = 3,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2Disposition;
+#endif // __cplusplus
+
+// How a registered profile is implemented.
+enum RatifyV2EvaluatorImplementation
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    // `evaluate` is called.
+    RatifyV2EvaluatorCustom = 0,
+    // The built-in `com.ratifyprotocol.max_count/v1` implementation.
+    RatifyV2EvaluatorStandardMaxCount = 1,
+    // The built-in `com.ratifyprotocol.allowed_values/v1` implementation.
+    RatifyV2EvaluatorStandardAllowedValues = 2,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2EvaluatorImplementation;
+#endif // __cplusplus
+
+// Evaluator outcomes (`ConstraintOutcomeV2`).
+enum RatifyV2EvaluatorOutcome
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2OutcomePass = 1,
+    RatifyV2OutcomeDenied = 2,
+    RatifyV2OutcomeUnverifiable = 3,
+    RatifyV2OutcomeInvalid = 4,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2EvaluatorOutcome;
+#endif // __cplusplus
+
+// Log append results.
+enum RatifyV2LogResult
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2LogNone = 0,
+    // The next valid entry; persist the new head atomically.
+    RatifyV2LogAppended = 1,
+    // An exact accepted body at an accepted sequence; state unchanged.
+    RatifyV2LogReplay = 2,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2LogResult;
+#endif // __cplusplus
+
 // Object kinds used by `ratify_v2_verify_object`, `ratify_v2_object_*`, and
 // signing. Values 1..=8 are the SPEC-v2 signed object type codes
 // (`kind_object_type_codes` in `objects.json`); 0x0009 shares the rotation
@@ -209,6 +272,104 @@ enum RatifyV2ObjectKind
 };
 #ifndef __cplusplus
 typedef int32_t RatifyV2ObjectKind;
+#endif // __cplusplus
+
+// Publisher operations.
+enum RatifyV2PublishOp
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2PublishGenesis = 1,
+    RatifyV2PublishHeartbeat = 2,
+    RatifyV2PublishRevoke = 3,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2PublishOp;
+#endif // __cplusplus
+
+// Release outcome classes (§6.9).
+enum RatifyV2ReleaseStatus
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2ReleaseNone = 0,
+    RatifyV2ReleaseReleased = 1,
+    RatifyV2ReleasePending = 2,
+    RatifyV2ReleaseWithheld = 3,
+    RatifyV2ReleaseRejected = 4,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2ReleaseStatus;
+#endif // __cplusplus
+
+// Which string field `ratify_v2_released_string` returns.
+enum RatifyV2ReleasedField
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2ReleasedClaimId = 1,
+    // "allow", "deny", or "indeterminate". Never gate a side effect on it;
+    // use `ratify_v2_released_allowed`.
+    RatifyV2ReleasedDecision = 2,
+    RatifyV2ReleasedReason = 3,
+    RatifyV2ReleasedIdentityStatus = 4,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2ReleasedField;
+#endif // __cplusplus
+
+// How an external signer receives the ML-DSA-65 input.
+enum RatifyV2SignerMode
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    // The provider signs `message` (`M`) under `ml_dsa_context` (FIPS 204
+    // pure ML-DSA with a context string).
+    RatifyV2SignerDirect = 1,
+    // The provider signs the 64-byte `ml_dsa_mu` (external μ).
+    RatifyV2SignerExternalMu = 2,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2SignerMode;
+#endif // __cplusplus
+
+// Where a verification stopped (SPEC-v2 §2.7).
+enum RatifyV2Stage
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2StageNone = 0,
+    // A pre-claim failure; nothing was consumed.
+    RatifyV2StagePreflight = 1,
+    // The claim already existed; the result is not disclosed.
+    RatifyV2StageReplay = 2,
+    // The claim exists and nothing was committed.
+    RatifyV2StageEvaluating = 3,
+    // A terminal result was committed; it is NOT actionable.
+    RatifyV2StageCommitted = 4,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2Stage;
+#endif // __cplusplus
+
+// Trust provider outcomes (§6.1).
+enum RatifyV2TrustOutcome
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+    RatifyV2TrustTrusted = 1,
+    RatifyV2TrustUntrusted = 2,
+    RatifyV2TrustUnavailable = 3,
+    RatifyV2TrustAmbiguous = 4,
+};
+#ifndef __cplusplus
+typedef int32_t RatifyV2TrustOutcome;
 #endif // __cplusplus
 
 typedef struct RatifyAgent RatifyAgent;

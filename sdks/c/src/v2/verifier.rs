@@ -9,11 +9,14 @@ use std::sync::{Arc, Mutex};
 use ratify_protocol::v2::*;
 
 use super::callbacks::*;
-use super::marshal::{expected_challenge_json, issue_request, status_keys, status_policy, to_bytes, transaction_result_json, verify_request, Obj, claim_json};
+use super::marshal::{
+    claim_json, expected_challenge_json, issue_request, status_keys, status_policy, to_bytes,
+    transaction_result_json, verify_request, Obj,
+};
 use super::{
-    bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h, run_value,
-    set_success_note, write_buffer, write_opt_buffer, write_opt_val, write_string, write_val, AbiResult,
-    RatifyV2Buffer, RatifyV2PublicKey, RatifyV2Slice,
+    bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run,
+    run_h, run_value, set_success_note, write_buffer, write_opt_buffer, write_opt_val,
+    write_string, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey, RatifyV2Slice,
 };
 
 /// Where a verification stopped (SPEC-v2 §2.7).
@@ -65,7 +68,9 @@ fn disposition_code(d: Option<V2ClaimDisposition>) -> i32 {
         None => RatifyV2Disposition::RatifyV2DispositionNone,
         Some(V2ClaimDisposition::Created) => RatifyV2Disposition::RatifyV2DispositionCreated,
         Some(V2ClaimDisposition::InProgress) => RatifyV2Disposition::RatifyV2DispositionInProgress,
-        Some(V2ClaimDisposition::TerminalReplay) => RatifyV2Disposition::RatifyV2DispositionTerminalReplay,
+        Some(V2ClaimDisposition::TerminalReplay) => {
+            RatifyV2Disposition::RatifyV2DispositionTerminalReplay
+        }
     }) as i32
 }
 
@@ -193,7 +198,9 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
             crate::guard::clear_ptr(claim_id_out);
         },
         || {
-            let cb = claim_store.as_ref().ok_or_else(|| null_arg("claim_store"))?;
+            let cb = claim_store
+                .as_ref()
+                .ok_or_else(|| null_arg("claim_store"))?;
             let req = request(request_json, request_json_len)?;
             let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
             let pre = preflight_proof_bundle_v2(
@@ -212,8 +219,15 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
                 cb: *cb,
                 cancel: Cancel(cancel),
             };
-            let (claim, disposition, _token) =
-                claim_proof_bundle_v2(&ctx, &store, &b, &pre, &req.verifier_namespace, req.replay_epoch, req.now)?;
+            let (claim, disposition, _token) = claim_proof_bundle_v2(
+                &ctx,
+                &store,
+                &b,
+                &pre,
+                &req.verifier_namespace,
+                req.replay_epoch,
+                req.now,
+            )?;
             write_val(disposition_out, disposition_code(Some(disposition)))?;
             write_string(claim_id_out, &claim.claim_id)
         },
@@ -230,23 +244,29 @@ pub unsafe extern "C" fn ratify_v2_recover_interrupted_claim(
     claim_id: *const c_char,
     committed_out: *mut *mut RatifyV2Committed,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(committed_out), || {
-        let cb = claim_store.as_ref().ok_or_else(|| null_arg("claim_store"))?;
-        if committed_out.is_null() {
-            return Err(null_arg("committed_out"));
-        }
-        let (ctx, cancel) = V2Context::background().with_cancel();
-        let store = CClaimStore {
-            cb: *cb,
-            cancel: Cancel(cancel),
-        };
-        let c = recover_interrupted_claim_v2(&ctx, &store, cstr(claim_id, "claim_id")?)?;
-        *committed_out = Box::into_raw(Box::new(RatifyV2Committed {
-            poisoned: AtomicBool::new(false),
-            inner: c,
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(committed_out),
+        || {
+            let cb = claim_store
+                .as_ref()
+                .ok_or_else(|| null_arg("claim_store"))?;
+            if committed_out.is_null() {
+                return Err(null_arg("committed_out"));
+            }
+            let (ctx, cancel) = V2Context::background().with_cancel();
+            let store = CClaimStore {
+                cb: *cb,
+                cancel: Cancel(cancel),
+            };
+            let c = recover_interrupted_claim_v2(&ctx, &store, cstr(claim_id, "claim_id")?)?;
+            *committed_out = Box::into_raw(Box::new(RatifyV2Committed {
+                poisoned: AtomicBool::new(false),
+                inner: c,
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// Release a committed outcome. NULL is a no-op.
@@ -264,19 +284,31 @@ pub unsafe extern "C" fn ratify_v2_committed_free(c: *mut RatifyV2Committed) {
 
 /// The claim ID of a committed outcome (free with `ratify_v2_string_free`).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_committed_claim_id(c: *const RatifyV2Committed, out: *mut *mut c_char) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(c)], || crate::guard::clear_ptr(out), || {
-        write_string(out, &handle(c, "committed")?.inner.claim_id())
-    })
+pub unsafe extern "C" fn ratify_v2_committed_claim_id(
+    c: *const RatifyV2Committed,
+    out: *mut *mut c_char,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(c)],
+        || crate::guard::clear_ptr(out),
+        || write_string(out, &handle(c, "committed")?.inner.claim_id()),
+    )
 }
 
 /// A copy of the sealed receipt outbox body. It is evidence for publication,
 /// not an authorization.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_committed_receipt_body(c: *const RatifyV2Committed, out: *mut RatifyV2Buffer) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(c)], || clear_buffer(out), || {
-        write_buffer(out, handle(c, "committed")?.inner.receipt_body())
-    })
+pub unsafe extern "C" fn ratify_v2_committed_receipt_body(
+    c: *const RatifyV2Committed,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(c)],
+        || clear_buffer(out),
+        || write_buffer(out, handle(c, "committed")?.inner.receipt_body()),
+    )
 }
 
 /// `ReceiptOutboxDigest` of the committed body (free with
@@ -286,17 +318,26 @@ pub unsafe extern "C" fn ratify_v2_committed_receipt_body_digest(
     c: *const RatifyV2Committed,
     out: *mut *mut c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(c)], || crate::guard::clear_ptr(out), || {
-        write_string(out, &handle(c, "committed")?.inner.receipt_body_digest())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(c)],
+        || crate::guard::clear_ptr(out),
+        || write_string(out, &handle(c, "committed")?.inner.receipt_body_digest()),
+    )
 }
 
 /// The sealed exclusive challenge deadline.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_committed_challenge_expires_at(c: *const RatifyV2Committed, out: *mut i64) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(c)], || crate::guard::clear_val(out), || {
-        write_val(out, handle(c, "committed")?.inner.challenge_expires_at())
-    })
+pub unsafe extern "C" fn ratify_v2_committed_challenge_expires_at(
+    c: *const RatifyV2Committed,
+    out: *mut i64,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(c)],
+        || crate::guard::clear_val(out),
+        || write_val(out, handle(c, "committed")?.inner.challenge_expires_at()),
+    )
 }
 
 /// The sealed exclusive allow horizon: `*has_horizon` is 1 only for an
@@ -362,9 +403,14 @@ pub unsafe extern "C" fn ratify_v2_release_decision(
         },
         || {
             let c = handle(committed, "committed")?;
-            let key = verifier_key.as_ref().ok_or_else(|| null_arg("verifier_key"))?.to_hybrid();
+            let key = verifier_key
+                .as_ref()
+                .ok_or_else(|| null_arg("verifier_key"))?
+                .as_hybrid();
             let log = cstr(log_id, "log_id")?;
-            let store_cb = release_store.as_ref().ok_or_else(|| null_arg("release_store"))?;
+            let store_cb = release_store
+                .as_ref()
+                .ok_or_else(|| null_arg("release_store"))?;
             let checkpoint_cb = checkpoint.as_ref().ok_or_else(|| null_arg("checkpoint"))?;
             if status_out.is_null() || reason_out.is_null() || released_out.is_null() {
                 return Err(null_arg("release outputs"));
@@ -466,34 +512,57 @@ pub unsafe extern "C" fn ratify_v2_released_string(
     field: i32,
     out: *mut *mut c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d)], || crate::guard::clear_ptr(out), || {
-        let d = &handle(d, "released")?.inner;
-        let value = match field {
-            1 => d.claim_id(),
-            2 => d.decision(),
-            3 => d.reason(),
-            4 => d.identity_status(),
-            other => return Err(super::bad_arg(format!("released field {other} is not defined"))),
-        };
-        write_string(out, &value)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d)],
+        || crate::guard::clear_ptr(out),
+        || {
+            let d = &handle(d, "released")?.inner;
+            let value = match field {
+                1 => d.claim_id(),
+                2 => d.decision(),
+                3 => d.reason(),
+                4 => d.identity_status(),
+                other => {
+                    return Err(super::bad_arg(format!(
+                        "released field {other} is not defined"
+                    )))
+                }
+            };
+            write_string(out, &value)
+        },
+    )
 }
 
 /// A copy of the released granted scope as a JSON array of strings.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_released_granted_scope(d: *const RatifyV2Released, out: *mut RatifyV2Buffer) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d)], || clear_buffer(out), || {
-        let scope = handle(d, "released")?.inner.granted_scope();
-        write_buffer(out, to_bytes(&serde_json::Value::from(scope)))
-    })
+pub unsafe extern "C" fn ratify_v2_released_granted_scope(
+    d: *const RatifyV2Released,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d)],
+        || clear_buffer(out),
+        || {
+            let scope = handle(d, "released")?.inner.granted_scope();
+            write_buffer(out, to_bytes(&serde_json::Value::from(scope)))
+        },
+    )
 }
 
 /// A copy of the signed receipt wire verified during release.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_released_receipt(d: *const RatifyV2Released, out: *mut RatifyV2Buffer) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d)], || clear_buffer(out), || {
-        write_buffer(out, handle(d, "released")?.inner.receipt_wire())
-    })
+pub unsafe extern "C" fn ratify_v2_released_receipt(
+    d: *const RatifyV2Released,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d)],
+        || clear_buffer(out),
+        || write_buffer(out, handle(d, "released")?.inner.receipt_wire()),
+    )
 }
 
 /// The release time, the sealed challenge deadline, and the sealed allow
@@ -566,23 +635,31 @@ pub unsafe extern "C" fn ratify_v2_issue_challenge(
     random: *const RatifyV2RandomCallbacks,
     expected_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(expected_out), || {
-        let req = issue_request(&json_bytes(request_json, request_json_len, "request_json")?)?;
-        let clock = clock.as_ref().ok_or_else(|| null_arg("clock"))?;
-        let store = issuance_store.as_ref().ok_or_else(|| null_arg("issuance_store"))?;
-        let (ctx, cancel) = V2Context::background().with_cancel();
-        let cancel = Cancel(cancel);
-        let issuer = V2ChallengeIssuer {
-            clock: Arc::new(CClock {
-                cb: *clock,
-                cancel: cancel.clone(),
-            }),
-            store: Arc::new(CIssuance { cb: *store, cancel }),
-            random: random.as_ref().map(|r| Arc::new(Mutex::new(CRandom(*r))) as V2RandomSource),
-        };
-        let expected = issuer.issue_challenge_v2(&ctx, &req)?;
-        write_buffer(expected_out, to_bytes(&expected_challenge_json(&expected)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(expected_out),
+        || {
+            let req = issue_request(&json_bytes(request_json, request_json_len, "request_json")?)?;
+            let clock = clock.as_ref().ok_or_else(|| null_arg("clock"))?;
+            let store = issuance_store
+                .as_ref()
+                .ok_or_else(|| null_arg("issuance_store"))?;
+            let (ctx, cancel) = V2Context::background().with_cancel();
+            let cancel = Cancel(cancel);
+            let issuer = V2ChallengeIssuer {
+                clock: Arc::new(CClock {
+                    cb: *clock,
+                    cancel: cancel.clone(),
+                }),
+                store: Arc::new(CIssuance { cb: *store, cancel }),
+                random: random
+                    .as_ref()
+                    .map(|r| Arc::new(Mutex::new(CRandom(*r))) as V2RandomSource),
+            };
+            let expected = issuer.issue_challenge_v2(&ctx, &req)?;
+            write_buffer(expected_out, to_bytes(&expected_challenge_json(&expected)))
+        },
+    )
 }
 
 /// Load the authenticated ExpectedChallenge for a presented 32-byte
@@ -596,22 +673,28 @@ pub unsafe extern "C" fn ratify_v2_load_expected_challenge(
     challenge_len: usize,
     expected_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(expected_out), || {
-        let store = issuance_store.as_ref().ok_or_else(|| null_arg("issuance_store"))?;
-        let (ctx, cancel) = V2Context::background().with_cancel();
-        let store = CIssuance {
-            cb: *store,
-            cancel: Cancel(cancel),
-        };
-        let expected = load_expected_challenge_v2(
-            &ctx,
-            &store,
-            cstr(verifier_namespace, "verifier_namespace")?,
-            replay_epoch,
-            bytes(challenge, challenge_len, "challenge")?,
-        )?;
-        write_buffer(expected_out, to_bytes(&expected_challenge_json(&expected)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(expected_out),
+        || {
+            let store = issuance_store
+                .as_ref()
+                .ok_or_else(|| null_arg("issuance_store"))?;
+            let (ctx, cancel) = V2Context::background().with_cancel();
+            let store = CIssuance {
+                cb: *store,
+                cancel: Cancel(cancel),
+            };
+            let expected = load_expected_challenge_v2(
+                &ctx,
+                &store,
+                cstr(verifier_namespace, "verifier_namespace")?,
+                replay_epoch,
+                bytes(challenge, challenge_len, "challenge")?,
+            )?;
+            write_buffer(expected_out, to_bytes(&expected_challenge_json(&expected)))
+        },
+    )
 }
 
 /// Composed transaction-receipt verification (SPEC-v2 §5.7). `config_json`
@@ -636,35 +719,41 @@ pub unsafe extern "C" fn ratify_v2_verify_transaction_receipt(
     status_journal: *const RatifyV2JournalStoreCallbacks,
     result_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(result_out), || {
-        let config = json_bytes(config_json, config_json_len, "config_json")?;
-        let o = Obj::new(&config, "config", &["status_keys", "status_policy"])?;
-        let (ctx, cancel) = V2Context::background().with_cancel();
-        let cancel = Cancel(cancel);
-        let sources = TransactionVerifySourcesV2 {
-            trust: trust.as_ref().map(|t| trust_provider(*t, cancel.clone())),
-            status_evidence: status_evidence.as_ref().map(|s| status_provider(*s, cancel.clone())),
-            status_journal: status_journal.as_ref().map(|j| {
-                Arc::new(CJournal {
-                    cb: *j,
-                    cancel: cancel.clone(),
-                }) as Arc<dyn SecurityJournalStoreV2>
-            }),
-            status_keys: status_keys(o.raw("status_keys"))?,
-            status_policy: match o.raw("status_policy") {
-                Some(p) => status_policy(p)?,
-                None => RevocationStatusPolicyV2::default(),
-            },
-        };
-        let result = verify_transaction_receipt_v2(
-            &ctx,
-            &TransactionVerifyRequestV2 {
-                receipt: bytes(receipt, receipt_len, "receipt")?.to_vec(),
-                now,
-                future_skew_seconds,
-            },
-            &sources,
-        )?;
-        write_buffer(result_out, to_bytes(&transaction_result_json(&result)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(result_out),
+        || {
+            let config = json_bytes(config_json, config_json_len, "config_json")?;
+            let o = Obj::new(&config, "config", &["status_keys", "status_policy"])?;
+            let (ctx, cancel) = V2Context::background().with_cancel();
+            let cancel = Cancel(cancel);
+            let sources = TransactionVerifySourcesV2 {
+                trust: trust.as_ref().map(|t| trust_provider(*t, cancel.clone())),
+                status_evidence: status_evidence
+                    .as_ref()
+                    .map(|s| status_provider(*s, cancel.clone())),
+                status_journal: status_journal.as_ref().map(|j| {
+                    Arc::new(CJournal {
+                        cb: *j,
+                        cancel: cancel.clone(),
+                    }) as Arc<dyn SecurityJournalStoreV2>
+                }),
+                status_keys: status_keys(o.raw("status_keys"))?,
+                status_policy: match o.raw("status_policy") {
+                    Some(p) => status_policy(p)?,
+                    None => RevocationStatusPolicyV2::default(),
+                },
+            };
+            let result = verify_transaction_receipt_v2(
+                &ctx,
+                &TransactionVerifyRequestV2 {
+                    receipt: bytes(receipt, receipt_len, "receipt")?.to_vec(),
+                    now,
+                    future_skew_seconds,
+                },
+                &sources,
+            )?;
+            write_buffer(result_out, to_bytes(&transaction_result_json(&result)))
+        },
+    )
 }

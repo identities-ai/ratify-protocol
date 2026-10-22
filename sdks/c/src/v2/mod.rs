@@ -219,50 +219,194 @@ pub(crate) const CLASS_TABLE: &[(V2ErrorClass, RatifyV2Code, &CStr)] = {
     use V2ErrorClass::*;
     &[
         (Malformed, RatifyV2Malformed, c"malformed"),
-        (UnsupportedObjectType, RatifyV2UnsupportedObjectType, c"unsupported_object_type"),
+        (
+            UnsupportedObjectType,
+            RatifyV2UnsupportedObjectType,
+            c"unsupported_object_type",
+        ),
         (KeyIdMismatch, RatifyV2KeyIdMismatch, c"key_id_mismatch"),
-        (DelegationDigestMismatch, RatifyV2DelegationDigestMismatch, c"delegation_digest_mismatch"),
-        (ChainLinkageMismatch, RatifyV2ChainLinkageMismatch, c"chain_linkage_mismatch"),
-        (DuplicateCertificateRef, RatifyV2DuplicateCertificateRef, c"duplicate_certificate_ref"),
-        (InvalidSignature, RatifyV2InvalidSignature, c"invalid_signature"),
-        (InvalidRequiredScope, RatifyV2InvalidRequiredScope, c"invalid_required_scope"),
-        (ConfigurationInvalid, RatifyV2ConfigurationInvalid, c"configuration_invalid"),
-        (ExpectedChallengeUnavailable, RatifyV2ExpectedChallengeUnavailable, c"expected_challenge_unavailable"),
-        (NamespaceMismatch, RatifyV2NamespaceMismatch, c"namespace_mismatch"),
-        (StaleReplayEpoch, RatifyV2StaleReplayEpoch, c"stale_replay_epoch"),
-        (VerifierIdMismatch, RatifyV2VerifierIdMismatch, c"verifier_id_mismatch"),
-        (ChallengeMismatch, RatifyV2ChallengeMismatch, c"challenge_mismatch"),
-        (ChallengeNotFresh, RatifyV2ChallengeNotFresh, c"challenge_not_fresh"),
-        (ExpectedAgentMismatch, RatifyV2ExpectedAgentMismatch, c"expected_agent_mismatch"),
-        (SessionContextMismatch, RatifyV2SessionContextMismatch, c"session_context_mismatch"),
-        (ReceiverAudienceRequired, RatifyV2ReceiverAudienceRequired, c"receiver_audience_required"),
-        (ReceiverAudienceMismatch, RatifyV2ReceiverAudienceMismatch, c"receiver_audience_mismatch"),
-        (ReceiverBindingRejected, RatifyV2ReceiverBindingRejected, c"receiver_binding_rejected"),
+        (
+            DelegationDigestMismatch,
+            RatifyV2DelegationDigestMismatch,
+            c"delegation_digest_mismatch",
+        ),
+        (
+            ChainLinkageMismatch,
+            RatifyV2ChainLinkageMismatch,
+            c"chain_linkage_mismatch",
+        ),
+        (
+            DuplicateCertificateRef,
+            RatifyV2DuplicateCertificateRef,
+            c"duplicate_certificate_ref",
+        ),
+        (
+            InvalidSignature,
+            RatifyV2InvalidSignature,
+            c"invalid_signature",
+        ),
+        (
+            InvalidRequiredScope,
+            RatifyV2InvalidRequiredScope,
+            c"invalid_required_scope",
+        ),
+        (
+            ConfigurationInvalid,
+            RatifyV2ConfigurationInvalid,
+            c"configuration_invalid",
+        ),
+        (
+            ExpectedChallengeUnavailable,
+            RatifyV2ExpectedChallengeUnavailable,
+            c"expected_challenge_unavailable",
+        ),
+        (
+            NamespaceMismatch,
+            RatifyV2NamespaceMismatch,
+            c"namespace_mismatch",
+        ),
+        (
+            StaleReplayEpoch,
+            RatifyV2StaleReplayEpoch,
+            c"stale_replay_epoch",
+        ),
+        (
+            VerifierIdMismatch,
+            RatifyV2VerifierIdMismatch,
+            c"verifier_id_mismatch",
+        ),
+        (
+            ChallengeMismatch,
+            RatifyV2ChallengeMismatch,
+            c"challenge_mismatch",
+        ),
+        (
+            ChallengeNotFresh,
+            RatifyV2ChallengeNotFresh,
+            c"challenge_not_fresh",
+        ),
+        (
+            ExpectedAgentMismatch,
+            RatifyV2ExpectedAgentMismatch,
+            c"expected_agent_mismatch",
+        ),
+        (
+            SessionContextMismatch,
+            RatifyV2SessionContextMismatch,
+            c"session_context_mismatch",
+        ),
+        (
+            ReceiverAudienceRequired,
+            RatifyV2ReceiverAudienceRequired,
+            c"receiver_audience_required",
+        ),
+        (
+            ReceiverAudienceMismatch,
+            RatifyV2ReceiverAudienceMismatch,
+            c"receiver_audience_mismatch",
+        ),
+        (
+            ReceiverBindingRejected,
+            RatifyV2ReceiverBindingRejected,
+            c"receiver_binding_rejected",
+        ),
         (ClaimReplay, RatifyV2ClaimReplay, c"claim_replay"),
-        (StreamSequenceMismatch, RatifyV2StreamSequenceMismatch, c"stream_sequence_mismatch"),
-        (ClaimStoreUnavailable, RatifyV2ClaimStoreUnavailable, c"claim_store_unavailable"),
-        (ReceiptAbandoned, RatifyV2ReceiptAbandoned, c"receipt_abandoned"),
-        (EvaluationCancelled, RatifyV2EvaluationCancelled, c"evaluation_cancelled"),
+        (
+            StreamSequenceMismatch,
+            RatifyV2StreamSequenceMismatch,
+            c"stream_sequence_mismatch",
+        ),
+        (
+            ClaimStoreUnavailable,
+            RatifyV2ClaimStoreUnavailable,
+            c"claim_store_unavailable",
+        ),
+        (
+            ReceiptAbandoned,
+            RatifyV2ReceiptAbandoned,
+            c"receipt_abandoned",
+        ),
+        (
+            EvaluationCancelled,
+            RatifyV2EvaluationCancelled,
+            c"evaluation_cancelled",
+        ),
         (ClockRegressed, RatifyV2ClockRegressed, c"clock_regressed"),
-        (AllowHorizonPassed, RatifyV2AllowHorizonPassed, c"allow_horizon_passed"),
+        (
+            AllowHorizonPassed,
+            RatifyV2AllowHorizonPassed,
+            c"allow_horizon_passed",
+        ),
         (ClaimLeaseLive, RatifyV2ClaimLeaseLive, c"claim_lease_live"),
         (ClaimLeaseLost, RatifyV2ClaimLeaseLost, c"claim_lease_lost"),
-        (ClaimAlreadyTerminal, RatifyV2ClaimAlreadyTerminal, c"claim_already_terminal"),
+        (
+            ClaimAlreadyTerminal,
+            RatifyV2ClaimAlreadyTerminal,
+            c"claim_already_terminal",
+        ),
         (ClaimNotFound, RatifyV2ClaimNotFound, c"claim_not_found"),
-        (StatusKeyBindingMismatch, RatifyV2StatusKeyBindingMismatch, c"status_key_binding_mismatch"),
-        (StatusObjectRejected, RatifyV2StatusObjectRejected, c"status_object_rejected"),
-        (ReceiptBundleMismatch, RatifyV2ReceiptBundleMismatch, c"receipt_bundle_mismatch"),
-        (BundleHashMismatch, RatifyV2BundleHashMismatch, c"bundle_hash_mismatch"),
-        (TransactionPartyMismatch, RatifyV2TransactionPartyMismatch, c"transaction_party_mismatch"),
-        (TransactionContextMismatch, RatifyV2TransactionContextMismatch, c"transaction_context_mismatch"),
-        (TransactionSignatureSetInvalid, RatifyV2TransactionSignatureSetInvalid, c"transaction_signature_set_invalid"),
-        (RotationStateMismatch, RatifyV2RotationStateMismatch, c"rotation_state_mismatch"),
-        (RotationKeyReused, RatifyV2RotationKeyReused, c"rotation_key_reused"),
-        (RotationFutureDated, RatifyV2RotationFutureDated, c"rotation_future_dated"),
+        (
+            StatusKeyBindingMismatch,
+            RatifyV2StatusKeyBindingMismatch,
+            c"status_key_binding_mismatch",
+        ),
+        (
+            StatusObjectRejected,
+            RatifyV2StatusObjectRejected,
+            c"status_object_rejected",
+        ),
+        (
+            ReceiptBundleMismatch,
+            RatifyV2ReceiptBundleMismatch,
+            c"receipt_bundle_mismatch",
+        ),
+        (
+            BundleHashMismatch,
+            RatifyV2BundleHashMismatch,
+            c"bundle_hash_mismatch",
+        ),
+        (
+            TransactionPartyMismatch,
+            RatifyV2TransactionPartyMismatch,
+            c"transaction_party_mismatch",
+        ),
+        (
+            TransactionContextMismatch,
+            RatifyV2TransactionContextMismatch,
+            c"transaction_context_mismatch",
+        ),
+        (
+            TransactionSignatureSetInvalid,
+            RatifyV2TransactionSignatureSetInvalid,
+            c"transaction_signature_set_invalid",
+        ),
+        (
+            RotationStateMismatch,
+            RatifyV2RotationStateMismatch,
+            c"rotation_state_mismatch",
+        ),
+        (
+            RotationKeyReused,
+            RatifyV2RotationKeyReused,
+            c"rotation_key_reused",
+        ),
+        (
+            RotationFutureDated,
+            RatifyV2RotationFutureDated,
+            c"rotation_future_dated",
+        ),
         (RotationFork, RatifyV2RotationFork, c"rotation_fork"),
         (RotationFrozen, RatifyV2RotationFrozen, c"rotation_frozen"),
-        (RotationRecoveryInvalid, RatifyV2RotationRecoveryInvalid, c"rotation_recovery_invalid"),
-        (LogStateMismatch, RatifyV2LogStateMismatch, c"log_state_mismatch"),
+        (
+            RotationRecoveryInvalid,
+            RatifyV2RotationRecoveryInvalid,
+            c"rotation_recovery_invalid",
+        ),
+        (
+            LogStateMismatch,
+            RatifyV2LogStateMismatch,
+            c"log_state_mismatch",
+        ),
         (LogGap, RatifyV2LogGap, c"log_gap"),
         (LogOrphan, RatifyV2LogOrphan, c"log_orphan"),
         (LogFork, RatifyV2LogFork, c"log_fork"),
@@ -282,9 +426,18 @@ const OTHER_CODES: &[(RatifyV2Code, &CStr)] = {
         (RatifyV2StoreClaimProofConflict, c"claim_proof_conflict"),
         (RatifyV2StoreRateLimitExceeded, c"rate_limit_exceeded"),
         (RatifyV2StoreReleaseStateMismatch, c"release_state_mismatch"),
-        (RatifyV2StoreAcknowledgementNotFound, c"acknowledgement_not_found"),
-        (RatifyV2StoreIssuanceConflict, c"challenge_issuance_conflict"),
-        (RatifyV2StoreIssuanceNotFound, c"challenge_issuance_not_found"),
+        (
+            RatifyV2StoreAcknowledgementNotFound,
+            c"acknowledgement_not_found",
+        ),
+        (
+            RatifyV2StoreIssuanceConflict,
+            c"challenge_issuance_conflict",
+        ),
+        (
+            RatifyV2StoreIssuanceNotFound,
+            c"challenge_issuance_not_found",
+        ),
         (RatifyV2StoreJournalConflict, c"journal_conflict"),
         (RatifyV2SignIssuerDuty, c"sign_issuer_duty"),
         (RatifyV2SignKeyBinding, c"sign_key_binding"),
@@ -397,7 +550,10 @@ pub(crate) fn bad_arg(message: impl Into<String>) -> Failure {
 }
 
 pub(crate) fn null_arg(name: &str) -> Failure {
-    Failure::new(RatifyV2Code::RatifyV2ErrNullPointer, format!("{name} is null"))
+    Failure::new(
+        RatifyV2Code::RatifyV2ErrNullPointer,
+        format!("{name} is null"),
+    )
 }
 
 pub(crate) type AbiResult<T> = Result<T, Failure>;
@@ -432,7 +588,11 @@ pub(crate) fn set_last_error(message: &str) {
 /// A caught panic runs `reset` (which puts every output parameter in a
 /// defined state) and returns `RatifyV2ErrInternal` rather than unwinding
 /// into C.
-pub(crate) fn run(err_out: *mut *mut c_char, reset: impl FnOnce(), f: impl FnOnce() -> AbiResult<()>) -> i32 {
+pub(crate) fn run(
+    err_out: *mut *mut c_char,
+    reset: impl FnOnce(),
+    f: impl FnOnce() -> AbiResult<()>,
+) -> i32 {
     run_h(err_out, &[], reset, f)
 }
 
@@ -507,7 +667,11 @@ where
         },
         || {
             // SAFETY: see run_h.
-            if flags.iter().filter(|f| !f.is_null()).any(|f| unsafe { (**f).load(Ordering::SeqCst) }) {
+            if flags
+                .iter()
+                .filter(|f| !f.is_null())
+                .any(|f| unsafe { (**f).load(Ordering::SeqCst) })
+            {
                 set_last_error("internal: a handle in use is poisoned by an earlier caught panic");
                 return on_panic;
             }
@@ -562,7 +726,11 @@ pub struct RatifyV2Slice {
 impl RatifyV2Slice {
     pub(crate) fn of(b: &[u8]) -> Self {
         RatifyV2Slice {
-            ptr: if b.is_empty() { std::ptr::null() } else { b.as_ptr() },
+            ptr: if b.is_empty() {
+                std::ptr::null()
+            } else {
+                b.as_ptr()
+            },
             len: b.len(),
         }
     }
@@ -604,7 +772,7 @@ pub struct RatifyV2PublicKey {
 }
 
 impl RatifyV2PublicKey {
-    pub(crate) fn to_hybrid(&self) -> HybridPublicKey {
+    pub(crate) fn as_hybrid(&self) -> HybridPublicKey {
         HybridPublicKey {
             ed25519: self.ed25519.to_vec(),
             ml_dsa_65: self.ml_dsa_65.to_vec(),
@@ -652,7 +820,7 @@ impl RatifyV2Signature {
         }
     }
 
-    pub(crate) fn to_hybrid(&self) -> HybridSignature {
+    pub(crate) fn as_hybrid(&self) -> HybridSignature {
         HybridSignature {
             ed25519: self.ed25519[..self.ed25519_len.min(64)].to_vec(),
             ml_dsa_65: self.ml_dsa_65[..self.ml_dsa_65_len.min(3309)].to_vec(),
@@ -745,7 +913,11 @@ pub(crate) unsafe fn bytes<'a>(ptr: *const u8, len: usize, name: &str) -> AbiRes
 }
 
 /// A strictly parsed JSON argument (bytes, not NUL-terminated).
-pub(crate) unsafe fn json_bytes(ptr: *const u8, len: usize, name: &str) -> AbiResult<serde_json::Value> {
+pub(crate) unsafe fn json_bytes(
+    ptr: *const u8,
+    len: usize,
+    name: &str,
+) -> AbiResult<serde_json::Value> {
     let data = bytes(ptr, len, name)?;
     serde_json::from_slice(data).map_err(|e| bad_arg(format!("{name}: {e}")))
 }
@@ -816,7 +988,9 @@ pub unsafe extern "C" fn ratify_v2_buffer_free(buffer: RatifyV2Buffer) {
         || {
             if !buffer.ptr.is_null() && buffer.len > 0 {
                 // SAFETY: ptr/len come from write_buffer's Box<[u8]>.
-                drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(buffer.ptr, buffer.len)));
+                drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+                    buffer.ptr, buffer.len,
+                )));
             }
         },
     )

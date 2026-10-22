@@ -11,8 +11,9 @@ use sha2::{Digest, Sha384};
 
 use super::marshal::{constraint_context, operation_context, session_inputs, to_bytes, Obj};
 use super::{
-    bad_arg, bytes, clear_buffer, cstr, json_bytes, null_arg, run, write_buffer, write_opt_buffer, write_string,
-    write_val, AbiResult, Failure, RatifyV2Buffer, RatifyV2Code, RatifyV2PublicKey, RatifyV2Slice,
+    bad_arg, bytes, clear_buffer, cstr, json_bytes, null_arg, run, write_buffer, write_opt_buffer,
+    write_string, write_val, AbiResult, Failure, RatifyV2Buffer, RatifyV2Code, RatifyV2PublicKey,
+    RatifyV2Slice,
 };
 
 pub(crate) fn object_type(code: u32) -> AbiResult<V2ObjectType> {
@@ -57,15 +58,27 @@ pub(crate) fn canonicalize(kind: i32, wire: &[u8]) -> AbiResult<Vec<u8>> {
 /// The exact signable projection of `wire` for signature code `code`.
 pub(crate) fn signable(code: u32, wire: &[u8]) -> AbiResult<Vec<u8>> {
     Ok(match object_type(code)? {
-        V2ObjectType::DelegationCertificate => delegation_cert_v2_signable_bytes(&decode_delegation_cert_v2(wire)?)?,
-        V2ObjectType::ChallengePresentation => presentation_v2_signable_bytes(&decode_proof_bundle_v2(wire)?)?,
-        V2ObjectType::RevocationList => revocation_list_v2_signable_bytes(&decode_revocation_list_v2(wire)?)?,
+        V2ObjectType::DelegationCertificate => {
+            delegation_cert_v2_signable_bytes(&decode_delegation_cert_v2(wire)?)?
+        }
+        V2ObjectType::ChallengePresentation => {
+            presentation_v2_signable_bytes(&decode_proof_bundle_v2(wire)?)?
+        }
+        V2ObjectType::RevocationList => {
+            revocation_list_v2_signable_bytes(&decode_revocation_list_v2(wire)?)?
+        }
         V2ObjectType::KeyRotationAuthorization | V2ObjectType::KeyRotationProofOfPossession => {
             key_rotation_statement_v2_signable_bytes(&decode_key_rotation_statement_v2(wire)?)?
         }
-        V2ObjectType::RevocationPush => revocation_push_v2_signable_bytes(&decode_revocation_push_v2(wire)?)?,
-        V2ObjectType::WitnessEntry => witness_entry_v2_signable_bytes(&decode_witness_entry_v2(wire)?)?,
-        V2ObjectType::TransactionPartyStatement => transaction_receipt_v2_sign_bytes(&decode_transaction_receipt_v2(wire)?)?,
+        V2ObjectType::RevocationPush => {
+            revocation_push_v2_signable_bytes(&decode_revocation_push_v2(wire)?)?
+        }
+        V2ObjectType::WitnessEntry => {
+            witness_entry_v2_signable_bytes(&decode_witness_entry_v2(wire)?)?
+        }
+        V2ObjectType::TransactionPartyStatement => {
+            transaction_receipt_v2_sign_bytes(&decode_transaction_receipt_v2(wire)?)?
+        }
         V2ObjectType::VerificationReceipt => {
             verification_receipt_v2_signable_bytes(&decode_verification_receipt_v2(wire)?)?
         }
@@ -84,10 +97,14 @@ pub unsafe extern "C" fn ratify_v2_object_decode(
     wire_len: usize,
     canonical_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(canonical_out), || {
-        let encoded = canonicalize(kind, bytes(wire, wire_len, "wire")?)?;
-        write_opt_buffer(canonical_out, encoded)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(canonical_out),
+        || {
+            let encoded = canonicalize(kind, bytes(wire, wire_len, "wire")?)?;
+            write_opt_buffer(canonical_out, encoded)
+        },
+    )
 }
 
 /// The exact signable projection (SPEC-v2 §5) of `wire` under signature code
@@ -103,9 +120,16 @@ pub unsafe extern "C" fn ratify_v2_signable_bytes(
     wire_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        write_buffer(out, signable(object_type_code, bytes(wire, wire_len, "wire")?)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            write_buffer(
+                out,
+                signable(object_type_code, bytes(wire, wire_len, "wire")?)?,
+            )
+        },
+    )
 }
 
 /// The 77-byte signing transcript `M` (SPEC-v2 §3.1) for `signable` under
@@ -117,19 +141,31 @@ pub unsafe extern "C" fn ratify_v2_signing_message(
     signable_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let ty = object_type(object_type_code)?;
-        write_buffer(out, v2_signing_message(ty, bytes(signable, signable_len, "signable")?))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let ty = object_type(object_type_code)?;
+            write_buffer(
+                out,
+                v2_signing_message(ty, bytes(signable, signable_len, "signable")?),
+            )
+        },
+    )
 }
 
 /// The 22-byte FIPS 204 ML-DSA-65 context of `object_type_code`
 /// (`ratify-protocol/2/` + lowercase 4-hex code).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_mldsa_context(object_type_code: u32, out: *mut RatifyV2Buffer) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        write_buffer(out, v2_mldsa_context(object_type(object_type_code)?))
-    })
+pub unsafe extern "C" fn ratify_v2_mldsa_context(
+    object_type_code: u32,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || write_buffer(out, v2_mldsa_context(object_type(object_type_code)?)),
+    )
 }
 
 /// The 64-byte external μ an external-μ provider signs (SPEC-v2 §3.1):
@@ -145,11 +181,22 @@ pub unsafe extern "C" fn ratify_v2_external_mu(
     message_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
-        let context = v2_mldsa_context(object_type(object_type_code)?);
-        write_buffer(out, external_mu_v2(&key.ml_dsa_65, &context, bytes(message, message_len, "message")?))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
+            let context = v2_mldsa_context(object_type(object_type_code)?);
+            write_buffer(
+                out,
+                external_mu_v2(
+                    &key.ml_dsa_65,
+                    &context,
+                    bytes(message, message_len, "message")?,
+                ),
+            )
+        },
+    )
 }
 
 /// Verify both components of a hybrid signature over `signable` under
@@ -165,18 +212,30 @@ pub unsafe extern "C" fn ratify_v2_verify_statement(
     signature_ml_dsa_65: RatifyV2Slice,
     key: *const RatifyV2PublicKey,
 ) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
-        let code = u16::try_from(object_type_code).map_err(|_| {
-            Failure::from(V2Error::new(V2ErrorClass::UnsupportedObjectType, "object type code exceeds 16 bits"))
-        })?;
-        let sig = HybridSignature {
-            ed25519: signature_ed25519.bytes("signature_ed25519")?.to_vec(),
-            ml_dsa_65: signature_ml_dsa_65.bytes("signature_ml_dsa_65")?.to_vec(),
-        };
-        verify_v2_statement_code(code, bytes(signable, signable_len, "signable")?, &sig, &key.to_hybrid())?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
+            let code = u16::try_from(object_type_code).map_err(|_| {
+                Failure::from(V2Error::new(
+                    V2ErrorClass::UnsupportedObjectType,
+                    "object type code exceeds 16 bits",
+                ))
+            })?;
+            let sig = HybridSignature {
+                ed25519: signature_ed25519.bytes("signature_ed25519")?.to_vec(),
+                ml_dsa_65: signature_ml_dsa_65.bytes("signature_ml_dsa_65")?.to_vec(),
+            };
+            verify_v2_statement_code(
+                code,
+                bytes(signable, signable_len, "signable")?,
+                &sig,
+                &key.as_hybrid(),
+            )?;
+            Ok(())
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -190,20 +249,32 @@ pub unsafe extern "C" fn ratify_v2_delegation_digest(
     bundle_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
-        write_buffer(out, delegation_digest_v2(&b.delegations)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
+            write_buffer(out, delegation_digest_v2(&b.delegations)?)
+        },
+    )
 }
 
 /// `BundleHashV2` (`"sha384:" + 96 hex`) of a strictly decoded proof bundle.
 /// Free `*out` with `ratify_v2_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_bundle_hash(bundle: *const u8, bundle_len: usize, out: *mut *mut c_char) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
-        write_string(out, &bundle_hash_v2(&b)?)
-    })
+pub unsafe extern "C" fn ratify_v2_bundle_hash(
+    bundle: *const u8,
+    bundle_len: usize,
+    out: *mut *mut c_char,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
+            write_string(out, &bundle_hash_v2(&b)?)
+        },
+    )
 }
 
 /// `ChallengeClaimDigest` (48 bytes) of exactly 32 challenge bytes.
@@ -213,14 +284,25 @@ pub unsafe extern "C" fn ratify_v2_challenge_claim_digest(
     challenge_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        write_buffer(out, challenge_claim_digest_v2(bytes(challenge, challenge_len, "challenge")?)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            write_buffer(
+                out,
+                challenge_claim_digest_v2(bytes(challenge, challenge_len, "challenge")?)?,
+            )
+        },
+    )
 }
 
 unsafe fn namespace<'a>(ptr: *const u8, len: usize) -> AbiResult<&'a str> {
     std::str::from_utf8(bytes(ptr, len, "namespace")?).map_err(|_| {
-        V2Error::new(V2ErrorClass::ConfigurationInvalid, "verifier namespace is not valid UTF-8").into()
+        V2Error::new(
+            V2ErrorClass::ConfigurationInvalid,
+            "verifier namespace is not valid UTF-8",
+        )
+        .into()
     })
 }
 
@@ -236,10 +318,21 @@ pub unsafe extern "C" fn ratify_v2_claim_id(
     challenge_len: usize,
     out: *mut *mut c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let ns = namespace(namespace_ptr, namespace_len)?;
-        write_string(out, &protocol_claim_id_v2(ns, replay_epoch, bytes(challenge, challenge_len, "challenge")?)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let ns = namespace(namespace_ptr, namespace_len)?;
+            write_string(
+                out,
+                &protocol_claim_id_v2(
+                    ns,
+                    replay_epoch,
+                    bytes(challenge, challenge_len, "challenge")?,
+                )?,
+            )
+        },
+    )
 }
 
 /// The claim ID from a precomputed 48-byte `ChallengeClaimDigest`.
@@ -252,13 +345,21 @@ pub unsafe extern "C" fn ratify_v2_claim_id_from_digest(
     claim_digest_len: usize,
     out: *mut *mut c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let ns = namespace(namespace_ptr, namespace_len)?;
-        write_string(
-            out,
-            &protocol_claim_id_from_digest_v2(ns, replay_epoch, bytes(claim_digest, claim_digest_len, "claim_digest")?)?,
-        )
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let ns = namespace(namespace_ptr, namespace_len)?;
+            write_string(
+                out,
+                &protocol_claim_id_from_digest_v2(
+                    ns,
+                    replay_epoch,
+                    bytes(claim_digest, claim_digest_len, "claim_digest")?,
+                )?,
+            )
+        },
+    )
 }
 
 /// `StatusEvidenceDigest` (48 bytes) of a strictly decoded revocation list
@@ -270,15 +371,19 @@ pub unsafe extern "C" fn ratify_v2_status_evidence_digest(
     wire_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let wire = bytes(wire, wire_len, "wire")?;
-        let digest = match kind {
-            3 => status_evidence_digest_list_v2(&decode_revocation_list_v2(wire)?)?,
-            5 => status_evidence_digest_push_v2(&decode_revocation_push_v2(wire)?)?,
-            other => return Err(unsupported_kind(other)),
-        };
-        write_buffer(out, digest)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let wire = bytes(wire, wire_len, "wire")?;
+            let digest = match kind {
+                3 => status_evidence_digest_list_v2(&decode_revocation_list_v2(wire)?)?,
+                5 => status_evidence_digest_push_v2(&decode_revocation_push_v2(wire)?)?,
+                other => return Err(unsupported_kind(other)),
+            };
+            write_buffer(out, digest)
+        },
+    )
 }
 
 /// `StatementBodyDigest(code, body)` (48 bytes) over an exact canonical
@@ -290,10 +395,17 @@ pub unsafe extern "C" fn ratify_v2_statement_body_digest(
     body_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let code = object_type(object_type_code)?.code();
-        write_buffer(out, statement_body_digest_v2(code, bytes(body, body_len, "body")?)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let code = object_type(object_type_code)?.code();
+            write_buffer(
+                out,
+                statement_body_digest_v2(code, bytes(body, body_len, "body")?)?,
+            )
+        },
+    )
 }
 
 /// `StatementBodyDigest` (48 bytes) of a strictly decoded signed object:
@@ -308,20 +420,24 @@ pub unsafe extern "C" fn ratify_v2_object_body_digest(
     wire_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let wire = bytes(wire, wire_len, "wire")?;
-        let digest = match kind {
-            4 => key_rotation_statement_v2_digest(&decode_key_rotation_statement_v2(wire)?)?,
-            6 => witness_entry_v2_digest(&decode_witness_entry_v2(wire)?)?,
-            8 => verification_receipt_v2_digest(&decode_verification_receipt_v2(wire)?)?,
-            1 | 2 | 3 | 5 | 7 => {
-                let code = kind as u32;
-                statement_body_digest_v2(code as u16, &signable(code, wire)?)?
-            }
-            other => return Err(unsupported_kind(other)),
-        };
-        write_buffer(out, digest)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let wire = bytes(wire, wire_len, "wire")?;
+            let digest = match kind {
+                4 => key_rotation_statement_v2_digest(&decode_key_rotation_statement_v2(wire)?)?,
+                6 => witness_entry_v2_digest(&decode_witness_entry_v2(wire)?)?,
+                8 => verification_receipt_v2_digest(&decode_verification_receipt_v2(wire)?)?,
+                1 | 2 | 3 | 5 | 7 => {
+                    let code = kind as u32;
+                    statement_body_digest_v2(code as u16, &signable(code, wire)?)?
+                }
+                other => return Err(unsupported_kind(other)),
+            };
+            write_buffer(out, digest)
+        },
+    )
 }
 
 /// `RevokedSetDigest` (48 bytes) of a JSON array of revoked `cert_id`
@@ -333,31 +449,50 @@ pub unsafe extern "C" fn ratify_v2_revoked_set_digest(
     cert_ids_json_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let v = json_bytes(cert_ids_json, cert_ids_json_len, "cert_ids_json")?;
-        let mut ids: Vec<String> = v
-            .as_array()
-            .ok_or_else(|| bad_arg("cert_ids_json must be an array of strings"))?
-            .iter()
-            .map(|x| x.as_str().map(str::to_owned).ok_or_else(|| bad_arg("cert_ids_json entries must be strings")))
-            .collect::<AbiResult<_>>()?;
-        ids.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
-        ids.dedup();
-        let canonical = canonical_json_v2(&to_bytes(&Value::from(ids)))?;
-        let mut h = Sha384::new();
-        h.update(b"ratify-protocol-revoked-set-v2\0");
-        h.update(&canonical);
-        write_buffer(out, h.finalize().to_vec())
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let v = json_bytes(cert_ids_json, cert_ids_json_len, "cert_ids_json")?;
+            let mut ids: Vec<String> = v
+                .as_array()
+                .ok_or_else(|| bad_arg("cert_ids_json must be an array of strings"))?
+                .iter()
+                .map(|x| {
+                    x.as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| bad_arg("cert_ids_json entries must be strings"))
+                })
+                .collect::<AbiResult<_>>()?;
+            ids.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+            ids.dedup();
+            let canonical = canonical_json_v2(&to_bytes(&Value::from(ids)))?;
+            let mut h = Sha384::new();
+            h.update(b"ratify-protocol-revoked-set-v2\0");
+            h.update(&canonical);
+            write_buffer(out, h.finalize().to_vec())
+        },
+    )
 }
 
 /// `ReceiptOutboxDigest` (`"sha384:" + 96 hex`) of an exact sealed outbox
 /// body. Free `*out` with `ratify_v2_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_receipt_outbox_digest(body: *const u8, body_len: usize, out: *mut *mut c_char) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        write_string(out, &receipt_outbox_digest_v2(bytes(body, body_len, "body")?))
-    })
+pub unsafe extern "C" fn ratify_v2_receipt_outbox_digest(
+    body: *const u8,
+    body_len: usize,
+    out: *mut *mut c_char,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            write_string(
+                out,
+                &receipt_outbox_digest_v2(bytes(body, body_len, "body")?),
+            )
+        },
+    )
 }
 
 /// `SecurityJournalDigest` (`"sha384:" + 96 hex`) of a canonical
@@ -368,9 +503,16 @@ pub unsafe extern "C" fn ratify_v2_security_journal_digest(
     snapshot_len: usize,
     out: *mut *mut c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        write_string(out, &security_journal_snapshot_digest_v2(bytes(snapshot, snapshot_len, "snapshot")?))
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            write_string(
+                out,
+                &security_journal_snapshot_digest_v2(bytes(snapshot, snapshot_len, "snapshot")?),
+            )
+        },
+    )
 }
 
 /// The sealed receipt outbox body (SPEC-v2 §7.7) of a strictly decoded
@@ -381,10 +523,14 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_body(
     receipt_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let r = decode_verification_receipt_v2(bytes(receipt, receipt_len, "receipt")?)?;
-        write_buffer(out, verification_receipt_v2_body(&r)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let r = decode_verification_receipt_v2(bytes(receipt, receipt_len, "receipt")?)?;
+            write_buffer(out, verification_receipt_v2_body(&r)?)
+        },
+    )
 }
 
 /// The 32-byte transaction context (SPEC-v2 §2.4) of a transaction ID, terms
@@ -398,18 +544,27 @@ pub unsafe extern "C" fn ratify_v2_transaction_context_hash(
     terms_canonical_json_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let r = TransactionReceiptV2 {
-            version: 2,
-            transaction_id: cstr(transaction_id, "transaction_id")?.to_string(),
-            created_at: 0,
-            terms_schema_uri: cstr(terms_schema_uri, "terms_schema_uri")?.to_string(),
-            terms_canonical_json: bytes(terms_canonical_json, terms_canonical_json_len, "terms_canonical_json")?.to_vec(),
-            parties: Vec::new(),
-            party_signatures: Vec::new(),
-        };
-        write_buffer(out, transaction_context_hash_v2(&r))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let r = TransactionReceiptV2 {
+                version: 2,
+                transaction_id: cstr(transaction_id, "transaction_id")?.to_string(),
+                created_at: 0,
+                terms_schema_uri: cstr(terms_schema_uri, "terms_schema_uri")?.to_string(),
+                terms_canonical_json: bytes(
+                    terms_canonical_json,
+                    terms_canonical_json_len,
+                    "terms_canonical_json",
+                )?
+                .to_vec(),
+                parties: Vec::new(),
+                party_signatures: Vec::new(),
+            };
+            write_buffer(out, transaction_context_hash_v2(&r))
+        },
+    )
 }
 
 /// The 32-byte per-party request hash (SPEC-v2 §2.4) of a transaction
@@ -421,15 +576,23 @@ pub unsafe extern "C" fn ratify_v2_transaction_party_request_hash(
     required_scope: *const c_char,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        write_buffer(
-            out,
-            transaction_party_request_hash_v2(
-                bytes(transaction_context, transaction_context_len, "transaction_context")?,
-                cstr(required_scope, "required_scope")?,
-            ),
-        )
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            write_buffer(
+                out,
+                transaction_party_request_hash_v2(
+                    bytes(
+                        transaction_context,
+                        transaction_context_len,
+                        "transaction_context",
+                    )?,
+                    cstr(required_scope, "required_scope")?,
+                ),
+            )
+        },
+    )
 }
 
 /// The 32-byte operation `request_hash` (SPEC-v2 §2.4) of
@@ -441,10 +604,18 @@ pub unsafe extern "C" fn ratify_v2_operation_context_hash(
     operation_json_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let ctx = operation_context(&json_bytes(operation_json, operation_json_len, "operation_json")?)?;
-        write_buffer(out, operation_context_v2_hash(&ctx)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let ctx = operation_context(&json_bytes(
+                operation_json,
+                operation_json_len,
+                "operation_json",
+            )?)?;
+            write_buffer(out, operation_context_v2_hash(&ctx)?)
+        },
+    )
 }
 
 /// The 32-byte `session_context` (SPEC-v2 §2.4) of `{"verifier_id",
@@ -456,10 +627,14 @@ pub unsafe extern "C" fn ratify_v2_session_context(
     inputs_json_len: usize,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let inputs = session_inputs(&json_bytes(inputs_json, inputs_json_len, "inputs_json")?)?;
-        write_buffer(out, build_session_context_v2(&inputs)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let inputs = session_inputs(&json_bytes(inputs_json, inputs_json_len, "inputs_json")?)?;
+            write_buffer(out, build_session_context_v2(&inputs)?)
+        },
+    )
 }
 
 /// Decode the managed Verify API text form of a payload digest (§7.12).
@@ -478,7 +653,11 @@ pub unsafe extern "C" fn ratify_v2_payload_digest_decode(
             crate::guard::clear_val(present);
         },
         || {
-            let text = if encoded.is_null() { None } else { Some(cstr(encoded, "encoded")?) };
+            let text = if encoded.is_null() {
+                None
+            } else {
+                Some(cstr(encoded, "encoded")?)
+            };
             let decoded = decode_payload_digest_v2(text)?;
             write_val(present, i32::from(decoded.is_some()))?;
             write_buffer(out, decoded.unwrap_or_default())
@@ -496,10 +675,18 @@ pub unsafe extern "C" fn ratify_v2_context_policy_digest(
     policy_json_len: usize,
     out: *mut *mut c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let policy = super::marshal::context_policy(&json_bytes(policy_json, policy_json_len, "policy_json")?)??;
-        write_string(out, policy.digest())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let policy = super::marshal::context_policy(&json_bytes(
+                policy_json,
+                policy_json_len,
+                "policy_json",
+            )?)??;
+            write_string(out, policy.digest())
+        },
+    )
 }
 
 /// The extension evaluator profile digest (`"sha384:" + 96 hex`) of a
@@ -510,37 +697,58 @@ pub unsafe extern "C" fn ratify_v2_constraint_profile_digest(
     constraint_type: *const c_char,
     out: *mut *mut c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let d = ConstraintProfileDescriptorV2 {
-            profile: cstr(profile, "profile")?.to_string(),
-            kind: cstr(constraint_type, "constraint_type")?.to_string(),
-        };
-        write_string(out, &constraint_profile_digest_v2(&d)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let d = ConstraintProfileDescriptorV2 {
+                profile: cstr(profile, "profile")?.to_string(),
+                kind: cstr(constraint_type, "constraint_type")?.to_string(),
+            };
+            write_string(out, &constraint_profile_digest_v2(&d)?)
+        },
+    )
 }
 
 /// RatifyCanonicalJSON (Annex A) of a strictly decoded JSON value.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_canonical_json(data: *const u8, data_len: usize, out: *mut RatifyV2Buffer) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        write_buffer(out, canonical_json_v2(bytes(data, data_len, "data")?)?)
-    })
+pub unsafe extern "C" fn ratify_v2_canonical_json(
+    data: *const u8,
+    data_len: usize,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || write_buffer(out, canonical_json_v2(bytes(data, data_len, "data")?)?),
+    )
 }
 
 /// Validate a JSON array of delegation scopes under the v2 scope rules.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_validate_scopes(scopes_json: *const u8, scopes_json_len: usize) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let v = json_bytes(scopes_json, scopes_json_len, "scopes_json")?;
-        let scopes: Vec<String> = v
-            .as_array()
-            .ok_or_else(|| bad_arg("scopes_json must be an array"))?
-            .iter()
-            .map(|x| x.as_str().map(str::to_owned).ok_or_else(|| bad_arg("scopes must be strings")))
-            .collect::<AbiResult<_>>()?;
-        validate_scopes_v2(&scopes)?;
-        Ok(())
-    })
+pub unsafe extern "C" fn ratify_v2_validate_scopes(
+    scopes_json: *const u8,
+    scopes_json_len: usize,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let v = json_bytes(scopes_json, scopes_json_len, "scopes_json")?;
+            let scopes: Vec<String> = v
+                .as_array()
+                .ok_or_else(|| bad_arg("scopes_json must be an array"))?
+                .iter()
+                .map(|x| {
+                    x.as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| bad_arg("scopes must be strings"))
+                })
+                .collect::<AbiResult<_>>()?;
+            validate_scopes_v2(&scopes)?;
+            Ok(())
+        },
+    )
 }
 
 /// Validate one request `required_scope` (SPEC-v2 §2.4):
@@ -548,22 +756,34 @@ pub unsafe extern "C" fn ratify_v2_validate_scopes(scopes_json: *const u8, scope
 /// one exact `custom:` scope.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_validate_required_scope(scope: *const c_char) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        validate_required_scope_v2(cstr(scope, "scope")?)?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            validate_required_scope_v2(cstr(scope, "scope")?)?;
+            Ok(())
+        },
+    )
 }
 
 /// Validate a request context JSON (the `"context"` member schema of the
 /// verification request) against the extension-context bounds
 /// (`configuration_invalid` when out of bounds).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_validate_request_context(context_json: *const u8, context_json_len: usize) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let c = constraint_context(&json_bytes(context_json, context_json_len, "context_json")?)?;
-        validate_v2_request_context(&c)?;
-        Ok(())
-    })
+pub unsafe extern "C" fn ratify_v2_validate_request_context(
+    context_json: *const u8,
+    context_json_len: usize,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let c =
+                constraint_context(&json_bytes(context_json, context_json_len, "context_json")?)?;
+            validate_v2_request_context(&c)?;
+            Ok(())
+        },
+    )
 }
 
 /// Evaluator outcomes (`ConstraintOutcomeV2`).
@@ -619,7 +839,16 @@ pub unsafe extern "C" fn ratify_v2_evaluate_standard_profile(
             let o = Obj::new(
                 &v,
                 "evaluation input",
-                &["type", "params", "delegation_index", "constraint_index", "issuer_id", "cert_id", "context", "evaluation_time"],
+                &[
+                    "type",
+                    "params",
+                    "delegation_index",
+                    "constraint_index",
+                    "issuer_id",
+                    "cert_id",
+                    "context",
+                    "evaluation_time",
+                ],
             )?;
             let context = match o.object("context") {
                 Some(c) => constraint_context(c)?,
@@ -685,10 +914,14 @@ pub extern "C" fn ratify_v2_challenge_time_current(
 /// `malformed`.
 #[no_mangle]
 pub extern "C" fn ratify_v2_check_stream_sequence(has_last: i32, last: i64, seq: i64) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        check_v2_stream_sequence(has_last != 0, last, seq)?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            check_v2_stream_sequence(has_last != 0, last, seq)?;
+            Ok(())
+        },
+    )
 }
 
 /// Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
@@ -701,8 +934,15 @@ pub unsafe extern "C" fn ratify_v2_cross_sdk_fixture_verify(
     fixture_len: usize,
     expected_sdk: *const c_char,
 ) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        verify_cross_sdk_fixture_v2(bytes(fixture, fixture_len, "fixture")?, cstr(expected_sdk, "expected_sdk")?)?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            verify_cross_sdk_fixture_v2(
+                bytes(fixture, fixture_len, "fixture")?,
+                cstr(expected_sdk, "expected_sdk")?,
+            )?;
+            Ok(())
+        },
+    )
 }

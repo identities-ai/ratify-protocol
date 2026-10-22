@@ -13,13 +13,13 @@ use serde_json::{json, Value};
 use super::callbacks::{CJournal, Cancel, RatifyV2JournalStoreCallbacks};
 use super::keys::RatifyV2KeyPair;
 use super::marshal::{
-    archival_json, receipt_head, rotation_journal_json, status_result_json,
-    status_state_json, to_bytes, witness_head, Obj,
+    archival_json, receipt_head, rotation_journal_json, status_result_json, status_state_json,
+    to_bytes, witness_head, Obj,
 };
 use super::sign::{build, finish, RatifyV2ExternalSigner};
 use super::{
-    bad_arg, bytes, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h, write_buffer,
-    write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
+    bad_arg, bytes, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h,
+    write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
 };
 
 /// The caller-authenticated revocation status policy (§2.5 bounds).
@@ -42,11 +42,15 @@ impl RatifyV2StatusPolicy {
 }
 
 unsafe fn policy_arg(p: *const RatifyV2StatusPolicy) -> AbiResult<RevocationStatusPolicyV2> {
-    p.as_ref().map(|p| p.to_rust()).ok_or_else(|| null_arg("policy"))
+    p.as_ref()
+        .map(|p| p.to_rust())
+        .ok_or_else(|| null_arg("policy"))
 }
 
 unsafe fn key_arg(k: *const RatifyV2PublicKey, name: &str) -> AbiResult<HybridPublicKey> {
-    k.as_ref().map(RatifyV2PublicKey::to_hybrid).ok_or_else(|| null_arg(name))
+    k.as_ref()
+        .map(RatifyV2PublicKey::as_hybrid)
+        .ok_or_else(|| null_arg(name))
 }
 
 // ---------------------------------------------------------------------------
@@ -75,16 +79,20 @@ impl RatifyV2StatusState {
 /// A new, empty reducer state.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_status_state_new(out: *mut *mut RatifyV2StatusState) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        *out = Box::into_raw(Box::new(RatifyV2StatusState {
-            poisoned: AtomicBool::new(false),
-            inner: std::sync::Mutex::new(RevocationStatusStateV2::default()),
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            *out = Box::into_raw(Box::new(RatifyV2StatusState {
+                poisoned: AtomicBool::new(false),
+                inner: std::sync::Mutex::new(RevocationStatusStateV2::default()),
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// Release a reducer state. NULL is a no-op.
@@ -114,21 +122,42 @@ pub unsafe extern "C" fn ratify_v2_status_state_apply(
     policy: *const RatifyV2StatusPolicy,
     now: i64,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(state)], || {}, || {
-        let st = handle(state, "state")?;
-        let wire = bytes(wire, wire_len, "wire")?;
-        let issuer = cstr(issuer_id, "issuer_id")?;
-        let key = key_arg(status_key, "status_key")?;
-        let pol = policy_arg(policy)?;
-        let current = st.get();
-        let next = match kind {
-            3 => apply_revocation_list_v2(&current, &decode_revocation_list_v2(wire)?, issuer, status_key_epoch, &key, &pol, now)?,
-            5 => apply_revocation_push_v2(&current, &decode_revocation_push_v2(wire)?, issuer, status_key_epoch, &key, &pol, now)?,
-            other => return Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
-        };
-        st.set(next);
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(state)],
+        || {},
+        || {
+            let st = handle(state, "state")?;
+            let wire = bytes(wire, wire_len, "wire")?;
+            let issuer = cstr(issuer_id, "issuer_id")?;
+            let key = key_arg(status_key, "status_key")?;
+            let pol = policy_arg(policy)?;
+            let current = st.get();
+            let next = match kind {
+                3 => apply_revocation_list_v2(
+                    &current,
+                    &decode_revocation_list_v2(wire)?,
+                    issuer,
+                    status_key_epoch,
+                    &key,
+                    &pol,
+                    now,
+                )?,
+                5 => apply_revocation_push_v2(
+                    &current,
+                    &decode_revocation_push_v2(wire)?,
+                    issuer,
+                    status_key_epoch,
+                    &key,
+                    &pol,
+                    now,
+                )?,
+                other => return Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
+            };
+            st.set(next);
+            Ok(())
+        },
+    )
 }
 
 /// Transition the issuer's status key to `next_epoch` / `next_status_key`.
@@ -139,17 +168,22 @@ pub unsafe extern "C" fn ratify_v2_status_state_transition_epoch(
     next_epoch: u64,
     next_status_key: *const RatifyV2PublicKey,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(state)], || {}, || {
-        let st = handle(state, "state")?;
-        let next = transition_revocation_status_epoch_v2(
-            &st.get(),
-            cstr(issuer_id, "issuer_id")?,
-            next_epoch,
-            &key_arg(next_status_key, "next_status_key")?,
-        )?;
-        st.set(next);
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(state)],
+        || {},
+        || {
+            let st = handle(state, "state")?;
+            let next = transition_revocation_status_epoch_v2(
+                &st.get(),
+                cstr(issuer_id, "issuer_id")?,
+                next_epoch,
+                &key_arg(next_status_key, "next_status_key")?,
+            )?;
+            st.set(next);
+            Ok(())
+        },
+    )
 }
 
 /// The status of one certificate at `now`: JSON `{"status": "not_revoked" |
@@ -166,19 +200,24 @@ pub unsafe extern "C" fn ratify_v2_status_state_query(
     now: i64,
     result_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(state)], || clear_buffer(result_out), || {
-        let st = handle(state, "state")?;
-        let r = revocation_status_for_cert_v2(
-            &st.get(),
-            cstr(issuer_id, "issuer_id")?,
-            cstr(cert_id, "cert_id")?,
-            status_key_epoch,
-            &key_arg(status_key, "status_key")?,
-            &policy_arg(policy)?,
-            now,
-        )?;
-        write_buffer(result_out, to_bytes(&status_result_json(&r)))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(state)],
+        || clear_buffer(result_out),
+        || {
+            let st = handle(state, "state")?;
+            let r = revocation_status_for_cert_v2(
+                &st.get(),
+                cstr(issuer_id, "issuer_id")?,
+                cstr(cert_id, "cert_id")?,
+                status_key_epoch,
+                &key_arg(status_key, "status_key")?,
+                &policy_arg(policy)?,
+                now,
+            )?;
+            write_buffer(result_out, to_bytes(&status_result_json(&r)))
+        },
+    )
 }
 
 /// A JSON view of the reducer state (`has_floor`, `floor`,
@@ -186,10 +225,21 @@ pub unsafe extern "C" fn ratify_v2_status_state_query(
 /// `fork_sequence`, `reconciliation_required`,
 /// `future_dated_object_observed`, and the status key fields).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_status_state_json(state: *const RatifyV2StatusState, out: *mut RatifyV2Buffer) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(state)], || clear_buffer(out), || {
-        write_buffer(out, to_bytes(&status_state_json(&handle(state, "state")?.get())))
-    })
+pub unsafe extern "C" fn ratify_v2_status_state_json(
+    state: *const RatifyV2StatusState,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(state)],
+        || clear_buffer(out),
+        || {
+            write_buffer(
+                out,
+                to_bytes(&status_state_json(&handle(state, "state")?.get())),
+            )
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +249,13 @@ fn journal(cb: *const RatifyV2JournalStoreCallbacks) -> AbiResult<(V2Context, CJ
     // SAFETY: a non-NULL pointer refers to caller storage for this call.
     let cb = unsafe { cb.as_ref() }.ok_or_else(|| null_arg("journal"))?;
     let (ctx, cancel) = V2Context::background().with_cancel();
-    Ok((ctx, CJournal { cb: *cb, cancel: Cancel(cancel) }))
+    Ok((
+        ctx,
+        CJournal {
+            cb: *cb,
+            cancel: Cancel(cancel),
+        },
+    ))
 }
 
 /// Permanently bind a key to a role (`"root"`, `"intermediate"`, `"agent"`,
@@ -210,11 +266,15 @@ pub unsafe extern "C" fn ratify_v2_journal_record_key_role(
     role: *const c_char,
     key: *const RatifyV2PublicKey,
 ) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let (ctx, j) = journal(journal_store)?;
-        record_security_key_role_v2(&ctx, &j, cstr(role, "role")?, &key_arg(key, "key")?)?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let (ctx, j) = journal(journal_store)?;
+            record_security_key_role_v2(&ctx, &j, cstr(role, "role")?, &key_arg(key, "key")?)?;
+            Ok(())
+        },
+    )
 }
 
 /// Configure an issuer's status key at `epoch` in the anchored journal.
@@ -225,11 +285,21 @@ pub unsafe extern "C" fn ratify_v2_journal_configure_status_key(
     epoch: u64,
     key: *const RatifyV2PublicKey,
 ) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let (ctx, j) = journal(journal_store)?;
-        configure_status_key_epoch_v2(&ctx, &j, cstr(issuer_id, "issuer_id")?, epoch, &key_arg(key, "key")?)?;
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let (ctx, j) = journal(journal_store)?;
+            configure_status_key_epoch_v2(
+                &ctx,
+                &j,
+                cstr(issuer_id, "issuer_id")?,
+                epoch,
+                &key_arg(key, "key")?,
+            )?;
+            Ok(())
+        },
+    )
 }
 
 /// Apply a signed revocation list (`kind` 3) or push (5) to the anchored
@@ -246,19 +316,41 @@ pub unsafe extern "C" fn ratify_v2_journal_apply(
     policy: *const RatifyV2StatusPolicy,
     now: i64,
 ) -> i32 {
-    run(std::ptr::null_mut(), || {}, || {
-        let (ctx, j) = journal(journal_store)?;
-        let wire = bytes(wire, wire_len, "wire")?;
-        let issuer = cstr(issuer_id, "issuer_id")?;
-        let key = key_arg(status_key, "status_key")?;
-        let pol = policy_arg(policy)?;
-        match kind {
-            3 => apply_revocation_list_to_journal_v2(&ctx, &j, &decode_revocation_list_v2(wire)?, issuer, status_key_epoch, &key, &pol, now)?,
-            5 => apply_revocation_push_to_journal_v2(&ctx, &j, &decode_revocation_push_v2(wire)?, issuer, status_key_epoch, &key, &pol, now)?,
-            other => return Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
-        };
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let (ctx, j) = journal(journal_store)?;
+            let wire = bytes(wire, wire_len, "wire")?;
+            let issuer = cstr(issuer_id, "issuer_id")?;
+            let key = key_arg(status_key, "status_key")?;
+            let pol = policy_arg(policy)?;
+            match kind {
+                3 => apply_revocation_list_to_journal_v2(
+                    &ctx,
+                    &j,
+                    &decode_revocation_list_v2(wire)?,
+                    issuer,
+                    status_key_epoch,
+                    &key,
+                    &pol,
+                    now,
+                )?,
+                5 => apply_revocation_push_to_journal_v2(
+                    &ctx,
+                    &j,
+                    &decode_revocation_push_v2(wire)?,
+                    issuer,
+                    status_key_epoch,
+                    &key,
+                    &pol,
+                    now,
+                )?,
+                other => return Err(bad_arg(format!("status object kind {other} is not 3 or 5"))),
+            };
+            Ok(())
+        },
+    )
 }
 
 /// The status of one certificate from the anchored journal (result JSON as
@@ -274,20 +366,24 @@ pub unsafe extern "C" fn ratify_v2_journal_status(
     now: i64,
     result_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(result_out), || {
-        let (ctx, j) = journal(journal_store)?;
-        let r = revocation_status_from_journal_v2(
-            &ctx,
-            &j,
-            cstr(issuer_id, "issuer_id")?,
-            cstr(cert_id, "cert_id")?,
-            status_key_epoch,
-            &key_arg(status_key, "status_key")?,
-            &policy_arg(policy)?,
-            now,
-        )?;
-        write_buffer(result_out, to_bytes(&status_result_json(&r)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(result_out),
+        || {
+            let (ctx, j) = journal(journal_store)?;
+            let r = revocation_status_from_journal_v2(
+                &ctx,
+                &j,
+                cstr(issuer_id, "issuer_id")?,
+                cstr(cert_id, "cert_id")?,
+                status_key_epoch,
+                &key_arg(status_key, "status_key")?,
+                &policy_arg(policy)?,
+                now,
+            )?;
+            write_buffer(result_out, to_bytes(&status_result_json(&r)))
+        },
+    )
 }
 
 fn snapshot_head_json(j: &SecurityJournalV2) -> Value {
@@ -335,14 +431,21 @@ pub unsafe extern "C" fn ratify_v2_journal_import(
     digest: *const c_char,
     head_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(head_out), || {
-        let head = SecurityJournalHeadV2 {
-            generation,
-            digest: cstr(digest, "digest")?.to_string(),
-        };
-        let j = import_security_journal_snapshot_v2(bytes(snapshot, snapshot_len, "snapshot")?, &head)?;
-        super::write_opt_buffer(head_out, to_bytes(&snapshot_head_json(&j)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(head_out),
+        || {
+            let head = SecurityJournalHeadV2 {
+                generation,
+                digest: cstr(digest, "digest")?.to_string(),
+            };
+            let j = import_security_journal_snapshot_v2(
+                bytes(snapshot, snapshot_len, "snapshot")?,
+                &head,
+            )?;
+            super::write_opt_buffer(head_out, to_bytes(&snapshot_head_json(&j)))
+        },
+    )
 }
 
 /// Migrate a version 1 journal record (Go JSON encoding) to the version 2
@@ -361,9 +464,16 @@ pub unsafe extern "C" fn ratify_v2_journal_migrate(
             clear_buffer(head_out);
         },
         || {
-            let legacy = decode_security_journal_json_v2(bytes(legacy_record, legacy_record_len, "legacy_record")?)?;
+            let legacy = decode_security_journal_json_v2(bytes(
+                legacy_record,
+                legacy_record_len,
+                "legacy_record",
+            )?)?;
             let migrated = migrate_security_journal_v2(&legacy)?;
-            write_buffer(snapshot_out, export_security_journal_snapshot_v2(&migrated)?)?;
+            write_buffer(
+                snapshot_out,
+                export_security_journal_snapshot_v2(&migrated)?,
+            )?;
             write_buffer(head_out, to_bytes(&snapshot_head_json(&migrated)))
         },
     )
@@ -379,13 +489,17 @@ pub unsafe extern "C" fn ratify_v2_journal_legacy_encode(
     clear_digest: i32,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(out), || {
-        let mut j = decode_security_journal_json_v2(bytes(record, record_len, "record")?)?;
-        if clear_digest != 0 {
-            j.digest = String::new();
-        }
-        write_buffer(out, encode_security_journal_json_v2(&j)?)
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let mut j = decode_security_journal_json_v2(bytes(record, record_len, "record")?)?;
+            if clear_digest != 0 {
+                j.digest = String::new();
+            }
+            write_buffer(out, encode_security_journal_json_v2(&j)?)
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +515,17 @@ pub enum RatifyV2PublishOp {
 }
 
 fn publisher_state(v: &Value) -> AbiResult<V2StatusPublisherState> {
-    let o = Obj::new(v, "publisher state", &["issuer_id", "status_key_id", "sequence", "updated_at", "revoked"])?;
+    let o = Obj::new(
+        v,
+        "publisher state",
+        &[
+            "issuer_id",
+            "status_key_id",
+            "sequence",
+            "updated_at",
+            "revoked",
+        ],
+    )?;
     Ok(V2StatusPublisherState {
         issuer_id: o.str("issuer_id")?,
         status_key_id: o.str("status_key_id")?,
@@ -469,7 +593,11 @@ pub unsafe extern "C" fn ratify_v2_status_publish(
                 v.as_array()
                     .ok_or_else(|| bad_arg("cert_ids_json must be an array"))?
                     .iter()
-                    .map(|x| x.as_str().map(str::to_owned).ok_or_else(|| bad_arg("cert ids must be strings")))
+                    .map(|x| {
+                        x.as_str()
+                            .map(str::to_owned)
+                            .ok_or_else(|| bad_arg("cert ids must be strings"))
+                    })
                     .collect::<AbiResult<_>>()?
             } else {
                 Vec::new()
@@ -518,22 +646,26 @@ pub unsafe extern "C" fn ratify_v2_rotation_journal_new(
     genesis_key: *const RatifyV2PublicKey,
     out: *mut *mut RatifyV2RotationJournal,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let j = new_key_rotation_v2_journal(
-            cstr(authority_id, "authority_id")?,
-            recovery_epoch,
-            cstr(role, "role")?,
-            &key_arg(genesis_key, "genesis_key")?,
-        )?;
-        *out = Box::into_raw(Box::new(RatifyV2RotationJournal {
-            poisoned: AtomicBool::new(false),
-            inner: std::sync::Mutex::new(j),
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let j = new_key_rotation_v2_journal(
+                cstr(authority_id, "authority_id")?,
+                recovery_epoch,
+                cstr(role, "role")?,
+                &key_arg(genesis_key, "genesis_key")?,
+            )?;
+            *out = Box::into_raw(Box::new(RatifyV2RotationJournal {
+                poisoned: AtomicBool::new(false),
+                inner: std::sync::Mutex::new(j),
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// Release a rotation journal. NULL is a no-op.
@@ -579,14 +711,20 @@ pub unsafe extern "C" fn ratify_v2_rotation_journal_accept(
     future_skew_seconds: i64,
     result_out: *mut i32,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(journal_handle)], || crate::guard::clear_val(result_out), || {
-        let h = handle(journal_handle, "journal")?;
-        let stmt = decode_key_rotation_statement_v2(bytes(wire, wire_len, "wire")?)?;
-        let mut j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
-        let (next, result) = accept_key_rotation_statement_v2(&stmt, &j, now, future_skew_seconds);
-        *j = next;
-        write_val(result_out, log_result(result?))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(journal_handle)],
+        || crate::guard::clear_val(result_out),
+        || {
+            let h = handle(journal_handle, "journal")?;
+            let stmt = decode_key_rotation_statement_v2(bytes(wire, wire_len, "wire")?)?;
+            let mut j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
+            let (next, result) =
+                accept_key_rotation_statement_v2(&stmt, &j, now, future_skew_seconds);
+            *j = next;
+            write_val(result_out, log_result(result?))
+        },
+    )
 }
 
 /// Recover the authority to a new recovery epoch and genesis key.
@@ -596,12 +734,21 @@ pub unsafe extern "C" fn ratify_v2_rotation_journal_recover(
     new_recovery_epoch: i64,
     new_genesis_key: *const RatifyV2PublicKey,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(journal_handle)], || {}, || {
-        let h = handle(journal_handle, "journal")?;
-        let mut j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
-        *j = recover_key_rotation_v2(&j, new_recovery_epoch, &key_arg(new_genesis_key, "new_genesis_key")?)?;
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(journal_handle)],
+        || {},
+        || {
+            let h = handle(journal_handle, "journal")?;
+            let mut j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
+            *j = recover_key_rotation_v2(
+                &j,
+                new_recovery_epoch,
+                &key_arg(new_genesis_key, "new_genesis_key")?,
+            )?;
+            Ok(())
+        },
+    )
 }
 
 /// The journal state JSON: `{"authority_id", "recovery_epoch", "role",
@@ -613,11 +760,16 @@ pub unsafe extern "C" fn ratify_v2_rotation_journal_state(
     journal_handle: *const RatifyV2RotationJournal,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(journal_handle)], || clear_buffer(out), || {
-        let h = handle(journal_handle, "journal")?;
-        let j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
-        write_buffer(out, to_bytes(&rotation_journal_json(&j)))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(journal_handle)],
+        || clear_buffer(out),
+        || {
+            let h = handle(journal_handle, "journal")?;
+            let j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
+            write_buffer(out, to_bytes(&rotation_journal_json(&j)))
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -675,7 +827,8 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_append(
         || {
             let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
             let head = receipt_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
-            let result = verify_verification_receipt_v2(&r, &key_arg(verifier_key, "verifier_key")?, &head)?;
+            let result =
+                verify_verification_receipt_v2(&r, &key_arg(verifier_key, "verifier_key")?, &head)?;
             write_val(result_out, log_result(result))?;
             super::write_opt_buffer(digest_out, verification_receipt_v2_digest(&r)?)
         },
@@ -707,19 +860,36 @@ pub unsafe extern "C" fn ratify_v2_archival_verify(
     key: *const RatifyV2PublicKey,
     result_out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run(std::ptr::null_mut(), || clear_buffer(result_out), || {
-        let data = bytes(wire, wire_len, "wire")?;
-        let r = match kind {
-            2 => return write_buffer(result_out, verify_archival_proof_bundle_v2(data).to_json()?),
-            1 => verify_archival_delegation_cert_v2(data)?,
-            3 => verify_archival_revocation_list_v2(data, cstr(issuer_id, "issuer_id")?, &key_arg(key, "key")?)?,
-            4 => verify_archival_key_rotation_statement_v2(data)?,
-            5 => verify_archival_revocation_push_v2(data, cstr(issuer_id, "issuer_id")?, &key_arg(key, "key")?)?,
-            6 => verify_archival_witness_entry_v2(data, &key_arg(key, "key")?)?,
-            7 => verify_archival_transaction_receipt_v2(data)?,
-            8 => verify_archival_verification_receipt_v2(data, &key_arg(key, "key")?)?,
-            other => return Err(bad_arg(format!("archival kind {other} is not defined"))),
-        };
-        write_buffer(result_out, to_bytes(&archival_json(&r)))
-    })
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(result_out),
+        || {
+            let data = bytes(wire, wire_len, "wire")?;
+            let r = match kind {
+                2 => {
+                    return write_buffer(
+                        result_out,
+                        verify_archival_proof_bundle_v2(data).to_json()?,
+                    )
+                }
+                1 => verify_archival_delegation_cert_v2(data)?,
+                3 => verify_archival_revocation_list_v2(
+                    data,
+                    cstr(issuer_id, "issuer_id")?,
+                    &key_arg(key, "key")?,
+                )?,
+                4 => verify_archival_key_rotation_statement_v2(data)?,
+                5 => verify_archival_revocation_push_v2(
+                    data,
+                    cstr(issuer_id, "issuer_id")?,
+                    &key_arg(key, "key")?,
+                )?,
+                6 => verify_archival_witness_entry_v2(data, &key_arg(key, "key")?)?,
+                7 => verify_archival_transaction_receipt_v2(data)?,
+                8 => verify_archival_verification_receipt_v2(data, &key_arg(key, "key")?)?,
+                other => return Err(bad_arg(format!("archival kind {other} is not defined"))),
+            };
+            write_buffer(result_out, to_bytes(&archival_json(&r)))
+        },
+    )
 }

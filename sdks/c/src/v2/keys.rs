@@ -9,8 +9,8 @@ use ratify_protocol::{hybrid_keypair_from_seeds, HybridPrivateKey, HybridPublicK
 
 use super::marshal::{public_key_json, to_bytes};
 use super::{
-    bytes, flag, handle, null_arg, poisonable, run, run_h, write_string, AbiResult, Failure, RatifyV2Code,
-    RatifyV2PublicKey,
+    bytes, flag, handle, null_arg, poisonable, run, run_h, write_string, AbiResult, Failure,
+    RatifyV2Code, RatifyV2PublicKey,
 };
 
 /// An opaque hybrid Ed25519 + ML-DSA-65 key pair. Create it with
@@ -60,14 +60,21 @@ pub unsafe extern "C" fn ratify_v2_keypair_from_seeds(
     ml_dsa_65_seed: *const u8,
     out: *mut *mut RatifyV2KeyPair,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let kp = RatifyV2KeyPair::from_seeds(&seed(ed25519_seed, "ed25519_seed")?, &seed(ml_dsa_65_seed, "ml_dsa_65_seed")?)?;
-        *out = Box::into_raw(Box::new(kp));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let kp = RatifyV2KeyPair::from_seeds(
+                &seed(ed25519_seed, "ed25519_seed")?,
+                &seed(ml_dsa_65_seed, "ml_dsa_65_seed")?,
+            )?;
+            *out = Box::into_raw(Box::new(kp));
+            Ok(())
+        },
+    )
 }
 
 /// Generate a fresh key pair from the operating-system random source (or the
@@ -96,7 +103,12 @@ pub unsafe extern "C" fn ratify_v2_keypair_generate(
             let mut ml = [0u8; 32];
             getrandom::getrandom(&mut ed)
                 .and_then(|_| getrandom::getrandom(&mut ml))
-                .map_err(|e| Failure::new(RatifyV2Code::RatifyV2ErrInternal, format!("random source failed: {e}")))?;
+                .map_err(|e| {
+                    Failure::new(
+                        RatifyV2Code::RatifyV2ErrInternal,
+                        format!("random source failed: {e}"),
+                    )
+                })?;
             let kp = RatifyV2KeyPair::from_seeds(&ed, &ml)?;
             if !ed25519_seed_out.is_null() {
                 std::ptr::copy_nonoverlapping(ed.as_ptr(), ed25519_seed_out, 32);
@@ -126,16 +138,26 @@ pub unsafe extern "C" fn ratify_v2_keypair_free(kp: *mut RatifyV2KeyPair) {
 
 /// Write the complete public key of `kp` into `*out`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_keypair_public_key(kp: *const RatifyV2KeyPair, out: *mut RatifyV2PublicKey) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(kp)], || {}, || {
-        RatifyV2PublicKey::write(out, &handle(kp, "keypair")?.public)
-    })
+pub unsafe extern "C" fn ratify_v2_keypair_public_key(
+    kp: *const RatifyV2KeyPair,
+    out: *mut RatifyV2PublicKey,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(kp)],
+        || {},
+        || RatifyV2PublicKey::write(out, &handle(kp, "keypair")?.public),
+    )
 }
 
 /// Write the 64-character `key_id_v2` of `kp` plus NUL into `out`
 /// (`out_len` >= `RATIFY_V2_KEY_ID_BUF_LEN`).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_keypair_key_id(kp: *const RatifyV2KeyPair, out: *mut c_char, out_len: usize) -> i32 {
+pub unsafe extern "C" fn ratify_v2_keypair_key_id(
+    kp: *const RatifyV2KeyPair,
+    out: *mut c_char,
+    out_len: usize,
+) -> i32 {
     run_h(
         std::ptr::null_mut(),
         &[flag(kp)],
@@ -149,7 +171,10 @@ pub(crate) fn write_cstr_buf(out: *mut c_char, out_len: usize, s: &str) -> AbiRe
         return Err(null_arg("out"));
     }
     if out_len < s.len() + 1 {
-        return Err(super::bad_arg(format!("out_len {out_len} is too small; need {}", s.len() + 1)));
+        return Err(super::bad_arg(format!(
+            "out_len {out_len} is too small; need {}",
+            s.len() + 1
+        )));
     }
     // SAFETY: out has at least out_len writable bytes (caller contract).
     unsafe {
@@ -162,22 +187,39 @@ pub(crate) fn write_cstr_buf(out: *mut c_char, out_len: usize, s: &str) -> AbiRe
 /// Compute `key_id_v2` of a complete public key (SPEC-v2 §2.3) into `out`
 /// (`out_len` >= 65).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_public_key_id(key: *const RatifyV2PublicKey, out: *mut c_char, out_len: usize) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_cstr(out, out_len), || {
-        let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
-        let id = key_id_v2(&key.to_hybrid()).map_err(|e| e.classify(V2ErrorClass::Malformed))?;
-        write_cstr_buf(out, out_len, &id)
-    })
+pub unsafe extern "C" fn ratify_v2_public_key_id(
+    key: *const RatifyV2PublicKey,
+    out: *mut c_char,
+    out_len: usize,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_cstr(out, out_len),
+        || {
+            let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
+            let id =
+                key_id_v2(&key.as_hybrid()).map_err(|e| e.classify(V2ErrorClass::Malformed))?;
+            write_cstr_buf(out, out_len, &id)
+        },
+    )
 }
 
 /// Encode a public key as the wire JSON object
 /// `{"ed25519":"<b64>","ml_dsa_65":"<b64>"}` (for request and context JSON).
 /// Free `*out` with `ratify_v2_string_free`.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_public_key_to_json(key: *const RatifyV2PublicKey, out: *mut *mut c_char) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
-        let text = String::from_utf8(to_bytes(&public_key_json(&key.to_hybrid()))).unwrap_or_default();
-        write_string(out, &text)
-    })
+pub unsafe extern "C" fn ratify_v2_public_key_to_json(
+    key: *const RatifyV2PublicKey,
+    out: *mut *mut c_char,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let key = key.as_ref().ok_or_else(|| null_arg("key"))?;
+            let text =
+                String::from_utf8(to_bytes(&public_key_json(&key.as_hybrid()))).unwrap_or_default();
+            write_string(out, &text)
+        },
+    )
 }

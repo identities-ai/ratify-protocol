@@ -37,7 +37,12 @@ pub fn load(name: &str) -> Value {
 }
 
 pub fn b64(v: &Value) -> Vec<u8> {
-    STANDARD.decode(v.as_str().unwrap_or_else(|| panic!("expected base64 string, got {v}"))).expect("base64")
+    STANDARD
+        .decode(
+            v.as_str()
+                .unwrap_or_else(|| panic!("expected base64 string, got {v}")),
+        )
+        .expect("base64")
 }
 
 pub fn enc(b: &[u8]) -> String {
@@ -85,11 +90,16 @@ pub struct Fail {
 pub type R<T> = Result<T, Fail>;
 
 pub fn class(code: i32) -> String {
-    unsafe { CStr::from_ptr(ratify_v2_error_class_str(code)) }.to_str().unwrap().to_string()
+    unsafe { CStr::from_ptr(ratify_v2_error_class_str(code)) }
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 pub fn last_error() -> String {
-    unsafe { CStr::from_ptr(ratify_v2_last_error_message()) }.to_string_lossy().into_owned()
+    unsafe { CStr::from_ptr(ratify_v2_last_error_message()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Map a return code to a result, capturing the thread-local diagnostic.
@@ -189,7 +199,8 @@ pub fn json_bytes(v: &Value) -> Vec<u8> {
 }
 
 pub fn parse(b: &[u8]) -> Value {
-    serde_json::from_slice(b).unwrap_or_else(|e| panic!("library JSON: {e}: {}", String::from_utf8_lossy(b)))
+    serde_json::from_slice(b)
+        .unwrap_or_else(|e| panic!("library JSON: {e}: {}", String::from_utf8_lossy(b)))
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +237,8 @@ impl Kp {
     pub fn from_seeds(ed: &[u8], ml: &[u8]) -> Kp {
         assert_eq!((ed.len(), ml.len()), (32, 32));
         let mut out = ptr::null_mut();
-        check(unsafe { ratify_v2_keypair_from_seeds(ed.as_ptr(), ml.as_ptr(), &mut out) }).expect("keypair");
+        check(unsafe { ratify_v2_keypair_from_seeds(ed.as_ptr(), ml.as_ptr(), &mut out) })
+            .expect("keypair");
         Kp(out)
     }
 
@@ -234,7 +246,8 @@ impl Kp {
     pub fn generate() -> (Kp, [u8; 32], [u8; 32]) {
         let mut out = ptr::null_mut();
         let (mut ed, mut ml) = ([0u8; 32], [0u8; 32]);
-        check(unsafe { ratify_v2_keypair_generate(&mut out, ed.as_mut_ptr(), ml.as_mut_ptr()) }).expect("generate");
+        check(unsafe { ratify_v2_keypair_generate(&mut out, ed.as_mut_ptr(), ml.as_mut_ptr()) })
+            .expect("generate");
         (Kp(out), ed, ml)
     }
 
@@ -246,8 +259,12 @@ impl Kp {
 
     pub fn id(&self) -> String {
         let mut out = [0 as c_char; RATIFY_V2_KEY_ID_BUF_LEN];
-        check(unsafe { ratify_v2_keypair_key_id(self.0, out.as_mut_ptr(), out.len()) }).expect("key id");
-        unsafe { CStr::from_ptr(out.as_ptr()) }.to_str().unwrap().to_string()
+        check(unsafe { ratify_v2_keypair_key_id(self.0, out.as_mut_ptr(), out.len()) })
+            .expect("key id");
+        unsafe { CStr::from_ptr(out.as_ptr()) }
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 }
 
@@ -260,7 +277,10 @@ impl Drop for Kp {
 pub fn key_id_of(k: &RatifyV2PublicKey) -> R<String> {
     let mut out = [0 as c_char; RATIFY_V2_KEY_ID_BUF_LEN];
     check(unsafe { ratify_v2_public_key_id(k, out.as_mut_ptr(), out.len()) })?;
-    Ok(unsafe { CStr::from_ptr(out.as_ptr()) }.to_str().unwrap().to_string())
+    Ok(unsafe { CStr::from_ptr(out.as_ptr()) }
+        .to_str()
+        .unwrap()
+        .to_string())
 }
 
 /// The keys.json fixture, every key derived through the ABI from its seeds.
@@ -279,7 +299,10 @@ impl Fixture {
             id: BTreeMap::new(),
         };
         for k in arr(&keys["keys"]) {
-            let kp = Kp::from_seeds(&hex::decode(s(&k["ed25519_seed_hex"])).unwrap(), &hex::decode(s(&k["ml_dsa_65_seed_hex"])).unwrap());
+            let kp = Kp::from_seeds(
+                &hex::decode(s(&k["ed25519_seed_hex"])).unwrap(),
+                &hex::decode(s(&k["ml_dsa_65_seed_hex"])).unwrap(),
+            );
             let name = s(&k["name"]);
             fx.public.insert(name.clone(), kp.public());
             fx.id.insert(name.clone(), kp.id());
@@ -289,11 +312,16 @@ impl Fixture {
     }
 
     pub fn key(&self, name: &str) -> RatifyV2PublicKey {
-        *self.public.get(name).unwrap_or_else(|| panic!("unknown fixture key {name}"))
+        *self
+            .public
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown fixture key {name}"))
     }
 
     pub fn kp(&self, name: &str) -> &Kp {
-        self.kp.get(name).unwrap_or_else(|| panic!("unknown fixture key {name}"))
+        self.kp
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown fixture key {name}"))
     }
 
     /// The key as wire JSON (zero key JSON for an unknown name).
@@ -343,8 +371,23 @@ pub fn mu(key: &RatifyV2PublicKey, code: u32, m: &[u8]) -> R<Vec<u8>> {
     buf(|o| unsafe { ratify_v2_external_mu(key, code, ptr_of(m), m.len(), o) })
 }
 
-pub fn verify_statement(code: u32, signable: &[u8], ed: &[u8], ml: &[u8], key: &RatifyV2PublicKey) -> R<()> {
-    check(unsafe { ratify_v2_verify_statement(code, ptr_of(signable), signable.len(), slice(ed), slice(ml), key) })
+pub fn verify_statement(
+    code: u32,
+    signable: &[u8],
+    ed: &[u8],
+    ml: &[u8],
+    key: &RatifyV2PublicKey,
+) -> R<()> {
+    check(unsafe {
+        ratify_v2_verify_statement(
+            code,
+            ptr_of(signable),
+            signable.len(),
+            slice(ed),
+            slice(ml),
+            key,
+        )
+    })
 }
 
 pub fn canonical_json(data: &[u8]) -> R<Vec<u8>> {
@@ -368,7 +411,12 @@ pub fn verify_context(vc: &Value, fx: &Fixture) -> Option<CString> {
             v[f] = fx.key_json(&name);
         }
     }
-    if let Some(name) = v.get("rotation_state").and_then(|r| r.get("current_key")).and_then(Value::as_str).map(str::to_owned) {
+    if let Some(name) = v
+        .get("rotation_state")
+        .and_then(|r| r.get("current_key"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    {
         v["rotation_state"]["current_key"] = fx.key_json(&name);
     }
     Some(CString::new(v.to_string()).unwrap())
@@ -379,7 +427,13 @@ pub fn verify_object(fx: &Fixture, kind: &str, wire: &[u8], bundle: &[u8], vc: &
     let ctx = verify_context(vc, fx);
     let code = unsafe {
         if kind == "receipt_bundle_binding" {
-            ratify_v2_receipt_bundle_binding_check(ptr_of(wire), wire.len(), ptr_of(bundle), bundle.len(), ptr::null_mut())
+            ratify_v2_receipt_bundle_binding_check(
+                ptr_of(wire),
+                wire.len(),
+                ptr_of(bundle),
+                bundle.len(),
+                ptr::null_mut(),
+            )
         } else {
             ratify_v2_verify_object(
                 kind_code(kind),
@@ -429,7 +483,12 @@ impl Tally {
             assert_eq!(total, *want, "{row}: ran {total} checks, expected {want}");
             assert!(*want > 0, "{row}: no checks ran");
         }
-        assert!(self.failures.is_empty(), "{} failure(s):\n{}", self.failures.len(), self.failures.join("\n"));
+        assert!(
+            self.failures.is_empty(),
+            "{} failure(s):\n{}",
+            self.failures.len(),
+            self.failures.join("\n")
+        );
     }
 }
 
@@ -467,7 +526,11 @@ impl Keep {
         v.push(b);
         let last = v.last().unwrap();
         RatifyV2Slice {
-            ptr: if last.is_empty() { ptr::null() } else { last.as_ptr() },
+            ptr: if last.is_empty() {
+                ptr::null()
+            } else {
+                last.as_ptr()
+            },
             len: last.len(),
         }
     }
@@ -487,7 +550,8 @@ pub struct ChainCert {
     pub subject_id: String,
 }
 
-pub type TrustFn = dyn Fn(&[ChainCert]) -> Result<(i32, Option<RatifyV2PublicKey>), i32> + Send + Sync;
+pub type TrustFn =
+    dyn Fn(&[ChainCert]) -> Result<(i32, Option<RatifyV2PublicKey>), i32> + Send + Sync;
 
 /// A trust provider implemented by a Rust closure.
 pub struct Trust(pub Box<TrustFn>);
@@ -567,7 +631,11 @@ impl Status {
     }
 }
 
-unsafe extern "C" fn status_tramp(user: *mut c_void, req: *const RatifyV2StatusRequest, out: *mut RatifyV2StatusBatch) -> i32 {
+unsafe extern "C" fn status_tramp(
+    user: *mut c_void,
+    req: *const RatifyV2StatusRequest,
+    out: *mut RatifyV2StatusBatch,
+) -> i32 {
     let st = &*(user as *const Status);
     let r = &*req;
     let refs = if r.refs_len == 0 {
@@ -590,10 +658,17 @@ unsafe extern "C" fn status_tramp(user: *mut c_void, req: *const RatifyV2StatusR
             keep.clear();
             for (code, wire) in objs {
                 let wire = st.keep.bytes(wire);
-                keep.push(RatifyV2StatusObject { object_type: code, wire });
+                keep.push(RatifyV2StatusObject {
+                    object_type: code,
+                    wire,
+                });
             }
             *out = RatifyV2StatusBatch {
-                objects: if keep.is_empty() { ptr::null() } else { keep.as_ptr() },
+                objects: if keep.is_empty() {
+                    ptr::null()
+                } else {
+                    keep.as_ptr()
+                },
                 count: keep.len(),
             };
             0
@@ -657,7 +732,8 @@ unsafe extern "C" fn audience_tramp(
             keep.0.clear();
             keep.1.clear();
             for m in &ms {
-                keep.1.push(m.trust_domain_ids.iter().map(|d| a.keep.str(d)).collect());
+                keep.1
+                    .push(m.trust_domain_ids.iter().map(|d| a.keep.str(d)).collect());
             }
             for (n, m) in ms.iter().enumerate() {
                 let domains = &keep.1[n];
@@ -665,7 +741,11 @@ unsafe extern "C" fn audience_tramp(
                     delegation_index: m.delegation_index,
                     constraint_index: m.constraint_index,
                     receiver_id: a.keep.str(&m.receiver_id),
-                    trust_domain_ids: if domains.is_empty() { ptr::null() } else { domains.as_ptr() },
+                    trust_domain_ids: if domains.is_empty() {
+                        ptr::null()
+                    } else {
+                        domains.as_ptr()
+                    },
                     trust_domain_ids_len: domains.len(),
                     issued_at: m.issued_at,
                     expires_at: m.expires_at,
@@ -674,7 +754,11 @@ unsafe extern "C" fn audience_tramp(
                 keep.0.push(view);
             }
             *out = RatifyV2AudienceResult {
-                memberships: if keep.0.is_empty() { ptr::null() } else { keep.0.as_ptr() },
+                memberships: if keep.0.is_empty() {
+                    ptr::null()
+                } else {
+                    keep.0.as_ptr()
+                },
                 count: keep.0.len(),
             };
             0
@@ -739,7 +823,11 @@ pub type BindingFn = dyn Fn() -> i32 + Send + Sync;
 /// A receiver-binding hook implemented by a Rust closure.
 pub struct Binding(pub Box<BindingFn>);
 
-unsafe extern "C" fn binding_tramp(user: *mut c_void, _bundle: RatifyV2Slice, _expected: RatifyV2Slice) -> i32 {
+unsafe extern "C" fn binding_tramp(
+    user: *mut c_void,
+    _bundle: RatifyV2Slice,
+    _expected: RatifyV2Slice,
+) -> i32 {
     ((*(user as *const Binding)).0)()
 }
 
@@ -826,7 +914,12 @@ unsafe extern "C" fn modal_load(user: *mut c_void, out: *mut RatifyV2JournalSnap
     }
 }
 
-unsafe extern "C" fn modal_cas(user: *mut c_void, generation: u64, digest: *const c_char, next: *const RatifyV2JournalSnapshot) -> i32 {
+unsafe extern "C" fn modal_cas(
+    user: *mut c_void,
+    generation: u64,
+    digest: *const c_char,
+    next: *const RatifyV2JournalSnapshot,
+) -> i32 {
     let m = &*(user as *const ModalJournal);
     let calls = {
         let mut c = m.cas_calls.lock().unwrap();
@@ -852,7 +945,8 @@ impl RefStore {
     pub fn new(now: i64, lease: i64, log_id: &str, verifier: &Kp) -> RefStore {
         let mut out = ptr::null_mut();
         let log = cs(log_id);
-        check(unsafe { ratify_v2_ref_store_new(now, lease, log.as_ptr(), verifier.0, &mut out) }).expect("ref store");
+        check(unsafe { ratify_v2_ref_store_new(now, lease, log.as_ptr(), verifier.0, &mut out) })
+            .expect("ref store");
         RefStore(out)
     }
 
@@ -883,7 +977,15 @@ impl RefStore {
     pub fn claim(&self, rate_at_finalization: bool) -> RatifyV2ClaimStoreCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2ClaimStoreCallbacks>() };
         check(unsafe {
-            ratify_v2_ref_store_callbacks(self.0, i32::from(rate_at_finalization), &mut c, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), ptr::null_mut())
+            ratify_v2_ref_store_callbacks(
+                self.0,
+                i32::from(rate_at_finalization),
+                &mut c,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )
         })
         .unwrap();
         c
@@ -891,25 +993,69 @@ impl RefStore {
 
     pub fn rate(&self) -> RatifyV2RateCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2RateCallbacks>() };
-        check(unsafe { ratify_v2_ref_store_callbacks(self.0, 1, ptr::null_mut(), &mut c, ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) }).unwrap();
+        check(unsafe {
+            ratify_v2_ref_store_callbacks(
+                self.0,
+                1,
+                ptr::null_mut(),
+                &mut c,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )
+        })
+        .unwrap();
         c
     }
 
     pub fn release(&self) -> RatifyV2ReleaseStoreCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2ReleaseStoreCallbacks>() };
-        check(unsafe { ratify_v2_ref_store_callbacks(self.0, 0, ptr::null_mut(), ptr::null_mut(), &mut c, ptr::null_mut(), ptr::null_mut()) }).unwrap();
+        check(unsafe {
+            ratify_v2_ref_store_callbacks(
+                self.0,
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut c,
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )
+        })
+        .unwrap();
         c
     }
 
     pub fn checkpoint(&self) -> RatifyV2CheckpointCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2CheckpointCallbacks>() };
-        check(unsafe { ratify_v2_ref_store_callbacks(self.0, 0, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), &mut c, ptr::null_mut()) }).unwrap();
+        check(unsafe {
+            ratify_v2_ref_store_callbacks(
+                self.0,
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut c,
+                ptr::null_mut(),
+            )
+        })
+        .unwrap();
         c
     }
 
     pub fn clock(&self) -> RatifyV2ClockCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2ClockCallbacks>() };
-        check(unsafe { ratify_v2_ref_store_callbacks(self.0, 0, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), &mut c) }).unwrap();
+        check(unsafe {
+            ratify_v2_ref_store_callbacks(
+                self.0,
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut c,
+            )
+        })
+        .unwrap();
         c
     }
 
@@ -918,7 +1064,16 @@ impl RefStore {
         let id = cs(claim_id);
         let mut out = empty_buf();
         let mut refusal: *const c_char = ptr::null();
-        let code = unsafe { ratify_v2_ref_store_publish(self.0, id.as_ptr(), ptr_of(body), body.len(), &mut out, &mut refusal) };
+        let code = unsafe {
+            ratify_v2_ref_store_publish(
+                self.0,
+                id.as_ptr(),
+                ptr_of(body),
+                body.len(),
+                &mut out,
+                &mut refusal,
+            )
+        };
         let wire = take(out);
         if code == 0 {
             Ok(wire)
@@ -964,13 +1119,19 @@ impl RefJournal {
 
     pub fn callbacks(&self) -> RatifyV2JournalStoreCallbacks {
         let mut c = unsafe { std::mem::zeroed::<RatifyV2JournalStoreCallbacks>() };
-        check(unsafe { ratify_v2_ref_journal_callbacks(self.0, &mut c, ptr::null_mut(), ptr::null_mut()) }).unwrap();
+        check(unsafe {
+            ratify_v2_ref_journal_callbacks(self.0, &mut c, ptr::null_mut(), ptr::null_mut())
+        })
+        .unwrap();
         c
     }
 
     pub fn head(&self) -> (u64, String) {
         let mut g = 0;
-        let d = string(|o| unsafe { ratify_v2_ref_journal_callbacks(self.0, ptr::null_mut(), &mut g, o) }).unwrap();
+        let d = string(|o| unsafe {
+            ratify_v2_ref_journal_callbacks(self.0, ptr::null_mut(), &mut g, o)
+        })
+        .unwrap();
         (g, d)
     }
 }
@@ -997,7 +1158,10 @@ pub fn status_policy_struct(v: &Value) -> RatifyV2StatusPolicy {
 pub fn status_keys_json(v: &Value) -> Value {
     let mut m = Map::new();
     for (issuer, k) in v.as_object().cloned().unwrap_or_default() {
-        m.insert(issuer, json!({"epoch": k["epoch"], "public_key": k["public_key"]}));
+        m.insert(
+            issuer,
+            json!({"epoch": k["epoch"], "public_key": k["public_key"]}),
+        );
     }
     Value::Object(m)
 }
@@ -1006,24 +1170,49 @@ pub fn status_keys_json(v: &Value) -> Value {
 pub fn request_json(inputs: &Value) -> Value {
     let mut r = Map::new();
     r.insert("required_scope".into(), inputs["required_scope"].clone());
-    r.insert("verifier_namespace".into(), inputs["configured_namespace"].clone());
-    r.insert("replay_epoch".into(), inputs["configured_replay_epoch"].clone());
+    r.insert(
+        "verifier_namespace".into(),
+        inputs["configured_namespace"].clone(),
+    );
+    r.insert(
+        "replay_epoch".into(),
+        inputs["configured_replay_epoch"].clone(),
+    );
     r.insert("now".into(), inputs["now"].clone());
-    r.insert("max_challenge_age_seconds".into(), inputs["max_challenge_age_seconds"].clone());
-    r.insert("future_skew_seconds".into(), inputs["future_skew_seconds"].clone());
+    r.insert(
+        "max_challenge_age_seconds".into(),
+        inputs["max_challenge_age_seconds"].clone(),
+    );
+    r.insert(
+        "future_skew_seconds".into(),
+        inputs["future_skew_seconds"].clone(),
+    );
     r.insert("tzdb_version".into(), inputs["tzdb_version"].clone());
-    r.insert("status_keys".into(), status_keys_json(&inputs["status_keys"]));
+    r.insert(
+        "status_keys".into(),
+        status_keys_json(&inputs["status_keys"]),
+    );
     r.insert("status_policy".into(), inputs["status_policy"].clone());
     let e = &inputs["expected_challenge"];
     if !e.is_null() {
         let mut exp = Map::new();
-        for k in ["value_b64", "issued_at", "expires_at", "verifier_namespace", "replay_epoch", "verifier_id"] {
+        for k in [
+            "value_b64",
+            "issued_at",
+            "expires_at",
+            "verifier_namespace",
+            "replay_epoch",
+            "verifier_id",
+        ] {
             exp.insert(k.into(), e[k].clone());
         }
         if !e["expected_agent_id"].is_null() {
             exp.insert("expected_agent_id".into(), e["expected_agent_id"].clone());
             if !e["expected_agent_public_key"].is_null() {
-                exp.insert("expected_agent_public_key".into(), e["expected_agent_public_key"].clone());
+                exp.insert(
+                    "expected_agent_public_key".into(),
+                    e["expected_agent_public_key"].clone(),
+                );
             }
         }
         for k in ["expected_receiver_id", "expected_session_context_b64"] {
@@ -1055,13 +1244,18 @@ pub fn request_json(inputs: &Value) -> Value {
 /// Configure every status key and apply every preload object through the
 /// journal callbacks (Go `v2PopulateStatusJournal`).
 pub fn populate_status_journal(journal: &RatifyV2JournalStoreCallbacks, inputs: &Value) {
-    let keys = inputs["status_keys"].as_object().cloned().unwrap_or_default();
+    let keys = inputs["status_keys"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
     let policy = status_policy_struct(&inputs["status_policy"]);
     for (issuer, key) in &keys {
         let id = cs(issuer);
         let k = key_struct(&key["public_key"]);
-        check(unsafe { ratify_v2_journal_configure_status_key(journal, id.as_ptr(), u(&key["epoch"]), &k) })
-            .unwrap_or_else(|e| panic!("configure status key for {issuer}: {e:?}"));
+        check(unsafe {
+            ratify_v2_journal_configure_status_key(journal, id.as_ptr(), u(&key["epoch"]), &k)
+        })
+        .unwrap_or_else(|e| panic!("configure status key for {issuer}: {e:?}"));
     }
     for p in arr(&inputs["journal"]["preload"]) {
         let issuer = s(&p["issuer_id"]);
@@ -1070,7 +1264,17 @@ pub fn populate_status_journal(journal: &RatifyV2JournalStoreCallbacks, inputs: 
         let wire = b64(&p["wire_b64"]);
         let id = cs(&issuer);
         check(unsafe {
-            ratify_v2_journal_apply(journal, u(&p["object_type_code"]) as i32, ptr_of(&wire), wire.len(), id.as_ptr(), u(&key["epoch"]), &k, &policy, i(&p["now"]))
+            ratify_v2_journal_apply(
+                journal,
+                u(&p["object_type_code"]) as i32,
+                ptr_of(&wire),
+                wire.len(),
+                id.as_ptr(),
+                u(&key["epoch"]),
+                &k,
+                &policy,
+                i(&p["now"]),
+            )
         })
         .unwrap_or_else(|e| panic!("preload: {e:?}"));
     }
@@ -1106,8 +1310,17 @@ pub struct Counts {
     pub evaluator: AtomicUsize,
 }
 
-pub const COUNT_NAMES: [&str; 9] =
-    ["receiver_binding", "claim", "trust", "status", "audience", "rate", "finalize", "progress", "evaluator"];
+pub const COUNT_NAMES: [&str; 9] = [
+    "receiver_binding",
+    "claim",
+    "trust",
+    "status",
+    "audience",
+    "rate",
+    "finalize",
+    "progress",
+    "evaluator",
+];
 
 impl Counts {
     pub fn get(&self, name: &str) -> &AtomicUsize {
@@ -1130,11 +1343,17 @@ impl Counts {
     }
 
     pub fn snapshot(&self) -> BTreeMap<&'static str, usize> {
-        COUNT_NAMES.iter().map(|n| (*n, self.get(n).load(Ordering::SeqCst))).collect()
+        COUNT_NAMES
+            .iter()
+            .map(|n| (*n, self.get(n).load(Ordering::SeqCst)))
+            .collect()
     }
 
     pub fn expected(v: &Value) -> BTreeMap<&'static str, usize> {
-        COUNT_NAMES.iter().map(|n| (*n, u(&v[*n]) as usize)).collect()
+        COUNT_NAMES
+            .iter()
+            .map(|n| (*n, u(&v[*n]) as usize))
+            .collect()
     }
 }
 
@@ -1194,7 +1413,14 @@ unsafe extern "C" fn evaluator_tramp(
             let input_json = json_bytes(&Value::Object(v));
             let p = cs(profile);
             let (mut outcome, mut until) = (0i32, 0i64);
-            let code = ratify_v2_evaluate_standard_profile(p.as_ptr(), input_json.as_ptr(), input_json.len(), &mut outcome, &mut until, ptr::null_mut());
+            let code = ratify_v2_evaluate_standard_profile(
+                p.as_ptr(),
+                input_json.as_ptr(),
+                input_json.len(),
+                &mut outcome,
+                &mut until,
+                ptr::null_mut(),
+            );
             if code != 0 {
                 return code;
             }
@@ -1256,7 +1482,8 @@ impl Setup {
                     "ambiguous" => 4,
                     other => panic!("unknown trust outcome {other}"),
                 };
-                let key = (!t["root_public_key"].is_null()).then(|| key_struct(&t["root_public_key"]));
+                let key =
+                    (!t["root_public_key"].is_null()).then(|| key_struct(&t["root_public_key"]));
                 Ok((outcome, key))
             })))
         };
@@ -1274,7 +1501,10 @@ impl Setup {
                     "panic" => return Err(RatifyV2Code::RatifyV2ErrInternal as i32),
                     _ => {}
                 }
-                Ok(arr(&script["objects"]).iter().map(|o| (u(&o["object_type_code"]) as u16, b64(&o["wire_b64"]))).collect())
+                Ok(arr(&script["objects"])
+                    .iter()
+                    .map(|o| (u(&o["object_type_code"]) as u16, b64(&o["wire_b64"])))
+                    .collect())
             }))
         };
         let audience = {
@@ -1411,7 +1641,11 @@ impl Setup {
     pub fn evaluator_config(&self) -> RatifyV2EvaluatorConfig {
         RatifyV2EvaluatorConfig {
             timeout_ms: 1000,
-            registrations: if self.registrations.is_empty() { ptr::null() } else { self.registrations.as_ptr() },
+            registrations: if self.registrations.is_empty() {
+                ptr::null()
+            } else {
+                self.registrations.as_ptr()
+            },
             count: self.registrations.len(),
         }
     }
@@ -1492,7 +1726,11 @@ pub fn verify(setup: &Setup, bundle: &[u8]) -> R<Outcome> {
             bundle.len(),
             setup.request.as_ptr(),
             setup.request.len(),
-            if setup.has_evaluators { &config } else { ptr::null() },
+            if setup.has_evaluators {
+                &config
+            } else {
+                ptr::null()
+            },
             &cb,
             &mut outcome,
             &mut record,
@@ -1504,7 +1742,11 @@ pub fn verify(setup: &Setup, bundle: &[u8]) -> R<Outcome> {
     check(code)?;
     Ok(Outcome {
         stage: stage_name(outcome.stage).into(),
-        class: if outcome.error_code == 0 { String::new() } else { class(outcome.error_code) },
+        class: if outcome.error_code == 0 {
+            String::new()
+        } else {
+            class(outcome.error_code)
+        },
         disposition: disposition_name(outcome.disposition).into(),
         message,
         claim_record,

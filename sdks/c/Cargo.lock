@@ -561,8 +561,11 @@ version = "2.0.0-alpha.1"
 dependencies = [
  "base64",
  "cbindgen",
+ "ed25519-dalek",
+ "fips204",
  "getrandom 0.2.17",
  "hex",
+ "rand_core",
  "ratify-c",
  "ratify-protocol",
  "serde",

@@ -55,13 +55,19 @@ pub struct RatifyV2SignRequest {
 
 /// Reports the signer's complete public key. Return 0, or a negative code
 /// (`RatifyV2ErrCancelled` cancels signing).
-pub type RatifyV2SignerPublicKeyFn = Option<unsafe extern "C" fn(user: *mut c_void, out: *mut RatifyV2PublicKey) -> i32>;
+pub type RatifyV2SignerPublicKeyFn =
+    Option<unsafe extern "C" fn(user: *mut c_void, out: *mut RatifyV2PublicKey) -> i32>;
 
 /// Signs one request. Write both components and their lengths into `*out`
 /// and return 0; return `RatifyV2ErrCancelled` to cancel, or any other
 /// non-zero code to refuse. The library verifies the result before use.
-pub type RatifyV2SignerSignFn =
-    Option<unsafe extern "C" fn(user: *mut c_void, request: *const RatifyV2SignRequest, out: *mut RatifyV2Signature) -> i32>;
+pub type RatifyV2SignerSignFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        request: *const RatifyV2SignRequest,
+        out: *mut RatifyV2Signature,
+    ) -> i32,
+>;
 
 /// An external signer (HSM, KMS, remote service). `mode` is declared when the
 /// signer is bound and never changes. The callbacks run on the calling thread
@@ -101,7 +107,9 @@ impl SignerV2 for CSigner {
             ed25519: Vec::new(),
             ml_dsa_65: Vec::new(),
         };
-        let Some(f) = self.cb.public_key else { return empty };
+        let Some(f) = self.cb.public_key else {
+            return empty;
+        };
         let mut out = RatifyV2PublicKey {
             ed25519: [0; 32],
             ml_dsa_65: [0; 1952],
@@ -115,7 +123,7 @@ impl SignerV2 for CSigner {
             }
             return empty;
         }
-        let key = out.to_hybrid();
+        let key = out.as_hybrid();
         *cached = Some(key.clone());
         key
     }
@@ -129,7 +137,9 @@ impl SignerV2 for CSigner {
             return Err(V2SignError::Cancelled);
         }
         let Some(f) = self.cb.sign else {
-            return Err(V2SignError::Provider("external signer has no sign callback".into()));
+            return Err(V2SignError::Provider(
+                "external signer has no sign callback".into(),
+            ));
         };
         let mut key = RatifyV2PublicKey {
             ed25519: [0; 32],
@@ -168,9 +178,11 @@ impl SignerV2 for CSigner {
             )));
         }
         if out.ed25519_len > 64 || out.ml_dsa_65_len > 3309 {
-            return Err(V2SignError::Provider("external signer reported an oversized component".into()));
+            return Err(V2SignError::Provider(
+                "external signer reported an oversized component".into(),
+            ));
         }
-        Ok(out.to_hybrid())
+        Ok(out.as_hybrid())
     }
 }
 
@@ -236,9 +248,10 @@ pub(crate) unsafe fn build(
 /// `RatifyV2ErrCancelled`.
 pub(crate) fn finish<R>(result: V2SignResult<R>, built: &[&Built]) -> AbiResult<R> {
     match result {
-        Err(e) if built.iter().any(|b| b.cancelled()) => {
-            Err(Failure::new(RatifyV2Code::RatifyV2ErrCancelled, format!("signer cancelled: {e}")))
-        }
+        Err(e) if built.iter().any(|b| b.cancelled()) => Err(Failure::new(
+            RatifyV2Code::RatifyV2ErrCancelled,
+            format!("signer cancelled: {e}"),
+        )),
         other => Ok(other?),
     }
 }
@@ -274,9 +287,16 @@ fn placeholder_sig() -> Value {
 /// Parse an object for signing: signature members that are absent are filled
 /// with a well-formed placeholder (their values are replaced by signing),
 /// then the object is canonicalized for the strict decoder.
-unsafe fn signing_input(ptr: *const u8, len: usize, sig_fields: &[&str], extra: &[(&str, Value)]) -> AbiResult<Vec<u8>> {
+unsafe fn signing_input(
+    ptr: *const u8,
+    len: usize,
+    sig_fields: &[&str],
+    extra: &[(&str, Value)],
+) -> AbiResult<Vec<u8>> {
     let mut v = json_bytes(ptr, len, "object")?;
-    let m = v.as_object_mut().ok_or_else(|| bad_arg("object must be a JSON object"))?;
+    let m = v
+        .as_object_mut()
+        .ok_or_else(|| bad_arg("object must be a JSON object"))?;
     for f in sig_fields {
         m.entry(f.to_string()).or_insert_with(placeholder_sig);
     }
@@ -288,7 +308,9 @@ unsafe fn signing_input(ptr: *const u8, len: usize, sig_fields: &[&str], extra: 
 
 fn key_arg(k: *const RatifyV2PublicKey, name: &str) -> AbiResult<HybridPublicKey> {
     // SAFETY: a non-NULL key points to caller storage.
-    unsafe { k.as_ref() }.map(RatifyV2PublicKey::to_hybrid).ok_or_else(|| null_arg(name))
+    unsafe { k.as_ref() }
+        .map(RatifyV2PublicKey::as_hybrid)
+        .ok_or_else(|| null_arg(name))
 }
 
 /// Sign a delegation certificate (code 0x0001) with the issuer key. `object`
@@ -304,11 +326,23 @@ pub unsafe extern "C" fn ratify_v2_sign_delegation_certificate(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let cert = decode_delegation_cert_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-        let signed = with_signer(local, external, "issuer", |ctx, s| sign_delegation_cert_v2_with_signer(ctx, &cert, s))?;
-        write_buffer(out, encode_delegation_cert_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let cert = decode_delegation_cert_v2(&signing_input(
+                object,
+                object_len,
+                &["signature"],
+                &[],
+            )?)?;
+            let signed = with_signer(local, external, "issuer", |ctx, s| {
+                sign_delegation_cert_v2_with_signer(ctx, &cert, s)
+            })?;
+            write_buffer(out, encode_delegation_cert_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a proof bundle's challenge presentation (code 0x0002) with the agent
@@ -322,17 +356,24 @@ pub unsafe extern "C" fn ratify_v2_sign_proof_bundle(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let wire = signing_input(
-            object,
-            object_len,
-            &["challenge_sig"],
-            &[("delegation_digest", json!(b64(&[0u8; 48])))],
-        )?;
-        let bundle = decode_proof_bundle_v2(&wire)?;
-        let signed = with_signer(local, external, "agent", |ctx, s| sign_proof_bundle_v2_with_signer(ctx, &bundle, s))?;
-        write_buffer(out, encode_proof_bundle_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let wire = signing_input(
+                object,
+                object_len,
+                &["challenge_sig"],
+                &[("delegation_digest", json!(b64(&[0u8; 48])))],
+            )?;
+            let bundle = decode_proof_bundle_v2(&wire)?;
+            let signed = with_signer(local, external, "agent", |ctx, s| {
+                sign_proof_bundle_v2_with_signer(ctx, &bundle, s)
+            })?;
+            write_buffer(out, encode_proof_bundle_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a revocation list (code 0x0003) with the status key bound to
@@ -348,15 +389,25 @@ pub unsafe extern "C" fn ratify_v2_sign_revocation_list(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let list = decode_revocation_list_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-        let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
-        let key = key_arg(bound_status_key, "bound_status_key")?;
-        let signed = with_signer(local, external, "status", |ctx, s| {
-            sign_revocation_list_v2_with_signer(ctx, &list, issuer, &key, s)
-        })?;
-        write_buffer(out, encode_revocation_list_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let list = decode_revocation_list_v2(&signing_input(
+                object,
+                object_len,
+                &["signature"],
+                &[],
+            )?)?;
+            let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
+            let key = key_arg(bound_status_key, "bound_status_key")?;
+            let signed = with_signer(local, external, "status", |ctx, s| {
+                sign_revocation_list_v2_with_signer(ctx, &list, issuer, &key, s)
+            })?;
+            write_buffer(out, encode_revocation_list_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a revocation push (code 0x0005); see
@@ -371,15 +422,25 @@ pub unsafe extern "C" fn ratify_v2_sign_revocation_push(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let push = decode_revocation_push_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-        let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
-        let key = key_arg(bound_status_key, "bound_status_key")?;
-        let signed = with_signer(local, external, "status", |ctx, s| {
-            sign_revocation_push_v2_with_signer(ctx, &push, issuer, &key, s)
-        })?;
-        write_buffer(out, encode_revocation_push_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let push = decode_revocation_push_v2(&signing_input(
+                object,
+                object_len,
+                &["signature"],
+                &[],
+            )?)?;
+            let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
+            let key = key_arg(bound_status_key, "bound_status_key")?;
+            let signed = with_signer(local, external, "status", |ctx, s| {
+                sign_revocation_push_v2_with_signer(ctx, &push, issuer, &key, s)
+            })?;
+            write_buffer(out, encode_revocation_push_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a key-rotation statement under both codes: 0x0004 with the current
@@ -395,18 +456,25 @@ pub unsafe extern "C" fn ratify_v2_sign_key_rotation_statement(
     new_external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(old_local), flag(new_local)], || clear_buffer(out), || {
-        let stmt = decode_key_rotation_statement_v2(&signing_input(
-            object,
-            object_len,
-            &["old_signature", "new_signature"],
-            &[],
-        )?)?;
-        let signed = with_two_signers((old_local, old_external), (new_local, new_external), |ctx, a, b| {
-            sign_key_rotation_statement_v2_with_signers(ctx, &stmt, a, b)
-        })?;
-        write_buffer(out, encode_key_rotation_statement_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(old_local), flag(new_local)],
+        || clear_buffer(out),
+        || {
+            let stmt = decode_key_rotation_statement_v2(&signing_input(
+                object,
+                object_len,
+                &["old_signature", "new_signature"],
+                &[],
+            )?)?;
+            let signed = with_two_signers(
+                (old_local, old_external),
+                (new_local, new_external),
+                |ctx, a, b| sign_key_rotation_statement_v2_with_signers(ctx, &stmt, a, b),
+            )?;
+            write_buffer(out, encode_key_rotation_statement_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a witness entry (code 0x0006) with the named witness key.
@@ -418,11 +486,19 @@ pub unsafe extern "C" fn ratify_v2_sign_witness_entry(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let entry = decode_witness_entry_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-        let signed = with_signer(local, external, "witness", |ctx, s| sign_witness_entry_v2_with_signer(ctx, &entry, s))?;
-        write_buffer(out, encode_witness_entry_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let entry =
+                decode_witness_entry_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
+            let signed = with_signer(local, external, "witness", |ctx, s| {
+                sign_witness_entry_v2_with_signer(ctx, &entry, s)
+            })?;
+            write_buffer(out, encode_witness_entry_v2(&signed)?)
+        },
+    )
 }
 
 /// Sign a complete verification receipt (code 0x0008) with the verifier key.
@@ -434,13 +510,23 @@ pub unsafe extern "C" fn ratify_v2_sign_verification_receipt(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let r = decode_verification_receipt_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-        let signed = with_signer(local, external, "verifier", |ctx, s| {
-            sign_verification_receipt_v2_with_signer(ctx, &r, s)
-        })?;
-        write_buffer(out, encode_verification_receipt_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let r = decode_verification_receipt_v2(&signing_input(
+                object,
+                object_len,
+                &["signature"],
+                &[],
+            )?)?;
+            let signed = with_signer(local, external, "verifier", |ctx, s| {
+                sign_verification_receipt_v2_with_signer(ctx, &r, s)
+            })?;
+            write_buffer(out, encode_verification_receipt_v2(&signed)?)
+        },
+    )
 }
 
 /// Bind a sealed receipt outbox body to the next position of a receipt log
@@ -456,14 +542,19 @@ pub unsafe extern "C" fn ratify_v2_sign_prepared_verification_receipt(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let body = bytes(body, body_len, "body")?;
-        let head = receipt_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
-        let signed = with_signer(local, external, "verifier", |ctx, s| {
-            sign_prepared_verification_receipt_v2_with_signer(ctx, body, &head, s)
-        })?;
-        write_buffer(out, encode_verification_receipt_v2(&signed)?)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let body = bytes(body, body_len, "body")?;
+            let head = receipt_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
+            let signed = with_signer(local, external, "verifier", |ctx, s| {
+                sign_prepared_verification_receipt_v2_with_signer(ctx, body, &head, s)
+            })?;
+            write_buffer(out, encode_verification_receipt_v2(&signed)?)
+        },
+    )
 }
 
 /// Parse a transaction receipt whose party signature set may be incomplete.
@@ -508,7 +599,10 @@ fn transaction_template(v: &Value) -> AbiResult<TransactionReceiptV2> {
             party_id: po.str("party_id")?,
             role: po.str("role")?,
             agent_id: po.str("agent_id")?,
-            agent_pub_key: public_key(po.raw("agent_pub_key").unwrap_or(&Value::Null), "agent_pub_key")?,
+            agent_pub_key: public_key(
+                po.raw("agent_pub_key").unwrap_or(&Value::Null),
+                "agent_pub_key",
+            )?,
             verifier_id: po.str("verifier_id")?,
             workspace_id: po.str("workspace_id")?,
             session_id: po.str("session_id")?,
@@ -537,7 +631,8 @@ fn transaction_template(v: &Value) -> AbiResult<TransactionReceiptV2> {
         transaction_id: o.str("transaction_id")?,
         created_at: o.i64("created_at")?,
         terms_schema_uri: o.str("terms_schema_uri")?,
-        terms_canonical_json: base64_std_decode(&terms).map_err(|e| bad_arg(format!("terms_canonical_json: {e}")))?,
+        terms_canonical_json: base64_std_decode(&terms)
+            .map_err(|e| bad_arg(format!("terms_canonical_json: {e}")))?,
         parties,
         party_signatures: sigs,
     })
@@ -558,34 +653,41 @@ pub unsafe extern "C" fn ratify_v2_sign_transaction_receipt_party(
     external: *const RatifyV2ExternalSigner,
     out: *mut RatifyV2Buffer,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(local)], || clear_buffer(out), || {
-        let mut v = json_bytes(object, object_len, "object")?;
-        let r = transaction_template(&v)?;
-        let party = cstr(party_id, "party_id")?;
-        let sig = with_signer(local, external, "party", |ctx, s| {
-            sign_transaction_receipt_party_v2_with_signer(ctx, &r, party, s)
-        })?;
-        let m = v.as_object_mut().ok_or_else(|| bad_arg("object must be a JSON object"))?;
-        let mut sigs: Vec<Value> = match m.remove("party_signatures") {
-            Some(Value::Array(a)) => a,
-            _ => Vec::new(),
-        };
-        sigs.retain(|s| s.get("party_id").and_then(Value::as_str) != Some(party));
-        let mut entry = Map::new();
-        entry.insert("party_id".into(), json!(party));
-        entry.insert(
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(local)],
+        || clear_buffer(out),
+        || {
+            let mut v = json_bytes(object, object_len, "object")?;
+            let r = transaction_template(&v)?;
+            let party = cstr(party_id, "party_id")?;
+            let sig = with_signer(local, external, "party", |ctx, s| {
+                sign_transaction_receipt_party_v2_with_signer(ctx, &r, party, s)
+            })?;
+            let m = v
+                .as_object_mut()
+                .ok_or_else(|| bad_arg("object must be a JSON object"))?;
+            let mut sigs: Vec<Value> = match m.remove("party_signatures") {
+                Some(Value::Array(a)) => a,
+                _ => Vec::new(),
+            };
+            sigs.retain(|s| s.get("party_id").and_then(Value::as_str) != Some(party));
+            let mut entry = Map::new();
+            entry.insert("party_id".into(), json!(party));
+            entry.insert(
             "signature".into(),
             json!({"ed25519": b64(&sig.signature.ed25519), "ml_dsa_65": b64(&sig.signature.ml_dsa_65)}),
         );
-        sigs.push(Value::Object(entry));
-        sigs.sort_by(|a, b| {
-            let pa = a.get("party_id").and_then(Value::as_str).unwrap_or("");
-            let pb = b.get("party_id").and_then(Value::as_str).unwrap_or("");
-            pa.as_bytes().cmp(pb.as_bytes())
-        });
-        m.insert("party_signatures".into(), Value::Array(sigs));
-        write_buffer(out, canonical_json_v2(&to_bytes(&v))?)
-    })
+            sigs.push(Value::Object(entry));
+            sigs.sort_by(|a, b| {
+                let pa = a.get("party_id").and_then(Value::as_str).unwrap_or("");
+                let pb = b.get("party_id").and_then(Value::as_str).unwrap_or("");
+                pa.as_bytes().cmp(pb.as_bytes())
+            });
+            m.insert("party_signatures".into(), Value::Array(sigs));
+            write_buffer(out, canonical_json_v2(&to_bytes(&v))?)
+        },
+    )
 }
 
 impl Built {

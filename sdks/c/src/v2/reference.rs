@@ -20,11 +20,15 @@ use serde_json::Value;
 
 use super::callbacks::*;
 use super::keys::RatifyV2KeyPair;
-use super::marshal::{claim_from_json, claim_json, expected_challenge, expected_challenge_json, progress_from_json, progress_json, public_key, to_bytes, Obj};
+use super::marshal::{
+    claim_from_json, claim_json, expected_challenge, expected_challenge_json, progress_from_json,
+    progress_json, public_key, to_bytes, Obj,
+};
 use super::verifier::RatifyV2Released;
 use super::{
-    bad_arg, bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h,
-    store_failure, write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2Code, RatifyV2Slice,
+    bad_arg, bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable,
+    run, run_h, store_failure, write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2Code,
+    RatifyV2Slice,
 };
 
 // ---------------------------------------------------------------------------
@@ -121,9 +125,15 @@ unsafe extern "C" fn br_now(user: *mut c_void, out: *mut i64) -> i32 {
     })
 }
 
-unsafe extern "C" fn br_claim(user: *mut c_void, view: *const RatifyV2ClaimView, out: *mut RatifyV2ClaimResult) -> i32 {
+unsafe extern "C" fn br_claim(
+    user: *mut c_void,
+    view: *const RatifyV2ClaimView,
+    out: *mut RatifyV2ClaimResult,
+) -> i32 {
     enter(user, |b| {
-        let Some(view) = view.as_ref() else { return RatifyV2Code::RatifyV2ErrNullPointer as i32 };
+        let Some(view) = view.as_ref() else {
+            return RatifyV2Code::RatifyV2ErrNullPointer as i32;
+        };
         let claim = match claim_from_json(&slice_vec(view.record)) {
             Ok(c) => c,
             Err(_) => return RatifyV2Code::RatifyV2Malformed as i32,
@@ -161,22 +171,30 @@ unsafe extern "C" fn br_finalize(
 ) -> i32 {
     enter(user, |b| {
         let id = owned(claim_id);
-        let (token, terminal, body) = (slice_vec(owner_token), slice_vec(terminal), slice_vec(body));
+        let (token, terminal, body) =
+            (slice_vec(owner_token), slice_vec(terminal), slice_vec(body));
         let mut code = not_served();
         b.target.claim(&mut |s| {
-            code = match s.finalize_v2_claim(&ctx(), &id, &token, &terminal, &body, allow_valid_until) {
-                Ok(c) => {
-                    *committed = i32::from(c);
-                    0
+            code =
+                match s.finalize_v2_claim(&ctx(), &id, &token, &terminal, &body, allow_valid_until)
+                {
+                    Ok(c) => {
+                        *committed = i32::from(c);
+                        0
+                    }
+                    Err(e) => store_code(e),
                 }
-                Err(e) => store_code(e),
-            }
         });
         code
     })
 }
 
-unsafe extern "C" fn br_progress(user: *mut c_void, claim_id: *const c_char, owner_token: RatifyV2Slice, progress: RatifyV2Slice) -> i32 {
+unsafe extern "C" fn br_progress(
+    user: *mut c_void,
+    claim_id: *const c_char,
+    owner_token: RatifyV2Slice,
+    progress: RatifyV2Slice,
+) -> i32 {
     enter(user, |b| {
         let id = owned(claim_id);
         let token = slice_vec(owner_token);
@@ -195,7 +213,11 @@ unsafe extern "C" fn br_progress(user: *mut c_void, claim_id: *const c_char, own
     })
 }
 
-unsafe extern "C" fn br_load_interrupted(user: *mut c_void, claim_id: *const c_char, out: *mut RatifyV2InterruptedClaim) -> i32 {
+unsafe extern "C" fn br_load_interrupted(
+    user: *mut c_void,
+    claim_id: *const c_char,
+    out: *mut RatifyV2InterruptedClaim,
+) -> i32 {
     enter(user, |b| {
         let id = owned(claim_id);
         let mut code = not_served();
@@ -252,7 +274,11 @@ unsafe extern "C" fn br_reserve(
     RatifyV2Code::RatifyV2StoreUnavailable as i32
 }
 
-unsafe extern "C" fn br_load_terminal(user: *mut c_void, claim_id: *const c_char, out: *mut RatifyV2TerminalClaim) -> i32 {
+unsafe extern "C" fn br_load_terminal(
+    user: *mut c_void,
+    claim_id: *const c_char,
+    out: *mut RatifyV2TerminalClaim,
+) -> i32 {
     enter(user, |b| {
         let id = owned(claim_id);
         let mut code = not_served();
@@ -281,9 +307,14 @@ unsafe extern "C" fn br_load_terminal(user: *mut c_void, claim_id: *const c_char
     })
 }
 
-unsafe extern "C" fn br_record_release(user: *mut c_void, record: *const RatifyV2ReleaseRecord) -> i32 {
+unsafe extern "C" fn br_record_release(
+    user: *mut c_void,
+    record: *const RatifyV2ReleaseRecord,
+) -> i32 {
     enter(user, |b| {
-        let Some(r) = record.as_ref() else { return RatifyV2Code::RatifyV2ErrNullPointer as i32 };
+        let Some(r) = record.as_ref() else {
+            return RatifyV2Code::RatifyV2ErrNullPointer as i32;
+        };
         let rec = V2ReleaseRecord {
             claim_id: owned(r.claim_id),
             entry_hash: slice_vec(r.entry_hash),
@@ -337,7 +368,12 @@ unsafe extern "C" fn br_acknowledge(
     })
 }
 
-unsafe extern "C" fn br_get_ack(user: *mut c_void, log_id: *const c_char, sequence: i64, out: *mut RatifyV2Acknowledgement) -> i32 {
+unsafe extern "C" fn br_get_ack(
+    user: *mut c_void,
+    log_id: *const c_char,
+    sequence: i64,
+    out: *mut RatifyV2Acknowledgement,
+) -> i32 {
     enter(user, |b| {
         let log = owned(log_id);
         let mut code = not_served();
@@ -383,7 +419,9 @@ unsafe extern "C" fn br_journal_cas(
     next: *const RatifyV2JournalSnapshot,
 ) -> i32 {
     enter(user, |b| {
-        let Some(next) = next.as_ref() else { return RatifyV2Code::RatifyV2ErrNullPointer as i32 };
+        let Some(next) = next.as_ref() else {
+            return RatifyV2Code::RatifyV2ErrNullPointer as i32;
+        };
         let expected = SecurityJournalHeadV2 {
             generation: expected_generation,
             digest: owned(expected_digest),
@@ -400,7 +438,9 @@ unsafe extern "C" fn br_journal_cas(
         b.target.journal(&mut |j| {
             code = match j.compare_and_swap(&ctx(), &expected, &journal) {
                 Ok(()) => 0,
-                Err(SecurityJournalStoreErrorV2::Conflict) => RatifyV2Code::RatifyV2StoreJournalConflict as i32,
+                Err(SecurityJournalStoreErrorV2::Conflict) => {
+                    RatifyV2Code::RatifyV2StoreJournalConflict as i32
+                }
                 Err(SecurityJournalStoreErrorV2::Failed(e)) => class_code(e.class) as i32,
             }
         });
@@ -416,7 +456,10 @@ unsafe extern "C" fn br_issuance_persist(
     record: RatifyV2Slice,
 ) -> i32 {
     enter(user, |b| {
-        let rec = match serde_json::from_slice::<Value>(&slice_vec(record)).ok().and_then(|v| expected_challenge(&v).ok()) {
+        let rec = match serde_json::from_slice::<Value>(&slice_vec(record))
+            .ok()
+            .and_then(|v| expected_challenge(&v).ok())
+        {
             Some(r) => r,
             None => return RatifyV2Code::RatifyV2Malformed as i32,
         };
@@ -544,15 +587,19 @@ pub unsafe extern "C" fn ratify_v2_ref_store_new(
     verifier_key: *const RatifyV2KeyPair,
     out: *mut *mut RatifyV2RefStore,
 ) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        let kp = handle(verifier_key, "verifier_key")?;
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let store = Store::new(now, lease_seconds, cstr(log_id, "log_id")?, &kp.private)?;
-        *out = ref_store(Arc::new(store));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            let kp = handle(verifier_key, "verifier_key")?;
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let store = Store::new(now, lease_seconds, cstr(log_id, "log_id")?, &kp.private)?;
+            *out = ref_store(Arc::new(store));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: release a reference store handle. NULL is a no-op.
@@ -570,40 +617,63 @@ pub unsafe extern "C" fn ratify_v2_ref_store_free(s: *mut RatifyV2RefStore) {
 
 /// TEST ONLY: an exact copy of the store state (a restore of a backup).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_ref_store_clone(s: *const RatifyV2RefStore, out: *mut *mut RatifyV2RefStore) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || crate::guard::clear_ptr(out), || {
-        let s = handle(s, "store")?;
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        *out = ref_store(Arc::new(s.store.clone_store()));
-        Ok(())
-    })
+pub unsafe extern "C" fn ratify_v2_ref_store_clone(
+    s: *const RatifyV2RefStore,
+    out: *mut *mut RatifyV2RefStore,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || crate::guard::clear_ptr(out),
+        || {
+            let s = handle(s, "store")?;
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            *out = ref_store(Arc::new(s.store.clone_store()));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: store controls. `control` selects: 1 set time to `value`;
 /// 2 set acknowledgement withheld (`value` != 0); 3 set signer failure
 /// (`value` != 0).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_ref_store_control(s: *const RatifyV2RefStore, control: i32, value: i64) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || {}, || {
-        let s = handle(s, "store")?;
-        match control {
-            1 => s.store.set_time(value),
-            2 => s.store.set_acknowledgement_withheld(value != 0),
-            3 => s.store.set_signer_failure(value != 0),
-            other => return Err(bad_arg(format!("store control {other} is not defined"))),
-        }
-        Ok(())
-    })
+pub unsafe extern "C" fn ratify_v2_ref_store_control(
+    s: *const RatifyV2RefStore,
+    control: i32,
+    value: i64,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || {},
+        || {
+            let s = handle(s, "store")?;
+            match control {
+                1 => s.store.set_time(value),
+                2 => s.store.set_acknowledgement_withheld(value != 0),
+                3 => s.store.set_signer_failure(value != 0),
+                other => return Err(bad_arg(format!("store control {other} is not defined"))),
+            }
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: the store's current clock value (without a reading).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_ref_store_time(s: *const RatifyV2RefStore, out: *mut i64) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || crate::guard::clear_val(out), || {
-        write_val(out, handle(s, "store")?.store.now())
-    })
+pub unsafe extern "C" fn ratify_v2_ref_store_time(
+    s: *const RatifyV2RefStore,
+    out: *mut i64,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || crate::guard::clear_val(out),
+        || write_val(out, handle(s, "store")?.store.now()),
+    )
 }
 
 /// TEST ONLY: plant a release record for a claim (models a forged or stale
@@ -616,26 +686,39 @@ pub unsafe extern "C" fn ratify_v2_ref_store_tamper(
     corrupt: i32,
     ack_timestamp: i64,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || {}, || {
-        let s = handle(s, "store")?;
-        let id = cstr(claim_id, "claim_id")?;
-        if corrupt != 0 {
-            s.store.corrupt_sealed_state_test_only(id);
-        } else {
-            s.store.plant_release_test_only(id, ack_timestamp);
-        }
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || {},
+        || {
+            let s = handle(s, "store")?;
+            let id = cstr(claim_id, "claim_id")?;
+            if corrupt != 0 {
+                s.store.corrupt_sealed_state_test_only(id);
+            } else {
+                s.store.plant_release_test_only(id, ack_timestamp);
+            }
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: abandon every unpublished receipt and freeze the log; writes
 /// the abandoned claim IDs as a JSON array.
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_ref_store_abandon(s: *const RatifyV2RefStore, out: *mut RatifyV2Buffer) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || clear_buffer(out), || {
-        let ids = handle(s, "store")?.store.abandon_pending_receipts();
-        write_buffer(out, to_bytes(&Value::from(ids)))
-    })
+pub unsafe extern "C" fn ratify_v2_ref_store_abandon(
+    s: *const RatifyV2RefStore,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || clear_buffer(out),
+        || {
+            let ids = handle(s, "store")?.store.abandon_pending_receipts();
+            write_buffer(out, to_bytes(&Value::from(ids)))
+        },
+    )
 }
 
 /// TEST ONLY: the receipt publisher (§7.7): sign and append the committed
@@ -661,14 +744,26 @@ pub unsafe extern "C" fn ratify_v2_ref_store_publish(
         },
         || {
             let s = handle(s, "store")?;
-            match s.store.publish_v2_receipt(&ctx(), cstr(claim_id, "claim_id")?, bytes(body, body_len, "body")?) {
+            match s.store.publish_v2_receipt(
+                &ctx(),
+                cstr(claim_id, "claim_id")?,
+                bytes(body, body_len, "body")?,
+            ) {
                 Ok(wire) => write_buffer(wire_out, wire),
                 Err(e) => {
                     if !refusal_out.is_null() {
                         *refusal_out = match &e {
-                            V2StoreError::Unavailable(m) if m == store::ERR_HEAD_OF_LINE_BLOCKED => c"head_of_line_blocked",
-                            V2StoreError::Unavailable(m) if m == store::ERR_SIGNER_UNAVAILABLE => c"signer_unavailable",
-                            V2StoreError::Unavailable(m) if m == store::ERR_LOG_FROZEN => c"log_frozen",
+                            V2StoreError::Unavailable(m)
+                                if m == store::ERR_HEAD_OF_LINE_BLOCKED =>
+                            {
+                                c"head_of_line_blocked"
+                            }
+                            V2StoreError::Unavailable(m) if m == store::ERR_SIGNER_UNAVAILABLE => {
+                                c"signer_unavailable"
+                            }
+                            V2StoreError::Unavailable(m) if m == store::ERR_LOG_FROZEN => {
+                                c"log_frozen"
+                            }
                             _ => c"other",
                         }
                         .as_ptr();
@@ -694,41 +789,46 @@ pub unsafe extern "C" fn ratify_v2_ref_store_callbacks(
     checkpoint_out: *mut RatifyV2CheckpointCallbacks,
     clock_out: *mut RatifyV2ClockCallbacks,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || {}, || {
-        let s = handle(s, "store")?;
-        let b = s.bridge.as_ref();
-        if rate_at_finalization != 0 {
-            let _view = s.store.with_rate_at_finalization();
-        }
-        if !claim_out.is_null() {
-            *claim_out = claim_callbacks(b, rate_at_finalization != 0);
-        }
-        if !rate_out.is_null() {
-            *rate_out = RatifyV2RateCallbacks {
-                user: bridge_ptr(b),
-                rate_at_finalization: i32::from(rate_at_finalization != 0),
-                reserve: Some(br_reserve),
-            };
-        }
-        if !release_out.is_null() {
-            *release_out = RatifyV2ReleaseStoreCallbacks {
-                user: bridge_ptr(b),
-                now: Some(br_now),
-                load_terminal: Some(br_load_terminal),
-                record_release: Some(br_record_release),
-            };
-        }
-        if !checkpoint_out.is_null() {
-            *checkpoint_out = checkpoint_callbacks(b);
-        }
-        if !clock_out.is_null() {
-            *clock_out = RatifyV2ClockCallbacks {
-                user: bridge_ptr(b),
-                now: Some(br_now),
-            };
-        }
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || {},
+        || {
+            let s = handle(s, "store")?;
+            let b = s.bridge.as_ref();
+            if rate_at_finalization != 0 {
+                let _view = s.store.with_rate_at_finalization();
+            }
+            if !claim_out.is_null() {
+                *claim_out = claim_callbacks(b, rate_at_finalization != 0);
+            }
+            if !rate_out.is_null() {
+                *rate_out = RatifyV2RateCallbacks {
+                    user: bridge_ptr(b),
+                    rate_at_finalization: i32::from(rate_at_finalization != 0),
+                    reserve: Some(br_reserve),
+                };
+            }
+            if !release_out.is_null() {
+                *release_out = RatifyV2ReleaseStoreCallbacks {
+                    user: bridge_ptr(b),
+                    now: Some(br_now),
+                    load_terminal: Some(br_load_terminal),
+                    record_release: Some(br_record_release),
+                };
+            }
+            if !checkpoint_out.is_null() {
+                *checkpoint_out = checkpoint_callbacks(b);
+            }
+            if !clock_out.is_null() {
+                *clock_out = RatifyV2ClockCallbacks {
+                    user: bridge_ptr(b),
+                    now: Some(br_now),
+                };
+            }
+            Ok(())
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -755,20 +855,24 @@ poisonable!(RatifyV2RefJournal);
 /// TEST ONLY: a reference journal store anchored at genesis.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_ref_journal_new(out: *mut *mut RatifyV2RefJournal) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let journal = Arc::new(JournalStore::new()?);
-        *out = Box::into_raw(Box::new(RatifyV2RefJournal {
-            poisoned: AtomicBool::new(false),
-            bridge: Box::new(Bridge {
-                target: Box::new(JournalTarget(Arc::clone(&journal))),
-            }),
-            journal,
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let journal = Arc::new(JournalStore::new()?);
+            *out = Box::into_raw(Box::new(RatifyV2RefJournal {
+                poisoned: AtomicBool::new(false),
+                bridge: Box::new(Bridge {
+                    target: Box::new(JournalTarget(Arc::clone(&journal))),
+                }),
+                journal,
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: release a reference journal. NULL is a no-op.
@@ -793,15 +897,20 @@ pub unsafe extern "C" fn ratify_v2_ref_journal_callbacks(
     generation_out: *mut u64,
     digest_out: *mut *mut c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(j)], || crate::guard::clear_ptr(digest_out), || {
-        let j = handle(j, "journal")?;
-        if !callbacks_out.is_null() {
-            *callbacks_out = journal_callbacks(&j.bridge);
-        }
-        let head = j.journal.head();
-        super::write_opt_val(generation_out, head.generation);
-        super::write_opt_string(digest_out, &head.digest)
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(j)],
+        || crate::guard::clear_ptr(digest_out),
+        || {
+            let j = handle(j, "journal")?;
+            if !callbacks_out.is_null() {
+                *callbacks_out = journal_callbacks(&j.bridge);
+            }
+            let head = j.journal.head();
+            super::write_opt_val(generation_out, head.generation);
+            super::write_opt_string(digest_out, &head.digest)
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -828,20 +937,24 @@ poisonable!(RatifyV2RefIssuance);
 /// TEST ONLY: a new, empty reference issuance store.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_ref_issuance_new(out: *mut *mut RatifyV2RefIssuance) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let store = Arc::new(TestOnlyChallengeIssuanceStore::new());
-        *out = Box::into_raw(Box::new(RatifyV2RefIssuance {
-            poisoned: AtomicBool::new(false),
-            bridge: Box::new(Bridge {
-                target: Box::new(IssuanceTarget(Arc::clone(&store))),
-            }),
-            store,
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let store = Arc::new(TestOnlyChallengeIssuanceStore::new());
+            *out = Box::into_raw(Box::new(RatifyV2RefIssuance {
+                poisoned: AtomicBool::new(false),
+                bridge: Box::new(Bridge {
+                    target: Box::new(IssuanceTarget(Arc::clone(&store))),
+                }),
+                store,
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: release a reference issuance store. NULL is a no-op.
@@ -867,25 +980,30 @@ pub unsafe extern "C" fn ratify_v2_ref_issuance_control(
     callbacks_out: *mut RatifyV2IssuanceStoreCallbacks,
     records_out: *mut i64,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(s)], || {}, || {
-        let s = handle(s, "issuance")?;
-        match fault {
-            -1 => {}
-            0 => s.store.fail_next_persist(PersistFault::Ok),
-            1 => s.store.fail_next_persist(PersistFault::FailBeforeCommit),
-            2 => s.store.fail_next_persist(PersistFault::FailAfterCommit),
-            other => return Err(bad_arg(format!("persist fault {other} is not defined"))),
-        }
-        if !callbacks_out.is_null() {
-            *callbacks_out = RatifyV2IssuanceStoreCallbacks {
-                user: bridge_ptr(&s.bridge),
-                persist: Some(br_issuance_persist),
-                load: Some(br_issuance_load),
-            };
-        }
-        super::write_opt_val(records_out, s.store.len() as i64);
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || {},
+        || {
+            let s = handle(s, "issuance")?;
+            match fault {
+                -1 => {}
+                0 => s.store.fail_next_persist(PersistFault::Ok),
+                1 => s.store.fail_next_persist(PersistFault::FailBeforeCommit),
+                2 => s.store.fail_next_persist(PersistFault::FailAfterCommit),
+                other => return Err(bad_arg(format!("persist fault {other} is not defined"))),
+            }
+            if !callbacks_out.is_null() {
+                *callbacks_out = RatifyV2IssuanceStoreCallbacks {
+                    user: bridge_ptr(&s.bridge),
+                    persist: Some(br_issuance_persist),
+                    load: Some(br_issuance_load),
+                };
+            }
+            super::write_opt_val(records_out, s.store.len() as i64);
+            Ok(())
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -911,7 +1029,12 @@ struct DeviceTarget(Arc<Mutex<Option<DeviceParts>>>);
 
 impl Target for DeviceTarget {
     fn checkpoint(&self, f: &mut dyn FnMut(&dyn V2ReceiptCheckpoint)) -> bool {
-        let checkpoint = self.0.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|d| Arc::clone(&d.checkpoint));
+        let checkpoint = self
+            .0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|d| Arc::clone(&d.checkpoint));
         match checkpoint {
             Some(c) => {
                 f(c.as_ref());
@@ -949,8 +1072,15 @@ pub struct RatifyV2RefPrimary {
 
 poisonable!(RatifyV2RefDevice, RatifyV2RefPrimary);
 
-fn bind_device(primary: DevicePrimaryTestOnly, component: Arc<DeviceComponentTestOnly>) -> AbiResult<DeviceParts> {
-    let checkpoint = Arc::new(DeviceCheckpointTestOnly::new(&primary, component.clone(), &component.public_key())?);
+fn bind_device(
+    primary: DevicePrimaryTestOnly,
+    component: Arc<DeviceComponentTestOnly>,
+) -> AbiResult<DeviceParts> {
+    let checkpoint = Arc::new(DeviceCheckpointTestOnly::new(
+        &primary,
+        component.clone(),
+        &component.public_key(),
+    )?);
     let uplink = DeviceUplinkTestOnly::new(checkpoint.clone());
     Ok(DeviceParts {
         component,
@@ -963,7 +1093,9 @@ fn bind_device(primary: DevicePrimaryTestOnly, component: Arc<DeviceComponentTes
 impl RatifyV2RefDevice {
     fn with<R>(&self, f: impl FnOnce(&DeviceParts) -> AbiResult<R>) -> AbiResult<R> {
         let parts = self.parts.lock().unwrap_or_else(|p| p.into_inner());
-        f(parts.as_ref().ok_or_else(|| bad_arg("device has no bound primary"))?)
+        f(parts
+            .as_ref()
+            .ok_or_else(|| bad_arg("device has no bound primary"))?)
     }
 }
 
@@ -980,31 +1112,36 @@ pub unsafe extern "C" fn ratify_v2_ref_device_new(
     replay_epoch: i64,
     out: *mut *mut RatifyV2RefDevice,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(store)], || crate::guard::clear_ptr(out), || {
-        let s = handle(store, "store")?;
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let slot = Arc::new(Mutex::new(Arc::clone(&s.store)));
-        let component = Arc::new(DeviceComponentTestOnly::new(
-            bytes(component_seed, component_seed_len, "component_seed")?,
-            capacity as usize,
-            Arc::new(DeviceClock(Arc::clone(&slot))),
-        )?);
-        let primary = DevicePrimaryTestOnly::new(Arc::clone(&s.store), replay_epoch)?;
-        let parts = bind_device(primary, component)?;
-        parts.checkpoint.provision()?;
-        let parts = Arc::new(Mutex::new(Some(parts)));
-        *out = Box::into_raw(Box::new(RatifyV2RefDevice {
-            poisoned: AtomicBool::new(false),
-            slot,
-            bridge: Box::new(Bridge {
-                target: Box::new(DeviceTarget(Arc::clone(&parts))),
-            }),
-            parts,
-        }));
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(store)],
+        || crate::guard::clear_ptr(out),
+        || {
+            let s = handle(store, "store")?;
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let slot = Arc::new(Mutex::new(Arc::clone(&s.store)));
+            let component = Arc::new(DeviceComponentTestOnly::new(
+                bytes(component_seed, component_seed_len, "component_seed")?,
+                capacity as usize,
+                Arc::new(DeviceClock(Arc::clone(&slot))),
+            )?);
+            let primary = DevicePrimaryTestOnly::new(Arc::clone(&s.store), replay_epoch)?;
+            let parts = bind_device(primary, component)?;
+            parts.checkpoint.provision()?;
+            let parts = Arc::new(Mutex::new(Some(parts)));
+            *out = Box::into_raw(Box::new(RatifyV2RefDevice {
+                poisoned: AtomicBool::new(false),
+                slot,
+                bridge: Box::new(Bridge {
+                    target: Box::new(DeviceTarget(Arc::clone(&parts))),
+                }),
+                parts,
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: release a device. NULL is a no-op.
@@ -1040,16 +1177,21 @@ pub unsafe extern "C" fn ratify_v2_ref_device_callbacks(
     checkpoint_out: *mut RatifyV2CheckpointCallbacks,
     journal_out: *mut RatifyV2JournalStoreCallbacks,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d)], || {}, || {
-        let d = handle(d, "device")?;
-        if !checkpoint_out.is_null() {
-            *checkpoint_out = checkpoint_callbacks(&d.bridge);
-        }
-        if !journal_out.is_null() {
-            *journal_out = journal_callbacks(&d.bridge);
-        }
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d)],
+        || {},
+        || {
+            let d = handle(d, "device")?;
+            if !checkpoint_out.is_null() {
+                *checkpoint_out = checkpoint_callbacks(&d.bridge);
+            }
+            if !journal_out.is_null() {
+                *journal_out = journal_callbacks(&d.bridge);
+            }
+            Ok(())
+        },
+    )
 }
 
 fn device_error_name(e: Option<&DeviceErrorTestOnly>) -> &'static std::ffi::CStr {
@@ -1059,7 +1201,9 @@ fn device_error_name(e: Option<&DeviceErrorTestOnly>) -> &'static std::ffi::CStr
         Some(DeviceErrorTestOnly::StorageFull) => c"storage_full",
         Some(DeviceErrorTestOnly::StateMismatch) => c"state_mismatch",
         Some(DeviceErrorTestOnly::Frozen) => c"frozen",
-        Some(DeviceErrorTestOnly::Store(e)) if e.class() == Some(V2ErrorClass::ClockRegressed) => c"clock_regressed",
+        Some(DeviceErrorTestOnly::Store(e)) if e.class() == Some(V2ErrorClass::ClockRegressed) => {
+            c"clock_regressed"
+        }
         Some(_) => c"unexpected",
     }
 }
@@ -1134,19 +1278,27 @@ pub unsafe extern "C" fn ratify_v2_ref_device_op(
 
 /// TEST ONLY: copy the device's complete primary state (a backup).
 #[no_mangle]
-pub unsafe extern "C" fn ratify_v2_ref_device_snapshot(d: *const RatifyV2RefDevice, out: *mut *mut RatifyV2RefPrimary) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d)], || crate::guard::clear_ptr(out), || {
-        let d = handle(d, "device")?;
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        let primary = d.with(|p| Ok(p.primary.clone_primary()))?;
-        *out = Box::into_raw(Box::new(RatifyV2RefPrimary {
-            poisoned: AtomicBool::new(false),
-            primary,
-        }));
-        Ok(())
-    })
+pub unsafe extern "C" fn ratify_v2_ref_device_snapshot(
+    d: *const RatifyV2RefDevice,
+    out: *mut *mut RatifyV2RefPrimary,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d)],
+        || crate::guard::clear_ptr(out),
+        || {
+            let d = handle(d, "device")?;
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let primary = d.with(|p| Ok(p.primary.clone_primary()))?;
+            *out = Box::into_raw(Box::new(RatifyV2RefPrimary {
+                poisoned: AtomicBool::new(false),
+                primary,
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: restore a primary copy onto the device: the device keeps its
@@ -1158,23 +1310,30 @@ pub unsafe extern "C" fn ratify_v2_ref_device_restore(
     snapshot: *const RatifyV2RefPrimary,
     store_out: *mut *mut RatifyV2RefStore,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(d), flag(snapshot)], || crate::guard::clear_ptr(store_out), || {
-        let d = handle(d, "device")?;
-        let snap = handle(snapshot, "snapshot")?;
-        if store_out.is_null() {
-            return Err(null_arg("store_out"));
-        }
-        let mut parts = d.parts.lock().unwrap_or_else(|p| p.into_inner());
-        let current = parts.take().ok_or_else(|| bad_arg("device has no bound primary"))?;
-        let now = d.slot.lock().unwrap_or_else(|p| p.into_inner()).now();
-        let primary = snap.primary.clone_primary();
-        let store = Arc::clone(&primary.store);
-        *d.slot.lock().unwrap_or_else(|p| p.into_inner()) = Arc::clone(&store);
-        store.set_time(now);
-        *parts = Some(bind_device(primary, current.component)?);
-        *store_out = ref_store(store);
-        Ok(())
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(d), flag(snapshot)],
+        || crate::guard::clear_ptr(store_out),
+        || {
+            let d = handle(d, "device")?;
+            let snap = handle(snapshot, "snapshot")?;
+            if store_out.is_null() {
+                return Err(null_arg("store_out"));
+            }
+            let mut parts = d.parts.lock().unwrap_or_else(|p| p.into_inner());
+            let current = parts
+                .take()
+                .ok_or_else(|| bad_arg("device has no bound primary"))?;
+            let now = d.slot.lock().unwrap_or_else(|p| p.into_inner()).now();
+            let primary = snap.primary.clone_primary();
+            let store = Arc::clone(&primary.store);
+            *d.slot.lock().unwrap_or_else(|p| p.into_inner()) = Arc::clone(&store);
+            store.set_time(now);
+            *parts = Some(bind_device(primary, current.component)?);
+            *store_out = ref_store(store);
+            Ok(())
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,16 +1379,20 @@ fn static_name(s: &'static str) -> *const c_char {
 /// TEST ONLY: a new, empty ledger.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_ref_ledger_new(out: *mut *mut RatifyV2RefLedger) -> i32 {
-    run(std::ptr::null_mut(), || crate::guard::clear_ptr(out), || {
-        if out.is_null() {
-            return Err(null_arg("out"));
-        }
-        *out = Box::into_raw(Box::new(RatifyV2RefLedger {
-            poisoned: AtomicBool::new(false),
-            ledger: ApprovalLedgerTestOnly::new(),
-        }));
-        Ok(())
-    })
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            *out = Box::into_raw(Box::new(RatifyV2RefLedger {
+                poisoned: AtomicBool::new(false),
+                ledger: ApprovalLedgerTestOnly::new(),
+            }));
+            Ok(())
+        },
+    )
 }
 
 /// TEST ONLY: release a ledger. NULL is a no-op.
@@ -1256,39 +1419,47 @@ pub unsafe extern "C" fn ratify_v2_ref_ledger_open(
     set_json_len: usize,
     error_out: *mut *const c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(l)], || {}, || {
-        let l = handle(l, "ledger")?;
-        let v = json_bytes(set_json, set_json_len, "set_json")?;
-        let o = Obj::new(
-            &v,
-            "approval set",
-            &[
-                "approval_set_id",
-                "verifier_id",
-                "workspace_id",
-                "session_id",
-                "agent_public_key",
-                "required_scope",
-                "request_hash_b64",
-                "root_keys",
-            ],
-        )?;
-        let roots = o.array("root_keys")?;
-        if roots.len() != 2 {
-            return Err(bad_arg("root_keys must hold two keys"));
-        }
-        let set = ApprovalSetTestOnly {
-            approval_set_id: o.str("approval_set_id")?,
-            verifier_id: o.str("verifier_id")?,
-            workspace_id: o.str("workspace_id")?,
-            session_id: o.str("session_id")?,
-            agent_public_key: o.key("agent_public_key")?,
-            required_scope: o.str("required_scope")?,
-            request_hash: o.b64("request_hash_b64")?,
-            roots: [public_key(roots[0], "root_keys[0]")?, public_key(roots[1], "root_keys[1]")?],
-        };
-        write_val(error_out, ledger_error_name(&l.ledger.open(set)))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(l)],
+        || {},
+        || {
+            let l = handle(l, "ledger")?;
+            let v = json_bytes(set_json, set_json_len, "set_json")?;
+            let o = Obj::new(
+                &v,
+                "approval set",
+                &[
+                    "approval_set_id",
+                    "verifier_id",
+                    "workspace_id",
+                    "session_id",
+                    "agent_public_key",
+                    "required_scope",
+                    "request_hash_b64",
+                    "root_keys",
+                ],
+            )?;
+            let roots = o.array("root_keys")?;
+            if roots.len() != 2 {
+                return Err(bad_arg("root_keys must hold two keys"));
+            }
+            let set = ApprovalSetTestOnly {
+                approval_set_id: o.str("approval_set_id")?,
+                verifier_id: o.str("verifier_id")?,
+                workspace_id: o.str("workspace_id")?,
+                session_id: o.str("session_id")?,
+                agent_public_key: o.key("agent_public_key")?,
+                required_scope: o.str("required_scope")?,
+                request_hash: o.b64("request_hash_b64")?,
+                roots: [
+                    public_key(roots[0], "root_keys[0]")?,
+                    public_key(roots[1], "root_keys[1]")?,
+                ],
+            };
+            write_val(error_out, ledger_error_name(&l.ledger.open(set)))
+        },
+    )
 }
 
 /// TEST ONLY: record a released decision (NULL = none) and the exact proof
@@ -1305,15 +1476,23 @@ pub unsafe extern "C" fn ratify_v2_ref_ledger_record(
     complete_out: *mut i32,
     error_out: *mut *const c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(l), flag(decision)], || crate::guard::clear_val(complete_out), || {
-        let l = handle(l, "ledger")?;
-        let d = decision.as_ref().map(|d| &d.inner);
-        let r = l
-            .ledger
-            .record_approval(cstr(set_id, "set_id")?, slot as usize, d, bytes(bundle, bundle_len, "bundle")?);
-        write_val(complete_out, i32::from(*r.as_ref().unwrap_or(&false)))?;
-        write_val(error_out, ledger_error_name(&r.map(|_| ())))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(l), flag(decision)],
+        || crate::guard::clear_val(complete_out),
+        || {
+            let l = handle(l, "ledger")?;
+            let d = decision.as_ref().map(|d| &d.inner);
+            let r = l.ledger.record_approval(
+                cstr(set_id, "set_id")?,
+                slot as usize,
+                d,
+                bytes(bundle, bundle_len, "bundle")?,
+            );
+            write_val(complete_out, i32::from(*r.as_ref().unwrap_or(&false)))?;
+            write_val(error_out, ledger_error_name(&r.map(|_| ())))
+        },
+    )
 }
 
 /// TEST ONLY: execute an approval set at the receiver's authoritative clock.
@@ -1324,14 +1503,22 @@ pub unsafe extern "C" fn ratify_v2_ref_ledger_execute(
     clock: *const RatifyV2ClockCallbacks,
     error_out: *mut *const c_char,
 ) -> i32 {
-    run_h(std::ptr::null_mut(), &[flag(l)], || {}, || {
-        let l = handle(l, "ledger")?;
-        let clock = clock.as_ref().ok_or_else(|| null_arg("clock"))?;
-        let (c, cancel) = V2Context::background().with_cancel();
-        let clock = CClock {
-            cb: *clock,
-            cancel: Cancel(cancel),
-        };
-        write_val(error_out, ledger_error_name(&l.ledger.execute(&c, cstr(set_id, "set_id")?, &clock)))
-    })
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(l)],
+        || {},
+        || {
+            let l = handle(l, "ledger")?;
+            let clock = clock.as_ref().ok_or_else(|| null_arg("clock"))?;
+            let (c, cancel) = V2Context::background().with_cancel();
+            let clock = CClock {
+                cb: *clock,
+                cancel: Cancel(cancel),
+            };
+            write_val(
+                error_out,
+                ledger_error_name(&l.ledger.execute(&c, cstr(set_id, "set_id")?, &clock)),
+            )
+        },
+    )
 }

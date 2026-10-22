@@ -65,18 +65,21 @@ impl<'a> Obj<'a> {
     pub fn i64(&self, k: &str) -> AbiResult<i64> {
         match self.get(k) {
             None => Ok(0),
-            Some(v) => v
-                .as_i64()
-                .ok_or_else(|| bad_arg(format!("{}.{k} must be a signed 64-bit integer", self.name))),
+            Some(v) => v.as_i64().ok_or_else(|| {
+                bad_arg(format!("{}.{k} must be a signed 64-bit integer", self.name))
+            }),
         }
     }
 
     pub fn u64(&self, k: &str) -> AbiResult<u64> {
         match self.get(k) {
             None => Ok(0),
-            Some(v) => v
-                .as_u64()
-                .ok_or_else(|| bad_arg(format!("{}.{k} must be an unsigned 64-bit integer", self.name))),
+            Some(v) => v.as_u64().ok_or_else(|| {
+                bad_arg(format!(
+                    "{}.{k} must be an unsigned 64-bit integer",
+                    self.name
+                ))
+            }),
         }
     }
 
@@ -91,10 +94,12 @@ impl<'a> Obj<'a> {
     pub fn b64(&self, k: &str) -> AbiResult<Vec<u8>> {
         match self.get(k) {
             None => Ok(Vec::new()),
-            Some(Value::String(s)) => {
-                base64_std_decode(s).map_err(|e| bad_arg(format!("{}.{k}: invalid base64: {e}", self.name)))
-            }
-            Some(_) => Err(bad_arg(format!("{}.{k} must be a base64 string", self.name))),
+            Some(Value::String(s)) => base64_std_decode(s)
+                .map_err(|e| bad_arg(format!("{}.{k}: invalid base64: {e}", self.name))),
+            Some(_) => Err(bad_arg(format!(
+                "{}.{k} must be a base64 string",
+                self.name
+            ))),
         }
     }
 
@@ -112,12 +117,15 @@ impl<'a> Obj<'a> {
             Some(Value::Array(a)) => a
                 .iter()
                 .map(|x| {
-                    x.as_str()
-                        .map(str::to_owned)
-                        .ok_or_else(|| bad_arg(format!("{}.{k} entries must be strings", self.name)))
+                    x.as_str().map(str::to_owned).ok_or_else(|| {
+                        bad_arg(format!("{}.{k} entries must be strings", self.name))
+                    })
                 })
                 .collect(),
-            Some(_) => Err(bad_arg(format!("{}.{k} must be an array of strings", self.name))),
+            Some(_) => Err(bad_arg(format!(
+                "{}.{k} must be an array of strings",
+                self.name
+            ))),
         }
     }
 
@@ -169,19 +177,29 @@ fn accepted_digests(o: &Obj<'_>) -> AbiResult<BTreeMap<i64, Vec<u8>>> {
             .as_object()
             .ok_or_else(|| bad_arg("accepted_digests_b64 must be an object"))?;
         for (k, v) in m {
-            let seq = k
-                .parse::<i64>()
-                .map_err(|_| bad_arg(format!("accepted_digests_b64 key {k:?} is not an integer")))?;
+            let seq = k.parse::<i64>().map_err(|_| {
+                bad_arg(format!("accepted_digests_b64 key {k:?} is not an integer"))
+            })?;
             let s = v
                 .as_str()
                 .ok_or_else(|| bad_arg("accepted_digests_b64 values must be base64 strings"))?;
-            out.insert(seq, base64_std_decode(s).map_err(|e| bad_arg(format!("accepted_digests_b64: {e}")))?);
+            out.insert(
+                seq,
+                base64_std_decode(s).map_err(|e| bad_arg(format!("accepted_digests_b64: {e}")))?,
+            );
         }
     }
     Ok(out)
 }
 
-const HEAD_FIELDS: &[&str] = &["log_id", "verifier_id", "sequence", "head_hash_b64", "accepted_digests_b64", "frozen"];
+const HEAD_FIELDS: &[&str] = &[
+    "log_id",
+    "verifier_id",
+    "sequence",
+    "head_hash_b64",
+    "accepted_digests_b64",
+    "frozen",
+];
 
 /// A witness or receipt log head: `{"log_id", "sequence", "head_hash_b64",
 /// "accepted_digests_b64": {"<seq>": "<b64>"}, "frozen"}` (plus
@@ -216,7 +234,15 @@ pub(crate) fn rotation_state(v: &Value) -> AbiResult<KeyRotationV2State> {
     let o = Obj::new(
         v,
         "rotation_state",
-        &["authority_id", "recovery_epoch", "role", "sequence", "head_hash_b64", "current_key", "used_key_ids"],
+        &[
+            "authority_id",
+            "recovery_epoch",
+            "role",
+            "sequence",
+            "head_hash_b64",
+            "current_key",
+            "used_key_ids",
+        ],
     )?;
     Ok(KeyRotationV2State {
         authority_id: o.str("authority_id")?,
@@ -249,7 +275,11 @@ pub(crate) fn status_policy(v: &Value) -> AbiResult<RevocationStatusPolicyV2> {
     let o = Obj::new(
         v,
         "status_policy",
-        &["max_list_lifetime_seconds", "max_status_age_seconds", "clock_skew_seconds"],
+        &[
+            "max_list_lifetime_seconds",
+            "max_status_age_seconds",
+            "clock_skew_seconds",
+        ],
     )?;
     Ok(RevocationStatusPolicyV2 {
         max_list_lifetime_seconds: o.i64("max_list_lifetime_seconds")?,
@@ -262,7 +292,9 @@ pub(crate) fn status_policy(v: &Value) -> AbiResult<RevocationStatusPolicyV2> {
 pub(crate) fn status_keys(v: Option<&Value>) -> AbiResult<BTreeMap<String, V2StatusKeyConfig>> {
     let mut out = BTreeMap::new();
     let Some(v) = v else { return Ok(out) };
-    let m = v.as_object().ok_or_else(|| bad_arg("status_keys must be an object"))?;
+    let m = v
+        .as_object()
+        .ok_or_else(|| bad_arg("status_keys must be an object"))?;
     for (issuer, cfg) in m {
         let o = Obj::new(cfg, "status_keys entry", &["epoch", "public_key"])?;
         out.insert(
@@ -339,7 +371,12 @@ pub(crate) fn context_policy(v: &Value) -> AbiResult<V2Result<V2ContextPolicy>> 
     let o = Obj::new(
         v,
         "context_policy",
-        &["profile", "require_bound", "required_fields", "expected_session_context_b64"],
+        &[
+            "profile",
+            "require_bound",
+            "required_fields",
+            "expected_session_context_b64",
+        ],
     )?;
     let expected = o.b64("expected_session_context_b64")?;
     Ok(V2ContextPolicy::new(
@@ -370,16 +407,23 @@ pub(crate) fn constraint_context(v: &Value) -> AbiResult<ConstraintContextV2> {
     )?;
     let mut counts = BTreeMap::new();
     if let Some(m) = o.object("extension_counts") {
-        for (k, n) in m.as_object().ok_or_else(|| bad_arg("extension_counts must be an object"))? {
+        for (k, n) in m
+            .as_object()
+            .ok_or_else(|| bad_arg("extension_counts must be an object"))?
+        {
             counts.insert(
                 k.clone(),
-                n.as_i64().ok_or_else(|| bad_arg("extension_counts values must be integers"))?,
+                n.as_i64()
+                    .ok_or_else(|| bad_arg("extension_counts values must be integers"))?,
             );
         }
     }
     let mut values = BTreeMap::new();
     if let Some(m) = o.object("extension_values") {
-        for (k, s) in m.as_object().ok_or_else(|| bad_arg("extension_values must be an object"))? {
+        for (k, s) in m
+            .as_object()
+            .ok_or_else(|| bad_arg("extension_values must be an object"))?
+        {
             values.insert(
                 k.clone(),
                 s.as_str()
@@ -477,7 +521,13 @@ pub(crate) fn evidence(v: &Value) -> AbiResult<StatusEvidenceEntryV2> {
     let o = Obj::new(
         v,
         "status_evidence entry",
-        &["issuer_id", "status_key_id", "sequence", "object_type_code", "digest"],
+        &[
+            "issuer_id",
+            "status_key_id",
+            "sequence",
+            "object_type_code",
+            "digest",
+        ],
     )?;
     Ok(StatusEvidenceEntryV2 {
         issuer_id: o.str("issuer_id")?,
@@ -533,7 +583,8 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
 }
 
 pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
-    let v: Value = serde_json::from_slice(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
+    let v: Value =
+        serde_json::from_slice(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
     let o = Obj::new(
         &v,
         "claim record",
@@ -562,7 +613,11 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     )?;
     let mut rate_batch = Vec::new();
     for r in o.array("rate_batch")? {
-        let r = Obj::new(r, "rate_batch entry", &["issuer_id", "cert_id", "window_s", "limit"])?;
+        let r = Obj::new(
+            r,
+            "rate_batch entry",
+            &["issuer_id", "cert_id", "window_s", "limit"],
+        )?;
         rate_batch.push(V2RateReservation {
             issuer_id: r.str("issuer_id")?,
             cert_id: r.str("cert_id")?,
@@ -572,7 +627,11 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     }
     let mut evaluators = Vec::new();
     for e in o.array("constraint_evaluators")? {
-        let e = Obj::new(e, "constraint_evaluators entry", &["type", "profile_digest"])?;
+        let e = Obj::new(
+            e,
+            "constraint_evaluators entry",
+            &["type", "profile_digest"],
+        )?;
         evaluators.push(ConstraintEvaluatorRefV2 {
             kind: e.str("type")?,
             profile_digest: e.str("profile_digest")?,
@@ -597,7 +656,11 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
         max_age_seconds: o.i64("max_age_seconds")?,
         clock_skew_seconds: o.i64("clock_skew_seconds")?,
         stream_id: o.opt_b64("stream_id_b64")?,
-        stream_seq: if o.has("stream_seq") { Some(o.i64("stream_seq")?) } else { None },
+        stream_seq: if o.has("stream_seq") {
+            Some(o.i64("stream_seq")?)
+        } else {
+            None
+        },
         constraint_evaluators: evaluators,
     })
 }
@@ -617,11 +680,18 @@ pub(crate) fn progress_json(p: &V2EvaluationProgress) -> Vec<u8> {
 }
 
 pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress> {
-    let v: Value = serde_json::from_slice(data).map_err(|e| bad_arg(format!("progress record: {e}")))?;
+    let v: Value =
+        serde_json::from_slice(data).map_err(|e| bad_arg(format!("progress record: {e}")))?;
     let o = Obj::new(
         &v,
         "progress record",
-        &["trust_assessment", "status_assessment", "context_assessment", "context_policy_digest", "status_evidence"],
+        &[
+            "trust_assessment",
+            "status_assessment",
+            "context_assessment",
+            "context_policy_digest",
+            "status_evidence",
+        ],
     )?;
     Ok(V2EvaluationProgress {
         trust_assessment: o.str("trust_assessment")?,
@@ -632,7 +702,11 @@ pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress>
         } else {
             None
         },
-        status_evidence: o.array("status_evidence")?.into_iter().map(evidence).collect::<AbiResult<_>>()?,
+        status_evidence: o
+            .array("status_evidence")?
+            .into_iter()
+            .map(evidence)
+            .collect::<AbiResult<_>>()?,
     })
 }
 
@@ -734,7 +808,14 @@ pub(crate) fn session_inputs(v: &Value) -> AbiResult<SessionContextV2Inputs> {
     let o = Obj::new(
         v,
         "session inputs",
-        &["verifier_id", "workspace_id", "agent_id", "session_id", "invocation_id", "request_hash_b64"],
+        &[
+            "verifier_id",
+            "workspace_id",
+            "agent_id",
+            "session_id",
+            "invocation_id",
+            "request_hash_b64",
+        ],
     )?;
     Ok(SessionContextV2Inputs {
         verifier_id: o.str("verifier_id")?,
@@ -752,7 +833,13 @@ pub(crate) fn operation_context(v: &Value) -> AbiResult<OperationContextV2> {
     let o = Obj::new(
         v,
         "operation context",
-        &["required_scope", "operation", "resource_id", "requested_path", "payload_digest_b64"],
+        &[
+            "required_scope",
+            "operation",
+            "resource_id",
+            "requested_path",
+            "payload_digest_b64",
+        ],
     )?;
     Ok(OperationContextV2 {
         required_scope: o.str("required_scope")?,

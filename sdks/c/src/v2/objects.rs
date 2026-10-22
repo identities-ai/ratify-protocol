@@ -143,14 +143,18 @@ pub unsafe extern "C" fn ratify_v2_key_id(
     out_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || crate::guard::clear_cstr(out, out_len), || {
-        let key = HybridPublicKey {
-            ed25519: bytes(ed25519, ed25519_len, "ed25519")?.to_vec(),
-            ml_dsa_65: bytes(ml_dsa_65, ml_dsa_65_len, "ml_dsa_65")?.to_vec(),
-        };
-        let id = key_id_v2(&key).map_err(|e| e.classify(V2ErrorClass::Malformed))?;
-        write_hex_out(out, out_len, &id)
-    })
+    run(
+        err_out,
+        || crate::guard::clear_cstr(out, out_len),
+        || {
+            let key = HybridPublicKey {
+                ed25519: bytes(ed25519, ed25519_len, "ed25519")?.to_vec(),
+                ml_dsa_65: bytes(ml_dsa_65, ml_dsa_65_len, "ml_dsa_65")?.to_vec(),
+            };
+            let id = key_id_v2(&key).map_err(|e| e.classify(V2ErrorClass::Malformed))?;
+            write_hex_out(out, out_len, &id)
+        },
+    )
 }
 
 /// Check that `key_id` is a well-formed v2 key ID (64 lowercase hex chars).
@@ -160,20 +164,28 @@ pub unsafe extern "C" fn ratify_v2_key_id_check(
     key_id: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {}, || {
-        if key_id.is_null() {
-            return Err(null_arg("key_id"));
-        }
-        let ok = CStr::from_ptr(key_id)
-            .to_str()
-            .map(valid_v2_id)
-            .unwrap_or(false);
-        if ok {
-            Ok(())
-        } else {
-            Err(V2Error::new(V2ErrorClass::Malformed, "not a 256-bit lowercase-hex v2 key ID").into())
-        }
-    })
+    run(
+        err_out,
+        || {},
+        || {
+            if key_id.is_null() {
+                return Err(null_arg("key_id"));
+            }
+            let ok = CStr::from_ptr(key_id)
+                .to_str()
+                .map(valid_v2_id)
+                .unwrap_or(false);
+            if ok {
+                Ok(())
+            } else {
+                Err(V2Error::new(
+                    V2ErrorClass::Malformed,
+                    "not a 256-bit lowercase-hex v2 key ID",
+                )
+                .into())
+            }
+        },
+    )
 }
 
 /// Strictly decode a canonical v2 signed object of `kind`
@@ -204,15 +216,19 @@ pub unsafe extern "C" fn ratify_v2_verify_object(
     verify_context_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {}, || {
-        let wire = bytes(wire, wire_len, "wire")?;
-        let ctx = if verify_context_json.is_null() {
-            None
-        } else {
-            Some(json_arg(verify_context_json, "verify_context_json")?)
-        };
-        verify_kind(kind, wire, ctx.as_ref())
-    })
+    run(
+        err_out,
+        || {},
+        || {
+            let wire = bytes(wire, wire_len, "wire")?;
+            let ctx = if verify_context_json.is_null() {
+                None
+            } else {
+                Some(json_arg(verify_context_json, "verify_context_json")?)
+            };
+            verify_kind(kind, wire, ctx.as_ref())
+        },
+    )
 }
 
 /// Strictly decode a v2 ProofBundle and run its structural checks (key IDs,
@@ -231,14 +247,18 @@ pub unsafe extern "C" fn ratify_v2_proof_bundle_verify_signatures(
     bundle_hash_out_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || crate::guard::clear_cstr(bundle_hash_out, bundle_hash_out_len), || {
-        let b = decode_proof_bundle_v2(bytes(wire, wire_len, "wire")?)?;
-        verify_proof_bundle_v2_signatures(&b)?;
-        if !bundle_hash_out.is_null() {
-            write_hex_out(bundle_hash_out, bundle_hash_out_len, &bundle_hash_v2(&b)?)?;
-        }
-        Ok(())
-    })
+    run(
+        err_out,
+        || crate::guard::clear_cstr(bundle_hash_out, bundle_hash_out_len),
+        || {
+            let b = decode_proof_bundle_v2(bytes(wire, wire_len, "wire")?)?;
+            verify_proof_bundle_v2_signatures(&b)?;
+            if !bundle_hash_out.is_null() {
+                write_hex_out(bundle_hash_out, bundle_hash_out_len, &bundle_hash_v2(&b)?)?;
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Verify a v2 VerificationReceipt against a caller-authenticated verifier key
@@ -255,17 +275,26 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_verify(
     head_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {}, || {
-        let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
-        let key = HybridPublicKey {
-            ed25519: bytes(verifier_ed25519, verifier_ed25519_len, "verifier_ed25519")?.to_vec(),
-            ml_dsa_65: bytes(verifier_ml_dsa_65, verifier_ml_dsa_65_len, "verifier_ml_dsa_65")?
+    run(
+        err_out,
+        || {},
+        || {
+            let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
+            let key = HybridPublicKey {
+                ed25519: bytes(verifier_ed25519, verifier_ed25519_len, "verifier_ed25519")?
+                    .to_vec(),
+                ml_dsa_65: bytes(
+                    verifier_ml_dsa_65,
+                    verifier_ml_dsa_65_len,
+                    "verifier_ml_dsa_65",
+                )?
                 .to_vec(),
-        };
-        let head = receipt_head(&json_arg(head_json, "head_json")?)?;
-        verify_verification_receipt_v2(&r, &key, &head)?;
-        Ok(())
-    })
+            };
+            let head = receipt_head(&json_arg(head_json, "head_json")?)?;
+            verify_verification_receipt_v2(&r, &key, &head)?;
+            Ok(())
+        },
+    )
 }
 
 /// Check that a v2 VerificationReceipt is bound to a v2 ProofBundle (bundle
@@ -279,10 +308,18 @@ pub unsafe extern "C" fn ratify_v2_receipt_bundle_binding_check(
     bundle_wire_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {}, || {
-        let r = decode_verification_receipt_v2(bytes(receipt_wire, receipt_wire_len, "receipt_wire")?)?;
-        let b = decode_proof_bundle_v2(bytes(bundle_wire, bundle_wire_len, "bundle_wire")?)?;
-        check_verification_receipt_v2_bundle_binding(&r, &b)?;
-        Ok(())
-    })
+    run(
+        err_out,
+        || {},
+        || {
+            let r = decode_verification_receipt_v2(bytes(
+                receipt_wire,
+                receipt_wire_len,
+                "receipt_wire",
+            )?)?;
+            let b = decode_proof_bundle_v2(bytes(bundle_wire, bundle_wire_len, "bundle_wire")?)?;
+            check_verification_receipt_v2_bundle_binding(&r, &b)?;
+            Ok(())
+        },
+    )
 }

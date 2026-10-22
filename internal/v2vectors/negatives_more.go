@@ -316,6 +316,27 @@ func (g *gen) receiptNegatives(n *negBuilder) {
 	})
 	m("agent_id_changed", "agent_id names another key", "invalid_signature", func(o map[string]any) { o["agent_id"] = attacker.ID })
 	m("agent_id_removed", "optional agent_id removed", "invalid_signature", func(o map[string]any) { delete(o, "agent_id") })
+	// constraint_evaluators (SPEC-v2 §5.8): optional, signed, non-empty when
+	// present, sorted and unique by type, registrable extension types only.
+	ref := func(kind, digest string) map[string]any {
+		return map[string]any{"profile_digest": digest, "type": kind}
+	}
+	countRef, allowedRef := ref(maxCountType, profileDigest(maxCountProfile, maxCountType)), ref(allowedType, profileDigest(allowedProfile, allowedType))
+	m("constraint_evaluators_added", "a valid constraint_evaluators member added after signing", "invalid_signature", func(o map[string]any) { o["constraint_evaluators"] = []any{countRef} })
+	m("constraint_evaluators_empty", "constraint_evaluators present but empty (absence is the only empty form)", "malformed", func(o map[string]any) { o["constraint_evaluators"] = []any{} })
+	m("constraint_evaluators_unsorted", "constraint_evaluators not sorted by type", "malformed", func(o map[string]any) { o["constraint_evaluators"] = []any{countRef, allowedRef} })
+	m("constraint_evaluators_duplicate_type", "constraint_evaluators repeats a type", "malformed", func(o map[string]any) { o["constraint_evaluators"] = []any{countRef, countRef} })
+	m("constraint_evaluators_bad_digest", "constraint_evaluators profile_digest is not sha384: and 96 lowercase hex", "malformed", func(o map[string]any) {
+		o["constraint_evaluators"] = []any{ref(maxCountType, "sha256:"+strings.Repeat("a", 64))}
+	})
+	m("constraint_evaluators_registered_type", "constraint_evaluators names a closed-registry type", "malformed", func(o map[string]any) {
+		o["constraint_evaluators"] = []any{ref("max_rate", profileDigest(maxCountProfile, maxCountType))}
+	})
+	m("constraint_evaluators_extra_member", "constraint_evaluators entry carries an extra member", "malformed", func(o map[string]any) {
+		e := ref(maxCountType, profileDigest(maxCountProfile, maxCountType))
+		e["profile"] = maxCountProfile
+		o["constraint_evaluators"] = []any{e}
+	})
 	m("human_id_added", "optional human_id added", "invalid_signature", func(o map[string]any) { o["human_id"] = "user-1" })
 	m("human_id_empty", "human_id is empty", "malformed", func(o map[string]any) { o["human_id"] = "" })
 	m("decision_changed", "decision=deny with granted scope", "malformed", func(o map[string]any) { o["decision"] = "deny" })

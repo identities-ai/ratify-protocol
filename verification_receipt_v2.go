@@ -14,77 +14,82 @@ import (
 // VerificationReceiptV2 is a caller-verifier-signed terminal assertion. Its
 // signature does not independently establish trust or status for the bundle.
 type VerificationReceiptV2 struct {
-	Version             int                     `json:"version"`
-	LogID               string                  `json:"log_id"`
-	Sequence            int64                   `json:"sequence"`
-	VerifierID          string                  `json:"verifier_id"`
-	AgentID             string                  `json:"agent_id,omitempty"`
-	HumanID             string                  `json:"human_id,omitempty"`
-	BundleHash          string                  `json:"bundle_hash"`
-	IssuerIDs           []string                `json:"issuer_ids"`
-	Decision            string                  `json:"decision"`
-	DecisionReason      string                  `json:"decision_reason"`
-	IdentityStatus      string                  `json:"identity_status"`
-	TrustAssessment     string                  `json:"trust_assessment"`
-	StatusAssessment    string                  `json:"status_assessment"`
-	ChallengeAssessment string                  `json:"challenge_assessment"`
-	ContextAssessment   string                  `json:"context_assessment"`
-	ContextPolicyDigest *string                 `json:"context_policy_digest"`
-	VerifiedAt          int64                   `json:"verified_at"`
-	RequiredScope       string                  `json:"required_scope"`
-	GrantedScope        []string                `json:"granted_scope"`
-	StatusEvidence      []StatusEvidenceEntryV2 `json:"status_evidence_digests"`
-	PreviousReceiptHash []byte                  `json:"previous_receipt_hash"`
-	Signature           HybridSignature         `json:"signature"`
+	Version             int      `json:"version"`
+	LogID               string   `json:"log_id"`
+	Sequence            int64    `json:"sequence"`
+	VerifierID          string   `json:"verifier_id"`
+	AgentID             string   `json:"agent_id,omitempty"`
+	HumanID             string   `json:"human_id,omitempty"`
+	BundleHash          string   `json:"bundle_hash"`
+	IssuerIDs           []string `json:"issuer_ids"`
+	Decision            string   `json:"decision"`
+	DecisionReason      string   `json:"decision_reason"`
+	IdentityStatus      string   `json:"identity_status"`
+	TrustAssessment     string   `json:"trust_assessment"`
+	StatusAssessment    string   `json:"status_assessment"`
+	ChallengeAssessment string   `json:"challenge_assessment"`
+	// ConstraintEvaluators is present exactly when the claim sealed at least
+	// one extension evaluator profile (SPEC-v2 §5.2, §5.8).
+	ConstraintEvaluators []ConstraintEvaluatorRefV2 `json:"constraint_evaluators,omitempty"`
+	ContextAssessment    string                     `json:"context_assessment"`
+	ContextPolicyDigest  *string                    `json:"context_policy_digest"`
+	VerifiedAt           int64                      `json:"verified_at"`
+	RequiredScope        string                     `json:"required_scope"`
+	GrantedScope         []string                   `json:"granted_scope"`
+	StatusEvidence       []StatusEvidenceEntryV2    `json:"status_evidence_digests"`
+	PreviousReceiptHash  []byte                     `json:"previous_receipt_hash"`
+	Signature            HybridSignature            `json:"signature"`
 }
 
 type verificationReceiptSignableV2 struct {
-	AgentID             string                      `json:"agent_id,omitempty"`
-	BundleHash          string                      `json:"bundle_hash"`
-	ChallengeAssessment string                      `json:"challenge_assessment"`
-	ContextAssessment   string                      `json:"context_assessment"`
-	ContextPolicyDigest *string                     `json:"context_policy_digest"`
-	Decision            string                      `json:"decision"`
-	DecisionReason      string                      `json:"decision_reason"`
-	GrantedScope        []string                    `json:"granted_scope"`
-	HumanID             string                      `json:"human_id,omitempty"`
-	IdentityStatus      string                      `json:"identity_status"`
-	IssuerIDs           []string                    `json:"issuer_ids"`
-	LogID               string                      `json:"log_id"`
-	PreviousReceiptHash []byte                      `json:"previous_receipt_hash"`
-	RequiredScope       string                      `json:"required_scope"`
-	Sequence            int64                       `json:"sequence"`
-	StatusAssessment    string                      `json:"status_assessment"`
-	StatusEvidence      []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
-	TrustAssessment     string                      `json:"trust_assessment"`
-	VerifiedAt          int64                       `json:"verified_at"`
-	VerifierID          string                      `json:"verifier_id"`
-	Version             int                         `json:"version"`
+	AgentID              string                      `json:"agent_id,omitempty"`
+	BundleHash           string                      `json:"bundle_hash"`
+	ChallengeAssessment  string                      `json:"challenge_assessment"`
+	ConstraintEvaluators []ConstraintEvaluatorRefV2  `json:"constraint_evaluators,omitempty"`
+	ContextAssessment    string                      `json:"context_assessment"`
+	ContextPolicyDigest  *string                     `json:"context_policy_digest"`
+	Decision             string                      `json:"decision"`
+	DecisionReason       string                      `json:"decision_reason"`
+	GrantedScope         []string                    `json:"granted_scope"`
+	HumanID              string                      `json:"human_id,omitempty"`
+	IdentityStatus       string                      `json:"identity_status"`
+	IssuerIDs            []string                    `json:"issuer_ids"`
+	LogID                string                      `json:"log_id"`
+	PreviousReceiptHash  []byte                      `json:"previous_receipt_hash"`
+	RequiredScope        string                      `json:"required_scope"`
+	Sequence             int64                       `json:"sequence"`
+	StatusAssessment     string                      `json:"status_assessment"`
+	StatusEvidence       []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
+	TrustAssessment      string                      `json:"trust_assessment"`
+	VerifiedAt           int64                       `json:"verified_at"`
+	VerifierID           string                      `json:"verifier_id"`
+	Version              int                         `json:"version"`
 }
 
 type verificationReceiptWireV2 struct {
-	AgentID             string                      `json:"agent_id,omitempty"`
-	BundleHash          string                      `json:"bundle_hash"`
-	ChallengeAssessment string                      `json:"challenge_assessment"`
-	ContextAssessment   string                      `json:"context_assessment"`
-	ContextPolicyDigest *string                     `json:"context_policy_digest"`
-	Decision            string                      `json:"decision"`
-	DecisionReason      string                      `json:"decision_reason"`
-	GrantedScope        []string                    `json:"granted_scope"`
-	HumanID             string                      `json:"human_id,omitempty"`
-	IdentityStatus      string                      `json:"identity_status"`
-	IssuerIDs           []string                    `json:"issuer_ids"`
-	LogID               string                      `json:"log_id"`
-	PreviousReceiptHash []byte                      `json:"previous_receipt_hash"`
-	RequiredScope       string                      `json:"required_scope"`
-	Sequence            int64                       `json:"sequence"`
-	Signature           HybridSignature             `json:"signature"`
-	StatusAssessment    string                      `json:"status_assessment"`
-	StatusEvidence      []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
-	TrustAssessment     string                      `json:"trust_assessment"`
-	VerifiedAt          int64                       `json:"verified_at"`
-	VerifierID          string                      `json:"verifier_id"`
-	Version             int                         `json:"version"`
+	AgentID              string                      `json:"agent_id,omitempty"`
+	BundleHash           string                      `json:"bundle_hash"`
+	ChallengeAssessment  string                      `json:"challenge_assessment"`
+	ConstraintEvaluators []ConstraintEvaluatorRefV2  `json:"constraint_evaluators,omitempty"`
+	ContextAssessment    string                      `json:"context_assessment"`
+	ContextPolicyDigest  *string                     `json:"context_policy_digest"`
+	Decision             string                      `json:"decision"`
+	DecisionReason       string                      `json:"decision_reason"`
+	GrantedScope         []string                    `json:"granted_scope"`
+	HumanID              string                      `json:"human_id,omitempty"`
+	IdentityStatus       string                      `json:"identity_status"`
+	IssuerIDs            []string                    `json:"issuer_ids"`
+	LogID                string                      `json:"log_id"`
+	PreviousReceiptHash  []byte                      `json:"previous_receipt_hash"`
+	RequiredScope        string                      `json:"required_scope"`
+	Sequence             int64                       `json:"sequence"`
+	Signature            HybridSignature             `json:"signature"`
+	StatusAssessment     string                      `json:"status_assessment"`
+	StatusEvidence       []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
+	TrustAssessment      string                      `json:"trust_assessment"`
+	VerifiedAt           int64                       `json:"verified_at"`
+	VerifierID           string                      `json:"verifier_id"`
+	Version              int                         `json:"version"`
 }
 
 type statusEvidenceCanonicalV2 struct {
@@ -119,7 +124,8 @@ func receiptV2Signable(r *VerificationReceiptV2) verificationReceiptSignableV2 {
 	return verificationReceiptSignableV2{
 		AgentID: r.AgentID, BundleHash: r.BundleHash,
 		ChallengeAssessment: r.ChallengeAssessment, ContextAssessment: r.ContextAssessment,
-		ContextPolicyDigest: r.ContextPolicyDigest, Decision: r.Decision,
+		ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(r.ConstraintEvaluators),
+		ContextPolicyDigest:  r.ContextPolicyDigest, Decision: r.Decision,
 		DecisionReason: r.DecisionReason, GrantedScope: r.GrantedScope,
 		HumanID: r.HumanID, IdentityStatus: r.IdentityStatus, IssuerIDs: r.IssuerIDs,
 		LogID: r.LogID, PreviousReceiptHash: r.PreviousReceiptHash,
@@ -192,6 +198,9 @@ func validateVerificationReceiptV2(r *VerificationReceiptV2, signature bool) err
 	}
 	if r.ContextPolicyDigest != nil && !validPrefixedDigestV2(*r.ContextPolicyDigest) {
 		return fmt.Errorf("wire v2: context_policy_digest is invalid")
+	}
+	if !validConstraintEvaluatorRefsV2(r.ConstraintEvaluators) || len(r.ConstraintEvaluators) != 0 && len(r.IssuerIDs) == 0 {
+		return fmt.Errorf("wire v2: constraint_evaluators must be valid extension types with sha384 profile digests, sorted and unique by type, and only for a delegated chain")
 	}
 	if (r.ContextAssessment == "not_evaluated" || r.ContextAssessment == "unbound") && r.ContextPolicyDigest != nil || (r.ContextAssessment == "bound" || r.ContextAssessment == "not_required" || r.ContextAssessment == "mismatch") && r.ContextPolicyDigest == nil {
 		return fmt.Errorf("wire v2: context_policy_digest does not match context_assessment")
@@ -510,7 +519,8 @@ func EncodeVerificationReceiptV2(receipt *VerificationReceiptV2) ([]byte, error)
 	wire := verificationReceiptWireV2{
 		AgentID: signable.AgentID, BundleHash: signable.BundleHash,
 		ChallengeAssessment: signable.ChallengeAssessment, ContextAssessment: signable.ContextAssessment,
-		ContextPolicyDigest: signable.ContextPolicyDigest, Decision: signable.Decision,
+		ConstraintEvaluators: signable.ConstraintEvaluators,
+		ContextPolicyDigest:  signable.ContextPolicyDigest, Decision: signable.Decision,
 		DecisionReason: signable.DecisionReason, GrantedScope: signable.GrantedScope,
 		HumanID: signable.HumanID, IdentityStatus: signable.IdentityStatus, IssuerIDs: signable.IssuerIDs,
 		LogID: signable.LogID, PreviousReceiptHash: signable.PreviousReceiptHash,
@@ -549,7 +559,8 @@ func DecodeVerificationReceiptV2(data []byte) (_ *VerificationReceiptV2, err err
 		Decision: wire.Decision, DecisionReason: wire.DecisionReason, IdentityStatus: wire.IdentityStatus,
 		TrustAssessment: wire.TrustAssessment, StatusAssessment: wire.StatusAssessment,
 		ChallengeAssessment: wire.ChallengeAssessment, ContextAssessment: wire.ContextAssessment,
-		ContextPolicyDigest: wire.ContextPolicyDigest, VerifiedAt: wire.VerifiedAt,
+		ConstraintEvaluators: wire.ConstraintEvaluators,
+		ContextPolicyDigest:  wire.ContextPolicyDigest, VerifiedAt: wire.VerifiedAt,
 		RequiredScope: wire.RequiredScope, GrantedScope: wire.GrantedScope, StatusEvidence: statusEvidenceFromCanonicalV2(wire.StatusEvidence),
 		PreviousReceiptHash: wire.PreviousReceiptHash, Signature: wire.Signature,
 	}
@@ -587,7 +598,8 @@ func validateVerificationReceiptSignableV2(data []byte) error {
 		Decision: wire.Decision, DecisionReason: wire.DecisionReason, IdentityStatus: wire.IdentityStatus,
 		TrustAssessment: wire.TrustAssessment, StatusAssessment: wire.StatusAssessment,
 		ChallengeAssessment: wire.ChallengeAssessment, ContextAssessment: wire.ContextAssessment,
-		ContextPolicyDigest: wire.ContextPolicyDigest, VerifiedAt: wire.VerifiedAt,
+		ConstraintEvaluators: wire.ConstraintEvaluators,
+		ContextPolicyDigest:  wire.ContextPolicyDigest, VerifiedAt: wire.VerifiedAt,
 		RequiredScope: wire.RequiredScope, GrantedScope: wire.GrantedScope, StatusEvidence: statusEvidenceFromCanonicalV2(wire.StatusEvidence),
 		PreviousReceiptHash: wire.PreviousReceiptHash,
 	}

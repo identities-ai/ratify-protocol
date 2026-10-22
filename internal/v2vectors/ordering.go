@@ -83,6 +83,20 @@ type requestContextJSON struct {
 	HasAmount             bool   `json:"has_amount,omitempty"`
 	RequestedAmountMicros int64  `json:"requested_amount_micros,omitempty"`
 	RequestedCurrency     string `json:"requested_currency,omitempty"`
+	// Authenticated inputs for extension evaluator profiles (SPEC-v2 §5.2).
+	ExtensionCounts map[string]int64  `json:"extension_counts,omitempty"`
+	ExtensionValues map[string]string `json:"extension_values,omitempty"`
+}
+
+// evaluatorJSON registers one extension evaluator profile in the verifier's
+// caller-authenticated configuration. profile and type form the descriptor
+// whose digest is recorded; implementation names the behavior the harness
+// binds to it: a standard profile identifier, or a fault: test behavior.
+type evaluatorJSON struct {
+	Type           string `json:"type"`
+	Profile        string `json:"profile"`
+	Implementation string `json:"implementation"`
+	ValidUntil     int64  `json:"valid_until,omitempty"`
 }
 
 type rateJSON struct {
@@ -101,6 +115,7 @@ type countsJSON struct {
 	Rate            int `json:"rate"`
 	Finalize        int `json:"finalize"`
 	Progress        int `json:"progress"`
+	Evaluator       int `json:"evaluator,omitempty"`
 }
 
 type outcomeJSON struct {
@@ -149,6 +164,7 @@ type orderingVector struct {
 	AudienceMode           string                        `json:"audience_mode"`
 	AudienceMemberships    []membershipJSON              `json:"audience_memberships"`
 	Rate                   string                        `json:"rate"`
+	ConstraintEvaluators   []evaluatorJSON               `json:"constraint_evaluators,omitempty"`
 	Expected               outcomeJSON                   `json:"expected"`
 }
 
@@ -188,6 +204,7 @@ type scenario struct {
 	audience    string
 	memberships []membershipJSON
 	rate        string
+	evaluators  []evaluatorJSON
 	out         outcomeJSON
 }
 
@@ -354,6 +371,7 @@ func (g *gen) finish(s scenario) orderingVector {
 			TrustAssessment: s.out.TrustAssessment, StatusAssessment: s.out.StatusAssessment, ChallengeAssessment: "current",
 			ContextAssessment: s.out.ContextAssessment, ContextPolicyDigest: s.out.ContextPolicyDigest, VerifiedAt: s.out.VerifiedAt,
 			RequiredScope: s.scope, GrantedScope: granted, StatusEvidence: toLibEvidence(s.out.StatusEvidence),
+			ConstraintEvaluators: sealedEvaluatorRefs(b, s.evaluators),
 		}
 		s.out.ReceiptBodyB64 = b64(must(ratify.VerificationReceiptV2Body(r)))
 		s.out.CallbackCounts.Finalize = 1
@@ -379,7 +397,7 @@ func (g *gen) finish(s scenario) orderingVector {
 		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, TZDBVersion: tzdb, ReceiverBindingHook: s.hook,
 		ClaimStore: s.claim, ClaimTimeOffset: s.claimOffset, FinalizeTimeOffset: s.finOffset, Trust: s.trust, StatusKeys: s.statusKeys,
 		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
-		Rate: s.rate, Expected: s.out,
+		Rate: s.rate, ConstraintEvaluators: s.evaluators, Expected: s.out,
 	}
 }
 
@@ -423,6 +441,10 @@ func (g *gen) orderingFile() any {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}
+	f.Semantics["constraint_evaluators"] = "caller-authenticated extension evaluator registry (SPEC-v2 §5.2); absent = none registered. Each entry's profile and type form the descriptor {\"profile\",\"type\"} whose digest is sha384:hex(SHA-384(\"ratify-protocol-constraint-profile-v2\" || 0x00 || RatifyCanonicalJSON(descriptor))). implementation binds the behavior: com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1 are the standard profiles; fault:error returns an error; fault:panic panics; fault:timeout never answers within the registry timeout; fault:invalid_outcome returns an outcome outside pass/denied/unverifiable; fault:pass_until returns pass with horizon valid_until. The registry entries for types present in the chain are sealed with the claim and recorded, sorted by type, in the receipt member constraint_evaluators"
+	f.Semantics["request_context.extension_counts"] = "authenticated named quantities for extension profiles: names 1 to 128 bytes of [a-z0-9_.:-], values 0..2^53-1, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["request_context.extension_values"] = "authenticated named exact values for extension profiles: names as for extension_counts, values valid UTF-8 of at most 512 bytes, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["callback_counts.evaluator"] = "number of extension evaluator invocations; omitted when zero"
 	return f
 }
 
@@ -700,6 +722,7 @@ func (g *gen) terminalScenarios() []scenario {
 			s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_signed_by_party_b"]))
 		}))
 	g.statusProvenanceScenarios(add, def, allow, indeterminate, allowCounts, vp)
+	g.extensionScenarios(add, allow, deny, vp)
 
 	// Context policy cases.
 	add(g.terminal("no_policy_unbound_context", "no context policy and a null session_context: never allow", def,

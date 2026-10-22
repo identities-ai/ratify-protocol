@@ -51,6 +51,7 @@ type V2LocalAuthorizationAssessment struct {
 	StatusAssessment        string
 	DelegationValidUntil    int64
 	LocalTimeValidUntil     int64
+	ExtensionValidUntil     int64
 	StatusFreshUntil        int64
 	AudienceFreshUntil      int64
 	StatusEvidence          []StatusEvidenceEntryV2
@@ -215,7 +216,7 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 			localPolicyFailure = &V2LocalPolicyFailure{Status: contextAssessment.Status, Reason: contextAssessment.Reason, Detail: contextAssessment.Detail}
 		}
 	}
-	deferred, constraintStatus, constraintFailures := evaluateV2LocalConstraints(bundle, opts, now)
+	deferred, constraintStatus, constraintFailures, extensionValidUntil := evaluateV2LocalConstraints(bundle, opts, tokenState.expected, nowUnix, now)
 	if constraintStatus != "" {
 		slices.Sort(constraintFailures)
 		candidate := &V2LocalPolicyFailure{Status: constraintStatus, Reason: constraintStatus, Detail: strings.Join(constraintFailures, "; ")}
@@ -224,6 +225,7 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 		}
 	}
 	assessment = pendingV2LocalAssessment(bundle, opts, effective, deferred, localPolicyFailure)
+	assessment.ExtensionValidUntil = extensionValidUntil
 	assessment.DelegationValidUntil = bundle.Delegations[0].ExpiresAt
 	for _, cert := range bundle.Delegations[1:] {
 		if cert.ExpiresAt < assessment.DelegationValidUntil {
@@ -504,10 +506,16 @@ func pendingV2LocalAssessment(bundle *ProofBundleV2, opts V2LocalAuthorizationOp
 	return assessment
 }
 
-func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorizationOptions, now time.Time) ([]V2DeferredConstraint, string, []string) {
+// evaluateV2LocalConstraints evaluates every locally decidable constraint in
+// chain order. A registered v2 type uses its built-in rule; an extension type
+// uses the evaluator sealed for it at preflight (SPEC-v2 §5.2), and any other
+// type is constraint_unknown. It also returns the earliest pass horizon an
+// extension evaluator reported (0 = none).
+func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorizationOptions, sealed *expectedChallengeStateV2, nowUnix int64, now time.Time) ([]V2DeferredConstraint, string, []string, int64) {
 	deferred := make([]V2DeferredConstraint, 0)
 	constraintStatus := ""
 	constraintFailures := make([]string, 0)
+	var extensionHorizon int64
 	for i := range bundle.Delegations {
 		cert := &bundle.Delegations[i]
 		for j, constraint := range cert.Constraints {
@@ -523,7 +531,25 @@ func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorization
 				deferred = append(deferred, V2DeferredConstraint{DelegationIndex: i, ConstraintIndex: j, IssuerID: cert.IssuerID, CertID: cert.CertID, Type: constraint.Type, CanonicalJSON: encoded})
 				continue
 			}
-			if err := evaluateConstraintV2(constraint, opts.Context, opts.TZDBVersion, now); err != nil {
+			var err error
+			if entry, ok := sealed.evaluators[constraint.Type]; ok && !IsRegisteredConstraintTypeV2(constraint.Type) {
+				var horizon int64
+				params, encodeErr := extensionParamsJSONV2(constraint)
+				if encodeErr != nil {
+					err = errConstraintUnverifiable(fmt.Sprintf("%s params cannot be encoded: %v", constraint.Type, encodeErr))
+				} else {
+					horizon, err = runConstraintEvaluatorV2(entry, sealed.evaluatorTimeout, ConstraintEvaluationInputV2{
+						Type: constraint.Type, ParamsJSON: params, DelegationIndex: i, ConstraintIndex: j,
+						IssuerID: cert.IssuerID, CertID: cert.CertID, Context: cloneConstraintContextV2(opts.Context), EvaluationTime: nowUnix,
+					})
+				}
+				if err == nil && horizon != 0 && (extensionHorizon == 0 || horizon < extensionHorizon) {
+					extensionHorizon = horizon
+				}
+			} else {
+				err = evaluateConstraintV2(constraint, opts.Context, opts.TZDBVersion, now)
+			}
+			if err != nil {
 				status := "constraint_denied"
 				switch {
 				case errors.Is(err, ErrConstraintUnverifiable):
@@ -538,7 +564,7 @@ func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorization
 			}
 		}
 	}
-	return deferred, constraintStatus, constraintFailures
+	return deferred, constraintStatus, constraintFailures, extensionHorizon
 }
 
 func allowHorizonV2(assessment V2LocalAuthorizationAssessment) int64 {
@@ -548,6 +574,9 @@ func allowHorizonV2(assessment V2LocalAuthorizationAssessment) int64 {
 	}
 	if assessment.LocalTimeValidUntil > 0 {
 		horizon = min(horizon, assessment.LocalTimeValidUntil)
+	}
+	if assessment.ExtensionValidUntil > 0 {
+		horizon = min(horizon, assessment.ExtensionValidUntil)
 	}
 	return min(horizon, V2MaxTimestampSeconds)
 }

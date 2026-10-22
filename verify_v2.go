@@ -94,6 +94,10 @@ type V2VerifyRequest struct {
 	TZDBVersion  string
 	StatusKeys   map[string]V2StatusKeyConfig
 	StatusPolicy RevocationStatusPolicyV2
+	// ConstraintEvaluators is the caller-authenticated extension evaluator
+	// registry (SPEC-v2 §5.2); nil registers none, so every extension type is
+	// constraint_unknown. The entries a chain uses are sealed with the claim.
+	ConstraintEvaluators *ConstraintEvaluatorRegistryV2
 }
 
 // V2VerifyStage names where a verification stopped.
@@ -168,7 +172,7 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 	if err := validateV2VerifyConfiguration(req); err != nil {
 		return preflightFailure(err)
 	}
-	preflight, err := preflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, true, safeV2ReceiverBinding(cb.ReceiverBinding),
+	preflight, err := preflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, true, safeV2ReceiverBinding(cb.ReceiverBinding), req.ConstraintEvaluators,
 		req.RequiredScope, req.VerifierNamespace, req.ReplayEpoch, req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds)
 	if err != nil {
 		return preflightFailure(err)
@@ -355,6 +359,9 @@ func validateV2VerifyConfiguration(req V2VerifyRequest) error {
 	if err := validateV2RequestContext(req.Context); err != nil {
 		return err
 	}
+	if req.ConstraintEvaluators != nil && !req.ConstraintEvaluators.valid {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 constraint evaluator registry was not built by NewConstraintEvaluatorRegistryV2")
+	}
 	return validateV2StatusConfiguration(req.StatusKeys, req.StatusPolicy)
 }
 
@@ -381,7 +388,7 @@ func validateV2RequestContext(c ConstraintContextV2) error {
 	} else if c.RequestedResourceID != "" || c.RequestedPath != "" {
 		return v2Errorf(V2ErrConfigurationInvalid, "v2 requested resource ID and path must be supplied with has_resource")
 	}
-	return nil
+	return validateV2ExtensionContext(c)
 }
 
 // validateV2StatusConfiguration checks the caller-authenticated status policy
@@ -451,7 +458,7 @@ func buildV2TerminalResult(bundle *ProofBundleV2, assessment V2LocalAuthorizatio
 		TrustAssessment: trust, StatusAssessment: statusAssessment, ChallengeAssessment: "current",
 		ContextAssessment: contextAssessment, ContextPolicyDigest: policyDigest,
 		VerifiedAt: verifiedAt, RequiredScope: claim.RequiredScope, GrantedScope: granted,
-		StatusEvidence: evidence,
+		StatusEvidence: evidence, ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(claim.ConstraintEvaluators),
 	}
 	body, err = VerificationReceiptV2Body(receipt)
 	if err != nil {

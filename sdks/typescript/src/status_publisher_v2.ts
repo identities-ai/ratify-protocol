@@ -22,7 +22,7 @@ import {
 } from "./protocol_v2_wire.js";
 import { keyRoleBindingV2, loadAnchoredSecurityJournalV2, type SecurityJournalStoreV2, type StatusKeyBindingV2 } from "./security_journal_v2.js";
 import type { HybridKeyPairV2 } from "./crypto_v2.js";
-import { newLocalSignerV2, signerPublicKeyV2, type SignerV2 } from "./signer_v2.js";
+import { disposeLocalSignerV2, newLocalSignerV2, signerPublicKeyV2, type SignerV2 } from "./signer_v2.js";
 import { MAX_IDENTIFIER_LENGTH_BYTES, type HybridPublicKey } from "./types.js";
 
 /** The publisher's durable state. */
@@ -44,22 +44,68 @@ export interface V2StatusPublication {
   push: RevocationPushV2 | null;
 }
 
+/**
+ * Local signers created by newV2StatusPublisherWithKey. Only a publisher
+ * built around one of these owns, and on dispose() zeroes, its signer's key.
+ */
+const ownedStatusSigners = new WeakSet<SignerV2>();
+
 const isSortedUnique = (values: readonly string[]) => values.every((v, i) => i === 0 || compareStrings(values[i - 1]!, v) < 0);
 
-/** Signs status for one issuer under one status key. */
+/**
+ * Signs status for one issuer under one status key.
+ *
+ * A publisher built by newV2StatusPublisherWithKey holds its own copy of the
+ * status private key for its whole lifetime. Call dispose() (or declare it
+ * with `using`) when the publisher is no longer needed: it zeroes that copy,
+ * and every later signing call throws configuration_invalid. A publisher
+ * built around an external signer never holds private key material;
+ * dispose() then only retires the publisher and leaves the signer untouched.
+ * JavaScript cannot guarantee erasure of copies made by the engine, the
+ * garbage collector, or the cryptography libraries' internal state; only the
+ * SDK-owned buffers are wiped.
+ */
 export class V2StatusPublisher {
   readonly #issuerID: string;
   readonly #statusKey: HybridPublicKey;
   readonly #statusKeyID: string;
   readonly #signer: SignerV2;
+  readonly #ownsSigner: boolean;
   readonly #lifetime: number;
+  #disposed = false;
 
-  private constructor(issuerID: string, statusKey: HybridPublicKey, statusKeyID: string, signer: SignerV2, lifetime: number) {
+  private constructor(issuerID: string, statusKey: HybridPublicKey, statusKeyID: string, signer: SignerV2, ownsSigner: boolean, lifetime: number) {
     this.#issuerID = issuerID;
     this.#statusKey = statusKey;
     this.#statusKeyID = statusKeyID;
     this.#signer = signer;
+    this.#ownsSigner = ownsSigner;
     this.#lifetime = lifetime;
+  }
+
+  /**
+   * Retires the publisher. When it owns an in-process status key
+   * (newV2StatusPublisherWithKey), the SDK's copy of that key is zeroed.
+   * Every later genesis, heartbeat, or revoke throws configuration_invalid.
+   * Idempotent. A signing call already in progress may fail.
+   */
+  dispose(): void {
+    this.#disposed = true;
+    if (this.#ownsSigner) disposeLocalSignerV2(this.#signer);
+  }
+
+  /** Same as dispose(), for `using` declarations. */
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
+
+  /** Whether dispose() has been called. */
+  get disposed(): boolean {
+    return this.#disposed;
+  }
+
+  #live(): void {
+    if (this.#disposed) throw v2Errorf("configuration_invalid", "v2 status publisher has been disposed");
   }
 
   /**
@@ -119,7 +165,7 @@ export class V2StatusPublisher {
           current.mlDsa65Digest !== statusBinding.mlDsa65Digest) {
         throw v2Errorf("configuration_invalid", "v2 status signer is not the issuer's current configured status key");
       }
-      return new V2StatusPublisher(issuerBinding.keyID, cloneHybridPublicKey(statusKey), statusBinding.keyID, statusSigner, lifetimeSeconds);
+      return new V2StatusPublisher(issuerBinding.keyID, cloneHybridPublicKey(statusKey), statusBinding.keyID, statusSigner, ownedStatusSigners.has(statusSigner), lifetimeSeconds);
     });
   }
 
@@ -136,6 +182,7 @@ export class V2StatusPublisher {
   /** Signs the first full list: sequence 1, an empty revoked set. */
   async genesis(updatedAt: number, signal?: AbortSignal): Promise<V2StatusPublication> {
     return classifiedAsync("configuration_invalid", async () => {
+      this.#live();
       return this.#list({ issuerID: this.#issuerID, statusKeyID: this.#statusKeyID, sequence: 0, updatedAt: 0, revoked: [] }, 1, updatedAt, signal);
     });
   }
@@ -143,6 +190,7 @@ export class V2StatusPublisher {
   /** Re-signs the current sequence and set with a strictly later updated_at. */
   async heartbeat(state: V2StatusPublisherState, updatedAt: number, signal?: AbortSignal): Promise<V2StatusPublication> {
     return classifiedAsync("configuration_invalid", async () => {
+      this.#live();
       this.#checkState(state, updatedAt);
       return this.#list(state, state.sequence, updatedAt, signal);
     });
@@ -155,6 +203,7 @@ export class V2StatusPublisher {
    */
   async revoke(state: V2StatusPublisherState, certIDs: readonly string[], at: number, signal?: AbortSignal): Promise<V2StatusPublication> {
     return classifiedAsync("configuration_invalid", async () => {
+      this.#live();
       this.#checkState(state, at);
       if (!Array.isArray(certIDs) || certIDs.length === 0 || certIDs.length > MAX_REVOCATION_PUSH_REFS_V2) {
         throw new Error(`v2 status revocation must name 1..${MAX_REVOCATION_PUSH_REFS_V2} certificate IDs`);
@@ -215,8 +264,21 @@ export function newV2StatusPublisher(roles: SecurityJournalStoreV2 | null | unde
  * signing path, with every refusal of newV2StatusPublisher; an invalid key
  * pair is configuration_invalid. No local SignerV2 is exported (SPEC-v2
  * §3.2), so this is the in-process key path.
+ *
+ * The publisher keeps its own copy of the status private key until
+ * dispose() is called; the caller's statusKey is not retained and may be
+ * cleared once this resolves. If construction fails, the copy is zeroed
+ * before the error is returned.
  */
 export function newV2StatusPublisherWithKey(roles: SecurityJournalStoreV2 | null | undefined, issuerKey: HybridPublicKey, statusKey: HybridKeyPairV2, lifetimeSeconds: number, signal?: AbortSignal): Promise<V2StatusPublisher> {
-  return classifiedAsync("configuration_invalid", async () =>
-    V2StatusPublisher.create(roles, issuerKey, await newLocalSignerV2(statusKey), lifetimeSeconds, signal));
+  return classifiedAsync("configuration_invalid", async () => {
+    const signer = await newLocalSignerV2(statusKey);
+    try {
+      ownedStatusSigners.add(signer);
+      return await V2StatusPublisher.create(roles, issuerKey, signer, lifetimeSeconds, signal);
+    } catch (err) {
+      disposeLocalSignerV2(signer);
+      throw err;
+    }
+  });
 }

@@ -7,7 +7,7 @@ import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2S
 import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { validConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
 import { MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2, MAX_VERIFICATION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
-import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
+import { signV2StatementWithSigner, signerPublicKeyV2, withLocalSignerV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import { classified, classifiedAsync, v2Classify, v2Errorf } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
@@ -513,7 +513,7 @@ export async function signVerificationReceiptV2(r: VerificationReceiptV2, verifi
   return classifiedAsync("malformed", async () => {
     validateVerificationReceiptV2(r, false);
     await validateHybridKeyPairV2(verifier);
-    return signVerificationReceiptV2WithSigner(r, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+    return withLocalSignerV2(verifier, { deterministic: opts.deterministic }, (signer) => signVerificationReceiptV2WithSigner(r, signer));
   });
 }
 
@@ -667,7 +667,7 @@ export function bindVerificationReceiptBodyV2(data: Uint8Array, head: ReceiptV2H
 export async function signPreparedVerificationReceiptV2(data: Uint8Array, head: ReceiptV2Head, verifier: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<VerificationReceiptV2> {
   return classifiedAsync("malformed", async () => {
     await validateHybridKeyPairV2(verifier);
-    return signPreparedVerificationReceiptV2WithSigner(data, head, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+    return withLocalSignerV2(verifier, { deterministic: opts.deterministic }, (signer) => signPreparedVerificationReceiptV2WithSigner(data, head, signer));
   });
 }
 

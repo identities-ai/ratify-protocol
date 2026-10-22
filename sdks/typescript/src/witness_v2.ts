@@ -4,7 +4,7 @@
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
 import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
-import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
+import { signV2StatementWithSigner, signerPublicKeyV2, withLocalSignerV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
   classified,
   classifiedAsync,
@@ -177,7 +177,7 @@ export async function signWitnessEntryV2(e: WitnessEntryV2, witness: HybridKeyPa
   return classifiedAsync("malformed", async () => {
     validateWitnessEntryV2(e, false);
     await validateHybridKeyPairV2(witness);
-    return signWitnessEntryV2WithSigner(e, await newLocalSignerV2(witness, { deterministic: opts.deterministic }));
+    return withLocalSignerV2(witness, { deterministic: opts.deterministic }, (signer) => signWitnessEntryV2WithSigner(e, signer));
   });
 }
 

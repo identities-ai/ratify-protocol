@@ -48,7 +48,7 @@ import {
 } from "./limits_v2.js";
 import { normalizeResourcePath, resourcePathsNested } from "./resource_path.js";
 import { validateScopesV2 } from "./scope_v2.js";
-import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
+import { signV2StatementWithSigner, signerPublicKeyV2, withLocalSignerV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
   MAX_CONSTRAINTS_PER_CERT,
   MAX_DELEGATION_CHAIN_DEPTH,
@@ -354,7 +354,7 @@ export async function verifyDelegationCertV2Signature(cert: DelegationCertV2): P
  * ID and key must match the key. See signDelegationCertV2WithSigner.
  */
 export async function signDelegationCertV2(cert: DelegationCertV2, issuer: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<DelegationCertV2> {
-  return signDelegationCertV2WithSigner(cert, await newLocalSignerV2(issuer, { deterministic: opts.deterministic }));
+  return withLocalSignerV2(issuer, { deterministic: opts.deterministic }, (signer) => signDelegationCertV2WithSigner(cert, signer));
 }
 
 /**
@@ -645,7 +645,7 @@ export async function verifyProofBundleV2Signatures(b: ProofBundleV2): Promise<v
 
 /** Computes the delegation digest and signs the presentation with the agent key. */
 export async function signProofBundleV2(bundle: ProofBundleV2, agent: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<ProofBundleV2> {
-  return signProofBundleV2WithSigner(bundle, await newLocalSignerV2(agent, { deterministic: opts.deterministic }));
+  return withLocalSignerV2(agent, { deterministic: opts.deterministic }, (signer) => signProofBundleV2WithSigner(bundle, signer));
 }
 
 /** signProofBundleV2 through a signer whose key must equal the bundle agent key. */
@@ -845,7 +845,7 @@ async function checkStatusSigner(issuerID: string, boundIssuerID: string, boundS
 
 /** Signs a list under the caller-authenticated status key bound to its issuer. */
 export async function signRevocationListV2(l: RevocationListV2, boundIssuerID: string, boundStatusKey: HybridPublicKey, statusKey: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<RevocationListV2> {
-  return signRevocationListV2WithSigner(l, boundIssuerID, boundStatusKey, await newLocalSignerV2(statusKey, { deterministic: opts.deterministic }));
+  return withLocalSignerV2(statusKey, { deterministic: opts.deterministic }, (signer) => signRevocationListV2WithSigner(l, boundIssuerID, boundStatusKey, signer));
 }
 
 /** signRevocationListV2 through a signer whose key must equal boundStatusKey. */
@@ -867,7 +867,7 @@ export async function signRevocationListV2WithSigner(l: RevocationListV2, boundI
 
 /** Signs a push under the caller-authenticated status key bound to its issuer. */
 export async function signRevocationPushV2(p: RevocationPushV2, boundIssuerID: string, boundStatusKey: HybridPublicKey, statusKey: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<RevocationPushV2> {
-  return signRevocationPushV2WithSigner(p, boundIssuerID, boundStatusKey, await newLocalSignerV2(statusKey, { deterministic: opts.deterministic }));
+  return withLocalSignerV2(statusKey, { deterministic: opts.deterministic }, (signer) => signRevocationPushV2WithSigner(p, boundIssuerID, boundStatusKey, signer));
 }
 
 /** signRevocationPushV2 through a signer whose key must equal boundStatusKey. */

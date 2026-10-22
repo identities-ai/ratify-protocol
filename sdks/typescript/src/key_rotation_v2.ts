@@ -8,7 +8,7 @@ import { sha384 } from "@noble/hashes/sha2";
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
 import { V2_MAX_TIMESTAMP_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_KEY_ROTATION_STATEMENT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
-import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
+import { disposeLocalSignerV2, newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
   classified,
   classifiedAsync,
@@ -286,21 +286,26 @@ export async function signKeyRotationStatementV2(
 ): Promise<KeyRotationStatementV2> {
   return classifiedAsync("malformed", async () => {
     validateKeyRotationStatementV2(s, false);
-    let oldSigner: SignerV2;
-    let newSigner: SignerV2;
+    let oldSigner: SignerV2 | null = null;
+    let newSigner: SignerV2 | null = null;
     try {
-      await validateHybridKeyPairV2(oldKey);
-      oldSigner = await newLocalSignerV2(oldKey, { deterministic: opts.deterministic });
-    } catch (err) {
-      throw wrapError("old rotation key", err);
+      try {
+        await validateHybridKeyPairV2(oldKey);
+        oldSigner = await newLocalSignerV2(oldKey, { deterministic: opts.deterministic });
+      } catch (err) {
+        throw wrapError("old rotation key", err);
+      }
+      try {
+        await validateHybridKeyPairV2(newKey);
+        newSigner = await newLocalSignerV2(newKey, { deterministic: opts.deterministic });
+      } catch (err) {
+        throw wrapError("new rotation key", err);
+      }
+      return await signKeyRotationStatementV2WithSigners(s, oldSigner, newSigner);
+    } finally {
+      disposeLocalSignerV2(oldSigner);
+      disposeLocalSignerV2(newSigner);
     }
-    try {
-      await validateHybridKeyPairV2(newKey);
-      newSigner = await newLocalSignerV2(newKey, { deterministic: opts.deterministic });
-    } catch (err) {
-      throw wrapError("new rotation key", err);
-    }
-    return signKeyRotationStatementV2WithSigners(s, oldSigner, newSigner);
   });
 }
 

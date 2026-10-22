@@ -338,6 +338,17 @@ SPEC-v2:
   `newV2StatusPublisher` (external signer) and `newV2StatusPublisherWithKey`
   (in-process key pair) build a minimal signed-status publisher from the
   role journal.
+- **Key material.** A typed key-pair signer copies the private key into an
+  internal signer and overwrites that copy with zeros when the call settles,
+  on success, refusal, or error. A publisher from
+  `newV2StatusPublisherWithKey` keeps its copy of the status key until
+  `dispose()` (or a `using` declaration) zeroes it; after that, every
+  signing call throws `configuration_invalid`. Your own key pair is never
+  modified, so clear it yourself when you are done. JavaScript cannot
+  guarantee erasure: copies made by the engine or the garbage collector, and
+  the internal state of the underlying cryptography libraries, are outside
+  the SDK's control. Only buffers the SDK owns are wiped. For stronger
+  custody, sign through an external `SignerV2` backed by an HSM or KMS.
 - **Constraints.** `time_window` is evaluated against the embedded IANA
   tzdata `2025c` (SHA-256 checked at load; host zone data is never used).
   Extension evaluator profiles, including the two standard profiles, are

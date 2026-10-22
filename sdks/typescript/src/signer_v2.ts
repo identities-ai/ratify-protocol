@@ -90,9 +90,34 @@ export interface LocalSignerOptionsV2 {
 
 const localSigners = new WeakSet<object>();
 
+/**
+ * @internal Test hook: called with the signer's own private-key buffers each
+ * time the SDK creates a local signer, so tests can observe that those
+ * buffers are zeroed when the signer is disposed. Never exported from a
+ * package entry point.
+ */
+let localSignerBuffersObserverV2: ((buffers: readonly Uint8Array[]) => void) | null = null;
+
+/** @internal See localSignerBuffersObserverV2. Pass null to remove. */
+export function setLocalSignerBuffersObserverForTestingV2(observer: ((buffers: readonly Uint8Array[]) => void) | null): void {
+  localSignerBuffersObserverV2 = observer;
+}
+
+/**
+ * The in-process signer holds its own copies of both private components,
+ * validated once at construction, so a caller mutating its key pair during
+ * an asynchronous signing call cannot change what is signed. dispose()
+ * overwrites those copies with zeros and makes every later use throw.
+ *
+ * Only these SDK-owned buffers are wiped. JavaScript gives no guarantee about
+ * copies made by the engine, the garbage collector, or the internal state of
+ * the cryptography libraries (for example the expanded Ed25519 secret scalar
+ * or the ML-DSA-65 working state); those are outside the SDK's control.
+ */
 class LocalSignerV2 implements SignerV2 {
   readonly #pair: HybridKeyPairV2;
   readonly #deterministic: boolean;
+  #disposed = false;
   constructor(pair: HybridKeyPairV2, deterministic: boolean) {
     this.#pair = {
       publicKey: { ed25519: Uint8Array.from(pair.publicKey.ed25519), ml_dsa_65: Uint8Array.from(pair.publicKey.ml_dsa_65) },
@@ -100,26 +125,41 @@ class LocalSignerV2 implements SignerV2 {
     };
     this.#deterministic = deterministic;
     localSigners.add(this);
+    localSignerBuffersObserverV2?.([this.#pair.privateKey.ed25519, this.#pair.privateKey.ml_dsa_65]);
+  }
+  #live(): void {
+    if (this.#disposed) throw new Error("local v2 signer has been disposed");
   }
   publicKeyV2(): HybridPublicKey {
+    this.#live();
     return { ed25519: Uint8Array.from(this.#pair.publicKey.ed25519), ml_dsa_65: Uint8Array.from(this.#pair.publicKey.ml_dsa_65) };
   }
   modeV2(): SignerModeV2 {
     return SIGNER_MODE_DIRECT_V2;
   }
   async signV2(req: SignRequestV2, signal?: AbortSignal): Promise<HybridSignature> {
+    this.#live();
     if (signal?.aborted) throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("signing cancelled"));
     if (req.mode !== SIGNER_MODE_DIRECT_V2 || req.message.length !== V2_SIGNING_MESSAGE_SIZE || !req.mlDsaContext || req.mlDsaContext.length === 0) {
       throw new Error("local v2 signer supports only direct-mode requests");
     }
     const ed25519 = await signEd25519Async(req.message, this.#pair.privateKey.ed25519);
+    // The signer may have been disposed while Ed25519 signing was pending.
+    this.#live();
     const ml_dsa_65 = ml_dsa65.sign(req.message, this.#pair.privateKey.ml_dsa_65, this.#deterministic
       ? { context: req.mlDsaContext, extraEntropy: false }
       : { context: req.mlDsaContext });
     return { ed25519, ml_dsa_65 };
   }
   async validate(): Promise<void> {
+    this.#live();
     await validateHybridKeyPairV2(this.#pair);
+  }
+  /** Zeroes the signer's private-key copies; later use throws. Idempotent. */
+  dispose(): void {
+    this.#disposed = true;
+    this.#pair.privateKey.ed25519.fill(0);
+    this.#pair.privateKey.ml_dsa_65.fill(0);
   }
 }
 
@@ -130,13 +170,36 @@ class LocalSignerV2 implements SignerV2 {
  * would sign any well-formed message under any context the caller chose,
  * which SPEC-v2 §3.2 forbids. A caller with an in-process key uses the typed
  * key-pair signing functions; a caller with an external provider implements
- * SignerV2 itself.
+ * SignerV2 itself. The returned signer holds copies of the private key; its
+ * owner MUST release it with disposeLocalSignerV2 (or use withLocalSignerV2).
  */
 export async function newLocalSignerV2(pair: HybridKeyPairV2, opts: LocalSignerOptionsV2 = {}): Promise<SignerV2> {
   return classifiedAsync("configuration_invalid", async () => {
     await validateHybridKeyPairV2(pair);
     return new LocalSignerV2(pair, opts.deterministic === true);
   });
+}
+
+/**
+ * @internal Zeroes the private-key copies of a signer created by
+ * newLocalSignerV2. A no-op for any other signer: the SDK never touches key
+ * material it does not own.
+ */
+export function disposeLocalSignerV2(signer: SignerV2 | null | undefined): void {
+  if (signer && localSigners.has(signer)) (signer as LocalSignerV2).dispose();
+}
+
+/**
+ * @internal Runs fn with a local signer for pair and disposes the signer when
+ * fn settles, on success, failure, or cancellation alike.
+ */
+export async function withLocalSignerV2<T>(pair: HybridKeyPairV2, opts: LocalSignerOptionsV2, fn: (signer: SignerV2) => Promise<T>): Promise<T> {
+  const signer = await newLocalSignerV2(pair, opts);
+  try {
+    return await fn(signer);
+  } finally {
+    disposeLocalSignerV2(signer);
+  }
 }
 
 /**
@@ -150,8 +213,8 @@ export async function signV2StatementWithKeyPair(
   pair: HybridKeyPairV2,
   opts: { deterministic?: boolean } = {},
 ): Promise<HybridSignature> {
-  const signer = await newLocalSignerV2(pair, { deterministic: opts.deterministic });
-  return signV2StatementWithSigner(objectType, signable, signer, await signerPublicKeyV2(signer));
+  return withLocalSignerV2(pair, { deterministic: opts.deterministic }, async (signer) =>
+    signV2StatementWithSigner(objectType, signable, signer, await signerPublicKeyV2(signer)));
 }
 
 /** len("ratify-protocol-signature\x00\x02") + 2 + 48. */

@@ -7,7 +7,7 @@ import { sha256, sha384 } from "@noble/hashes/sha2";
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
 import { validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_TRANSACTION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
-import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
+import { signV2StatementWithSigner, signerPublicKeyV2, withLocalSignerV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import { classified, classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
@@ -295,7 +295,7 @@ export async function signTransactionReceiptPartyV2(r: TransactionReceiptV2, par
     const party = r.parties.find((p) => p.party_id === partyID);
     if (!party) throw v2Errorf("transaction_party_mismatch", `party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
     await validateHybridKeyPairV2(key);
-    return signTransactionReceiptPartyV2WithSigner(r, partyID, await newLocalSignerV2(key, { deterministic: opts.deterministic }));
+    return withLocalSignerV2(key, { deterministic: opts.deterministic }, (signer) => signTransactionReceiptPartyV2WithSigner(r, partyID, signer));
   });
 }
 

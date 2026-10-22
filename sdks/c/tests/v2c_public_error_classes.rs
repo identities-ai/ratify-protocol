@@ -513,9 +513,11 @@ fn v2c_public_api_errors_are_classified() {
                 })
             },
         ),
-        call("ratify_v2_operation_context_hash", "invalid_required_scope", || {
-            buffer_call(|o| unsafe { ratify_v2_operation_context_hash(b"{}".as_ptr(), 2, o) })
-        }),
+        call(
+            "ratify_v2_operation_context_hash",
+            "invalid_required_scope",
+            || buffer_call(|o| unsafe { ratify_v2_operation_context_hash(b"{}".as_ptr(), 2, o) }),
+        ),
         call("ratify_v2_session_context", "configuration_invalid", || {
             buffer_call(|o| unsafe { ratify_v2_session_context(b"{}".as_ptr(), 2, o) })
         }),
@@ -842,12 +844,18 @@ fn v2c_public_api_errors_are_classified() {
             },
         ),
         // Key rotation journal.
-        call("ratify_v2_rotation_journal_new", "configuration_invalid", || {
-            let (a, r) = (cs(""), cs(""));
-            let mut out = ptr::null_mut();
-            let key = zero_key();
-            unsafe { ratify_v2_rotation_journal_new(a.as_ptr(), -1, r.as_ptr(), &key, &mut out) }
-        }),
+        call(
+            "ratify_v2_rotation_journal_new",
+            "configuration_invalid",
+            || {
+                let (a, r) = (cs(""), cs(""));
+                let mut out = ptr::null_mut();
+                let key = zero_key();
+                unsafe {
+                    ratify_v2_rotation_journal_new(a.as_ptr(), -1, r.as_ptr(), &key, &mut out)
+                }
+            },
+        ),
         call("ratify_v2_rotation_journal_accept", "", move || {
             let j = rotation_journal(pubk);
             let mut result = 0;

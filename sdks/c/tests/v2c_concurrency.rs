@@ -207,7 +207,13 @@ fn v2c_concurrent_status_applies_never_lose_a_revocation() {
     }));
     let list = buf(|o| unsafe {
         ratify_v2_sign_revocation_list(
-            list.as_ptr(), list.len(), issuer_c.as_ptr(), &key, kp.0, ptr::null(), o,
+            list.as_ptr(),
+            list.len(),
+            issuer_c.as_ptr(),
+            &key,
+            kp.0,
+            ptr::null(),
+            o,
         )
     })
     .expect("sign list");
@@ -221,7 +227,13 @@ fn v2c_concurrent_status_applies_never_lose_a_revocation() {
             }));
             let wire = buf(|o| unsafe {
                 ratify_v2_sign_revocation_push(
-                    push.as_ptr(), push.len(), issuer_c.as_ptr(), &key, kp.0, ptr::null(), o,
+                    push.as_ptr(),
+                    push.len(),
+                    issuer_c.as_ptr(),
+                    &key,
+                    kp.0,
+                    ptr::null(),
+                    o,
                 )
             })
             .expect("sign push");
@@ -236,7 +248,15 @@ fn v2c_concurrent_status_applies_never_lose_a_revocation() {
         let shared = Arc::new(SharedState(h));
         check(unsafe {
             ratify_v2_status_state_apply(
-                h, 3, list.as_ptr(), list.len(), issuer_c.as_ptr(), 1, &key, &policy, NOW,
+                h,
+                3,
+                list.as_ptr(),
+                list.len(),
+                issuer_c.as_ptr(),
+                1,
+                &key,
+                &policy,
+                NOW,
             )
         })
         .expect("apply genesis");
@@ -249,16 +269,22 @@ fn v2c_concurrent_status_applies_never_lose_a_revocation() {
                         let mut accepted = Vec::new();
                         // Each thread applies an interleaved share, in
                         // descending order on odd threads.
-                        let mut mine: Vec<_> =
-                            pushes.iter().skip(t).step_by(THREADS).collect();
+                        let mut mine: Vec<_> = pushes.iter().skip(t).step_by(THREADS).collect();
                         if t % 2 == 1 {
                             mine.reverse();
                         }
                         for (cert, wire) in mine {
                             let code = unsafe {
                                 ratify_v2_status_state_apply(
-                                    shared.0, 5, wire.as_ptr(), wire.len(),
-                                    issuer_c.as_ptr(), 1, &key, &policy, NOW,
+                                    shared.0,
+                                    5,
+                                    wire.as_ptr(),
+                                    wire.len(),
+                                    issuer_c.as_ptr(),
+                                    1,
+                                    &key,
+                                    &policy,
+                                    NOW,
                                 )
                             };
                             if code == 0 {
@@ -269,18 +295,38 @@ fn v2c_concurrent_status_applies_never_lose_a_revocation() {
                     })
                 })
                 .collect();
-            handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().unwrap())
+                .collect()
         });
-        assert_eq!(applied.len(), PUSHES as usize, "round {round}: every push applies");
+        assert_eq!(
+            applied.len(),
+            PUSHES as usize,
+            "round {round}: every push applies"
+        );
         let st = parse(&buf(|o| unsafe { ratify_v2_status_state_json(h, o) }).unwrap());
         let deny: Vec<String> = arr(&st["deny_union_cert_ids"]).iter().map(s).collect();
-        for cert in applied.iter().chain(std::iter::once(&"genesis".to_string())) {
-            assert!(deny.contains(cert), "round {round}: revocation of {cert} was lost: {deny:?}");
+        for cert in applied
+            .iter()
+            .chain(std::iter::once(&"genesis".to_string()))
+        {
+            assert!(
+                deny.contains(cert),
+                "round {round}: revocation of {cert} was lost: {deny:?}"
+            );
             let cert_c = cs(cert);
             let r = parse(
                 &buf(|o| unsafe {
                     ratify_v2_status_state_query(
-                        h, issuer_c.as_ptr(), cert_c.as_ptr(), 1, &key, &policy, NOW, o,
+                        h,
+                        issuer_c.as_ptr(),
+                        cert_c.as_ptr(),
+                        1,
+                        &key,
+                        &policy,
+                        NOW,
+                        o,
                     )
                 })
                 .expect("query"),

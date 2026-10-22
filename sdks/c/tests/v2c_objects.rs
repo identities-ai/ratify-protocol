@@ -1638,6 +1638,11 @@ fn v2c_rotation_refuses_mixed_local_and_external_signers() {
         sign(old.0, ptr::null(), ptr::null(), &external),
         sign(ptr::null(), &external, new.0, ptr::null()),
     ] {
-        assert_eq!(class_of(&r), "configuration_invalid", "{:?}", r.err().map(|f| f.message));
+        assert_eq!(
+            class_of(&r),
+            "configuration_invalid",
+            "{:?}",
+            r.err().map(|f| f.message)
+        );
     }
 }

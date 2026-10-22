@@ -629,13 +629,9 @@ pub unsafe extern "C" fn ratify_v2_status_publish(
             }
             let (_sctx, cancel) = V2Context::background().with_cancel();
             let publisher = match build(local, external, "status", &cancel)? {
-                Built::Local(key) => new_v2_status_publisher_with_key(
-                    &ctx,
-                    &j,
-                    &issuer,
-                    key,
-                    lifetime_seconds,
-                )?,
+                Built::Local(key) => {
+                    new_v2_status_publisher_with_key(&ctx, &j, &issuer, key, lifetime_seconds)?
+                }
                 Built::External(signer) => new_v2_status_publisher(
                     &ctx,
                     &j,

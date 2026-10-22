@@ -583,8 +583,7 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
 }
 
 pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
-    let v: Value =
-        super::strict_json(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
+    let v: Value = super::strict_json(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
     let o = Obj::new(
         &v,
         "claim record",

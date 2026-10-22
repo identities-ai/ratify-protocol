@@ -26,9 +26,12 @@ cpp_compat = true
 
 [export]
 # Types are already prefixed with Ratify* in Rust — no additional prefix needed.
-# The v2 result-code and object-kind enums are passed as int32_t, so no
+# The v2 enums are passed as int32_t, so no
 # signature references them; export them explicitly for C callers.
-include = ["RatifyV2Code", "RatifyV2ObjectKind"]
+include = ["RatifyV2Code", "RatifyV2ObjectKind", "RatifyV2Disposition", "RatifyV2TrustOutcome", "RatifyV2EvaluatorOutcome", "RatifyV2EvaluatorImplementation", "RatifyV2Stage", "RatifyV2ReleaseStatus", "RatifyV2ReleasedField", "RatifyV2SignerMode", "RatifyV2PublishOp", "RatifyV2LogResult"]
 
 [parse]
 parse_deps = false
+
+[defines]
+"feature = test-reference" = "RATIFY_V2_TEST_REFERENCE"

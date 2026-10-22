@@ -38,7 +38,12 @@ fn public_keys() -> BTreeMap<String, Value> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|k| (k["name"].as_str().unwrap().to_owned(), k["public_key"].clone()))
+        .map(|k| {
+            (
+                k["name"].as_str().unwrap().to_owned(),
+                k["public_key"].clone(),
+            )
+        })
         .collect()
 }
 
@@ -95,7 +100,9 @@ fn verify_via_abi(kind: &str, wire: &[u8], bundle: &[u8], ctx: Option<&CString>)
     let msg = if err.is_null() {
         String::new()
     } else {
-        let m = unsafe { CStr::from_ptr(err) }.to_string_lossy().into_owned();
+        let m = unsafe { CStr::from_ptr(err) }
+            .to_string_lossy()
+            .into_owned();
         unsafe { ratify_error_free(err) };
         m
     };
@@ -117,18 +124,27 @@ fn v2_abi_version_query() {
 #[test]
 fn v2_abi_error_class_strings_are_distinct_and_stable() {
     let mut seen = BTreeSet::new();
-    for code in 1..=41 {
+    for code in 1..=49 {
         let s = class(code);
         assert_ne!(s, "unknown", "code {code} has no class spelling");
         assert!(seen.insert(s.clone()), "duplicate class spelling {s}");
     }
     assert_eq!(class(0), "ok");
     assert_eq!(class(RatifyV2Code::RatifyV2Malformed as i32), "malformed");
-    assert_eq!(class(RatifyV2Code::RatifyV2InvalidSignature as i32), "invalid_signature");
-    assert_eq!(class(RatifyV2Code::RatifyV2ErrNullPointer as i32), "null_pointer");
-    assert_eq!(class(RatifyV2Code::RatifyV2ErrBadArgument as i32), "bad_argument");
+    assert_eq!(
+        class(RatifyV2Code::RatifyV2InvalidSignature as i32),
+        "invalid_signature"
+    );
+    assert_eq!(
+        class(RatifyV2Code::RatifyV2ErrNullPointer as i32),
+        "null_pointer"
+    );
+    assert_eq!(
+        class(RatifyV2Code::RatifyV2ErrBadArgument as i32),
+        "bad_argument"
+    );
     assert_eq!(class(RatifyV2Code::RatifyV2ErrInternal as i32), "internal");
-    assert_eq!(class(42), "unknown");
+    assert_eq!(class(50), "unknown");
     assert_eq!(class(-99), "unknown");
 }
 
@@ -140,21 +156,40 @@ fn v2_abi_key_ids_match_corpus() {
         let ml = b64(&k["public_key"]["ml_dsa_65"]);
         let mut out = [0 as c_char; RATIFY_V2_KEY_ID_BUF_LEN];
         let code = unsafe {
-            ratify_v2_key_id(ed.as_ptr(), ed.len(), ml.as_ptr(), ml.len(), out.as_mut_ptr(), out.len(), ptr::null_mut())
+            ratify_v2_key_id(
+                ed.as_ptr(),
+                ed.len(),
+                ml.as_ptr(),
+                ml.len(),
+                out.as_mut_ptr(),
+                out.len(),
+                ptr::null_mut(),
+            )
         };
         assert_eq!(code, 0, "{}", k["name"]);
         let got = unsafe { CStr::from_ptr(out.as_ptr()) }.to_str().unwrap();
         assert_eq!(got, k["key_id_v2"].as_str().unwrap(), "{}", k["name"]);
         let id = CString::new(got).unwrap();
-        assert_eq!(unsafe { ratify_v2_key_id_check(id.as_ptr(), ptr::null_mut()) }, 0);
+        assert_eq!(
+            unsafe { ratify_v2_key_id_check(id.as_ptr(), ptr::null_mut()) },
+            0
+        );
         // The v1 128-bit ID of the same key is never a v2 key ID.
         let v1 = CString::new(k["v1_key_id_128"].as_str().unwrap()).unwrap();
-        assert_eq!(class(unsafe { ratify_v2_key_id_check(v1.as_ptr(), ptr::null_mut()) }), "malformed");
+        assert_eq!(
+            class(unsafe { ratify_v2_key_id_check(v1.as_ptr(), ptr::null_mut()) }),
+            "malformed"
+        );
     }
     for bad in keys["invalid_v2_key_ids"].as_array().unwrap() {
         let id = CString::new(bad["value"].as_str().unwrap()).unwrap();
         let got = class(unsafe { ratify_v2_key_id_check(id.as_ptr(), ptr::null_mut()) });
-        assert_eq!(got, bad["expected_error_class"].as_str().unwrap(), "{}", bad["name"]);
+        assert_eq!(
+            got,
+            bad["expected_error_class"].as_str().unwrap(),
+            "{}",
+            bad["name"]
+        );
     }
 
     let k = &keys["keys"][0]["public_key"];
@@ -163,16 +198,40 @@ fn v2_abi_key_ids_match_corpus() {
     let mut out = [0 as c_char; RATIFY_V2_KEY_ID_BUF_LEN];
     // A truncated Ed25519 key is malformed, not a different valid ID.
     let code = unsafe {
-        ratify_v2_key_id(ed.as_ptr(), 31, ml.as_ptr(), ml.len(), out.as_mut_ptr(), out.len(), ptr::null_mut())
+        ratify_v2_key_id(
+            ed.as_ptr(),
+            31,
+            ml.as_ptr(),
+            ml.len(),
+            out.as_mut_ptr(),
+            out.len(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(class(code), "malformed");
     // A too-small output buffer is a caller error, never a truncated ID.
     let code = unsafe {
-        ratify_v2_key_id(ed.as_ptr(), ed.len(), ml.as_ptr(), ml.len(), out.as_mut_ptr(), 64, ptr::null_mut())
+        ratify_v2_key_id(
+            ed.as_ptr(),
+            ed.len(),
+            ml.as_ptr(),
+            ml.len(),
+            out.as_mut_ptr(),
+            64,
+            ptr::null_mut(),
+        )
     };
     assert_eq!(class(code), "bad_argument");
     let code = unsafe {
-        ratify_v2_key_id(ptr::null(), 0, ml.as_ptr(), ml.len(), out.as_mut_ptr(), out.len(), ptr::null_mut())
+        ratify_v2_key_id(
+            ptr::null(),
+            0,
+            ml.as_ptr(),
+            ml.len(),
+            out.as_mut_ptr(),
+            out.len(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(class(code), "null_pointer");
 }
@@ -189,7 +248,11 @@ fn v2_abi_every_positive_object_verifies() {
         let (code, msg) = verify_via_abi(kind, &b64(&o["wire_b64"]), &[], ctx.as_ref());
         assert_eq!(code, 0, "{}: {} {msg}", o["name"], class(code));
     }
-    assert_eq!(kinds.len(), 8, "positive corpus must cover all eight object kinds");
+    assert_eq!(
+        kinds.len(),
+        8,
+        "positive corpus must cover all eight object kinds"
+    );
 }
 
 #[test]
@@ -206,14 +269,28 @@ fn v2_abi_every_object_negative_has_corpus_class() {
         let (code, msg) = verify_via_abi(kind, &b64(&v["wire_b64"]), &bundle, ctx.as_ref());
         let want = v["expected_error_class"].as_str().unwrap();
         if class(code) != want {
-            failures.push(format!("{}: got {} want {want} ({msg})", v["name"], class(code)));
+            failures.push(format!(
+                "{}: got {} want {want} ({msg})",
+                v["name"],
+                class(code)
+            ));
         }
         if code != 0 {
-            assert!(code > 0, "{}: corpus failure reported as ABI error {}", v["name"], class(code));
+            assert!(
+                code > 0,
+                "{}: corpus failure reported as ABI error {}",
+                v["name"],
+                class(code)
+            );
         }
     }
     assert!(n > 200, "object-negatives corpus unexpectedly small: {n}");
-    assert!(failures.is_empty(), "{} mismatches:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 #[test]
@@ -234,7 +311,13 @@ fn v2_abi_proof_bundle_and_receipt_entry_points() {
     let wire = b64(&bundle["wire_b64"]);
     let mut hash = [0 as c_char; 128];
     let code = unsafe {
-        ratify_v2_proof_bundle_verify_signatures(wire.as_ptr(), wire.len(), hash.as_mut_ptr(), hash.len(), ptr::null_mut())
+        ratify_v2_proof_bundle_verify_signatures(
+            wire.as_ptr(),
+            wire.len(),
+            hash.as_mut_ptr(),
+            hash.len(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(code, 0, "{}", class(code));
     let got = unsafe { CStr::from_ptr(hash.as_ptr()) }.to_str().unwrap();
@@ -242,13 +325,26 @@ fn v2_abi_proof_bundle_and_receipt_entry_points() {
 
     // A single flipped byte inside the signed region must not verify.
     let mut tampered = wire.clone();
-    let pos = String::from_utf8_lossy(&wire).find("\"challenge\":\"").unwrap() + 13;
+    let pos = String::from_utf8_lossy(&wire)
+        .find("\"challenge\":\"")
+        .unwrap()
+        + 13;
     tampered[pos] = if tampered[pos] == b'A' { b'B' } else { b'A' };
     let code = unsafe {
-        ratify_v2_proof_bundle_verify_signatures(tampered.as_ptr(), tampered.len(), ptr::null_mut(), 0, ptr::null_mut())
+        ratify_v2_proof_bundle_verify_signatures(
+            tampered.as_ptr(),
+            tampered.len(),
+            ptr::null_mut(),
+            0,
+            ptr::null_mut(),
+        )
     };
     assert_ne!(code, 0);
-    assert!(code > 0, "tamper must be a protocol class, got {}", class(code));
+    assert!(
+        code > 0,
+        "tamper must be a protocol class, got {}",
+        class(code)
+    );
 
     let receipt = find("verification_receipt_allow_genesis");
     let rw = b64(&receipt["wire_b64"]);
@@ -256,7 +352,16 @@ fn v2_abi_proof_bundle_and_receipt_entry_points() {
     let (ed, ml) = (b64(&vk["ed25519"]), b64(&vk["ml_dsa_65"]));
     let head = CString::new(receipt["verify"]["head"].to_string()).unwrap();
     let code = unsafe {
-        ratify_v2_verification_receipt_verify(rw.as_ptr(), rw.len(), ed.as_ptr(), ed.len(), ml.as_ptr(), ml.len(), head.as_ptr(), ptr::null_mut())
+        ratify_v2_verification_receipt_verify(
+            rw.as_ptr(),
+            rw.len(),
+            ed.as_ptr(),
+            ed.len(),
+            ml.as_ptr(),
+            ml.len(),
+            head.as_ptr(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(code, 0, "{}", class(code));
 
@@ -264,13 +369,31 @@ fn v2_abi_proof_bundle_and_receipt_entry_points() {
     let ak = &keys["attacker"];
     let (aed, aml) = (b64(&ak["ed25519"]), b64(&ak["ml_dsa_65"]));
     let code = unsafe {
-        ratify_v2_verification_receipt_verify(rw.as_ptr(), rw.len(), aed.as_ptr(), aed.len(), aml.as_ptr(), aml.len(), head.as_ptr(), ptr::null_mut())
+        ratify_v2_verification_receipt_verify(
+            rw.as_ptr(),
+            rw.len(),
+            aed.as_ptr(),
+            aed.len(),
+            aml.as_ptr(),
+            aml.len(),
+            head.as_ptr(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(class(code), "log_state_mismatch");
 
     let bad_head = CString::new("{not json").unwrap();
     let code = unsafe {
-        ratify_v2_verification_receipt_verify(rw.as_ptr(), rw.len(), ed.as_ptr(), ed.len(), ml.as_ptr(), ml.len(), bad_head.as_ptr(), ptr::null_mut())
+        ratify_v2_verification_receipt_verify(
+            rw.as_ptr(),
+            rw.len(),
+            ed.as_ptr(),
+            ed.len(),
+            ml.as_ptr(),
+            ml.len(),
+            bad_head.as_ptr(),
+            ptr::null_mut(),
+        )
     };
     assert_eq!(class(code), "bad_argument");
 }
@@ -286,18 +409,29 @@ fn v2_abi_rejects_unsupported_kinds_and_missing_context() {
         .unwrap();
     let wire = b64(&list["wire_b64"]);
     for kind in [0, 9, 10, -1, 0xffff] {
-        let code = unsafe { ratify_v2_verify_object(kind, wire.as_ptr(), wire.len(), ptr::null(), ptr::null_mut()) };
+        let code = unsafe {
+            ratify_v2_verify_object(
+                kind,
+                wire.as_ptr(),
+                wire.len(),
+                ptr::null(),
+                ptr::null_mut(),
+            )
+        };
         assert_eq!(class(code), "unsupported_object_type", "kind {kind}");
     }
     // A status object verified without caller-authenticated state is refused,
     // never accepted on its self-declared key.
-    let code = unsafe { ratify_v2_verify_object(3, wire.as_ptr(), wire.len(), ptr::null(), ptr::null_mut()) };
+    let code = unsafe {
+        ratify_v2_verify_object(3, wire.as_ptr(), wire.len(), ptr::null(), ptr::null_mut())
+    };
     assert_eq!(class(code), "null_pointer");
     let code = unsafe { ratify_v2_verify_object(3, ptr::null(), 0, ptr::null(), ptr::null_mut()) };
     assert_eq!(class(code), "null_pointer");
     let mut err: *mut c_char = ptr::null_mut();
     let empty = CString::new("{}").unwrap();
-    let code = unsafe { ratify_v2_verify_object(3, wire.as_ptr(), wire.len(), empty.as_ptr(), &mut err) };
+    let code =
+        unsafe { ratify_v2_verify_object(3, wire.as_ptr(), wire.len(), empty.as_ptr(), &mut err) };
     assert_eq!(class(code), "bad_argument");
     assert!(!err.is_null());
     let msg = unsafe { CStr::from_ptr(err) }.to_str().unwrap().to_owned();
@@ -341,6 +475,49 @@ fn v2_abi_key_rotation_signature_vector() {
 
         let wrong = ctx(&c["new_key"]);
         let (code, msg) = verify_via_abi("key_rotation_statement", &wire, &[], Some(&wrong));
-        assert!(code > 0, "case {n}: wrong current key must be a protocol failure, got {} {msg}", class(code));
+        assert!(
+            code > 0,
+            "case {n}: wrong current key must be a protocol failure, got {} {msg}",
+            class(code)
+        );
+    }
+}
+
+/// The C class table equals the SPEC-v2 §2.7 table: codes 1..=49 spell the
+/// classes in table order, every spelling is distinct, and the spec states
+/// the same count.
+#[test]
+fn v2_abi_error_classes_equal_the_spec_table() {
+    let spec =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../SPEC-v2.md"))
+            .unwrap();
+    let start = spec.find("### 2.7 Error classes").expect("§2.7");
+    let section = &spec[start..start + spec[start..].find("\n## ").unwrap()];
+    let mut classes = Vec::new();
+    for line in section.lines().filter(|l| l.starts_with("| `")) {
+        let first = line.split('|').nth(1).unwrap();
+        for part in first.split('`').skip(1).step_by(2) {
+            classes.push(part.to_string());
+        }
+    }
+    let stated: usize = section
+        .split("The list has ")
+        .nth(1)
+        .and_then(|r| r.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+        .expect("the spec states the class count");
+    assert_eq!(classes.len(), stated, "{classes:?}");
+    assert_eq!(classes.len() as u32, RATIFY_V2_ERROR_CLASS_COUNT);
+    for (n, c) in classes.iter().enumerate() {
+        assert_eq!(class(n as i32 + 1), *c, "code {}", n + 1);
+    }
+    assert_eq!(class(classes.len() as i32 + 1), "unknown");
+    for (code, name) in [
+        (-1, "null_pointer"),
+        (-2, "bad_argument"),
+        (-3, "internal"),
+        (-4, "cancelled"),
+    ] {
+        assert_eq!(class(code), name);
     }
 }

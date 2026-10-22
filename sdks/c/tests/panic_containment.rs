@@ -275,29 +275,64 @@ fn matching(b: &[u8], open: usize) -> usize {
     }
 }
 
+/// Every Rust source file of the crate, relative to src/.
+fn source_files() -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![sdk_dir().join("src")];
+    while let Some(dir) = stack.pop() {
+        for e in fs::read_dir(&dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(
+                    p.strip_prefix(sdk_dir().join("src"))
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// The v2 guard helpers (src/v2/mod.rs); each must delegate to `ffi_guard`.
+const V2_GUARDS: &[&str] = &["run(", "run_h(", "run_value("];
+
 /// For every `extern "C" fn` in src/, the body must be exactly one call to a
-/// guard: `crate::guard::{guard_status, guard_ptr, ffi_guard}(…)`, or v2's
-/// `run(…)`, which itself must delegate to `ffi_guard`.
+/// guard: `crate::guard::{guard_status, guard_ptr, ffi_guard}(…)`, or a v2
+/// helper (`run`, `run_h`, `run_value`), each of which must itself delegate
+/// to `ffi_guard`.
 fn guarded_source_exports() -> BTreeSet<String> {
     const GUARDS: &[&str] = &[
         "crate::guard::guard_status(",
         "crate::guard::guard_ptr(",
         "crate::guard::ffi_guard(",
     ];
+    let v2 = fs::read_to_string(sdk_dir().join("src/v2/mod.rs")).unwrap();
+    for helper in ["run", "run_h", "run_value"] {
+        let at = v2
+            .find(&format!("\npub(crate) fn {helper}"))
+            .unwrap_or_else(|| panic!("v2 helper {helper}"));
+        let body_open = at + v2[at..].find("{\n").unwrap();
+        let body = v2[body_open + 1..].trim_start();
+        let body = body
+            .strip_prefix("run_h(")
+            .map_or(body, |_| "crate::guard::ffi_guard(");
+        assert!(
+            body.starts_with("crate::guard::ffi_guard("),
+            "v2 {helper} must use ffi_guard"
+        );
+    }
     let mut names = BTreeSet::new();
     let mut unguarded = Vec::new();
-    for file in ["lib.rs", "advanced.rs", "v2.rs"] {
+    for file in source_files() {
+        let file = file.as_str();
         let src = fs::read_to_string(sdk_dir().join("src").join(file)).unwrap();
         let b = src.as_bytes();
-        if file == "v2.rs" {
-            let run = src.find("\nfn run(").expect("v2 run helper");
-            let body_open = run + src[run..].find(") -> i32 {").unwrap() + ") -> i32 ".len();
-            let body = src[body_open + 1..].trim_start();
-            assert!(
-                body.starts_with("crate::guard::ffi_guard("),
-                "v2 run must use ffi_guard"
-            );
-        }
+        let is_v2 = file.starts_with("v2");
         let mut from = 0;
         while let Some(at) = src[from..].find("extern \"C\" fn ratify_") {
             let start = from + at + "extern \"C\" fn ".len();
@@ -315,7 +350,12 @@ fn guarded_source_exports() -> BTreeSet<String> {
                 .iter()
                 .find(|g| body.starts_with(**g))
                 .map(|g| g.len())
-                .or_else(|| (file == "v2.rs" && body.starts_with("run(")).then_some(4));
+                .or_else(|| {
+                    V2_GUARDS
+                        .iter()
+                        .find(|g| is_v2 && body.starts_with(**g))
+                        .map(|g| g.len())
+                });
             let ok = guard_len.is_some_and(|len| {
                 // The guard call must be the whole body: nothing may run
                 // before it or after it outside the catch_unwind.
@@ -353,4 +393,72 @@ fn every_export_goes_through_the_panic_guard() {
         header.len()
     );
     assert_eq!(header, source, "header and guarded source exports differ");
+}
+
+// --- v2 handle poisoning ------------------------------------------------------
+
+/// SPEC-v2 §1.3: a handle in use when a panic is caught is poisoned, and
+/// every later call on it returns the internal-failure code; other handles
+/// are unaffected and outputs are reset.
+#[test]
+fn v2_handle_in_use_during_a_panic_is_poisoned() {
+    unsafe {
+        let (mut a, mut b) = (ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            ratify_v2_keypair_from_seeds([1u8; 32].as_ptr(), [2u8; 32].as_ptr(), &mut a),
+            0
+        );
+        assert_eq!(
+            ratify_v2_keypair_from_seeds([3u8; 32].as_ptr(), [4u8; 32].as_ptr(), &mut b),
+            0
+        );
+        let mut id = [b'x' as c_char; RATIFY_V2_KEY_ID_BUF_LEN];
+        arm_after_body();
+        assert_eq!(ratify_v2_keypair_key_id(a, id.as_mut_ptr(), id.len()), -3);
+        assert_eq!(id[0], 0, "output reset after the caught panic");
+        assert_eq!(
+            ratify_v2_keypair_key_id(a, id.as_mut_ptr(), id.len()),
+            -3,
+            "poisoned handle"
+        );
+        let mut key: RatifyV2PublicKey = std::mem::zeroed();
+        assert_eq!(
+            ratify_v2_keypair_public_key(a, &mut key),
+            -3,
+            "poisoned handle"
+        );
+        assert!(CStr::from_ptr(ratify_v2_last_error_message())
+            .to_str()
+            .unwrap()
+            .contains("poisoned"));
+        assert_eq!(
+            ratify_v2_keypair_key_id(b, id.as_mut_ptr(), id.len()),
+            0,
+            "other handles are unaffected"
+        );
+        // Freeing a poisoned handle is still allowed.
+        ratify_v2_keypair_free(a);
+        ratify_v2_keypair_free(b);
+    }
+}
+
+/// A poisoned status-reducer handle fails every later call.
+#[test]
+fn v2_poisoned_state_handle_fails_closed() {
+    unsafe {
+        let mut st = ptr::null_mut();
+        assert_eq!(ratify_v2_status_state_new(&mut st), 0);
+        let mut out = RatifyV2Buffer {
+            ptr: ptr::null_mut(),
+            len: 0,
+        };
+        arm_after_body();
+        assert_eq!(ratify_v2_status_state_json(st, &mut out), -3);
+        assert!(
+            out.ptr.is_null() && out.len == 0,
+            "output buffer reset (the written buffer leaks, never dangles)"
+        );
+        assert_eq!(ratify_v2_status_state_json(st, &mut out), -3);
+        ratify_v2_status_state_free(st);
+    }
 }

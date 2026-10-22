@@ -1,0 +1,15 @@
+Ratify Protocol v2 quickstart
+development only: in-memory reference stores
+keys: root, agent, status and verifier generated (key IDs are 64 hex characters)
+delegation: scope=payments:send max_amount=50000000 USD micros lifetime=86400s
+status: genesis list signed by the status key (sequence 1, 0 revoked)
+challenge: issued and persisted, expires in 120s
+proof: agent signed the presentation (1 delegation)
+verify: stage=committed (not actionable until released)
+receipt: published at log sequence 1
+checkpoint: acknowledged sequence 1
+release: status=released decision=allow reason=authorized
+granted scope: payments:send
+allowed now: true
+replay: stage=replay disposition=terminal_replay
+allowed at challenge expiry: false

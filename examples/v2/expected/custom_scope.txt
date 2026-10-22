@@ -1,0 +1,10 @@
+Ratify Protocol v2 custom scope and max_count profile
+development only: in-memory reference stores
+issue scope custom:*: refused (malformed)
+delegation: scope=custom:acme:deploy constraint=com.ratifyprotocol.max_count(counter=nodes, max=5)
+profile: com.ratifyprotocol.max_count/v1 digest=sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b
+request nodes=3: decision=allow reason=authorized allowed=true
+  receipt constraint_evaluators: com.ratifyprotocol.max_count sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b
+request nodes=8: decision=deny reason=constraint_denied allowed=false
+  receipt constraint_evaluators: com.ratifyprotocol.max_count sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b
+request nodes=3 without the profile registered: decision=deny reason=constraint_unknown allowed=false

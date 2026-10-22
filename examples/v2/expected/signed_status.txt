@@ -1,0 +1,11 @@
+Ratify Protocol v2 signed status
+development only: in-memory reference stores
+delegation: status-demo-cert-1 scope=data:read
+journal: key roles recorded; status key configured for the root at epoch 1
+publisher with the root key as status key: refused (configuration_invalid)
+publisher: genesis list sequence 1
+journal: ingested list sequence 1; status-demo-cert-1 is not_revoked
+verify before revocation: decision=allow reason=authorized status_assessment=current allowed=true
+publisher: revoked status-demo-cert-1 (push sequence 2, list sequence 2)
+journal: ingested push sequence 2; status-demo-cert-1 is revoked
+verify after revocation: decision=deny reason=delegation_revoked status_assessment=revoked allowed=false

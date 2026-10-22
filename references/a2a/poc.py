@@ -1,13 +1,10 @@
-"""Experimental A2A carrier for the existing ADK receiver scenario."""
+"""Experimental A2A carrier for a Ratify Protocol v2 receiver (one-directional)."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from dataclasses import replace
-import hashlib
 import re
 import secrets
-import sys
 from typing import Any
 
 from google.protobuf.json_format import MessageToDict
@@ -26,22 +23,20 @@ from a2a.types import (
     SendMessageRequest, Task, TaskState, TaskStatus,
 )
 from a2a.utils.errors import ExtensionSupportRequiredError, UnsupportedOperationError
-from ratify_protocol import (
-    OperationContext, SessionContextInputs, build_session_context,
-    encode_proof_bundle, operation_context_hash,
-)
+from ratify_protocol.v2 import session_context_v2_hash
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-# Reuse the published reference's authority fixture and receiver. The A2A
-# carrier is experimental; no ADK runtime participates in this flow.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "google-adk"))
-from authority_reference.authority import INFRA_SCOPE, WORKSPACE_ID, issue_authority, region_resource  # noqa: E402
-from authority_reference.receiver import InfrastructureReceiver, OperationRequest  # noqa: E402
+from authority_v2 import (
+    WORKSPACE_ID, AuthorityFixture, InfrastructureReceiverV2, OperationRequest,
+    issue_authority, receiver_for,
+)
 
 
-EXTENSION_URI = "https://ratifyprotocol.com/extensions/a2a-authority/poc-v0"
+# Provisional: this URI is not registered with or accepted by A2A. It names
+# the experimental one-directional Protocol v2 carrier in this draft only.
+EXTENSION_URI = "https://ratifyprotocol.com/extensions/a2a-authority/provisional-v2"
 
 
 def _operation(data: Any) -> OperationRequest:
@@ -67,7 +62,7 @@ def _operation(data: Any) -> OperationRequest:
 
 
 class AuthorityExecutor(AgentExecutor):
-    def __init__(self, receiver: InfrastructureReceiver, agent_id: str):
+    def __init__(self, receiver: InfrastructureReceiverV2, agent_id: str):
         self.receiver = receiver
         self.agent_id = agent_id
 
@@ -88,16 +83,11 @@ class AuthorityExecutor(AgentExecutor):
                 response = {
                     "decision": "challenge",
                     "challenge": grant.challenge.hex(),
+                    "challenge_at": grant.challenge_at,
+                    "verifier_id": grant.verifier_id,
                     "session_context": grant.session_context.hex(),
                     "expires_at": grant.expires_at,
-                    "session_inputs": {
-                        "verifier_id": grant.session_inputs.verifier_id,
-                        "workspace_id": grant.session_inputs.workspace_id,
-                        "agent_id": grant.session_inputs.agent_id,
-                        "session_id": grant.session_inputs.session_id,
-                        "invocation_id": grant.session_inputs.invocation_id,
-                        "request_hash": grant.session_inputs.request_hash.hex(),
-                    },
+                    "session_inputs": grant.session_inputs,
                 }
             else:
                 if context.current_task is None:
@@ -143,7 +133,7 @@ class AuthorityRequestHandler(DefaultRequestHandler):
 
 
 def build_app(
-    receiver: InfrastructureReceiver, agent_id: str, *,
+    receiver: InfrastructureReceiverV2, agent_id: str, *,
     base_url: str = "http://127.0.0.1:8766/", bearer_token: str | None = None,
 ) -> Starlette:
     card = AgentCard(
@@ -154,7 +144,8 @@ def build_app(
         default_output_modes=["application/json"],
         capabilities=AgentCapabilities(extensions=[AgentExtension(
             uri=EXTENSION_URI,
-            description="Experimental receiver-side exact-operation authority proof",
+            description=("Provisional, unregistered extension: one-directional Ratify Protocol v2 "
+                         "proof checked by the receiver before the exact operation"),
             required=True,
         )]),
         supported_interfaces=[AgentInterface(
@@ -193,12 +184,9 @@ def build_app(
     return app
 
 
-def demo_fixture() -> tuple[Starlette, Any, InfrastructureReceiver]:
+def demo_fixture(**receiver_options: Any) -> tuple[Starlette, AuthorityFixture, InfrastructureReceiverV2]:
     authority = issue_authority()
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-    )
+    receiver = receiver_for(authority, **receiver_options)
     return build_app(receiver, authority.specialist_id), authority, receiver
 
 
@@ -207,31 +195,27 @@ def operation_data(request: OperationRequest, step: str) -> dict[str, Any]:
             "instance_type": request.instance_type, "count": str(request.count)}
 
 
-def presentation_metadata(authority: Any, grant: dict[str, Any], request: OperationRequest) -> dict[str, str]:
+def presentation_metadata(authority: AuthorityFixture, grant: dict[str, Any],
+                          request: OperationRequest) -> dict[str, str]:
     """Sign only a challenge bound to the caller's intended operation."""
     request.validate()
     if not request.task_id or not request.context_id:
         raise ValueError("A2A task and context IDs are required before signing")
-    operation = OperationContext(
-        required_scope=INFRA_SCOPE,
-        operation="infra.provision",
-        resource_id=region_resource(request.region, WORKSPACE_ID),
-        payload_digest=hashlib.sha256(request.canonical_payload()).digest(),
-    )
     inputs = grant["session_inputs"]
     if inputs["workspace_id"] != WORKSPACE_ID or inputs["agent_id"] != authority.specialist_id:
         raise ValueError("challenge targets a different workspace or agent")
-    if bytes.fromhex(inputs["request_hash"]) != operation_context_hash(operation):
+    if inputs["verifier_id"] != grant["verifier_id"]:
+        raise ValueError("challenge names two different verifiers")
+    if bytes.fromhex(inputs["request_hash"]) != request.request_hash():
         raise ValueError("challenge does not match the intended operation")
-    rebuilt = build_session_context(SessionContextInputs(
-        verifier_id=inputs["verifier_id"], workspace_id=inputs["workspace_id"],
-        agent_id=inputs["agent_id"], session_id=inputs["session_id"],
-        invocation_id=inputs["invocation_id"], request_hash=bytes.fromhex(inputs["request_hash"]),
-    ))
+    rebuilt = session_context_v2_hash(
+        inputs["verifier_id"], inputs["workspace_id"], inputs["agent_id"],
+        inputs["session_id"], inputs["invocation_id"], bytes.fromhex(inputs["request_hash"]),
+    )
     if bytes.fromhex(grant["session_context"]) != rebuilt:
         raise ValueError("challenge session context does not match its inputs")
     proof = authority.present(
-        challenge=bytes.fromhex(grant["challenge"]),
-        session_context=bytes.fromhex(grant["session_context"]),
+        challenge=bytes.fromhex(grant["challenge"]), challenge_at=int(grant["challenge_at"]),
+        verifier_id=grant["verifier_id"], session_context=rebuilt,
     )
-    return {EXTENSION_URI: encode_proof_bundle(proof)}
+    return {EXTENSION_URI: proof.decode("utf-8")}

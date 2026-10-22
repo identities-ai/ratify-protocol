@@ -1,6 +1,7 @@
 """The A2A wire path must leave the protected action untouched on denial."""
 
 import asyncio
+import base64
 from dataclasses import replace
 import json
 import os
@@ -17,7 +18,7 @@ import httpx
 import pytest
 
 from poc import EXTENSION_URI, demo_fixture, operation_data, presentation_metadata
-from authority_reference.receiver import OperationRequest
+from authority_v2 import OperationRequest
 
 
 async def send(client, request, step, *, metadata=None, activate=True, expect_error=False,
@@ -120,12 +121,27 @@ def test_receiver_checks_exact_a2a_operation_before_provisioning():
 
 def test_separate_https_receiver_requires_caller_auth_and_verifies_task():
     async def scenario():
-        from authority_reference.authority import issue_authority
+        from authority_v2 import issue_authority
 
         authority = issue_authority()
+
+        def hex_key(public_key):
+            return {"ed25519": public_key.ed25519.hex(), "ml_dsa_65": public_key.ml_dsa_65.hex()}
+
         with tempfile.TemporaryDirectory() as directory:
             cert = Path(directory) / "receiver.crt"
             key = Path(directory) / "receiver.key"
+            config = Path(directory) / "receiver.json"
+            config.write_text(json.dumps({
+                "root_id": authority.root_id,
+                "root_public_key": hex_key(authority.root_public_key),
+                "agent_public_key": hex_key(authority.specialist_public_key),
+                "status_keys": {issuer: hex_key(k) for issuer, k in authority.status_keys().items()},
+                "status_objects": {
+                    issuer: [{"type": t, "wire": base64.b64encode(w).decode()} for t, w in objects]
+                    for issuer, objects in authority.status_objects().items()
+                },
+            }), encoding="utf-8")
             subprocess.run([
                 "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
                 "-keyout", str(key), "-out", str(cert), "-days", "1",
@@ -137,10 +153,7 @@ def test_separate_https_receiver_requires_caller_auth_and_verifies_task():
             token = secrets.token_urlsafe(32)
             env = {**os.environ,
                    "A2A_PORT": str(port), "A2A_BEARER_TOKEN": token,
-                   "A2A_ROOT_ID": authority.root_id,
-                   "A2A_ROOT_ED25519": authority.root_public_key.ed25519.hex(),
-                   "A2A_ROOT_ML_DSA_65": authority.root_public_key.ml_dsa_65.hex(),
-                   "A2A_AGENT_ID": authority.specialist_id,
+                   "A2A_RECEIVER_CONFIG": str(config),
                    "A2A_TLS_CERT": str(cert), "A2A_TLS_KEY": str(key)}
             server = subprocess.Popen(
                 [sys.executable, str(Path(__file__).resolve().parents[1] / "serve.py")],
@@ -343,5 +356,49 @@ def test_proof_for_another_pending_operation_never_provisions():
                                  task=first_grant)
             assert allowed["decision"] == "allow"
             assert receiver.tool_invocations == 1
+
+    asyncio.run(scenario())
+
+
+def test_signed_revocation_denies_before_action():
+    async def scenario():
+        app, authority, receiver = demo_fixture()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://127.0.0.1:8766") as client:
+            first = OperationRequest("before-revoke", "us-central1", "n2-standard-4", 1)
+            grant = await send(client, first, "challenge")
+            result = await send(client, first, "execute", task=grant,
+                                metadata=presentation_metadata(authority, grant, bound(first, grant)))
+            assert result["decision"] == "allow"
+            assert receiver.tool_invocations == 1
+
+            # The commander revokes the specialist's certificate under its own
+            # status key; the receiver receives the signed push and list.
+            specialist_cert = authority.delegations[0]
+            receiver.accept_status(authority.revoke(specialist_cert.cert_id))
+            second = OperationRequest("after-revoke", "us-central1", "n2-standard-4", 1)
+            grant = await send(client, second, "challenge")
+            result = await send(client, second, "execute", task=grant,
+                                metadata=presentation_metadata(authority, grant, bound(second, grant)))
+            assert result["decision"] == "deny"
+            assert result["status"] == "delegation_revoked"
+            assert result["_state"] == "TASK_STATE_REJECTED"
+            assert receiver.tool_invocations == 1
+
+    asyncio.run(scenario())
+
+
+def test_receiver_outside_the_signed_audience_never_provisions():
+    async def scenario():
+        app, authority, receiver = demo_fixture(receiver_id="a2a:other-project/infra-provisioner")
+        request = OperationRequest("wrong-receiver", "us-central1", "n2-standard-4", 1)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://127.0.0.1:8766") as client:
+            grant = await send(client, request, "challenge")
+            result = await send(client, request, "execute", task=grant,
+                                metadata=presentation_metadata(authority, grant, bound(request, grant)))
+            assert result["decision"] == "deny"
+            assert result["status"] == "receiver_audience_mismatch"
+            assert receiver.tool_invocations == 0
 
     asyncio.run(scenario())

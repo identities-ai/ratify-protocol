@@ -62,6 +62,28 @@ impl JournalStore {
     pub fn head(&self) -> SecurityJournalHeadV2 {
         self.lock().head.clone()
     }
+
+    /// The anchored head and stored snapshot bytes (read by the
+    /// single-device profile's complete-state digest).
+    pub(crate) fn anchored(&self) -> (SecurityJournalHeadV2, Vec<u8>) {
+        let state = self.lock();
+        (state.head.clone(), state.snapshot.clone())
+    }
+
+    /// A store holding exactly `head` and `snapshot` (a copy of another
+    /// store's anchored state).
+    pub(crate) fn from_anchored(head: SecurityJournalHeadV2, snapshot: Vec<u8>) -> Self {
+        JournalStore {
+            state: Mutex::new(Anchored { head, snapshot }),
+        }
+    }
+
+    /// Put back a previously read anchored state (undo of a refused change).
+    pub(crate) fn restore_anchored(&self, head: SecurityJournalHeadV2, snapshot: Vec<u8>) {
+        let mut state = self.lock();
+        state.head = head;
+        state.snapshot = snapshot;
+    }
 }
 
 impl SecurityJournalStoreV2 for JournalStore {

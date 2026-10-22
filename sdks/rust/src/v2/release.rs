@@ -491,3 +491,43 @@ pub(crate) fn read_v2_authoritative_time(ctx: &V2Context, clock: &dyn V2Authorit
     }
     Ok(now)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::generate_hybrid_keypair;
+    use crate::v2::reference::Store;
+
+    // lifecycle-scenarios.json `release_forged`: an outcome the verifier never
+    // produced (the Go zero value) is always rejected. Callers cannot build
+    // one, so this crate-internal test is where the vector's expectation runs.
+    #[test]
+    fn forged_zero_value_outcome_is_rejected() {
+        let (public, private) = generate_hybrid_keypair();
+        let log_id = "dddddddddddddddddddddddddddddd01";
+        let store = Store::new(1_800_000_000, 30, log_id, &private).unwrap();
+        let forged = CommittedV2Outcome {
+            claim_id: String::new(),
+            verifier_id: String::new(),
+            receipt_body: Vec::new(),
+            challenge_expires_at: 0,
+            allow_horizon: 0,
+        };
+        let result = release_v2_decision(
+            &V2Context::background(),
+            &forged,
+            None,
+            V2ReleaseConfig {
+                verifier_public_key: &public,
+                log_id,
+                claim_store: &store,
+                checkpoint: &store,
+            },
+        );
+        assert_eq!(
+            (result.status, result.reason.as_str()),
+            (V2ReleaseStatus::Rejected, "release_state_mismatch")
+        );
+        assert!(result.decision().is_none());
+    }
+}

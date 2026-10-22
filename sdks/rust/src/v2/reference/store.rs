@@ -82,8 +82,7 @@ pub(crate) struct ClaimRecord {
 pub(crate) struct OutboxEntry {
     pub claim_id: String,
     // Go keeps the committed body with its log position; it is read by the
-    // durable-state digests of the offline-device profile (ported separately).
-    #[allow(dead_code)]
+    // durable-state digests of the offline-device profile.
     pub body: Vec<u8>,
     pub wire: Option<Vec<u8>>,
     pub digest: Vec<u8>,
@@ -95,7 +94,7 @@ pub(crate) type OwnerTokenRand = Arc<dyn Fn(&mut [u8]) -> Result<(), String> + S
 
 /// A durable security-state anchor (Go `anchor`): called with the state
 /// before and after a change; an error undoes the change. It is set only by
-/// the single-device offline profile (ported separately) and never copied by
+/// the single-device offline profile and never copied by
 /// [`Store::clone_store`].
 pub(crate) type StoreAnchor = Arc<dyn Fn(&StoreState, &StoreState) -> Result<(), V2Error> + Send + Sync>;
 

@@ -87,6 +87,17 @@ impl TestOnlyChallengeIssuanceStore {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Every stored record by issuance key (read by the single-device
+    /// profile's complete-state digest, copy, and undo).
+    pub(crate) fn records(&self) -> BTreeMap<String, ExpectedChallengeV2> {
+        self.lock().records.clone()
+    }
+
+    /// Replace every stored record.
+    pub(crate) fn set_records(&self, records: BTreeMap<String, ExpectedChallengeV2>) {
+        self.lock().records = records;
+    }
 }
 
 impl V2ChallengeIssuanceStore for TestOnlyChallengeIssuanceStore {

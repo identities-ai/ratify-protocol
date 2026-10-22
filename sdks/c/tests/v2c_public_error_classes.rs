@@ -28,6 +28,7 @@ const NOT_FALLIBLE: &[&str] = &[
     "ratify_v2_abi_version",
     "ratify_v2_protocol_version",
     "ratify_v2_library_version",
+    "ratify_v2_tzdb_version",
     "ratify_v2_error_class_str",
     "ratify_v2_last_error_message",
     "ratify_v2_release_status_str",

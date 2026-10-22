@@ -2195,6 +2195,12 @@ uint32_t ratify_v2_protocol_version(void);
 // allocated — do NOT free. Same value as `ratify_version()`.
 const char *ratify_v2_library_version(void);
 
+// Returns the IANA time zone database release pinned for `time_window`
+// evaluation (e.g. "2025c"; SPEC-v2 §5.2, Go `TZDBVersionV2`). A verifier
+// configuration's `tzdb_version` must equal it. Statically allocated; do
+// NOT free.
+const char *ratify_v2_tzdb_version(void);
+
 // Returns the stable spelling for a `ratify_v2_*` result code: "ok", a
 // SPEC-v2 §2.7 failure class (e.g. "invalid_signature"), an ABI condition
 // ("null_pointer", "bad_argument", "internal", "cancelled"), a store
@@ -2943,8 +2949,11 @@ int32_t ratify_v2_status_state_query(const struct RatifyV2StatusState *state,
 int32_t ratify_v2_status_state_json(const struct RatifyV2StatusState *state,
                                     struct RatifyV2Buffer *out);
 
-// Permanently bind a key to a role (`"root"`, `"intermediate"`, `"agent"`,
-// `"verifier"`, `"status"`, ...) in the anchored journal.
+// Permanently bind a key to a role in the anchored journal. `role` is one of
+// `"delegation"`, `"rotation"`, `"verifier"`, `"witness"`, `"receiver"`,
+// `"issuer"`, or `"other"`. A status key is bound with
+// `ratify_v2_journal_configure_status_key`, which also records its issuer
+// and epoch; `"status"` is rejected here.
 int32_t ratify_v2_journal_record_key_role(const struct RatifyV2JournalStoreCallbacks *journal_store,
                                           const char *role,
                                           const struct RatifyV2PublicKey *key);

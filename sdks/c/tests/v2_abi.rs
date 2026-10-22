@@ -119,6 +119,11 @@ fn v2_abi_version_query() {
         env!("CARGO_PKG_VERSION").starts_with("2."),
         "the v2 ABI must ship on the ratify-c 2.x line, never under a 1.x version"
     );
+    // A C verifier passes this value as its configuration's tzdb_version, so
+    // it must name the database the library evaluates time_window against.
+    let tzdb = unsafe { CStr::from_ptr(ratify_v2_tzdb_version()) };
+    assert_eq!(tzdb.to_str().unwrap(), ratify_protocol::v2::TZDB_VERSION_V2);
+    assert_eq!(tzdb.to_str().unwrap(), "2025c");
 }
 
 #[test]

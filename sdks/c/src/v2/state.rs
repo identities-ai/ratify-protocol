@@ -275,8 +275,11 @@ fn journal(cb: *const RatifyV2JournalStoreCallbacks) -> AbiResult<(V2Context, CJ
     ))
 }
 
-/// Permanently bind a key to a role (`"root"`, `"intermediate"`, `"agent"`,
-/// `"verifier"`, `"status"`, ...) in the anchored journal.
+/// Permanently bind a key to a role in the anchored journal. `role` is one of
+/// `"delegation"`, `"rotation"`, `"verifier"`, `"witness"`, `"receiver"`,
+/// `"issuer"`, or `"other"`. A status key is bound with
+/// `ratify_v2_journal_configure_status_key`, which also records its issuer
+/// and epoch; `"status"` is rejected here.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_journal_record_key_role(
     journal_store: *const RatifyV2JournalStoreCallbacks,

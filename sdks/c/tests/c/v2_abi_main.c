@@ -198,8 +198,9 @@ int main(int argc, char **argv) {
     v2c_check(ratify_v2_abi_version() == RATIFY_V2_ABI_VERSION, "abi_version", "header/library mismatch");
     v2c_check(ratify_v2_protocol_version() == RATIFY_V2_PROTOCOL_VERSION, "protocol_version", "not 2");
     v2c_check(strncmp(ratify_v2_library_version(), "2.", 2) == 0, "library_version", ratify_v2_library_version());
-    printf("ratify-c %s, v2 ABI %u, protocol %u\n", ratify_v2_library_version(),
-           ratify_v2_abi_version(), ratify_v2_protocol_version());
+    v2c_check(strcmp(ratify_v2_tzdb_version(), "2025c") == 0, "tzdb_version", ratify_v2_tzdb_version());
+    printf("ratify-c %s, v2 ABI %u, protocol %u, tzdb %s\n", ratify_v2_library_version(),
+           ratify_v2_abi_version(), ratify_v2_protocol_version(), ratify_v2_tzdb_version());
 
     int total = 0;
     total += v2c_run_objects();

@@ -1011,6 +1011,27 @@ pub extern "C" fn ratify_v2_library_version() -> *const c_char {
     )
 }
 
+/// Returns the IANA time zone database release pinned for `time_window`
+/// evaluation (e.g. "2025c"; SPEC-v2 §5.2, Go `TZDBVersionV2`). A verifier
+/// configuration's `tzdb_version` must equal it. Statically allocated; do
+/// NOT free.
+#[no_mangle]
+pub extern "C" fn ratify_v2_tzdb_version() -> *const c_char {
+    crate::guard::ffi_guard(
+        || c"".as_ptr(),
+        || {
+            TZDB_VERSION_C
+                .get_or_init(|| {
+                    CString::new(ratify_protocol::v2::TZDB_VERSION_V2)
+                        .expect("pinned tzdb version has no NUL")
+                })
+                .as_ptr()
+        },
+    )
+}
+
+static TZDB_VERSION_C: std::sync::OnceLock<CString> = std::sync::OnceLock::new();
+
 /// Returns the stable spelling for a `ratify_v2_*` result code: "ok", a
 /// SPEC-v2 §2.7 failure class (e.g. "invalid_signature"), an ABI condition
 /// ("null_pointer", "bad_argument", "internal", "cancelled"), a store

@@ -33,6 +33,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_abi_version",
     "ratify_v2_protocol_version",
     "ratify_v2_library_version",
+    "ratify_v2_tzdb_version",
     "ratify_v2_error_class_str",
     "ratify_v2_last_error_message",
     "ratify_v2_buffer_free",
@@ -189,6 +190,15 @@ fn every_v2_export_contains_a_panic() {
             .unwrap(),
         "",
         "ratify_v2_library_version"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { CStr::from_ptr(ratify_v2_tzdb_version()) }
+            .to_str()
+            .unwrap(),
+        "",
+        "ratify_v2_tzdb_version"
     );
     fired();
     arm_before_body();

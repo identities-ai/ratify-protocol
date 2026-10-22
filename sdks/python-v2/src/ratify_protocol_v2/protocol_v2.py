@@ -834,6 +834,41 @@ def revocation_push_signable_bytes_v2(push: RevocationPushV2) -> bytes:
     })
 
 
+def validate_revocation_list_signable_body_v2(body: bytes) -> None:
+    """Go ``validateRevocationListSignableBodyV2``: accepts exactly the bytes
+    that revocation_list_signable_bytes_v2 produces for a valid list."""
+    try:
+        obj = require_fields(_v2json.check_wire_json(body),
+                             ("issuer_id", "next_update", "revoked", "sequence", "updated_at", "version"))
+        check_keys(obj, ("issuer_id", "next_update", "revoked", "sequence", "updated_at", "version"), "revocation list signable body")
+        rebuilt = revocation_list_signable_bytes_v2(RevocationListV2(
+            version=get_int(obj, "version"), issuer_id=get_str(obj, "issuer_id"),
+            updated_at=get_int(obj, "updated_at"), next_update=get_int(obj, "next_update"),
+            sequence=get_int(obj, "sequence"), revoked=_decode_revoked(obj.get("revoked")),
+        ))
+    except ValueError as exc:
+        raise ValueError(f"revocation list signable body: {exc}") from exc
+    if rebuilt != body:
+        raise ValueError("revocation list signable body must use RatifyCanonicalJSON")
+
+
+def validate_revocation_push_signable_body_v2(body: bytes) -> None:
+    """Go ``validateRevocationPushSignableBodyV2``: accepts exactly the bytes
+    that revocation_push_signable_bytes_v2 produces for a valid push."""
+    try:
+        obj = require_fields(_v2json.check_wire_json(body), ("issuer_id", "pushed_at", "revoked", "sequence", "version"))
+        check_keys(obj, ("issuer_id", "pushed_at", "revoked", "sequence", "version"), "revocation push signable body")
+        rebuilt = revocation_push_signable_bytes_v2(RevocationPushV2(
+            version=get_int(obj, "version"), issuer_id=get_str(obj, "issuer_id"),
+            sequence=get_int(obj, "sequence"), pushed_at=get_int(obj, "pushed_at"),
+            revoked=_decode_revoked(obj.get("revoked")),
+        ))
+    except ValueError as exc:
+        raise ValueError(f"revocation push signable body: {exc}") from exc
+    if rebuilt != body:
+        raise ValueError("revocation push signable body must use RatifyCanonicalJSON")
+
+
 def decode_revocation_list_v2(data: bytes) -> RevocationListV2:
     def run() -> RevocationListV2:
         check_v2_wire_size(data, "revocation list", "MAX_REVOCATION_LIST_BYTES_V2", MAX_REVOCATION_LIST_BYTES_V2)

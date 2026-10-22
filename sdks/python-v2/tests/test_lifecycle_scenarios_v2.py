@@ -44,7 +44,13 @@ from ratify_protocol_v2.verification_receipt_v2 import (
     decode_verification_receipt_v2,
     encode_verification_receipt_v2,
 )
-from ratify_protocol_v2.verify_v2 import V2_STAGE_COMMITTED, V2_STAGE_EVALUATING, V2_STAGE_REPLAY, verify_proof_bundle_v2
+from ratify_protocol_v2.verify_v2 import (
+    V2_STAGE_COMMITTED,
+    V2_STAGE_EVALUATING,
+    V2_STAGE_PREFLIGHT,
+    V2_STAGE_REPLAY,
+    verify_proof_bundle_v2,
+)
 
 from ratify_protocol_v2 import _native  # noqa: E402
 
@@ -56,8 +62,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 28
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 140
+    assert len(SCENARIOS) == 32
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 162
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 279
     profiles = {}
@@ -172,8 +178,13 @@ def test_lifecycle_scenario(sc):
         return holder["store"]
 
     def recover_step(i, request, want):
+        claim_id = claim_ids.get(request)
+        if claim_id is None:
+            # Never claimed: the request's own claim ID (claim_not_found).
+            e = FILE["requests"][request]["expected_challenge"]
+            claim_id = protocol_claim_id_v2(e["verifier_namespace"], e["replay_epoch"], b64(e["value_b64"]))
         try:
-            outcome, err = recover_interrupted_claim_v2(BACKGROUND, holder["store"], claim_ids[request]), None
+            outcome, err = recover_interrupted_claim_v2(BACKGROUND, holder["store"], claim_id), None
         except Exception as exc:  # noqa: BLE001
             outcome, err = None, exc
         if want.get("error_class"):
@@ -182,6 +193,51 @@ def test_lifecycle_scenario(sc):
         assert err is None, (i, err)
         check_committed(i, outcome, want)
         committed[request] = outcome
+
+    maps_lock = threading.Lock()
+
+    def run_verify(i, name, mode, at, want):
+        """One verify step; safe for concurrent use with mode "" (the maps it
+        writes are guarded)."""
+        request = request_inputs(name)
+        request["now"] = holder["store"].now()
+        if epoch_override[0] != 0:
+            request["configured_replay_epoch"] = epoch_override[0]
+        req, cb, _ = build_verify_request(request, b64(FILE["bundles_b64"][request["bundle"]]), Counts())
+        cs = claim_store()
+        cb.claim_store = cs
+        if sc.get("rate_at_finalization"):
+            cb.rate = cs
+        claim_id = protocol_claim_id_v2(req.verifier_namespace, req.replay_epoch, req.expected.value)
+        with maps_lock:
+            claim_ids[name], request_of[claim_id] = claim_id, name
+        vctx = context_v2.with_cancel(BACKGROUND)
+        if mode == "cancel_before_claim":
+            vctx.cancel()
+        elif mode:
+            provider = cb.status_evidence
+            fired = [False]
+
+            def scripted(c, r):
+                if not fired[0]:
+                    fired[0] = True
+                    if mode == "cancel_during_status":
+                        vctx.cancel()
+                        raise c.err()
+                    if mode == "recover_during_status":
+                        holder["store"].set_time(at)
+                        recover_step(i, name, want["recovered"])
+                    elif mode in ("expire_lease_during_status", "regress_clock_during_status"):
+                        holder["store"].set_time(at)
+                    else:
+                        raise AssertionError(f"unknown verify mode {mode}")
+                return provider(c, r)
+
+            cb.status_evidence = scripted
+        try:
+            return verify_proof_bundle_v2(vctx, req, cb)
+        finally:
+            vctx.cancel()
 
     for i, step in enumerate(sc["steps"]):
         want = step.get("expect", {})
@@ -193,34 +249,7 @@ def test_lifecycle_scenario(sc):
         elif op == "set_ack_withheld":
             store.set_acknowledgement_withheld(step["withheld"])
         elif op == "verify":
-            request = request_inputs(step["request"])
-            request["now"] = now
-            if epoch_override[0] != 0:
-                request["configured_replay_epoch"] = epoch_override[0]
-            req, cb, _ = build_verify_request(request, b64(FILE["bundles_b64"][request["bundle"]]), Counts())
-            cs = claim_store()
-            cb.claim_store = cs
-            if sc.get("rate_at_finalization"):
-                cb.rate = cs
-            claim_id = protocol_claim_id_v2(req.verifier_namespace, req.replay_epoch, req.expected.value)
-            claim_ids[step["request"]], request_of[claim_id] = claim_id, step["request"]
-            mode = step.get("mode", "")
-            if mode:
-                provider = cb.status_evidence
-                fired = [False]
-
-                def scripted(c, r, provider=provider, fired=fired, step=step, i=i, want=want):
-                    if not fired[0]:
-                        fired[0] = True
-                        holder["store"].set_time(step["time"])
-                        if step["mode"] == "recover_during_status":
-                            recover_step(i, step["request"], want["recovered"])
-                        elif step["mode"] not in ("expire_lease_during_status", "regress_clock_during_status"):
-                            raise AssertionError(f"unknown verify mode {step['mode']}")
-                    return provider(c, r)
-
-                cb.status_evidence = scripted
-            outcome = verify_proof_bundle_v2(BACKGROUND, req, cb)
+            outcome = run_verify(i, step["request"], step.get("mode", ""), step.get("time", 0), want)
             assert outcome.stage == want.get("stage", ""), (i, outcome.error_class, outcome.error)
             assert outcome.error_class == want.get("error_class", ""), (i, outcome.error)
             if want.get("disposition"):
@@ -228,6 +257,29 @@ def test_lifecycle_scenario(sc):
             if outcome.stage == V2_STAGE_COMMITTED:
                 check_committed(i, outcome.committed, want)
                 committed[step["request"]] = outcome.committed
+        elif op == "verify_concurrent":
+            names = step["requests"]
+            results = [None] * len(names)
+            barrier = threading.Barrier(len(names))
+
+            def worker(k, name):
+                barrier.wait()
+                results[k] = run_verify(i, name, "", 0, want)
+
+            threads = [threading.Thread(target=worker, args=(k, name)) for k, name in enumerate(names)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            got = []
+            for k, outcome in enumerate(results):
+                label = outcome.stage
+                if outcome.stage in (V2_STAGE_PREFLIGHT, V2_STAGE_EVALUATING):
+                    label += "/" + outcome.error_class
+                got.append(label)
+                if outcome.stage == V2_STAGE_COMMITTED:
+                    committed[names[k]] = outcome.committed
+            assert sorted(got) == want["outcomes"], (i, got)
         elif op == "claim_only":
             request = request_inputs(step["request"])
             bundle = decode_proof_bundle_v2(b64(FILE["bundles_b64"][request["bundle"]]))

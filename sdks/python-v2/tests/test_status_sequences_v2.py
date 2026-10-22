@@ -3,6 +3,8 @@
 Each scenario starts from empty state; a rejected step leaves state
 unchanged; every query must return the exact status, reason, and ordered
 evidence, including the exclusive next_update and status-age deadlines.
+Every apply step that records an observation names its unlabelled body
+digest (SPEC-v2 §6.6), which the state must hold.
 """
 from __future__ import annotations
 
@@ -40,9 +42,16 @@ def _check_state(where: str, s: ss.RevocationStatusStateV2, want: dict) -> None:
         assert got[name] == value, f"{where}: {name} = {got[name]!r}, want {value!r}"
 
 
+def _has_body_digest(s: ss.RevocationStatusStateV2, epoch: int, op: str, want: str) -> bool:
+    code = 5 if op == "apply_push" else 3
+    return any(o.status_key_epoch == epoch and o.object_type == code and "sha384:" + bytes(o.body_digest).hex() == want
+               for o in s.observations)
+
+
 def test_scenario_and_step_counts():
     assert len(VECTORS["scenarios"]) == 22
     assert sum(len(s["steps"]) for s in VECTORS["scenarios"]) == 112
+    assert sum(1 for s in VECTORS["scenarios"] for step in s["steps"] if step.get("expect_body_digest")) == 63
 
 
 @pytest.mark.parametrize("scenario", VECTORS["scenarios"], ids=lambda s: s["name"])
@@ -83,6 +92,9 @@ def test_status_sequence(scenario):
         state = nxt
         if "expect_state" in step:
             _check_state(where, state, step["expect_state"])
+        if step.get("expect_body_digest"):
+            assert _has_body_digest(state, step["status_key_epoch"], op, step["expect_body_digest"]), \
+                f"{where}: no observation with body_digest {step['expect_body_digest']} (SPEC-v2 §6.6)"
 
 
 def test_reducer_never_mutates_its_input():

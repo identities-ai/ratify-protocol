@@ -357,7 +357,7 @@ def test_object_typed_signer_resign(o):
 def test_objects_cover_every_object_code():
     codes = {s["object_type_code"] for o in OBJECTS["objects"] for s in o["signatures"]}
     assert codes == set(range(1, 10))
-    assert len(OBJECTS["objects"]) == 10
+    assert len(OBJECTS["objects"]) == 11
 
 
 NEGATIVES = load("object-negatives.json")
@@ -376,7 +376,7 @@ def test_object_negatives_cover_every_kind():
     assert kinds == {"delegation_certificate", "proof_bundle", "revocation_list", "revocation_push",
                      "key_rotation_statement", "witness_entry", "transaction_receipt", "verification_receipt",
                      "receipt_bundle_binding"}
-    assert len(NEGATIVES["vectors"]) == 399
+    assert len(NEGATIVES["vectors"]) == 401
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,9 @@ CONSUMERS = {
     "challenge-issuance.json": "test_challenge_issuance_v2.py",
     "transaction-verification.json": "test_transaction_verification_v2.py",
     "device-state.json": "test_device_state_v2.py",
+    "archival.json": "test_archival_signer_digest_v2.py",
+    "external-signer.json": "test_archival_signer_digest_v2.py",
+    "digest-functions.json": "test_archival_signer_digest_v2.py",
 }
 
 

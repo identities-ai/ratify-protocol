@@ -31,12 +31,16 @@ from .protocol_v2 import (
     require_fields,
     valid_v2_id,
     validate_hybrid_signature_v2,
+    validate_revocation_list_signable_body_v2,
+    validate_revocation_push_signable_body_v2,
 )
 from .clock_bounds_v2 import valid_v2_timestamp
 from .context_v2 import Context, background
 from .limits_v2 import MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2, check_v2_wire_size
 from .signing_v2 import (
     KEY_ROTATION_AUTHORIZATION,
+    REVOCATION_LIST,
+    REVOCATION_PUSH,
     VERIFICATION_RECEIPT,
     WITNESS_ENTRY,
     SignerV2,
@@ -142,12 +146,16 @@ def _validate_witness_signable_body(body: bytes) -> None:
 
 @classified(V2ErrorClass.MALFORMED)
 def statement_body_digest_v2(object_type: int, signable_body: bytes) -> bytes:
-    """StatementBodyDigestV2 for rotation (0x0004), witness (0x0006), and
-    verification-receipt (0x0008) signable bodies; each body is schema-validated."""
-    if object_type not in (KEY_ROTATION_AUTHORIZATION, WITNESS_ENTRY, VERIFICATION_RECEIPT):
+    """StatementBodyDigestV2 for revocation list (0x0003), rotation (0x0004),
+    revocation push (0x0005), witness (0x0006), and verification-receipt
+    (0x0008) signable bodies; each body is schema-validated. Any other code
+    is unsupported_object_type."""
+    if object_type not in (REVOCATION_LIST, KEY_ROTATION_AUTHORIZATION, REVOCATION_PUSH, WITNESS_ENTRY, VERIFICATION_RECEIPT):
         raise V2ValueError(V2ErrorClass.UNSUPPORTED_OBJECT_TYPE,
                            f"object type 0x{object_type:04x} does not use StatementBodyDigestV2")
-    if object_type == VERIFICATION_RECEIPT:
+    if object_type in (REVOCATION_LIST, REVOCATION_PUSH):
+        value = _v2json.check_wire_json(signable_body)
+    elif object_type == VERIFICATION_RECEIPT:
         value = _v2json.check_wire_json(signable_body, ("previous_receipt_hash",), ("bundle_hash",))
     else:
         value = _v2json.check_wire_json(
@@ -161,7 +169,11 @@ def statement_body_digest_v2(object_type: int, signable_body: bytes) -> bytes:
                 raise ValueError(f"signable body must exclude {name!r}")
     if canonical(value) != signable_body:
         raise ValueError("signable body must use RatifyCanonicalJSON")
-    if object_type == KEY_ROTATION_AUTHORIZATION:
+    if object_type == REVOCATION_LIST:
+        validate_revocation_list_signable_body_v2(signable_body)
+    elif object_type == REVOCATION_PUSH:
+        validate_revocation_push_signable_body_v2(signable_body)
+    elif object_type == KEY_ROTATION_AUTHORIZATION:
         from .key_rotation_v2 import validate_key_rotation_signable_body_v2
 
         validate_key_rotation_signable_body_v2(signable_body)

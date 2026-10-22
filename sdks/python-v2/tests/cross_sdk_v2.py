@@ -19,7 +19,12 @@ from ratify_protocol_v2 import verification_receipt_v2 as vrv2
 from ratify_protocol_v2 import witness_v2 as wv2
 from ratify_protocol_v2._version import __version__
 from ratify_protocol_v2.challenge_claim_v2 import challenge_claim_digest_v2, protocol_claim_id_v2
-from ratify_protocol_v2.constraints_v2 import ConstraintV2, is_registered_constraint_type_v2
+from ratify_protocol_v2.constraints_v2 import TZDB_VERSION_V2, ConstraintV2, is_registered_constraint_type_v2
+from ratify_protocol_v2.context_policy_v2 import (
+    VERIFY_SESSION_CONTEXT_FIELDS_V2,
+    VERIFY_SESSION_CONTEXT_PROFILE_V2,
+    new_v2_context_policy,
+)
 from ratify_protocol_v2.operation_context_v2 import operation_context_v2_hash, session_context_v2_hash
 from ratify_protocol_v2.signing_v2 import (
     key_id_v2,
@@ -27,7 +32,7 @@ from ratify_protocol_v2.signing_v2 import (
     mldsa_context_v2,
     signing_message_v2,
 )
-from ratify_protocol_v2.types import HybridPublicKey, HybridSignature
+from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey, HybridSignature
 from ratify_protocol_v2.types_v2 import ConstraintEvaluatorRefV2, StatusEvidenceEntryV2
 
 KEY_NAMES = ["root", "intermediate", "agent", "verifier", "status_root", "status_intermediate",
@@ -57,9 +62,24 @@ DESCRIPTION = (
     "signable projection, transcript M, context, tr and mu, find each pinned signature in the wire object, verify "
     "every signature with the named verify context (key names resolve to this file's keys), and reproduce every "
     "digest. A receipt_bundle_binding object is verified by strict decode of wire_b64 (verification receipt) and "
-    "bundle_b64 (proof bundle) and the receipt/bundle binding check. Timestamps are relative to the fixed "
-    "evaluation time 1800000000."
+    "bundle_b64 (proof bundle) and the receipt/bundle binding check. scenarios are verifier and release scenarios "
+    "produced by this SDK: replay each through your own verifier, reference store and release gate under "
+    "scenario_configuration (testvectors/v2/README.md, cross-sdk), release with the scenario's signed_receipt_b64, "
+    "and require the same receipt outbox body, allow horizon and release result. Timestamps are relative to the "
+    "fixed evaluation time 1800000000."
 )
+
+# Verifier and release scenarios (SPEC-v2 §8.1, README "Verifier and release
+# scenarios"): the fixed configuration and the four required scenario names.
+SCENARIO_LOG = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeee01"
+SCENARIO_CONFIGURATION = {
+    "verifier_namespace": NAMESPACE, "replay_epoch": REPLAY_EPOCH, "verifier_key": "verifier",
+    "receipt_log_id": SCENARIO_LOG, "lease_seconds": 30, "max_challenge_age_seconds": 300, "future_skew_seconds": 5,
+    "status_policy": {"max_list_lifetime_seconds": 7200, "max_status_age_seconds": 3660, "clock_skew_seconds": 5},
+    "tzdb_version": TZDB_VERSION_V2,
+}
+SCENARIO_NAMES = ["allow_released", "deny_revoked_released", "indeterminate_status_unavailable_released",
+                  "allow_withheld_past_horizon"]
 
 
 def b64(data: bytes) -> str:
@@ -361,11 +381,175 @@ def build_fixture(sdk_version: str = __version__, generator: str = "python sdks/
                 "member for com.ratifyprotocol.max_count/v1.",
                 receipt(ext, ["data:read"], EVALUATOR_RECEIPT_LOG, refs), ext_wire)
 
+    # Verifier and release scenarios, each with its own challenge over the
+    # default two-link chain; expectations are what this SDK observes.
+    def scenario_list(issuer, status_key, next_update, revoked=()):
+        signed = pv2.sign_revocation_list_v2(
+            pv2.RevocationListV2(2, k.id[issuer], NOW - 60, next_update, 1, list(revoked)),
+            k.id[issuer], k.pub[status_key], k.priv[status_key])
+        return {"object_type_code": 3, "wire_b64": b64(pv2.encode_revocation_list_v2(signed))}
+
+    root_ev = scenario_list("root", "status_root", NOW + 3600)
+    root_short = scenario_list("root", "status_root", NOW + 60)
+    inter_ev = scenario_list("intermediate", "status_intermediate", NOW + 3600)
+    inter_revoked = scenario_list("intermediate", "status_intermediate", NOW + 3600, ["cert-leaf"])
+
+    def scenario(name, description, first_byte, evidence, publish, release):
+        challenge = bytes([first_byte]) + bytes(range(0xA1, 0xC0))
+        presented = bundle("agent", [plain_leaf, root_cert], session, challenge=challenge)
+        return {
+            "name": name, "description": description, "bundle_b64": b64(pv2.encode_proof_bundle_v2(presented)),
+            "required_scope": "data:read",
+            "expected_challenge": {
+                "value_b64": b64(challenge), "issued_at": NOW - 10, "expires_at": NOW + 290,
+                "verifier_namespace": NAMESPACE, "replay_epoch": REPLAY_EPOCH, "verifier_id": k.id["verifier"],
+                "expected_agent_id": k.id["agent"],
+                "expected_agent_public_key": {"ed25519": b64(k.pub["agent"].ed25519), "ml_dsa_65": b64(k.pub["agent"].ml_dsa_65)},
+                "expected_receiver_id": None, "expected_session_context_b64": b64(session),
+            },
+            "context_policy": {
+                "profile": VERIFY_SESSION_CONTEXT_PROFILE_V2, "require_bound": True,
+                "required_fields": list(VERIFY_SESSION_CONTEXT_FIELDS_V2), "expected_session_context_b64": b64(session),
+                "digest": CONTEXT_POLICY_DIGEST,
+            },
+            "trust_root_key": "root",
+            "status_keys": {k.id["root"]: {"epoch": 1, "key": "status_root"},
+                            k.id["intermediate"]: {"epoch": 1, "key": "status_intermediate"}},
+            "status_evidence": evidence, "verify_time": NOW, "publish_time": publish, "release_time": release,
+        }
+
+    scenarios = [
+        scenario("allow_released", "every check passes; the published, acknowledged allow is released at the "
+                 "acknowledgement time", 0xA1, {k.id["root"]: [root_ev], k.id["intermediate"]: [inter_ev]}, NOW, NOW),
+        scenario("deny_revoked_released", "the intermediate's signed list revokes the leaf: a committed deny / "
+                 "delegation_revoked, released as a non-actionable deny", 0xA2,
+                 {k.id["root"]: [root_ev], k.id["intermediate"]: [inter_revoked]}, NOW, NOW),
+        scenario("indeterminate_status_unavailable_released", "the status provider returns no evidence for the "
+                 "intermediate: indeterminate / status_unavailable, released as a non-actionable indeterminate", 0xA3,
+                 {k.id["root"]: [root_ev]}, NOW, NOW),
+        scenario("allow_withheld_past_horizon", "the root list's next_update makes the allow horizon verify_time + 60; "
+                 "the receipt is acknowledged at that horizon, so release is withheld as allow_horizon_passed and "
+                 "never becomes released", 0xA4, {k.id["root"]: [root_short], k.id["intermediate"]: [inter_ev]},
+                 NOW + 60, NOW + 60),
+    ]
+    for sc in scenarios:
+        sc["expected"] = replay_scenario(SCENARIO_CONFIGURATION, sc, k.pub, k.priv["verifier"], None)
+
     fixture = {"version": 2, "description": DESCRIPTION, "sdk": "python", "sdk_version": sdk_version,
                "generator": generator, "kind_object_type_codes": dict(KIND_CODES), "keys": k.entries,
-               "objects": objects}
+               "objects": objects, "scenario_configuration": dict(SCENARIO_CONFIGURATION), "scenarios": scenarios}
     verify_fixture(json.dumps(fixture).encode("utf-8"), "python")
     return fixture
+
+
+# ---------------------------------------------------------------------------
+# Scenario replay
+
+
+def replay_scenario(cfg: dict, sc: dict, pub: dict, verifier_priv: HybridPrivateKey, release_receipt) -> dict:
+    """Run one scenario through this SDK (Go ``replayCrossScenario``): a fresh
+    reference store at verify_time, the live verifier, publication at
+    publish_time, and release at release_time with ``release_receipt`` (the
+    scenario's own published receipt when None). Returns the observed
+    ``expected`` member."""
+    from ratify_protocol_v2 import context_v2  # noqa: PLC0415
+    from ratify_protocol_v2.release_v2 import V2ReleaseConfig, release_v2_decision  # noqa: PLC0415
+    from ratify_protocol_v2.security_journal_v2 import configure_status_key_epoch_v2  # noqa: PLC0415
+    from ratify_protocol_v2.status_batch_v2 import V2StatusEvidenceBatch, V2StatusEvidenceObject  # noqa: PLC0415
+    from ratify_protocol_v2.status_provenance_v2 import V2StatusKeyConfig  # noqa: PLC0415
+    from ratify_protocol_v2.status_state_v2 import RevocationStatusPolicyV2  # noqa: PLC0415
+    from ratify_protocol_v2.v2reference.journal import JournalStore  # noqa: PLC0415
+    from ratify_protocol_v2.v2reference.store import Store  # noqa: PLC0415
+    from ratify_protocol_v2.verify_v2 import (  # noqa: PLC0415
+        V2_STAGE_COMMITTED,
+        V2_TRUST_TRUSTED,
+        V2TrustResolution,
+        V2VerifyCallbacks,
+        V2VerifyRequest,
+        verify_proof_bundle_v2,
+    )
+    from ratify_protocol_v2.verify_v2_preflight import ExpectedChallengeV2  # noqa: PLC0415
+
+    ctx = context_v2.background()
+    store = Store(sc["verify_time"], cfg["lease_seconds"], cfg["receipt_log_id"], verifier_priv)
+    journal = JournalStore()
+    p = cfg["status_policy"]
+    req = V2VerifyRequest(
+        bundle=b64d(sc["bundle_b64"]), required_scope=sc["required_scope"], verifier_namespace=cfg["verifier_namespace"],
+        replay_epoch=cfg["replay_epoch"], now=sc["verify_time"], max_challenge_age_seconds=cfg["max_challenge_age_seconds"],
+        future_skew_seconds=cfg["future_skew_seconds"], tzdb_version=cfg["tzdb_version"], status_keys={},
+        status_policy=RevocationStatusPolicyV2(p["max_list_lifetime_seconds"], p["max_status_age_seconds"], p["clock_skew_seconds"]),
+    )
+    for issuer in sorted(sc["status_keys"]):
+        entry = sc["status_keys"][issuer]
+        _require(entry["key"] in pub, f"status key {entry['key']!r} is not in the fixture")
+        req.status_keys[issuer] = V2StatusKeyConfig(epoch=entry["epoch"], key=pub[entry["key"]])
+        configure_status_key_epoch_v2(ctx, journal, issuer, entry["epoch"], pub[entry["key"]])
+    e = sc["expected_challenge"]
+    exp = ExpectedChallengeV2(value=b64d(e["value_b64"]), issued_at=e["issued_at"], expires_at=e["expires_at"],
+                              verifier_namespace=e["verifier_namespace"], replay_epoch=e["replay_epoch"],
+                              verifier_id=e["verifier_id"])
+    if e.get("expected_agent_id") is not None:
+        a = e["expected_agent_public_key"]
+        exp.expected_agent_id = e["expected_agent_id"]
+        exp.expected_agent_public_key = HybridPublicKey(b64d(a["ed25519"]), b64d(a["ml_dsa_65"]))
+    if e.get("expected_receiver_id") is not None:
+        exp.expected_receiver_id = e["expected_receiver_id"]
+    if e.get("expected_session_context_b64") is not None:
+        exp.expected_session_context = b64d(e["expected_session_context_b64"])
+    req.expected = exp
+    c = sc.get("context_policy")
+    if c is not None:
+        expected = b64d(c["expected_session_context_b64"]) if c.get("expected_session_context_b64") is not None else None
+        req.context_policy = new_v2_context_policy(c["profile"], c["require_bound"], list(c["required_fields"]), expected)
+    _require(sc["trust_root_key"] in pub, f"trust root key {sc['trust_root_key']!r} is not in the fixture")
+    root_key = pub[sc["trust_root_key"]]
+
+    def status_evidence(_ctx, r):
+        return V2StatusEvidenceBatch(objects=[V2StatusEvidenceObject(object_type=o["object_type_code"], wire=b64d(o["wire_b64"]))
+                                              for o in sc["status_evidence"].get(r.issuer_id, [])])
+
+    cb = V2VerifyCallbacks(claim_store=store, status_journal=journal, status_evidence=status_evidence,
+                           trust=lambda _ctx, _chain: V2TrustResolution(outcome=V2_TRUST_TRUSTED, root_key=root_key))
+    outcome = verify_proof_bundle_v2(ctx, req, cb)
+    _require(outcome.stage == V2_STAGE_COMMITTED, f"stage {outcome.stage} ({outcome.error_class}): {outcome.error!r}")
+    committed = outcome.committed
+    horizon, is_allow = committed.allow_horizon()
+    store.set_time(sc["publish_time"])
+    published = store.publish_v2_receipt(ctx, committed.claim_id(), committed.receipt_body())
+    store.set_time(sc["release_time"])
+    result = release_v2_decision(ctx, committed, published if release_receipt is None else release_receipt, V2ReleaseConfig(
+        verifier_public_key=pub[cfg["verifier_key"]], log_id=cfg["receipt_log_id"], claim_store=store, checkpoint=store))
+    released = result.decision
+    return {
+        "receipt_body_b64": b64(committed.receipt_body()), "allow_horizon": horizon if is_allow else None,
+        "signed_receipt_b64": b64(published),
+        "release": {"status": result.status, "reason": result.reason or None,
+                    "decision": None if released is None else released.decision(),
+                    "release_time": None if released is None else released.release_time()},
+    }
+
+
+def check_scenarios(f: dict, pub: dict, priv: dict) -> int:
+    """Replay every scenario of a fixture and compare the committed outcome
+    and release result, releasing with the fixture's own signed receipt (Go
+    ``checkCrossScenarios``). Returns the number replayed."""
+    cfg = f["scenario_configuration"]
+    _require(cfg == SCENARIO_CONFIGURATION, f"scenario_configuration {cfg!r} differs from the fixed values")
+    seen = set()
+    for sc in f["scenarios"]:
+        seen.add(sc["name"])
+        want = sc["expected"]
+        try:
+            got = replay_scenario(cfg, sc, pub, priv[cfg["verifier_key"]], b64d(want["signed_receipt_b64"]))
+        except Exception as exc:  # noqa: BLE001 - reported with the scenario name
+            raise FixtureError(f"scenario {sc['name']}: {exc!r}") from exc
+        _require(got["receipt_body_b64"] == want["receipt_body_b64"] and got["allow_horizon"] == want["allow_horizon"],
+                 f"scenario {sc['name']}: committed outcome differs")
+        _require(got["release"] == want["release"], f"scenario {sc['name']}: release {got['release']}, want {want['release']}")
+    for name in SCENARIO_NAMES:
+        _require(name in seen, f"missing scenario {name}")
+    return len(f["scenarios"])
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +577,7 @@ def verify_fixture(data: bytes, file_stem: str) -> dict:
         _require(isinstance(f.get(member), str) and f[member] != "", f"{member} is required")
     _require(f.get("kind_object_type_codes") == KIND_CODES, "kind_object_type_codes differs from objects.json")
     pub: dict[str, HybridPublicKey] = {}
+    priv: dict[str, HybridPrivateKey] = {}
     ids: dict[str, str] = {}
     for entry in f["keys"]:
         name = entry["name"]
@@ -402,8 +587,8 @@ def verify_fixture(data: bytes, file_stem: str) -> dict:
                  f"key {name}: bad seed")
         derived = listed
         if _native.AVAILABLE:  # key derivation from seeds needs the native backend
-            derived, _ = keypair_from_seeds_v2(bytes.fromhex(entry["ed25519_seed_hex"]),
-                                               bytes.fromhex(entry["ml_dsa_65_seed_hex"]))
+            derived, priv[name] = keypair_from_seeds_v2(bytes.fromhex(entry["ed25519_seed_hex"]),
+                                                        bytes.fromhex(entry["ml_dsa_65_seed_hex"]))
             _require(derived == listed, f"key {name}: seeds do not derive the public key")
         _require(key_id_v2(derived) == entry["key_id_v2"], f"key {name}: key_id_v2 differs")
         pub[name], ids[name] = derived, entry["key_id_v2"]
@@ -439,5 +624,14 @@ def verify_fixture(data: bytes, file_stem: str) -> dict:
     _require(codes == set(range(1, 10)), f"signature codes {sorted(codes)} do not cover 0x0001..0x0009")
     _require(all_constraints, "no delegation certificate with every registered constraint type and an extension type")
     _require(evaluators, "no verification receipt with constraint_evaluators")
+    # Verifier and release scenarios. Replay signs receipts with the
+    # verifier key derived from its seeds, which needs the native backend. A
+    # fixture without scenarios predates SPEC-v2 §8.1's scenario requirement;
+    # the Go and Python fixtures must carry them.
+    if f.get("scenario_configuration") is None or not f.get("scenarios"):
+        _require(file_stem not in ("go", "python"), f"{file_stem}.json has no verifier and release scenarios")
+        counts["scenarios"] = 0
+    elif _native.AVAILABLE:
+        counts["scenarios"] = check_scenarios(f, pub, priv)
     return counts
 

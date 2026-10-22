@@ -38,8 +38,8 @@ EPOCH = 3
 
 
 def test_issuance_corpus_shape():
-    assert len(SCENARIOS) == 9
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 33
+    assert len(SCENARIOS) == 10
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 36
 
 
 class ScriptedRandom:

@@ -11,6 +11,24 @@ install resolves to the latest v1 release until `2.0.0`. The v2 API is at
 root. To keep the exact v1 release next to it, use an alias:
 `npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
 
+### Bundle size
+
+The package declares `"sideEffects": false`, so a bundler drops every module
+an application does not import: a v1-only import from the package root does
+not pull in the v2 tree. Measured with esbuild 0.28.2 (browser platform,
+minified, `gzip -9`) on 2026-10-22:
+
+| Import | Minified | Gzip |
+|---|---|---|
+| The v1 flow above (`generateHumanRoot`, `generateAgent`, `issueDelegation`, `signChallenge`, `verifyBundle`) from the package root | 58.7 kB | 21.5 kB |
+| `decodeProofBundleV2` from `/v2` | 33.1 kB | 11.2 kB |
+| `verifyProofBundleV2` and `decodeProofBundleV2` from `/v2` | 750.5 kB | 223.0 kB |
+
+Most of the v2 verifier's size is the embedded IANA tzdata archive that
+`time_window` evaluation needs. Without the `sideEffects` declaration the
+same v1-only import bundled to 198.0 kB gzipped, because the v2 modules
+came along with it.
+
 ## Protocol v2 quickstart
 
 Runnable TypeScript programs live in

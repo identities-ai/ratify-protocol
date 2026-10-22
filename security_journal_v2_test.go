@@ -20,17 +20,19 @@ func newMemorySecurityJournalStoreV2() *memorySecurityJournalStoreV2 {
 	return &memorySecurityJournalStoreV2{anchor: SecurityJournalHeadV2{Digest: genesis.Digest}, latest: genesis}
 }
 
-func (s *memorySecurityJournalStoreV2) Load(context.Context) (SecurityJournalV2, error) {
+func (s *memorySecurityJournalStoreV2) Load(context.Context) (SecurityJournalV2, SecurityJournalHeadV2, error) {
 	if s.stale != nil {
 		if s.stale.Generation != s.anchor.Generation || s.stale.Digest != s.anchor.Digest {
-			return SecurityJournalV2{}, errors.New("anchored security journal head is missing")
+			return SecurityJournalV2{}, SecurityJournalHeadV2{}, errors.New("anchored security journal head is missing")
 		}
-		return cloneSecurityJournalV2(*s.stale)
+		journal, err := cloneSecurityJournalV2(*s.stale)
+		return journal, s.anchor, err
 	}
 	if s.latest.Generation != s.anchor.Generation || s.latest.Digest != s.anchor.Digest {
-		return SecurityJournalV2{}, errors.New("stored security journal does not match independent anchor")
+		return SecurityJournalV2{}, SecurityJournalHeadV2{}, errors.New("stored security journal does not match independent anchor")
 	}
-	return cloneSecurityJournalV2(s.latest)
+	journal, err := cloneSecurityJournalV2(s.latest)
+	return journal, s.anchor, err
 }
 
 func (s *memorySecurityJournalStoreV2) CompareAndSwap(_ context.Context, expected SecurityJournalHeadV2, next SecurityJournalV2) error {
@@ -77,7 +79,7 @@ func TestSecurityJournalV2AnchorsHeadAndCommitsMonotonically(t *testing.T) {
 	if err := ValidateSecurityJournalTransitionV2(first, deleted); err == nil {
 		t.Fatal("allowed an update that deleted permanent key-role history")
 	}
-	loaded, err := store.Load(ctx)
+	loaded, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +91,7 @@ func TestSecurityJournalV2AnchorsHeadAndCommitsMonotonically(t *testing.T) {
 func TestSecurityJournalV2RejectsStaleWriterAndRolledBackBackup(t *testing.T) {
 	ctx := context.Background()
 	store := newMemorySecurityJournalStoreV2()
-	base, err := store.Load(ctx)
+	base, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestSecurityJournalV2RejectsStaleWriterAndRolledBackBackup(t *testing.T) {
 		t.Fatalf("stale writer was not rejected as a conflict: %v", err)
 	}
 	store.stale = &base
-	if _, err := store.Load(ctx); err == nil {
+	if _, _, err := store.Load(ctx); err == nil {
 		t.Fatal("restored old valid journal record despite a newer independent anchor")
 	}
 }
@@ -275,12 +277,13 @@ func TestSecurityJournalV2RequiresAcceptedSnapshotEvidence(t *testing.T) {
 	state := journal.StatusByIssuer[issuerID]
 	state.AcceptedSnapshot.Revoked = nil
 	journal.StatusByIssuer[issuerID] = state
+	// The canonical snapshot cannot even encode a structurally altered accepted
+	// list; if a digest can be formed, validation must still reject it.
 	journal.Digest, err = securityJournalDigestV2(journal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateSecurityJournalV2(journal); err == nil {
-		t.Fatal("accepted a changed snapshot not backed by its authenticated observation")
+	if err == nil {
+		if err := ValidateSecurityJournalV2(journal); err == nil {
+			t.Fatal("accepted a changed snapshot not backed by its authenticated observation")
+		}
 	}
 }
 
@@ -468,7 +471,7 @@ func TestSecurityJournalV2PrunesOnlyUnneededEmptyHeartbeats(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	journal, err := store.Load(ctx)
+	journal, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +505,7 @@ func TestSecurityJournalV2BoundsRepeatedSnapshotHeartbeats(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	journal, err := store.Load(ctx)
+	journal, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -546,7 +549,7 @@ func TestSecurityJournalV2BoundsSameFloorHeartbeatsDuringGap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	journal, err := store.Load(ctx)
+	journal, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -632,7 +635,7 @@ func TestSecurityJournalV2AcceptsPartialCatchupAfterCompactedGap(t *testing.T) {
 			if _, err := ApplyRevocationListToJournalV2(ctx, store, catchUp, issuerID, 1, pub, policy, 140); err != nil {
 				t.Fatalf("valid partial catch-up was rejected: %v", err)
 			}
-			journal, err := store.Load(ctx)
+			journal, _, err := store.Load(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -793,7 +796,7 @@ func TestSecurityJournalV2CompactsRepeatedFutureHeartbeats(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	journal, err := store.Load(ctx)
+	journal, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,7 +852,7 @@ func TestSecurityJournalV2ReplayOfCompactedAcceptedHeartbeatDoesNotRefork(t *tes
 	if _, err := ApplyRevocationListToJournalV2(ctx, store, first, issuerID, 1, pub, policy, 100); err != nil {
 		t.Fatal(err)
 	}
-	replayed, err := store.Load(ctx)
+	replayed, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +908,7 @@ func TestSecurityJournalV2ReplayOfReconciledFutureDatedForkDoesNotRefork(t *test
 	if _, err := ApplyRevocationListToJournalV2(ctx, store, future, issuerID, 1, pub, policy, 200); err != nil {
 		t.Fatal(err)
 	}
-	replayed, err := store.Load(ctx)
+	replayed, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -967,7 +970,7 @@ func TestSecurityJournalV2FutureSnapshotReplayAfterPushForkDoesNotRefork(t *test
 	if _, err := ApplyRevocationListToJournalV2(ctx, store, future, issuerID, 1, pub, policy, 200); err != nil {
 		t.Fatal(err)
 	}
-	replayed, err := store.Load(ctx)
+	replayed, _, err := store.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

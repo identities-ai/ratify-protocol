@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 )
 
 func signedV2TestBundle(t testing.TB) *ProofBundleV2 {
@@ -297,11 +296,13 @@ func TestV2AuthenticatedChallengePreflight(t *testing.T) {
 	}
 	maxAgeBoundary := expected
 	maxAgeBoundary.ExpiresAt = 30
-	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 20, 10, 0); err != nil {
-		t.Fatalf("challenge at the configured maximum age rejected: %v", err)
+	// The maximum-age deadline is exclusive (SPEC-v2 A5): one second before
+	// issued_at+max_age is current, the deadline itself is not.
+	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 19, 10, 0); err != nil {
+		t.Fatalf("challenge one second before the maximum-age deadline rejected: %v", err)
 	}
-	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 21, 10, 0); err == nil {
-		t.Fatal("accepted challenge older than the configured maximum age")
+	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 20, 10, 0); err == nil {
+		t.Fatal("accepted challenge at the exclusive maximum-age deadline")
 	}
 	for name, mutate := range map[string]func(*ExpectedChallengeV2, *ProofBundleV2, *int64){
 		"expiry boundary": func(_ *ExpectedChallengeV2, _ *ProofBundleV2, now *int64) { *now = 20 },
@@ -354,7 +355,7 @@ func TestV2CertificateScopeRegistryFailureIsDeferredUntilAuthorization(t *testin
 		t.Fatalf("signed invalid-scope proof could not be claimed after structural preflight: %v", err)
 	}
 	got := EvaluateProofBundleV2LocalAuthorization(decoded, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy, ExpectedChallenge: expected,
 		ClaimToken: testTokenFromPreflightV2(t, pre),
 	})

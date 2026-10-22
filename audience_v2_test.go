@@ -34,17 +34,19 @@ func TestEvaluateReceiverAudienceV2IntersectsLinksAndUsesMinimumAge(t *testing.T
 	digestA := "sha384:" + strings.Repeat("a", 96)
 	digestB := "sha384:" + strings.Repeat("b", 96)
 	memberships := []V2AudienceMembership{
-		{ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-a"}, IssuedAt: 70, ExpiresAt: 200, EvidenceDigest: digestA},
+		// Exclusive age deadline (SPEC-v2 A5): issued 71 with minimum age 30 is
+		// current at 100 (100 < 101); issued 70 reaches the deadline exactly.
+		{ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-a"}, IssuedAt: 71, ExpiresAt: 200, EvidenceDigest: digestA},
 		{DelegationIndex: 1, ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-b"}, IssuedAt: 80, ExpiresAt: 200, EvidenceDigest: digestB},
 	}
 	got, err := EvaluateReceiverAudienceV2([]V2DeferredConstraint{first, second}, "receiver-1", memberships, 100, 0)
 	if err != nil || got.Status != "passed" || len(got.EvidenceDigests) != 2 || got.EvidenceDigests[0] != digestA || got.EvidenceDigests[1] != digestB {
 		t.Fatalf("minimum-age boundary rejected valid membership: %+v, %v", got, err)
 	}
-	memberships[0].IssuedAt = 69
+	memberships[0].IssuedAt = 70
 	got, err = EvaluateReceiverAudienceV2([]V2DeferredConstraint{first, second}, "receiver-1", memberships, 100, 0)
 	if err != nil || got.Status != "constraint_unverifiable" {
-		t.Fatalf("older ancestor membership bypassed minimum age: %+v, %v", got, err)
+		t.Fatalf("membership at the exact minimum-age deadline was accepted: %+v, %v", got, err)
 	}
 }
 
@@ -121,6 +123,8 @@ func TestEvaluateReceiverAudienceV2RejectsAmbiguousOrMutatedInputs(t *testing.T)
 	}
 }
 
+// The audience stage evaluates at the sealed authoritative evaluation time
+// (15), never at an earlier caller time: membership expiring at 15 is expired.
 func TestResolveClaimProofBundleV2AfterAudienceUsesEvaluationTimeFloor(t *testing.T) {
 	constraint := audienceConstraintV2Test(t, nil, []string{"domain-a"}, 30)
 	state := &v2EvaluationTokenState{
@@ -134,7 +138,7 @@ func TestResolveClaimProofBundleV2AfterAudienceUsesEvaluationTimeFloor(t *testin
 	state.evaluationComplete.Store(true)
 	token := &V2EvaluationToken{state: state}
 	membership := V2AudienceMembership{ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-a"}, IssuedAt: 10, ExpiresAt: 15, EvidenceDigest: "sha384:" + strings.Repeat("a", 96)}
-	if got, err := ResolveClaimProofBundleV2AfterAudience(token, []V2AudienceMembership{membership}, 14); err != nil || got.Status != "constraint_unverifiable" {
+	if got, err := ResolveClaimProofBundleV2AfterAudience(token, []V2AudienceMembership{membership}); err != nil || got.Status != "constraint_unverifiable" {
 		t.Fatalf("audience accepted evidence expired at the local evaluation time: %+v, %v", got, err)
 	}
 	if decision, ok := terminalDecisionForV2Evaluation(state.evaluationStatus, state.evaluationReason); !ok || decision != "deny" || state.pendingAssessment != nil {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha512"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 )
@@ -111,7 +110,7 @@ func RevocationStatusForCertV2(state RevocationStatusStateV2, issuerID, certID s
 	if err := validateAcceptedStatusStateV2(state); err != nil {
 		return unavailable, err
 	}
-	if certID == "" || now < 0 || now > maxSafeInteger {
+	if certID == "" || !validV2Timestamp(now) {
 		return unavailable, fmt.Errorf("status query has invalid certificate ID or time")
 	}
 	statusKeyID, err := keyIDV2(statusKey)
@@ -187,7 +186,7 @@ func ApplyRevocationListV2(state RevocationStatusStateV2, list *RevocationListV2
 	if err := validateRevocationStatusPolicyV2(policy); err != nil {
 		return state, err
 	}
-	if now < 0 || now > maxSafeInteger || statusKeyEpoch == 0 || statusKeyEpoch > uint64(maxSafeInteger) {
+	if !validV2Timestamp(now) || statusKeyEpoch == 0 || statusKeyEpoch > uint64(maxSafeInteger) {
 		return state, fmt.Errorf("revocation list application has invalid time or status-key epoch")
 	}
 	if err := VerifyRevocationListV2Signature(list, boundIssuerID, statusKey); err != nil {
@@ -412,7 +411,7 @@ func ApplyRevocationPushV2(state RevocationStatusStateV2, push *RevocationPushV2
 	if err := validateRevocationStatusPolicyV2(policy); err != nil {
 		return state, err
 	}
-	if now < 0 || now > maxSafeInteger || statusKeyEpoch == 0 || statusKeyEpoch > uint64(maxSafeInteger) {
+	if !validV2Timestamp(now) || statusKeyEpoch == 0 || statusKeyEpoch > uint64(maxSafeInteger) {
 		return state, fmt.Errorf("revocation push application has invalid time or status-key epoch")
 	}
 	if err := VerifyRevocationPushV2Signature(push, boundIssuerID, statusKey); err != nil {
@@ -519,7 +518,10 @@ func ApplyRevocationPushV2(state RevocationStatusStateV2, push *RevocationPushV2
 }
 
 func validateRevocationStatusPolicyV2(policy RevocationStatusPolicyV2) error {
-	if policy.MaxListLifetimeSeconds < 0 || policy.MaxStatusAgeSeconds < 0 || policy.ClockSkewSeconds < 0 || policy.MaxListLifetimeSeconds > maxSafeInteger || policy.MaxStatusAgeSeconds > maxSafeInteger || policy.ClockSkewSeconds > maxSafeInteger {
+	// Zero lifetime or age means "not configured" (status is then never
+	// current); configured values are bounded by SPEC-v2 §6 (A5).
+	if policy.MaxListLifetimeSeconds < 0 || policy.MaxStatusAgeSeconds < 0 || policy.ClockSkewSeconds < 0 ||
+		policy.MaxListLifetimeSeconds > V2MaxStatusLifetimeSeconds || policy.MaxStatusAgeSeconds > V2MaxStatusLifetimeSeconds || policy.ClockSkewSeconds > V2MaxFutureSkewSeconds {
 		return fmt.Errorf("revocation status policy contains invalid time bounds")
 	}
 	return nil
@@ -606,10 +608,12 @@ func timestampBeyondSkewV2(timestamp, now, skew int64) bool {
 func revocationListFreshV2(list *RevocationListV2, policy RevocationStatusPolicyV2, now int64) bool {
 	if policy.MaxListLifetimeSeconds == 0 || policy.MaxStatusAgeSeconds == 0 ||
 		list.NextUpdate-list.UpdatedAt > policy.MaxListLifetimeSeconds ||
-		timestampBeyondSkewV2(list.UpdatedAt, now, policy.ClockSkewSeconds) || now > list.NextUpdate {
+		timestampBeyondSkewV2(list.UpdatedAt, now, policy.ClockSkewSeconds) || now >= list.NextUpdate {
+		// Exclusive deadline: a list is fresh only while now < next_update.
 		return false
 	}
-	return now <= list.UpdatedAt || now-list.UpdatedAt <= policy.MaxStatusAgeSeconds
+	// Exclusive age deadline: fresh only while now < updated_at + max_status_age.
+	return now < list.UpdatedAt || now-list.UpdatedAt < policy.MaxStatusAgeSeconds
 }
 
 func revokedCertIDsV2(refs []RevokedCertV2) []string {
@@ -655,13 +659,17 @@ func addRevocationsV2(state *RevocationStatusStateV2, values []string) {
 }
 
 func revokedSetDigestV2(revoked []RevokedCertV2) ([]byte, error) {
-	ids := revokedCertIDsV2(revoked)
-	canonical, err := json.Marshal(ids)
+	// RevokedSetDigest (SPEC-v2 §4): SHA-384("ratify-protocol-revoked-set-v2" ||
+	// 0x00 || RatifyCanonicalJSON(sorted, deduplicated cert_ids)).
+	canonical, err := CanonicalJSON(sortedUniqueStringsV2(revokedCertIDsV2(revoked)))
 	if err != nil {
 		return nil, fmt.Errorf("encode revoked certificate set: %w", err)
 	}
-	digest := sha512.Sum384(canonical)
-	return bytes.Clone(digest[:]), nil
+	h := sha512.New384()
+	_, _ = h.Write([]byte("ratify-protocol-revoked-set-v2"))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write(canonical)
+	return h.Sum(nil), nil
 }
 
 func containsNovelRevocationV2(values, accepted []string) bool {

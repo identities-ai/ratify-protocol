@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 )
 
 type recordingClaimStoreV2 struct {
@@ -28,6 +27,14 @@ type recordingClaimStoreV2 struct {
 }
 
 func int64PtrV2Test(value int64) *int64 { return &value }
+
+// AuthoritativeTimeV2 returns the scripted claim time (15 by default).
+func (s *recordingClaimStoreV2) AuthoritativeTimeV2(context.Context) (int64, error) {
+	if s.claimedAt != nil {
+		return *s.claimedAt, nil
+	}
+	return 15, nil
+}
 
 func TestV2PreflightDoesNotRaceOnSharedIssuance(t *testing.T) {
 	bundle := signedV2TestBundle(t)
@@ -107,7 +114,7 @@ func TestEvaluateProofBundleV2LocalAuthorizationAllowsOneConcurrentEvaluator(t *
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	opts := V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	}
@@ -204,7 +211,7 @@ func TestClaimProofBundleV2RevalidatesAndPassesSealedClaim(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -356,7 +363,7 @@ func TestFinalizeClaimProofBundleV2BlocksDeferredExternalChecks(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -438,7 +445,7 @@ func TestV2EvaluationTokenCannotStartASecondEvaluation(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	opts := V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	}
@@ -472,7 +479,7 @@ func TestV2EvaluationTokenSealsClaimAgainstLaterPreflight(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -480,7 +487,7 @@ func TestV2EvaluationTokenSealsClaimAgainstLaterPreflight(t *testing.T) {
 		t.Fatalf("later preflight changed sealed claimed inputs: %+v", assessment)
 	}
 	retry := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -503,7 +510,7 @@ func TestV2EvaluationUsesAuthoritativeClaimTimeFloor(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(14, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -526,7 +533,7 @@ func TestV2EvaluationUsesSealedChallengeWhenCallerOmitsIssuance(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	base := V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy, ClaimToken: token,
 	}
 	base.ExpectedChallenge = nil
@@ -565,7 +572,7 @@ func TestV2EvaluationTokenBindsContextPolicyDigest(t *testing.T) {
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: otherPolicy,
 		ExpectedChallenge: otherExpected, ClaimToken: token,
 	})
@@ -597,7 +604,7 @@ func TestAuthorizationAssessmentDoesNotExposeContextPolicyStorage(t *testing.T) 
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: otherPolicy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -647,7 +654,7 @@ func TestClaimProofBundleV2PreservesOwnerForInvalidStoreClaimTime(t *testing.T) 
 			}
 			root := bundle.Delegations[len(bundle.Delegations)-1]
 			assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+				TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 				TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy,
 				ExpectedChallenge: expected, ClaimToken: token,
 			})

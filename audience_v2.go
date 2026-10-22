@@ -43,7 +43,7 @@ type v2AudienceConstraint struct {
 // nonmatching membership takes precedence over unavailable membership in
 // another link. Only the verifier's authenticated expected receiver is used.
 func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID string, memberships []V2AudienceMembership, now, futureSkew int64) (V2AudienceAssessment, error) {
-	if receiverID == "" || now < -maxSafeInteger || now > maxSafeInteger || futureSkew < 0 || futureSkew > maxSafeInteger {
+	if receiverID == "" || !validV2Timestamp(now) || futureSkew < 0 || futureSkew > V2MaxFutureSkewSeconds {
 		return V2AudienceAssessment{}, fmt.Errorf("v2 audience requires a sealed receiver and valid security time")
 	}
 	type audienceLink struct {
@@ -79,8 +79,8 @@ func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID stri
 		if err := json.Unmarshal(item.CanonicalJSON, &constraint); err != nil || constraint.Type != ConstraintReceiverAudience {
 			return V2AudienceAssessment{}, fmt.Errorf("v2 sealed audience constraint has wrong type")
 		}
-		if len(constraint.Params.TrustDomainIDs) > 0 && constraint.Params.MaxMembershipAgeSeconds <= 0 {
-			return V2AudienceAssessment{}, fmt.Errorf("v2 audience membership age must be positive")
+		if len(constraint.Params.TrustDomainIDs) > 0 && (constraint.Params.MaxMembershipAgeSeconds <= 0 || constraint.Params.MaxMembershipAgeSeconds > V2MaxAudienceMembershipAgeSeconds) {
+			return V2AudienceAssessment{}, fmt.Errorf("v2 audience membership age must be 1..%d seconds", V2MaxAudienceMembershipAgeSeconds)
 		}
 		if len(constraint.Params.TrustDomainIDs) > 0 && constraint.Params.MaxMembershipAgeSeconds < maxAge {
 			maxAge = constraint.Params.MaxMembershipAgeSeconds
@@ -117,10 +117,11 @@ func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID stri
 			continue
 		}
 		if membership.ReceiverID != receiverID || !validPrefixedDigestV2(membership.EvidenceDigest) ||
-			membership.IssuedAt < -maxSafeInteger || membership.IssuedAt > maxSafeInteger || membership.ExpiresAt < -maxSafeInteger || membership.ExpiresAt > maxSafeInteger ||
+			!validV2Timestamp(membership.IssuedAt) || !validV2Timestamp(membership.ExpiresAt) ||
 			membership.IssuedAt >= membership.ExpiresAt || now >= membership.ExpiresAt ||
 			(membership.IssuedAt > now && membership.IssuedAt-now > futureSkew) ||
-			(now > membership.IssuedAt && now-membership.IssuedAt > maxAge) {
+			// Exclusive age deadline: current only while now < issued_at + max_age.
+			(now >= membership.IssuedAt && now-membership.IssuedAt >= maxAge) {
 			unavailable = true
 			continue
 		}

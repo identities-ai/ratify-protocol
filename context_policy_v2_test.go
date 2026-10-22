@@ -5,7 +5,6 @@ import (
 	stdcontext "context"
 	"strings"
 	"testing"
-	"time"
 )
 
 const testV2ContextPolicyDigest = "sha384:610c40faa472aa2a4f905988899733758cccf30f243aed35f1f42433228a28dbab1725cb2a4a6811029a8109da0b9b29"
@@ -93,7 +92,7 @@ func TestZeroValueContextPolicyCannotPass(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	root := bundle.Delegations[0]
 	authorization := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: testExpectedContextChallenge(t, bundle, validPolicy),
 		ClaimToken:        testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, validPolicy), validPolicy, "execute:tool"),
@@ -176,7 +175,7 @@ func TestLocalAuthorizationEvaluatesContextBeforeConstraints(t *testing.T) {
 	}
 	contextPolicy := testBoundContextPolicy(t, policyContext)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: bundle.Delegations[1].IssuerID,
+		TrustedRootID: bundle.Delegations[1].IssuerID,
 		TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 		ContextPolicy:     contextPolicy,
 		ExpectedChallenge: testExpectedContextChallenge(t, bundle, contextPolicy),
@@ -192,7 +191,7 @@ func TestLocalAuthorizationUsesSealedPreflightPolicyWhenOptionOmitted(t *testing
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ExpectedChallenge: testExpectedContextChallenge(t, bundle, policy),
 		ClaimToken: testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "execute:tool"),
 	})
@@ -253,7 +252,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	}
 	root := positive.Delegations[len(positive.Delegations)-1]
 	postClaim := EvaluateProofBundleV2LocalAuthorization(&positive, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: verifyPolicy, ExpectedChallenge: &expected,
 		ClaimToken: claimToken,
 	})
@@ -263,7 +262,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	mutatedIssuance := expected
 	mutatedIssuance.Value = bytes.Repeat([]byte{0x24}, 32)
 	issuanceMismatch := EvaluateProofBundleV2LocalAuthorization(&positive, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: verifyPolicy, ExpectedChallenge: &mutatedIssuance,
 		ClaimToken: testTokenFromPreflightV2(t, pre),
 	})
@@ -281,7 +280,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherAuthorization := EvaluateProofBundleV2LocalAuthorization(&otherBundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: verifyPolicy, ExpectedChallenge: &expected,
 		ClaimToken: testTokenFromPreflightV2(t, pre),
 	})
@@ -292,7 +291,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	downgradedExpected := expected
 	downgradedExpected.ContextPolicy = unboundPolicy
 	downgrade := EvaluateProofBundleV2LocalAuthorization(&positive, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: unboundPolicy, ExpectedChallenge: &downgradedExpected,
 		ClaimToken: testTokenFromPreflightV2(t, pre),
 	})
@@ -302,7 +301,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	originalVerifyPolicy := cloneV2ContextPolicy(verifyPolicy)
 	*verifyPolicy = *unboundPolicy
 	mutatedSource := EvaluateProofBundleV2LocalAuthorization(&positive, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: verifyPolicy, ExpectedChallenge: &expected,
 		ClaimToken: testTokenFromPreflightV2(t, pre),
 	})
@@ -396,7 +395,7 @@ func TestVerifyAuthorizationRequiresExactPreflightPolicy(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+				TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 				TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: test.policy, ExpectedChallenge: test.expected,
 				ClaimToken: testTokenFromPreflightV2(t, pre),
 			})
@@ -444,18 +443,18 @@ func TestInvalidOrMismatchedFutureSkewInterruptsPostClaimEvaluation(t *testing.T
 		t.Fatalf("valid preflight failed to claim: %v", err)
 	}
 	root := bundle.Delegations[len(bundle.Delegations)-1]
-	for _, skew := range []time.Duration{-time.Second, 10 * time.Second} {
+	for _, skew := range []int64{-1, 10} {
 		got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-			Now: time.Unix(15, 0), FutureSkew: skew, TrustedRootID: root.IssuerID,
+			FutureSkewSeconds: skew, TrustedRootID: root.IssuerID,
 			TrustedRootKey: root.IssuerPubKey, TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy,
 			ExpectedChallenge: expected,
 			ClaimToken:        testTokenFromPreflightV2(t, pre),
 		})
 		if got.Status != "authorization_unverified" || got.Reason != "evaluation_interrupted" || got.ContextAssessment != "not_evaluated" {
-			t.Fatalf("unmatched verifier skew did not produce an interrupted terminal assessment: skew=%s result=%+v", skew, got)
+			t.Fatalf("unmatched verifier skew did not produce an interrupted terminal assessment: skew=%d result=%+v", skew, got)
 		}
 	}
-	withoutPreflight := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{FutureSkew: -time.Second})
+	withoutPreflight := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{FutureSkewSeconds: -1})
 	if withoutPreflight.Status != "preflight_binding_mismatch" || withoutPreflight.Reason != "claim_required" {
 		t.Fatalf("missing preflight state was not rejected before claim: %+v", withoutPreflight)
 	}

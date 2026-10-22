@@ -125,11 +125,29 @@ const (
 // indeterminate/evaluation_interrupted. Recovery never creates a claim or
 // returns Created; ClaimV2 returns Created only to the transaction that
 // inserted the row, and exact retries return InProgress until publication.
+// AuthoritativeTimeV2 returns the store's security clock, the same clock that
+// produced ClaimedAt. The verifier reads it again at finalization and at
+// release; a reading earlier than a previous reading for the same claim is a
+// clock regression and fails closed.
 // This interface does not make a memory-only implementation safe for production.
 type ClaimStoreV2 interface {
+	V2AuthoritativeClock
 	ClaimV2(context.Context, V2ChallengeClaim) (V2ClaimResult, error)
 	FinalizeV2Claim(ctx context.Context, claimID string, ownerToken, terminalResult, receiptBody []byte, allowValidUntil int64) (bool, error)
 	RecoverInterruptedV2Claim(ctx context.Context, claimID string, terminalResult, receiptBody []byte) (bool, error)
+}
+
+// V2AuthoritativeClock is a Part B authoritative security clock in integer
+// seconds (0..V2MaxTimestampSeconds).
+type V2AuthoritativeClock interface {
+	AuthoritativeTimeV2(context.Context) (int64, error)
+}
+
+// ChallengeClaimTimeCurrentV2 reports whether an authoritative time is inside
+// the claim's sealed challenge bounds using exclusive deadlines. Claim stores
+// use it to recheck freshness inside the claim transaction.
+func ChallengeClaimTimeCurrentV2(claim V2ChallengeClaim, now int64) bool {
+	return v2ChallengeTimeCurrent(now, claim.IssuedAt, claim.ExpiresAt, claim.MaxAgeSeconds, claim.ClockSkewSeconds)
 }
 
 // V2RateAtFinalizationStore admits the sealed rate batch atomically during
@@ -201,7 +219,7 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 	}
 	claim.RateBatch, err = signedV2RateReservationBatch(bundle)
 	if err != nil {
-		return zero, "", nil, fmt.Errorf("v2 signed rate batch: %w", err)
+		return zero, "", nil, v2Classify(V2ErrMalformed, fmt.Errorf("v2 signed rate batch: %w", err))
 	}
 	claim.RequiresRate = len(claim.RateBatch) != 0
 	result, err := store.ClaimV2(ctx, cloneV2ChallengeClaim(claim))
@@ -213,10 +231,9 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 		if len(result.OwnerToken) != 32 {
 			return zero, "", nil, fmt.Errorf("v2 claim store returned an invalid evaluator owner token")
 		}
-		claimTimeValid := result.ClaimedAt >= -maxSafeInteger && result.ClaimedAt <= maxSafeInteger &&
-			!(result.ClaimedAt < sealed.IssuedAt && sealed.IssuedAt-result.ClaimedAt > futureSkewSeconds) &&
-			result.ClaimedAt < sealed.ExpiresAt &&
-			!(result.ClaimedAt > sealed.IssuedAt && result.ClaimedAt-sealed.IssuedAt > maxAgeSeconds)
+		// The store's authoritative claim time must itself satisfy the
+		// exclusive challenge deadlines; otherwise evaluation is interrupted.
+		claimTimeValid := v2ChallengeTimeCurrent(result.ClaimedAt, sealed.IssuedAt, sealed.ExpiresAt, maxAgeSeconds, futureSkewSeconds)
 		return claim, result.Disposition, &V2EvaluationToken{state: &v2EvaluationTokenState{
 			claimID: claim.ClaimID, proofDigest: claim.ProofDigest,
 			rateBatch:     append([]V2RateReservation{}, claim.RateBatch...),

@@ -113,6 +113,8 @@ func testTokenFromPreflightV2(t testing.TB, preflight *V2PreflightResult) *V2Eva
 		requiredScope:  state.RequiredScope,
 		futureSkew:     state.FutureSkew,
 		ownerToken:     make([]byte, 32),
+		claimedAt:      15, // authoritative claim time used for evaluation
+
 		claimTimeValid: true,
 		expected:       cloneExpectedChallengeStateV2(state),
 	}}
@@ -123,7 +125,6 @@ func TestEvaluateProofBundleV2LocalAuthorizationRequiresConfiguredTrustedRoot(t 
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	base := V2LocalAuthorizationOptions{
-		Now:               time.Unix(15, 0),
 		TrustedRootID:     root.IssuerID,
 		TrustedRootKey:    root.IssuerPubKey,
 		TrustConfigured:   true,
@@ -233,7 +234,6 @@ func TestEvaluateProofBundleV2RequiresParentDelegationScope(t *testing.T) {
 		root := bundle.Delegations[len(bundle.Delegations)-1]
 		policy := testUnboundContextPolicy(t)
 		got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-			Now:               time.Unix(15, 0),
 			TrustedRootID:     root.IssuerID,
 			TrustedRootKey:    rootKey,
 			TrustConfigured:   true,
@@ -259,7 +259,7 @@ func TestEvaluateProofBundleV2CarriesAuthenticatedSubjectIDsIntoStatusChecks(t *
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: testExpectedContextChallenge(t, bundle, policy),
 		ClaimToken: testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "data:read"),
 	})
@@ -279,7 +279,7 @@ func TestAuthenticatedStatusChecksAggregateWithVerifiedChainRoles(t *testing.T) 
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: testExpectedContextChallenge(t, bundle, policy),
 		ClaimToken: testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "data:read"),
 	})
@@ -322,7 +322,7 @@ func TestAuthenticatedStatusAggregationRejectsCrossCertificateRoleKeys(t *testin
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: testExpectedContextChallenge(t, bundle, policy),
 		ClaimToken: testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "data:read"),
 	})
@@ -366,7 +366,6 @@ func TestEvaluateProofBundleV2LocalAuthorizationScopeAndExpiry(t *testing.T) {
 	root := bundle.Delegations[0]
 	policy := testUnboundContextPolicy(t)
 	opts := V2LocalAuthorizationOptions{
-		Now:               time.Unix(15, 0),
 		TrustedRootID:     root.IssuerID,
 		TrustedRootKey:    root.IssuerPubKey,
 		TrustConfigured:   true,
@@ -400,8 +399,9 @@ func TestEvaluateProofBundleV2LocalAuthorizationScopeAndExpiry(t *testing.T) {
 		t.Fatalf("post-claim preflight binding failure did not produce a terminal-safe assessment: %+v", got)
 	}
 
-	opts.Now = time.Unix(20, 0)
+	// Evaluation uses the authoritative claim time; a claim at expires_at is expired.
 	opts.ClaimToken = testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "data:read")
+	opts.ClaimToken.state.claimedAt = 20
 	got = EvaluateProofBundleV2LocalAuthorization(bundle, opts)
 	if got.Status != "expired" || got.Reason == "" {
 		t.Fatalf("certificate at expires_at was not expired: %+v", got)
@@ -460,7 +460,7 @@ func TestEvaluateProofBundleV2DefersLocalConstraintFailuresUntilEveryStatusCheck
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
 			got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				Now: time.Unix(15, 0), TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
+				TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
 				TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 				Context: tt.context, ContextPolicy: policy, ExpectedChallenge: expected,
 				ClaimToken: testEvaluationTokenForTest(t, bundle, expected, policy, "data:read"),
@@ -521,7 +521,7 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 			expected := testExpectedContextChallenge(t, bundle, policy)
 			token := testEvaluationTokenForTest(t, bundle, expected, policy, "data:read")
 			assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				Now: time.Unix(15, 0), TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
+				TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
 				TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 				Context:       VerifierContext{HasAmount: true, RequestedAmount: 10, RequestedCurrency: "USD"},
 				ContextPolicy: policy, ExpectedChallenge: expected, ClaimToken: token,
@@ -575,7 +575,7 @@ func TestResolveClaimProofBundleV2AllowsOnlyAfterCurrentStatus(t *testing.T) {
 	expected := testExpectedContextChallenge(t, bundle, policy)
 	token := testEvaluationTokenForTest(t, bundle, expected, policy, "execute:tool")
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
 		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: policy,
 		ExpectedChallenge: expected, ClaimToken: token,
 	})
@@ -634,7 +634,7 @@ func TestEvaluateProofBundleV2FailureOrderChecksAllTimeBoundsBeforeExpiry(t *tes
 	root := bundle.Delegations[len(bundle.Delegations)-1]
 	policy := testUnboundContextPolicy(t)
 	got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
+		TrustedRootID: root.IssuerID, TrustedRootKey: rootKey,
 		TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: testExpectedContextChallenge(t, bundle, policy),
 		ClaimToken: testEvaluationTokenForTest(t, bundle, testExpectedContextChallenge(t, bundle, policy), policy, "data:read"),
 	})
@@ -711,7 +711,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 		t.Fatal("claim store rate batch aliases caller-owned output")
 	}
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		Now: time.Unix(15, 0), TrustedRootID: bundle.Delegations[1].IssuerID,
+		TrustedRootID: bundle.Delegations[1].IssuerID,
 		TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: expected,
 		ClaimToken: token,
 	})
@@ -761,7 +761,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, []byte(`{"decision":"allow","decision_reason":"authorized"}`), []byte(`{"decision":"allow","decision_reason":"authorized"}`)); err == nil || finalized || store.finalizeCalls != 0 {
 		t.Fatalf("allow finalized before deferred audience/rate evaluation: finalized=%t err=%v", finalized, err)
 	}
-	audienceResolved, err := ResolveClaimProofBundleV2AfterAudience(token, nil, 14)
+	audienceResolved, err := ResolveClaimProofBundleV2AfterAudience(token, nil)
 	if err != nil || audienceResolved.Status != "pending_external_checks" || audienceResolved.Reason != "rate_reservation_required" || len(audienceResolved.Deferred) != 2 {
 		t.Fatalf("exact audience did not preserve pending rate checks: %+v, %v", audienceResolved, err)
 	}

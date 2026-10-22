@@ -189,7 +189,15 @@ func TestRevocationStatusReducerSnapshotPushSameSequenceIsOrderIndependent(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ReconciliationRequired || state.ForkSequence != 0 || state.Observations[len(state.Observations)-1].Accepted {
+	// Observations are kept in canonical snapshot order (SPEC-v2 A3), so the
+	// push is located by identity rather than by position.
+	pushAccepted := false
+	for _, observation := range state.Observations {
+		if observation.ObjectType == uint16(v2RevocationPush) && observation.Sequence == 2 {
+			pushAccepted = observation.Accepted
+		}
+	}
+	if state.ReconciliationRequired || state.ForkSequence != 0 || pushAccepted {
 		t.Fatalf("snapshot-first matching push was rejected or treated as accepted contiguous push: %+v", state)
 	}
 

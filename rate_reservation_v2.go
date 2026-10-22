@@ -78,7 +78,7 @@ func BuildV2RateReservationBatch(deferred []V2DeferredConstraint) ([]V2RateReser
 		if item.Type == ConstraintReceiverAudience {
 			continue
 		}
-		if constraint.Count <= 0 || int64(constraint.Count) > maxSafeInteger || constraint.WindowS <= 0 || constraint.WindowS > maxSafeInteger {
+		if constraint.Count <= 0 || int64(constraint.Count) > maxSafeInteger || constraint.WindowS <= 0 || constraint.WindowS > V2MaxRateWindowSeconds {
 			return nil, fmt.Errorf("v2 rate constraint has noncanonical or invalid limits")
 		}
 		key := counterKey{item.IssuerID, item.CertID, constraint.WindowS}

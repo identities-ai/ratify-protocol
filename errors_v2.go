@@ -56,6 +56,27 @@ const (
 	V2ErrLogFork                    V2ErrorClass = "log_fork"
 	V2ErrLogFrozen                  V2ErrorClass = "log_frozen"
 	V2ErrStatusObjectRejected       V2ErrorClass = "status_object_rejected"
+
+	// Part B stream sequence (SPEC-v2 §7.4): gap, duplicate and reorder all
+	// fail before claim with this one class.
+	V2ErrStreamSequenceMismatch V2ErrorClass = "stream_sequence_mismatch"
+
+	// Clock reads at finalization and release.
+	V2ErrClockUnavailable V2ErrorClass = "clock_unavailable"
+	V2ErrClockRegressed   V2ErrorClass = "clock_regressed"
+	// V2ErrEvaluationCancelled: the caller's context ended after the claim;
+	// nothing was committed and the claim remains recoverable.
+	V2ErrEvaluationCancelled V2ErrorClass = "evaluation_cancelled"
+
+	// Part B claim lifecycle.
+	V2ErrClaimLeaseLive       V2ErrorClass = "claim_lease_live"
+	V2ErrClaimLeaseLost       V2ErrorClass = "claim_lease_lost"
+	V2ErrClaimAlreadyTerminal V2ErrorClass = "claim_already_terminal"
+	V2ErrClaimNotFound        V2ErrorClass = "claim_not_found"
+
+	// An allow reached finalization at or after its allow horizon or the
+	// challenge expiry; nothing was committed (SPEC-v2 §7.2, §7.5).
+	V2ErrAllowHorizonPassed V2ErrorClass = "allow_horizon_passed"
 )
 
 // V2Error attaches a conformance class to a diagnostic error. Error returns

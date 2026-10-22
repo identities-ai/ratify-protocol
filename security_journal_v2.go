@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"unicode/utf8"
 )
 
-const securityJournalVersionV2 = 1
+// securityJournalVersionV2 is the current record version: canonical
+// snapshot digest (security_journal_snapshot_v2.go). Version 1 records use the
+// legacy json.Marshal digest and must be migrated before use.
+const securityJournalVersionV2 = 2
 
 // SecurityJournalHeadV2 is the independently anchored head of a deployment's
 // security journal. A backend must not derive its rollback protection solely
@@ -43,8 +45,12 @@ type SecurityJournalV2 struct {
 // enough history to recover the anchored head after a crash. A normal file,
 // database transaction, or checksum chain does not by itself satisfy this
 // contract. No production backend is provided by this protocol library.
+//
+// Load returns the record together with the independently anchored head it
+// was read against. A record whose generation or digest differs from the
+// returned head is unanchored and is never used to derive not_revoked.
 type SecurityJournalStoreV2 interface {
-	Load(context.Context) (SecurityJournalV2, error)
+	Load(context.Context) (SecurityJournalV2, SecurityJournalHeadV2, error)
 	CompareAndSwap(context.Context, SecurityJournalHeadV2, SecurityJournalV2) error
 }
 
@@ -90,12 +96,9 @@ func updateSecurityJournalV2(ctx context.Context, store SecurityJournalStoreV2, 
 	if store == nil || update == nil {
 		return SecurityJournalV2{}, fmt.Errorf("security journal store and update are required")
 	}
-	current, err := store.Load(ctx)
+	current, err := loadAnchoredSecurityJournalV2(ctx, store)
 	if err != nil {
-		return SecurityJournalV2{}, fmt.Errorf("load rollback-protected security journal: %w", err)
-	}
-	if err := ValidateSecurityJournalV2(current); err != nil {
-		return SecurityJournalV2{}, fmt.Errorf("validate loaded security journal: %w", err)
+		return SecurityJournalV2{}, err
 	}
 	next, err := cloneSecurityJournalV2(current)
 	if err != nil {
@@ -104,16 +107,27 @@ func updateSecurityJournalV2(ctx context.Context, store SecurityJournalStoreV2, 
 	if err := update(&next); err != nil {
 		return SecurityJournalV2{}, err
 	}
+	return commitSecurityJournalTransitionV2(ctx, store, current, next)
+}
+
+// commitSecurityJournalTransitionV2 compacts and canonicalizes next, returns
+// current unchanged when the canonical content is identical (no-op), and
+// otherwise chains, validates, and commits it by compare-and-swap against
+// current's head. A conflict is returned, never retried.
+func commitSecurityJournalTransitionV2(ctx context.Context, store SecurityJournalStoreV2, current, next SecurityJournalV2) (SecurityJournalV2, error) {
 	pruneSecurityJournalObservationsV2(&next)
-	if reflect.DeepEqual(next, current) {
+	canonicalizeSecurityJournalV2(&next)
+	if sameSecurityJournalContentV2(next, current) {
 		return current, nil
 	}
 	next.Generation = current.Generation + 1
-	if next.Generation == 0 {
+	if next.Generation == 0 || next.Generation > uint64(maxSafeInteger) {
 		return SecurityJournalV2{}, fmt.Errorf("security journal generation exhausted")
 	}
+	next.Version = securityJournalVersionV2
 	next.PreviousDigest = current.Digest
 	next.Digest = ""
+	var err error
 	next.Digest, err = securityJournalDigestV2(next)
 	if err != nil {
 		return SecurityJournalV2{}, err
@@ -129,6 +143,25 @@ func updateSecurityJournalV2(ctx context.Context, store SecurityJournalStoreV2, 
 		return SecurityJournalV2{}, fmt.Errorf("commit rollback-protected security journal: %w", err)
 	}
 	return next, nil
+}
+
+// loadAnchoredSecurityJournalV2 loads a version 2 record and requires it to
+// match the anchored head returned with it.
+func loadAnchoredSecurityJournalV2(ctx context.Context, store SecurityJournalStoreV2) (SecurityJournalV2, error) {
+	current, head, err := store.Load(ctx)
+	if err != nil {
+		return SecurityJournalV2{}, fmt.Errorf("load rollback-protected security journal: %w", err)
+	}
+	if head.Generation != current.Generation || head.Digest == "" || head.Digest != current.Digest {
+		return SecurityJournalV2{}, fmt.Errorf("loaded security journal is not anchored by the store head")
+	}
+	if current.Version != securityJournalVersionV2 {
+		return SecurityJournalV2{}, fmt.Errorf("security journal version %d requires migration", current.Version)
+	}
+	if err := ValidateSecurityJournalV2(current); err != nil {
+		return SecurityJournalV2{}, fmt.Errorf("validate loaded security journal: %w", err)
+	}
+	return current, nil
 }
 
 // RecordSecurityKeyRoleV2 durably adds a non-status key role after the caller
@@ -214,12 +247,9 @@ func RevocationStatusFromJournalV2(ctx context.Context, store SecurityJournalSto
 	if store == nil {
 		return RevocationStatusResultV2{}, fmt.Errorf("security journal store is required")
 	}
-	journal, err := store.Load(ctx)
+	journal, err := loadAnchoredSecurityJournalV2(ctx, store)
 	if err != nil {
-		return RevocationStatusResultV2{Status: "indeterminate", Reason: "unavailable", Evidence: []StatusEvidenceEntryV2{}}, fmt.Errorf("load rollback-protected security journal: %w", err)
-	}
-	if err := ValidateSecurityJournalV2(journal); err != nil {
-		return RevocationStatusResultV2{Status: "indeterminate", Reason: "unavailable", Evidence: []StatusEvidenceEntryV2{}}, fmt.Errorf("validate loaded security journal: %w", err)
+		return RevocationStatusResultV2{Status: "indeterminate", Reason: "unavailable", Evidence: []StatusEvidenceEntryV2{}}, err
 	}
 	if err := requireJournalStatusKeyV2(&journal, issuerID, epoch, pub); err != nil {
 		return RevocationStatusResultV2{Status: "indeterminate", Reason: "unavailable", Evidence: []StatusEvidenceEntryV2{}}, err
@@ -255,7 +285,7 @@ func requireJournalStatusKeyV2(journal *SecurityJournalV2, issuerID string, epoc
 
 // ValidateSecurityJournalV2 validates record integrity and internal indexes.
 func ValidateSecurityJournalV2(journal SecurityJournalV2) error {
-	if journal.Version != securityJournalVersionV2 || journal.StatusByIssuer == nil || journal.KeyRoleHistory == nil || journal.StatusKeyHistory == nil {
+	if (journal.Version != securityJournalVersionV2 && journal.Version != securityJournalLegacyVersion) || journal.StatusByIssuer == nil || journal.KeyRoleHistory == nil || journal.StatusKeyHistory == nil {
 		return fmt.Errorf("security journal has unsupported or incomplete shape")
 	}
 	if journal.Generation == 0 && journal.PreviousDigest != "" {
@@ -344,6 +374,12 @@ func ValidateSecurityJournalTransitionV2(current, next SecurityJournalV2) error 
 	}
 	if next.Generation != current.Generation+1 || next.PreviousDigest != current.Digest {
 		return fmt.Errorf("journal generation or predecessor is not contiguous")
+	}
+	if next.Version != securityJournalVersionV2 {
+		return fmt.Errorf("journal transitions must produce a version %d record", securityJournalVersionV2)
+	}
+	if current.Version == securityJournalLegacyVersion && !sameSecurityJournalContentV2(current, next) {
+		return fmt.Errorf("journal migration must not change logical content")
 	}
 	if !appendOnlyKeyRolesV2(current.KeyRoleHistory, next.KeyRoleHistory) || !appendOnlyStatusBindingsV2(current.StatusKeyHistory, next.StatusKeyHistory) {
 		return fmt.Errorf("journal key binding history was removed or rewritten")
@@ -572,7 +608,7 @@ func pruneSecurityJournalObservationsV2(journal *SecurityJournalV2) {
 			}
 		}
 		state.Observations = retained
-		journal.StatusByIssuer[issuerID] = state
+		journal.StatusByIssuer[issuerID] = canonicalizeRevocationStatusStateV2(state)
 	}
 }
 
@@ -838,16 +874,6 @@ func validSecurityKeyRoleV2(role string) bool {
 func validDigestHexV2(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == 48 && hex.EncodeToString(decoded) == value
-}
-
-func securityJournalDigestV2(journal SecurityJournalV2) (string, error) {
-	journal.Digest = ""
-	wire, err := json.Marshal(journal)
-	if err != nil {
-		return "", fmt.Errorf("encode security journal: %w", err)
-	}
-	digest := sha512.Sum384(wire)
-	return hex.EncodeToString(digest[:]), nil
 }
 
 func cloneSecurityJournalV2(journal SecurityJournalV2) (SecurityJournalV2, error) {

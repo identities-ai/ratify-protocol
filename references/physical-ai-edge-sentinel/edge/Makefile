@@ -4,7 +4,7 @@
 #   make test-bins    build edge-test and edge-checkpoint-test (fixture clock)
 #   make check        build everything and run the deterministic scenario matrix
 #
-# RATIFY_SDK points at a Ratify C SDK 2.0.0-alpha.1 tree with include/ratify.h
+# RATIFY_SDK points at a Ratify C SDK v2 tree (built from sdks/c) with include/ratify.h
 # and lib/libratify_c.a. The static library is linked, so the binaries carry
 # no runtime library path. Only the *-test binaries are compiled with
 # -DSENTINEL_TEST_BUILD; the edge and edge-checkpoint binaries cannot read the

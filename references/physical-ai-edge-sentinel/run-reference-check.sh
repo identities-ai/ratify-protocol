@@ -1,7 +1,8 @@
 #!/bin/sh
 # Reference gate: build the Protocol v2 receiver, checkpoint, and controller
-# against a Ratify C SDK 2.0.0-alpha.1 tree and run the deterministic scenario
-# matrix (fixture clock, mock actuator; no serial device or GPIO is touched).
+# against a Ratify C SDK tree at this repository's sdks/c version and run the
+# deterministic scenario matrix (fixture clock, mock actuator; no serial device
+# or GPIO is touched).
 #
 #   RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh
 #
@@ -11,8 +12,11 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 : "${RATIFY_SDK:?Set RATIFY_SDK to a Ratify C SDK tree (include/ratify.h, lib/libratify_c.a)}"
 [ -f "$RATIFY_SDK/include/ratify.h" ] || { echo "missing Ratify C header" >&2; exit 1; }
 [ -f "$RATIFY_SDK/lib/libratify_c.a" ] || { echo "missing Ratify C static library" >&2; exit 1; }
-grep -Fq 'Version: 2.0.0-alpha.1' "$RATIFY_SDK/include/ratify.h" || {
-    echo "Ratify C SDK must be version 2.0.0-alpha.1" >&2
+# The SDK must be the version this reference ships with: the one in sdks/c.
+SDK_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$ROOT/../../sdks/c/Cargo.toml" | head -n 1)
+[ -n "$SDK_VERSION" ] || { echo "cannot read the C SDK version from sdks/c/Cargo.toml" >&2; exit 1; }
+grep -Fqx " * Version: $SDK_VERSION" "$RATIFY_SDK/include/ratify.h" || {
+    echo "Ratify C SDK must be version $SDK_VERSION" >&2
     exit 1
 }
 OUTPUT=$(mktemp "${TMPDIR:-/tmp}/ratify-edge-gate.XXXXXX")

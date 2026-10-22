@@ -170,6 +170,34 @@ if c_dep_match.group(1) != ts_version:
 if not c_banner_match or c_banner_match.group(1) != ts_version:
     got = c_banner_match.group(1) if c_banner_match else "missing"
     fail(f"cbindgen.toml header banner version {got} does not match {ts_version}")
+header_banner = re.search(r'^ \* Version: (\S+)$', read("sdks/c/include/ratify.h"), re.M)
+if not header_banner or header_banner.group(1) != ts_version:
+    got = header_banner.group(1) if header_banner else "missing"
+    fail(f"sdks/c/include/ratify.h banner version {got} does not match {ts_version}")
+
+# Programs that build against the in-tree v2 SDKs record its version in their
+# lockfiles, and the cross-SDK fixture generator defaults to a development
+# build of it. scripts/release.sh rewrites all of these on a bump.
+for lock_file in ("demos/rust/Cargo.lock", "examples/v2/rust/Cargo.lock",
+                  "sdks/python-v2/bench/rust/Cargo.lock"):
+    entry = re.search(r'\[\[package\]\]\nname = "ratify-protocol"\nversion = "([^"]+)"', read(lock_file))
+    if not entry or entry.group(1) != ts_version:
+        got = entry.group(1) if entry else "missing"
+        fail(f"{lock_file} ratify-protocol {got} does not match {ts_version}")
+for lock_file, key in (("examples/v2/typescript/package-lock.json", "../../../sdks/typescript"),
+                       ("references/github-copilot/package-lock.json", "../../sdks/typescript")):
+    got = json.loads(read(lock_file)).get("packages", {}).get(key, {}).get("version", "missing")
+    if got != ts_version:
+        fail(f"{lock_file} in-tree SDK entry {got} does not match {ts_version}")
+cross_sdk_default = re.search(r'"sdk-version", "([^"]+)\+dev"', read("cmd/ratify-v2-cross-sdk/main.go"))
+if not cross_sdk_default or cross_sdk_default.group(1) != ts_version:
+    got = cross_sdk_default.group(1) if cross_sdk_default else "missing"
+    fail(f"cmd/ratify-v2-cross-sdk default sdk-version {got} does not match {ts_version}+dev")
+for line in read("docs/V2_REFERENCE_COMPATIBILITY.md").splitlines():
+    if line.startswith("| ") and "| `sdks/" in line:
+        for found in re.findall(r"`(2\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+|(?:a|b|rc)\d+))`", line):
+            if found not in (ts_version, pyv2_version):
+                fail(f"docs/V2_REFERENCE_COMPATIBILITY.md SDK row names {found}; the v2 line is {ts_version}")
 
 # Install pins. The alpha.13 npm tarball shipped with a README that still
 # pinned alpha.10 — registries render the README snapshotted at publish

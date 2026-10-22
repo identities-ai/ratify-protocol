@@ -125,13 +125,12 @@ type V2VerifyOutcome struct {
 	Committed   *CommittedV2Outcome
 }
 
-// v2EvaluationProgress records which post-claim stages completed, so an
-// interrupted result keeps completed assessments, marks an interrupted
-// status lookup unavailable, and marks stages not reached not_evaluated.
+// v2EvaluationProgress is the evaluator's progress. persisted is exactly
+// what was last recorded in the claim store and what an interrupted result
+// reports (SPEC-v2 §6.7); trustCompleted notes that trust resolution ran.
 type v2EvaluationProgress struct {
-	trust  string // not_evaluated until the trust stage completes
-	status string // not_evaluated, unavailable (interrupted), or the aggregate
-	last   *V2LocalAuthorizationAssessment
+	persisted      V2EvaluationProgress
+	trustCompleted bool
 }
 
 // VerifyProofBundleV2 runs the live Protocol v2 decision path in the SPEC-v2
@@ -185,7 +184,17 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 		return evaluating(v2Classify(V2ErrEvaluationCancelled, fmt.Errorf("v2 evaluation cancelled before commit: %w", err)))
 	}
 
-	progress := v2EvaluationProgress{trust: "not_evaluated", status: "not_evaluated"}
+	progress := v2EvaluationProgress{persisted: InitialV2EvaluationProgress()}
+	// record persists progress before an external lookup starts and after it
+	// completes (SPEC-v2 §7.5). A failed write stops evaluation before the
+	// next provider call; recovery then uses the last recorded progress.
+	record := func() error {
+		err := recordV2ProgressSafely(ctx, cb.ClaimStore, token, progress.persisted)
+		if err != nil && ctx.Err() != nil {
+			return v2Classify(V2ErrEvaluationCancelled, fmt.Errorf("v2 evaluation cancelled before commit: %w", ctx.Err()))
+		}
+		return err
+	}
 	opts := V2LocalAuthorizationOptions{
 		FutureSkewSeconds: req.FutureSkewSeconds, RequiredScope: req.RequiredScope, Context: req.Context,
 		ContextPolicy: req.ContextPolicy, ExpectedChallenge: req.Expected, ClaimToken: token,
@@ -194,6 +203,10 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 	// challenge bounds) is checked before trust; an inconsistent claim is
 	// interrupted with every assessment not_evaluated.
 	if token.state.claimTimeValid && len(bundle.Delegations) > 0 {
+		progress.persisted.TrustAssessment = "unavailable" // resolution started
+		if err := record(); err != nil {
+			return evaluating(err)
+		}
 		chain := make([]DelegationCertV2, len(bundle.Delegations))
 		copy(chain, bundle.Delegations)
 		resolution, trustErr := callV2TrustSafely(ctx, cb.Trust, chain)
@@ -201,43 +214,58 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 			return cancelled(ctx.Err())
 		}
 		root := bundle.Delegations[len(bundle.Delegations)-1]
-		progress.trust = "unavailable"
+		trust := "unavailable"
 		if trustErr == nil {
 			switch resolution.Outcome {
 			case V2TrustTrusted:
 				rootID, idErr := keyIDV2(resolution.RootKey)
 				if idErr == nil && rootID == root.IssuerID && equalHybridPublicKeys(resolution.RootKey, root.IssuerPubKey) {
-					progress.trust = "trusted"
+					trust = "trusted"
 					opts.TrustedRootID, opts.TrustedRootKey = rootID, resolution.RootKey
 				}
 			case V2TrustUntrusted:
 				// Configured trust that excludes this chain: the local
 				// evaluation compares against an empty root and denies.
-				progress.trust = "untrusted"
+				trust = "untrusted"
 			}
 		}
-		opts.TrustConfigured = progress.trust != "unavailable"
+		opts.TrustConfigured = trust != "unavailable"
+		progress.trustCompleted = true
+		progress.persisted.TrustAssessment = trust
 	}
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, opts)
 	claimedAt := token.state.claimedAt
+	if progress.trustCompleted {
+		if progress.persisted.TrustAssessment == "trusted" && (assessment.ContextAssessment == "bound" || assessment.ContextAssessment == "not_required") && assessment.ContextPolicyDigest != nil {
+			digest := *assessment.ContextPolicyDigest
+			progress.persisted.ContextAssessment, progress.persisted.ContextPolicyDigest = assessment.ContextAssessment, &digest
+		}
+		if assessment.Status == "pending_external_checks" {
+			progress.persisted.StatusAssessment = "unavailable" // status started
+		}
+		if err := record(); err != nil {
+			return evaluating(err)
+		}
+	}
 
 	if assessment.Status == "pending_external_checks" {
-		progress.last = cloneV2LocalAuthorizationAssessment(assessment)
-		progress.status = "unavailable" // until the stage completes
 		stage := runV2StatusStage(ctx, bundle, assessment.StatusChecks, req, cb, claimedAt)
 		if stage.cancelled != nil {
 			return cancelled(stage.cancelled)
+		}
+		progress.persisted.StatusAssessment = stage.assessment.Assessment
+		progress.persisted.StatusEvidence = append([]StatusEvidenceEntryV2{}, stage.assessment.Evidence...)
+		if err := record(); err != nil {
+			return evaluating(err)
 		}
 		resolved, resolveErr := resolveClaimProofBundleV2AfterStatus(token, func([]V2CertificateStatusCheck) (V2StatusAssessment, error) {
 			return stage.assessment, nil
 		})
 		if resolveErr != nil {
 			interruptV2Evaluation(token)
-			assessment = v2InterruptedFrom(progress.last)
+			assessment = v2InterruptedAssessment(bundle, "evaluation interrupted after status")
 		} else {
 			assessment = resolved
-			progress.status = resolved.StatusAssessment
-			progress.last = cloneV2LocalAuthorizationAssessment(resolved)
 		}
 	}
 	if assessment.Status == "pending_external_checks" && slices.ContainsFunc(assessment.Deferred, func(d V2DeferredConstraint) bool { return d.Type == ConstraintReceiverAudience }) {
@@ -257,10 +285,9 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 		resolved, resolveErr := ResolveClaimProofBundleV2AfterAudience(token, memberships)
 		if resolveErr != nil {
 			interruptV2Evaluation(token)
-			assessment = v2InterruptedFrom(progress.last)
+			assessment = v2InterruptedAssessment(bundle, "evaluation interrupted after audience")
 		} else {
 			assessment = resolved
-			progress.last = cloneV2LocalAuthorizationAssessment(resolved)
 		}
 	}
 	if assessment.Status == "pending_external_checks" {
@@ -273,33 +300,25 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 				return cancelled(ctx.Err())
 			}
 			interruptV2Evaluation(token)
-			assessment = v2InterruptedFrom(progress.last)
+			assessment = v2InterruptedAssessment(bundle, "evaluation interrupted after rate")
 		} else {
 			assessment = resolved
 		}
 	}
 
-	// Finalization reads the authoritative clock again (T_final). A failed or
-	// regressed reading, or an allow at or beyond its horizon or the challenge
-	// expiry, commits nothing; lease-expiry recovery later commits
-	// evaluation_interrupted (SPEC-v2 §7.2, §7.5).
-	finalizedAt, clockErr := readV2AuthoritativeTime(ctx, cb.ClaimStore)
-	if clockErr != nil {
-		return evaluating(clockErr)
-	}
-	if finalizedAt < claimedAt {
-		return evaluating(v2Errorf(V2ErrClockRegressed, "v2 authoritative time moved backward between claim (%d) and finalization (%d)", claimedAt, finalizedAt))
-	}
-
+	// The claim store reads T_final inside the finalization compare-and-set
+	// and rejects a regressed clock or an allow at or beyond its horizon or
+	// the challenge expiry; nothing is then committed and lease-expiry
+	// recovery later commits evaluation_interrupted (SPEC-v2 §7.2, §7.5).
 	for attempt := 0; attempt < 2; attempt++ {
-		if assessment.Status == "authorized_agent" && (finalizedAt >= token.state.allowHorizon() || finalizedAt >= claim.ExpiresAt) {
-			return evaluating(v2Errorf(V2ErrAllowHorizonPassed, "v2 allow reached finalization at %d, at or beyond its horizon or challenge expiry", finalizedAt))
-		}
 		decision, terminal, body, buildErr := buildV2TerminalResult(bundle, assessment, progress, claim, claimedAt)
 		if buildErr != nil {
 			return evaluating(buildErr)
 		}
 		_, finalizeErr := finalizeV2Safely(ctx, cb.ClaimStore, token, terminal, body)
+		if V2ErrorClassOf(finalizeErr) == V2ErrUnclassified {
+			finalizeErr = v2Classify(V2ErrClaimStoreUnavailable, finalizeErr)
+		}
 		if finalizeErr == nil {
 			horizon := int64(0)
 			if decision == "allow" {
@@ -349,19 +368,6 @@ func validateV2StatusConfiguration(keys map[string]V2StatusKeyConfig, policy Rev
 	return nil
 }
 
-// v2InterruptedFrom builds an interrupted assessment that retains the most
-// recent completed assessment (context, evidence) when one exists.
-func v2InterruptedFrom(last *V2LocalAuthorizationAssessment) V2LocalAuthorizationAssessment {
-	if last == nil {
-		return v2InterruptedAssessment(nil, "evaluation interrupted")
-	}
-	assessment := *cloneV2LocalAuthorizationAssessment(*last)
-	assessment.Status, assessment.Reason = "authorization_unverified", "evaluation_interrupted"
-	assessment.Detail = "evaluation interrupted after a completed stage"
-	assessment.Deferred, assessment.LocalPolicyFailure = nil, nil
-	return assessment
-}
-
 // buildV2TerminalResult maps a terminal assessment to the receipt tuple of
 // SPEC-v2 §5.8 and the §6.7 table and validates it by preparing the exact
 // receipt outbox body. verifiedAt is the authoritative claim time T_claim.
@@ -370,7 +376,7 @@ func buildV2TerminalResult(bundle *ProofBundleV2, assessment V2LocalAuthorizatio
 	if !ok {
 		return "", nil, nil, fmt.Errorf("v2 evaluation did not reach a terminal result: %s/%s", assessment.Status, assessment.Reason)
 	}
-	trust := progress.trust
+	trust := progress.persisted.TrustAssessment
 	statusAssessment := assessment.StatusAssessment
 	if statusAssessment == "" {
 		statusAssessment = "not_evaluated"
@@ -383,8 +389,6 @@ func buildV2TerminalResult(bundle *ProofBundleV2, assessment V2LocalAuthorizatio
 	switch assessment.Reason {
 	case "not_delegated":
 		trust = "not_evaluated"
-	case "evaluation_interrupted":
-		trust, statusAssessment, contextAssessment = interruptedV2Assessments(progress, contextAssessment, statusAssessment)
 	}
 	if statusAssessment == "not_evaluated" {
 		evidence = []StatusEvidenceEntryV2{}
@@ -393,6 +397,11 @@ func buildV2TerminalResult(bundle *ProofBundleV2, assessment V2LocalAuthorizatio
 	if contextAssessment != "not_evaluated" && contextAssessment != "unbound" && assessment.ContextPolicyDigest != nil {
 		digest := *assessment.ContextPolicyDigest
 		policyDigest = &digest
+	}
+	if assessment.Reason == "evaluation_interrupted" {
+		// Per-dimension progress, exactly as lease-expiry recovery reports it.
+		p := cloneV2EvaluationProgress(progress.persisted)
+		trust, statusAssessment, contextAssessment, policyDigest, evidence = p.TrustAssessment, p.StatusAssessment, p.ContextAssessment, p.ContextPolicyDigest, p.StatusEvidence
 	}
 	granted := []string{}
 	if decision == "allow" {
@@ -418,39 +427,6 @@ func buildV2TerminalResult(bundle *ProofBundleV2, assessment V2LocalAuthorizatio
 		return "", nil, nil, err
 	}
 	return decision, terminal, body, nil
-}
-
-// interruptedV2Assessments applies SPEC-v2 §6 (A8) to an interrupted
-// evaluation: completed checks keep their assessment, an interrupted status
-// lookup is unavailable, and stages not reached are not_evaluated. A trust
-// result other than trusted ends the dependent stages, and the receipt table
-// admits no untrusted interrupted result, so untrusted is reported as
-// not_evaluated. A context other than bound/not_required cannot accompany a
-// status assessment, so both then become not_evaluated.
-func interruptedV2Assessments(progress v2EvaluationProgress, contextAssessment, statusAssessment string) (string, string, string) {
-	trust := progress.trust
-	switch trust {
-	case "trusted":
-	case "unavailable":
-		return "unavailable", "not_evaluated", "not_evaluated"
-	default:
-		return "not_evaluated", "not_evaluated", "not_evaluated"
-	}
-	if contextAssessment != "bound" && contextAssessment != "not_required" {
-		return trust, "not_evaluated", "not_evaluated"
-	}
-	switch progress.status {
-	case "current":
-		return trust, "current", contextAssessment
-	case "unavailable":
-		return trust, "unavailable", contextAssessment
-	case "not_evaluated":
-		return trust, "not_evaluated", contextAssessment
-	default:
-		// revoked or stale terminate evaluation themselves; an interruption
-		// cannot follow them.
-		return trust, "not_evaluated", contextAssessment
-	}
 }
 
 // ---------------------------------------------------------------------------

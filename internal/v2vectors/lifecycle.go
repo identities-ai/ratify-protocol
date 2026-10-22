@@ -6,6 +6,8 @@ package v2vectors
 // independent checkpoint). Expected outcomes are written from the spec rules
 // here, not read back from the Go reference.
 
+import ratify "github.com/identities-ai/ratify-protocol/v2"
+
 const (
 	lifecycleLogID        = "dddddddddddddddddddddddddddddd01"
 	lifecycleLeaseSeconds = 30
@@ -23,24 +25,38 @@ type lifecycleExpectJSON struct {
 	AllowHorizon   int64  `json:"allow_horizon,omitempty"`
 	ReceiptSeq     int64  `json:"receipt_sequence,omitempty"`
 	Failed         bool   `json:"failed,omitempty"`
+	PublishError   string `json:"publish_error,omitempty"`
+	// Committed receipt assessments, checked when present.
+	TrustAssessment   string `json:"trust_assessment,omitempty"`
+	StatusAssessment  string `json:"status_assessment,omitempty"`
+	ContextAssessment string `json:"context_assessment,omitempty"`
+	// Abandoned lists the requests whose claims an abandon step marks.
+	Abandoned []string `json:"abandoned,omitempty"`
+	// Recovered is the expected recovery run by a recover_during_status step.
+	Recovered *lifecycleExpectJSON `json:"recovered,omitempty"`
 }
 
 type lifecycleStepJSON struct {
-	Op         string              `json:"op"`
-	Request    string              `json:"request,omitempty"`
-	Time       int64               `json:"time,omitempty"`
-	Withheld   *bool               `json:"withheld,omitempty"`
-	Mode       string              `json:"mode,omitempty"`
-	ReceiptOf  string              `json:"receipt_of,omitempty"`
-	Checkpoint string              `json:"checkpoint,omitempty"`
-	Expect     lifecycleExpectJSON `json:"expect"`
+	Op          string              `json:"op"`
+	Request     string              `json:"request,omitempty"`
+	Time        int64               `json:"time,omitempty"`
+	Withheld    *bool               `json:"withheld,omitempty"`
+	Mode        string              `json:"mode,omitempty"`
+	ReceiptOf   string              `json:"receipt_of,omitempty"`
+	Checkpoint  string              `json:"checkpoint,omitempty"`
+	ReplayEpoch int64               `json:"replay_epoch,omitempty"`
+	LogID       string              `json:"log_id,omitempty"`
+	Expect      lifecycleExpectJSON `json:"expect"`
 }
 
 type lifecycleScenarioJSON struct {
-	Name        string              `json:"name"`
-	Description string              `json:"description"`
-	StartTime   int64               `json:"start_time"`
-	Steps       []lifecycleStepJSON `json:"steps"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	StartTime   int64  `json:"start_time"`
+	// RateAtFinalization selects the reference store's max_rate admission
+	// inside the finalization compare-and-set as both claim and rate store.
+	RateAtFinalization bool                `json:"rate_at_finalization,omitempty"`
+	Steps              []lifecycleStepJSON `json:"steps"`
 }
 
 type lifecycleFile struct {
@@ -56,8 +72,11 @@ type lifecycleFile struct {
 }
 
 func (g *gen) lifecycleRequest(challengeByte byte, streamSeq int64, edit func(*scenario)) (orderingVector, []byte) {
+	return g.lifecycleRequestWithChain(challengeByte, streamSeq, g.chain(chainSpec{}), edit)
+}
+
+func (g *gen) lifecycleRequestWithChain(challengeByte byte, streamSeq int64, certs []ratify.DelegationCertV2, edit func(*scenario)) (orderingVector, []byte) {
 	agent := g.k("agent")
-	certs := g.chain(chainSpec{})
 	session := g.fixtureSessionContext(agent)
 	challenge := defaultChallenge()
 	challenge[0] = challengeByte
@@ -96,8 +115,12 @@ func (g *gen) lifecycleFile() any {
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
 			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class",
-			"recover":                "RecoverInterruptedClaim with the claim's authoritative claim time; expect stage committed (idempotent for the same body) or error_class",
-			"publish":                "drain the outbox for the request's committed outcome. mode ok = reference publisher; signer_failure = the publisher fails and appends nothing (failed=true); corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence",
+			"recover":                "RecoverInterruptedClaim for the request's claim ID: the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
+			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there",
+			"publish":                "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
+			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
+			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
+			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
 			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
@@ -109,16 +132,26 @@ func (g *gen) lifecycleFile() any {
 		f.Requests[name] = v
 		f.Bundles[v.Bundle] = b64(bundle)
 	}
+	nextEpoch := func(s *scenario) {
+		s.epoch = fixtureReplayEpoch + 1
+		s.expected.ReplayEpoch = fixtureReplayEpoch + 1
+	}
 	for _, r := range []struct {
 		name      string
 		challenge byte
 		edit      func(*scenario)
 	}{
-		{"A", 0xa0, nil}, {"B", 0xb0, nil},
+		{"A", 0xa0, nil}, {"B", 0xb0, nil}, {"E2", 0xe2, nextEpoch},
 		{"H", 0xc0, func(s *scenario) { s.evidence[g.k("root").ID] = evidenceBatch(g.object(st["root_next_plus_one"])) }},
 	} {
 		v, bundle := g.lifecycleRequest(r.challenge, 0, r.edit)
 		add(r.name, v, bundle)
+	}
+	// Rate requests: a leaf max_rate of 2 per 60 seconds.
+	rateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 60}}})
+	for i, name := range []string{"R1", "R2", "R3", "R4"} {
+		v, bundle := g.lifecycleRequestWithChain(byte(0x71+i), 0, rateChain, nil)
+		add(name, v, bundle)
 	}
 	// Stream requests share stream_id 0x5a..; S1x reuses S1's challenge with a
 	// different proof (stream_seq 2), so it collides with S1's claim.
@@ -143,9 +176,18 @@ func (g *gen) lifecycleFile() any {
 	publish := func(request, mode string, seq int64) lifecycleStepJSON {
 		e := lifecycleExpectJSON{ReceiptSeq: seq}
 		if mode == "signer_failure" {
-			e = lifecycleExpectJSON{Failed: true}
+			e = lifecycleExpectJSON{Failed: true, PublishError: "signer_unavailable"}
 		}
 		return lifecycleStepJSON{Op: "publish", Request: request, Mode: mode, Expect: e}
+	}
+	publishFails := func(request, reason string) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "publish", Request: request, Mode: "ok", Expect: lifecycleExpectJSON{Failed: true, PublishError: reason}}
+	}
+	interrupted := func(trust, status, context string) lifecycleExpectJSON {
+		return lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted", TrustAssessment: trust, StatusAssessment: status, ContextAssessment: context}
+	}
+	verifyMode := func(request, mode string, t int64, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "verify", Request: request, Mode: mode, Time: t, Expect: expect}
 	}
 	release := func(request string, expect lifecycleExpectJSON) lifecycleStepJSON {
 		return lifecycleStepJSON{Op: "release", Request: request, Checkpoint: "reference", Expect: expect}
@@ -199,11 +241,54 @@ func (g *gen) lifecycleFile() any {
 		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "in_progress"}),
 		step("recover", "A", lifecycleExpectJSON{ErrorClass: "claim_lease_live"}),
 		setTime(Now+lifecycleLeaseSeconds),
-		step("recover", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}),
-		step("recover", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}),
+		step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
 		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}),
 		publish("A", "ok", 1),
 		release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: Now + lifecycleLeaseSeconds, ReceiptSeq: 1}))
+	sc("head_of_line_blocking", "receipt-log positions are assigned at terminal commit; a later entry cannot publish while an earlier one is pending, and its release stays pending until it publishes in order",
+		step("verify", "A", committedAllow), step("verify", "B", committedAllow),
+		publishFails("B", "head_of_line_blocked"), release("B", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "receipt_not_appended"}),
+		publish("A", "ok", 1), publish("B", "ok", 2), release("B", released(Now, 2)), release("A", released(Now, 1)))
+	sc("receipt_abandoned", "abandoning the log marks every committed claim whose receipt was not appended receipt_abandoned: its release is withheld, an exact retry fails before claim with receipt_abandoned, and the frozen log publishes nothing; a receipt appended before abandonment still releases",
+		step("verify", "A", committedAllow), step("verify", "B", committedAllow), publish("A", "ok", 1),
+		lifecycleStepJSON{Op: "abandon", Expect: lifecycleExpectJSON{Abandoned: []string{"B"}}},
+		release("B", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "receipt_abandoned"}),
+		step("verify", "B", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "receipt_abandoned"}),
+		publishFails("B", "log_frozen"), release("A", released(Now, 1)))
+	sc("lease_expires_during_status_then_recovery", "the evaluator lease expires while the status lookup runs: the next progress write is fenced (claim_lease_lost) and nothing is committed; an exact retry sees the claim in progress; recovery commits evaluation_interrupted with trust trusted and context bound retained and the interrupted status lookup unavailable",
+		verifyMode("A", "expire_lease_during_status", Now+lifecycleLeaseSeconds, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "claim_lease_lost"}),
+		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "in_progress"}),
+		step("recover", "A", interrupted("trusted", "unavailable", "bound")),
+		publish("A", "ok", 1),
+		release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: Now + lifecycleLeaseSeconds, ReceiptSeq: 1}))
+	recovered := interrupted("trusted", "unavailable", "bound")
+	sc("late_worker_fenced_after_recovery", "recovery commits evaluation_interrupted while the original evaluator is still in its status lookup; the late evaluator's next write fails with claim_already_terminal and cannot replace the recovered result",
+		verifyMode("A", "recover_during_status", Now+lifecycleLeaseSeconds, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "claim_already_terminal", Recovered: &recovered}),
+		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}),
+		publish("A", "ok", 1),
+		release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: Now + lifecycleLeaseSeconds, ReceiptSeq: 1}))
+	sc("clock_regression_at_claim", "a store clock below the greatest reading already returned creates no claim and consumes nothing (claim_store_unavailable); once the clock recovers the same request claims and commits",
+		step("verify", "A", committedAllow), setTime(Now-1),
+		step("verify", "B", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_store_unavailable"}),
+		setTime(Now), step("verify", "B", committedAllow))
+	sc("clock_regression_during_evaluation", "a store clock that moves below T_claim during evaluation fails the next store write with clock_regressed and commits nothing; recovery after the lease commits evaluation_interrupted",
+		verifyMode("A", "regress_clock_during_status", Now-1, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "clock_regressed"}),
+		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("trusted", "unavailable", "bound")))
+	sc("restore_exact_state", "continuing on an exact copy of the complete store state keeps every claim: an exact retry is a terminal replay and the published receipt still releases",
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		lifecycleStepJSON{Op: "restore", Mode: "exact"},
+		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}), release("A", released(Now, 1)))
+	sc("restore_lost_state_with_epoch_bump", "after a restore that lost claim state, the recovery authority advances the replay epoch: a challenge issued in the earlier epoch fails before claim with stale_replay_epoch, and a challenge of the new epoch claims, commits and releases on the new receipt log",
+		step("verify", "A", committedAllow),
+		lifecycleStepJSON{Op: "restore", Mode: "lost_state_epoch_bump", ReplayEpoch: fixtureReplayEpoch + 1, LogID: "dddddddddddddddddddddddddddddd02"},
+		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stale_replay_epoch"}),
+		step("verify", "E2", committedAllow), publish("E2", "ok", 1), release("E2", released(Now, 1)))
+	sc("rate_admission_at_finalization", "with max_rate admitted inside the finalization compare-and-set, two allows fill a 2-per-60-second counter; the third finalizes once as constraint_denied; a request 60 seconds later is admitted again",
+		step("verify", "R1", committedAllow), step("verify", "R2", committedAllow),
+		step("verify", "R3", lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}),
+		setTime(Now+60), step("verify", "R4", committedAllow))
+	f.Scenarios[len(f.Scenarios)-1].RateAtFinalization = true
 	sc("different_proof_for_claimed_challenge_is_replay", "a second, different proof for an already claimed challenge is rejected before claim without disclosure and does not advance the stream",
 		step("verify", "S1", committedAllow), step("verify", "S1x", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_replay"}),
 		step("verify", "S2", committedAllow))

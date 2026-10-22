@@ -383,6 +383,18 @@ func TestVerificationReceiptV2RejectsMalformedWireAndDecisionTuples(t *testing.T
 			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "trusted", "unavailable", "bound"
 			r.GrantedScope, r.StatusEvidence = []string{}, []StatusEvidenceEntryV2{}
 		}},
+		// SPEC-v2 §6.7: dimensions are independent; a status outcome is kept
+		// while the context outcome was pending, and untrusted is retained.
+		{"interrupted status kept while context was pending", func(r *VerificationReceiptV2) {
+			r.Decision, r.DecisionReason, r.IdentityStatus = "indeterminate", "evaluation_interrupted", "authorization_unverified"
+			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "trusted", "unavailable", "not_evaluated"
+			r.ContextPolicyDigest, r.GrantedScope, r.StatusEvidence = nil, []string{}, []StatusEvidenceEntryV2{}
+		}},
+		{"interrupted after an untrusted trust result", func(r *VerificationReceiptV2) {
+			r.Decision, r.DecisionReason, r.IdentityStatus = "indeterminate", "evaluation_interrupted", "authorization_unverified"
+			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "untrusted", "not_evaluated", "not_evaluated"
+			r.ContextPolicyDigest, r.GrantedScope, r.StatusEvidence = nil, []string{}, []StatusEvidenceEntryV2{}
+		}},
 	}
 	for _, test := range validTuples {
 		t.Run("valid "+test.name, func(t *testing.T) {
@@ -415,10 +427,6 @@ func TestVerificationReceiptV2RejectsMalformedWireAndDecisionTuples(t *testing.T
 			r.GrantedScope, r.StatusEvidence = []string{}, []StatusEvidenceEntryV2{}
 		}},
 		{"not evaluated status carries evidence", "status evidence cannot be present", func(r *VerificationReceiptV2) { r.StatusAssessment = "not_evaluated" }},
-		{"interrupted status before context", "evaluation_interrupted assessment tuple", func(r *VerificationReceiptV2) {
-			r.Decision, r.DecisionReason, r.IdentityStatus, r.StatusAssessment, r.ContextAssessment = "indeterminate", "evaluation_interrupted", "authorization_unverified", "unavailable", "not_evaluated"
-			r.ContextPolicyDigest, r.GrantedScope = nil, []string{}
-		}},
 		{"interrupted after context mismatch", "evaluation_interrupted assessment tuple", func(r *VerificationReceiptV2) {
 			r.Decision, r.DecisionReason, r.IdentityStatus, r.ContextAssessment = "indeterminate", "evaluation_interrupted", "authorization_unverified", "mismatch"
 			r.GrantedScope = []string{}
@@ -507,9 +515,9 @@ func TestVerificationReceiptV2RejectsMalformedWireAndDecisionTuples(t *testing.T
 			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "trusted", "not_evaluated", "not_evaluated"
 			r.ContextPolicyDigest, r.GrantedScope, r.StatusEvidence = nil, []string{}, []StatusEvidenceEntryV2{}
 		}},
-		{"interrupted after trust rejection", "evaluation_interrupted assessment tuple", func(r *VerificationReceiptV2) {
+		{"interrupted untrusted chain reports a status lookup", "evaluation_interrupted assessment tuple", func(r *VerificationReceiptV2) {
 			r.Decision, r.DecisionReason, r.IdentityStatus = "indeterminate", "evaluation_interrupted", "authorization_unverified"
-			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "untrusted", "not_evaluated", "not_evaluated"
+			r.TrustAssessment, r.StatusAssessment, r.ContextAssessment = "untrusted", "unavailable", "not_evaluated"
 			r.ContextPolicyDigest, r.GrantedScope, r.StatusEvidence = nil, []string{}, []StatusEvidenceEntryV2{}
 		}},
 		{"interrupted before trust completed context", "evaluation_interrupted assessment tuple", func(r *VerificationReceiptV2) {

@@ -6,8 +6,10 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -176,6 +178,13 @@ type v2LifecycleExpect struct {
 	AllowHorizon   int64  `json:"allow_horizon"`
 	ReceiptSeq     int64  `json:"receipt_sequence"`
 	Failed         bool   `json:"failed"`
+	PublishError   string `json:"publish_error"`
+
+	TrustAssessment   string             `json:"trust_assessment"`
+	StatusAssessment  string             `json:"status_assessment"`
+	ContextAssessment string             `json:"context_assessment"`
+	Abandoned         []string           `json:"abandoned"`
+	Recovered         *v2LifecycleExpect `json:"recovered"`
 }
 
 type v2LifecycleRequest struct {
@@ -220,18 +229,21 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 		Bundles      map[string]string             `json:"bundles_b64"`
 		Requests     map[string]v2LifecycleRequest `json:"requests"`
 		Scenarios    []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			StartTime   int64  `json:"start_time"`
-			Steps       []struct {
-				Op         string            `json:"op"`
-				Request    string            `json:"request"`
-				Time       int64             `json:"time"`
-				Withheld   *bool             `json:"withheld"`
-				Mode       string            `json:"mode"`
-				ReceiptOf  string            `json:"receipt_of"`
-				Checkpoint string            `json:"checkpoint"`
-				Expect     v2LifecycleExpect `json:"expect"`
+			Name               string `json:"name"`
+			Description        string `json:"description"`
+			StartTime          int64  `json:"start_time"`
+			RateAtFinalization bool   `json:"rate_at_finalization"`
+			Steps              []struct {
+				Op          string            `json:"op"`
+				Request     string            `json:"request"`
+				Time        int64             `json:"time"`
+				Withheld    *bool             `json:"withheld"`
+				Mode        string            `json:"mode"`
+				ReceiptOf   string            `json:"receipt_of"`
+				Checkpoint  string            `json:"checkpoint"`
+				ReplayEpoch int64             `json:"replay_epoch"`
+				LogID       string            `json:"log_id"`
+				Expect      v2LifecycleExpect `json:"expect"`
 			} `json:"steps"`
 		} `json:"scenarios"`
 	}
@@ -248,15 +260,33 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 			}
 			committed := map[string]*ratify.CommittedV2Outcome{}
 			receipts := map[string][]byte{}
-			type heldClaim struct {
-				claim     ratify.V2ChallengeClaim
-				claimedAt int64
-			}
-			claims := map[string]heldClaim{}
+			claimIDs := map[string]string{}
+			requestOf := map[string]string{}
+			var epochOverride int64
 			config := ratify.V2ReleaseConfig{VerifierPublicKey: fx.pub[f.VerifierKey], LogID: f.LogID, ClaimStore: store, Checkpoint: store}
+			claimStore := func() ratify.ClaimStoreV2 {
+				if sc.RateAtFinalization {
+					return store.WithRateAtFinalization()
+				}
+				return store
+			}
+			recoverStep := func(i int, request string, want v2LifecycleExpect) {
+				outcome, err := ratify.RecoverInterruptedClaimV2(ctx, store, claimIDs[request])
+				if want.ErrorClass != "" {
+					if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
+						t.Fatalf("step %d recover: %v (class %s), want %s", i, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("step %d recover: %v", i, err)
+				}
+				checkV2CommittedDecision(t, i, outcome, want)
+				committed[request] = outcome
+			}
 			for i, step := range sc.Steps {
 				want := step.Expect
-				now, _ := store.AuthoritativeTimeV2(ctx)
+				now := store.Now()
 				request := f.Requests[step.Request]
 				switch step.Op {
 				case "set_time":
@@ -267,8 +297,37 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					counts := &v2Counts{}
 					inputs := request.v2OrderingInputs
 					inputs.Now = now
+					if epochOverride != 0 {
+						inputs.ConfiguredReplayEpoch = epochOverride
+					}
 					req, cb, _ := v2BuildVerifyRequest(t, inputs, unb64(t, f.Bundles[request.Bundle]), counts)
-					cb.ClaimStore = store
+					cs := claimStore()
+					cb.ClaimStore = cs
+					if sc.RateAtFinalization {
+						cb.Rate = cs.(ratify.V2RateReservationStore)
+					}
+					claimID, err := ratify.ProtocolClaimIDV2(req.VerifierNamespace, req.ReplayEpoch, req.Expected.Value)
+					if err != nil {
+						t.Fatal(err)
+					}
+					claimIDs[step.Request], requestOf[claimID] = claimID, step.Request
+					if step.Mode != "" {
+						provider, fired := cb.StatusEvidence, false
+						cb.StatusEvidence = func(c context.Context, r ratify.V2StatusEvidenceRequest) (ratify.V2StatusEvidenceBatch, error) {
+							if !fired {
+								fired = true
+								store.SetTime(step.Time)
+								switch step.Mode {
+								case "recover_during_status":
+									recoverStep(i, step.Request, *want.Recovered)
+								case "expire_lease_during_status", "regress_clock_during_status":
+								default:
+									t.Fatalf("unknown verify mode %s", step.Mode)
+								}
+							}
+							return provider(c, r)
+						}
+					}
 					outcome, _ := ratify.VerifyProofBundleV2(ctx, req, cb)
 					if string(outcome.Stage) != want.Stage || string(outcome.ErrorClass) != want.ErrorClass || want.Disposition != "" && string(outcome.Disposition) != want.Disposition {
 						t.Fatalf("step %d verify %s: stage %s class %s disposition %s (%v), want %+v", i, step.Request, outcome.Stage, outcome.ErrorClass, outcome.Disposition, outcome.Error, want)
@@ -287,34 +346,27 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					claim, disposition, _, err := ratify.ClaimProofBundleV2(ctx, store, bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
+					claim, disposition, _, err := ratify.ClaimProofBundleV2(ctx, claimStore(), bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
 					if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass || string(disposition) != want.Disposition {
 						t.Fatalf("step %d claim_only: disposition %s err %v, want %+v", i, disposition, err, want)
 					}
-					claims[step.Request] = heldClaim{claim: claim, claimedAt: now}
+					claimIDs[step.Request], requestOf[claim.ClaimID] = claim.ClaimID, step.Request
 				case "recover":
-					held := claims[step.Request]
-					outcome, err := ratify.RecoverInterruptedClaimV2(ctx, store, held.claim, held.claimedAt)
-					if want.ErrorClass != "" {
-						if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
-							t.Fatalf("step %d recover: %v (class %s), want %s", i, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
-						}
-						continue
-					}
-					if err != nil {
-						t.Fatalf("step %d recover: %v", i, err)
-					}
-					checkV2CommittedDecision(t, i, outcome, want)
-					committed[step.Request] = outcome
+					recoverStep(i, step.Request, want)
 				case "publish":
 					c := committed[step.Request]
 					if step.Mode == "signer_failure" {
-						if !want.Failed {
-							t.Fatal("signer_failure must expect failed")
+						store.SetSignerFailure(true)
+					}
+					wire, err := store.PublishV2Receipt(ctx, c.ClaimID(), c.ReceiptBody())
+					store.SetSignerFailure(false)
+					if want.Failed {
+						reasons := map[string]error{"head_of_line_blocked": v2reference.ErrHeadOfLineBlocked, "signer_unavailable": v2reference.ErrSignerUnavailable, "log_frozen": v2reference.ErrLogFrozen}
+						if wire != nil || !errors.Is(err, reasons[want.PublishError]) {
+							t.Fatalf("step %d publish: %v, want failure %s", i, err, want.PublishError)
 						}
 						continue
 					}
-					wire, err := store.PublishV2Receipt(ctx, c.ClaimID(), c.ReceiptBody())
 					if err != nil {
 						t.Fatalf("step %d publish: %v", i, err)
 					}
@@ -329,6 +381,28 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 						}
 					}
 					receipts[step.Request] = wire
+				case "abandon":
+					got := []string{}
+					for _, id := range store.AbandonPendingReceipts() {
+						got = append(got, requestOf[id])
+					}
+					if !slices.Equal(got, want.Abandoned) {
+						t.Fatalf("step %d abandon: %v, want %v", i, got, want.Abandoned)
+					}
+				case "restore":
+					switch step.Mode {
+					case "exact":
+						store = store.Clone()
+					case "lost_state_epoch_bump":
+						if store, err = v2reference.NewStore(now, f.LeaseSeconds, step.LogID, fx.priv[f.VerifierKey]); err != nil {
+							t.Fatal(err)
+						}
+						epochOverride = step.ReplayEpoch
+						config.LogID = step.LogID
+					default:
+						t.Fatalf("unknown restore mode %s", step.Mode)
+					}
+					config.ClaimStore, config.Checkpoint = store, store
 				case "release", "release_forged":
 					c := committed[step.Request]
 					receipt := receipts[step.Request]
@@ -370,6 +444,11 @@ func checkV2CommittedDecision(t *testing.T, step int, c *ratify.CommittedV2Outco
 	body, err := ratify.DecodeVerificationReceiptBodyV2(c.ReceiptBody())
 	if err != nil || body.Decision != want.Decision || body.DecisionReason != want.DecisionReason {
 		t.Fatalf("step %d committed %v (%v), want %s/%s", step, body, err, want.Decision, want.DecisionReason)
+	}
+	if want.TrustAssessment != "" && body.TrustAssessment != want.TrustAssessment || want.StatusAssessment != "" && body.StatusAssessment != want.StatusAssessment ||
+		want.ContextAssessment != "" && body.ContextAssessment != want.ContextAssessment {
+		t.Fatalf("step %d committed assessments %s/%s/%s, want %s/%s/%s", step, body.TrustAssessment, body.StatusAssessment, body.ContextAssessment,
+			want.TrustAssessment, want.StatusAssessment, want.ContextAssessment)
 	}
 	horizon, _ := c.AllowHorizon()
 	if horizon != want.AllowHorizon {
@@ -421,11 +500,11 @@ func TestV2CancellationAfterClaimLeavesClaimRecoverable(t *testing.T) {
 	if retry.Stage != ratify.V2StageReplay || retry.Disposition != ratify.V2ClaimInProgress {
 		t.Fatalf("retry after cancellation: %s/%s", retry.Stage, retry.Disposition)
 	}
-	if _, err := ratify.RecoverInterruptedClaimV2(context.Background(), store, outcome.Claim, start); ratify.V2ErrorClassOf(err) != ratify.V2ErrClaimLeaseLive {
+	if _, err := ratify.RecoverInterruptedClaimV2(context.Background(), store, outcome.Claim.ClaimID); ratify.V2ErrorClassOf(err) != ratify.V2ErrClaimLeaseLive {
 		t.Fatalf("recovery during a live lease: %v", err)
 	}
 	store.SetTime(start + f.LeaseSeconds)
-	committed, err := ratify.RecoverInterruptedClaimV2(context.Background(), store, outcome.Claim, start)
+	committed, err := ratify.RecoverInterruptedClaimV2(context.Background(), store, outcome.Claim.ClaimID)
 	if err != nil {
 		t.Fatal(err)
 	}

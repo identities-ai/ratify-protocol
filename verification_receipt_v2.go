@@ -304,7 +304,11 @@ func validateReceiptDecisionV2(r *VerificationReceiptV2) error {
 			return fmt.Errorf("wire v2: action_context_unverified assessment tuple is invalid")
 		}
 	case "evaluation_interrupted":
-		if r.TrustAssessment == "untrusted" || r.StatusAssessment == "revoked" || r.StatusAssessment == "stale" || r.ContextAssessment == "unbound" || r.ContextAssessment == "unverified" || r.ContextAssessment == "mismatch" || r.TrustAssessment == "not_evaluated" && (r.StatusAssessment != "not_evaluated" || r.ContextAssessment != "not_evaluated") || r.TrustAssessment == "unavailable" && (r.StatusAssessment != "not_evaluated" || r.ContextAssessment != "not_evaluated") || r.TrustAssessment == "trusted" && r.StatusAssessment != "not_evaluated" && r.StatusAssessment != "unavailable" && r.StatusAssessment != "current" || r.ContextAssessment == "not_evaluated" && r.StatusAssessment != "not_evaluated" || (r.StatusAssessment == "unavailable" || r.StatusAssessment == "current") && (r.TrustAssessment != "trusted" || r.ContextAssessment != "bound" && r.ContextAssessment != "not_required") {
+		// Each dimension is independent (SPEC-v2 §6.7): trust keeps its last
+		// state; status and context exist only under a trusted root; context
+		// is recorded only when it completed as bound or not_required.
+		if r.ContextAssessment != "not_evaluated" && r.ContextAssessment != "bound" && r.ContextAssessment != "not_required" ||
+			r.TrustAssessment != "trusted" && (r.StatusAssessment != "not_evaluated" || r.ContextAssessment != "not_evaluated") {
 			return fmt.Errorf("wire v2: evaluation_interrupted assessment tuple is invalid")
 		}
 	default:

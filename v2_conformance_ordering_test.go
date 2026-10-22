@@ -35,6 +35,7 @@ type v2Counts struct {
 	Audience        int `json:"audience"`
 	Rate            int `json:"rate"`
 	Finalize        int `json:"finalize"`
+	Progress        int `json:"progress"`
 }
 
 type v2Rate struct {
@@ -168,14 +169,17 @@ type v2ScriptedClaimStore struct {
 	finalizationAt int64
 	counts         *v2Counts
 	finalBody      []byte
+	expiresAt      int64
+	progress       ratify.V2EvaluationProgress
 }
 
 func (s *v2ScriptedClaimStore) AuthoritativeTimeV2(context.Context) (int64, error) {
 	return s.finalizationAt, nil
 }
 
-func (s *v2ScriptedClaimStore) ClaimV2(_ context.Context, _ ratify.V2ChallengeClaim) (ratify.V2ClaimResult, error) {
+func (s *v2ScriptedClaimStore) ClaimV2(_ context.Context, claim ratify.V2ChallengeClaim) (ratify.V2ClaimResult, error) {
 	s.counts.Claim++
+	s.expiresAt = claim.ExpiresAt
 	switch s.mode {
 	case "create":
 		return ratify.V2ClaimResult{Disposition: ratify.V2ClaimCreated, ClaimedAt: s.claimedAt, OwnerToken: bytes.Repeat([]byte{7}, 32)}, nil
@@ -189,14 +193,34 @@ func (s *v2ScriptedClaimStore) ClaimV2(_ context.Context, _ ratify.V2ChallengeCl
 	return ratify.V2ClaimResult{}, fmt.Errorf("scripted claim store unavailable")
 }
 
-func (s *v2ScriptedClaimStore) FinalizeV2Claim(_ context.Context, _ string, _ []byte, _ []byte, receiptBody []byte, _ int64) (bool, error) {
+// FinalizeV2Claim applies the claim-store side of SPEC-v2 §7.2: T_final is
+// the scripted finalization reading, a reading below T_claim is
+// clock_regressed, and an allow commits only while T_final is before both
+// its horizon and the challenge expiry.
+func (s *v2ScriptedClaimStore) FinalizeV2Claim(_ context.Context, _ string, _ []byte, _ []byte, receiptBody []byte, allowValidUntil int64) (bool, error) {
 	s.counts.Finalize++
+	if s.finalizationAt < s.claimedAt {
+		return false, &ratify.V2Error{Class: ratify.V2ErrClockRegressed, Err: fmt.Errorf("scripted finalization clock regressed")}
+	}
+	if allowValidUntil > 0 && (s.finalizationAt >= allowValidUntil || s.finalizationAt >= s.expiresAt) {
+		return false, &ratify.V2Error{Class: ratify.V2ErrAllowHorizonPassed, Err: fmt.Errorf("scripted allow at or beyond its deadline")}
+	}
 	s.finalBody = bytes.Clone(receiptBody)
 	return true, nil
 }
 
 func (s *v2ScriptedClaimStore) RecoverInterruptedV2Claim(context.Context, string, []byte, []byte) (bool, error) {
 	return false, fmt.Errorf("not used by ordering vectors")
+}
+
+func (s *v2ScriptedClaimStore) RecordV2EvaluationProgress(_ context.Context, _ string, _ []byte, progress ratify.V2EvaluationProgress) error {
+	s.counts.Progress++
+	s.progress = progress
+	return nil
+}
+
+func (s *v2ScriptedClaimStore) LoadV2InterruptedClaim(context.Context, string) (ratify.V2InterruptedClaim, error) {
+	return ratify.V2InterruptedClaim{}, fmt.Errorf("not used by ordering vectors")
 }
 
 type v2ScriptedRateStore struct {

@@ -24,6 +24,7 @@ type recordingClaimStoreV2 struct {
 	finalizeDigest        [32]byte
 	ambiguousFinalize     bool
 	mutateFinalizeBuffers bool
+	progress              []V2EvaluationProgress
 }
 
 func int64PtrV2Test(value int64) *int64 { return &value }
@@ -180,6 +181,19 @@ func (s *recordingClaimStoreV2) FinalizeV2Claim(_ context.Context, _ string, own
 
 func (*recordingClaimStoreV2) RecoverInterruptedV2Claim(context.Context, string, []byte, []byte) (bool, error) {
 	return true, nil
+}
+
+func (s *recordingClaimStoreV2) RecordV2EvaluationProgress(_ context.Context, _ string, _ []byte, progress V2EvaluationProgress) error {
+	s.progress = append(s.progress, progress)
+	return nil
+}
+
+func (s *recordingClaimStoreV2) LoadV2InterruptedClaim(context.Context, string) (V2InterruptedClaim, error) {
+	progress := InitialV2EvaluationProgress()
+	if len(s.progress) != 0 {
+		progress = s.progress[len(s.progress)-1]
+	}
+	return V2InterruptedClaim{Claim: s.claim, ClaimedAt: s.claim.IssuedAt, Progress: progress}, nil
 }
 
 func TestClaimProofBundleV2RevalidatesAndPassesSealedClaim(t *testing.T) {

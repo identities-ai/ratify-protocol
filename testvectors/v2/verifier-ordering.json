@@ -8,11 +8,12 @@
     "callback_counts.audience": "number of audience-provider invocations",
     "callback_counts.claim": "number of atomic claim attempts",
     "callback_counts.finalize": "number of terminal finalize calls",
+    "callback_counts.progress": "number of evaluation-progress writes to the claim store (SPEC-v2 §7.5): before trust resolution starts, after it completes, and after the status stage completes",
     "callback_counts.rate": "number of rate-batch reservations",
     "callback_counts.receiver_binding": "number of application hook invocations",
     "callback_counts.status": "number of status-provider invocations (one per issuer whose binding, anchoring and role checks passed)",
     "callback_counts.trust": "number of trust-provider invocations",
-    "claim_store": "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The authoritative clock read at finalization returns now + claim_time_offset + finalize_time_offset",
+    "claim_store": "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final \u003c T_claim fails with clock_regressed, and an allow commits only while T_final \u003c its allow horizon and T_final \u003c the challenge expiry, else allow_horizon_passed; either failure commits nothing",
     "configuration": "now, max_challenge_age_seconds, future_skew_seconds, status_policy and status_keys are validated against SPEC-v2 §2.5 bounds before the bundle is decoded",
     "journal": "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
     "rate": "absent = no rate store; reserve = batch reserved; exceeded = definitive capacity exhaustion; unavailable = store error; panic = the store panics",
@@ -187,7 +188,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -311,7 +313,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -435,7 +438,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -559,7 +563,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -683,7 +688,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -807,7 +813,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -931,7 +938,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1055,7 +1063,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1179,7 +1188,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1303,7 +1313,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1427,7 +1438,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1551,7 +1563,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1675,7 +1688,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1792,7 +1806,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -1902,7 +1917,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2026,7 +2042,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2150,7 +2167,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2274,7 +2292,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2398,7 +2417,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2522,7 +2542,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2646,7 +2667,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2770,7 +2792,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -2894,7 +2917,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3018,7 +3042,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3142,7 +3167,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3266,7 +3292,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3390,7 +3417,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3514,7 +3542,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3638,7 +3667,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3762,7 +3792,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -3886,7 +3917,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4010,7 +4042,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4134,7 +4167,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4258,7 +4292,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4382,7 +4417,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4506,7 +4542,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4630,7 +4667,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4754,7 +4792,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -4878,7 +4917,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -5002,7 +5042,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 0,
+          "progress": 0
         }
       }
     },
@@ -5155,7 +5196,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -5301,7 +5343,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -5406,7 +5449,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 0
         }
       }
     },
@@ -5533,7 +5577,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -5664,7 +5709,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -5788,7 +5834,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -5915,7 +5962,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6041,7 +6089,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6167,7 +6216,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6298,7 +6348,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6429,7 +6480,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6560,7 +6612,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6691,7 +6744,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6822,7 +6876,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -6953,7 +7008,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -7084,7 +7140,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 2
         }
       }
     },
@@ -7232,7 +7289,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -7380,7 +7438,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -7533,7 +7592,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -7686,7 +7746,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -7822,7 +7883,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -7970,7 +8032,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8108,7 +8171,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8258,7 +8322,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8394,7 +8459,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8535,7 +8601,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8671,7 +8738,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8807,7 +8875,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -8952,7 +9021,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -9097,7 +9167,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -9494,7 +9565,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -9635,7 +9707,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -9768,7 +9841,8 @@
           "status": 1,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -9900,7 +9974,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10032,7 +10107,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10164,7 +10240,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10296,7 +10373,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10428,7 +10506,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10578,7 +10657,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10731,7 +10811,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -10881,7 +10962,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11012,7 +11094,8 @@
           "status": 0,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 0
         }
       }
     },
@@ -11136,7 +11219,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11260,7 +11344,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 0
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11413,7 +11498,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11547,7 +11633,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11681,7 +11768,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11832,7 +11920,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -11980,7 +12069,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12128,7 +12218,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12279,7 +12370,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12427,7 +12519,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12575,7 +12668,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12740,7 +12834,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -12905,7 +13000,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13053,7 +13149,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13201,7 +13298,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13349,7 +13447,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13509,7 +13608,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13669,7 +13769,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13829,7 +13930,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -13989,7 +14091,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14149,7 +14252,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14297,7 +14401,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14457,7 +14562,8 @@
           "status": 2,
           "audience": 1,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14615,7 +14721,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14768,7 +14875,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -14921,7 +15029,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15069,7 +15178,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15217,7 +15327,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15365,7 +15476,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15526,7 +15638,8 @@
           "status": 2,
           "audience": 0,
           "rate": 1,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15682,7 +15795,8 @@
           "status": 2,
           "audience": 0,
           "rate": 1,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15838,7 +15952,8 @@
           "status": 2,
           "audience": 0,
           "rate": 1,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -15994,7 +16109,8 @@
           "status": 2,
           "audience": 0,
           "rate": 1,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -16130,7 +16246,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -16278,7 +16395,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -16445,7 +16563,8 @@
           "status": 2,
           "audience": 0,
           "rate": 1,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     },
@@ -16593,7 +16712,8 @@
           "status": 2,
           "audience": 0,
           "rate": 0,
-          "finalize": 1
+          "finalize": 1,
+          "progress": 3
         }
       }
     }

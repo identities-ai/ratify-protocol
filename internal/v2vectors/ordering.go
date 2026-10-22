@@ -98,6 +98,7 @@ type countsJSON struct {
 	Audience        int `json:"audience"`
 	Rate            int `json:"rate"`
 	Finalize        int `json:"finalize"`
+	Progress        int `json:"progress"`
 }
 
 type outcomeJSON struct {
@@ -349,6 +350,21 @@ func (g *gen) finish(s scenario) orderingVector {
 		s.out.ReceiptBodyB64 = b64(must(ratify.VerificationReceiptV2Body(r)))
 		s.out.CallbackCounts.Finalize = 1
 	}
+	// Evaluation-progress writes (SPEC-v2 §7.5): one before trust resolution
+	// starts, one after it completes (also marking a status stage as
+	// started), and one after the status stage completes.
+	switch {
+	case s.out.Stage == "evaluating":
+		s.out.CallbackCounts.Progress = 2
+		if s.out.CallbackCounts.Status > 0 {
+			s.out.CallbackCounts.Progress = 3
+		}
+	case s.out.Stage != "committed", s.out.DecisionReason == "not_delegated", s.out.TrustAssessment == "not_evaluated":
+	case s.out.StatusAssessment == "not_evaluated":
+		s.out.CallbackCounts.Progress = 2
+	default:
+		s.out.CallbackCounts.Progress = 3
+	}
 	return orderingVector{
 		Name: s.name, Description: s.desc, Bundle: bundleName(s.bundle), RequiredScope: s.scope, ExpectedChallenge: s.expected,
 		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, Now: s.now,
@@ -372,7 +388,7 @@ func (g *gen) orderingFile() any {
 			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); evaluating = claim created but nothing committed (error_class says why; lease-expiry recovery commits evaluation_interrupted later); committed = a terminal Protocol result was committed with receipt_body_b64 (not actionable until released)",
 			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, status_policy and status_keys are validated against SPEC-v2 §2.5 bounds before the bundle is decoded",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
-			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The authoritative clock read at finalization returns now + claim_time_offset + finalize_time_offset",
+			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final < T_claim fails with clock_regressed, and an allow commits only while T_final < its allow horizon and T_final < the challenge expiry, else allow_horizon_passed; either failure commits nothing",
 			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics",
 			"status_keys":                      "caller-authenticated status key per issuer_id (epoch and complete public key)",
 			"status_policy":                    "configured status freshness bounds",
@@ -384,6 +400,7 @@ func (g *gen) orderingFile() any {
 			"callback_counts.status":           "number of status-provider invocations (one per issuer whose binding, anchoring and role checks passed)",
 			"callback_counts.claim":            "number of atomic claim attempts",
 			"callback_counts.finalize":         "number of terminal finalize calls",
+			"callback_counts.progress":         "number of evaluation-progress writes to the claim store (SPEC-v2 §7.5): before trust resolution starts, after it completes, and after the status stage completes",
 			"callback_counts.trust":            "number of trust-provider invocations",
 			"callback_counts.audience":         "number of audience-provider invocations",
 			"callback_counts.rate":             "number of rate-batch reservations",
@@ -866,7 +883,9 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 	add(g.terminal("claim_time_outside_challenge_interrupts", "the store's authoritative claim time equals the challenge expiry: evaluation is interrupted before trust, with every assessment not_evaluated", def,
 		indeterminate("evaluation_interrupted", "not_evaluated", "not_evaluated", "not_evaluated", nil, nil, countsJSON{Claim: 1}), func(s *scenario) { s.claimOffset = 290 }))
 	evaluating := func(class string) outcomeJSON {
-		return outcomeJSON{Stage: "evaluating", ErrorClass: class, CallbackCounts: allowCounts}
+		counts := allowCounts
+		counts.Finalize = 1 // the store rejects the compare-and-set itself
+		return outcomeJSON{Stage: "evaluating", ErrorClass: class, CallbackCounts: counts}
 	}
 	add(g.terminal("finalization_clock_regressed", "the finalization reading is earlier than the claim reading: nothing is committed and the claim stays evaluating", def, outcomeJSON{}, func(s *scenario) {
 		s.finOffset = -1

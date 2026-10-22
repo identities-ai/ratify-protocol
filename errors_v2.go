@@ -73,6 +73,9 @@ const (
 	V2ErrClaimLeaseLost       V2ErrorClass = "claim_lease_lost"
 	V2ErrClaimAlreadyTerminal V2ErrorClass = "claim_already_terminal"
 	V2ErrClaimNotFound        V2ErrorClass = "claim_not_found"
+	// V2ErrReceiptAbandoned: an exact retry of a claim whose receipt was
+	// abandoned (SPEC-v2 §7.7); a fresh challenge is required.
+	V2ErrReceiptAbandoned V2ErrorClass = "receipt_abandoned"
 
 	// An allow reached finalization at or after its allow horizon or the
 	// challenge expiry; nothing was committed (SPEC-v2 §7.2, §7.5).

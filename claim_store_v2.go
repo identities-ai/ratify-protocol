@@ -109,13 +109,31 @@ const (
 // lost owner capability. Stores must roll back when they know creation failed
 // before commit.
 // FinalizeV2Claim compares all token bytes against the stored digest without an
-// early exit and performs a state-and-live-lease CAS. Externally anchored stores
-// return success only after a confirmed barrier projects the terminal result.
+// early exit and performs a state-and-live-lease CAS. Inside that same CAS it
+// reads its authoritative clock as T_final and records it with the terminal
+// result (SPEC-v2 §7.2): a reading below the greatest reading the store has
+// returned, or below the claim's T_claim, fails with clock_regressed; a
+// non-zero allowValidUntil (an allow) commits only while T_final <
+// allowValidUntil and T_final < the sealed challenge expiry, else it fails
+// with allow_horizon_passed. Either failure commits nothing and leaves the
+// claim evaluating. Externally anchored stores return success only after a
+// confirmed barrier projects the terminal result.
 // It returns true when it commits the terminal result, false when the same
 // owner already committed the identical result and receipt body, and an error
-// for owner mismatch, a
-// competing terminal result, or a lost lease. The evaluator wrapper permits
-// retry only with the identical result and receipt bytes.
+// for owner mismatch, a competing terminal result, or a lost lease. The
+// evaluator wrapper permits retry only with the identical result and receipt
+// bytes.
+// RecordV2EvaluationProgress persists the evaluator's per-dimension progress
+// (V2EvaluationProgress) under the same owner token and live lease; it fails
+// with claim_lease_lost or claim_already_terminal otherwise. The verifier
+// records progress before every external lookup starts and after it
+// completes, and never calls a provider whose start it could not record.
+// LoadV2InterruptedClaim returns the sealed claim, T_claim and the last
+// recorded progress for lease-expiry recovery. It fails with
+// claim_lease_live while an evaluating claim's lease is live, so the progress
+// it returns can no longer change. For a terminal claim it returns the same
+// record, and RecoverInterruptedV2Claim then accepts only the identical
+// interrupted result (idempotent recovery).
 // RecoverInterruptedV2Claim returns true when it commits the canonical
 // indeterminate/evaluation_interrupted result and false when that same
 // interrupted result and receipt body are already committed. It errors while
@@ -126,14 +144,18 @@ const (
 // returns Created; ClaimV2 returns Created only to the transaction that
 // inserted the row, and exact retries return InProgress until publication.
 // AuthoritativeTimeV2 returns the store's security clock, the same clock that
-// produced ClaimedAt. The verifier reads it again at finalization and at
-// release; a reading earlier than a previous reading for the same claim is a
-// clock regression and fails closed.
+// produced ClaimedAt. The store records the greatest reading it has returned;
+// a reading below it is a clock regression (SPEC-v2 §7.2): ClaimV2 then
+// creates nothing and fails with claim_store_unavailable, FinalizeV2Claim
+// fails with clock_regressed, and AuthoritativeTimeV2 itself fails with
+// clock_regressed, which release reports as withheld/clock_regressed.
 // This interface does not make a memory-only implementation safe for production.
 type ClaimStoreV2 interface {
 	V2AuthoritativeClock
 	ClaimV2(context.Context, V2ChallengeClaim) (V2ClaimResult, error)
 	FinalizeV2Claim(ctx context.Context, claimID string, ownerToken, terminalResult, receiptBody []byte, allowValidUntil int64) (bool, error)
+	RecordV2EvaluationProgress(ctx context.Context, claimID string, ownerToken []byte, progress V2EvaluationProgress) error
+	LoadV2InterruptedClaim(ctx context.Context, claimID string) (V2InterruptedClaim, error)
 	RecoverInterruptedV2Claim(ctx context.Context, claimID string, terminalResult, receiptBody []byte) (bool, error)
 }
 

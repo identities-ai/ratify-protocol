@@ -249,6 +249,9 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	}
 	// 7. Clock.
 	now, err := readV2AuthoritativeTime(ctx, config.ClaimStore)
+	if V2ErrorClassOf(err) == V2ErrClockRegressed {
+		return releaseResultV2(V2ReleaseWithheld, "clock_regressed")
+	}
 	if err != nil {
 		return releaseResultV2(V2ReleasePending, "clock_unavailable")
 	}
@@ -327,66 +330,4 @@ func getV2AcknowledgementSafely(ctx context.Context, checkpoint V2ReceiptCheckpo
 		}
 	}()
 	return checkpoint.GetV2Acknowledgement(ctx, logID, sequence)
-}
-
-// V2EvaluationInterruptedResult builds the canonical terminal result object
-// and receipt outbox body for indeterminate/evaluation_interrupted, as
-// committed by lease-expiry recovery (SPEC-v2 §6.7, §7.5) when no stage
-// progress is known. Every assessment is not_evaluated, granted_scope and
-// status evidence are empty, and the body is bound to the claim's sealed
-// bundle hash, issuers, verifier, agent and required scope. verifiedAt is the
-// claim's authoritative claim time (T_claim).
-func V2EvaluationInterruptedResult(claim V2ChallengeClaim, verifiedAt int64) (terminalResult, receiptBody []byte, err error) {
-	if !validV2Timestamp(verifiedAt) {
-		return nil, nil, v2Errorf(V2ErrConfigurationInvalid, "v2 recovery time is outside the timestamp domain")
-	}
-	issuers := append([]string{}, claim.IssuerIDs...)
-	slices.Sort(issuers)
-	receipt := &VerificationReceiptV2{
-		Version: 2, VerifierID: claim.VerifierID, AgentID: claim.AgentID, BundleHash: claim.BundleHash, IssuerIDs: slices.Compact(issuers),
-		Decision: "indeterminate", DecisionReason: "evaluation_interrupted", IdentityStatus: "authorization_unverified",
-		TrustAssessment: "not_evaluated", StatusAssessment: "not_evaluated", ChallengeAssessment: "current",
-		ContextAssessment: "not_evaluated", VerifiedAt: verifiedAt, RequiredScope: claim.RequiredScope,
-		GrantedScope: []string{}, StatusEvidence: []StatusEvidenceEntryV2{},
-	}
-	receiptBody, err = VerificationReceiptV2Body(receipt)
-	if err != nil {
-		return nil, nil, v2Classify(V2ErrMalformed, err)
-	}
-	terminalResult, err = CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "evaluation_interrupted", "identity_status": "authorization_unverified"})
-	if err != nil {
-		return nil, nil, err
-	}
-	return terminalResult, receiptBody, nil
-}
-
-// RecoverInterruptedClaimV2 commits the canonical evaluation_interrupted
-// result for a claim whose evaluator lease expired and returns the committed
-// (non-actionable) outcome for publication and release. claimedAt is the
-// claim's authoritative claim time, which becomes verified_at. The store
-// rejects recovery while the lease is live or after another terminal result.
-func RecoverInterruptedClaimV2(ctx context.Context, store ClaimStoreV2, claim V2ChallengeClaim, claimedAt int64) (*CommittedV2Outcome, error) {
-	if ctx == nil || store == nil || claim.ClaimID == "" {
-		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 recovery requires a context, claim store and claim")
-	}
-	terminal, body, err := V2EvaluationInterruptedResult(claim, claimedAt)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := recoverV2Safely(ctx, store, claim.ClaimID, terminal, body); err != nil {
-		if V2ErrorClassOf(err) == V2ErrUnclassified {
-			err = v2Classify(V2ErrClaimStoreUnavailable, err)
-		}
-		return nil, err
-	}
-	return newCommittedV2Outcome(claim, body, 0), nil
-}
-
-func recoverV2Safely(ctx context.Context, store ClaimStoreV2, claimID string, terminal, body []byte) (recovered bool, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			recovered, err = false, fmt.Errorf("claim store recovery panicked: %v", r)
-		}
-	}()
-	return store.RecoverInterruptedV2Claim(ctx, claimID, terminal, body)
 }

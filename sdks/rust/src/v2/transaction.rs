@@ -5,7 +5,7 @@ use super::context::V2Context;
 use super::crypto::{
     equal_keys, key_id_v2, lp, sha256, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
-use super::errors::{V2SignError, V2SignResult};
+use super::errors::{V2Error, V2SignError, V2SignResult};
 use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_TRANSACTION_RECEIPT_BYTES_V2};
 use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
@@ -380,8 +380,9 @@ pub fn sign_transaction_receipt_party_v2_with_signer(
     signer: &dyn SignerV2,
 ) -> V2SignResult<TransactionReceiptSignatureV2> {
     let Some(party) = r.parties.iter().find(|p| p.party_id == party_id) else {
-        return Err(V2SignError::KeyBinding(format!(
-            "party {party_id:?} is not listed in the transaction receipt"
+        return Err(V2SignError::InvalidObject(V2Error::new(
+            V2ErrorClass::TransactionPartyMismatch,
+            format!("party {party_id:?} is not listed in the transaction receipt"),
         )));
     };
     let party_public = signer_public_key_v2(signer)?;

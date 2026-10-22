@@ -214,10 +214,16 @@ impl ConstraintEvaluatorRegistryV2 {
 /// RatifyCanonicalJSON({"profile":profile,"type":type})))`.
 pub fn constraint_profile_digest_v2(d: &ConstraintProfileDescriptorV2) -> V2Result<String> {
     if !valid_extension_type_v2(&d.kind) {
-        return plain(format!("v2 constraint profile type {:?} is not a registrable extension type", d.kind));
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            format!("v2 constraint profile type {:?} is not a registrable extension type", d.kind),
+        );
     }
     if !valid_profile_id_v2(&d.profile) {
-        return plain(format!("v2 constraint profile identifier {:?} is invalid", d.profile));
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            format!("v2 constraint profile identifier {:?} is invalid", d.profile),
+        );
     }
     let body = canonical(&CJ::obj(vec![("profile", CJ::s(&d.profile)), ("type", CJ::s(&d.kind))]))?;
     Ok(format!("sha384:{}", hex::encode(sha384(&[PROFILE_DIGEST_LABEL, &body]))))

@@ -1047,7 +1047,9 @@ pub fn transition_revocation_status_epoch_v2(
         next.future_dated_object_observed = false;
         Ok(next)
     })()
-    .classify(V2ErrorClass::ConfigurationInvalid)
+    // SPEC-v2 §2.7: a rejected status-key epoch transition, including reuse
+    // of a current or retired key, is status_object_rejected.
+    .classify(V2ErrorClass::StatusObjectRejected)
 }
 
 fn evidence_entry(

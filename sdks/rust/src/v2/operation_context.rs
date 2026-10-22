@@ -65,7 +65,7 @@ pub fn operation_context_v2_bytes(ctx: &OperationContextV2) -> V2Result<Vec<u8>>
     validate_required_scope_v2(&ctx.required_scope)?;
     if !ctx.payload_digest.is_empty() && ctx.payload_digest.len() != 32 {
         return err(
-            V2ErrorClass::Malformed,
+            V2ErrorClass::ConfigurationInvalid,
             format!("payload digest must be empty or 32 bytes, got {}", ctx.payload_digest.len()),
         );
     }
@@ -89,7 +89,7 @@ pub fn operation_context_v2_hash(ctx: &OperationContextV2) -> V2Result<Vec<u8>> 
 
 /// The session-context v2 preimage in canonical field order.
 pub fn session_context_v2_bytes(inputs: &SessionContextV2Inputs) -> V2Result<Vec<u8>> {
-    let invalid = |m: &str| err(V2ErrorClass::Malformed, m.to_string());
+    let invalid = |m: &str| err(V2ErrorClass::ConfigurationInvalid, m.to_string());
     if !is_key_id(&inputs.verifier_id) {
         return invalid("verifier ID must be 64 lowercase hexadecimal characters");
     }

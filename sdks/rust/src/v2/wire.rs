@@ -5,7 +5,7 @@
 use super::constraints::{validate_v2_constraint_fields, ConstraintV2, CONSTRAINT_RESOURCE_PATH};
 use super::context::V2Context;
 use super::crypto::{equal_keys, key_id_v2, sha384, valid_v2_id, verify_v2_statement, V2ObjectType};
-use super::errors::{err, plain, Classify, V2ErrorClass, V2Result, V2SignError, V2SignResult};
+use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result, V2SignError, V2SignResult};
 use super::json::{canonical, obj, parse_wire, JNode, CJ, JV};
 use super::limits::{
     check_v2_wire_size, valid_v2_timestamp, MAX_DELEGATION_CERT_BYTES_V2, MAX_PROOF_BUNDLE_BYTES_V2,
@@ -653,9 +653,12 @@ pub fn sign_proof_bundle_v2_with_signer(
     let agent_pub = signer_public_key_v2(signer)?;
     let agent_id = key_id_v2(&agent_pub).classify(V2ErrorClass::Malformed)?;
     if bundle.agent_id != agent_id || !equal_keys(&bundle.agent_pub_key, &agent_pub) {
-        return Err(V2SignError::KeyBinding(
-            "v2 agent key does not match proof bundle agent".into(),
-        ));
+        // The Go reference leaves this refusal unclassified, so its signing
+        // default (`malformed`) applies.
+        return Err(V2SignError::InvalidObject(V2Error::new(
+            V2ErrorClass::Malformed,
+            "v2 agent key does not match proof bundle agent",
+        )));
     }
     let mut unsigned = bundle.clone();
     unsigned.challenge_sig = placeholder_signature();
@@ -1008,16 +1011,13 @@ fn check_status_signer(
     bound_status_key: &HybridPublicKey,
     signer: &dyn SignerV2,
 ) -> V2SignResult<HybridPublicKey> {
+    let binding = |m: &str| V2SignError::InvalidObject(V2Error::new(V2ErrorClass::StatusKeyBindingMismatch, m));
     if bound_issuer_id.is_empty() || issuer_id != bound_issuer_id {
-        return Err(V2SignError::KeyBinding(
-            "status object issuer does not match caller-authenticated status-key binding".into(),
-        ));
+        return Err(binding("status object issuer does not match caller-authenticated status-key binding"));
     }
     let derived = signer_public_key_v2(signer)?;
     if !equal_keys(&derived, bound_status_key) {
-        return Err(V2SignError::KeyBinding(
-            "status key does not match caller-authenticated issuer status-key binding".into(),
-        ));
+        return Err(binding("status key does not match caller-authenticated issuer status-key binding"));
     }
     Ok(derived)
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"unicode/utf8"
 )
 
 // CertificateRefV2 is the issuer-scoped certificate reference used for
@@ -327,7 +328,36 @@ func validateV2VerifyConfiguration(req V2VerifyRequest) error {
 	if err := validateV2FreshnessConfiguration(req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds); err != nil {
 		return err
 	}
+	if err := validateV2RequestContext(req.Context); err != nil {
+		return err
+	}
 	return validateV2StatusConfiguration(req.StatusKeys, req.StatusPolicy)
+}
+
+// validateV2RequestContext checks the authenticated request context of
+// SPEC-v2 §5.2 before claim. The amount and currency are supplied together:
+// with HasAmount, requested_amount_micros is 0..2^53-1 and requested_currency
+// is three ASCII A-Z bytes; without it, both must be absent. With
+// HasResource, requested_resource_id and requested_path are valid UTF-8 and
+// the resource ID is at most 512 bytes; without it, both must be absent. A
+// path that is valid UTF-8 but violates the path model stays an
+// evaluation-time constraint_denied. Any violation is configuration_invalid.
+func validateV2RequestContext(c ConstraintContextV2) error {
+	if c.HasAmount {
+		if c.RequestedAmountMicros < 0 || c.RequestedAmountMicros > maxSafeInteger || !validISO4217AlphaV2(c.RequestedCurrency) {
+			return v2Errorf(V2ErrConfigurationInvalid, "v2 request amount must be 0..%d micro-units with a three-letter A-Z currency", maxSafeInteger)
+		}
+	} else if c.RequestedAmountMicros != 0 || c.RequestedCurrency != "" {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 request amount and currency must be supplied together with has_amount")
+	}
+	if c.HasResource {
+		if !utf8.ValidString(c.RequestedResourceID) || !utf8.ValidString(c.RequestedPath) || len(c.RequestedResourceID) > MaxIdentifierLengthBytes {
+			return v2Errorf(V2ErrConfigurationInvalid, "v2 requested resource ID and path must be valid UTF-8 and the resource ID at most %d bytes", MaxIdentifierLengthBytes)
+		}
+	} else if c.RequestedResourceID != "" || c.RequestedPath != "" {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 requested resource ID and path must be supplied with has_resource")
+	}
+	return nil
 }
 
 // validateV2StatusConfiguration checks the caller-authenticated status policy

@@ -149,7 +149,7 @@ func statusEvidenceFromCanonicalV2(values []statusEvidenceCanonicalV2) []StatusE
 }
 
 func validateVerificationReceiptV2(r *VerificationReceiptV2, signature bool) error {
-	if r == nil || r.Version != 2 || len(r.LogID) != 32 || !lowerHexString(r.LogID) || r.Sequence <= 0 || r.Sequence > maxSafeInteger || r.VerifiedAt < -maxSafeInteger || r.VerifiedAt > maxSafeInteger {
+	if r == nil || r.Version != 2 || len(r.LogID) != 32 || !lowerHexString(r.LogID) || r.Sequence <= 0 || r.Sequence > maxSafeInteger || !validV2Timestamp(r.VerifiedAt) {
 		return fmt.Errorf("wire v2: receipt version, log ID, sequence, or verified_at is invalid")
 	}
 	if !validV2ID(r.VerifierID) || r.AgentID != "" && !validV2ID(r.AgentID) {

@@ -89,6 +89,10 @@ func (g *gen) certNegatives(n *negBuilder) {
 	}
 	m("version_3", "version=3", "malformed", func(o map[string]any) { o["version"] = num(3) })
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("issued_at_after_max_timestamp", "issued_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["issued_at"] = num(maxTimestampV2 + 1) })
+	m("issued_at_negative", "issued_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["issued_at"] = num(-1) })
+	m("expires_at_after_max_timestamp", "expires_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["expires_at"] = num(maxTimestampV2 + 1) })
+	m("expires_at_negative", "expires_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["expires_at"] = num(-1) })
 	m("cert_id_changed", "cert_id changed", "invalid_signature", func(o map[string]any) { o["cert_id"] = "cert-root-x" })
 	m("cert_id_empty", "cert_id empty", "malformed", func(o map[string]any) { o["cert_id"] = "" })
 	m("issuer_id_other_key", "issuer_id set to another key's ID", "key_id_mismatch", func(o map[string]any) { o["issuer_id"] = attacker.ID })
@@ -228,6 +232,9 @@ func (g *gen) certNegatives(n *negBuilder) {
 	}
 	n.add("v1_certificate", kind, "complete v1 certificate (version 1, 128-bit IDs)", canon(v1), v, "malformed")
 }
+
+// maxTimestampV2 is 9999-12-31T23:59:59Z, the inclusive v2 timestamp bound (SPEC-v2 §2.5).
+const maxTimestampV2 = ratify.V2MaxTimestampSeconds
 
 func itoa(v int64) string { return num(v).String() }
 

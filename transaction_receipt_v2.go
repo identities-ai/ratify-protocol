@@ -210,7 +210,7 @@ func VerifyTransactionReceiptV2Signatures(receipt *TransactionReceiptV2) error {
 }
 
 func validateTransactionReceiptV2(receipt *TransactionReceiptV2, requireSignatures bool) error {
-	if receipt == nil || receipt.Version != 2 || receipt.TransactionID == "" || receipt.CreatedAt < -maxSafeInteger || receipt.CreatedAt > maxSafeInteger || receipt.TermsSchemaURI == "" || len(receipt.TermsCanonicalJSON) == 0 || len(receipt.Parties) == 0 {
+	if receipt == nil || receipt.Version != 2 || receipt.TransactionID == "" || !validV2Timestamp(receipt.CreatedAt) || receipt.TermsSchemaURI == "" || len(receipt.TermsCanonicalJSON) == 0 || len(receipt.Parties) == 0 {
 		return fmt.Errorf("wire v2: transaction receipt header or terms are invalid")
 	}
 	if len(receipt.Parties) > MaxTransactionParties {

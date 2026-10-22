@@ -467,6 +467,18 @@ func (g *gen) preflightScenarios() []scenario {
 		p.MaxListLifetimeSeconds = 86401
 		s.policy2 = &p
 	}))
+	reqAmount := func(micros int64, currency string) func(*scenario) {
+		return func(s *scenario) {
+			s.reqCtx = &requestContextJSON{HasAmount: true, RequestedAmountMicros: micros, RequestedCurrency: currency}
+		}
+	}
+	add(std("request_amount_negative", "a supplied requested_amount_micros below 0 is configuration_invalid before claim", bundle, "configuration_invalid", reqAmount(-1, "USD")))
+	add(std("request_amount_above_safe_integer", "a supplied requested_amount_micros of 2^53 is configuration_invalid before claim", bundle, "configuration_invalid", reqAmount(1<<53, "USD")))
+	add(std("request_currency_lowercase", "a lowercase requested_currency is configuration_invalid before claim", bundle, "configuration_invalid", reqAmount(1, "usd")))
+	add(std("request_currency_two_letters", "a two-letter requested_currency is configuration_invalid before claim", bundle, "configuration_invalid", reqAmount(1, "US")))
+	add(std("request_amount_without_has_amount", "an amount supplied without has_amount is configuration_invalid: amount and currency are supplied together", bundle, "configuration_invalid", func(s *scenario) {
+		s.reqCtx = &requestContextJSON{RequestedAmountMicros: 5, RequestedCurrency: "USD"}
+	}))
 	add(std("config_now_outside_timestamp_domain", "a verifier time below 0 is configuration_invalid", bundle, "configuration_invalid", func(s *scenario) { s.now = -1 }))
 	futureChallenge := func() []byte {
 		_, w, _ := g.bundle(bundleSpec{agent: agent, certs: certs, session: session, challengeAt: Now + 60})
@@ -599,6 +611,8 @@ func (g *gen) terminalScenarios() []scenario {
 	}
 	add(g.terminal("delegation_lifetime_exceeds_bound", "expires_at - issued_at above 315360000 seconds is proof_invalid", g.chain(chainSpec{leafIssued: Now - 3600, leafExpires: Now - 3600 + 315360001}),
 		deny("proof_invalid", "invalid", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
+	add(g.terminal("delegation_lifetime_at_bound", "expires_at - issued_at exactly 315360000 seconds passes the lifetime check", g.chain(chainSpec{leafIssued: Now - 3600, leafExpires: Now - 3600 + 315360000}),
+		allow(), nil))
 	add(g.terminal("parent_lacks_identity_delegate", "non-root issuer without identity:delegate in its parent certificate", g.chain(chainSpec{rootScope: []string{"data:read", "files:read"}}),
 		deny("delegation_not_authorized", "delegation_not_authorized", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
 	add(g.terminal("delegation_expired", "now >= expires_at for the leaf", g.chain(chainSpec{leafIssued: Now - 7200, leafExpires: Now}),

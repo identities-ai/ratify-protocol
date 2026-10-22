@@ -223,6 +223,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
 6. **Commit (signed-off), push the branch, open the PR.** CI and the DCO check run on the release PR exactly as on any other PR.
+6a. **Complete the draft release notes.** When `docs/releases/<version>.md` exists, its "Evidence (fill in at the tag)" section holds placeholders in angle brackets: `<sha>`, `<re-measure at the tag>`, `<result and date>`, `<records>`, and `<record>`. Replace every one with a result measured on the release branch (per-SDK test counts, the armv7 C ABI run, fuzzing, concurrency and issuer-collision records, and the review closure record), and remove the draft banner, in the release PR. `` grep -nE '`<[a-z][^>]*>`' docs/releases/<version>.md `` must print nothing before the PR merges. The tag commit SHA is known only after the merge: point that line at the GitHub release, and record the SHA in the release body when the tag is pushed.
 
 **Phase 2: `make release-tag` (after the PR merges):**
 
@@ -235,9 +236,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
    - **PyPI:** a v2 tag publishes `ratify-protocol-native-v2` first (`cd sdks/python-native-v2 && maturin sdist --out dist && maturin build --release --out dist && twine upload --skip-existing dist/*`), then `ratify-protocol-v2` (`cd sdks/python-v2 && python -m build && twine upload --skip-existing dist/*`), which pins the extension exactly. The manual path uploads the extension's sdist and this machine's wheel only; the release workflow's native wheel jobs add the other platforms. A v1 tag publishes `ratify-protocol` from `sdks/python` instead.
    - **crates.io:** `cd sdks/rust && cargo publish` publishes `ratify-protocol = "<version>"`.
 10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now; see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
-11. **Update downstream claims.** The docs site (`ratify-docs`) and marketing site (`ratify-marketing`) each carry protocol facts (version, fixture count, scope count, SDK list), centralized in one constants file per repo (`src/constants/protocol.ts` / `lib/protocol-facts.ts`, plus each repo's bump checklist for literals in code snippets). Bump them via a normal PR in each repo as part of release day. `check-release-sync.sh` cannot reach those repos; this step is the manual bridge.
-
-    The two repos behave differently and the difference is deliberate. `ratify-docs` bumps its constants and sweeps literals per its `RELEASE_BUMP.md`. `ratify-marketing` runs `check-facts.mjs`, which fails as soon as a registry moves ahead of the site and forces an explicit choice: re-review the version-dependent claims and move `PROTOCOL_VERSION`, `LATEST_PUBLISHED_ACKNOWLEDGED` and `FACTS_REVIEWED` together, or move the acknowledgement alone to record that the site deliberately keeps stating the older release. Its declared dependency must match the reviewed version rather than the published one, so bumping `package.json` without re-reviewing fails the check by design.
+11. **Update downstream claims.** The documentation site and the project website each carry protocol facts (version, fixture count, scope count, SDK list) that are maintained outside this repository. Update them as part of release day, following each site's own release checklist. `check-release-sync.sh` cannot reach them; this step is the manual bridge.
 
     Stamp the `CHANGELOG.md` heading as `## <version> (unreleased)` **before** running `release-prepare`. That exact string is the only marker the script rewrites; with any other heading it changes nothing and reports success, so the release ships with its notes sitting under `Unreleased`.
 12. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
@@ -354,6 +353,9 @@ Only then do `make release-prepare VERSION=…` and `make release-tag VERSION=�
 # Phase 1: from clean, up-to-date main:
 make release-prepare VERSION=v1.0.0-alpha.12
 #   branch release/v1.0.0-alpha.12 + version bumps + full gate + PR
+# Before the PR merges: fill every placeholder in docs/releases/<version>.md
+# (step 6a); this must print nothing:
+grep -nE '`<[a-z][^>]*>`' docs/releases/v1.0.0-alpha.12.md
 
 # Phase 2: after the release PR merges:
 git checkout main && git pull

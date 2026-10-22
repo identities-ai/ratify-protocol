@@ -462,7 +462,7 @@ Shipped (alpha.10) / planned backward-compatible (alpha.11 docs pass, alpha.12 p
 
 ### Changed — SDK READMEs and registry publishing
 
-- All five SDK READMEs (Go, TypeScript, Python, Rust, C/C++) now include a "What is Ratify Protocol?" introduction, the quantum-safe line, and consistent cross-language interop framing
+- All five SDK READMEs (Go, TypeScript, Python, Rust, C/C++) now include a "What is Ratify Protocol?" introduction, the post-quantum line, and consistent cross-language interop framing
 - All relative links in SDK READMEs replaced with absolute GitHub URLs (broken on npm, PyPI, and crates.io package pages)
 - npm package homepage updated to `docs.identities.ai`
 - npm publishing switched from long-lived `NPM_TOKEN` to OIDC Trusted Publisher — no stored secret required

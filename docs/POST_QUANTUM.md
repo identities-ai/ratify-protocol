@@ -43,7 +43,9 @@ flowchart LR
   VL --> A
   A -->|yes| OK["Accept"]
   A -->|no| NO["Reject"]
-``` Protocol v2 enforces this strictly: there is no fallback
+```
+
+Protocol v2 enforces this strictly: there is no fallback
 to a single algorithm, the signed message is a typed transcript that binds the
 object type and protocol version, and Ed25519 verification rejects
 non-canonical and small-order encodings (see [SPEC-v2](../SPEC-v2.md) §2 and §3).

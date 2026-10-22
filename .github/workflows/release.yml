@@ -1016,12 +1016,12 @@ jobs:
             v2.*)
               go_module="github.com/identities-ai/ratify-protocol/v2"; py_dist="ratify-protocol-v2"
               spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
-              summary="Protocol v2 alpha. V2 uses a separate key ID namespace, wire schemas, and strict dispatch; v1 keys and proofs are never accepted as v2. Shared v2 vectors live in testvectors/v2. At this tag the Go, TypeScript, Python, and Rust SDKs run every testvectors/v2 file, including the stateful VerifyProofBundleV2 ordering, status, log, and rotation vectors. The C ABI verifies v2 key IDs, object decoding, and object signatures against keys.json, objects.json, object-negatives.json, key-rotation-signature.json, and the delegation-signature, operation and session context, and challenge-claim vectors; it does not provide a stateful verifier. This alpha is not a v2 conformance claim; see SPEC-v2.md section 8 and docs/V2_REFERENCE_COMPATIBILITY.md."
+              summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is internal adversarial review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md."
               ;;
             *)
               go_module="github.com/identities-ai/ratify-protocol";    py_dist="ratify-protocol"
               spec_file="SPEC.md"; vectors_dir="testvectors/v1"
-              summary="Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++."
+              summary="Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204) signatures; both must verify. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++."
               ;;
           esac
           {

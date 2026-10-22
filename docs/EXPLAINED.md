@@ -33,15 +33,15 @@ One distinction worth internalizing: that YES is stateless cryptographic verific
 
 ---
 
-## 3. Hybrid Cryptography: Quantum-Safe by Design
+## 3. Hybrid Cryptography
 
-The "harvest now, decrypt later" threat is real. Any authorization proof signed today might be archived by an adversary and forged decades from now if today's cryptographic assumptions fail.
+"Harvest now, decrypt later" is a threat to encrypted data. Ratify signs and does not encrypt, so the corresponding risk is a future forgery: if today's assumptions fail, an adversary could try to forge new authorization proofs.
 
-Ratify defends against this by requiring **hybrid signatures** for every object in the protocol:
+Ratify answers this by requiring **hybrid signatures** for every object in the protocol, in both protocol lines:
 - **Ed25519 (RFC 8032):** High-performance, classical elliptic-curve signatures.
 - **ML-DSA-65 (NIST FIPS 204):** Post-quantum lattice-based signatures.
 
-**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, the ML-DSA-65 signature remains an unforgeable barrier. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still holds the line.
+**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, a forger still has to forge the ML-DSA-65 signature. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still has to be forged. Protocol v2 additionally signs a domain-separated message that names the object type, with a fixed ML-DSA-65 context per type (SPEC-v2 §3).
 
 ---
 
@@ -59,7 +59,7 @@ When the Travel Agent presents the proof to the Airline, the Airline can see the
 ### Resource-bound authority (the `resource_path` constraint)
 Scopes answer *what* an agent may do; the `resource_path` constraint answers *where*. It binds a delegation to one resource (a repository, workspace, channel, or device) named by an opaque `resource_id`, and optionally to a `path_prefix` inside that resource. A scope of `files:write` grants file writes anywhere; `files:write` paired with `resource_path{repo R, /docs}` grants writes only under `/docs` of repository R.
 
-Two properties make it safe to hand down a sub-delegation chain. The `resource_id` is compared **byte-for-byte** (the verifier never fetches, decodes, or normalizes it), and `path_prefix` matches only on **segment boundaries**, so `/src` covers `/src` and `/src/a.ts` but never `/src-old`. Because verification evaluates every cert's constraints conjunctively against the same requested resource, effective authority can stay the same or narrow down the chain but never widen: a child may carry a broader prefix on the same resource and still verify, yet gains nothing because the request must still satisfy every hop upstream, while a child naming a different resource or a same-resource prefix that does not nest makes the chain jointly unsatisfiable and fails closed. Downstream escape is impossible by construction, not by a special rule. `resource_path` is one of the eight canonical constraint types (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`); the verifier receives the requested resource and path through its `VerifierContext`.
+Two properties make it safe to hand down a sub-delegation chain. The `resource_id` is compared **byte-for-byte** (the verifier never fetches, decodes, or normalizes it), and `path_prefix` matches only on **segment boundaries**, so `/src` covers `/src` and `/src/a.ts` but never `/src-old`. Because verification evaluates every cert's constraints conjunctively against the same requested resource, effective authority can stay the same or narrow down the chain but never widen: a child may carry a broader prefix on the same resource and still verify, yet gains nothing because the request must still satisfy every hop upstream, while a child naming a different resource or a same-resource prefix that does not nest makes the chain jointly unsatisfiable and fails closed. Downstream escape is impossible by construction, not by a special rule. In Protocol v1, `resource_path` is one of the eight canonical constraint types (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`), and the verifier receives the requested resource and path through its `VerifierContext`. Protocol v2 has a closed registry of five types (`time_window`, `max_amount` in integer micro-units, `max_rate`, `resource_path`, `ratify.receiver_audience`) plus registered extension evaluator profiles; the geo and speed types are v1-only until Protocol 2.1.
 
 ---
 

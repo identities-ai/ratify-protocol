@@ -3,7 +3,7 @@
 **Companion to [`SPEC.md`](../SPEC.md) and [`SDKS.md`](SDKS.md). Defines how Ratify v1 is validated — from unit tests through external audit, and how every new language SDK proves it is conformant with the reference.**
 
 **Last updated:** 2026-07-31
-**Scope:** Ratify Protocol v1 (hybrid Ed25519 + ML-DSA-65 delegation, JSON wire format)
+**Scope:** Ratify Protocol v1 (hybrid Ed25519 + ML-DSA-65 delegation, JSON wire format). The geo, speed and SessionToken fixtures below are v1-only until Protocol 2.1. Protocol v2 validation (the `testvectors/v2` corpus, fuzzing, concurrency, cross-SDK fixtures and the `examples/v2` output checks) is defined in SPEC-v2 §8 and recorded in [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md).
 
 ---
 

@@ -1,4 +1,6 @@
-# Ratify Protocol v1 — Verifier Benchmarks
+# Ratify Protocol v1 verifier benchmarks
+
+> **Protocol line:** every number in this document measures Protocol v1 ([`SPEC.md`](../SPEC.md)). Protocol v2 adds a claim, a signed receipt and a release step to each decision; v2 benchmarks for verify plus release have not been published yet. The SessionToken fast path and the geo and speed constraints measured here are v1-only until Protocol 2.1.
 
 Committed numbers backing the performance claims in protocol documentation — including the per-SDK verify-latency matrix and the wire-size table. The headline "under a millisecond" claim is about the compiled verifiers (Go, Rust, C); the per-SDK matrix below states what every SDK actually measures. Re-run the Go baseline with:
 
@@ -37,7 +39,7 @@ Verification exercises the full §4 trust equation: structural checks, agent bin
 
 - **"Under a millisecond"** — holds at every chain depth measured (1 through 3) for the Go reference verifier; the worst case exercised — depth-3 — is ~0.83 ms on an M2 Pro. The protocol ceiling is `MAX_DELEGATION_CHAIN_DEPTH` = 8 as of the v1.0.0-alpha.16 specification; depths 4 through 8 are not yet measured, and per-cert scaling (~220 µs per level, below) suggests depth-8 verification lands around ~1.9 ms on the same hardware — a projection, not a measurement, until the depth-8 benchmarks run with the alpha.16 implementation. Other SDKs differ; see the per-SDK matrix below.
 - **Dominant cost**: ML-DSA-65 verify, which is a post-quantum lattice-based scheme. Each cert in the chain adds ~220 µs (392 → 614 → 832 µs across depths 1/2/3). ML-DSA-65 verification itself is ~180 µs of that; the remainder is per-cert scope validation, canonicalization, and chain checks.
-- **Constraint cost is negligible**: geo_circle (haversine + radius check) adds ~1 µs. The test set covers geo / time / amount / speed / rate; none move the needle at these depths.
+- **Constraint cost is negligible** (v1 constraint set): geo_circle (haversine + radius check) adds ~1 µs. The test set covers geo / time / amount / speed / rate; none move the needle at these depths.
 - **Allocations** scale linearly with chain depth: ~198 allocations and ~55 kB of transient heap per extra cert (197/395/592 allocs at depths 1/2/3). An allocation profile of `BenchmarkVerifyDepth1` attributes ~73% of allocated bytes to ML-DSA-65 public-key unpacking inside the signature library, and essentially all of the remainder to the canonical-JSON encode/decode path for the signable structs. A lower-allocation canonical path is a v1.1 candidate but not a launch blocker.
 
 ## Per-SDK verify latency
@@ -73,7 +75,9 @@ Hybrid signatures are big — ML-DSA-65 signatures are 3 309 bytes and public ke
 
 The practical consequence: a full proof bundle is a per-session artifact, not a per-message one. A streamed turn under the §5.13 presentation shape carries the SessionToken plus the fresh challenge, timestamp, and hybrid signature — ~7.6 kB before envelope overhead — versus ~17.6–37.9 kB for a full bundle: roughly 2.3× smaller than a depth-1 bundle and ~5× smaller than depth-3. (A deployment that caches tokens server-side and keys turns by a compact session handle can shrink the per-turn payload to the ~4.6 kB challenge/signature portion, but that cache is an out-of-band integration choice, not the §5.13 presentation shape.)
 
-## Session tokens are the default for repeated interactions
+## Session tokens are the default for repeated v1 interactions
+
+This section applies to Protocol v1. Protocol v2 has no session token until 2.1.
 
 A full chain verification per turn is the wrong integration shape for anything conversational — voice calls, streams, multi-turn agent sessions. The intended pattern (§5.13) is: verify the full `ProofBundle` once at session start, issue a `SessionToken`, then verify each subsequent turn against the token — an HMAC check plus ONE fresh hybrid challenge-signature verification, instead of the N+1 hybrid verifications of a full depth-N verify. That is a 50% signature-count reduction at depth 1 and 75% at depth 3; measured end-to-end, a streamed turn is 0.21 ms in Go (vs 0.39/0.83 ms full at depth 1/3) and 4.6 ms in TypeScript (vs 7.4/14.9 ms full). The per-turn wire footprint is ~7.6 kB (token + challenge signature) versus ~17.6–37.9 kB for a bundle — roughly 2.3–5× smaller depending on depth. Since alpha.15, the streamed-turn verifier enforces required scope, single-use challenges, and session/stream bindings on that fast path (§5.13), so choosing it does not mean giving up verification controls. Treat per-turn full-chain verification as the special case (high-stakes actions that demand fresh revocation semantics via full `Verify` + `ForceRevocationCheck`), not the default.
 

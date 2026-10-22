@@ -2,7 +2,7 @@
 
 **Where Ratify Protocol reference implementations live, which languages are coming next, and exactly what any new implementation must pass to be considered conformant.**
 
-This document is for language SDK authors, external contributors, and anyone planning to ship a Ratify implementation. For the protocol itself see [`SPEC.md`](../SPEC.md). For testing methodology see [`TEST_PLAN.md`](TEST_PLAN.md).
+This document is for language SDK authors, external contributors, and anyone planning to ship a Ratify implementation. It describes the Protocol v1 conformance contract (including the v1-only SessionToken surface). The Protocol v2 contract is every file in [`testvectors/v2/`](../testvectors/v2/README.md) plus the cross-SDK fixtures (SPEC-v2 §8), recorded per SDK in [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md). For the protocol itself see [`SPEC.md`](../SPEC.md). For testing methodology see [`TEST_PLAN.md`](TEST_PLAN.md).
 
 ---
 

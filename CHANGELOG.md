@@ -6,6 +6,110 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v2.0.0-beta.1 (unreleased)
+
+The first beta of Protocol v2 ([`SPEC-v2.md`](SPEC-v2.md)), a breaking,
+separately versioned protocol line. It freezes the v2 wire format and SDK API
+in Go, TypeScript, Python, Rust and C. Protocol v1 is unchanged and remains
+available; its released tags and artifacts are not moved or replaced. Upgrade
+guide: [`docs/PROTOCOL_V2_MIGRATION.md`](docs/PROTOCOL_V2_MIGRATION.md).
+
+**Review status.** This is a prerelease. Review so far is internal
+adversarial review of the specification, the shared vectors and every SDK.
+External independent review has not happened; releasing the beta without it
+is an accepted risk (SPEC-v2 §8.1). External review, interoperability with an
+implementation outside this repository, and a soak are gates for `2.0.0`
+(SPEC-v2 §8.2). No v2 release carries a production security claim yet.
+
+### Breaking (relative to Protocol v1)
+
+- **Not backward compatible.** New signed bytes, key IDs, challenge signing,
+  status references and verifier ordering. A v2 verifier rejects v1 objects
+  and never falls back; migration is a clean re-enrollment with fresh v2 keys
+  and new delegations.
+- **Signing transcript.** Ed25519 and ML-DSA-65 sign
+  `M = "ratify-protocol-signature" || 0x00 || 0x02 || uint16_be(type_code) || SHA-384(signable)`,
+  with the ML-DSA-65 context `ratify-protocol/2/<type_code>`. Both signatures
+  must verify.
+- **Key IDs** are the full 256-bit `key_id_v2` (64 hex characters), and trust
+  is pinned to complete public keys.
+- **Integers only.** No floating-point value anywhere on the wire; amounts use
+  `max_amount_micros`.
+- **Finite expiry.** Every delegation has a real `expires_at`, at most
+  315360000 seconds after `issued_at`.
+
+### Added
+
+- **Verify, then release.** `VerifyProofBundleV2` commits a terminal result
+  and a receipt body that are not actionable; `ReleaseV2Decision` returns the
+  only actionable decision after the signed receipt is appended and
+  acknowledged by an independent checkpoint and the exclusive deadlines are
+  still current.
+- **Signed status** under a role-separated status key, applied through the
+  anchored `SecurityJournalV2`, and a minimal status publisher (genesis,
+  heartbeat, revoke) in every SDK.
+- **Verification receipts** for every terminal result in a hash-chained log
+  with checkpoint acknowledgements.
+- **Challenge issuance helper** that persists each challenge before it is
+  returned, and atomic challenge claims with replay epochs.
+- **Exact `custom:` required scopes:** one exact `custom:<name>`, listed by
+  every certificate in the chain; `custom:*` is invalid.
+- **Extension evaluator profiles** in a caller-authenticated registry, with
+  the standard `com.ratifyprotocol.max_count/v1` and
+  `com.ratifyprotocol.allowed_values/v1`; the profiles a chain uses are
+  signed into the receipt as `constraint_evaluators`.
+- **A closed constraint registry:** `time_window` (pinned IANA tzdata
+  `2025c`), `max_amount`, `max_rate`, `resource_path`,
+  `ratify.receiver_audience`.
+- **Typed signers only,** and an external signer interface (direct or
+  external-mu mode) whose returned signatures are verified before use.
+- **Wire limits** checked before parsing, and a closed table of 49 error
+  classes.
+- **Deployment profiles:** single-device offline (§7.13), dual-root
+  composition (§7.14), middleware custody (§7.15).
+- v2 rotation statements, witness entries, transaction receipts with
+  composed verification, and archival verification (never actionable).
+- **Shared corpus** `testvectors/v2` (22 vector files plus cross-SDK
+  fixtures), run in full by every SDK, with every SDK verifying the fixtures
+  every other SDK produces.
+- **Runnable examples** in [`examples/v2/`](examples/v2/) for all five
+  languages (quickstart, signed status, custom scope with `max_count/v1`,
+  external signer), with identical output checked in CI. They use the
+  test-only in-memory reference stores.
+
+### Not carried into v2
+
+The no-expiry sentinel, an empty required scope, floating-point constraint
+values, the identity enrollment objects, the `PolicyProvider`,
+`AuditProvider` and `PolicyVerdict` hooks, `AnchorResolver` inside
+verification, unsigned or boolean revocation inputs and
+`ForceRevocationCheck`, and self-issued live challenges.
+
+### v1-only until 2.1
+
+The SessionToken fast path, the A2A mutual presentation profile, the HTTP and
+registry bindings, and the geo and speed constraints have no v2.0
+equivalent. They are planned for Protocol 2.1, together with activation
+constraints; until then, claims that depend on them are v1 claims.
+
+### Packages
+
+| SDK | Package |
+| --- | --- |
+| Go | module `github.com/identities-ai/ratify-protocol/v2` |
+| TypeScript | `@identities-ai/ratify-protocol` 2.x, dist-tag `next` (`latest` stays on v1 until `2.0.0`) |
+| Python | `ratify-protocol-v2` (import `ratify_protocol_v2`) with the required signing backend `ratify-protocol-native-v2` |
+| Rust | crate `ratify-protocol` 2.x, module `ratify_protocol::v2` |
+| C/C++ | `ratify-c` 2.x, `ratify_v2_*` ABI with `ratify_v2_abi_version()` |
+
+### Known limits
+
+- The in-memory reference stores are for tests and examples only; production
+  needs durable Part B stores and an independent checkpoint.
+- The external signer interface makes no claim about any particular KMS or
+  HSM.
+- Embedded v2 targets other than armv7 Linux are untested.
+
 ## v1.0.0-alpha.20 (2026-09-01)
 
 Completes the C SDK's context-binding surface. No canonical bytes, fixture

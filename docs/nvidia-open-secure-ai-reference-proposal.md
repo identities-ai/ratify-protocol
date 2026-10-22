@@ -391,7 +391,9 @@ Ratify's HMAC `PolicyVerdict` may be relevant as a cached fast path, but calling
 
 ## 21. Physical-AI extension, future work
 
-The protocol's constraint vocabulary includes geofences (`geo_circle`, `geo_polygon`, `geo_bbox`) and kinematic bounds (`max_speed_mps`) alongside the monetary and rate bounds used here, evaluated by the same verifier against a caller-supplied context. The same receiver-side pattern therefore extends to an actuation boundary on Jetson or IGX: a principal delegates bounded authority to a robot or drone control agent, and the actuation service verifies the delegation, including geofence and speed bounds, before commanding motion, emitting a signed receipt per decision.
+> **Protocol v1; returns in v2.1.** The geofence and kinematic constraints in this section exist in Protocol v1 only. Protocol v2.0 registers no geofence, position or speed constraint; they are planned for Protocol 2.1.
+
+The Protocol v1 constraint vocabulary includes geofences (`geo_circle`, `geo_polygon`, `geo_bbox`) and kinematic bounds (`max_speed_mps`) alongside the monetary and rate bounds used here, evaluated by the same verifier against a caller-supplied context. The same receiver-side pattern therefore extends to an actuation boundary on Jetson or IGX: a principal delegates bounded authority to a robot or drone control agent, and the actuation service verifies the delegation, including geofence and speed bounds, before commanding motion, emitting a signed receipt per decision.
 
 This is a plausible extension of the same architecture, not a validated one. It requires real hardware, latency measurement at the actuation boundary, and a safety analysis that is out of scope here. It is listed to indicate direction, and is explicitly not claimed as working.
 

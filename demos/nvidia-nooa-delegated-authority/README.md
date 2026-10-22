@@ -242,7 +242,7 @@ Two directions extend the same receiver-side pattern. Neither is implemented her
 
 **SPIFFE workload identity.** Bind the authenticated workload identity into the session context, so a valid delegation replayed from a different workload fails cryptographically rather than by policy. This is a specification change requiring protocol review, which is why it is deliberately absent from a demonstration.
 
-**Physical AI.** The same constraint machinery covers geofences and kinematic bounds alongside monetary ones, evaluated by the same verifier. The pattern extends to an actuation boundary on Jetson or IGX, where a principal delegates a bounded mission and the actuation service verifies it before commanding motion. That requires hardware, latency measurement, and a safety analysis, none of which exist yet.
+**Physical AI.** In Protocol v1, the same constraint machinery covers geofences and kinematic bounds alongside monetary ones, evaluated by the same verifier (Protocol v1; returns in v2.1: Protocol v2.0 has no geofence or speed constraint). The pattern extends to an actuation boundary on Jetson or IGX, where a principal delegates a bounded mission and the actuation service verifies it before commanding motion. That requires hardware, latency measurement, and a safety analysis, none of which exist yet.
 
 ---
 

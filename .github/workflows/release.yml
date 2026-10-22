@@ -98,7 +98,7 @@ jobs:
       # Go
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26.10'
           cache: true
       - name: go vet
         run: go vet ./...
@@ -123,6 +123,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+          check-latest: true
           cache: 'npm'
           cache-dependency-path: sdks/typescript/package-lock.json
       - name: TS install
@@ -821,6 +822,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+          check-latest: true
           cache: 'npm'
           cache-dependency-path: sdks/typescript/package-lock.json
           # No registry-url here — that would write a token-based .npmrc entry

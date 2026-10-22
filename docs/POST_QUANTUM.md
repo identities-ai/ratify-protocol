@@ -28,7 +28,22 @@ Two parts of Ratify are not meaningfully threatened:
 
 Each signature is a pair: an Ed25519 signature and an ML-DSA-65 signature over
 the same exact message. A verifier accepts the signature only when both
-components are valid. Protocol v2 enforces this strictly: there is no fallback
+components are valid.
+
+```mermaid
+flowchart LR
+  O["Ratify object<br/>(delegation, proof, receipt...)"] --> M["Typed signing message<br/>binds object type and protocol version"]
+  M --> E["Ed25519 signature"]
+  M --> L["ML-DSA-65 signature<br/>(NIST FIPS 204)"]
+  E --> P["Hybrid signature pair"]
+  L --> P
+  P --> VE{"Ed25519<br/>valid?"}
+  P --> VL{"ML-DSA-65<br/>valid?"}
+  VE --> A{"Both valid?"}
+  VL --> A
+  A -->|yes| OK["Accept"]
+  A -->|no| NO["Reject"]
+``` Protocol v2 enforces this strictly: there is no fallback
 to a single algorithm, the signed message is a typed transcript that binds the
 object type and protocol version, and Ed25519 verification rejects
 non-canonical and small-order encodings (see [SPEC-v2](../SPEC-v2.md) §2 and §3).
@@ -42,6 +57,19 @@ To forge, an attacker must break both algorithms:
 
 The construction is therefore at least as strong as the stronger of its two
 parts.
+
+```mermaid
+flowchart TB
+  subgraph Q["Attacker with a quantum computer"]
+    Q1["Breaks Ed25519"] --> Q2["Cannot produce a valid ML-DSA-65 signature"] --> Q3["Forgery rejected"]
+  end
+  subgraph W["Attacker with an unknown ML-DSA weakness"]
+    W1["Breaks ML-DSA-65"] --> W2["Cannot produce a valid Ed25519 signature"] --> W3["Forgery rejected"]
+  end
+  subgraph B["A forgery that verifies"]
+    B1["Requires breaking Ed25519 AND ML-DSA-65"]
+  end
+```
 
 ## What this does not cover
 

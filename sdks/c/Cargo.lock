@@ -562,6 +562,7 @@ dependencies = [
  "cbindgen",
  "getrandom 0.2.17",
  "hex",
+ "ratify-c",
  "ratify-protocol",
  "serde",
  "serde_json",

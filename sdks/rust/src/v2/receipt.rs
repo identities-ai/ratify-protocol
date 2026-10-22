@@ -4,19 +4,23 @@
 
 use std::collections::BTreeMap;
 
-use super::crypto::{
-    key_id_v2, public_key_v2, sign_v2_statement, valid_prefixed_digest, valid_v2_id,
-    verify_v2_statement, V2ObjectType,
+use super::context::V2Context;
+use super::crypto::{key_id_v2, valid_prefixed_digest, valid_v2_id, verify_v2_statement, V2ObjectType};
+use super::errors::{err, plain, Classify, V2ErrorClass, V2Result, V2SignError, V2SignResult};
+use super::evaluator::{evaluator_refs_cj, valid_constraint_evaluator_refs_v2, ConstraintEvaluatorRefV2};
+use super::limits::{
+    check_v2_wire_size, valid_v2_timestamp, MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2,
+    MAX_VERIFICATION_RECEIPT_BYTES_V2,
 };
-use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
+use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::json::{canonical, obj, parse_wire, Obj, CJ};
 use super::rotation::{statement_body_digest_v2, WitnessEntryV2Result};
 use super::wire::{
-    bundle_hash_v2, encode_proof_bundle_v2, is_wildcard_scope, placeholder_signature, safe,
+    bundle_hash_v2, encode_proof_bundle_v2, is_wildcard_scope, placeholder_signature,
     validate_required_scope_v2, validate_scopes_v2, ProofBundleV2, MAX_SAFE,
 };
 use super::witness::{log_position, validate_head};
-use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature, MAX_PROOF_BUNDLE_BYTES};
+use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
 /// Authenticated status evidence reference (issuer-scoped).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -47,6 +51,9 @@ pub struct VerificationReceiptV2 {
     pub trust_assessment: String,
     pub status_assessment: String,
     pub challenge_assessment: String,
+    /// Present (non-empty) exactly when the claim sealed at least one
+    /// extension evaluator profile (SPEC-v2 §5.2, §5.8).
+    pub constraint_evaluators: Vec<ConstraintEvaluatorRefV2>,
     pub context_assessment: String,
     pub context_policy_digest: Option<String>,
     pub verified_at: i64,
@@ -160,6 +167,9 @@ fn receipt_cj(r: &VerificationReceiptV2, shape: Shape) -> CJ {
     }
     if !r.human_id.is_empty() {
         f.push(("human_id", CJ::s(&r.human_id)));
+    }
+    if !r.constraint_evaluators.is_empty() {
+        f.push(("constraint_evaluators", evaluator_refs_cj(&r.constraint_evaluators)));
     }
     if shape != Shape::Body {
         f.push(("log_id", CJ::s(&r.log_id)));
@@ -292,7 +302,7 @@ pub(crate) fn validate_receipt(r: &VerificationReceiptV2, signature: bool) -> V2
         || !super::crypto::lower_hex(&r.log_id)
         || r.sequence <= 0
         || r.sequence > MAX_SAFE
-        || !safe(r.verified_at)
+        || !valid_v2_timestamp(r.verified_at)
     {
         return plain("wire v2: receipt version, log ID, sequence, or verified_at is invalid");
     }
@@ -346,6 +356,11 @@ pub(crate) fn validate_receipt(r: &VerificationReceiptV2, signature: bool) -> V2
         .is_some_and(|d| !valid_prefixed_digest(d))
     {
         return plain("wire v2: context_policy_digest is invalid");
+    }
+    if !valid_constraint_evaluator_refs_v2(&r.constraint_evaluators)
+        || (!r.constraint_evaluators.is_empty() && r.issuer_ids.is_empty())
+    {
+        return plain("wire v2: constraint_evaluators must be valid extension types with sha384 profile digests, sorted and unique by type, and only for a delegated chain");
     }
     if (matches!(ca, "not_evaluated" | "unbound") && r.context_policy_digest.is_some())
         || (matches!(ca, "bound" | "not_required" | "mismatch")
@@ -541,17 +556,12 @@ fn validate_decision(r: &VerificationReceiptV2) -> V2Result<()> {
         "action_context_unverified" => {
             ta == "trusted" && sa == "current" && (ca == "unbound" || ca == "unverified")
         }
+        // Each dimension is independent (SPEC-v2 §6.7): trust keeps its last
+        // state; status and context exist only under a trusted root; context
+        // is recorded only when it completed as bound or not_required.
         "evaluation_interrupted" => {
-            !(ta == "untrusted"
-                || sa == "revoked"
-                || sa == "stale"
-                || matches!(ca, "unbound" | "unverified" | "mismatch")
-                || (ta == "not_evaluated" && (sa != "not_evaluated" || ca != "not_evaluated"))
-                || (ta == "unavailable" && (sa != "not_evaluated" || ca != "not_evaluated"))
-                || (ta == "trusted" && !matches!(sa, "not_evaluated" | "unavailable" | "current"))
-                || (ca == "not_evaluated" && sa != "not_evaluated")
-                || (matches!(sa, "unavailable" | "current")
-                    && (ta != "trusted" || (ca != "bound" && ca != "not_required"))))
+            !((ca != "not_evaluated" && ca != "bound" && ca != "not_required")
+                || (ta != "trusted" && (sa != "not_evaluated" || ca != "not_evaluated")))
         }
         _ => return plain("wire v2: indeterminate reason is invalid"),
     };
@@ -609,6 +619,7 @@ fn receipt_from(o: &Obj<'_>) -> V2Result<VerificationReceiptV2> {
         trust_assessment: o.str("trust_assessment")?,
         status_assessment: o.str("status_assessment")?,
         challenge_assessment: o.str("challenge_assessment")?,
+        constraint_evaluators: evaluators_from(o)?,
         context_assessment: o.str("context_assessment")?,
         context_policy_digest: o.opt_str("context_policy_digest")?,
         verified_at: o.i64("verified_at")?,
@@ -620,11 +631,25 @@ fn receipt_from(o: &Obj<'_>) -> V2Result<VerificationReceiptV2> {
     })
 }
 
+fn evaluators_from(o: &Obj<'_>) -> V2Result<Vec<ConstraintEvaluatorRefV2>> {
+    o.array("constraint_evaluators")?
+        .iter()
+        .map(|n| {
+            let e = obj(n)?;
+            e.only(&["profile_digest", "type"])?;
+            Ok(ConstraintEvaluatorRefV2 {
+                kind: e.str("type")?,
+                profile_digest: e.str("profile_digest")?,
+            })
+        })
+        .collect()
+}
+
 fn with_optional(names: &[&'static str]) -> Vec<&'static str> {
     names
         .iter()
         .copied()
-        .chain(["agent_id", "human_id"])
+        .chain(["agent_id", "human_id", "constraint_evaluators"])
         .collect()
 }
 
@@ -659,18 +684,24 @@ pub(crate) fn validate_receipt_signable_body(data: &[u8]) -> V2Result<()> {
 pub fn encode_verification_receipt_v2(r: &VerificationReceiptV2) -> V2Result<Vec<u8>> {
     validate_receipt(r, true)?;
     let data = canonical(&receipt_cj(r, Shape::Wire))?;
-    if data.len() > MAX_PROOF_BUNDLE_BYTES {
-        return plain("wire v2: verification receipt exceeds the wire size limit");
-    }
+    check_v2_wire_size(
+        &data,
+        "verification receipt",
+        "MAX_VERIFICATION_RECEIPT_BYTES_V2",
+        MAX_VERIFICATION_RECEIPT_BYTES_V2,
+    )?;
     Ok(data)
 }
 
 /// Strictly decode a canonical v2 verification receipt.
 pub fn decode_verification_receipt_v2(data: &[u8]) -> V2Result<VerificationReceiptV2> {
     (|| {
-        if data.len() > MAX_PROOF_BUNDLE_BYTES {
-            return plain("wire v2: verification receipt exceeds the wire size limit");
-        }
+        check_v2_wire_size(
+            data,
+            "verification receipt",
+            "MAX_VERIFICATION_RECEIPT_BYTES_V2",
+            MAX_VERIFICATION_RECEIPT_BYTES_V2,
+        )?;
         let root = parse_wire(data, &["previous_receipt_hash"], &["bundle_hash"])?;
         let o = obj(&root)?;
         o.require(FIELDS, &["context_policy_digest"])?;
@@ -689,15 +720,34 @@ pub fn decode_verification_receipt_v2(data: &[u8]) -> V2Result<VerificationRecei
 pub fn sign_verification_receipt_v2(
     r: &VerificationReceiptV2,
     verifier_key: &HybridPrivateKey,
-) -> V2Result<VerificationReceiptV2> {
-    validate_receipt(r, false)?;
-    if key_id_v2(&public_key_v2(verifier_key)?)? != r.verifier_id {
-        return plain("receipt verifier_id does not match signing key");
+) -> V2SignResult<VerificationReceiptV2> {
+    sign_verification_receipt_v2_with_signer(&V2Context::background(), r, &LocalSignerV2::new(verifier_key)?)
+}
+
+/// [`sign_verification_receipt_v2`] with an external signer whose key ID must
+/// equal `verifier_id`.
+pub fn sign_verification_receipt_v2_with_signer(
+    ctx: &V2Context,
+    r: &VerificationReceiptV2,
+    signer: &dyn SignerV2,
+) -> V2SignResult<VerificationReceiptV2> {
+    validate_receipt(r, false).classify(V2ErrorClass::Malformed)?;
+    let verifier_public = signer_public_key_v2(signer)?;
+    if key_id_v2(&verifier_public).ok().as_deref() != Some(r.verifier_id.as_str()) {
+        return Err(V2SignError::KeyBinding(
+            "receipt verifier_id does not match signing key".into(),
+        ));
     }
-    let body = verification_receipt_v2_signable_bytes(r)?;
+    let body = verification_receipt_v2_signable_bytes(r).classify(V2ErrorClass::Malformed)?;
     let mut out = r.clone();
-    out.signature = sign_v2_statement(V2ObjectType::VerificationReceipt, &body, verifier_key)?;
-    encode_verification_receipt_v2(&out)?;
+    out.signature = sign_v2_statement_with_signer(
+        ctx,
+        V2ObjectType::VerificationReceipt,
+        &body,
+        signer,
+        &verifier_public,
+    )?;
+    encode_verification_receipt_v2(&out).classify(V2ErrorClass::Malformed)?;
     Ok(out)
 }
 
@@ -779,9 +829,12 @@ pub fn verification_receipt_v2_body(r: &VerificationReceiptV2) -> V2Result<Vec<u
 /// Reject a malformed or noncanonical prepared body.
 pub fn decode_verification_receipt_body_v2(data: &[u8]) -> V2Result<VerificationReceiptV2> {
     (|| {
-        if data.len() > MAX_PROOF_BUNDLE_BYTES {
-            return plain("wire v2: verification receipt body exceeds the wire size limit");
-        }
+        check_v2_wire_size(
+            data,
+            "verification receipt body",
+            "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2",
+            MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2,
+        )?;
         let root = parse_wire(data, &[], &["bundle_hash"])?;
         let o = obj(&root)?;
         o.require(BODY_REQUIRED, &["context_policy_digest"])?;
@@ -827,12 +880,30 @@ pub fn sign_prepared_verification_receipt_v2(
     data: &[u8],
     head: &ReceiptV2Head,
     verifier_key: &HybridPrivateKey,
-) -> V2Result<VerificationReceiptV2> {
+) -> V2SignResult<VerificationReceiptV2> {
+    sign_prepared_verification_receipt_v2_with_signer(
+        &V2Context::background(),
+        data,
+        head,
+        &LocalSignerV2::new(verifier_key)?,
+    )
+}
+
+/// [`sign_prepared_verification_receipt_v2`] with an external verifier signer.
+pub fn sign_prepared_verification_receipt_v2_with_signer(
+    ctx: &V2Context,
+    data: &[u8],
+    head: &ReceiptV2Head,
+    signer: &dyn SignerV2,
+) -> V2SignResult<VerificationReceiptV2> {
     let bound = bind_verification_receipt_body_v2(data, head)?;
-    let signed = sign_verification_receipt_v2(&bound, verifier_key)?;
+    let signed = sign_verification_receipt_v2_with_signer(ctx, &bound, signer)?;
     match verification_receipt_v2_body(&signed) {
         Ok(b) if b == data => Ok(signed),
-        _ => plain("wire v2: signed receipt differs from prepared body"),
+        _ => Err(V2SignError::InvalidObject(super::errors::V2Error::new(
+            V2ErrorClass::Malformed,
+            "wire v2: signed receipt differs from prepared body",
+        ))),
     }
 }
 

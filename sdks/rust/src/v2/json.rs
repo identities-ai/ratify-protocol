@@ -198,20 +198,24 @@ impl<'a> Parser<'a> {
                 return plain("wire: invalid JSON number");
             }
         }
-        let text = std::str::from_utf8(&self.s[start..self.i]).expect("ascii number");
-        // Go: reject a "-" token whose value parses to zero (-0, -0.0, -0e5,
-        // and underflow such as -1e-400). Ordinary negatives like -0.5 pass.
-        if text.starts_with('-') && text.parse::<f64>() == Ok(0.0) {
+        let text = std::str::from_utf8(&self.s[start..self.i])
+            .map_err(|_| V2Error::plain("wire: invalid JSON number"))?;
+        // Protocol v2 carries no floating point anywhere on the wire: every
+        // number token is an integer spelling, and "-0" is rejected.
+        if text.contains(['.', 'e', 'E']) {
+            return plain(format!(
+                "wire: number {text} is not an integer; v2 forbids floating point"
+            ));
+        }
+        if text == "-0" {
             return plain("wire: negative zero is not a canonical number");
         }
-        if !text.contains(['.', 'e', 'E']) {
-            match text.parse::<i64>() {
-                Ok(n) if (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&n) => {}
-                _ => {
-                    return plain(format!(
-                        "wire: integer {text} outside the safe-integer range [-(2^53-1), 2^53-1]"
-                    ))
-                }
+        match text.parse::<i64>() {
+            Ok(n) if (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&n) => {}
+            _ => {
+                return plain(format!(
+                    "wire: integer {text} outside the safe-integer range [-(2^53-1), 2^53-1]"
+                ))
             }
         }
         Ok(text.to_string())
@@ -291,10 +295,12 @@ impl<'a> Parser<'a> {
                         0xe0..=0xef => 3,
                         _ => 4,
                     };
-                    out.push_str(
-                        std::str::from_utf8(&self.s[self.i..self.i + len])
-                            .expect("validated UTF-8"),
-                    );
+                    let scalar = self
+                        .s
+                        .get(self.i..self.i + len)
+                        .and_then(|b| std::str::from_utf8(b).ok())
+                        .ok_or_else(|| V2Error::plain("wire: invalid UTF-8"))?;
+                    out.push_str(scalar);
                     self.i += len;
                 }
             }
@@ -659,17 +665,25 @@ mod tests {
     use super::parse_json;
 
     #[test]
-    fn negative_zero_values_are_rejected_but_negative_floats_decode() {
-        for bad in ["-0", "-0.0", "-0e5", "-0E0", "-0.000", "-1e-400"] {
+    fn non_integer_and_negative_zero_numbers_are_rejected() {
+        for bad in [
+            "-0", "-0.0", "-0e5", "-0E0", "-0.5", "1.0", "1e3", "1E3", "0.0", "9007199254740992",
+            "-9007199254740992", "01", "+1",
+        ] {
             let doc = format!("{{\"a\":{bad}}}");
-            assert!(
-                parse_json(doc.as_bytes()).is_err(),
-                "{bad} must be rejected"
-            );
+            assert!(parse_json(doc.as_bytes()).is_err(), "{bad} must be rejected");
         }
-        for good in ["-0.5", "-122.4194", "-1e-3", "0", "0.0", "-1"] {
+        for good in ["0", "-1", "9007199254740991", "-9007199254740991"] {
             let doc = format!("{{\"a\":{good}}}");
             assert!(parse_json(doc.as_bytes()).is_ok(), "{good} must decode");
         }
+    }
+
+    #[test]
+    fn unpaired_surrogate_escapes_are_rejected() {
+        for bad in [r#""\ud800""#, r#""\udc00""#, r#""\ud800\u0041""#, r#""\ud800x""#] {
+            assert!(parse_json(bad.as_bytes()).is_err(), "{bad} must be rejected");
+        }
+        assert!(parse_json(r#""\ud83d\ude00""#.as_bytes()).is_ok());
     }
 }

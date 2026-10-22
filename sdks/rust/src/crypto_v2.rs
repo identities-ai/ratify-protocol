@@ -49,7 +49,9 @@ pub fn derive_key_id_v2(pub_key: &HybridPublicKey) -> Result<String, String> {
 }
 
 /// Sign delegation signable bytes with both v2 components and fixed contexts.
-pub fn sign_delegation_v2(
+/// Test-only: no exported function signs caller-selected bytes (SPEC-v2 §3.2).
+#[cfg(test)]
+pub(crate) fn sign_delegation_v2(
     signable_bytes: &[u8],
     private_key: &HybridPrivateKey,
 ) -> Result<HybridSignature, String> {

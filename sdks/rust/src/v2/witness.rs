@@ -3,15 +3,18 @@
 
 use std::collections::BTreeMap;
 
-use super::crypto::{
-    key_id_v2, lower_hex, public_key_v2, sign_v2_statement, valid_v2_id, verify_v2_statement,
-    V2ObjectType,
+use super::context::V2Context;
+use super::crypto::{key_id_v2, lower_hex, valid_v2_id, verify_v2_statement, V2ObjectType};
+use super::errors::{V2SignError, V2SignResult};
+use super::limits::{
+    check_v2_wire_size, valid_v2_timestamp, MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2,
 };
+use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use super::json::{canonical, obj, parse_wire, CJ};
 use super::rotation::{statement_body_digest_v2, WitnessEntryV2Result};
-use super::wire::{safe, MAX_SAFE};
-use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature, MAX_PROOF_BUNDLE_BYTES};
+use super::wire::MAX_SAFE;
+use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
 /// One signed entry in a caller-operated v2 witness log.
 #[derive(Debug, Clone)]
@@ -55,14 +58,16 @@ fn validate(e: &WitnessEntryV2, signature: bool) -> V2Result<()> {
     if e.log_id.len() != 32 || !lower_hex(&e.log_id) {
         return plain("wire v2: log_id must be 32 lowercase hexadecimal characters");
     }
-    if e.sequence <= 0 || e.sequence > MAX_SAFE || !safe(e.timestamp) {
+    if e.sequence <= 0 || e.sequence > MAX_SAFE || !valid_v2_timestamp(e.timestamp) {
         return plain("wire v2: sequence and timestamp must be safe integers");
     }
     if e.prev_hash.len() != 48 {
         return plain("wire v2: prev_hash must be 48 bytes");
     }
-    if e.entry_data.len() > MAX_PROOF_BUNDLE_BYTES {
-        return plain("wire v2: entry_data exceeds the witness wire size limit");
+    if e.entry_data.len() > MAX_WITNESS_ENTRY_DATA_BYTES_V2 {
+        return plain(format!(
+            "wire v2: entry_data exceeds MAX_WITNESS_ENTRY_DATA_BYTES_V2 ({MAX_WITNESS_ENTRY_DATA_BYTES_V2} bytes)"
+        ));
     }
     let zero = e.prev_hash.iter().all(|b| *b == 0);
     if e.sequence == 1 && !zero {
@@ -149,18 +154,14 @@ pub fn witness_entry_v2_digest(e: &WitnessEntryV2) -> V2Result<Vec<u8>> {
 pub fn encode_witness_entry_v2(e: &WitnessEntryV2) -> V2Result<Vec<u8>> {
     validate(e, true)?;
     let wire = canonical(&entry_cj(e, true))?;
-    if wire.len() > MAX_PROOF_BUNDLE_BYTES {
-        return plain("wire v2: witness entry exceeds the wire size limit");
-    }
+    check_v2_wire_size(&wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2)?;
     Ok(wire)
 }
 
 /// Strictly decode one canonical v2 witness entry.
 pub fn decode_witness_entry_v2(data: &[u8]) -> V2Result<WitnessEntryV2> {
     (|| {
-        if data.len() > MAX_PROOF_BUNDLE_BYTES {
-            return plain("wire v2: witness entry exceeds the wire size limit");
-        }
+        check_v2_wire_size(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2)?;
         let root = parse_wire(data, &[], &[])?;
         let o = obj(&root)?;
         o.require(FIELDS, &[])?;
@@ -179,15 +180,27 @@ pub fn decode_witness_entry_v2(data: &[u8]) -> V2Result<WitnessEntryV2> {
 pub fn sign_witness_entry_v2(
     e: &WitnessEntryV2,
     witness_key: &HybridPrivateKey,
-) -> V2Result<WitnessEntryV2> {
-    validate(e, false)?;
-    if key_id_v2(&public_key_v2(witness_key)?)? != e.witness_id {
-        return plain("witness_id does not match signing key");
+) -> V2SignResult<WitnessEntryV2> {
+    sign_witness_entry_v2_with_signer(&V2Context::background(), e, &LocalSignerV2::new(witness_key)?)
+}
+
+/// [`sign_witness_entry_v2`] with an external signer whose key ID must equal
+/// `witness_id`.
+pub fn sign_witness_entry_v2_with_signer(
+    ctx: &V2Context,
+    e: &WitnessEntryV2,
+    signer: &dyn SignerV2,
+) -> V2SignResult<WitnessEntryV2> {
+    validate(e, false).classify(V2ErrorClass::Malformed)?;
+    let witness_public = signer_public_key_v2(signer)?;
+    if key_id_v2(&witness_public).ok().as_deref() != Some(e.witness_id.as_str()) {
+        return Err(V2SignError::KeyBinding("witness_id does not match signing key".into()));
     }
-    let body = witness_entry_v2_signable_bytes(e)?;
+    let body = witness_entry_v2_signable_bytes(e).classify(V2ErrorClass::Malformed)?;
     let mut out = e.clone();
-    out.signature = sign_v2_statement(V2ObjectType::WitnessEntry, &body, witness_key)?;
-    encode_witness_entry_v2(&out)?;
+    out.signature =
+        sign_v2_statement_with_signer(ctx, V2ObjectType::WitnessEntry, &body, signer, &witness_public)?;
+    encode_witness_entry_v2(&out).classify(V2ErrorClass::Malformed)?;
     Ok(out)
 }
 

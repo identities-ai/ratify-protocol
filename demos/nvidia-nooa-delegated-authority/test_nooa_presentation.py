@@ -26,10 +26,10 @@ import os
 import time
 
 import pytest
-from ratify_protocol import Constraint, SCOPE_PAYMENTS_SEND
+from ratify_protocol_v2.scope import SCOPE_PAYMENTS_SEND
 
 from agent_client import RefundClient
-from principal import new_agent, new_principal, sign_cert
+from principal import StatusAuthority, max_amount_micros, new_agent, new_principal, sign_cert
 from refund_service import RefundService, serve
 
 # Skipping is right for the general suite, NOOA needs Python 3.12/3.13, but a
@@ -86,9 +86,10 @@ class _NoLLMAllowed(FakeLLMClient):
         raise AssertionError("the reference must not make an LLM call")
 
 
-LIMIT = 100.0
-UNDER = 75.0
-OVER = 150.0
+#: Integer micro-units, as Protocol v2 requires: 100.00, 75.00 and 150.00 USD.
+LIMIT = 100_000_000
+UNDER = 75_000_000
+OVER = 150_000_000
 
 
 @pytest.fixture
@@ -105,12 +106,13 @@ def wired():
         subject_id=agent_id.id,
         subject_pub=agent_id.public_key,
         scope=[SCOPE_PAYMENTS_SEND],
-        constraints=[Constraint(type="max_amount", max_amount=LIMIT, currency="USD")],
+        constraints=[max_amount_micros(LIMIT)],
         issued_at=now - 60,
         expires_at=now + 24 * 3600,
     )
 
-    service = RefundService(trust_root=principal.public_key)
+    status = StatusAuthority(principal, now)
+    service = RefundService(principal.public_key, status.status_pub, status)
     server, base_url = serve(service)
     client = RefundClient(base_url, agent_id.id, agent_id.public_key, agent_priv, [cert])
 
@@ -138,9 +140,9 @@ def test_capability_invocation_is_authorized_by_the_receiver(wired):
 
     # The receiver verified and recorded it; the agent process did not.
     assert len(service.receipts) == 1
-    assert service.receipts[0].decision == "authorized_agent"
+    assert service.receipts[0].identity_status == "authorized_agent"
     assert outcome["receipt_id"] == service.receipt_ids[0]
-    assert service.refunded_total == UNDER
+    assert service.refunded_total_micros == UNDER
 
 
 def test_adapter_reports_a_denial_rather_than_producing_one(wired):
@@ -158,9 +160,9 @@ def test_adapter_reports_a_denial_rather_than_producing_one(wired):
 
     # The denial was reached and recorded at the receiver.
     assert len(service.receipts) == 1
-    assert service.receipts[0].decision == "constraint_denied"
+    assert service.receipts[0].identity_status == "constraint_denied"
     assert outcome["receipt_id"] == service.receipt_ids[0]
-    assert service.refunded_total == 0.0
+    assert service.refunded_total_micros == 0
 
 
 def test_capability_is_inert_without_the_presentation_adapter(wired):
@@ -175,7 +177,7 @@ def test_capability_is_inert_without_the_presentation_adapter(wired):
         asyncio.run(agent.issue_refund("ord-nooa-3", UNDER))
 
     assert service.receipts == []
-    assert service.refunded_total == 0.0
+    assert service.refunded_total_micros == 0
 
 
 def test_adapter_sees_the_capability_call_through_nooas_public_api(wired):

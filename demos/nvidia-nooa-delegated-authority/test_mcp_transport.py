@@ -62,26 +62,43 @@ else:
 
 import uvicorn  # noqa: E402
 from mcp import Client  # noqa: E402
-from ratify_protocol import (  # noqa: E402
-    Constraint,
-    SCOPE_PAYMENTS_SEND,
-    verify_verification_receipt,
+from ratify_protocol_v2.limits_v2 import (  # noqa: E402
+    MAX_DELEGATION_CHAIN_DEPTH,
+    MAX_PROOF_BUNDLE_BYTES_V2,
 )
-from ratify_protocol.wire import encode_proof_bundle  # noqa: E402
+from ratify_protocol_v2.protocol_v2 import (  # noqa: E402
+    decode_proof_bundle_v2,
+    verify_proof_bundle_v2_signatures,
+)
+from ratify_protocol_v2.scope import SCOPE_PAYMENTS_SEND  # noqa: E402
 
+from agent_client import sign_presentation  # noqa: E402
 from mcp_server import (  # noqa: E402
     MAX_PROOF_BYTES,
     PROOF_META_KEY,
     PROPOSED_OPENSHELL_MAX_BODY_BYTES,
     build_server,
 )
-from principal import new_agent, new_principal, sign_cert  # noqa: E402
-from refund_service import RefundService, canonical_resource_id  # noqa: E402
-from test_verification import build_bundle  # noqa: E402
+from openshell_probe import receipts_verify  # noqa: E402
+from principal import (  # noqa: E402
+    StatusAuthority,
+    max_amount_micros,
+    new_agent,
+    new_principal,
+    resource_bound,
+    sign_cert,
+)
+from refund_service import (  # noqa: E402
+    CHALLENGE_TTL_SECONDS,
+    RefundService,
+    canonical_resource_id,
+    encode_public_key,
+)
 
-LIMIT = 100.0
-UNDER = 75.0
-OVER = 150.0
+#: Integer micro-units, as Protocol v2 requires: 100.00, 75.00, 150.00 USD.
+LIMIT = 100_000_000
+UNDER = 75_000_000
+OVER = 150_000_000
 DAY = 24 * 3600
 
 
@@ -92,12 +109,13 @@ def _free_port() -> int:
 
 
 class _World:
-    def __init__(self, principal, principal_priv, agent, agent_priv, cert, service, url):
+    def __init__(self, principal, principal_priv, agent, agent_priv, cert, status, service, url):
         self.principal = principal
         self.principal_priv = principal_priv
         self.agent = agent
         self.agent_priv = agent_priv
         self.cert = cert
+        self.status = status
         self.service = service
         self.url = url
 
@@ -116,14 +134,15 @@ def mcp_world():
         subject_pub=agent.public_key,
         scope=[SCOPE_PAYMENTS_SEND],
         constraints=[
-            Constraint(type="max_amount", max_amount=LIMIT, currency="USD"),
-            Constraint(type="resource_path", resource_id=canonical_resource_id("acme", "ord-1")),
+            max_amount_micros(LIMIT),
+            resource_bound(canonical_resource_id("acme", "ord-1")),
         ],
         issued_at=now - 60,
         expires_at=now + DAY,
     )
 
-    service = RefundService(trust_root=principal.public_key)
+    status = StatusAuthority(principal, now)
+    service = RefundService(principal.public_key, status.status_pub, status)
     observed: list[tuple[str, dict]] = []
     port = _free_port()
     app = build_server(service, observe=lambda t, tc: observed.append((t, tc))).streamable_http_app(
@@ -147,6 +166,7 @@ def mcp_world():
             agent,
             agent_priv,
             cert,
+            status,
             service,
             f"http://127.0.0.1:{port}/mcp",
         )
@@ -168,17 +188,37 @@ async def _session(url):
         yield session
 
 
-def _proof_meta(bundle) -> dict:
-    return {PROOF_META_KEY: base64.b64encode(encode_proof_bundle(bundle).encode()).decode()}
+def _proof_meta(proof: bytes) -> dict:
+    """The proof's exact v2 wire bytes, base64, under the one carriage key."""
+    return {PROOF_META_KEY: base64.b64encode(proof).decode()}
 
 
-async def _prepare(session, order_id, amount, agent_id, currency="USD", tenant="acme"):
+def _sign(prepared, agent, priv, delegations, session_from=None, challenge_at=None) -> bytes:
+    """Sign a v2 presentation for the receiver's prepared challenge.
+
+    ``session_from`` signs under another prepared request's session binding;
+    ``challenge_at`` overrides the receiver's issuance time. Both exist only for
+    the adversarial cases."""
+    return sign_presentation(
+        verifier_id=prepared["verifier_id"],
+        agent_id=agent.id,
+        agent_pub=agent.public_key,
+        agent_priv=priv,
+        delegations=delegations,
+        challenge=base64.b64decode(prepared["challenge"]),
+        challenge_at=prepared["issued_at"] if challenge_at is None else challenge_at,
+        session_context=base64.b64decode((session_from or prepared)["session_context"]),
+    )
+
+
+async def _prepare(session, order_id, amount, agent, currency="USD", tenant="acme"):
     result = await session.call_tool(
         "refund.prepare",
         {
             "order_id": order_id,
-            "amount": amount,
-            "agent_id": agent_id,
+            "amount_micros": amount,
+            "agent_id": agent.id,
+            "agent_public_key": encode_public_key(agent.public_key),
             "currency": currency,
             "tenant": tenant,
         },
@@ -201,15 +241,8 @@ async def _full_refund(world, session, order_id, amount, cert=None, agent=None, 
     """prepare, sign the receiver's challenge, execute."""
     agent = agent or world.agent
     priv = priv or world.agent_priv
-    prepared = await _prepare(session, order_id, amount, agent.id)
-    bundle = build_bundle(
-        agent.id,
-        agent.public_key,
-        priv,
-        [cert or world.cert],
-        base64.b64decode(prepared["challenge"]),
-        base64.b64decode(prepared["session_context"]),
-    )
+    prepared = await _prepare(session, order_id, amount, agent)
+    bundle = _sign(prepared, agent, priv, [cert or world.cert])
     result = await _execute(session, prepared["challenge"], bundle)
     return result.structured_content
 
@@ -265,20 +298,20 @@ async def test_bounded_refund_executes_across_the_mcp_boundary(mcp_world):
     assert out["decision"] == "authorized"
     assert out["status"] == "authorized_agent"
     assert out["receipt_id"]
-    assert mcp_world.service.refunded_total == UNDER
+    assert mcp_world.service.refunded_total_micros == UNDER
 
 
 @pytest.mark.anyio
 async def test_over_limit_is_denied_after_transport(mcp_world):
     """WHY: MCP moved the bytes; it did not grant anything. The principal's
-    $100 ceiling still binds on the far side of a tool boundary the principal
+    100.00 USD ceiling still binds on the far side of a tool boundary the principal
     never saw."""
     async with _session(mcp_world.url) as session:
         out = await _full_refund(mcp_world, session, "ord-1", OVER)
 
     assert out["decision"] == "denied"
     assert out["status"] == "constraint_denied"
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 @pytest.mark.anyio
@@ -291,7 +324,6 @@ async def test_wrong_resource_is_denied_after_transport(mcp_world):
 
     assert out["decision"] == "denied"
     assert out["status"] == "constraint_denied"
-    assert "resource" in out["reason"]
 
 
 @pytest.mark.anyio
@@ -300,15 +332,8 @@ async def test_wrong_tenant_is_denied_after_transport(mcp_world):
     Same local order number, different tenant, and the canonical identifiers
     differ by exact byte comparison."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id, tenant="globex")
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent, tenant="globex")
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         result = await _execute(session, prepared["challenge"], bundle)
 
     out = result.structured_content
@@ -322,21 +347,14 @@ async def test_replay_across_the_boundary_is_denied(mcp_world):
     use is enforced by the receiver, not by the transport, so it has to hold
     when the same call is repeated through MCP."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         first = await _execute(session, prepared["challenge"], bundle)
         second = await _execute(session, prepared["challenge"], bundle)
 
     assert first.structured_content["decision"] == "authorized"
     assert second.structured_content["decision"] == "denied"
-    assert mcp_world.service.refunded_total == UNDER
+    assert mcp_world.service.refunded_total_micros == UNDER
 
 
 @pytest.mark.anyio
@@ -345,23 +363,16 @@ async def test_a_proof_cannot_be_moved_to_another_pending_request(mcp_world):
     satisfy the other, or an agent could prepare a small refund and a large
     one and present the cheap proof against the expensive record."""
     async with _session(mcp_world.url) as session:
-        small = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
-        large = await _prepare(session, "ord-1", OVER, mcp_world.agent.id)
-        bundle_for_small = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(small["challenge"]),
-            base64.b64decode(small["session_context"]),
-        )
+        small = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
+        large = await _prepare(session, "ord-1", OVER, mcp_world.agent)
+        bundle_for_small = _sign(small, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         # Present the small refund's proof against the large refund's record.
         result = await _execute(session, large["challenge"], bundle_for_small)
 
     out = result.structured_content
     assert out["decision"] == "denied"
     assert out["receipt_id"] == ""  # refused before authentication
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 @pytest.mark.anyio
@@ -393,7 +404,7 @@ async def test_revoked_delegation_is_denied_after_transport(mcp_world):
     over a tool protocol that knows nothing about it."""
     async with _session(mcp_world.url) as session:
         assert (await _full_refund(mcp_world, session, "ord-1", UNDER))["decision"] == "authorized"
-        mcp_world.service.revoke(mcp_world.cert.cert_id)
+        mcp_world.status.revoke(mcp_world.cert.cert_id, int(time.time()))
         out = await _full_refund(mcp_world, session, "ord-1", UNDER)
 
     assert out["decision"] == "denied"
@@ -419,15 +430,8 @@ async def test_there_is_exactly_one_authoritative_proof_location(mcp_world):
     and nothing else."""
     async with _session(mcp_world.url) as session:
         # (a) A bogus proof argument alongside a real _meta proof is inert.
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         with_extra = await _execute(
             session,
             prepared["challenge"],
@@ -437,7 +441,7 @@ async def test_there_is_exactly_one_authoritative_proof_location(mcp_world):
         assert with_extra.structured_content["decision"] == "authorized"
 
         # (b) The same proof, offered only as an argument, authorizes nothing.
-        second = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
+        second = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
         args_only = await session.call_tool(
             "refund.execute",
             {
@@ -447,7 +451,7 @@ async def test_there_is_exactly_one_authoritative_proof_location(mcp_world):
         )
 
     assert args_only.is_error
-    assert mcp_world.service.refunded_total == UNDER  # only (a) moved money
+    assert mcp_world.service.refunded_total_micros == UNDER  # only (a) moved money
 
 
 @pytest.mark.anyio
@@ -468,7 +472,7 @@ async def test_unusable_proof_metadata_is_refused_before_verification(mcp_world,
     answers malformed authorization metadata with a stack trace has not failed
     closed, it has just failed."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
         result = await session.call_tool(
             "refund.execute",
             {"challenge": prepared["challenge"]},
@@ -477,7 +481,7 @@ async def test_unusable_proof_metadata_is_refused_before_verification(mcp_world,
 
     assert result.is_error
     assert mcp_world.service.receipts == []
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 @pytest.mark.anyio
@@ -486,7 +490,7 @@ async def test_a_refused_presentation_leaves_the_challenge_usable(mcp_world):
     anyone who can reach the endpoint can grief a legitimate agent by firing
     garbage at a challenge it is about to use."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
         bad = await session.call_tool(
             "refund.execute",
             {"challenge": prepared["challenge"]},
@@ -494,14 +498,7 @@ async def test_a_refused_presentation_leaves_the_challenge_usable(mcp_world):
         )
         assert bad.is_error
 
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         good = await _execute(session, prepared["challenge"], bundle)
 
     assert good.structured_content["decision"] == "authorized"
@@ -529,15 +526,8 @@ async def test_trace_context_propagates_to_the_receiving_boundary(mcp_world):
     and would normalize putting attacker-controlled data there."""
     traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         result = await _execute(
             session,
             prepared["challenge"],
@@ -555,7 +545,7 @@ async def test_trace_context_propagates_to_the_receiving_boundary(mcp_world):
     assert trace["baggage"] == "tenant=acme"
 
     # And absent from the authorization result.
-    assert set(out) == {"decision", "status", "reason", "refunded", "receipt_id"}
+    assert set(out) == {"decision", "status", "reason", "refunded_micros", "receipt_id"}
 
 
 @pytest.mark.anyio
@@ -564,15 +554,8 @@ async def test_trace_context_cannot_influence_a_decision(mcp_world):
     during authorization, baggage would become a policy input, which is
     exactly the confusion the separation exists to prevent."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-99", UNDER, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        prepared = await _prepare(session, "ord-99", UNDER, mcp_world.agent)
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         result = await _execute(
             session,
             prepared["challenge"],
@@ -595,7 +578,7 @@ async def test_the_result_returns_a_receipt_id_and_no_proof_material(mcp_world):
         out = await _full_refund(mcp_world, session, "ord-1", UNDER)
 
     assert out["receipt_id"] == mcp_world.service.receipt_ids[0]
-    assert set(out) == {"decision", "status", "reason", "refunded", "receipt_id"}
+    assert set(out) == {"decision", "status", "reason", "refunded_micros", "receipt_id"}
     body = str(out).lower()
     for leak in ("signature", "ml_dsa", "ed25519", "private", "cert_id", "bundle"):
         assert leak not in body
@@ -615,7 +598,7 @@ async def test_an_unknown_tool_is_refused_at_the_server(mcp_world):
         result = await session.call_tool("refund.approve_anything", {})
 
     assert result.is_error
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 @pytest.fixture
@@ -660,8 +643,8 @@ async def test_envelope_size_is_measured_and_bounded(mcp_world, depth, capsys):
     """WHY: hybrid post-quantum signatures make authorization envelopes large
     enough that transport limits become a real integration constraint rather
     than a footnote. ML-DSA-65 contributes roughly 3.3KB per signature and 2KB
-    per public key, so an alpha.16 maximum-depth chain is an order of
-    magnitude bigger than a bearer token.
+    per public key, so a v2 maximum-depth chain (8 certificates) is an order
+    of magnitude bigger than a bearer token.
 
     This records the actual numbers at each depth so the OpenShell body limit
     is chosen from measurement, not from a guess, and asserts the maximum
@@ -669,17 +652,17 @@ async def test_envelope_size_is_measured_and_bounded(mcp_world, depth, capsys):
     import json as _json
 
     chain, leaf, leaf_priv = _chain(mcp_world, depth)
-    raw = encode_proof_bundle(
-        build_bundle(
-            leaf.id,
-            leaf.public_key,
-            leaf_priv,
-            chain,
-            b"\x00" * 32,
-            b"\x00" * 32,
-        )
+    raw = sign_presentation(
+        verifier_id=mcp_world.service.verifier_id,
+        agent_id=leaf.id,
+        agent_pub=leaf.public_key,
+        agent_priv=leaf_priv,
+        delegations=chain,
+        challenge=b"\x00" * 32,
+        challenge_at=int(time.time()),
+        session_context=b"\x00" * 32,
     )
-    encoded = base64.b64encode(raw.encode()).decode()
+    encoded = base64.b64encode(raw).decode()
     envelope = _json.dumps(
         {
             "jsonrpc": "2.0",
@@ -715,6 +698,15 @@ async def test_envelope_size_is_measured_and_bounded(mcp_world, depth, capsys):
     assert openshell_margin >= 0, "maximum-depth envelope must fit the proposed OpenShell limit"
 
 
+def test_the_receiver_bound_is_the_protocol_bound():
+    """WHY: in v2 the proof-bundle size limit and the chain-depth limit are
+    protocol constants. A receiver bound below them would refuse proofs the
+    protocol allows; one above them would admit proofs every v2 verifier
+    rejects. The receiver uses the protocol's number, not its own."""
+    assert MAX_PROOF_BYTES == MAX_PROOF_BUNDLE_BYTES_V2 == 131_072
+    assert MAX_DELEGATION_CHAIN_DEPTH == 8
+
+
 @pytest.mark.anyio
 async def test_a_proof_over_the_receiver_limit_is_refused(mcp_world):
     """WHY: OpenShell's transport bound protects OpenShell and the SDK's bound
@@ -723,7 +715,7 @@ async def test_a_proof_over_the_receiver_limit_is_refused(mcp_world):
     work is attempted."""
     oversized = base64.b64encode(b"A" * (MAX_PROOF_BYTES + 1)).decode()
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
+        prepared = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
         result = await session.call_tool(
             "refund.execute",
             {"challenge": prepared["challenge"]},
@@ -732,7 +724,7 @@ async def test_a_proof_over_the_receiver_limit_is_refused(mcp_world):
 
     assert result.is_error
     assert mcp_world.service.receipts == []
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 @pytest.mark.anyio
@@ -816,8 +808,9 @@ async def test_duplicate_meta_members_resolve_last_wins_and_still_verify(mcp_wor
                     "name": "refund.prepare",
                     "arguments": {
                         "order_id": "ord-1",
-                        "amount": UNDER,
+                        "amount_micros": UNDER,
                         "agent_id": mcp_world.agent.id,
+                        "agent_public_key": encode_public_key(mcp_world.agent.public_key),
                     },
                     "_meta": envelope_meta,
                 },
@@ -825,14 +818,7 @@ async def test_duplicate_meta_members_resolve_last_wins_and_still_verify(mcp_wor
         )
         prepared = json.loads(_decode(prepared_raw)["result"]["content"][0]["text"])
 
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-        )
+        bundle = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         good = _proof_meta(bundle)[PROOF_META_KEY]
 
         # The same key twice: garbage first, the real proof second.
@@ -859,9 +845,9 @@ async def test_duplicate_meta_members_resolve_last_wins_and_still_verify(mcp_wor
     assert json.loads(result["content"][0]["text"])["decision"] == "authorized"
 
     # A parser probe must not be able to conceal duplicate execution.
-    assert mcp_world.service.refunded_total == UNDER  # exactly one refund
+    assert mcp_world.service.refunded_total_micros == UNDER  # exactly one refund
     assert len(mcp_world.service.receipts) == 1  # exactly one receipt
-    assert verify_verification_receipt(mcp_world.service.receipts[0]) is None
+    assert receipts_verify(mcp_world.service)
     assert mcp_world.service.internal_errors == 0
 
 
@@ -897,11 +883,12 @@ async def test_a_failing_observer_cannot_undo_or_obscure_an_executed_refund(mcp_
         subject_id=agent.id,
         subject_pub=agent.public_key,
         scope=[SCOPE_PAYMENTS_SEND],
-        constraints=[Constraint(type="max_amount", max_amount=LIMIT, currency="USD")],
+        constraints=[max_amount_micros(LIMIT)],
         issued_at=now - 60,
         expires_at=now + DAY,
     )
-    service = RefundService(trust_root=principal.public_key)
+    status = StatusAuthority(principal, now)
+    service = RefundService(principal.public_key, status.status_pub, status)
     port = _free_port()
     app = build_server(service, observe=exploding_observer).streamable_http_app(
         json_response=True
@@ -917,15 +904,8 @@ async def test_a_failing_observer_cannot_undo_or_obscure_an_executed_refund(mcp_
     try:
         url = f"http://127.0.0.1:{port}/mcp"
         async with _session(url) as session:
-            prepared = await _prepare(session, "ord-1", UNDER, agent.id)
-            bundle = build_bundle(
-                agent.id,
-                agent.public_key,
-                agent_priv,
-                [cert],
-                base64.b64decode(prepared["challenge"]),
-                base64.b64decode(prepared["session_context"]),
-            )
+            prepared = await _prepare(session, "ord-1", UNDER, agent)
+            bundle = _sign(prepared, agent, agent_priv, [cert])
             result = await _execute(session, prepared["challenge"], bundle)
             # And the same challenge again, to be sure the failure did not
             # leave the pending record in a state that permits a second refund.
@@ -941,7 +921,7 @@ async def test_a_failing_observer_cannot_undo_or_obscure_an_executed_refund(mcp_
     assert secret not in str(out)
     assert secret not in str(result.content)
 
-    assert service.refunded_total == UNDER  # exactly one refund
+    assert service.refunded_total_micros == UNDER  # exactly one refund
     assert len(service.receipts) == 1  # exactly one receipt
     assert service.observation_failures == 2  # both observations lost, and counted
     assert replay.structured_content["decision"] == "denied"
@@ -970,15 +950,8 @@ async def test_wrong_length_challenges_are_refused(mcp_world, raw, label):
     all. None of these may create a receipt or disturb a legitimate pending
     request."""
     async with _session(mcp_world.url) as session:
-        legitimate = await _prepare(session, "ord-1", UNDER, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id,
-            mcp_world.agent.public_key,
-            mcp_world.agent_priv,
-            [mcp_world.cert],
-            base64.b64decode(legitimate["challenge"]),
-            base64.b64decode(legitimate["session_context"]),
-        )
+        legitimate = await _prepare(session, "ord-1", UNDER, mcp_world.agent)
+        bundle = _sign(legitimate, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
         bad = await session.call_tool(
             "refund.execute",
             {"challenge": base64.b64encode(raw).decode()},
@@ -1082,134 +1055,108 @@ async def test_header_and_body_must_name_the_same_method_and_tool(mcp_world):
     payload = _decode(mismatched)
     assert "error" in payload, "header/body disagreement must not be dispatched"
     assert mcp_world.service.receipts == []
-    assert mcp_world.service.refunded_total == 0.0
+    assert mcp_world.service.refunded_total_micros == 0
 
 
 # ---------------------------------------------------------------------------
-# The presenter's clock safety margin
+# Whose clock stamps the presentation
 #
-# MCPRefundClient is the only presenter in the reference that signs inside the
-# OpenShell sandbox, so it is the only one whose clock is the container's rather
-# than the receiver's. SPEC §10 requires 0 <= (now - challenge_at) with no
-# tolerance below zero, correctly, since T11 is a clock-skew attacker. A
-# concurrent profile run was refused once with "challenge is -1 seconds old"
-# because the container's clock led the host's. The presenter therefore backdates
-# its own timestamp by a measured margin. Nothing in the verifier changed.
+# Under Protocol v1 the presenter chose challenge_at from its own clock. The
+# in-sandbox presenter's clock once led the receiver's and was refused with a
+# negative challenge age, so it backdated by a two-second margin. Under v2 the
+# presentation's challenge_at must equal the receiver's own issuance time,
+# returned by refund.prepare, so no presenter clock is consulted and no margin
+# exists. These tests pin that.
 # ---------------------------------------------------------------------------
-
-from mcp_refund_client import (  # noqa: E402
-    CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS as MARGIN,
-)
-from ratify_protocol import CHALLENGE_WINDOW_SECONDS  # noqa: E402
-from ratify_protocol.crypto import verify_challenge_signature_e  # noqa: E402
-
-
-def test_the_safety_margin_is_a_small_fraction_of_the_freshness_window():
-    """WHY: backdating spends freshness. The margin has to be large enough to
-    cover measured host/guest skew (+0.228s at most, bracketed over six samples
-    on the executed platform) and small enough that the presentation is still
-    obviously fresh."""
-    assert MARGIN >= 1
-    assert MARGIN < CHALLENGE_WINDOW_SECONDS / 100
 
 
 @pytest.mark.anyio
-async def test_a_backdated_presentation_is_accepted_and_stays_fresh(mcp_world):
-    """WHY: the property the margin exists for. A presentation stamped in the
-    recent past must still authorize, and its age at the receiver must land
-    inside the freshness window rather than merely being non-negative."""
-    order = "ord-1"
+async def test_challenge_at_is_the_receivers_issuance_time(mcp_world):
+    """WHY: the honest presenter copies the receiver's issued_at, and that is
+    all it needs. If this ever required the presenter's own clock again, clock
+    skew between sandbox and host would be back as a failure mode."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, order, 25.0, mcp_world.agent.id)
-        challenge = base64.b64decode(prepared["challenge"])
-        session_context = base64.b64decode(prepared["session_context"])
-        signed_at = int(time.time()) - MARGIN
-        bundle = build_bundle(
-            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
-            [mcp_world.cert], challenge, session_context, at=signed_at,
+        prepared = await _prepare(session, "ord-1", 25_000_000, mcp_world.agent)
+        proof = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
+        result = await _execute(session, prepared["challenge"], proof)
+
+    assert decode_proof_bundle_v2(proof).challenge_at == prepared["issued_at"]
+    assert result.structured_content["decision"] == "authorized"
+
+
+@pytest.mark.anyio
+async def test_a_backdated_presentation_is_refused_before_any_claim(mcp_world):
+    """WHY: the v1 safety margin must not survive as a tolerance. A
+    presentation stamped two seconds before issuance does not answer this
+    receiver's challenge, so it is refused in preflight as challenge_mismatch,
+    with no receipt, and the challenge stays usable."""
+    async with _session(mcp_world.url) as session:
+        prepared = await _prepare(session, "ord-1", 25_000_000, mcp_world.agent)
+        backdated = _sign(
+            prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert],
+            challenge_at=prepared["issued_at"] - 2,
         )
-        result = await session.call_tool(
-            "refund.execute", {"challenge": prepared["challenge"]},
-            meta=_proof_meta(bundle),
+        refused = await _execute(session, prepared["challenge"], backdated)
+        honest = await _execute(
+            session, prepared["challenge"],
+            _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert]),
         )
 
-    decision = json.loads(result.content[0].text)
-    assert decision["decision"] == "authorized", decision
-    age = int(time.time()) - signed_at
-    assert 0 <= age <= CHALLENGE_WINDOW_SECONDS
-    assert age >= MARGIN
+    assert refused.structured_content["decision"] == "denied"
+    assert refused.structured_content["reason"].startswith("challenge_mismatch")
+    assert refused.structured_content["receipt_id"] == ""
+    assert honest.structured_content["decision"] == "authorized"
 
 
-def test_the_agent_signature_covers_the_backdated_timestamp(mcp_world):
-    """WHY: the margin must not create an unsigned or forgeable field. The
-    timestamp is inside the signed bytes, so a bundle whose challenge_at is
-    altered after signing must fail signature verification."""
-    challenge = b"\x11" * 32
-    session_context = b"\x22" * 32
-    signed_at = int(time.time()) - MARGIN
-    bundle = build_bundle(
-        mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
-        [mcp_world.cert], challenge, session_context, at=signed_at,
-    )
-    assert verify_challenge_signature_e(
-        bundle.challenge, bundle.challenge_at, bundle.challenge_sig,
-        bundle.agent_pub_key, session_context,
-    ) is None
-    # Same signature, timestamp moved: the signature must no longer verify.
-    assert verify_challenge_signature_e(
-        bundle.challenge, bundle.challenge_at + 1, bundle.challenge_sig,
-        bundle.agent_pub_key, session_context,
-    ) is not None
+def test_the_agent_signature_covers_challenge_at(mcp_world):
+    """WHY: challenge_at must not be an unsigned, movable field. Altering it in
+    a signed proof after the fact must break the agent's signature."""
+    prepared = {
+        "verifier_id": mcp_world.service.verifier_id,
+        "challenge": base64.b64encode(b"\x11" * 32).decode(),
+        "issued_at": int(time.time()),
+        "session_context": base64.b64encode(b"\x22" * 32).decode(),
+    }
+    proof = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
+    verify_proof_bundle_v2_signatures(decode_proof_bundle_v2(proof))
+
+    needle = b'"challenge_at":%d' % prepared["issued_at"]
+    assert needle in proof
+    moved = proof.replace(needle, b'"challenge_at":%d' % (prepared["issued_at"] + 1))
+    with pytest.raises(Exception):
+        verify_proof_bundle_v2_signatures(decode_proof_bundle_v2(moved))
 
 
 @pytest.mark.anyio
 async def test_a_genuinely_stale_challenge_is_still_denied(mcp_world):
-    """WHY: the margin must not become a hole. Backdating by seconds is a clock
-    accommodation; a presentation older than the freshness window is a liveness
-    failure and must still be refused by Ratify on its own terms."""
+    """WHY: a presentation that arrives after its challenge expired is a
+    liveness failure and must be refused on the receiver's clock. Advancing the
+    receiver's authoritative clock past the challenge lifetime retires the
+    pending request; nothing is claimed and nothing is signed."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", 25.0, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
-            [mcp_world.cert], base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-            at=int(time.time()) - CHALLENGE_WINDOW_SECONDS - 60,
-        )
-        result = await session.call_tool(
-            "refund.execute", {"challenge": prepared["challenge"]},
-            meta=_proof_meta(bundle),
-        )
+        prepared = await _prepare(session, "ord-1", 25_000_000, mcp_world.agent)
+        proof = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
+        mcp_world.service.store.set_time(prepared["expires_at"] + 1)
+        result = await _execute(session, prepared["challenge"], proof)
 
-    decision = json.loads(result.content[0].text)
+    decision = result.structured_content
     assert decision["decision"] == "denied"
     assert decision["status"] == "invalid"
-    assert "stale_challenge" in decision["reason"]
+    assert decision["receipt_id"] == ""
+    assert mcp_world.service.receipts == []
 
 
 @pytest.mark.anyio
 async def test_a_refused_presentation_is_not_retried(mcp_world):
-    """WHY: a retry would turn a refusal into a race that sometimes succeeds, and
-    would let a clock problem hide behind a second attempt. One presentation, one
-    decision, whatever the decision is."""
-    before = mcp_world.service.execute_count if hasattr(
-        mcp_world.service, "execute_count") else None
+    """WHY: a retry would turn a refusal into a race that sometimes succeeds.
+    One presentation, one decision, whatever the decision is: exactly one
+    refusal is recorded and nothing is signed."""
     async with _session(mcp_world.url) as session:
-        prepared = await _prepare(session, "ord-1", 25.0, mcp_world.agent.id)
-        bundle = build_bundle(
-            mcp_world.agent.id, mcp_world.agent.public_key, mcp_world.agent_priv,
-            [mcp_world.cert], base64.b64decode(prepared["challenge"]),
-            base64.b64decode(prepared["session_context"]),
-            at=int(time.time()) - CHALLENGE_WINDOW_SECONDS - 60,
-        )
-        result = await session.call_tool(
-            "refund.execute", {"challenge": prepared["challenge"]},
-            meta=_proof_meta(bundle),
-        )
-        decision = json.loads(result.content[0].text)
-        assert decision["decision"] == "denied"
-        # The challenge is single-use. If anything had retried the presentation,
-        # the second attempt would have been refused as a spent challenge and the
-        # receipt count would show two decisions for one request.
-        assert len(mcp_world.service.receipts) == 1
-    if before is not None:
-        assert mcp_world.service.execute_count == before + 1
+        prepared = await _prepare(session, "ord-1", 25_000_000, mcp_world.agent)
+        proof = _sign(prepared, mcp_world.agent, mcp_world.agent_priv, [mcp_world.cert])
+        mcp_world.service.store.set_time(prepared["issued_at"] + CHALLENGE_TTL_SECONDS + 5)
+        result = await _execute(session, prepared["challenge"], proof)
+
+    assert result.structured_content["decision"] == "denied"
+    assert mcp_world.service.refusal_count == 1
+    assert mcp_world.service.receipts == []

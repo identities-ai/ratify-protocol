@@ -39,9 +39,6 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
-from mcp_refund_client import (  # noqa: E402
-    CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS,
-)
 from openshell_cases import (  # noqa: E402
     GROUPS,
     GROUP_G_SHAPES,
@@ -84,9 +81,21 @@ TIMEOUTS = {
 #: output at all.
 SANDBOX_PYTHON = "/usr/bin/python3"
 
+#: Seconds by which the sandbox clock may lead the host's before the run reports
+#: a clock-discipline failure.
+#:
+#: Under Protocol v1 this guarded a real check: the in-sandbox presenter stamped
+#: ``challenge_at`` from its own clock and backdated it by this margin. Under v2
+#: the presentation's ``challenge_at`` is the receiver's own issuance time, so
+#: the sandbox clock no longer feeds any protocol check. The measurement is kept
+#: as a recorded clock-discipline diagnostic so the v2 gate set stays comparable
+#: with the v1 campaign.
+CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS = 2
+
 #: Above the 262,144-byte envelope ceiling the policy proposes.
 OVERSIZED_PROOF_BYTES = 400_000
-#: Decodes above the receiver's 131,072-byte bound while the resulting
+#: Decodes above the receiver's 131,072-byte bound (MAX_PROOF_BUNDLE_BYTES_V2)
+#: while the resulting
 #: envelope stays under the 262,144-byte policy bound: the only window in
 #: which the receiver's own limit is independently observable.
 OVER_RECEIVER_PROOF_BYTES = 150_000
@@ -101,11 +110,9 @@ def clock_skew_verdict(brackets: list[tuple[float, float]], margin: int) -> dict
     only figure a fail-fast decision may rest on: it is the amount by which the
     sandbox certainly leads.
 
-    The margin is diagnostic, never a substitute for backdating the presenter's
-    timestamp. If the sandbox leads by more than the margin, backdating can no
-    longer guarantee a non-negative challenge age and the run would fail
-    somewhere in the matrix with a confusing stale_challenge; this says so up
-    front instead.
+    The margin is diagnostic. Under Protocol v2 no protocol check reads the
+    sandbox clock (``challenge_at`` is the receiver's issuance time), so a
+    failure here reports container clock discipline, not a protocol refusal.
     """
     if not brackets:
         return {"result": "FAIL", "detail": "no clock samples were taken",
@@ -121,11 +128,11 @@ def clock_skew_verdict(brackets: list[tuple[float, float]], margin: int) -> dict
         "sandbox_lead_at_most_seconds": round(lead_at_most, 4),
         "detail": (
             f"sandbox clock leads the host by at least {lead_at_least:+.3f}s, which "
-            f"exceeds the {margin}s presenter safety margin; fix clock discipline "
-            "on the container runtime (SPEC 15.6)"
+            f"exceeds the {margin}s margin; fix clock discipline on the container "
+            "runtime"
         ) if not ok else (
             f"sandbox clock offset within [{lead_at_least:+.3f}, {lead_at_most:+.3f}]s "
-            f"against a {margin}s presenter safety margin"
+            f"against a {margin}s clock-discipline margin"
         ),
     }
 
@@ -226,9 +233,12 @@ class Control:
     def snapshot(self) -> dict:
         return self._call("/snapshot")
 
-    def sign(self, variant: str, challenge: str, session_context: str) -> dict:
-        return self._call("/sign", {"variant": variant, "challenge": challenge,
-                                    "session_context": session_context})
+    def sign(self, variant: str, prepared: dict) -> dict:
+        """A presentation for ``prepared``: the challenge, issuance time,
+        session binding and verifier ID refund.prepare returned."""
+        return self._call("/sign", {"variant": variant, "prepared": {
+            k: prepared[k] for k in ("challenge", "issued_at", "session_context", "verifier_id")
+        }})
 
     def revoke(self, variant: str) -> dict:
         return self._call("/revoke", {"variant": variant})
@@ -250,7 +260,7 @@ class Control:
 # Case construction
 # --------------------------------------------------------------------------
 
-def prepare_body(idx: int, ctx: dict, amount: float = UNDER_LIMIT, order: str | None = None,
+def prepare_body(idx: int, ctx: dict, amount: int = UNDER_LIMIT, order: str | None = None,
                  tenant: str | None = None, agent_id: str | None = None) -> dict:
     return {
         "jsonrpc": "2.0", "id": idx, "method": "tools/call",
@@ -258,8 +268,9 @@ def prepare_body(idx: int, ctx: dict, amount: float = UNDER_LIMIT, order: str | 
             "name": "refund.prepare", "_meta": ENV,
             "arguments": {
                 "order_id": order or ctx["canaries"]["order"],
-                "amount": amount,
+                "amount_micros": amount,
                 "agent_id": agent_id or ctx["agent_id"],
+                "agent_public_key": ctx["agent_public_key"],
                 "currency": "USD",
                 "tenant": tenant or ctx["canaries"]["tenant"],
             },
@@ -318,7 +329,7 @@ def _signed_execute(ctx, prior, prepare_name, variant, case_name):
     prepared = (prior.get(prepare_name) or {}).get("prepared")
     if not prepared:
         raise RuntimeError(f"{prepare_name} produced no challenge; cannot build {case_name}")
-    signed = ctx["control"].sign(variant, prepared["challenge"], prepared["session_context"])
+    signed = ctx["control"].sign(variant, prepared)
     ctx["sent_proofs"][case_name] = {"sha256": signed["sha256"], "len": signed["len"]}
     if case_name == "execute_valid":
         # The log audit has to search for literal fragments of a proof that
@@ -414,7 +425,7 @@ def group_ratify_semantic_denials(ctx):
     def cross(ctx, prior):
         first = prior["__prepare__cross_a"]["prepared"]
         second = prior["__prepare__cross_b"]["prepared"]
-        signed = ctx["control"].sign("valid", first["challenge"], first["session_context"])
+        signed = ctx["control"].sign("valid", first)
         ctx["sent_proofs"]["cross_request_proof_movement"] = {
             "sha256": signed["sha256"], "len": signed["len"]}
         return execute_case("cross_request_proof_movement", ctx,
@@ -428,8 +439,7 @@ def group_ratify_semantic_denials(ctx):
 
     def invalid_challenge(ctx, prior):
         prepared = prior["__prepare__invalid_challenge"]["prepared"]
-        signed = ctx["control"].sign("valid", prepared["challenge"],
-                                     prepared["session_context"])
+        signed = ctx["control"].sign("valid", prepared)
         never_issued = base64.b64encode(b"\x11" * 32).decode()
         return execute_case("invalid_challenge", ctx, never_issued, signed["proof"])
 
@@ -1039,7 +1049,7 @@ class Runner:
                 "url": ctx["mcp_url"],
                 "tenant": canaries["tenant"],
                 "order_id": order,
-                "amount": amount,
+                "amount_micros": amount,
                 "install_adapter": install,
                 "delegations": [grant["delegation"]],
                 "trace_context": trace_context,
@@ -1237,7 +1247,7 @@ class Runner:
                 else:
                     counters["refusals"] += 1
                 if event.get("decision") == "authorized":
-                    counters["refunded_total"] += UNDER_LIMIT
+                    counters["refunded_total_micros"] += UNDER_LIMIT
         if final is not None:
             # Verification of the receipt set is a property of the whole set and
             # cannot be replayed, so it is carried from the real final snapshot.
@@ -1295,7 +1305,7 @@ class Runner:
             case["status_code"] = decision.get("status")
             case["reason"] = decision.get("reason") or ""
             case["receipt_id"] = decision.get("receipt_id")
-            case["refunded"] = decision.get("refunded")
+            case["refunded_micros"] = decision.get("refunded_micros")
         return case
 
     def _json_from(self, record: dict, label: str, remote: str, stem: str) -> dict | None:
@@ -1400,6 +1410,7 @@ def main() -> int:
         "control": runner.control,
         "canaries": public["canaries"],
         "agent_id": public["agent_id"],
+        "agent_public_key": public["agent_public_key"],
         "resource_id": public["resource_id"],
         "mcp_host": args.mcp_host,
         "mcp_port": args.mcp_port,
@@ -1411,8 +1422,8 @@ def main() -> int:
         "fragment_file": work / "proof_fragment.json",
     }
 
-    # Before anything is judged: the in-sandbox presenter stamps challenge_at from
-    # the container's clock, and the receiver verifies against this host's.
+    # Before anything is judged: a clock-discipline diagnostic for the sandbox.
+    # Under v2 no protocol check reads the sandbox clock; see the constant.
     ctx["clock_skew"] = runner.measure_clock_skew()
 
     fragment_file = ctx["fragment_file"]

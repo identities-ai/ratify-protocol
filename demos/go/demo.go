@@ -1,4 +1,7 @@
-// Ratify Protocol v1 — end-to-end narrative demo (Go).
+// Ratify Protocol v1 end-to-end narrative demo (Go).
+//
+// Protocol v1 only. For the Protocol v2 flow (delegate, present, verify,
+// release) see examples/v2/go.
 //
 // Run: go run ./demos/go
 package main
@@ -90,7 +93,7 @@ func main() {
 	kv("Hybrid sig:", "Ed25519 + ML-DSA-65 over challenge || BE(ts)")
 
 	// Step 5
-	banner("STEP 5  Verifier runs Verify() — expects meeting:attend")
+	banner("STEP 5  Verifier runs Verify(), expects meeting:attend")
 	result := ratify.Verify(bundle, ratify.VerifyOptions{RequiredScope: ratify.ScopeMeetingAttend})
 	if result.Valid {
 		fmt.Println("  ✅  VALID")
@@ -99,7 +102,7 @@ func main() {
 		kv("Status:", result.IdentityStatus)
 		kv("Granted scope:", strings.Join(result.GrantedScope, ", "))
 	} else {
-		fmt.Printf("  ❌  INVALID — %s: %s\n", result.IdentityStatus, result.ErrorReason)
+		fmt.Printf("  ❌  INVALID: %s: %s\n", result.IdentityStatus, result.ErrorReason)
 	}
 
 	// Attack 1
@@ -146,10 +149,12 @@ func main() {
   • The agent signed a fresh challenge to prove liveness.
   • A verifier checked the bundle in a single function call.
   • Every one of four tampering/misuse scenarios was rejected
-    deterministically — no fuzzy detection, no false positives.
+    deterministically, with no fuzzy detection and no false positives.
   • Signatures are post-quantum hybrid, Ed25519 + ML-DSA-65 (NIST FIPS 204):
     breaking either algorithm alone is insufficient to forge.
 
-  This is the full Ratify Protocol v1, end to end, in one process.`)
+  This is Ratify Protocol v1, end to end, in one process.
+  For the Protocol v2 flow (delegate, present, verify, release),
+  see examples/v2/ in this repository.`)
 	fmt.Println()
 }

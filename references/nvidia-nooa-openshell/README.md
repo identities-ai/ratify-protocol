@@ -11,9 +11,20 @@ project, not an NVIDIA partnership, NVIDIA-approved integration, or NVIDIA
 reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
-[Architecture proposal](../../docs/nvidia-open-secure-ai-reference-proposal.md) ·
-[Evidence record](../../docs/evidence/nvidia-reference-evidence.json) ·
+[Architecture proposal](../../docs/nvidia-open-secure-ai-reference-proposal.md) (Protocol v1) ·
+[v2 evidence record](evidence-v2-2026-10-22.md) ·
+[v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json) ·
 [PR inventory](../../docs/nvidia-pr-inventory.md)
+
+**Protocol line.** The reference runs on Ratify Protocol v2, built from this
+source tree ahead of the published `2.0.0-beta.1` packages. Its deterministic
+gate passes 192/192 on v2, and one live OpenShell profile run passed 64/64
+gates (52 required cases), both against the SDK built from this tree and the
+SDK's in-memory reference stores, which are for development only. The Protocol v1 results (181 tests; the live
+OpenShell profile at 64/64 gates against `ratify-protocol==1.0.0a20`) are kept
+as dated history. Details: [v2 evidence record](evidence-v2-2026-10-22.md). Every geofence, speed or
+kinematic statement in the NVIDIA outreach and proposal documents describes
+Protocol v1; those constraints return in v2.1.
 
 ## Why would a developer or enterprise need this?
 
@@ -36,8 +47,8 @@ risk has the least evidence of anyone in the chain.**
 | Can this agent reach the service? | Yes | Not its purpose |
 | Is the call shaped correctly, to an allowed destination? | Yes, OpenShell enforces destination, method, path, and tool | Not its purpose |
 | Did a recognized principal authorize this exact action? | Not expressed by a credential | Yes |
-| Was the ceiling $100 or $10,000? | Not carried | Signed into the delegation and checked by the receiver |
-| Was the authority revoked, expired, or replayed? | Separate concern | Verified before the refund runs |
+| Was the ceiling $100 or $10,000? | Not carried | Signed into the delegation as integer micro-units and checked by the receiver |
+| Was the authority revoked, expired, or replayed? | Separate concern | Verified before the refund runs, revocation by status the principal signs |
 
 ```mermaid
 flowchart LR
@@ -62,10 +73,11 @@ sequenceDiagram
     A->>O: MCP refund request + proof
     O->>O: Enforce destination, method, path, tool
     O->>R: Admitted request
-    R->>R: Verify principal, agent, action,<br/>resource, amount, expiry, revocation
-    alt proof and receiver policy allow
+    R->>R: Verify principal, agent, action,<br/>resource, amount, expiry, signed status
+    R->>R: Commit, publish signed receipt,<br/>checkpoint, release
+    alt released and allowed
         R->>T: Execute refund once
-        T-->>A: Signed decision receipt
+        T-->>A: Decision and receipt ID
     else any check fails
         R-->>A: DENY, no refund
     end
@@ -83,10 +95,10 @@ either is required.
 
 | Role | Who this usually is | What they do | What they build |
 | --- | --- | --- | --- |
-| **Principal** | Company A, accountable for the refund | Signs a bounded mandate: ceiling, named order, expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides the bounds |
+| **Principal** | Company A, accountable for the refund | Signs a bounded mandate (ceiling, named order, expiry) and publishes signed revocation status under a separate status key | No code. Issues a delegation with the SDK or Ratify Verify, and decides the bounds |
 | **Agent operator** | The team running the NOOA agent | Carries the proof with the request | No protocol code, but real configuration: the receiver, the trusted principal, and which calls carry proof |
 | **OpenShell** | The egress boundary at Company A | Enforces destination, method, path, and tool as it already does | **Nothing.** It constrains where the call may go, not who sanctioned it |
-| **Receiver operator** | Company B, carrying the consequence | Verifies principal, agent, action, resource, amount, expiry, and revocation before refunding | The verification path. The receiving service here uses only the Python standard library, because a protocol reference should not need a web framework to be understood |
+| **Receiver operator** | Company B, carrying the consequence | Verifies principal, agent, action, resource, amount, expiry, and signed status, then releases the decision before refunding | The verification path, plus durable claim, receipt-log, checkpoint and journal stores in production. The receiving service here uses only the Python standard library and the SDK, because a protocol reference should not need a web framework to be understood |
 | **NVIDIA / NOOA** | The agent stack | Runs the agent as it already does | **Nothing** |
 
 OpenShell and Ratify answer different questions and compose. OpenShell decides
@@ -101,12 +113,16 @@ behind it. Neither substitutes for the other.
 | Amount above the ceiling | Deny | Not invoked |
 | Different order than the one authorized | Deny | Not invoked |
 | Expired or revoked authority | Deny | Not invoked |
+| Status feed unreachable | Deny (fails closed) | Not invoked |
 | Replayed proof | Deny | Not invoked again |
 | Untrusted principal | Deny | Not invoked |
 
-181 tests pass with zero skips, against both the in-tree SDK and the published
-package. The live OpenShell profile passed 64 of 64 gates.
-See [the evidence record](../../docs/evidence/nvidia-reference-evidence.json).
+On Protocol v2, 192 tests pass with zero skips against the SDK built from this
+tree, and one live OpenShell profile run passed 64 of 64 gates; see
+[the v2 evidence record](evidence-v2-2026-10-22.md). On Protocol v1, 181 tests passed
+against both the in-tree SDK and the published package, and the live OpenShell
+profile passed 64 of 64 gates; see
+[the v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json).
 
 ## Which path should I use?
 

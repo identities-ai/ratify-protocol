@@ -28,11 +28,12 @@ from dataclasses import dataclass, field
 PROOF_KEY = "com.ratifyprotocol/proof"
 
 #: The refund amount the positive path uses, and the amount a denial must not
-#: move. Named once so a gate cannot drift from the case that produced it.
-UNDER_LIMIT = 75.0
-#: Above the delegation's own cap, and above the capped parent in the
-#: amplification chains.
-OVER_LIMIT = 500.0
+#: move, in integer micro-units (75.00 USD). Named once so a gate cannot drift
+#: from the case that produced it.
+UNDER_LIMIT = 75_000_000
+#: Above the delegation's own cap (100.00 USD), and above the capped parent in
+#: the amplification chains: 500.00 USD.
+OVER_LIMIT = 500_000_000
 
 REFUND_PREPARE = "refund.prepare"
 REFUND_EXECUTE = "refund.execute"
@@ -65,7 +66,8 @@ class Expect:
     dispatch: tuple[str, ...] = ()
     prepare: int = 0
     execute: int = 0
-    refund: float = 0.0
+    #: Refund delta in integer micro-units.
+    refund: int = 0
     receipts: int = 0
     refusals: int = 0
     internal_errors: int = 0
@@ -91,11 +93,13 @@ def prepare_expect(**overrides) -> Expect:
 
 
 def denial_expect(status: str, **overrides) -> Expect:
-    """A denial the receiver reached *after* authenticating the presenter.
+    """A denial the receiver reached *after* the v2 claim.
 
-    Proof of possession succeeded, so the presenter's failed claim of
-    authority is a real authorization decision and is attested: one receipt,
-    no refusal, no money moved.
+    Preflight (challenge, freshness, expected agent, session binding, proof of
+    possession) succeeded and the challenge was claimed, so the presenter's
+    failed claim of authority is a committed decision and is attested: one
+    receipt, no refusal, no money moved. An indeterminate result (for example
+    status_unavailable) is committed and attested the same way.
     """
     base = dict(
         outcome="deny_at_ratify", status=status, tool=REFUND_EXECUTE, ingress=1,
@@ -106,7 +110,7 @@ def denial_expect(status: str, **overrides) -> Expect:
 
 
 def refusal_expect(**overrides) -> Expect:
-    """A refusal of traffic that never authenticated.
+    """A refusal of traffic that never reached a v2 claim (preflight or replay).
 
     Recording these as signed receipts would let an unauthenticated caller
     append to the verifier's audit trail at will, so the receipt count must not
@@ -171,13 +175,15 @@ GROUP_B: dict[str, Expect] = {
     "wrong_resource_path": denial_expect("constraint_denied"),
     "same_order_other_tenant": denial_expect(
         "constraint_denied",
-        notes="alpha.16: resource identity is the tenant-qualified path, so the "
+        notes="resource identity is the tenant-qualified path, so the "
               "same local order id under another tenant is a different resource",
     ),
     "expired_delegation": denial_expect("expired"),
     "revoked_delegation": denial_expect("revoked"),
     "revocation_provider_failure": denial_expect(
-        "invalid", notes="a revocation lookup error is not 'not revoked'; it fails closed",
+        "authorization_unverified",
+        notes="an unreachable signed-status feed is not 'not revoked'; the decision is "
+              "committed as indeterminate (status_unavailable) and fails closed",
     ),
     "wrong_agent_key": refusal_expect(
         notes="the presented key is not the agent the challenge was issued to, "
@@ -216,7 +222,7 @@ GROUP_B: dict[str, Expect] = {
 }
 
 # --------------------------------------------------------------------------
-# Group C: an alpha.16 maximum-depth chain, carried inline through _meta.
+# Group C: a v2 maximum-depth chain (8 certificates), carried inline in _meta.
 # --------------------------------------------------------------------------
 GROUP_C: dict[str, Expect] = {
     "prepare_max_depth": prepare_expect(),
@@ -249,8 +255,10 @@ GROUP_D: dict[str, Expect] = {
     ),
     "invalid_base64": carriage_refusal_expect(),
     "malformed_proof_encoding": carriage_refusal_expect(),
-    "chain_above_protocol_maximum": denial_expect(
-        "invalid", notes="depth 9; the verifier refuses it as chain_too_deep",
+    "chain_above_protocol_maximum": carriage_refusal_expect(
+        notes="depth 9. Under Protocol v2 a chain above the maximum (8) does not "
+              "decode, so the MCP boundary refuses it as a malformed proof before "
+              "the receiver is consulted: no claim, no receipt",
     ),
 }
 
@@ -552,10 +560,8 @@ def judge(
     deltas = {k: _delta(before, after, k) for k in _SCALARS}
     dispatched = _dispatch_delta(before, after)
     deltas["tool_dispatch"] = dispatched
-    deltas["refund"] = round(
-        (after["counters"].get("refunded_total") or 0.0)
-        - (before["counters"].get("refunded_total") or 0.0),
-        6,
+    deltas["refund"] = (after["counters"].get("refunded_total_micros") or 0) - (
+        before["counters"].get("refunded_total_micros") or 0
     )
     deltas["receipts"] = (after["counters"].get("receipts") or 0) - (
         before["counters"].get("receipts") or 0
@@ -729,7 +735,7 @@ def judge(
             name, "FAIL", f"receipt delta {deltas['receipts']}, expected {expect.receipts}",
             deltas,
         )
-    if abs(deltas["refund"] - expect.refund) > 1e-9:
+    if deltas["refund"] != expect.refund:
         return Verdict(
             name, "FAIL", f"refund delta {deltas['refund']}, expected {expect.refund}", deltas,
         )

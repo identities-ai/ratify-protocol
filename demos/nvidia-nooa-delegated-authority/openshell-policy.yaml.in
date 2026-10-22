@@ -63,11 +63,12 @@ network_policies:
         enforcement: enforce
         mcp:
           # Post-quantum authorization envelopes are large. A measured
-          # alpha.16 maximum-depth (8) proof is 88,990 raw bytes, 118,656
-          # base64, and 118,940 bytes as a complete MCP request body. The
-          # 65536 default would reject it and the 131072 used by NVIDIA's own
-          # e2e template leaves roughly 12 KB of headroom once trace context
-          # and envelope keys are counted. 262144 leaves 143,204.
+          # Protocol v2 maximum-depth (8) proof is 89,762 raw bytes, 119,684
+          # base64, and 119,966 bytes as a complete MCP request body
+          # (test_mcp_transport.py). The 65536 default would reject it and the
+          # 131072 used by NVIDIA's own e2e template leaves roughly 11 KB of
+          # headroom once trace context and envelope keys are counted. 262144
+          # leaves 142,178.
           max_body_bytes: 262144
           # Left enabled. Wildcard tool matchers require it, and the tool
           # names here are already conformant.

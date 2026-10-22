@@ -5,7 +5,8 @@
   "platform": "GitHub Copilot plugin, Agent Skill, and MCP server",
   "endorsement": "self-authored, no platform endorsement",
   "evidence": "reference-evidence.md",
-  "tests": 9,
+  "tests": 13,
   "skips": 0,
-  "gate": "./run-reference-check.sh"
+  "gate": "./run-reference-check.sh",
+  "protocol": "v2 (SDK built from this tree; development-only reference stores)"
 }

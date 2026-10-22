@@ -134,7 +134,10 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 			return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 challenge context policy does not match the issued policy")
 		}
 		if policy.requireBound {
-			if !bytes.Equal(expected.ExpectedSessionContext, policy.expectedSessionContext) || len(expected.ExpectedSessionContext) != 32 {
+			// SPEC-v2 §6.7: an ExpectedChallenge without an expected session
+			// context is accepted; the policy's own expected context is then
+			// compared after claim and a mismatch is a post-claim deny.
+			if expected.ExpectedSessionContext != nil && !bytes.Equal(expected.ExpectedSessionContext, policy.expectedSessionContext) {
 				return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 challenge context does not match the configured context policy")
 			}
 		} else if expected.ExpectedSessionContext != nil {
@@ -178,7 +181,7 @@ func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChal
 		if !expected.ContextPolicy.valid || expected.ContextPolicy.digest == "" || !validPrefixedDigestV2(expected.ContextPolicy.digest) {
 			return v2Errorf(V2ErrConfigurationInvalid, "v2 expected context policy is invalid")
 		}
-		if expected.ContextPolicy.requireBound && (!bytes.Equal(expected.ExpectedSessionContext, expected.ContextPolicy.expectedSessionContext) || len(expected.ExpectedSessionContext) != 32) {
+		if expected.ContextPolicy.requireBound && expected.ExpectedSessionContext != nil && !bytes.Equal(expected.ExpectedSessionContext, expected.ContextPolicy.expectedSessionContext) {
 			return v2Errorf(V2ErrConfigurationInvalid, "v2 expected context does not match its policy")
 		}
 		if !expected.ContextPolicy.requireBound && expected.ExpectedSessionContext != nil {

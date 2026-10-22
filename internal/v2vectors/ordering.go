@@ -1,6 +1,7 @@
 package v2vectors
 
 import (
+	"bytes"
 	"encoding/hex"
 	"sort"
 
@@ -740,6 +741,17 @@ func (g *gen) terminalScenarios() []scenario {
 			s.out.CallbackCounts.Audience = 1
 			s.out.AllowValidUntil = Now + 600
 		}))
+	// Post-claim context policy (SPEC-v2 §6.7): the ExpectedChallenge carries
+	// no expected session context, so the bound policy's own expected context
+	// is compared after claim.
+	add(g.terminal("context_policy_mismatch_after_claim", "a bound policy whose expected session context differs from the proof's, with no expected session context in the challenge record: every status is evaluated, then deny constraint_denied with context mismatch", def,
+		deny("constraint_denied", "constraint_denied", "trusted", "current", "mismatch", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) {
+			s.expected.ExpectedSessionContextB64 = nil
+			s.policy.ExpectedSessionContextB64 = strp(b64(bytes.Repeat([]byte{0x33}, 32)))
+		}))
+	add(g.terminal("context_policy_bound_after_claim", "the same configuration with a matching policy context binds after claim and allows", def, allow(), func(s *scenario) {
+		s.expected.ExpectedSessionContextB64 = nil
+	}))
 	for _, mode := range []string{"error", "panic"} {
 		mode := mode
 		add(g.terminal("audience_provider_"+mode, "an audience provider "+mode+" leaves the required membership unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),

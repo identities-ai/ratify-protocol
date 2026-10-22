@@ -48,7 +48,7 @@ from .signing_v2 import (
     _as_signer,
     equal_public_keys,
     key_id_v2,
-    sign_v2_statement_with_signer,
+    _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
 )
@@ -320,7 +320,7 @@ def sign_transaction_receipt_party_v2_with_signer(ctx: Context, receipt: Transac
     except (ValueError, V2Error) as exc:
         raise V2SigningError(f"cannot sign invalid transaction receipt: {exc}") from exc
     signable = transaction_receipt_v2_sign_bytes(receipt)
-    signature = sign_v2_statement_with_signer(ctx, TRANSACTION_PARTY_STATEMENT, signable, signer, party_public)
+    signature = _sign_v2_statement_with_signer(ctx, TRANSACTION_PARTY_STATEMENT, signable, signer, party_public)
     return TransactionReceiptSignatureV2(party_id, signature)
 
 

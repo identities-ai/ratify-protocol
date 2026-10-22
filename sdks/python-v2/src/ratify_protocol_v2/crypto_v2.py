@@ -22,14 +22,6 @@ def derive_key_id_v2(public_key: HybridPublicKey) -> str:
     return key_id_v2(public_key)
 
 
-def sign_delegation_v2(*_args, **_kwargs):
-    """Removed: signing caller-selected bytes is not part of the v2 API.
-    Use ``protocol_v2.sign_delegation_cert_v2`` (a typed signer)."""
-    raise NotImplementedError(
-        "sign_delegation_v2 signed caller-selected bytes and is removed; use protocol_v2.sign_delegation_cert_v2"
-    )
-
-
 def verify_delegation_signature_v2(
     signable_bytes: bytes,
     signature: HybridSignature,

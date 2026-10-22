@@ -41,7 +41,7 @@ from .signing_v2 import (
     V2SigningError,
     _as_signer,
     key_id_v2,
-    sign_v2_statement_with_signer,
+    _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
 )
@@ -213,7 +213,7 @@ def sign_witness_entry_v2_with_signer(ctx: Context, entry: WitnessEntryV2, signe
     if key_id_v2(witness_public) != entry.witness_id:
         raise V2SigningError("witness_id does not match signing key")
     body = witness_entry_signable_bytes_v2(entry)
-    signature = sign_v2_statement_with_signer(ctx, WITNESS_ENTRY, body, signer, witness_public)
+    signature = _sign_v2_statement_with_signer(ctx, WITNESS_ENTRY, body, signer, witness_public)
     result = replace(entry, prev_hash=bytes(entry.prev_hash), entry_data=bytes(entry.entry_data), signature=signature)
     encode_witness_entry_v2(result)
     return result

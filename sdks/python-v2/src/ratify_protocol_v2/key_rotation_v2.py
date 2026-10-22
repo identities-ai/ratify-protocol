@@ -39,7 +39,7 @@ from .signing_v2 import (
     clone_public_key,
     equal_public_keys,
     key_id_v2,
-    sign_v2_statement_with_signer,
+    _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
 )
@@ -218,8 +218,8 @@ def sign_key_rotation_statement_v2_with_signers(ctx: Context, stmt: KeyRotationS
     if not equal_public_keys(old_pub, stmt.old_key) or not equal_public_keys(new_pub, stmt.new_key):
         raise V2SigningError("rotation private keys do not match the statement keys")
     signable = key_rotation_signable_bytes_v2(stmt)
-    old_signature = sign_v2_statement_with_signer(ctx, KEY_ROTATION_AUTHORIZATION, signable, old_signer, old_pub)
-    new_signature = sign_v2_statement_with_signer(ctx, KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_signer, new_pub)
+    old_signature = _sign_v2_statement_with_signer(ctx, KEY_ROTATION_AUTHORIZATION, signable, old_signer, old_pub)
+    new_signature = _sign_v2_statement_with_signer(ctx, KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_signer, new_pub)
     return replace(stmt, previous_statement_hash=bytes(stmt.previous_statement_hash),
                    old_key=clone_public_key(stmt.old_key), new_key=clone_public_key(stmt.new_key),
                    old_signature=old_signature, new_signature=new_signature)

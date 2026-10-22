@@ -54,7 +54,7 @@ from .signing_v2 import (
     _as_signer,
     equal_public_keys,
     key_id_v2,
-    sign_v2_statement_with_signer,
+    _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
 )
@@ -407,7 +407,7 @@ def sign_delegation_cert_v2_with_signer(ctx: Context, cert: DelegationCertV2, si
         raise V2SigningError("v2 issuer key does not match certificate issuer")
     prepared = decode_delegation_cert_v2(encode_delegation_cert_v2(replace(cert, signature=placeholder_signature_v2())))
     signable = cert_signable_bytes_v2(prepared)
-    prepared.signature = sign_v2_statement_with_signer(ctx, DELEGATION_CERTIFICATE, signable, signer, issuer_pub)
+    prepared.signature = _sign_v2_statement_with_signer(ctx, DELEGATION_CERTIFICATE, signable, signer, issuer_pub)
     signed = decode_delegation_cert_v2(encode_delegation_cert_v2(prepared))
     verify_v2_statement(DELEGATION_CERTIFICATE, signable, signed.signature, issuer_pub)
     return signed
@@ -638,7 +638,7 @@ def sign_proof_bundle_v2_with_signer(ctx: Context, bundle: ProofBundleV2, signer
     prepared = decode_proof_bundle_v2(encode_proof_bundle_v2(unsigned))
     prepared.delegation_digest = delegation_digest_v2(prepared.delegations)
     signable = presentation_signable_bytes_v2(prepared)
-    prepared.challenge_sig = sign_v2_statement_with_signer(ctx, CHALLENGE_PRESENTATION, signable, signer, agent_pub)
+    prepared.challenge_sig = _sign_v2_statement_with_signer(ctx, CHALLENGE_PRESENTATION, signable, signer, agent_pub)
     signed = decode_proof_bundle_v2(encode_proof_bundle_v2(prepared))
     verify_proof_bundle_v2_signatures(signed)
     return signed
@@ -850,7 +850,7 @@ def _sign_status(ctx: Context, kind: str, obj, bound_issuer_id: str, bound_statu
     if not isinstance(bound_status_key, HybridPublicKey) or not equal_public_keys(bound_status_key, derived):
         raise V2SigningError("status private key does not match caller-authenticated issuer status-key binding")
     prepared = decode(encode(replace(obj, signature=placeholder_signature_v2())))
-    prepared.signature = sign_v2_statement_with_signer(ctx, code, signable_of(prepared), signer, derived)
+    prepared.signature = _sign_v2_statement_with_signer(ctx, code, signable_of(prepared), signer, derived)
     signed = decode(encode(prepared))
     verify(signed, bound_issuer_id, bound_status_key)
     return signed

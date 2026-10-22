@@ -39,7 +39,7 @@ from .signing_v2 import (
     V2SigningError,
     _as_signer,
     key_id_v2,
-    sign_v2_statement_with_signer,
+    _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
 )
@@ -510,7 +510,7 @@ def sign_verification_receipt_v2_with_signer(ctx: Context, r: VerificationReceip
     if key_id_v2(verifier_public) != r.verifier_id:
         raise V2SigningError("receipt verifier_id does not match signing key")
     body = receipt_v2_signable_bytes(r)
-    signature = sign_v2_statement_with_signer(ctx, VERIFICATION_RECEIPT, body, signer, verifier_public)
+    signature = _sign_v2_statement_with_signer(ctx, VERIFICATION_RECEIPT, body, signer, verifier_public)
     result = replace(r, signature=signature)
     encode_verification_receipt_v2(result)
     return result

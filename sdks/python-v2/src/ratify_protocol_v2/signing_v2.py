@@ -277,7 +277,7 @@ def signer_public_key_v2(signer: SignerV2) -> HybridPublicKey:
     return clone_public_key(pub)
 
 
-def sign_v2_statement_with_signer(
+def _sign_v2_statement_with_signer(
     ctx: Context, code: int, signable: bytes, signer: SignerV2, pub: HybridPublicKey
 ) -> HybridSignature:
     """Go ``signV2StatementWithSigner``: prepare the typed request, call the

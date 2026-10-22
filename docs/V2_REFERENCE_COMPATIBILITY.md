@@ -108,6 +108,7 @@ passing it. Changes to `testvectors/v2`:
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
 | `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps over 14 requests) against each SDK's in-memory reference store |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
+| `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 
 SDK test files that read these vector files, and therefore fail until ported:
 

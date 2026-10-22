@@ -1,0 +1,646 @@
+{
+  "version": 2,
+  "description": "Annex A vectors (SPEC-v2-ANNEX-A.md): the v1 clauses that Protocol v2 incorporates, pinned by digest and locked by behavior. The annex, not SPEC.md, is normative for v2.",
+  "semantics": {
+    "canonical_json": "strictly decode input_b64 under SPEC-v2 §2.1 and the A.2 value model, re-encode with RatifyCanonicalJSON (A.3), and compare with canonical byte for byte; input_is_canonical states whether the input bytes already equal that encoding",
+    "clauses": "recompute SHA-256 over the exact UTF-8 bytes between the annex-a:begin and annex-a:end marker lines of SPEC-v2-ANNEX-A.md (no final newline); bytes and sha256 must match",
+    "scope_expansion": "expand a scope list (A.4 §9.2 and §9.4) and sort it in byte order without duplicates",
+    "scope_intersection": "effective scope of a chain: the intersection of every list's expansion, sorted (A.4 §9.3)",
+    "scope_validation": "validate a v2 certificate scope list (A.4 plus SPEC-v2 §5.1: non-empty, no duplicate, no custom:*)",
+    "strict_decode_rejections": "input_b64 must be rejected before any value is produced, with error_class",
+    "vocabulary": "canonical is the complete A.4 §9.1 vocabulary in byte order; sensitive is its sensitive subset; wildcards maps each A.4 §9.2 wildcard to its sorted expansion"
+  },
+  "clauses": [
+    {
+      "id": "A.2",
+      "source": "SPEC.md §5.7.1, the Restricted value model item",
+      "bytes": 499,
+      "sha256": "adc4e5aba2f47577f4eb336a226c46d9d45d108e111b0ca8cb084a1c4277a727"
+    },
+    {
+      "id": "A.3",
+      "source": "SPEC.md §§6.1 to 6.3",
+      "bytes": 1616,
+      "sha256": "e89aeebd1238aff661ae087cec6134cd8c70d63eb7584003ce2539f9c182f9ab"
+    },
+    {
+      "id": "A.4",
+      "source": "SPEC.md §9 introduction and §§9.1 to 9.5",
+      "bytes": 11777,
+      "sha256": "bf265807bd61dd241bbcca4f70a2e860ec436c5f09bceeb82f0ae607ceaf15c6"
+    }
+  ],
+  "canonical_json": [
+    {
+      "name": "key_order_utf8_bytes",
+      "description": "object keys sort by UTF-8 bytes, not UTF-16 code units: U+FF61 (EF BD A1) sorts before U+1F600 (F0 9F 98 80)",
+      "input_b64": "eyJiIjoxLCJhIjoyLCJcdWZmNjEiOjMsIlx1ZDgzZFx1ZGUwMCI6NCwiXHUwMGU5Ijo1LCJaIjo2fQ==",
+      "input_is_canonical": false,
+      "canonical": "{\"Z\":6,\"a\":2,\"b\":1,\"é\":5,\"｡\":3,\"😀\":4}"
+    },
+    {
+      "name": "whitespace_and_nesting",
+      "description": "insignificant whitespace is removed and nested object keys sort recursively",
+      "input_b64": "IHsgInoiIDogWyAxICwgeyAieSIgOiBudWxsICwgIngiIDogdHJ1ZSB9IF0gLCAiYSIgOiAicyIgfSA=",
+      "input_is_canonical": false,
+      "canonical": "{\"a\":\"s\",\"z\":[1,{\"x\":true,\"y\":null}]}"
+    },
+    {
+      "name": "minimal_escaping",
+      "description": "minimal RFC 8259 escaping, no HTML escaping, U+2028 and U+2029 escaped, DEL and solidus literal, escaped non-ASCII emitted literally",
+      "input_b64": "eyJzIjoiPD4mXHUyMDI4XHUyMDI5XHUwMDAxXHUwMDFmXG5cdFxyXGJcZlwiXFxcL1x1MDA3Zlx1MDBlOSJ9",
+      "input_is_canonical": false,
+      "canonical": "{\"s\":\"\u003c\u003e\u0026\\u2028\\u2029\\u0001\\u001f\\n\\t\\r\\b\\f\\\"\\\\/é\"}"
+    },
+    {
+      "name": "literal_line_separator",
+      "description": "a literal U+2028 in the input is the same value as its escape and is emitted escaped",
+      "input_b64": "eyJzIjoiYeKAqGIifQ==",
+      "input_is_canonical": false,
+      "canonical": "{\"s\":\"a\\u2028b\"}"
+    },
+    {
+      "name": "safe_integer_bounds",
+      "description": "integers at the safe-integer bounds keep their shortest decimal form",
+      "input_b64": "eyJtYXgiOjkwMDcxOTkyNTQ3NDA5OTEsIm1pbiI6LTkwMDcxOTkyNTQ3NDA5OTEsIm5lZyI6LTEsInplcm8iOjB9",
+      "input_is_canonical": true,
+      "canonical": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"neg\":-1,\"zero\":0}"
+    },
+    {
+      "name": "no_unicode_normalization",
+      "description": "NFC U+00E9 and NFD e + U+0301 are distinct keys and distinct values; nothing is normalized, and the NFD key (65 CC 81) sorts first",
+      "input_b64": "eyLDqSI6IsOpIiwiZcyBIjoiZcyBIn0=",
+      "input_is_canonical": false,
+      "canonical": "{\"é\":\"é\",\"é\":\"é\"}"
+    },
+    {
+      "name": "empty_containers",
+      "description": "empty arrays and objects",
+      "input_b64": "eyJiIjp7fSwiYSI6W119",
+      "input_is_canonical": false,
+      "canonical": "{\"a\":[],\"b\":{}}"
+    },
+    {
+      "name": "already_canonical",
+      "description": "canonical input is unchanged",
+      "input_b64": "eyJhIjpbdHJ1ZSxmYWxzZSxudWxsLCJ4IiwtNV0sImIiOnsiYyI6ImQifX0=",
+      "input_is_canonical": true,
+      "canonical": "{\"a\":[true,false,null,\"x\",-5],\"b\":{\"c\":\"d\"}}"
+    }
+  ],
+  "strict_decode_rejections": [
+    {
+      "name": "fraction",
+      "description": "a number with a fraction is outside the value model",
+      "input_b64": "eyJhIjoxLjV9",
+      "error_class": "malformed"
+    },
+    {
+      "name": "integral_fraction",
+      "description": "1.0 is a fraction token even though its value is integral",
+      "input_b64": "eyJhIjoxLjB9",
+      "error_class": "malformed"
+    },
+    {
+      "name": "exponent",
+      "description": "a number with an exponent is outside the value model",
+      "input_b64": "eyJhIjoxZTJ9",
+      "error_class": "malformed"
+    },
+    {
+      "name": "exponent_upper",
+      "description": "an uppercase exponent is outside the value model",
+      "input_b64": "eyJhIjoxRTJ9",
+      "error_class": "malformed"
+    },
+    {
+      "name": "negative_zero",
+      "description": "the integer spelling -0 is rejected (SPEC-v2 §2.1)",
+      "input_b64": "eyJhIjotMH0=",
+      "error_class": "malformed"
+    },
+    {
+      "name": "above_safe_integer",
+      "description": "2^53 is outside the safe-integer range",
+      "input_b64": "eyJhIjo5MDA3MTk5MjU0NzQwOTkyfQ==",
+      "error_class": "malformed"
+    },
+    {
+      "name": "below_safe_integer",
+      "description": "-2^53 is outside the safe-integer range",
+      "input_b64": "eyJhIjotOTAwNzE5OTI1NDc0MDk5Mn0=",
+      "error_class": "malformed"
+    },
+    {
+      "name": "duplicate_key",
+      "description": "a repeated object key",
+      "input_b64": "eyJhIjoxLCJhIjoxfQ==",
+      "error_class": "malformed"
+    },
+    {
+      "name": "duplicate_key_after_escape",
+      "description": "a key and its escaped spelling are the same key",
+      "input_b64": "eyJhIjoxLCJhIjoyfQ==",
+      "error_class": "malformed"
+    },
+    {
+      "name": "nested_duplicate_key",
+      "description": "duplicate keys are rejected at any depth",
+      "input_b64": "eyJvIjp7ImsiOjEsImsiOjJ9fQ==",
+      "error_class": "malformed"
+    },
+    {
+      "name": "lone_high_surrogate",
+      "description": "an unpaired high surrogate escape",
+      "input_b64": "eyJhIjoiXHVkODAwIn0=",
+      "error_class": "malformed"
+    },
+    {
+      "name": "lone_low_surrogate",
+      "description": "an unpaired low surrogate escape",
+      "input_b64": "eyJhIjoiXHVkYzAwIn0=",
+      "error_class": "malformed"
+    },
+    {
+      "name": "reversed_surrogates",
+      "description": "a low surrogate followed by a high surrogate is not a pair",
+      "input_b64": "eyJhIjoiXHVkYzAwXHVkODAwIn0=",
+      "error_class": "malformed"
+    },
+    {
+      "name": "invalid_utf8",
+      "description": "raw bytes that are not UTF-8",
+      "input_b64": "eyJhIjoi/yJ9",
+      "error_class": "malformed"
+    },
+    {
+      "name": "nan_token",
+      "description": "NaN is not JSON",
+      "input_b64": "eyJhIjpOYU59",
+      "error_class": "malformed"
+    },
+    {
+      "name": "trailing_document",
+      "description": "content after the first JSON value",
+      "input_b64": "eyJhIjoxfXt9",
+      "error_class": "malformed"
+    }
+  ],
+  "vocabulary": {
+    "canonical": [
+      "actuate:motor",
+      "actuate:switch",
+      "actuate:valve",
+      "comms:calendar:read",
+      "comms:calendar:write",
+      "comms:email:delete",
+      "comms:email:read",
+      "comms:email:send",
+      "comms:message:delete",
+      "comms:message:read",
+      "comms:message:send",
+      "contract:read",
+      "contract:sign",
+      "data:delete",
+      "data:export",
+      "data:read",
+      "data:share",
+      "data:write",
+      "drone:capture",
+      "drone:deliver",
+      "drone:fly",
+      "execute:code",
+      "execute:tool",
+      "files:read",
+      "files:write",
+      "generate:content",
+      "generate:deepfake",
+      "identity:delegate",
+      "identity:prove",
+      "infrastructure:access",
+      "infrastructure:control",
+      "infrastructure:monitor",
+      "meeting:attend",
+      "meeting:chat",
+      "meeting:record",
+      "meeting:share_screen",
+      "meeting:speak",
+      "meeting:video",
+      "payments:authorize",
+      "payments:receive",
+      "payments:send",
+      "physical:actuate",
+      "physical:enter",
+      "physical:exit",
+      "physical:manipulate",
+      "presence:represent",
+      "robot:interact",
+      "robot:move",
+      "robot:operate",
+      "transact:purchase",
+      "transact:sell",
+      "vehicle:charge",
+      "vehicle:operate",
+      "vehicle:transport"
+    ],
+    "sensitive": [
+      "actuate:motor",
+      "actuate:switch",
+      "actuate:valve",
+      "comms:email:delete",
+      "comms:message:delete",
+      "contract:sign",
+      "data:delete",
+      "data:export",
+      "data:write",
+      "drone:fly",
+      "execute:code",
+      "files:write",
+      "generate:deepfake",
+      "identity:delegate",
+      "infrastructure:access",
+      "infrastructure:control",
+      "meeting:record",
+      "payments:authorize",
+      "physical:actuate",
+      "physical:manipulate",
+      "presence:represent",
+      "vehicle:operate"
+    ],
+    "wildcards": {
+      "comms:*": [
+        "comms:calendar:read",
+        "comms:calendar:write",
+        "comms:email:read",
+        "comms:email:send",
+        "comms:message:read",
+        "comms:message:send"
+      ],
+      "comms:email:*": [
+        "comms:email:read",
+        "comms:email:send"
+      ],
+      "comms:message:*": [
+        "comms:message:read",
+        "comms:message:send"
+      ],
+      "data:*": [
+        "data:read",
+        "data:share"
+      ],
+      "drone:*": [
+        "drone:capture",
+        "drone:deliver"
+      ],
+      "execute:*": [
+        "execute:tool"
+      ],
+      "generate:*": [
+        "generate:content"
+      ],
+      "infrastructure:*": [
+        "infrastructure:monitor"
+      ],
+      "meeting:*": [
+        "meeting:attend",
+        "meeting:chat",
+        "meeting:share_screen",
+        "meeting:speak",
+        "meeting:video"
+      ],
+      "payments:*": [
+        "payments:receive",
+        "payments:send"
+      ],
+      "physical:*": [
+        "physical:enter",
+        "physical:exit"
+      ],
+      "robot:*": [
+        "robot:interact",
+        "robot:move",
+        "robot:operate"
+      ],
+      "transact:*": [
+        "transact:purchase",
+        "transact:sell"
+      ],
+      "vehicle:*": [
+        "vehicle:charge",
+        "vehicle:transport"
+      ]
+    }
+  },
+  "scope_validation": [
+    {
+      "name": "canonical",
+      "scopes": [
+        "data:read"
+      ],
+      "valid": true
+    },
+    {
+      "name": "wildcard",
+      "scopes": [
+        "data:*"
+      ],
+      "valid": true
+    },
+    {
+      "name": "custom",
+      "scopes": [
+        "custom:acme:inventory:read"
+      ],
+      "valid": true
+    },
+    {
+      "name": "custom_single_character",
+      "scopes": [
+        "custom:x"
+      ],
+      "valid": true
+    },
+    {
+      "name": "custom_looks_like_wildcard",
+      "scopes": [
+        "custom:data:*"
+      ],
+      "valid": true
+    },
+    {
+      "name": "custom_non_ascii_exact",
+      "scopes": [
+        "custom:café"
+      ],
+      "valid": true
+    },
+    {
+      "name": "empty_list",
+      "scopes": [],
+      "valid": false
+    },
+    {
+      "name": "custom_prefix_only",
+      "scopes": [
+        "custom:"
+      ],
+      "valid": false
+    },
+    {
+      "name": "custom_star",
+      "scopes": [
+        "custom:*"
+      ],
+      "valid": false
+    },
+    {
+      "name": "reserved_x_prefix",
+      "scopes": [
+        "x-acme:read"
+      ],
+      "valid": false
+    },
+    {
+      "name": "reserved_urn_prefix",
+      "scopes": [
+        "urn:ratify:read"
+      ],
+      "valid": false
+    },
+    {
+      "name": "duplicate",
+      "scopes": [
+        "data:read",
+        "data:read"
+      ],
+      "valid": false
+    },
+    {
+      "name": "no_actuate_wildcard",
+      "scopes": [
+        "actuate:*"
+      ],
+      "valid": false
+    },
+    {
+      "name": "no_presence_wildcard",
+      "scopes": [
+        "presence:*"
+      ],
+      "valid": false
+    },
+    {
+      "name": "no_files_wildcard",
+      "scopes": [
+        "files:*"
+      ],
+      "valid": false
+    },
+    {
+      "name": "case_sensitive",
+      "scopes": [
+        "Data:read"
+      ],
+      "valid": false
+    },
+    {
+      "name": "trailing_space",
+      "scopes": [
+        "data:read "
+      ],
+      "valid": false
+    }
+  ],
+  "scope_expansion": [
+    {
+      "name": "wildcard_excludes_sensitive",
+      "scopes": [
+        "data:*"
+      ],
+      "expanded": [
+        "data:read",
+        "data:share"
+      ]
+    },
+    {
+      "name": "explicit_sensitive_kept",
+      "scopes": [
+        "meeting:*",
+        "meeting:record"
+      ],
+      "expanded": [
+        "meeting:attend",
+        "meeting:chat",
+        "meeting:record",
+        "meeting:share_screen",
+        "meeting:speak",
+        "meeting:video"
+      ]
+    },
+    {
+      "name": "custom_passes_through",
+      "scopes": [
+        "custom:acme:x",
+        "data:*"
+      ],
+      "expanded": [
+        "custom:acme:x",
+        "data:read",
+        "data:share"
+      ]
+    },
+    {
+      "name": "custom_wildcard_shape_is_literal",
+      "scopes": [
+        "custom:data:*"
+      ],
+      "expanded": [
+        "custom:data:*"
+      ]
+    },
+    {
+      "name": "physical_wildcard",
+      "scopes": [
+        "physical:*"
+      ],
+      "expanded": [
+        "physical:enter",
+        "physical:exit"
+      ]
+    },
+    {
+      "name": "deduplicated_and_sorted",
+      "scopes": [
+        "data:share",
+        "data:*",
+        "comms:email:*",
+        "comms:email:read"
+      ],
+      "expanded": [
+        "comms:email:read",
+        "comms:email:send",
+        "data:read",
+        "data:share"
+      ]
+    }
+  ],
+  "scope_intersection": [
+    {
+      "name": "wildcard_narrowed_by_child",
+      "lists": [
+        [
+          "data:*"
+        ],
+        [
+          "data:read",
+          "data:write"
+        ]
+      ],
+      "effective": [
+        "data:read"
+      ]
+    },
+    {
+      "name": "sensitive_needs_every_link",
+      "lists": [
+        [
+          "data:*"
+        ],
+        [
+          "data:write"
+        ]
+      ],
+      "effective": []
+    },
+    {
+      "name": "sensitive_explicit_in_every_link",
+      "lists": [
+        [
+          "identity:delegate",
+          "data:read"
+        ],
+        [
+          "identity:delegate"
+        ]
+      ],
+      "effective": [
+        "identity:delegate"
+      ]
+    },
+    {
+      "name": "custom_in_every_link",
+      "lists": [
+        [
+          "custom:acme:x",
+          "data:read"
+        ],
+        [
+          "custom:acme:x"
+        ]
+      ],
+      "effective": [
+        "custom:acme:x"
+      ]
+    },
+    {
+      "name": "custom_byte_exact",
+      "lists": [
+        [
+          "custom:acme:x"
+        ],
+        [
+          "custom:acme:X"
+        ]
+      ],
+      "effective": []
+    },
+    {
+      "name": "custom_not_granted_by_canonical",
+      "lists": [
+        [
+          "data:*"
+        ],
+        [
+          "custom:data:read"
+        ]
+      ],
+      "effective": []
+    },
+    {
+      "name": "nested_wildcards",
+      "lists": [
+        [
+          "comms:*"
+        ],
+        [
+          "comms:email:*",
+          "comms:email:delete"
+        ]
+      ],
+      "effective": [
+        "comms:email:read",
+        "comms:email:send"
+      ]
+    },
+    {
+      "name": "three_links",
+      "lists": [
+        [
+          "data:*",
+          "files:read"
+        ],
+        [
+          "data:read",
+          "data:share"
+        ],
+        [
+          "data:read",
+          "files:read"
+        ]
+      ],
+      "effective": [
+        "data:read"
+      ]
+    }
+  ]
+}

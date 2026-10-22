@@ -47,6 +47,7 @@ tests.
 | `log-sequences.json` | Witness-log and verification-receipt-log sequences: append, idempotent replay including new signature bytes over the same body, gap, orphan, cross-log replay, key substitution, fork freeze, and recovery to a new log ID. |
 | `limits.json` | 32 byte-boundary, count-boundary and timestamp-domain cases: every v2 decoder at its byte limit and limit+1 (including the status evidence batch), revoked-reference counts for lists and pushes, status evidence batch entries at 64 and 65, witness `entry_data`, and signed timestamps at 253402300799 and one second past it. Large inputs are given as exact construction recipes (`pad`, `repeat_items`, `repeat_item`) with the expected length and SHA-256. |
 | `hedged-signatures.json` | 10 objects from `objects.json`, each with 2 variants whose ML-DSA-65 components were produced by hedged (randomized) signing. Verifiers must accept every variant, derive identical projections and body digests, and treat a re-signed accepted log entry as a replay. Not reproducible: written only by `go run ./cmd/ratify-v2-vectors -hedged`. |
+| `annex-a.json` | Annex A (`SPEC-v2-ANNEX-A.md`): the 3 copied v1 clauses pinned by byte length and SHA-256; 8 canonical JSON cases (UTF-8 byte key order, minimal escaping, U+2028 and U+2029, safe-integer bounds, no Unicode normalization); 16 strict-decode rejections (fraction, exponent, `-0`, out-of-range integers, duplicate keys including escaped spellings, unpaired surrogates, invalid UTF-8, trailing content); the 54-scope vocabulary with its 22 sensitive scopes and 14 wildcard expansions; 17 certificate scope-list validations, 6 expansions, and 8 chain intersections, including `custom:` behavior. |
 | `rotation-sequences.json` | AcceptRotation journal: genesis, repeat signatures, skipped sequence, continuation, fork freeze, frozen rejection, invalid recoveries, recovery epoch increase, and rejection of old-epoch statements. |
 
 ## Required for 2.0.0-beta.1
@@ -57,6 +58,7 @@ follows; the last column names what is still missing.
 
 | Requirement | SPEC-v2 | Where it is covered | Still missing |
 | --- | --- | --- | --- |
+| Incorporated v1 text: value model, canonical JSON, scope vocabulary | §2.1, Annex A | `annex-a.json` | |
 | Byte and count limits | §2.6 | `limits.json` | |
 | Numeric bounds, exclusive deadlines, clock regression | §2.5, §7.2 | `limits.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `lifecycle-scenarios.json` | Checked-arithmetic overflow vectors beyond the timestamp domain |
 | Constraint registry and evaluation | §5.2 | `objects.json`, `object-negatives.json`, `verifier-ordering.json` | |

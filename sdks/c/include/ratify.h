@@ -2750,6 +2750,20 @@ int32_t ratify_v2_ref_device_restore(const struct RatifyV2RefDevice *d,
 #endif
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the single-device complete-state projection (SPEC-v2 §7.13)
+// of a primary loaded from `state_json` (the record encodings of
+// `testvectors/v2/device-state.json` `state`). `*out` is a JSON object of
+// strings: `<member>_canonical_json` for `claims`, `streams`,
+// `rate_counters`, `receipt_log`, and `issuance_records`;
+// `projection_canonical_json`; `complete_state_digest_hex`; and
+// `anchoring_digest_hex`, the digest the loaded primary anchors to its
+// checkpoint, which must equal the projection digest.
+int32_t ratify_v2_ref_device_state_projection(const uint8_t *state_json,
+                                              uintptr_t state_json_len,
+                                              struct RatifyV2Buffer *out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
 // TEST ONLY: a new, empty ledger.
 int32_t ratify_v2_ref_ledger_new(struct RatifyV2RefLedger **out);
 #endif

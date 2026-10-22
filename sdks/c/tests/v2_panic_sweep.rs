@@ -106,6 +106,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_ref_device_op",
     "ratify_v2_ref_device_snapshot",
     "ratify_v2_ref_device_restore",
+    "ratify_v2_ref_device_state_projection",
     "ratify_v2_ref_ledger_new",
     "ratify_v2_ref_ledger_free",
     "ratify_v2_ref_ledger_open",
@@ -671,6 +672,13 @@ fn every_v2_export_contains_a_panic() {
         unsafe { ratify_v2_ref_device_restore(z(), z(), z()) },
         -3,
         "ratify_v2_ref_device_restore"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_ref_device_state_projection(z(), z(), z()) },
+        -3,
+        "ratify_v2_ref_device_state_projection"
     );
     fired();
     arm_before_body();

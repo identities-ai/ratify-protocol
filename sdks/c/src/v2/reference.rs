@@ -1336,6 +1336,56 @@ pub unsafe extern "C" fn ratify_v2_ref_device_restore(
     )
 }
 
+/// TEST ONLY: the single-device complete-state projection (SPEC-v2 §7.13)
+/// of a primary loaded from `state_json` (the record encodings of
+/// `testvectors/v2/device-state.json` `state`). `*out` is a JSON object of
+/// strings: `<member>_canonical_json` for `claims`, `streams`,
+/// `rate_counters`, `receipt_log`, and `issuance_records`;
+/// `projection_canonical_json`; `complete_state_digest_hex`; and
+/// `anchoring_digest_hex`, the digest the loaded primary anchors to its
+/// checkpoint, which must equal the projection digest.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_ref_device_state_projection(
+    state_json: *const u8,
+    state_json_len: usize,
+    out: *mut RatifyV2Buffer,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || clear_buffer(out),
+        || {
+            let state = bytes(state_json, state_json_len, "state_json")?;
+            let primary = DevicePrimaryTestOnly::from_records_test_only(state)?;
+            let p = primary.projection_test_only()?;
+            let anchoring = primary.complete_state_digest_test_only()?;
+            let text = |b: &[u8]| {
+                String::from_utf8(b.to_vec()).map_err(|_| bad_arg("projection member is not UTF-8"))
+            };
+            let mut o = serde_json::Map::new();
+            for (member, b) in [
+                ("claims", &p.claims),
+                ("streams", &p.streams),
+                ("rate_counters", &p.rate_counters),
+                ("receipt_log", &p.receipt_log),
+                ("issuance_records", &p.issuance_records),
+                ("projection", &p.projection),
+            ] {
+                o.insert(format!("{member}_canonical_json"), text(b)?.into());
+            }
+            o.insert(
+                "complete_state_digest_hex".into(),
+                hex_lower(&p.complete_state_digest).into(),
+            );
+            o.insert("anchoring_digest_hex".into(), hex_lower(&anchoring).into());
+            write_buffer(out, to_bytes(&Value::Object(o)))
+        },
+    )
+}
+
+fn hex_lower(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
 // ---------------------------------------------------------------------------
 // Dual-root composition profile (§7.14)
 

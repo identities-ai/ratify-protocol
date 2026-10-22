@@ -35,6 +35,11 @@ const CONSUMED: &[(&str, &str, &str)] = &[
         "fn v2c_external_mu_matches_shared_signature_vector",
     ),
     (
+        "device-state.json",
+        "v2c_device_state.rs",
+        "\"device-state.json\"",
+    ),
+    (
         "evaluator-profiles.json",
         "v2c_objects.rs",
         "\"evaluator-profiles.json\"",

@@ -137,17 +137,6 @@ class KeyRotationFrozenError(V2Error):
         super().__init__(V2ErrorClass.ROTATION_FROZEN, message)
 
 
-class RateLimitExceededError(Exception):
-    """ErrV2RateLimitExceeded: a complete atomic batch had no capacity.
-
-    Unclassified by design, as in Go: it is a store outcome, not a failure
-    class, and the verifier maps it to ``constraint_denied``.
-    """
-
-    def __init__(self, message: str = "v2 signed rate limit has no remaining capacity"):
-        super().__init__(message)
-
-
 def v2_error(error_class: str, message: str) -> V2Error:
     return V2Error(error_class, message)
 

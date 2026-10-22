@@ -12,8 +12,8 @@
     "check": "tsc --noEmit && npm test && npm run build:plugin"
   },
   "dependencies": {
-    "@identities-ai/ratify-protocol": "1.0.0-alpha.19",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@identities-ai/ratify-protocol": "file:../../sdks/typescript",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "zod": "3.25.76"
   },
   "devDependencies": {

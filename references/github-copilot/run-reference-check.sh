@@ -2,7 +2,20 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-npm ci
+
+# Protocol v2. The reference depends on the TypeScript SDK in this tree through
+# a file: dependency, so the gate builds that SDK first and proves the
+# reference against the code in the checkout.
+# TODO(RATIFY_V2_PIN): when @identities-ai/ratify-protocol 2.0.0-beta.1 is
+# published, pin it exactly in package.json, drop this build step, and record
+# the published-package run in reference-evidence.md.
+SDK="../../sdks/typescript"
+if [ ! -d "$SDK/node_modules" ]; then
+    (cd "$SDK" && npm ci --no-audit --no-fund)
+fi
+(cd "$SDK" && npm run build --silent)
+
+npm ci --no-fund
 
 # Capture the runner's own tally and hold the declared count to it. The gate is
 # the only place that observes how many rows actually ran, so a reference whose
@@ -28,5 +41,12 @@ if [ "${failed:-1}" != "0" ] || [ "${skipped:-1}" != "0" ]; then
     exit 1
 fi
 
+# The distributed plugin runtime is rebuilt from the v2 SDK. The v1 geo and
+# speed constraint evaluator must not be vendored into it.
+if grep -qE 'geo_circle|geo_polygon|geo_bbox|max_speed_mps' plugin-runtime/mcp-server.js; then
+    echo "reference gate: plugin runtime still bundles v1 geo or speed constraint code" >&2
+    exit 1
+fi
+
 npm run demo
-echo "reference gate: core tests passed ($observed/$expected)"
+echo "reference gate: Protocol v2 tests passed ($observed/$expected)"

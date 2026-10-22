@@ -289,6 +289,33 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	m("signed_as_receipt", "party-a signs code 0x0008", "invalid_signature", func(o map[string]any) {
 		obj(arr(o["party_signatures"])[0])["signature"] = sigJSON(signDet(g.k("agent"), codeReceipt, tx.signable))
 	})
+	// Party binding failures (SPEC-v2 §5.7): party-b's bundle is replaced
+	// by a validly signed bundle that does not belong to its signed party;
+	// its proof_bundle_hash and both party signatures are recomputed, so
+	// only the binding fails.
+	variant := func(name, mutation string, spec bundleSpec) {
+		_, bwire, _ := g.bundle(spec)
+		o := parse(base).(map[string]any)
+		pb := party(o, 1)
+		pb["proof_bundle"], pb["proof_bundle_hash"] = parse(bwire), bundleHash(bwire)
+		signable := mutate(canon(o), func(v map[string]any) {
+			delete(v, "party_signatures")
+			for _, p := range arr(v["parties"]) {
+				delete(obj(p), "proof_bundle")
+			}
+		})
+		for i, signer := range []*Key{g.k("agent"), g.k("party_b_agent")} {
+			obj(arr(o["party_signatures"])[i])["signature"] = sigJSON(signDet(signer, codeParty, signable))
+		}
+		n.add(name, kind, mutation, canon(o), v, "transaction_party_mismatch")
+	}
+	bAgent := g.k("party_b_agent")
+	bCtx := tx.partyCtx["party-b"]
+	variant("party_bundle_empty_delegations", "party-b presents a validly signed proof bundle with no delegation certificates; its hash and both party signatures are consistent",
+		bundleSpec{agent: bAgent, session: bCtx})
+	bCert, _, _ := g.cert(certSpec{issuer: g.k("party_b_root"), subject: bAgent, certID: "cert-party-b", scope: []string{"transact:sell"}})
+	variant("party_bundle_other_verifier", "party-b's proof bundle names another verifier_id than its party entry; its hash and both party signatures are consistent",
+		bundleSpec{agent: bAgent, certs: []ratify.DelegationCertV2{bCert}, session: bCtx, verifierID: g.k("attacker").ID})
 }
 
 func (g *gen) receiptNegatives(n *negBuilder) {

@@ -53,6 +53,9 @@ var Files = []string{
 	"status-publisher.json",
 	"evaluator-profiles.json",
 	deviceStateFile,
+	archivalFile,
+	externalSignerFile,
+	digestFunctionsFile,
 }
 
 // Generate returns the exact bytes of every generated vector file.
@@ -78,6 +81,9 @@ func Generate() (map[string][]byte, error) {
 		"status-publisher.json":         g.statusPublisherFile,
 		"evaluator-profiles.json":       g.evaluatorProfilesFile,
 		deviceStateFile:                 g.deviceStateFile,
+		archivalFile:                    g.archivalFile,
+		externalSignerFile:              g.externalSignerFile,
+		digestFunctionsFile:             g.digestFunctionsFile,
 	}
 	for _, name := range Files {
 		var value any

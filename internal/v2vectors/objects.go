@@ -270,6 +270,24 @@ func (g *gen) objectsFile() any {
 		WireB64:     b64(rcWire), Verify: verifyContext{VerifierKey: "verifier", Head: genesisHead(receiptLogA, g.k("verifier").ID)},
 		Signatures: []sigVector{g.sigVec("signature", rcSig)},
 		Digests:    map[string]string{"statement_body_digest_hex": hex.EncodeToString(statementBodyDigest(codeReceipt, rcSig.signable)), "receipt_outbox_body_b64": b64(outbox)}})
+
+	// A signed receipt carrying constraint_evaluators (SPEC-v2 §5.8) for a
+	// chain whose leaf has the com.ratifyprotocol.max_count extension type.
+	extLeaf, _, _ := g.cert(certSpec{issuer: inter, subject: agent, certID: "cert-leaf-extension", scope: []string{"data:read"},
+		constraints: []ratify.ConstraintV2{{Type: maxCountType, Params: map[string]any{"counter": "nodes", "max": 10}}}})
+	extRoot, _, _ := g.cert(certSpec{issuer: root, subject: inter, certID: "cert-root", scope: []string{"data:read", "files:read", "identity:delegate"}})
+	_, extBundle, _ := g.bundle(bundleSpec{agent: agent, certs: []ratify.DelegationCertV2{extLeaf, extRoot}, session: g.fixtureSessionContext(agent)})
+	evaluated := g.receiptFixtureBody()
+	evaluated.BundleHash, evaluated.GrantedScope = bundleHash(extBundle), []string{"data:read"}
+	evaluated.ConstraintEvaluators = []ratify.ConstraintEvaluatorRefV2{{Type: maxCountType, ProfileDigest: profileDigest(maxCountProfile, maxCountType)}}
+	const evaluatorLog = "cccccccccccccccccccccccccccccc02"
+	_, evWire, evSig := g.receipt(g.k("verifier"), evaluated, evaluatorLog, 1, make([]byte, 48), 0)
+	f.Objects = append(f.Objects, objectVector{Name: "verification_receipt_constraint_evaluators", Kind: "verification_receipt",
+		Description: "Genesis allow receipt whose signed body carries constraint_evaluators naming com.ratifyprotocol.max_count with the com.ratifyprotocol.max_count/v1 profile digest; the member is part of the signable projection and of the receipt outbox body.",
+		WireB64:     b64(evWire), Verify: verifyContext{VerifierKey: "verifier", Head: genesisHead(evaluatorLog, g.k("verifier").ID)},
+		Signatures: []sigVector{g.sigVec("signature", evSig)},
+		Digests: map[string]string{"statement_body_digest_hex": hex.EncodeToString(statementBodyDigest(codeReceipt, evSig.signable)),
+			"receipt_outbox_body_b64": b64(must(ratify.VerificationReceiptV2Body(evaluated)))}})
 	return f
 }
 

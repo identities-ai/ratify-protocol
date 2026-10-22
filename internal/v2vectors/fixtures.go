@@ -115,6 +115,19 @@ func (g *gen) statusFixtures() map[string]statusFixture {
 	add("intermediate_current", "status_intermediate", g.k("intermediate").ID, 1)
 	add("intermediate_revoked_leaf", "status_intermediate", g.k("intermediate").ID, 2, "cert-leaf")
 	add("intermediate_revoked_shared", "status_intermediate", g.k("intermediate").ID, 2, "shared-id")
+	addAt := func(name, keyName, issuerID string, seq, updated, next int64) {
+		_, wire, _ := g.list(g.k(keyName), issuerID, seq, updated, next)
+		out[name] = statusFixture{wire, codeList, issuerID, keyName, seq, statusEvidenceDigest(codeList, wire)}
+	}
+	// Fresh when preloaded at Now-3990; at Now its age (4000) reaches the bound.
+	addAt("root_stale", "status_root", g.k("root").ID, 1, Now-4000, Now+3000)
+	// Exclusive next_update deadline exactly at Now, and one second later.
+	addAt("root_next_at_now", "status_root", g.k("root").ID, 1, Now-60, Now)
+	addAt("root_next_plus_one", "status_root", g.k("root").ID, 1, Now-60, Now+1)
+	// Exclusive status-age deadline: updated_at + 3660 == Now.
+	addAt("root_age_at_now", "status_root", g.k("root").ID, 1, Now-3660, Now+100)
+	// A correctly shaped intermediate list signed by another issuer's status key.
+	addAt("intermediate_signed_by_party_b", "status_party_b", g.k("intermediate").ID, 1, Now-60, Now+3600)
 	return out
 }
 

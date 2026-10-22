@@ -203,20 +203,14 @@ func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChal
 	if len(expected.Value) != 32 || !bytes.Equal(bundle.Challenge, expected.Value) || bundle.ChallengeAt != expected.IssuedAt {
 		return v2Errorf(V2ErrChallengeMismatch, "v2 proof does not match authenticated challenge issuance")
 	}
-	if expected.IssuedAt < -maxSafeInteger || expected.IssuedAt > maxSafeInteger || expected.ExpiresAt < -maxSafeInteger || expected.ExpiresAt > maxSafeInteger || expected.ExpiresAt <= expected.IssuedAt {
+	if !validV2Timestamp(expected.IssuedAt) || !validV2Timestamp(expected.ExpiresAt) || expected.ExpiresAt <= expected.IssuedAt {
 		return v2Errorf(V2ErrConfigurationInvalid, "v2 authenticated challenge time bounds are invalid")
 	}
-	if nowUnix < -maxSafeInteger || nowUnix > maxSafeInteger || maxAgeSeconds <= 0 || maxAgeSeconds > maxSafeInteger || futureSkewSeconds < 0 || futureSkewSeconds > maxSafeInteger {
-		return v2Errorf(V2ErrConfigurationInvalid, "v2 freshness policy is invalid")
+	if err := validateV2FreshnessConfiguration(nowUnix, maxAgeSeconds, futureSkewSeconds); err != nil {
+		return err
 	}
-	if expected.IssuedAt > nowUnix && expected.IssuedAt-nowUnix > futureSkewSeconds {
-		return v2Errorf(V2ErrChallengeNotFresh, "v2 challenge issuance is too far in the future")
-	}
-	if nowUnix >= expected.ExpiresAt {
-		return v2Errorf(V2ErrChallengeNotFresh, "v2 challenge is expired")
-	}
-	if nowUnix-expected.IssuedAt > maxAgeSeconds {
-		return v2Errorf(V2ErrChallengeNotFresh, "v2 challenge exceeds maximum age")
+	if !v2ChallengeTimeCurrent(nowUnix, expected.IssuedAt, expected.ExpiresAt, maxAgeSeconds, futureSkewSeconds) {
+		return v2Errorf(V2ErrChallengeNotFresh, "v2 challenge is not fresh (future-dated, expired, or beyond maximum age)")
 	}
 	if (expected.ExpectedAgentID == "") != (expected.ExpectedAgentPublicKey == nil) {
 		return v2Errorf(V2ErrConfigurationInvalid, "v2 expected agent ID and public key must be configured together")

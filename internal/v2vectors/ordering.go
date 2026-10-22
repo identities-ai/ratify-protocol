@@ -28,23 +28,40 @@ type contextPolicyJSON struct {
 	Digest                    string   `json:"digest"`
 }
 
+// trustJSON scripts the trust provider: mode ok returns outcome (with
+// root_public_key for trusted); mode error returns an error; mode panic panics.
 type trustJSON struct {
-	Available     bool           `json:"available"`
-	RootKeyID     string         `json:"root_key_id,omitempty"`
+	Mode          string         `json:"mode"`
+	Outcome       string         `json:"outcome,omitempty"`
 	RootPublicKey map[string]any `json:"root_public_key,omitempty"`
 }
 
-type statusResultJSON struct {
-	Status     string         `json:"status"`
-	Reason     string         `json:"reason,omitempty"`
-	FreshUntil int64          `json:"fresh_until,omitempty"`
-	Evidence   []EvidenceJSON `json:"evidence"`
+type evidenceObjectJSON struct {
+	ObjectTypeCode int    `json:"object_type_code"`
+	WireB64        string `json:"wire_b64"`
 }
 
-type statusRolesJSON struct {
-	StatusKeyIssuers    map[string]string `json:"status_key_issuers"`
-	CurrentStatusKeyIDs map[string]string `json:"current_status_key_ids"`
-	ReservedKeyIDs      []string          `json:"reserved_key_ids"`
+type statusProviderJSON struct {
+	Mode    string               `json:"mode"`
+	Objects []evidenceObjectJSON `json:"objects"`
+}
+
+type statusKeyJSON struct {
+	Epoch       uint64         `json:"epoch"`
+	StatusKeyID string         `json:"status_key_id"`
+	PublicKey   map[string]any `json:"public_key"`
+}
+
+type journalPreloadJSON struct {
+	IssuerID       string `json:"issuer_id"`
+	ObjectTypeCode int    `json:"object_type_code"`
+	WireB64        string `json:"wire_b64"`
+	Now            int64  `json:"now"`
+}
+
+type journalJSON struct {
+	Mode    string               `json:"mode"`
+	Preload []journalPreloadJSON `json:"preload"`
 }
 
 type membershipJSON struct {
@@ -85,6 +102,7 @@ type countsJSON struct {
 
 type outcomeJSON struct {
 	Stage               string         `json:"stage"`
+	VerifiedAt          int64          `json:"verified_at,omitempty"`
 	ErrorClass          string         `json:"error_class,omitempty"`
 	Disposition         string         `json:"disposition,omitempty"`
 	Decision            string         `json:"decision,omitempty"`
@@ -103,26 +121,31 @@ type outcomeJSON struct {
 }
 
 type orderingVector struct {
-	Name                   string                      `json:"name"`
-	Description            string                      `json:"description"`
-	Bundle                 string                      `json:"bundle"`
-	RequiredScope          string                      `json:"required_scope"`
-	ExpectedChallenge      *expectedChallengeJSON      `json:"expected_challenge"`
-	ContextPolicy          *contextPolicyJSON          `json:"context_policy"`
-	ConfiguredNamespace    string                      `json:"configured_namespace"`
-	ConfiguredReplayEpoch  int64                       `json:"configured_replay_epoch"`
-	Now                    int64                       `json:"now"`
-	MaxChallengeAgeSeconds int64                       `json:"max_challenge_age_seconds"`
-	FutureSkewSeconds      int64                       `json:"future_skew_seconds"`
-	RequestContext         *requestContextJSON         `json:"request_context"`
-	ReceiverBindingHook    string                      `json:"receiver_binding_hook"`
-	ClaimStore             string                      `json:"claim_store"`
-	Trust                  *trustJSON                  `json:"trust"`
-	Status                 map[string]statusResultJSON `json:"status"`
-	StatusRoles            statusRolesJSON             `json:"status_roles"`
-	AudienceMemberships    []membershipJSON            `json:"audience_memberships"`
-	Rate                   string                      `json:"rate"`
-	Expected               outcomeJSON                 `json:"expected"`
+	Name                   string                        `json:"name"`
+	Description            string                        `json:"description"`
+	Bundle                 string                        `json:"bundle"`
+	RequiredScope          string                        `json:"required_scope"`
+	ExpectedChallenge      *expectedChallengeJSON        `json:"expected_challenge"`
+	ContextPolicy          *contextPolicyJSON            `json:"context_policy"`
+	ConfiguredNamespace    string                        `json:"configured_namespace"`
+	ConfiguredReplayEpoch  int64                         `json:"configured_replay_epoch"`
+	Now                    int64                         `json:"now"`
+	MaxChallengeAgeSeconds int64                         `json:"max_challenge_age_seconds"`
+	FutureSkewSeconds      int64                         `json:"future_skew_seconds"`
+	RequestContext         *requestContextJSON           `json:"request_context"`
+	ReceiverBindingHook    string                        `json:"receiver_binding_hook"`
+	ClaimStore             string                        `json:"claim_store"`
+	ClaimTimeOffset        int64                         `json:"claim_time_offset"`
+	FinalizeTimeOffset     int64                         `json:"finalize_time_offset"`
+	Trust                  *trustJSON                    `json:"trust"`
+	StatusKeys             map[string]statusKeyJSON      `json:"status_keys"`
+	StatusPolicy           statusPolicyJSON              `json:"status_policy"`
+	Journal                journalJSON                   `json:"journal"`
+	StatusEvidence         map[string]statusProviderJSON `json:"status_evidence"`
+	AudienceMode           string                        `json:"audience_mode"`
+	AudienceMemberships    []membershipJSON              `json:"audience_memberships"`
+	Rate                   string                        `json:"rate"`
+	Expected               outcomeJSON                   `json:"expected"`
 }
 
 type orderingFile struct {
@@ -146,11 +169,18 @@ type scenario struct {
 	epoch       int64
 	now         int64
 	maxAge      int64
+	skew        int64
 	reqCtx      *requestContextJSON
 	hook        string
 	claim       string
+	claimOffset int64
+	finOffset   int64
 	trust       *trustJSON
-	status      map[string]statusResultJSON
+	statusKeys  map[string]statusKeyJSON
+	policy2     *statusPolicyJSON
+	journal     journalJSON
+	evidence    map[string]statusProviderJSON
+	audience    string
 	memberships []membershipJSON
 	rate        string
 	out         outcomeJSON
@@ -177,42 +207,61 @@ func (g *gen) defaultExpected(agent *Key, session []byte) *expectedChallengeJSON
 	return e
 }
 
-func (g *gen) statusRoles() statusRolesJSON {
-	return statusRolesJSON{
-		StatusKeyIssuers: map[string]string{
-			g.k("status_root").ID: g.k("root").ID, g.k("status_intermediate").ID: g.k("intermediate").ID,
-			g.k("status_party_b").ID: g.k("untrusted_root").ID,
-		},
-		CurrentStatusKeyIDs: map[string]string{
-			g.k("root").ID: g.k("status_root").ID, g.k("intermediate").ID: g.k("status_intermediate").ID,
-			g.k("untrusted_root").ID: g.k("status_party_b").ID,
-		},
-		ReservedKeyIDs: []string{g.k("verifier").ID},
+// statusKeyConfig is the caller-authenticated status-key configuration of
+// every ordering vector: one epoch-1 status key per issuer.
+func (g *gen) statusKeyConfig() map[string]statusKeyJSON {
+	key := func(name string) statusKeyJSON {
+		return statusKeyJSON{Epoch: 1, StatusKeyID: g.k(name).ID, PublicKey: pubJSON(g.k(name).Pub)}
+	}
+	return map[string]statusKeyJSON{
+		g.k("root").ID: key("status_root"), g.k("intermediate").ID: key("status_intermediate"),
+		g.k("untrusted_root").ID: key("status_party_b"),
 	}
 }
 
+// orderingStatusPolicy: a 3660-second list (updated Now-60, next Now+3600)
+// is fresh until Now+3600 under both bounds.
+var orderingStatusPolicy = statusPolicyJSON{MaxListLifetimeSeconds: 7200, MaxStatusAgeSeconds: 3660, ClockSkewSeconds: 5}
+
 const statusFreshUntil = Now + 3600
 
-func notRevoked(e EvidenceJSON) statusResultJSON {
-	return statusResultJSON{Status: "not_revoked", FreshUntil: statusFreshUntil, Evidence: []EvidenceJSON{e}}
+func (g *gen) object(f statusFixture) evidenceObjectJSON {
+	return evidenceObjectJSON{ObjectTypeCode: int(f.code), WireB64: b64(f.wire)}
 }
 
-func (g *gen) currentStatus(certs []ratify.DelegationCertV2) map[string]statusResultJSON {
+func evidenceBatch(objects ...evidenceObjectJSON) statusProviderJSON {
+	if objects == nil {
+		objects = []evidenceObjectJSON{}
+	}
+	return statusProviderJSON{Mode: "ok", Objects: objects}
+}
+
+func providerFailure(mode string) statusProviderJSON {
+	return statusProviderJSON{Mode: mode, Objects: []evidenceObjectJSON{}}
+}
+
+// currentEvidenceBatches returns, for each issuer of certs, a provider batch
+// holding that issuer's fresh signed revocation list.
+func (g *gen) currentEvidenceBatches(certs []ratify.DelegationCertV2) map[string]statusProviderJSON {
 	st := g.statusFixtures()
-	out := map[string]statusResultJSON{}
+	out := map[string]statusProviderJSON{}
 	for _, c := range certs {
 		switch c.IssuerID {
 		case g.k("root").ID:
-			out[c.IssuerID+"/"+c.CertID] = notRevoked(g.evidence(st["root_current"]))
+			out[c.IssuerID] = evidenceBatch(g.object(st["root_current"]))
 		case g.k("intermediate").ID:
-			out[c.IssuerID+"/"+c.CertID] = notRevoked(g.evidence(st["intermediate_current"]))
+			out[c.IssuerID] = evidenceBatch(g.object(st["intermediate_current"]))
 		}
 	}
 	return out
 }
 
+func (g *gen) preload(f statusFixture, now int64) journalPreloadJSON {
+	return journalPreloadJSON{IssuerID: f.issuerID, ObjectTypeCode: int(f.code), WireB64: b64(f.wire), Now: now}
+}
+
 func (g *gen) trustRoot(name string) *trustJSON {
-	return &trustJSON{Available: true, RootKeyID: g.k(name).ID, RootPublicKey: pubJSON(g.k(name).Pub)}
+	return &trustJSON{Mode: "ok", Outcome: "trusted", RootPublicKey: pubJSON(g.k(name).Pub)}
 }
 
 // finish fills defaults and computes the expected receipt body for terminal
@@ -242,13 +291,36 @@ func (g *gen) finish(s scenario) orderingVector {
 	if s.rate == "" {
 		s.rate = "absent"
 	}
-	if s.status == nil {
-		s.status = map[string]statusResultJSON{}
+	if s.evidence == nil {
+		s.evidence = map[string]statusProviderJSON{}
+	}
+	if s.statusKeys == nil {
+		s.statusKeys = g.statusKeyConfig()
+	}
+	if s.journal.Mode == "" {
+		s.journal.Mode = "anchored"
+	}
+	if s.journal.Preload == nil {
+		s.journal.Preload = []journalPreloadJSON{}
+	}
+	if s.audience == "" {
+		s.audience = "ok"
+	}
+	if s.skew == 0 {
+		s.skew = 5
+	}
+	if s.skew < 0 {
+		s.skew = 0
+	}
+	policy := orderingStatusPolicy
+	if s.policy2 != nil {
+		policy = *s.policy2
 	}
 	if s.memberships == nil {
 		s.memberships = []membershipJSON{}
 	}
-	if s.out.Stage == "terminal" {
+	if s.out.Stage == "committed" {
+		s.out.VerifiedAt = s.now + s.claimOffset // T_claim (SPEC-v2 §7.2)
 		b := must(ratify.DecodeProofBundleV2(s.bundle))
 		issuers := []string{}
 		seen := map[string]bool{}
@@ -271,7 +343,7 @@ func (g *gen) finish(s scenario) orderingVector {
 			Version: 2, VerifierID: b.VerifierID, AgentID: b.AgentID, BundleHash: bundleHash(s.bundle), IssuerIDs: issuers,
 			Decision: s.out.Decision, DecisionReason: s.out.DecisionReason, IdentityStatus: s.out.IdentityStatus,
 			TrustAssessment: s.out.TrustAssessment, StatusAssessment: s.out.StatusAssessment, ChallengeAssessment: "current",
-			ContextAssessment: s.out.ContextAssessment, ContextPolicyDigest: s.out.ContextPolicyDigest, VerifiedAt: s.now,
+			ContextAssessment: s.out.ContextAssessment, ContextPolicyDigest: s.out.ContextPolicyDigest, VerifiedAt: s.out.VerifiedAt,
 			RequiredScope: s.scope, GrantedScope: granted, StatusEvidence: toLibEvidence(s.out.StatusEvidence),
 		}
 		s.out.ReceiptBodyB64 = b64(must(ratify.VerificationReceiptV2Body(r)))
@@ -280,8 +352,9 @@ func (g *gen) finish(s scenario) orderingVector {
 	return orderingVector{
 		Name: s.name, Description: s.desc, Bundle: bundleName(s.bundle), RequiredScope: s.scope, ExpectedChallenge: s.expected,
 		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, Now: s.now,
-		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: 5, RequestContext: s.reqCtx, ReceiverBindingHook: s.hook,
-		ClaimStore: s.claim, Trust: s.trust, Status: s.status, StatusRoles: g.statusRoles(), AudienceMemberships: s.memberships,
+		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, ReceiverBindingHook: s.hook,
+		ClaimStore: s.claim, ClaimTimeOffset: s.claimOffset, FinalizeTimeOffset: s.finOffset, Trust: s.trust, StatusKeys: s.statusKeys,
+		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
 		Rate: s.rate, Expected: s.out,
 	}
 }
@@ -293,24 +366,29 @@ func preflight(class string, hook int) outcomeJSON {
 func (g *gen) orderingFile() any {
 	f := orderingFile{
 		Version:     2,
-		Description: "End-to-end live verifier ordering vectors (SPEC-v2 §6, §6.2, §8). Run the complete decision path with the given inputs and scripted callbacks; compare the stage, error class or terminal tuple, the exact receipt outbox body, and the number of times each callback ran.",
+		Description: "End-to-end live verifier ordering vectors (SPEC-v2 §2.5, §6, §7.2). Run the complete decision path with the given inputs and scripted Part B dependencies; compare the stage, error class or committed tuple, the exact receipt outbox body, and the number of times each callback ran. A committed outcome is not a released decision.",
 		Semantics: map[string]string{
 			"bundle":                           "key into bundles_b64; the exact presented proof bundle bytes",
-			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); terminal = a terminal Protocol result was committed with receipt_body_b64",
+			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); evaluating = claim created but nothing committed (error_class says why; lease-expiry recovery commits evaluation_interrupted later); committed = a terminal Protocol result was committed with receipt_body_b64 (not actionable until released)",
+			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, status_policy and status_keys are validated against SPEC-v2 §2.5 bounds before the bundle is decoded",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
-			"claim_store":                      "create = atomic claim succeeds; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error",
-			"trust":                            "null = no caller-authenticated trust configuration is available; otherwise the configured root for this chain",
-			"status":                           "result returned for CertificateRef issuer_id/cert_id; a reference absent from the map returns indeterminate/unavailable with no evidence",
-			"status_roles":                     "caller-authenticated status-key role bindings used to authenticate returned evidence",
+			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The authoritative clock read at finalization returns now + claim_time_offset + finalize_time_offset",
+			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics",
+			"status_keys":                      "caller-authenticated status key per issuer_id (epoch and complete public key)",
+			"status_policy":                    "configured status freshness bounds",
+			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
+			"status_evidence":                  "per issuer_id provider response: mode ok returns objects (each object_type_code and exact wire bytes); error returns an error; panic panics. An issuer absent from the map returns an empty batch",
+			"audience_mode":                    "ok returns audience_memberships; error returns an error; panic panics",
 			"audience_memberships":             "caller-authenticated membership results returned by the audience provider",
-			"rate":                             "absent = no rate store; reserve = batch reserved; exceeded = definitive capacity exhaustion; unavailable = store error",
-			"callback_counts.status":           "number of CertificateRef status queries",
+			"rate":                             "absent = no rate store; reserve = batch reserved; exceeded = definitive capacity exhaustion; unavailable = store error; panic = the store panics",
+			"callback_counts.status":           "number of status-provider invocations (one per issuer whose binding, anchoring and role checks passed)",
 			"callback_counts.claim":            "number of atomic claim attempts",
 			"callback_counts.finalize":         "number of terminal finalize calls",
-			"callback_counts.trust":            "number of trust-resolver invocations",
+			"callback_counts.trust":            "number of trust-provider invocations",
 			"callback_counts.audience":         "number of audience-provider invocations",
 			"callback_counts.rate":             "number of rate-batch reservations",
 			"callback_counts.receiver_binding": "number of application hook invocations",
+			"verified_at":                      "the authoritative claim time (T_claim) recorded in the receipt",
 			"receipt_body_b64":                 "exact canonical receipt outbox body: every required receipt field except log_id, sequence, previous_receipt_hash and signature, plus agent_id",
 		},
 	}
@@ -336,7 +414,7 @@ func (g *gen) preflightScenarios() []scenario {
 	bundle, certs, session := g.base()
 	std := func(name, desc string, b []byte, class string, edit func(*scenario)) scenario {
 		s := scenario{name: name, desc: desc, bundle: b, certs: certs, scope: "data:read", expected: g.defaultExpected(agent, session), policy: g.verifyPolicyJSON(session),
-			trust: g.trustRoot("root"), status: g.currentStatus(certs), out: preflight(class, 0)}
+			trust: g.trustRoot("root"), evidence: g.currentEvidenceBatches(certs), out: preflight(class, 0)}
 		if edit != nil {
 			edit(&s)
 		}
@@ -380,6 +458,16 @@ func (g *gen) preflightScenarios() []scenario {
 	add(std("challenge_expired_at_boundary", "now == expires_at is expired (exclusive boundary)", bundle, "challenge_not_fresh", func(s *scenario) { s.expected.ExpiresAt = Now }))
 	add(std("delayed_claim_after_expiry", "request received after expiry fails preflight and cannot reach a stored claim", bundle, "challenge_not_fresh", func(s *scenario) { s.now = Now + 400 }))
 	add(std("challenge_exceeds_max_age", "challenge older than the configured maximum age", bundle, "challenge_not_fresh", func(s *scenario) { s.maxAge = 5 }))
+	add(std("challenge_max_age_exact_deadline", "now == issued_at + max_age is not fresh (exclusive deadline)", bundle, "challenge_not_fresh", func(s *scenario) { s.maxAge = 10 }))
+	add(std("config_future_skew_above_bound", "configured future skew 301 is outside 0..300 and is rejected before decode and claim", bundle, "configuration_invalid", func(s *scenario) { s.skew = 301 }))
+	add(std("config_max_age_above_bound", "configured challenge maximum age 301 is outside 1..300", bundle, "configuration_invalid", func(s *scenario) { s.maxAge = 301 }))
+	add(std("config_max_age_below_bound", "configured challenge maximum age below 1 is rejected", bundle, "configuration_invalid", func(s *scenario) { s.maxAge = -1 }))
+	add(std("config_status_lifetime_above_bound", "configured status list lifetime 86401 is outside 1..86400", bundle, "configuration_invalid", func(s *scenario) {
+		p := orderingStatusPolicy
+		p.MaxListLifetimeSeconds = 86401
+		s.policy2 = &p
+	}))
+	add(std("config_now_outside_timestamp_domain", "a verifier time below 0 is configuration_invalid", bundle, "configuration_invalid", func(s *scenario) { s.now = -1 }))
 	futureChallenge := func() []byte {
 		_, w, _ := g.bundle(bundleSpec{agent: agent, certs: certs, session: session, challengeAt: Now + 60})
 		return w
@@ -429,9 +517,9 @@ func (g *gen) terminal(name, desc string, certs []ratify.DelegationCertV2, out o
 	agent := g.k("agent")
 	session := g.fixtureSessionContext(agent)
 	_, bundle, _ := g.bundle(bundleSpec{agent: agent, certs: certs, session: session})
-	out.Stage = "terminal"
+	out.Stage = "committed"
 	s := scenario{name: name, desc: desc, bundle: bundle, certs: certs, scope: "data:read", expected: g.defaultExpected(agent, session), policy: g.verifyPolicyJSON(session),
-		trust: g.trustRoot("root"), status: g.currentStatus(certs), out: out}
+		trust: g.trustRoot("root"), evidence: g.currentEvidenceBatches(certs), out: out}
 	if edit != nil {
 		edit(&s)
 	}
@@ -448,8 +536,6 @@ func (g *gen) terminalScenarios() []scenario {
 	vp := policyDigest(verifyPolicy, true, verifyPolicyFields)
 	np := policyDigest(notRequiredPolicy, false, nil)
 	st := g.statusFixtures()
-	leafKey := func(certs []ratify.DelegationCertV2) string { return certs[0].IssuerID + "/" + certs[0].CertID }
-	rootKey := func(certs []ratify.DelegationCertV2) string { return certs[1].IssuerID + "/" + certs[1].CertID }
 	allowCounts := countsJSON{Claim: 1, Trust: 1, Status: 2}
 	allow := func() outcomeJSON {
 		return outcomeJSON{Decision: "allow", DecisionReason: "authorized", IdentityStatus: "authorized_agent", TrustAssessment: "trusted", StatusAssessment: "current",
@@ -465,11 +551,15 @@ func (g *gen) terminalScenarios() []scenario {
 			StatusAssessment: status, ContextAssessment: context, ContextPolicyDigest: digest, StatusEvidence: evidence, CallbackCounts: counts}
 	}
 	noStatus := countsJSON{Claim: 1, Trust: 1}
-	unavailable := statusResultJSON{Status: "indeterminate", Reason: "unavailable", Evidence: []EvidenceJSON{}}
-	stale := func(e EvidenceJSON) statusResultJSON {
-		return statusResultJSON{Status: "indeterminate", Reason: "stale", Evidence: []EvidenceJSON{e}}
+	rootID, intermediateID := g.k("root").ID, g.k("intermediate").ID
+	providerError := providerFailure("error")
+	revoked := evidenceBatch(g.object(st["intermediate_revoked_leaf"]))
+	// staleRoot preloads a root list that was fresh when applied (Now-3990)
+	// and whose age reaches the 3660-second bound before Now.
+	staleRoot := func(s *scenario) {
+		s.journal.Preload = []journalPreloadJSON{g.preload(st["root_stale"], Now-3990)}
+		s.evidence[rootID] = evidenceBatch()
 	}
-	revoked := statusResultJSON{Status: "revoked", Evidence: []EvidenceJSON{g.evidence(st["intermediate_revoked_leaf"])}}
 	def := g.chain(chainSpec{})
 
 	var out []scenario
@@ -488,14 +578,27 @@ func (g *gen) terminalScenarios() []scenario {
 			s.expected = g.defaultExpected(agent, nil)
 			s.policy = g.notRequiredPolicyJSON()
 		}))
-	add(g.terminal("untrusted_root_consumes_challenge", "validly signed proof for the challenge-bound agent with an untrusted root commits a sticky deny and makes no status callback", def,
-		deny("unauthorized", "unauthorized", "untrusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = g.trustRoot("untrusted_root") }))
-	add(g.terminal("trust_anchor_key_substitution", "configured root ID matches the chain root but the configured key differs: the root is untrusted (IDs are lookup indexes, the complete key must match)", def,
-		deny("unauthorized", "unauthorized", "untrusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) {
-			s.trust = &trustJSON{Available: true, RootKeyID: g.k("root").ID, RootPublicKey: pubJSON(g.k("attacker").Pub)}
+	add(g.terminal("untrusted_root_consumes_challenge", "the trust provider reports the chain untrusted: a sticky deny is committed and no status callback runs", def,
+		deny("unauthorized", "unauthorized", "untrusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = &trustJSON{Mode: "ok", Outcome: "untrusted"} }))
+	add(g.terminal("trust_anchor_key_substitution", "the provider returns trusted with a complete key that differs from the chain root: the verifier treats the mismatch as ambiguous (SPEC-v2 §6.1), never trusted", def,
+		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) {
+			s.trust = &trustJSON{Mode: "ok", Outcome: "trusted", RootPublicKey: pubJSON(g.k("attacker").Pub)}
 		}))
 	add(g.terminal("trust_unavailable", "no caller-authenticated trust configuration", def,
 		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = nil }))
+	for _, c := range []struct {
+		name, desc string
+		trust      *trustJSON
+	}{
+		{"trust_ambiguous", "the trust provider reports more than one matching candidate: never trusted", &trustJSON{Mode: "ok", Outcome: "ambiguous"}},
+		{"trust_provider_error", "a trust provider error fails closed", &trustJSON{Mode: "error"}},
+		{"trust_provider_panic", "a trust provider panic fails closed", &trustJSON{Mode: "panic"}},
+	} {
+		trust := c.trust
+		add(g.terminal(c.name, c.desc, def, indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = trust }))
+	}
+	add(g.terminal("delegation_lifetime_exceeds_bound", "expires_at - issued_at above 315360000 seconds is proof_invalid", g.chain(chainSpec{leafIssued: Now - 3600, leafExpires: Now - 3600 + 315360001}),
+		deny("proof_invalid", "invalid", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
 	add(g.terminal("parent_lacks_identity_delegate", "non-root issuer without identity:delegate in its parent certificate", g.chain(chainSpec{rootScope: []string{"data:read", "files:read"}}),
 		deny("delegation_not_authorized", "delegation_not_authorized", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
 	add(g.terminal("delegation_expired", "now >= expires_at for the leaf", g.chain(chainSpec{leafIssued: Now - 7200, leafExpires: Now}),
@@ -518,34 +621,31 @@ func (g *gen) terminalScenarios() []scenario {
 		allow(), func(s *scenario) { s.out.GrantedScope = []string{"custom:billing", "data:read"} }))
 	add(g.terminal("revoked_outranks_unavailable", "one reference revoked and the other unavailable: revoked wins and both references are queried", def,
 		deny("delegation_revoked", "revoked", "trusted", "revoked", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_revoked_leaf"])}, allowCounts), func(s *scenario) {
-			s.status[leafKey(def)] = revoked
-			s.status[rootKey(def)] = unavailable
+			s.evidence[intermediateID] = revoked
+			s.evidence[rootID] = providerError
 		}))
 	add(g.terminal("revoked_outranks_scope_denied", "status aggregation precedes a pending local scope denial", def,
 		deny("delegation_revoked", "revoked", "trusted", "revoked", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_revoked_leaf"]), g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
 			s.scope = "meeting:attend"
-			s.status[leafKey(def)] = revoked
+			s.evidence[intermediateID] = revoked
 		}))
 	add(g.terminal("unavailable_outranks_stale", "unavailable on one reference and stale on another yields status_unavailable", def,
-		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
-			s.status[leafKey(def)] = unavailable
-			s.status[rootKey(def)] = stale(g.evidence(st["root_current"]))
+		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_stale"])}, allowCounts), func(s *scenario) {
+			s.evidence[intermediateID] = providerError
+			staleRoot(s)
 		}))
 	add(g.terminal("status_stale", "accepted status beyond its freshness bounds yields status_stale", def,
-		indeterminate("status_stale", "trusted", "stale", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) {
-			s.status[rootKey(def)] = stale(g.evidence(st["root_current"]))
-		}))
+		indeterminate("status_stale", "trusted", "stale", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_current"]), g.evidence(st["root_stale"])}, allowCounts), staleRoot))
 	add(g.terminal("unavailable_outranks_scope_denied", "a pending scope denial is not finalized while status is unavailable", def,
 		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
 			s.scope = "meeting:attend"
-			s.status[leafKey(def)] = unavailable
+			s.evidence[intermediateID] = providerError
 		}))
-	add(g.terminal("unauthenticated_status_evidence", "evidence signed by a key not bound to the issuer is excluded and the result is unavailable", def,
+	add(g.terminal("unauthenticated_status_evidence", "a list signed by a key other than the configured issuer status key fails verification; that issuer's batch is discarded and its status is unavailable", def,
 		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
-			e := g.evidence(st["intermediate_current"])
-			e.StatusKeyID = g.k("status_party_b").ID
-			s.status[leafKey(def)] = notRevoked(e)
+			s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_signed_by_party_b"]))
 		}))
+	g.statusProvenanceScenarios(add, def, allow, indeterminate, allowCounts, vp)
 
 	// Context policy cases.
 	add(g.terminal("no_policy_unbound_context", "no context policy and a null session_context: never allow", def,
@@ -602,6 +702,11 @@ func (g *gen) terminalScenarios() []scenario {
 			s.out.CallbackCounts.Audience = 1
 			s.out.AllowValidUntil = Now + 600
 		}))
+	for _, mode := range []string{"error", "panic"} {
+		mode := mode
+		add(g.terminal("audience_provider_"+mode, "an audience provider "+mode+" leaves the required membership unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
+			constraintOut("constraint_unverifiable", 1), func(s *scenario) { withReceiver(s); s.audience = mode }))
+	}
 	add(g.terminal("audience_membership_missing", "missing required membership is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
 		constraintOut("constraint_unverifiable", 1), withReceiver))
 	add(g.terminal("audience_domain_nonmatch", "authoritative membership ruling out the named domain is constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{domainA}}),
@@ -648,12 +753,14 @@ func (g *gen) terminalScenarios() []scenario {
 	}))
 	add(g.terminal("rate_exceeded", "definitive capacity exhaustion is constraint_denied", rateCerts,
 		constraintOut("constraint_denied", 0), func(s *scenario) { s.rate = "exceeded"; s.out.CallbackCounts.Rate = 1; s.out.RateBatch = batch }))
+	add(g.terminal("rate_store_panic", "a rate store panic is handled like a storage failure: constraint_unverifiable", rateCerts,
+		constraintOut("constraint_unverifiable", 0), func(s *scenario) { s.rate = "panic"; s.out.CallbackCounts.Rate = 1; s.out.RateBatch = batch }))
 	add(g.terminal("rate_store_unavailable", "reservation storage failure is constraint_unverifiable and never assumes capacity", rateCerts,
 		constraintOut("constraint_unverifiable", 0), func(s *scenario) { s.rate = "unavailable"; s.out.CallbackCounts.Rate = 1; s.out.RateBatch = batch }))
 	add(g.terminal("rate_not_reserved_when_status_unavailable", "no reservation occurs after non-current status", rateCerts,
 		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
 			s.rate = "reserve"
-			s.status[leafKey(rateCerts)] = unavailable
+			s.evidence[intermediateID] = providerError
 		}))
 	add(g.terminal("rate_not_reserved_after_local_denial", "no reservation occurs after a local policy denial", rateCerts,
 		constraintOut("scope_denied", 0), func(s *scenario) { s.rate = "reserve"; s.scope = "meeting:attend" }))
@@ -668,7 +775,7 @@ func (g *gen) terminalScenarios() []scenario {
 	}))
 	add(g.terminal("issuer_collision_status_isolation", "revoking (intermediate, shared-id) does not revoke (root, shared-id) and vice versa", shared,
 		deny("delegation_revoked", "revoked", "trusted", "revoked", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_revoked_shared"]), g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
-			s.status[leafKey(shared)] = statusResultJSON{Status: "revoked", Evidence: []EvidenceJSON{g.evidence(st["intermediate_revoked_shared"])}}
+			s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_revoked_shared"]))
 		}))
 	return out
 }
@@ -684,4 +791,104 @@ func hexRepeat(c byte, n int) string {
 		out[i] = "0123456789abcdef"[int(c)%16]
 	}
 	return string(out)
+}
+
+// statusProvenanceScenarios covers SPEC-v2 §6.5 status provenance, the
+// §6.11 provider failure classes, §2.5 exclusive status deadlines, and
+// §7.2/§7.5 finalization clock rules.
+func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.DelegationCertV2, allow func() outcomeJSON,
+	indeterminate func(reason, trust, status, context string, digest *string, evidence []EvidenceJSON, counts countsJSON) outcomeJSON, allowCounts countsJSON, vp string) {
+	st := g.statusFixtures()
+	rootID, intermediateID := g.k("root").ID, g.k("intermediate").ID
+	rootOnly := []EvidenceJSON{g.evidence(st["root_current"])}
+	unavailableIntermediate := func(name, desc string, counts countsJSON, edit func(*scenario)) {
+		add(g.terminal(name, desc, def, indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), rootOnly, counts), edit))
+	}
+	unavailableIntermediate("status_provider_error", "a status provider error makes that issuer's references unavailable", allowCounts,
+		func(s *scenario) { s.evidence[intermediateID] = providerFailure("error") })
+	unavailableIntermediate("status_provider_panic", "a status provider panic is handled exactly like an error", allowCounts,
+		func(s *scenario) { s.evidence[intermediateID] = providerFailure("panic") })
+	unavailableIntermediate("status_batch_malformed_object", "an object that fails strict decoding rejects the whole batch", allowCounts, func(s *scenario) {
+		s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_current"]), evidenceObjectJSON{ObjectTypeCode: int(codeList), WireB64: b64([]byte("{"))})
+	})
+	unavailableIntermediate("status_batch_unknown_object_type", "an object code other than 3 or 5 rejects the whole batch", allowCounts, func(s *scenario) {
+		s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_current"]), evidenceObjectJSON{ObjectTypeCode: 7, WireB64: g.object(st["intermediate_current"]).WireB64})
+	})
+	unavailableIntermediate("status_batch_oversized", "a batch of 65 objects exceeds the 64-object bound", allowCounts, func(s *scenario) {
+		objects := make([]evidenceObjectJSON, 65)
+		for i := range objects {
+			objects[i] = g.object(st["intermediate_current"])
+		}
+		s.evidence[intermediateID] = evidenceBatch(objects...)
+	})
+	unavailableIntermediate("status_batch_wrong_issuer", "an object naming another issuer fails authentication and rejects the batch", allowCounts, func(s *scenario) {
+		s.evidence[intermediateID] = evidenceBatch(g.object(st["root_current"]))
+	})
+	unavailableIntermediate("status_issuer_unconfigured", "an issuer without a caller-authenticated status key is unavailable and its provider is not called", countsJSON{Claim: 1, Trust: 1, Status: 1}, func(s *scenario) {
+		s.statusKeys = g.statusKeyConfig()
+		delete(s.statusKeys, intermediateID)
+	})
+	mixed := g.mixedKey()
+	add(g.terminal("status_key_component_reuse", "a status key that reuses the intermediate issuer's Ed25519 component under a different ML-DSA component (different key ID) is a chain key sharing a component with a status binding (SPEC-v2 §6.5 step 2); the check is chain-wide, so every issuer is unavailable and no provider is called", def,
+		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), nil, countsJSON{Claim: 1, Trust: 1}), func(s *scenario) {
+			s.statusKeys = g.statusKeyConfig()
+			s.statusKeys[intermediateID] = statusKeyJSON{Epoch: 1, StatusKeyID: mixed.ID, PublicKey: pubJSON(mixed.Pub)}
+		}))
+	for _, c := range []struct {
+		mode, desc string
+		queries    int
+	}{
+		{"absent", "no status journal is configured: every reference is unavailable and no provider is called", 0},
+		{"unanchored", "the journal record does not match the store's anchored head: never not_revoked, no provider call", 0},
+		{"load_error", "the journal store fails to load: unavailable, no provider call", 0},
+		{"cas_conflict", "the compare-and-swap of each issuer's transition conflicts and is not retried: unavailable", 2},
+	} {
+		mode := c.mode
+		add(g.terminal("status_journal_"+c.mode, c.desc, def, indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), nil, countsJSON{Claim: 1, Trust: 1, Status: c.queries}),
+			func(s *scenario) { s.journal.Mode = mode }))
+	}
+	add(g.terminal("status_next_update_exact_deadline", "a list whose next_update equals the evaluation time is not fresh (exclusive deadline): stale", def,
+		indeterminate("status_stale", "trusted", "stale", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_current"]), g.evidence(st["root_next_at_now"])}, allowCounts), func(s *scenario) {
+			s.journal.Preload = []journalPreloadJSON{g.preload(st["root_next_at_now"], Now-30)}
+			s.evidence[rootID] = evidenceBatch()
+		}))
+	add(g.terminal("status_one_second_before_next_update", "a list whose next_update is one second after the evaluation time is fresh and bounds the allow horizon", def, allow(), func(s *scenario) {
+		s.evidence[rootID] = evidenceBatch(g.object(st["root_next_plus_one"]))
+		s.out.StatusEvidence = []EvidenceJSON{g.evidence(st["intermediate_current"]), g.evidence(st["root_next_plus_one"])}
+		s.out.AllowValidUntil = Now + 1
+	}))
+	add(g.terminal("status_age_exact_deadline", "accepted status whose updated_at plus the configured age equals the evaluation time is stale (exclusive deadline)", def,
+		indeterminate("status_stale", "trusted", "stale", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_current"]), g.evidence(st["root_age_at_now"])}, allowCounts), func(s *scenario) {
+			s.journal.Preload = []journalPreloadJSON{g.preload(st["root_age_at_now"], Now-3600)}
+			s.evidence[rootID] = evidenceBatch()
+		}))
+	// Authoritative clock and finalization (SPEC-v2 §7.2, §7.5).
+	add(g.terminal("claim_time_outside_challenge_interrupts", "the store's authoritative claim time equals the challenge expiry: evaluation is interrupted before trust, with every assessment not_evaluated", def,
+		indeterminate("evaluation_interrupted", "not_evaluated", "not_evaluated", "not_evaluated", nil, nil, countsJSON{Claim: 1}), func(s *scenario) { s.claimOffset = 290 }))
+	evaluating := func(class string) outcomeJSON {
+		return outcomeJSON{Stage: "evaluating", ErrorClass: class, CallbackCounts: allowCounts}
+	}
+	add(g.terminal("finalization_clock_regressed", "the finalization reading is earlier than the claim reading: nothing is committed and the claim stays evaluating", def, outcomeJSON{}, func(s *scenario) {
+		s.finOffset = -1
+		s.out = evaluating("clock_regressed")
+	}))
+	add(g.terminal("allow_at_challenge_expiry_at_finalization", "an allow whose finalization time equals the challenge expiry is not committed (exclusive deadline)", def, outcomeJSON{}, func(s *scenario) {
+		s.finOffset = 290
+		s.out = evaluating("allow_horizon_passed")
+	}))
+	add(g.terminal("allow_one_second_before_challenge_expiry_at_finalization", "an allow finalized one second before the challenge expiry commits with verified_at equal to the claim time", def, allow(), func(s *scenario) {
+		s.finOffset = 289
+	}))
+}
+
+// mixedKey is a status key that reuses the intermediate issuer's Ed25519
+// component with a different ML-DSA-65 component, so its key ID differs.
+func (g *gen) mixedKey() *Key {
+	var ml [32]byte
+	for i := range ml {
+		ml[i] = 0x53
+	}
+	ed := g.k("intermediate").EdSeed
+	pub, priv := must2(ratify.HybridKeypairFromSeeds(ed, ml))
+	return &Key{Name: "status_component_reuse", Pub: pub, Priv: priv, ID: keyIDV2(pub), EdSeed: ed, MLSeed: ml}
 }

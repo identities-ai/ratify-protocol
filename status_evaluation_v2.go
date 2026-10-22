@@ -35,10 +35,18 @@ type V2StatusRoleBindings struct {
 // order. Authenticated evidence is deduplicated and sorted; malformed rows are
 // excluded and make their result unavailable.
 func AggregateCertificateStatusV2(checks []V2CertificateStatusCheck, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2StatusAssessment, error) {
+	return aggregateCertificateStatusV2(checks, results, roles, false)
+}
+
+// aggregateCertificateStatusV2 is the shared aggregator. allowUnboundIssuers is
+// used only by the live verifier, which derives results from its own journal
+// and reports an issuer without authenticated status configuration as
+// unavailable instead of aborting the evaluation.
+func aggregateCertificateStatusV2(checks []V2CertificateStatusCheck, results []RevocationStatusResultV2, roles V2StatusRoleBindings, allowUnboundIssuers bool) (V2StatusAssessment, error) {
 	if len(checks) == 0 || len(checks) != len(results) {
 		return V2StatusAssessment{}, fmt.Errorf("v2 status aggregation requires one result for every non-empty certificate list")
 	}
-	if err := validateV2StatusRoleBindings(roles, checks); err != nil {
+	if err := validateV2StatusRoleBindings(roles, checks, allowUnboundIssuers); err != nil {
 		return V2StatusAssessment{}, err
 	}
 	assessment := V2StatusAssessment{Assessment: "current", Evidence: []StatusEvidenceEntryV2{}}
@@ -165,7 +173,7 @@ func AggregateCertificateStatusV2(checks []V2CertificateStatusCheck, results []R
 	return assessment, nil
 }
 
-func validateV2StatusRoleBindings(roles V2StatusRoleBindings, checks []V2CertificateStatusCheck) error {
+func validateV2StatusRoleBindings(roles V2StatusRoleBindings, checks []V2CertificateStatusCheck, allowUnboundIssuers bool) error {
 	if roles.StatusKeyIssuers == nil || roles.CurrentStatusKeyIDs == nil || roles.ReservedKeyIDs == nil {
 		return fmt.Errorf("v2 status aggregation requires authenticated status-key role bindings")
 	}
@@ -182,7 +190,10 @@ func validateV2StatusRoleBindings(roles V2StatusRoleBindings, checks []V2Certifi
 		}
 	}
 	for issuerID := range issuers {
-		keyID := roles.CurrentStatusKeyIDs[issuerID]
+		keyID, bound := roles.CurrentStatusKeyIDs[issuerID]
+		if !bound && allowUnboundIssuers {
+			continue
+		}
 		if roles.StatusKeyIssuers[keyID] != issuerID {
 			return fmt.Errorf("issuer lacks an authenticated current status-key binding")
 		}

@@ -14,9 +14,12 @@ import (
 // deterministic authorization checks that follow a successful challenge
 // claim. Status retrieval and max_rate reservation are deliberately separate
 // stages because they have ordering and durability requirements.
+//
+// There is no caller-supplied evaluation time: every time-sensitive check
+// uses the claim store's authoritative claim time sealed in ClaimToken
+// (SPEC-v2 §6.2, A5). FutureSkewSeconds must equal the value sealed at claim.
 type V2LocalAuthorizationOptions struct {
-	Now               time.Time
-	FutureSkew        time.Duration
+	FutureSkewSeconds int64
 	RequiredScope     string
 	TrustedRootID     string
 	TrustedRootKey    HybridPublicKey
@@ -128,18 +131,12 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 	if opts.ExpectedChallenge != nil && !matchesExpectedChallengeV2(opts.ExpectedChallenge, tokenState.expected) {
 		return v2InterruptedAssessment(bundle, "local authorization challenge state differs from successful preflight or atomic claim")
 	}
-	now := opts.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
-	if now.Unix() < tokenState.claimedAt {
-		now = time.Unix(tokenState.claimedAt, 0)
-	}
+	nowUnix := tokenState.claimedAt
+	now := time.Unix(nowUnix, 0)
 	tokenState.finalizationMu.Lock()
-	tokenState.evaluatedAt = now.Unix()
+	tokenState.evaluatedAt = nowUnix
 	tokenState.finalizationMu.Unlock()
-	if opts.RequiredScope != tokenState.requiredScope ||
-		opts.FutureSkew < 0 || opts.FutureSkew%time.Second != 0 || int64(opts.FutureSkew/time.Second) != tokenState.futureSkew {
+	if opts.RequiredScope != tokenState.requiredScope || opts.FutureSkewSeconds != tokenState.futureSkew {
 		return v2InterruptedAssessment(bundle, "local authorization state differs from successful preflight or atomic claim")
 	}
 	if opts.RequiredScope != tokenState.expected.RequiredScope {
@@ -172,13 +169,17 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 	}
 	for i := range bundle.Delegations {
 		cert := &bundle.Delegations[i]
-		if cert.IssuedAt >= cert.ExpiresAt || time.Unix(cert.IssuedAt, 0).After(now.Add(opts.FutureSkew)) {
+		// Checked integer seconds: both timestamps inside the v2 domain, a
+		// bounded lifetime, and issued_at no later than now + skew.
+		latestIssue, ok := checkedAddV2(nowUnix, tokenState.futureSkew)
+		if !validV2Timestamp(cert.IssuedAt) || !validV2Timestamp(cert.ExpiresAt) || cert.IssuedAt >= cert.ExpiresAt ||
+			cert.ExpiresAt-cert.IssuedAt > V2MaxDelegationLifetimeSeconds || !ok || cert.IssuedAt > latestIssue {
 			return v2LocalAssessment(bundle, "invalid", "proof_invalid", nil, fmt.Sprintf("delegation %d has invalid time bounds", i))
 		}
 	}
 	for i := range bundle.Delegations {
 		cert := &bundle.Delegations[i]
-		if !now.Before(time.Unix(cert.ExpiresAt, 0)) {
+		if nowUnix >= cert.ExpiresAt {
 			return v2LocalAssessment(bundle, "expired", "delegation_expired", nil, fmt.Sprintf("delegation %d has expired", i))
 		}
 	}
@@ -244,6 +245,12 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 // Local denials are applied only when every status is current. Deferred
 // audience and rate constraints remain pending for their dedicated evaluators.
 func ResolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2LocalAuthorizationAssessment, error) {
+	return resolveClaimProofBundleV2AfterStatus(token, func(checks []V2CertificateStatusCheck) (V2StatusAssessment, error) {
+		return AggregateCertificateStatusV2(checks, results, roles)
+	})
+}
+
+func resolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, aggregate func([]V2CertificateStatusCheck) (V2StatusAssessment, error)) (V2LocalAuthorizationAssessment, error) {
 	if token == nil || token.state == nil {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("v2 claim evaluator capability is required")
 	}
@@ -257,7 +264,7 @@ func ResolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, results []Re
 	if assessment.BundleHash != state.expected.BundleHash || assessment.RequiredScope != state.expected.RequiredScope {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("pending status assessment differs from its claimed proof")
 	}
-	aggregated, err := AggregateCertificateStatusV2(assessment.StatusChecks, results, roles)
+	aggregated, err := aggregate(assessment.StatusChecks)
 	if err != nil {
 		return V2LocalAuthorizationAssessment{}, err
 	}
@@ -317,7 +324,9 @@ func ResolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, results []Re
 // ResolveClaimProofBundleV2AfterAudience consumes caller-authenticated,
 // complete membership results only after every certificate status is current.
 // The application adapter, not Protocol, authenticates these results.
-func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, memberships []V2AudienceMembership, now int64) (V2LocalAuthorizationAssessment, error) {
+// Membership freshness is evaluated at the authoritative claim time sealed in
+// the token, never at a caller-supplied time (SPEC-v2 A5).
+func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, memberships []V2AudienceMembership) (V2LocalAuthorizationAssessment, error) {
 	if token == nil || token.state == nil {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("v2 claim evaluator capability is required")
 	}
@@ -333,10 +342,7 @@ func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, membership
 		state.pendingAssessment = nil
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("pending audience assessment differs from its claimed proof")
 	}
-	if now < state.evaluatedAt {
-		now = state.evaluatedAt
-	}
-	result, err := EvaluateReceiverAudienceV2(assessment.Deferred, state.expected.ExpectedReceiverID, memberships, now, state.futureSkew)
+	result, err := EvaluateReceiverAudienceV2(assessment.Deferred, state.expected.ExpectedReceiverID, memberships, state.evaluatedAt, state.futureSkew)
 	if err != nil {
 		state.evaluationStatus, state.evaluationReason = "authorization_unverified", "evaluation_interrupted"
 		state.pendingAssessment = nil
@@ -633,4 +639,32 @@ func constraintPrecedenceV2(status string) int {
 	default:
 		return 0
 	}
+}
+
+// allowHorizon returns the exclusive allow deadline sealed for this claim (0
+// unless the evaluation reached allow).
+func (state *v2EvaluationTokenState) allowHorizon() int64 {
+	state.finalizationMu.Lock()
+	defer state.finalizationMu.Unlock()
+	return state.allowValidUntil
+}
+
+// interruptV2Evaluation turns the claim's evaluation into the terminal
+// indeterminate/evaluation_interrupted result. It is used when a post-claim
+// stage cannot complete deterministically (sealed-state mismatch, an
+// inconsistent pending stage, or an allow whose horizon passed before
+// finalization). Any provisional rate admission is abandoned because the
+// result is not allow.
+func interruptV2Evaluation(token *V2EvaluationToken) {
+	if token == nil || token.state == nil {
+		return
+	}
+	state := token.state
+	state.finalizationMu.Lock()
+	defer state.finalizationMu.Unlock()
+	state.evaluationStatus, state.evaluationReason = "authorization_unverified", "evaluation_interrupted"
+	state.allowValidUntil = 0
+	state.rateAtFinalization = false
+	state.pendingAssessment = nil
+	state.evaluationComplete.Store(true)
 }

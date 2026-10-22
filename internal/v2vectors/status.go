@@ -292,6 +292,16 @@ func (g *gen) statusFile() any {
 	b.query("c9", T, nil, "not_revoked", "", "L2")
 	add(b)
 
+	b = g.statusScenario("exclusive_age_deadline", "a snapshot is fresh only while now < updated_at + max_status_age (SPEC-v2 §2.5): one second before the deadline it is current, at the deadline it is stale")
+	b.list("L1", 1, "c1").apply("L1", T, nil)
+	b.query("c9", T+539, nil, "not_revoked", "", "L1").query("c9", T+540, nil, "indeterminate", "stale", "L1")
+	add(b)
+
+	b = g.statusScenario("exclusive_next_update_deadline", "a snapshot is fresh only while now < next_update (SPEC-v2 §2.5): one second before next_update it is current, at next_update it is stale")
+	b.listAt("L1", 1, T-60, T+300, "c1").apply("L1", T, nil)
+	b.query("c9", T+299, nil, "not_revoked", "", "L1").query("c9", T+300, nil, "indeterminate", "stale", "L1")
+	add(b)
+
 	b = g.statusScenario("unconfigured_freshness_bounds", "status is unavailable when either finite freshness bound is not configured")
 	b.list("L1", 1).apply("L1", T, nil)
 	b.query("c9", T, &statusPolicyJSON{MaxListLifetimeSeconds: 3600, MaxStatusAgeSeconds: 0, ClockSkewSeconds: 5}, "indeterminate", "unavailable", "L1")

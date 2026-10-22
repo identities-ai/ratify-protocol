@@ -6,8 +6,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::crypto::{key_id_v2, sha384, valid_prefixed_digest, valid_v2_id};
-use super::errors::{plain, Classify, V2ErrorClass, V2Result};
+use super::errors::{plain, Classify, V2Error, V2ErrorClass, V2Result};
 use super::json::{canonical, CJ};
+use super::limits::{
+    valid_v2_timestamp, V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_STATUS_LIFETIME_SECONDS,
+};
 use super::receipt::{
     compare_evidence, has_accepted_status_history_per_issuer, StatusEvidenceEntryV2,
 };
@@ -20,8 +23,15 @@ use super::wire::{
 };
 use crate::types::HybridPublicKey;
 
-const LIST: u16 = 0x0003;
-const PUSH: u16 = 0x0005;
+pub(crate) const LIST: u16 = 0x0003;
+pub(crate) const PUSH: u16 = 0x0005;
+
+/// Go `keyIDV2`, whose length errors are unclassified (the caller's
+/// `v2Classify` fixes their class). The public `key_id_v2` reports
+/// `malformed` explicitly, so internal ports that mirror Go use this.
+pub(crate) fn key_id_plain(key: &HybridPublicKey) -> V2Result<String> {
+    key_id_v2(key).map_err(|e| V2Error::plain(e.message))
+}
 
 /// Finite freshness bounds. A zero maximum means "not configured": status
 /// can then never be current.
@@ -94,7 +104,7 @@ pub struct RevocationStatusStateV2 {
     pub future_dated_object_observed: bool,
 }
 
-fn sorted_unique(values: &[String]) -> Vec<String> {
+pub(crate) fn sorted_unique(values: &[String]) -> Vec<String> {
     values
         .iter()
         .cloned()
@@ -103,11 +113,11 @@ fn sorted_unique(values: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn contains_all(have: &[String], want: &[String]) -> bool {
+pub(crate) fn contains_all(have: &[String], want: &[String]) -> bool {
     want.iter().all(|w| have.contains(w))
 }
 
-fn equal_sets(a: &[String], b: &[String]) -> bool {
+pub(crate) fn equal_sets(a: &[String], b: &[String]) -> bool {
     sorted_unique(a).len() == sorted_unique(b).len() && contains_all(a, b)
 }
 
@@ -115,12 +125,16 @@ fn concat(a: &[String], b: &[String]) -> Vec<String> {
     a.iter().chain(b.iter()).cloned().collect()
 }
 
-fn revoked_ids(refs: &[RevokedCertV2]) -> Vec<String> {
+pub(crate) fn revoked_ids(refs: &[RevokedCertV2]) -> Vec<String> {
     refs.iter().map(|r| r.cert_id.clone()).collect()
 }
 
+/// RevokedSetDigest (SPEC-v2 §4): SHA-384("ratify-protocol-revoked-set-v2" ||
+/// 0x00 || RatifyCanonicalJSON(sorted, deduplicated cert_ids)).
 fn revoked_set_digest(refs: &[RevokedCertV2]) -> V2Result<Vec<u8>> {
-    Ok(sha384(&[&canonical(&CJ::strs(&revoked_ids(refs)))?]))
+    let encoded = canonical(&CJ::strs(&sorted_unique(&revoked_ids(refs))))
+        .map_err(|e| e.context("encode revoked certificate set"))?;
+    Ok(sha384(&[b"ratify-protocol-revoked-set-v2", &[0], &encoded]))
 }
 
 fn beyond_skew(timestamp: i64, now: i64, skew: i64) -> bool {
@@ -132,25 +146,35 @@ fn list_fresh(l: &RevocationListV2, p: &RevocationStatusPolicyV2, now: i64) -> b
         || p.max_status_age_seconds == 0
         || l.next_update - l.updated_at > p.max_list_lifetime_seconds
         || beyond_skew(l.updated_at, now, p.clock_skew_seconds)
-        || now > l.next_update
+        || now >= l.next_update
     {
+        // Exclusive deadline: a list is fresh only while now < next_update.
         return false;
     }
-    now <= l.updated_at || now - l.updated_at <= p.max_status_age_seconds
+    // Exclusive age deadline: fresh only while now < updated_at + max_status_age.
+    now < l.updated_at || now - l.updated_at < p.max_status_age_seconds
 }
 
 fn validate_policy(p: &RevocationStatusPolicyV2) -> V2Result<()> {
-    let bad = |v: i64| !(0..=MAX_SAFE).contains(&v);
-    if bad(p.max_list_lifetime_seconds)
-        || bad(p.max_status_age_seconds)
-        || bad(p.clock_skew_seconds)
+    // Zero lifetime or age means "not configured" (status is then never
+    // current); configured values are bounded by SPEC-v2 §2.5.
+    if p.max_list_lifetime_seconds < 0
+        || p.max_status_age_seconds < 0
+        || p.clock_skew_seconds < 0
+        || p.max_list_lifetime_seconds > V2_MAX_STATUS_LIFETIME_SECONDS
+        || p.max_status_age_seconds > V2_MAX_STATUS_LIFETIME_SECONDS
+        || p.clock_skew_seconds > V2_MAX_FUTURE_SKEW_SECONDS
     {
         return plain("revocation status policy contains invalid time bounds");
     }
     Ok(())
 }
 
-fn validate_binding(s: &RevocationStatusStateV2, issuer_id: &str, epoch: u64) -> V2Result<()> {
+pub(crate) fn validate_binding(
+    s: &RevocationStatusStateV2,
+    issuer_id: &str,
+    epoch: u64,
+) -> V2Result<()> {
     if !s.issuer_id.is_empty() && s.issuer_id != issuer_id {
         return plain("revocation status state belongs to a different issuer");
     }
@@ -203,7 +227,7 @@ fn validate_binding(s: &RevocationStatusStateV2, issuer_id: &str, epoch: u64) ->
     Ok(())
 }
 
-fn has_accepted_observation(
+pub(crate) fn has_accepted_observation(
     obs: &[RevocationObservationV2],
     epoch: u64,
     ty: u16,
@@ -221,7 +245,7 @@ fn has_accepted_observation(
     })
 }
 
-fn validate_accepted_state(s: &RevocationStatusStateV2) -> V2Result<()> {
+pub(crate) fn validate_accepted_state(s: &RevocationStatusStateV2) -> V2Result<()> {
     if sorted_unique(&s.deny_union_cert_ids).len() != s.deny_union_cert_ids.len()
         || sorted_unique(&s.accepted_cert_ids).len() != s.accepted_cert_ids.len()
     {
@@ -265,7 +289,11 @@ fn validate_accepted_state(s: &RevocationStatusStateV2) -> V2Result<()> {
     if !s.has_floor {
         return Ok(());
     }
-    let snap = s.accepted_snapshot.as_ref().expect("validated by binding");
+    let Some(snap) = s.accepted_snapshot.as_ref() else {
+        // Go dereferences the snapshot here; every caller validates the
+        // binding (has_floor implies a snapshot) first.
+        return plain("accepted snapshot does not match issuer or floor");
+    };
     if snap.issuer_id != s.issuer_id || snap.sequence > s.floor {
         return plain("accepted snapshot does not match issuer or floor");
     }
@@ -313,7 +341,7 @@ fn validate_accepted_state(s: &RevocationStatusStateV2) -> V2Result<()> {
     Ok(())
 }
 
-fn semantic_key(o: &RevocationObservationV2) -> String {
+pub(crate) fn semantic_key(o: &RevocationObservationV2) -> String {
     let digest = if o.object_type == LIST {
         &o.revoked_set_digest
     } else {
@@ -330,7 +358,7 @@ fn semantic_key(o: &RevocationObservationV2) -> String {
     )
 }
 
-fn must_retain(s: &RevocationStatusStateV2, o: &RevocationObservationV2) -> bool {
+pub(crate) fn must_retain(s: &RevocationStatusStateV2, o: &RevocationObservationV2) -> bool {
     if o.status_key_epoch != s.status_key_epoch {
         return false;
     }
@@ -346,7 +374,22 @@ fn must_retain(s: &RevocationStatusStateV2, o: &RevocationObservationV2) -> bool
     s.reconciliation_required && (o.sequence > s.floor || o.fork || o.gap || o.future_dated)
 }
 
-fn compact(mut s: RevocationStatusStateV2) -> RevocationStatusStateV2 {
+/// Go `canonicalizeRevocationStatusStateV2`: every string set in snapshot
+/// order. Observation order (compaction order) is not changed.
+pub(crate) fn canonicalize_state(mut s: RevocationStatusStateV2) -> RevocationStatusStateV2 {
+    s.retired_status_key_ids = sorted_unique(&s.retired_status_key_ids);
+    s.accepted_cert_ids = sorted_unique(&s.accepted_cert_ids);
+    s.preceding_accepted_cert_ids = sorted_unique(&s.preceding_accepted_cert_ids);
+    s.deny_union_cert_ids = sorted_unique(&s.deny_union_cert_ids);
+    for o in &mut s.observations {
+        o.revoked_cert_ids = sorted_unique(&o.revoked_cert_ids);
+    }
+    s
+}
+
+/// Go `pruneSecurityJournalObservationsV2` for one issuer state (also Go
+/// `compactRevocationStatusObservationsV2`), followed by canonicalization.
+pub(crate) fn compact(mut s: RevocationStatusStateV2) -> RevocationStatusStateV2 {
     let base_digest = s
         .accepted_snapshot
         .as_ref()
@@ -425,7 +468,7 @@ fn compact(mut s: RevocationStatusStateV2) -> RevocationStatusStateV2 {
         }
     }
     s.observations = retained;
-    s
+    canonicalize_state(s)
 }
 
 fn initialize(s: &mut RevocationStatusStateV2, issuer_id: &str, epoch: u64) {
@@ -573,8 +616,18 @@ fn heartbeat_preferred(
     status_evidence_digest_list_v2(accepted).is_ok_and(|d| incoming_digest < d.as_slice())
 }
 
-fn clone_list(l: &RevocationListV2) -> V2Result<RevocationListV2> {
+pub(crate) fn clone_list(l: &RevocationListV2) -> V2Result<RevocationListV2> {
     decode_revocation_list_v2(&encode_revocation_list_v2(l)?)
+}
+
+/// Go `cloneRevocationStatusStateV2`: the accepted snapshot is copied through
+/// its wire form, so a snapshot that does not encode is an error.
+fn clone_state(s: &RevocationStatusStateV2) -> V2Result<RevocationStatusStateV2> {
+    let mut copy = s.clone();
+    if let Some(list) = &s.accepted_snapshot {
+        copy.accepted_snapshot = Some(clone_list(list)?);
+    }
+    Ok(copy)
 }
 
 /// Verify a list against the caller-authenticated status-key binding and
@@ -618,7 +671,7 @@ fn apply_list_inner(
     now: i64,
 ) -> V2Result<RevocationStatusStateV2> {
     validate_policy(policy)?;
-    if !(0..=MAX_SAFE).contains(&now) || epoch == 0 || epoch > MAX_SAFE as u64 {
+    if !valid_v2_timestamp(now) || epoch == 0 || epoch > MAX_SAFE as u64 {
         return plain("revocation list application has invalid time or status-key epoch");
     }
     verify_revocation_list_v2_signature(list, bound_issuer_id, status_key)?;
@@ -626,9 +679,9 @@ fn apply_list_inner(
     let digest = status_evidence_digest_list_v2(list)?;
     let body_digest = sha384(&[&revocation_list_v2_signable_bytes(list)?]);
     let set_digest = revoked_set_digest(&list.revoked)?;
-    let mut next = state.clone();
+    let mut next = clone_state(state)?;
     initialize(&mut next, bound_issuer_id, epoch);
-    let key_id = key_id_v2(status_key)?;
+    let key_id = key_id_plain(status_key)?;
     if !next.status_key_id.is_empty() && next.status_key_id != key_id {
         return plain("revocation list status key does not match configured epoch binding");
     }
@@ -848,7 +901,7 @@ fn apply_push_inner(
     now: i64,
 ) -> V2Result<RevocationStatusStateV2> {
     validate_policy(policy)?;
-    if !(0..=MAX_SAFE).contains(&now) || epoch == 0 || epoch > MAX_SAFE as u64 {
+    if !valid_v2_timestamp(now) || epoch == 0 || epoch > MAX_SAFE as u64 {
         return plain("revocation push application has invalid time or status-key epoch");
     }
     verify_revocation_push_v2_signature(push, bound_issuer_id, status_key)?;
@@ -856,9 +909,9 @@ fn apply_push_inner(
     let digest = status_evidence_digest_push_v2(push)?;
     let body_digest = sha384(&[&revocation_push_v2_signable_bytes(push)?]);
     let set_digest = revoked_set_digest(&push.revoked)?;
-    let mut next = state.clone();
+    let mut next = clone_state(state)?;
     initialize(&mut next, bound_issuer_id, epoch);
-    let key_id = key_id_v2(status_key)?;
+    let key_id = key_id_plain(status_key)?;
     if !next.status_key_id.is_empty() && next.status_key_id != key_id {
         return plain("revocation push status key does not match configured epoch binding");
     }
@@ -969,13 +1022,13 @@ pub fn transition_revocation_status_epoch_v2(
             .map_err(|e| e.context("cannot transition malformed status state"))?;
         validate_accepted_state(state)
             .map_err(|e| e.context("cannot transition invalid accepted status state"))?;
-        let key_id = key_id_v2(next_status_key)?;
+        let key_id = key_id_plain(next_status_key)?;
         if key_id == state.status_key_id || state.retired_status_key_ids.contains(&key_id) {
             return plain(
                 "status-key epoch transition cannot reuse a current or retired status key",
             );
         }
-        let mut next = state.clone();
+        let mut next = clone_state(state)?;
         let mut retired = next.retired_status_key_ids.clone();
         retired.push(state.status_key_id.clone());
         next.retired_status_key_ids = sorted_unique(&retired);
@@ -1084,7 +1137,34 @@ fn unavailable_evidence(
 
 /// Derive a fail-closed answer and deterministic evidence for one
 /// CertificateRef from the issuer's reducer state.
+///
+/// Go `RevocationStatusForCertV2` returns these errors unclassified; this
+/// port classifies them `configuration_invalid` (an invalid query, policy,
+/// or state binding), keeping any class already fixed (for example the
+/// accepted snapshot's signature verification class).
 pub fn revocation_status_for_cert_v2(
+    state: &RevocationStatusStateV2,
+    issuer_id: &str,
+    cert_id: &str,
+    status_key_epoch: u64,
+    status_key: &HybridPublicKey,
+    policy: &RevocationStatusPolicyV2,
+    now: i64,
+) -> V2Result<RevocationStatusResultV2> {
+    revocation_status_for_cert_inner(
+        state,
+        issuer_id,
+        cert_id,
+        status_key_epoch,
+        status_key,
+        policy,
+        now,
+    )
+    .classify(V2ErrorClass::ConfigurationInvalid)
+}
+
+/// Go `RevocationStatusForCertV2` with Go's (unclassified) error classes.
+pub(crate) fn revocation_status_for_cert_inner(
     state: &RevocationStatusStateV2,
     issuer_id: &str,
     cert_id: &str,
@@ -1096,10 +1176,10 @@ pub fn revocation_status_for_cert_v2(
     validate_policy(policy)?;
     validate_binding(state, issuer_id, status_key_epoch)?;
     validate_accepted_state(state)?;
-    if cert_id.is_empty() || !(0..=MAX_SAFE).contains(&now) {
+    if cert_id.is_empty() || !valid_v2_timestamp(now) {
         return plain("status query has invalid certificate ID or time");
     }
-    let key_id = key_id_v2(status_key)?;
+    let key_id = key_id_plain(status_key)?;
     if state.issuer_id != issuer_id
         || state.status_key_epoch != status_key_epoch
         || state.status_key_id != key_id
@@ -1141,7 +1221,9 @@ pub fn revocation_status_for_cert_v2(
             fresh_until: 0,
         });
     }
-    let snap = state.accepted_snapshot.as_ref().expect("checked");
+    let Some(snap) = state.accepted_snapshot.as_ref() else {
+        return Ok(RevocationStatusResultV2::unavailable());
+    };
     if !list_fresh(snap, policy, now) {
         return Ok(RevocationStatusResultV2 {
             status: "indeterminate".into(),
@@ -1195,6 +1277,7 @@ pub struct V2StatusAssessment {
 fn validate_roles(
     roles: &V2StatusRoleBindings,
     checks: &[V2CertificateStatusCheck],
+    allow_unbound_issuers: bool,
 ) -> V2Result<()> {
     for (key, issuer) in &roles.status_key_issuers {
         if !valid_v2_id(key) || !valid_v2_id(issuer) {
@@ -1205,11 +1288,11 @@ fn validate_roles(
         }
     }
     for check in checks {
-        let key = roles
-            .current_status_key_ids
-            .get(&check.issuer_id)
-            .cloned()
-            .unwrap_or_default();
+        let bound = roles.current_status_key_ids.get(&check.issuer_id);
+        if bound.is_none() && allow_unbound_issuers {
+            continue;
+        }
+        let key = bound.cloned().unwrap_or_default();
         if roles.status_key_issuers.get(&key) != Some(&check.issuer_id) {
             return plain("issuer lacks an authenticated current status-key binding");
         }
@@ -1240,10 +1323,9 @@ fn valid_current_evidence(evidence: &[StatusEvidenceEntryV2], issuer_id: &str) -
             _ => return false,
         }
     }
-    if bases != 1 {
+    let (1, Some(base)) = (bases, base) else {
         return false;
-    }
-    let base = base.expect("one base");
+    };
     pushes.sort_by_key(|p| p.sequence);
     pushes.iter().enumerate().all(|(i, p)| {
         p.status_key_id == base.status_key_id && p.sequence == base.sequence + i as i64 + 1
@@ -1265,19 +1347,35 @@ fn add_history(
     }
 }
 
-/// Aggregate exactly one result per check, in order. Revoked outranks
+/// Go `aggregateCertificateStatusResultsV2` (internal; SPEC-v2 §6.5):
+/// exactly one reducer result per check, in order. Revoked outranks
 /// unavailable, which outranks stale, independent of chain order.
-pub fn aggregate_certificate_status_v2(
+// Used by the authorization port (Go authorization_v2.go), not yet ported.
+#[allow(dead_code)]
+pub(crate) fn aggregate_certificate_status_results_v2(
     checks: &[V2CertificateStatusCheck],
     results: &[RevocationStatusResultV2],
     roles: &V2StatusRoleBindings,
+) -> V2Result<V2StatusAssessment> {
+    aggregate_certificate_status_v2(checks, results, roles, false)
+}
+
+/// Go `aggregateCertificateStatusV2`, the shared aggregator.
+/// `allow_unbound_issuers` is used only by the live verifier, which derives
+/// results from its own journal and reports an issuer without authenticated
+/// status configuration as unavailable instead of aborting the evaluation.
+pub(crate) fn aggregate_certificate_status_v2(
+    checks: &[V2CertificateStatusCheck],
+    results: &[RevocationStatusResultV2],
+    roles: &V2StatusRoleBindings,
+    allow_unbound_issuers: bool,
 ) -> V2Result<V2StatusAssessment> {
     if checks.is_empty() || checks.len() != results.len() {
         return plain(
             "v2 status aggregation requires one result for every non-empty certificate list",
         );
     }
-    validate_roles(roles, checks)?;
+    validate_roles(roles, checks, allow_unbound_issuers)?;
     let mut issuers = Vec::new();
     let mut seen_refs = BTreeSet::new();
     let mut issuer_set = BTreeSet::new();

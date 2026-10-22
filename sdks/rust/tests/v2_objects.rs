@@ -370,7 +370,7 @@ fn decode_limit(kind: &str, data: &[u8]) -> V2Result<()> {
         "verification_receipt" => decode_verification_receipt_v2(data).map(|_| ()),
         "verification_receipt_body" => decode_verification_receipt_body_v2(data).map(|_| ()),
         "transaction_receipt" => decode_transaction_receipt_v2(data).map(|_| ()),
-        "status_evidence_batch" => Err(V2Error::new(V2ErrorClass::Malformed, "PENDING status batch decoder")),
+        "status_evidence_batch" => decode_v2_status_evidence_batch(data).map(|_| ()),
         other => panic!("no decoder for {other}"),
     }
 }

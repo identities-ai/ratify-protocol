@@ -57,7 +57,7 @@ func signedTransactionReceiptV2Test(t testing.TB) (*TransactionReceiptV2, Hybrid
 	rootCert, err := SignDelegationCertV2(&DelegationCertV2{
 		Version: 2, CertID: "tx-cert-root", IssuerID: issuerID, IssuerPubKey: issuerPub,
 		SubjectID: intermediateID, SubjectPubKey: intermediatePub, Scope: []string{"execute:tool"},
-		Constraints: []Constraint{}, IssuedAt: 1, ExpiresAt: 20,
+		Constraints: []ConstraintV2{}, IssuedAt: 1, ExpiresAt: 20,
 	}, issuerKey)
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func signedTransactionReceiptV2Test(t testing.TB) (*TransactionReceiptV2, Hybrid
 	cert := &DelegationCertV2{
 		Version: 2, CertID: "tx-cert-1", IssuerID: intermediateID, IssuerPubKey: intermediatePub,
 		SubjectID: agentID, SubjectPubKey: agentPub, Scope: []string{"execute:tool"},
-		Constraints: []Constraint{}, IssuedAt: 1, ExpiresAt: 20,
+		Constraints: []ConstraintV2{}, IssuedAt: 1, ExpiresAt: 20,
 	}
 	cert, err = SignDelegationCertV2(cert, intermediateKey)
 	if err != nil {
@@ -128,7 +128,7 @@ func transactionPartyV2Test(t testing.TB, receipt *TransactionReceiptV2, partyID
 	cert, err := SignDelegationCertV2(&DelegationCertV2{
 		Version: 2, CertID: "tx-cert-" + partyID, IssuerID: issuerID, IssuerPubKey: issuerPub,
 		SubjectID: agentID, SubjectPubKey: agentPub, Scope: []string{"execute:tool"},
-		Constraints: []Constraint{}, IssuedAt: 1, ExpiresAt: 20,
+		Constraints: []ConstraintV2{}, IssuedAt: 1, ExpiresAt: 20,
 	}, issuerKey)
 	if err != nil {
 		t.Fatal(err)

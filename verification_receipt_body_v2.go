@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 )
 
@@ -72,8 +73,8 @@ func VerificationReceiptV2Body(receipt *VerificationReceiptV2) ([]byte, error) {
 // pre-signing body before it can become an immutable terminal outbox entry.
 func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt body exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", MaxVerificationReceiptBodyBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2WithTextTopLevel(data, nil, map[string]bool{"bundle_hash": true}); err != nil {
 		return nil, err
@@ -140,11 +141,17 @@ func BindVerificationReceiptBodyV2(data []byte, head ReceiptV2Head) (*Verificati
 // with a local verifier key. Publication still requires an atomic append
 // against the same caller-authenticated log head.
 func SignPreparedVerificationReceiptV2(data []byte, head ReceiptV2Head, private HybridPrivateKey) (*VerificationReceiptV2, error) {
+	return SignPreparedVerificationReceiptV2WithSigner(context.Background(), data, head, localSignerV2{private})
+}
+
+// SignPreparedVerificationReceiptV2WithSigner is
+// SignPreparedVerificationReceiptV2 with an external verifier signer.
+func SignPreparedVerificationReceiptV2WithSigner(ctx context.Context, data []byte, head ReceiptV2Head, signer SignerV2) (*VerificationReceiptV2, error) {
 	bound, err := BindVerificationReceiptBodyV2(data, head)
 	if err != nil {
 		return nil, err
 	}
-	signed, err := SignVerificationReceiptV2(bound, private)
+	signed, err := SignVerificationReceiptV2WithSigner(ctx, bound, signer)
 	if err != nil {
 		return nil, err
 	}

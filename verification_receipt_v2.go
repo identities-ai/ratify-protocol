@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -464,10 +465,20 @@ func VerificationReceiptV2Digest(receipt *VerificationReceiptV2) ([]byte, error)
 }
 
 func SignVerificationReceiptV2(receipt *VerificationReceiptV2, verifierPrivate HybridPrivateKey) (*VerificationReceiptV2, error) {
+	return SignVerificationReceiptV2WithSigner(context.Background(), receipt, localSignerV2{verifierPrivate})
+}
+
+// SignVerificationReceiptV2WithSigner is SignVerificationReceiptV2 with an
+// external signer whose key ID must equal verifier_id.
+func SignVerificationReceiptV2WithSigner(ctx context.Context, receipt *VerificationReceiptV2, signer SignerV2) (*VerificationReceiptV2, error) {
 	if err := validateVerificationReceiptV2(receipt, false); err != nil {
 		return nil, err
 	}
-	verifierID, err := keyIDV2(verifierPrivate.Public())
+	verifierPublic, err := signerPublicKeyV2(signer)
+	if err != nil {
+		return nil, err
+	}
+	verifierID, err := keyIDV2(verifierPublic)
 	if err != nil || verifierID != receipt.VerifierID {
 		return nil, fmt.Errorf("receipt verifier_id does not match signing key")
 	}
@@ -475,7 +486,7 @@ func SignVerificationReceiptV2(receipt *VerificationReceiptV2, verifierPrivate H
 	if err != nil {
 		return nil, err
 	}
-	sig, err := signV2Statement(v2VerificationReceipt, body, verifierPrivate)
+	sig, err := signV2StatementWithSigner(ctx, v2VerificationReceipt, body, signer, verifierPublic)
 	if err != nil {
 		return nil, err
 	}
@@ -507,16 +518,16 @@ func EncodeVerificationReceiptV2(receipt *VerificationReceiptV2) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MaxVerificationReceiptBytesV2); err != nil {
+		return nil, err
 	}
 	return data, nil
 }
 
 func DecodeVerificationReceiptV2(data []byte) (_ *VerificationReceiptV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: verification receipt exceeds the wire size limit")
+	if err := checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MaxVerificationReceiptBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2WithTextTopLevel(data, map[string]bool{"previous_receipt_hash": true}, map[string]bool{"bundle_hash": true}); err != nil {
 		return nil, err

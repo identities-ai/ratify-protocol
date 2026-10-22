@@ -20,7 +20,7 @@ func audienceConstraintV2Test(t *testing.T, exact, domains []string, age int64) 
 	if len(domains) > 0 {
 		params["max_membership_age_seconds"] = age
 	}
-	encoded, err := CanonicalJSON(Constraint{Type: ConstraintReceiverAudience, Params: params})
+	encoded, err := CanonicalJSON(ConstraintV2{Type: ConstraintReceiverAudience, Params: params})
 	if err != nil {
 		t.Fatal(err)
 	}

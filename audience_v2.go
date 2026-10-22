@@ -67,7 +67,7 @@ func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID stri
 			return V2AudienceAssessment{}, fmt.Errorf("v2 audience constraint has duplicate or invalid position")
 		}
 		seenLinks[linkKey] = true
-		var original Constraint
+		var original ConstraintV2
 		if err := json.Unmarshal(item.CanonicalJSON, &original); err != nil {
 			return V2AudienceAssessment{}, fmt.Errorf("v2 audience constraint cannot be decoded: %w", err)
 		}

@@ -90,11 +90,14 @@ func (g *gen) genesisRotationState(key string) *RotationStateJSON {
 }
 
 // constrainedLeaf pins every v2 constraint encoding used by the corpus.
-func (g *gen) constrainedLeafConstraints() []ratify.Constraint {
-	return []ratify.Constraint{
+func (g *gen) constrainedLeafConstraints() []ratify.ConstraintV2 {
+	return []ratify.ConstraintV2{
 		{Type: ratify.ConstraintMaxRate, Count: 5, WindowS: 60},
 		{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"receiver-1"}, "trust_domain_ids": []any{"domain-a"}, "max_membership_age_seconds": 3600}},
 		{Type: ratify.ConstraintResourcePath, ResourceID: "customer/123", PathPrefix: "/v1/customers/"},
+		{Type: ratify.ConstraintTimeWindow, Start: "22:00", End: "06:00", TZ: "America/New_York"},
+		{Type: ratify.ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: 2500000},
+		{Type: ratify.ConstraintGeoCircle, Params: map[string]any{"lat_microdegrees": 37774900, "lon_microdegrees": -122419400, "radius_mm": 500000}},
 	}
 }
 
@@ -191,7 +194,7 @@ func (g *gen) objectsFile() any {
 
 	_, leafWire, leafSig := g.cert(certSpec{issuer: inter, subject: agent, certID: "cert-leaf-constrained", scope: []string{"data:read"}, constraints: g.constrainedLeafConstraints()})
 	f.Objects = append(f.Objects, objectVector{Name: "delegation_with_every_v2_constraint_shape", Kind: "delegation_certificate",
-		Description: "Pins canonical encodings of max_rate, ratify.receiver_audience (exact and trust-domain members), and resource_path constraints.",
+		Description: "Pins canonical encodings of every v2 registry schema: max_rate, ratify.receiver_audience (exact and trust-domain members), resource_path, time_window (wrapping midnight), and max_amount (integer max_amount_micros). Also pins an unregistered type (geo_circle, not in the v2 registry) carrying only type and integer params: it decodes, and evaluation fails closed as constraint_unknown.",
 		WireB64:     b64(leafWire), Signatures: []sigVector{g.sigVec("signature", leafSig)}, Digests: map[string]string{}})
 
 	chain := g.chain(chainSpec{})

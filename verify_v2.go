@@ -55,7 +55,7 @@ type V2VerifyRequest struct {
 	Now                    int64
 	MaxChallengeAgeSeconds int64
 	FutureSkewSeconds      int64
-	Context                VerifierContext
+	Context                ConstraintContextV2
 	StatusRoles            V2StatusRoleBindings
 }
 

@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 )
@@ -107,8 +108,8 @@ func validateWitnessEntryV2(entry *WitnessEntryV2, signature bool) error {
 	if entry.EntryData == nil {
 		return fmt.Errorf("wire v2: entry_data must be a base64 byte string, not null")
 	}
-	if len(entry.EntryData) > MaxProofBundleBytes {
-		return fmt.Errorf("wire v2: entry_data exceeds the witness wire size limit")
+	if len(entry.EntryData) > MaxWitnessEntryDataBytesV2 {
+		return fmt.Errorf("wire v2: entry_data exceeds MAX_WITNESS_ENTRY_DATA_BYTES_V2 (%d bytes)", MaxWitnessEntryDataBytesV2)
 	}
 	if entry.Sequence == 1 && !bytes.Equal(entry.PrevHash, make([]byte, 48)) {
 		return fmt.Errorf("wire v2: genesis witness entry must use a zero prev_hash")
@@ -158,8 +159,8 @@ func EncodeWitnessEntryV2(entry *WitnessEntryV2) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(wire) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: witness entry exceeds the wire size limit")
+	if err := checkV2WireSize(wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MaxWitnessEntryBytesV2); err != nil {
+		return nil, err
 	}
 	return wire, nil
 }
@@ -167,8 +168,8 @@ func EncodeWitnessEntryV2(entry *WitnessEntryV2) ([]byte, error) {
 // DecodeWitnessEntryV2 strictly decodes one canonical v2 witness entry.
 func DecodeWitnessEntryV2(data []byte) (_ *WitnessEntryV2, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if len(data) > MaxProofBundleBytes {
-		return nil, fmt.Errorf("wire v2: witness entry exceeds the wire size limit")
+	if err := checkV2WireSize(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MaxWitnessEntryBytesV2); err != nil {
+		return nil, err
 	}
 	if err := checkWireJSONV2(data); err != nil {
 		return nil, err
@@ -192,10 +193,20 @@ func DecodeWitnessEntryV2(data []byte) (_ *WitnessEntryV2, err error) {
 
 // SignWitnessEntryV2 signs the v2 witness body with object code 0x0006.
 func SignWitnessEntryV2(entry *WitnessEntryV2, witnessPrivate HybridPrivateKey) (*WitnessEntryV2, error) {
+	return SignWitnessEntryV2WithSigner(context.Background(), entry, localSignerV2{witnessPrivate})
+}
+
+// SignWitnessEntryV2WithSigner is SignWitnessEntryV2 with an external signer
+// whose key ID must equal witness_id.
+func SignWitnessEntryV2WithSigner(ctx context.Context, entry *WitnessEntryV2, signer SignerV2) (*WitnessEntryV2, error) {
 	if err := validateWitnessEntryV2(entry, false); err != nil {
 		return nil, err
 	}
-	witnessID, err := keyIDV2(witnessPrivate.Public())
+	witnessPublic, err := signerPublicKeyV2(signer)
+	if err != nil {
+		return nil, err
+	}
+	witnessID, err := keyIDV2(witnessPublic)
 	if err != nil || witnessID != entry.WitnessID {
 		return nil, fmt.Errorf("witness_id does not match signing key")
 	}
@@ -203,7 +214,7 @@ func SignWitnessEntryV2(entry *WitnessEntryV2, witnessPrivate HybridPrivateKey) 
 	if err != nil {
 		return nil, err
 	}
-	signature, err := signV2Statement(v2WitnessEntry, body, witnessPrivate)
+	signature, err := signV2StatementWithSigner(ctx, v2WitnessEntry, body, signer, witnessPublic)
 	if err != nil {
 		return nil, err
 	}

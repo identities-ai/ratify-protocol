@@ -64,7 +64,7 @@ func BuildV2RateReservationBatch(deferred []V2DeferredConstraint) ([]V2RateReser
 		if err := validateV2ConstraintFields(item.CanonicalJSON); err != nil {
 			return nil, fmt.Errorf("v2 rate constraint is invalid: %w", err)
 		}
-		var constraint Constraint
+		var constraint ConstraintV2
 		if err := json.Unmarshal(item.CanonicalJSON, &constraint); err != nil || constraint.Type != item.Type {
 			return nil, fmt.Errorf("v2 rate constraint has wrong type")
 		}
@@ -78,11 +78,11 @@ func BuildV2RateReservationBatch(deferred []V2DeferredConstraint) ([]V2RateReser
 		if item.Type == ConstraintReceiverAudience {
 			continue
 		}
-		if constraint.Count <= 0 || int64(constraint.Count) > maxSafeInteger || constraint.WindowS <= 0 || constraint.WindowS > maxSafeInteger {
+		if constraint.Count <= 0 || constraint.Count > maxSafeInteger || constraint.WindowS <= 0 || constraint.WindowS > MaxRateWindowSecondsV2 {
 			return nil, fmt.Errorf("v2 rate constraint has noncanonical or invalid limits")
 		}
 		key := counterKey{item.IssuerID, item.CertID, constraint.WindowS}
-		limit := int64(constraint.Count)
+		limit := constraint.Count
 		if previous, exists := counters[key]; !exists || limit < previous {
 			counters[key] = limit
 		}

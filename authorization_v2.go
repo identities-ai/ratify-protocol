@@ -21,7 +21,7 @@ type V2LocalAuthorizationOptions struct {
 	TrustedRootID     string
 	TrustedRootKey    HybridPublicKey
 	TrustConfigured   bool
-	Context           VerifierContext
+	Context           ConstraintContextV2
 	ContextPolicy     *V2ContextPolicy
 	ExpectedChallenge *ExpectedChallengeV2
 	ClaimToken        *V2EvaluationToken
@@ -512,7 +512,7 @@ func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorization
 				deferred = append(deferred, V2DeferredConstraint{DelegationIndex: i, ConstraintIndex: j, IssuerID: cert.IssuerID, CertID: cert.CertID, Type: constraint.Type, CanonicalJSON: encoded})
 				continue
 			}
-			if err := evaluateConstraint(constraint, cert.CertID, opts.Context, now); err != nil {
+			if err := evaluateConstraintV2(constraint, opts.Context, now); err != nil {
 				status := "constraint_denied"
 				switch {
 				case errors.Is(err, ErrConstraintUnverifiable):
@@ -551,15 +551,15 @@ func localTimeWindowValidUntilV2(bundle *ProofBundleV2, now time.Time) (int64, e
 			if constraint.Type != ConstraintTimeWindow {
 				continue
 			}
-			loc, err := time.LoadLocation(constraint.TZ)
+			loc, err := loadV2TimeZone(constraint.TZ)
 			if err != nil {
 				return 0, err
 			}
-			start, err := parseHHMM(constraint.Start)
+			start, err := parseHHMMV2(constraint.Start)
 			if err != nil {
 				return 0, err
 			}
-			end, err := parseHHMM(constraint.End)
+			end, err := parseHHMMV2(constraint.End)
 			if err != nil {
 				return 0, err
 			}

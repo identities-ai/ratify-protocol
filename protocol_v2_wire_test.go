@@ -26,7 +26,7 @@ func signedV2TestBundleWithScopes(t testing.TB, scopes []string) (*ProofBundleV2
 	}
 	issuerID, _ := keyIDV2(issuerPub)
 	agentID, _ := keyIDV2(agentPub)
-	cert := DelegationCertV2{Version: 2, CertID: "cert-1", IssuerID: issuerID, IssuerPubKey: issuerPub, SubjectID: agentID, SubjectPubKey: agentPub, Scope: scopes, Constraints: []Constraint{}, IssuedAt: 10, ExpiresAt: 20}
+	cert := DelegationCertV2{Version: 2, CertID: "cert-1", IssuerID: issuerID, IssuerPubKey: issuerPub, SubjectID: agentID, SubjectPubKey: agentPub, Scope: scopes, Constraints: []ConstraintV2{}, IssuedAt: 10, ExpiresAt: 20}
 	certBytes, err := certSignableBytesV2(&cert)
 	if err != nil {
 		t.Fatal(err)
@@ -397,7 +397,7 @@ func TestPublicV2SigningAPIsProduceVerifiableChain(t *testing.T) {
 	unsignedCert := &DelegationCertV2{
 		Version: 2, CertID: "public-api-test", IssuerID: issuerID, IssuerPubKey: issuerPub,
 		SubjectID: agentID, SubjectPubKey: agentPub, Scope: []string{"execute:tool"},
-		Constraints: []Constraint{}, IssuedAt: 1, ExpiresAt: 100,
+		Constraints: []ConstraintV2{}, IssuedAt: 1, ExpiresAt: 100,
 	}
 	cert, err := SignDelegationCertV2(unsignedCert, issuerKey)
 	if err != nil {

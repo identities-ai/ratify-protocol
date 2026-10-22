@@ -163,10 +163,13 @@ func checkWireJSON(data []byte, topLevelByteFields map[string]bool, topLevelText
 			}
 		case json.Number:
 			s := t.String()
-			// Integer-formed tokens only; canonical floats (constraint
-			// bounds) are out of scope for the integer domain.
-			// Only a value equal to negative zero is rejected; -0.5 is a valid
-			// float (for example a geo coordinate).
+			// Protocol v2 carries no floating point anywhere on the wire:
+			// every number token must be an integer spelling. v1 keeps its
+			// float-valued constraint bounds, so only v2 rejects fractions
+			// and exponents (including integral values such as 1.0 or 1e3).
+			if strictV2 && strings.ContainsAny(s, ".eE") {
+				return fmt.Errorf("wire: number %s is not an integer; v2 forbids floating point", s)
+			}
 			if strictV2 && strings.HasPrefix(s, "-") {
 				if f, perr := strconv.ParseFloat(s, 64); perr == nil && f == 0 {
 					return fmt.Errorf("wire: negative zero is not a canonical number")

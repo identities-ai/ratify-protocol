@@ -46,6 +46,7 @@ CONSUMERS = {
     "lifecycle-scenarios.json": "test_lifecycle_scenarios_v2.py",
     "challenge-issuance.json": "test_challenge_issuance_v2.py",
     "transaction-verification.json": "test_transaction_verification_v2.py",
+    "device-state.json": "test_device_state_v2.py",
 }
 
 

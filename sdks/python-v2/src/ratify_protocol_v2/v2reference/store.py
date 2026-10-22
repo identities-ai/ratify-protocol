@@ -113,10 +113,8 @@ class _OutboxEntry:
     ack: Optional[V2CheckpointAcknowledgement] = None
 
 
-def _stream_key(claim: V2ChallengeClaim) -> str:
-    namespace, agent = claim.namespace, claim.agent_id
-    stream = (claim.stream_id or b"").hex()
-    return f"{len(namespace.encode('utf-8'))}:{namespace}|{len(agent.encode('utf-8'))}:{agent}|{stream}"
+def _stream_key(claim: V2ChallengeClaim) -> tuple[str, str, bytes]:
+    return (claim.namespace, claim.agent_id, bytes(claim.stream_id or b""))
 
 
 def _same_immutable_claim(a: V2ChallengeClaim, b: V2ChallengeClaim) -> bool:
@@ -265,7 +263,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
                 return V2ClaimResult(disposition=disposition, claimed_at=existing.claimed_at)
             if not challenge_claim_time_current_v2(claim, now):
                 raise V2Error(V2ErrorClass.CHALLENGE_NOT_FRESH, "v2reference: challenge is not current at the store clock")
-            key = ""
+            key = None
             if claim.stream_id is not None or claim.stream_seq is not None:
                 if claim.stream_id is None or claim.stream_seq is None:
                     raise V2Error(V2ErrorClass.MALFORMED, "v2reference: stream_id and stream_seq must appear together")

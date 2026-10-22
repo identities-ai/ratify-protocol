@@ -373,24 +373,112 @@ their declared capacity is nonzero.
 `ratify_derive_id` and `ratify_verify_delegation_signature` retain their v1
 behavior.
 
-The separate `ratify_v2_*` ABI (check `ratify_v2_abi_version()` against
-`RATIFY_V2_ABI_VERSION` before use) adds full v2 key ID derivation and checks
-(`ratify_v2_key_id`, `ratify_v2_key_id_check`), strict decoding and signature
-verification of every v2 signed object (`ratify_v2_verify_object`,
-`ratify_v2_proof_bundle_verify_signatures`,
-`ratify_v2_verification_receipt_verify`), and the receipt to bundle binding
-check. Failures return the same language-neutral error classes as the shared
-vectors. `cargo test --test v2_abi` drives this ABI with `keys.json`,
-`objects.json`, `object-negatives.json`, and `key-rotation-signature.json` from
-`testvectors/v2`, and `scripts/test-v2-c-abi.sh` runs the first three through a
-C program compiled against `include/ratify.h`.
+### Protocol v2 ABI (`ratify_v2_*`)
 
-The C SDK does not yet expose the stateful v2 live verifier (claim, trust,
-status, audience, and rate callbacks), the revocation status reducer, or log
-and rotation state machines, so it does not run the verifier ordering, status,
-log, or rotation sequence vectors. Use the Go, TypeScript, Python, or Rust SDK
-for a complete v2 verifier in this alpha. This alpha is not a v2 conformance
-claim; see SPEC-v2 §8.
+The `ratify_v2_*` functions are the complete Protocol v2 surface. They are an
+ABI over the Rust `ratify-protocol` v2 implementation (SPEC-v2 §1.3), not an
+independent implementation. Check `ratify_v2_abi_version()` against
+`RATIFY_V2_ABI_VERSION` before use; the v1 functions above are unchanged.
+
+| Area | Functions |
+|---|---|
+| Keys | `ratify_v2_keypair_from_seeds`, `ratify_v2_keypair_generate`, `ratify_v2_keypair_public_key`, `ratify_v2_keypair_key_id`, `ratify_v2_public_key_id`, `ratify_v2_key_id`, `ratify_v2_key_id_check` |
+| Typed signing (every object) | `ratify_v2_sign_delegation_certificate`, `_proof_bundle`, `_revocation_list`, `_revocation_push`, `_key_rotation_statement`, `_witness_entry`, `_transaction_receipt_party`, `_verification_receipt`, `_prepared_verification_receipt` |
+| Decode, transcripts, digests | `ratify_v2_object_decode` (strict, byte limits), `ratify_v2_signable_bytes`, `ratify_v2_signing_message`, `ratify_v2_mldsa_context`, `ratify_v2_external_mu`, `ratify_v2_verify_statement`, every SPEC-v2 §4 digest, `ratify_v2_canonical_json`, operation and session context |
+| Stateless verification | `ratify_v2_verify_object`, `ratify_v2_proof_bundle_verify_signatures`, `ratify_v2_receipt_bundle_binding_check`, `ratify_v2_archival_verify` |
+| Live verifier | `ratify_v2_verify_proof_bundle`, `ratify_v2_claim_proof_bundle`, `ratify_v2_recover_interrupted_claim`, `ratify_v2_issue_challenge`, `ratify_v2_load_expected_challenge`, `ratify_v2_verify_transaction_receipt` |
+| Release | `ratify_v2_release_decision`, `ratify_v2_released_allowed` and the `ratify_v2_committed_*` / `ratify_v2_released_*` accessors |
+| State machines | status reducer (`ratify_v2_status_state_*`), `SecurityJournalV2` (`ratify_v2_journal_*`), status publisher (`ratify_v2_status_publish`), rotation journal (`ratify_v2_rotation_journal_*`), witness and receipt logs (`ratify_v2_witness_entry_append`, `ratify_v2_verification_receipt_append`) |
+
+No function signs caller-selected bytes, codes, contexts, or prehash modes.
+Each signing function takes a typed object (its wire JSON; absent signature
+members are allowed) and exactly one signer: a library key pair or a
+`RatifyV2ExternalSigner` (an HSM or KMS behind two callbacks, in direct or
+external-μ mode). Issuer duties are checked before any signer callback runs,
+and every returned signature is verified before an object is produced.
+
+**Result codes.** Every fallible function returns an `int32_t`: `0` on
+success; a positive code naming exactly one of the 49 SPEC-v2 §2.7 classes,
+numbered in the order of that table; or a negative code. `-1` to `-4` are ABI
+conditions (`null_pointer`, `bad_argument`, `internal`, `cancelled`), `-10` to
+`-17` are store sentinels a callback returns, and `-20` to `-25` are typed
+signing refusals. `ratify_v2_error_class_str` gives the stable spelling. The
+diagnostic of the last call on the calling thread is
+`ratify_v2_last_error_message()`; it is valid until the next `ratify_v2_*`
+call on that thread and must not be freed. Messages are diagnostic only.
+
+**Ownership and lifetimes.** Input buffers are borrowed for the duration of
+the call; the library copies anything it keeps. A NULL input pointer is
+`null_pointer` even with a zero length. Outputs the library allocates belong to
+the caller and are released only through the matching function:
+`ratify_v2_buffer_free` for a `RatifyV2Buffer`, `ratify_v2_string_free` for a
+`char *`, and `ratify_v2_<handle>_free` for a handle. The library never frees
+caller or callback memory. Structured inputs (requests, heads, policies) are
+JSON with the schemas documented in `ratify.h`; unknown members are rejected.
+
+**Callbacks.** Every provider and store is a struct of function pointers with
+an opaque `user` pointer: claim store and authoritative clock, trust provider
+(including the ambiguous outcome), status evidence provider returning signed
+batches, security journal store, audience provider, rate store (or rate
+admission at finalization), receiver-binding hook, release store, checkpoint,
+issuance store, and random source. A callback runs on the calling thread
+before the ABI function returns and is never retained afterwards. Buffers the
+library passes in are valid only until the callback returns; pointers a
+callback writes into an output struct must stay valid until it returns, and
+the library copies them immediately. A callback returns `0`, a positive class
+(for example `RatifyV2ClockRegressed`), a store sentinel, or
+`RatifyV2ErrCancelled`. A callback failure is always handled fail-closed.
+
+Constraint evaluators are the one exception to "calling thread": the
+registry timeout requires each custom evaluator to run on a library worker
+thread. The ABI call still does not return until every evaluator call it
+started has returned, so no callback outlives the call. A custom evaluator
+should poll `ratify_v2_evaluator_call_expired` and return once it reports 1.
+The two standard profiles (`com.ratifyprotocol.max_count/v1`,
+`com.ratifyprotocol.allowed_values/v1`) are built in.
+
+**Cancellation.** A callback cancels an operation by returning
+`RatifyV2ErrCancelled`; the library treats it as a provider cancellation
+under SPEC-v2 §6.11 (after the claim this yields `evaluation_cancelled` and
+commits nothing). There is no other asynchronous cancellation.
+
+**Decisions.** `ratify_v2_verify_proof_bundle` reports a stage (`preflight`,
+`replay`, `evaluating`, `committed`) and never a decision. A committed
+outcome is an opaque `RatifyV2Committed` handle that is not actionable.
+`ratify_v2_release_decision` is the only constructor of a
+`RatifyV2Released` handle, and every accessor returns a copy. Gate a side
+effect only on `ratify_v2_released_allowed`, which reads your authoritative
+clock and returns 1 only for an allow strictly before both sealed deadlines;
+any failure returns 0.
+
+**Thread safety.** Functions that take no handle are safe to call
+concurrently. A handle is used by one thread at a time; serialize concurrent
+use of one handle yourself. Store callbacks provide the atomicity Part B
+requires (for example a claim store must make the claim atomic across
+threads and processes).
+
+**Panics.** Every export catches a panic and returns the internal-failure
+value (see below). A handle in use when a panic is caught is poisoned: every
+later call on it returns `RatifyV2ErrInternal`. Free it and create a new one.
+
+**Test-only reference stores.** Building with the `test-reference` feature
+exports `ratify_v2_ref_*`: the in-memory reference implementations of the
+Part B stores and of the single-device offline and dual-root profile
+components, presented through the same callback structs. They are not
+durable or production-safe, are declared in the header only under
+`RATIFY_V2_TEST_REFERENCE`, and a shipped build never enables them.
+
+**Conformance.** The `tests/v2c_*.rs` runners call only `ratify_v2_*`
+exports and run every file in `testvectors/v2` through the C ABI, including
+the verifier ordering, lifecycle and profile scenarios, status, journal,
+publisher, log, rotation, transaction, issuance, and cross-SDK fixtures;
+`tests/v2c_inventory.rs` fails if any corpus file is unconsumed.
+`scripts/test-v2-c-abi.sh` runs keys, objects, negatives, hedged signatures,
+limits, every verifier-ordering vector, a release lifecycle against a
+C-implemented in-memory store, and every cross-SDK fixture from a plain C
+program. Because C is an ABI over the Rust implementation, agreement between
+C and Rust is not independent evidence (SPEC-v2 §1.3). This alpha is not a
+2.0.0 conformance claim; see SPEC-v2 §8.
 
 ### Added in v1 alpha.16
 
@@ -465,6 +553,8 @@ panic at the C ABI boundary and returns its internal-error value instead:
 | `ratify_verify_result_is_valid`, `ratify_scope_has` | `0` |
 | `ratify_scope_is_sensitive`, `ratify_revocation_list_contains` | `1` (fail closed) |
 | `ratify_v2_abi_version`, `ratify_v2_protocol_version` | `0` (matches no header) |
+| `ratify_v2_released_allowed`, `ratify_v2_challenge_time_current` | `0` (fail closed) |
+| `ratify_v2_evaluator_call_expired` | `1` (stop evaluating) |
 | `void` (`*_free`) | returns normally |
 
 Before returning, the function puts every output parameter in a defined state:
@@ -555,11 +645,17 @@ cargo test --test conformance
 # error with outputs reset, and every header export goes through the guard
 cargo test --test panic_containment
 
-# Protocol v2 ABI against testvectors/v2 (keys, objects, object negatives,
-# key-rotation signature), then keys, objects, and object negatives from a
-# compiled C program
-cargo test --test v2_abi
+# Protocol v2 ABI: every testvectors/v2 file through ratify_v2_* only,
+# the corpus inventory, the SPEC-v2 class table, concurrency, handle
+# poisoning, and a panic sweep over every v2 export
+cargo test --test v2_abi --test v2_panic_sweep
+cargo test --test 'v2c_*'
+
+# The same ABI from a plain C program (objects, negatives, hedged, limits,
+# verifier ordering, a C-store release lifecycle, cross-SDK fixtures);
+# SANITIZE=1 adds AddressSanitizer and UndefinedBehaviorSanitizer
 ./scripts/test-v2-c-abi.sh
+SANITIZE=1 ./scripts/test-v2-c-abi.sh
 
 # Cross-architecture via QEMU (requires `cross`)
 cross test --target aarch64-unknown-linux-gnu

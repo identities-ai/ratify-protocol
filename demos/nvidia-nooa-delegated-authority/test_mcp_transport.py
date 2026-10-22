@@ -30,7 +30,7 @@ import pytest
 # entire module, a third of the hermetic suite, had not run. A gate that turns a
 # missing dependency into a green tick is worse than no gate, so
 # RATIFY_REQUIRE_MCP=1 makes the absence a hard failure instead of a skip.
-# scripts/nvidia-reference-check.sh sets it.
+# reference-check-v2.sh sets it.
 # The guard below checks for the symbol this module actually uses, not merely
 # that `mcp` imports. An older `mcp` imports cleanly and has no top-level
 # `Client`, so a presence-only check let collection proceed and then died on

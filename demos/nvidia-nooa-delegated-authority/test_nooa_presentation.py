@@ -35,7 +35,7 @@ from refund_service import RefundService, serve
 # Skipping is right for the general suite, NOOA needs Python 3.12/3.13, but a
 # contribution whose headline claim is "this integrates with NOOA" must not be
 # able to go green everywhere by never running. RATIFY_REQUIRE_NOOA=1 turns the
-# skip into a hard failure; scripts/nooa-integration-check.sh sets it.
+# skip into a hard failure; reference-check-v2.sh sets it.
 # Checks for the module this test actually imports from, not merely that
 # `nooa` is present. A package that imports cleanly but lacks
 # `nooa.unifiedllm` would otherwise pass the guard and then fail collection,

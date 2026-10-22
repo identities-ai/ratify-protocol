@@ -102,6 +102,9 @@ if expected == "published" and inside_repo:
     sys.exit(f"RATIFY_SDK=published but ratify_protocol_v2 resolved inside the repository at {module_path}")
 if expected == "local" and not inside_repo:
     sys.exit(f"RATIFY_SDK=local but ratify_protocol_v2 resolved outside the repository at {module_path}")
+import importlib.util
+if importlib.util.find_spec("ratify_protocol") is not None:
+    sys.exit("the v1 ratify_protocol package is installed; this gate is Protocol v2 only")
 if not ratify_protocol_v2.NATIVE_AVAILABLE:
     sys.exit("the native signing extension is not importable; v2 signing cannot run")
 

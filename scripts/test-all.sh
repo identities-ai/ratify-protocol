@@ -23,13 +23,11 @@ echo "==> TypeScript SDK"
 echo "==> Python SDK"
 (cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q)
 
-echo "==> NVIDIA NOOA delegated-authority reference (compatible subset)"
-# Deliberately the subset, not the authoritative gate. The NOOA and MCP modules
-# skip here when their optional dependencies are absent, which is correct for a
-# general SDK environment and wrong for a claim about counts. The authoritative,
-# skip-proof gate is scripts/nvidia-reference-check.sh, which requires Python
-# 3.12 or 3.13 and fails on any skip.
-(cd "$ROOT" && python -m pytest demos/nvidia-nooa-delegated-authority -q)
+echo "==> NVIDIA NOOA delegated-authority reference (Protocol v2 gate)"
+# The demo runs on Ratify Protocol v2, so the v1 SDK environment above cannot
+# collect it. Its gate builds its own v2 environment, needs Python 3.12 or 3.13
+# (set PYTHON), and fails on any skip.
+"$ROOT/demos/nvidia-nooa-delegated-authority/reference-check-v2.sh"
 
 echo "==> Wire transport (TS <-> Python)"
 "$ROOT/scripts/wire-transport-check.sh"

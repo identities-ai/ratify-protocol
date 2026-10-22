@@ -76,3 +76,45 @@ func TestVerifyCrossSDKRejectsTampering(t *testing.T) {
 		t.Errorf("missing witness_entry: %v", err)
 	}
 }
+
+// TestVerifyCrossSDKReplaysScenarios guards the scenario replay: a changed
+// expected release result, a receipt signed by another verifier key, and a
+// missing scenario must each fail.
+func TestVerifyCrossSDKReplaysScenarios(t *testing.T) {
+	data, err := GenerateCrossSDK("test", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := GenerateCrossSDK("test", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f, g crossSDKFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(other, &g); err != nil {
+		t.Fatal(err)
+	}
+	check := func(name string, edit func(f *crossSDKFile), want string) {
+		t.Helper()
+		var c crossSDKFile
+		if err := json.Unmarshal(data, &c); err != nil {
+			t.Fatal(err)
+		}
+		edit(&c)
+		out, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := VerifyCrossSDK(out); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want an error containing %q", name, err, want)
+		}
+	}
+	check("release status", func(c *crossSDKFile) { c.Scenarios[3].Expected.Release.Status = "released" }, "allow_withheld_past_horizon")
+	check("foreign receipt", func(c *crossSDKFile) {
+		c.Scenarios[0].Expected.SignedReceiptB64 = g.Scenarios[0].Expected.SignedReceiptB64
+	}, "allow_released")
+	check("receipt body", func(c *crossSDKFile) { c.Scenarios[1].Expected.ReceiptBodyB64 = c.Scenarios[0].Expected.ReceiptBodyB64 }, "deny_revoked_released")
+	check("missing scenario", func(c *crossSDKFile) { c.Scenarios = c.Scenarios[:3] }, "missing scenario")
+}

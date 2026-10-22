@@ -87,7 +87,9 @@ verified by `TestV2CrossSDKFixtures` (`cross_sdk_v2_test.go`).
   "generator": string,            // command or note that produced the file
   "kind_object_type_codes": { same map as objects.json },
   "keys":    [ keys.json "keys" entries ],
-  "objects": [ objects.json "objects" entries ]
+  "objects": [ objects.json "objects" entries ],
+  "scenario_configuration": { ... },   // fixed values, below
+  "scenarios": [ scenario, ... ]       // verifier and release scenarios, below
 }
 ```
 
@@ -168,6 +170,108 @@ For every file in `cross-sdk/`, a conforming SDK MUST:
    certificate with every registered constraint type and an extension type, or
    a verification receipt with `constraint_evaluators` is missing.
 5. Never compare ML-DSA-65 signature bytes with anything but the wire object.
+6. Replay every scenario as specified below and fail on any difference. A
+   fixture without `scenario_configuration` and `scenarios` predates this
+   requirement: its objects are still verified, but SPEC-v2 §8.1 is not met
+   for the producing SDK until it regenerates its fixture.
+
+### Verifier and release scenarios
+
+SPEC-v2 §8.1 requires each SDK's fixture to carry verifier and release
+scenarios. The producing SDK builds every input below with the keys of its own
+file (fresh keys, hedged ML-DSA-65), runs each scenario through its own live
+verifier, reference Part B store, receipt publisher, checkpoint and
+`ReleaseV2Decision`, and records what it observed. Every SDK replays every
+file's scenarios through its own implementation and must observe the same
+results. Key names resolve to the file's `keys`.
+
+`scenario_configuration` has exactly these members and values; a replaying
+SDK rejects a file whose values differ:
+
+```
+{
+  "verifier_namespace": "verify-test",
+  "replay_epoch": 3,
+  "verifier_key": "verifier",                        // key name; signs receipts, configured for release
+  "receipt_log_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeee01",
+  "lease_seconds": 30,
+  "max_challenge_age_seconds": 300,
+  "future_skew_seconds": 5,
+  "status_policy": {"max_list_lifetime_seconds": 7200, "max_status_age_seconds": 3660, "clock_skew_seconds": 5},
+  "tzdb_version": "2025c"
+}
+```
+
+Each scenario has exactly these members:
+
+```
+{
+  "name": string,
+  "description": string,
+  "bundle_b64": string,                  // the presented proof bundle, signed by the producer
+  "required_scope": string,
+  "expected_challenge": {...},           // verifier-ordering.json expected_challenge schema
+  "context_policy": {...},               // verifier-ordering.json context_policy schema
+  "trust_root_key": string,              // key name the trust provider returns as trusted
+  "status_keys": {"<issuer_id>": {"epoch": integer, "key": string}},
+  "status_evidence": {"<issuer_id>": [{"object_type_code": 3 | 5, "wire_b64": string}]},
+  "verify_time": integer,
+  "publish_time": integer,
+  "release_time": integer,
+  "expected": {
+    "receipt_body_b64": string,          // exact sealed receipt outbox body
+    "allow_horizon": integer | null,     // handoff allow_horizon; null unless allow
+    "signed_receipt_b64": string,        // the producer's signed receipt, log receipt_log_id, sequence 1
+    "release": {
+      "status": "released" | "pending" | "withheld" | "rejected",
+      "reason": string | null,           // null when released
+      "decision": string | null,         // the released decision; null unless released
+      "release_time": integer | null     // null unless released
+    }
+  }
+}
+```
+
+Replay procedure for one scenario:
+
+1. Create a fresh reference Part B store (claim store with the authoritative
+   clock at `verify_time`, receipt publisher signing with the private key
+   derived from the `verifier_key` seeds, and independent checkpoint) with
+   `lease_seconds` and `receipt_log_id`, and a fresh anchored
+   `SecurityJournalV2` store on which `ConfigureStatusKeyEpoch` runs for every
+   `status_keys` entry in ascending `issuer_id` order.
+2. Run `VerifyProofBundleV2` at `now = verify_time` with the configuration
+   above, the scenario's request members, a trust provider that returns
+   `trusted` with the complete public key of `trust_root_key`, and a status
+   provider that returns `status_evidence[issuer_id]` (an empty batch for an
+   issuer not listed). No receiver-binding hook, audience provider, rate store
+   or extension evaluator is configured. The stage MUST be `committed`, the
+   sealed outbox body MUST equal `receipt_body_b64`, and the handoff
+   `allow_horizon` MUST equal `allow_horizon`.
+3. Set the clock to `publish_time` and publish the committed outcome through
+   the reference publisher, so the checkpoint acknowledges sequence 1 at
+   `publish_time`.
+4. Set the clock to `release_time` and call `ReleaseV2Decision` with the
+   handoff, `signed_receipt_b64` (the producer's receipt, not the one just
+   published; both have the same signable body and therefore the same entry
+   hash), and the configured verifier public key, `receipt_log_id`, store and
+   checkpoint. The result MUST equal `release`.
+
+A fixture MUST contain these four scenarios; the Go fixture contains exactly
+these, each with its own challenge (first byte `0xa1`, `0xa2`, `0xa3`, or `0xa4`,
+then bytes `0xa1..0xbf`) issued at 1799999990 and expiring at 1800000290, the default two-link chain of
+`proof_bundle_two_link_bound_context` (scope `data:read`, `files:read`), the
+objects.json fixture session context, and the Verify session-context policy:
+
+| Name | Status evidence (all signed by the producer's status keys) | Times | Release |
+| --- | --- | --- | --- |
+| `allow_released` | root and intermediate lists, sequence 1, `updated_at` 1799999940, `next_update` 1800003600 | all 1800000000 | `released`, `allow` at 1800000000 |
+| `deny_revoked_released` | as above, the intermediate list revokes `cert-leaf` | all 1800000000 | `released`, `deny` (`delegation_revoked`) |
+| `indeterminate_status_unavailable_released` | the root list only | all 1800000000 | `released`, `indeterminate` (`status_unavailable`) |
+| `allow_withheld_past_horizon` | the root list's `next_update` is 1800000060 | verify 1800000000, publish and release 1800000060 | `withheld` / `allow_horizon_passed` |
+
+`go run ./cmd/ratify-v2-cross-sdk` replays its own scenarios before writing,
+and `TestV2CrossSDKFixtures` replays every file's scenarios.
 
 ## Required for 2.0.0-beta.1
 

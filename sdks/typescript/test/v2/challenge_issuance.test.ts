@@ -52,8 +52,8 @@ async function presentIssued(issuance: V2ChallengeIssuanceStore, claims: ClaimSt
 }
 
 test("challenge-issuance.json: corpus shape", () => {
-  assert.equal(file.scenarios.length, 9);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 33);
+  assert.equal(file.scenarios.length, 10);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 36);
 });
 
 for (const sc of file.scenarios as Any[]) {

@@ -27,6 +27,7 @@ import type { RevocationStatusPolicyV2 } from "../../src/status_state_v2.js";
 import type { V2StatusKeyConfig } from "../../src/status_provenance_v2.js";
 import type { HybridPublicKey } from "../../src/types.js";
 import { newJournalStoreTestOnly, type JournalStoreTestOnly } from "../../src/v2reference/journal.js";
+import { TrustRegistryTestOnly } from "../../src/v2reference/trust_registry.js";
 import type { V2RateReservation } from "../../src/audience_v2.js";
 import type { V2VerifyCallbacks, V2VerifyRequest, V2TrustResolution } from "../../src/verify_v2.js";
 import type { ExpectedChallengeV2 } from "../../src/verify_v2_preflight.js";
@@ -246,10 +247,12 @@ export async function buildVerifyRequest(inputs: Any, bundle: Uint8Array, counts
     };
   }
   if ((inputs.constraint_evaluators ?? []).length !== 0) req.constraintEvaluators = evaluatorRegistry(inputs, counts);
+  const registry = inputs.trust?.mode === "registry" ? new TrustRegistryTestOnly((inputs.trust.registry ?? []).map(keyOf)) : null;
   const cb: Omit<V2VerifyCallbacks, "claimStore"> = {
-    trust: async (): Promise<V2TrustResolution> => {
+    trust: async (chain): Promise<V2TrustResolution> => {
       counts.trust++;
       if (!inputs.trust) return { outcome: "unavailable" };
+      if (registry) return registry.resolve(chain);
       if (inputs.trust.mode === "error") throw new Error("scripted trust provider failure");
       if (inputs.trust.mode === "panic") throw new TypeError("scripted trust provider panic");
       return { outcome: inputs.trust.outcome, rootKey: inputs.trust.root_public_key ? keyOf(inputs.trust.root_public_key) : null };

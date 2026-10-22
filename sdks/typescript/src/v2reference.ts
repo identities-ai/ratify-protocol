@@ -16,6 +16,7 @@ export {
   type StoreStateTestOnly,
 } from "./v2reference/store.js";
 export { JournalStoreTestOnly, newJournalStoreTestOnly } from "./v2reference/journal.js";
+export { TrustRegistryTestOnly } from "./v2reference/trust_registry.js";
 export { ChallengeIssuanceStoreTestOnly, ErrPersistFailedTestOnly, type PersistFaultTestOnly } from "./v2reference/challenges.js";
 export {
   DeviceComponentTestOnly,

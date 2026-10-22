@@ -263,8 +263,8 @@ def test_lifecycle_scenario(sc):
         elif op == "plant_release":
             store.plant_release_test_only(committed[step["request"]].claim_id(), step["time"])
         elif op in ("release", "release_forged"):
-            c = committed.get(step["request"])
-            receipt = receipts.get(step.get("receipt_of") or step["request"])
+            c = committed.get(step.get("request", ""))
+            receipt = receipts.get(step.get("receipt_of") or step.get("request", ""))
             cfg = copy.copy(config)
             if step.get("checkpoint") == "wrong_entry":
                 cfg.checkpoint = WrongEntryCheckpoint(store)

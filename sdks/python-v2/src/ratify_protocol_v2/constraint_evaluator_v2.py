@@ -322,13 +322,16 @@ def run_constraint_evaluator_v2(
         except BaseException as exc:  # noqa: BLE001 - Go recovers every panic
             box["error"] = exc
         finally:
+            # An answer produced after the deadline lost the race: Go's
+            # select observes ctx.Done before the answer channel is ready.
+            box["late"] = ctx.err() is not None
             done.set()
 
     thread = threading.Thread(target=worker, name=f"ratify-v2-evaluator:{in_.type}", daemon=True)
     thread.start()
     finished = done.wait(timeout)
     ctx.cancel()
-    if not finished:
+    if not finished or box.get("late"):
         raise _unverifiable(f"{in_.type} evaluator did not answer within {timeout}s")
     if "error" in box:
         raise _unverifiable(f"{in_.type} evaluator failed: {box['error']}")

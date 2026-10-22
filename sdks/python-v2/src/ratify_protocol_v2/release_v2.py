@@ -319,14 +319,13 @@ def _read_v2_authoritative_time(ctx: context_v2.Context, clock) -> int:
 
 
 def _verify_published_v2_receipt(wire: bytes, config: V2ReleaseConfig):
-    from ._v2json import canonical
     from .signing_v2 import VERIFICATION_RECEIPT, verify_v2_statement
-    from .verification_receipt_v2 import decode_verification_receipt_v2, receipt_v2_signable
+    from .verification_receipt_v2 import decode_verification_receipt_v2, receipt_v2_signable_bytes
 
     receipt = decode_verification_receipt_v2(wire)
     if receipt.log_id != config.log_id:
         raise ValueError("v2 published receipt belongs to an unconfigured log")
-    body = canonical(receipt_v2_signable(receipt))
+    body = receipt_v2_signable_bytes(receipt)
     verify_v2_statement(VERIFICATION_RECEIPT, body, receipt.signature, config.verifier_public_key)
     return receipt
 

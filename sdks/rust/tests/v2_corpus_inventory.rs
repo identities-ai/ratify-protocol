@@ -17,6 +17,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("challenge-issuance.json", "v2_challenge_issuance.rs", "challenge-issuance.json"),
     ("cross-sdk", "v2_cross_sdk.rs", "\"cross-sdk\""),
     ("delegation-signature.json", "v2_crypto.rs", "delegation-signature.json"),
+    ("device-state.json", "v2_device_state.rs", "device-state.json"),
     ("derive-external-mu.py", "v2_crypto.rs", "fn v2_external_mu_matches_shared_signature_vector"),
     ("evaluator-profiles.json", "v2_issuance_profiles.rs", "evaluator-profiles.json"),
     ("hedged-signatures.json", "v2_objects.rs", "hedged-signatures.json"),

@@ -54,7 +54,7 @@ impl Default for TestOnlyChallengeIssuanceStore {
     }
 }
 
-fn issuance_key(namespace: &str, epoch: i64, digest: &[u8]) -> String {
+pub(crate) fn issuance_key(namespace: &str, epoch: i64, digest: &[u8]) -> String {
     format!("{}:{}|{}|{}", namespace.len(), namespace, epoch, hex::encode(digest))
 }
 

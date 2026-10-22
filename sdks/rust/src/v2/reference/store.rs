@@ -105,7 +105,7 @@ pub(crate) struct StoreState {
     pub high_water: i64,
     pub lease_seconds: i64,
     pub claims: BTreeMap<String, ClaimRecord>,
-    pub streams: BTreeMap<String, i64>,
+    pub streams: BTreeMap<StreamKey, i64>,
     pub verifier_key: HybridPrivateKey,
     pub verifier_id: String,
     pub log_id: String,
@@ -407,14 +407,16 @@ fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-fn stream_key(claim: &V2ChallengeClaim) -> String {
-    format!(
-        "{}:{}|{}:{}|{}",
-        claim.namespace.len(),
-        claim.namespace,
-        claim.agent_id.len(),
-        claim.agent_id,
-        hex::encode(claim.stream_id.as_deref().unwrap_or(&[]))
+/// The durable stream-state key `(namespace, agent_id, stream_id)` of
+/// SPEC-v2 §7.4, with the raw stream ID bytes. Its ordering is the §7.13
+/// sort order: strings by UTF-8 bytes, then the stream ID by unsigned bytes.
+pub(crate) type StreamKey = (String, String, Vec<u8>);
+
+fn stream_key(claim: &V2ChallengeClaim) -> StreamKey {
+    (
+        claim.namespace.clone(),
+        claim.agent_id.clone(),
+        claim.stream_id.clone().unwrap_or_default(),
     )
 }
 
@@ -465,7 +467,7 @@ impl ClaimStoreV2 for Store {
                 "v2reference: challenge is not current at the store clock",
             ));
         }
-        let mut key = String::new();
+        let mut key: Option<StreamKey> = None;
         if claim.stream_id.is_some() || claim.stream_seq.is_some() {
             let Some(seq) = claim.stream_seq.filter(|_| claim.stream_id.is_some()) else {
                 return Err(classified(
@@ -473,8 +475,9 @@ impl ClaimStoreV2 for Store {
                     "v2reference: stream_id and stream_seq must appear together",
                 ));
             };
-            key = stream_key(&claim);
-            let last = s.streams.get(&key).copied();
+            let k = stream_key(&claim);
+            let last = s.streams.get(&k).copied();
+            key = Some(k);
             check_v2_stream_sequence(last.is_some(), last.unwrap_or_default(), seq)?;
         }
         let mut owner = vec![0u8; 32];
@@ -482,8 +485,8 @@ impl ClaimStoreV2 for Store {
         let owner_digest: [u8; 32] = Sha256::digest(&owner).into();
         let lease_expires_at = now + s.lease_seconds;
         s.change_locked(|s| {
-            if let (false, Some(seq)) = (key.is_empty(), claim.stream_seq) {
-                s.streams.insert(key.clone(), seq);
+            if let (Some(k), Some(seq)) = (&key, claim.stream_seq) {
+                s.streams.insert(k.clone(), seq);
             }
             s.claims.insert(
                 claim.claim_id.clone(),

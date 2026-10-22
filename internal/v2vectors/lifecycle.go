@@ -69,6 +69,8 @@ type lifecycleFile struct {
 	Bundles      map[string]string         `json:"bundles_b64"`
 	Requests     map[string]orderingVector `json:"requests"`
 	Scenarios    []lifecycleScenarioJSON   `json:"scenarios"`
+	// ProfileScenarios are the Part B profile scripts (profiles.go).
+	ProfileScenarios []profileScenarioJSON `json:"profile_scenarios"`
 }
 
 func (g *gen) lifecycleRequest(challengeByte byte, streamSeq int64, edit func(*scenario)) (orderingVector, []byte) {
@@ -300,5 +302,6 @@ func (g *gen) lifecycleFile() any {
 		step("verify", "S2", committedAllow),
 		step("verify", "S2b", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stream_sequence_mismatch"}),
 		step("verify", "S1b", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stream_sequence_mismatch"}))
+	g.addProfileScenarios(&f, add)
 	return f
 }

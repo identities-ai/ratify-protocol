@@ -246,6 +246,8 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				Expect      v2LifecycleExpect `json:"expect"`
 			} `json:"steps"`
 		} `json:"scenarios"`
+		// Profile scripts run in TestV2ConformanceProfileScenarios.
+		ProfileScenarios json.RawMessage `json:"profile_scenarios"`
 	}
 	loadV2Vector(t, "lifecycle-scenarios.json", &f)
 	if len(f.Scenarios) == 0 {

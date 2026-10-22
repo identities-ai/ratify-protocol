@@ -1,5 +1,12 @@
 # Proof-carrying authority for Google ADK agents
 
+> **Dated v1 history.** This is the Protocol v1 version of the reference
+> (Ratify `1.0.0a20`, evidence recorded in September 2026), kept
+> unchanged apart from this note. Paths in the text are relative to
+> `references/google-adk/` as it was before the v2 port; the v1 code now
+> lives in this `v1/` folder. The current reference targets Protocol v2:
+> see [`../README.md`](../README.md).
+
 **Status:** independent draft reference implementation. Not a Google
 partnership, Google-approved integration, or Google reference architecture.
 

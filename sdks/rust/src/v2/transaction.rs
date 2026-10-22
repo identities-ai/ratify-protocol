@@ -12,7 +12,7 @@ use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
 use super::json::{canonical, node_to_cj, obj, parse_json, parse_wire, JNode, CJ, JV};
 use super::wire::{
     bundle_hash_of_bytes, bundle_hash_v2, decode_proof_bundle_v2, encode_proof_bundle_v2,
-    validate_required_scope_v2, verify_proof_bundle_v2_signatures, ProofBundleV2,
+    required_scope_v2, verify_proof_bundle_v2_signatures, ProofBundleV2,
 };
 use super::operation_context::{build_session_context_v2, SessionContextV2Inputs};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
@@ -211,7 +211,7 @@ fn validate(r: &TransactionReceiptV2, require_signatures: bool) -> V2Result<()> 
                 p.agent_id
             ));
         }
-        validate_required_scope_v2(&p.required_scope)
+        required_scope_v2(&p.required_scope)
             .map_err(|e| e.context(format!("wire v2: party {:?} required_scope", p.party_id)))?;
         let Some(bundle) = &p.proof_bundle else {
             return plain(format!(

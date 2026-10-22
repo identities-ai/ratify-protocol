@@ -17,7 +17,7 @@ use super::json::{canonical, obj, parse_wire, Obj, CJ};
 use super::rotation::{statement_body_digest_v2, WitnessEntryV2Result};
 use super::wire::{
     bundle_hash_v2, encode_proof_bundle_v2, is_wildcard_scope, placeholder_signature,
-    validate_required_scope_v2, validate_scopes_v2, ProofBundleV2, MAX_SAFE,
+    required_scope_v2, validate_scopes_v2, ProofBundleV2, MAX_SAFE,
 };
 use super::witness::{log_position, validate_head};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
@@ -330,7 +330,7 @@ pub(crate) fn validate_receipt(r: &VerificationReceiptV2, signature: bool) -> V2
     {
         return plain("wire v2: interrupted empty-chain receipt cannot claim completed trust, status, or context checks");
     }
-    validate_required_scope_v2(&r.required_scope).map_err(|e| e.context("wire v2"))?;
+    required_scope_v2(&r.required_scope).map_err(|e| e.context("wire v2"))?;
     let zero = r.previous_receipt_hash.iter().all(|b| *b == 0);
     if (r.sequence == 1 && !zero) || (r.sequence > 1 && zero) {
         return plain("wire v2: previous_receipt_hash is inconsistent with receipt sequence");

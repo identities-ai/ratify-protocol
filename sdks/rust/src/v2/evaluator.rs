@@ -263,6 +263,41 @@ pub(crate) fn valid_extension_context_name_v2(name: &str) -> bool {
         })
 }
 
+/// The supplied request context of SPEC-v2 §5.2, checked before claim
+/// (`configuration_invalid` on failure; Go `validateV2RequestContext`).
+pub fn validate_v2_request_context(c: &ConstraintContextV2) -> V2Result<()> {
+    if c.has_amount {
+        if c.requested_amount_micros < 0
+            || c.requested_amount_micros > V2_MAX_SAFE_INTEGER
+            || !super::constraints::valid_iso4217_alpha_v2(&c.requested_currency)
+        {
+            return err(
+                V2ErrorClass::ConfigurationInvalid,
+                "v2 request amount must be 0..2^53-1 micro-units with a three-letter A-Z currency",
+            );
+        }
+    } else if c.requested_amount_micros != 0 || !c.requested_currency.is_empty() {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            "v2 request amount and currency must be supplied together with has_amount",
+        );
+    }
+    if c.has_resource {
+        if c.requested_resource_id.len() > crate::types::MAX_IDENTIFIER_LENGTH_BYTES {
+            return err(
+                V2ErrorClass::ConfigurationInvalid,
+                "v2 requested resource ID must be at most 512 bytes",
+            );
+        }
+    } else if !c.requested_resource_id.is_empty() || !c.requested_path.is_empty() {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            "v2 requested resource ID and path must be supplied with has_resource",
+        );
+    }
+    validate_v2_extension_context(c)
+}
+
 /// The extension request context checked before claim.
 pub(crate) fn validate_v2_extension_context(c: &ConstraintContextV2) -> V2Result<()> {
     if c.extension_counts.len() > MAX_EXTENSION_CONTEXT_ENTRIES_V2

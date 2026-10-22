@@ -168,6 +168,12 @@ pub fn validate_scopes_v2(scopes: &[String]) -> V2Result<()> {
 /// and a scope longer than `MAX_SCOPE_LENGTH_BYTES` are rejected. A custom
 /// required scope is an exact string matched by byte equality.
 pub fn validate_required_scope_v2(scope: &str) -> V2Result<()> {
+    required_scope_v2(scope).classify(V2ErrorClass::InvalidRequiredScope)
+}
+
+/// Unclassified form for decoders, which report an invalid embedded required
+/// scope as `malformed` (Go `ValidateRequiredScopeV2` inside a decoder).
+pub(crate) fn required_scope_v2(scope: &str) -> V2Result<()> {
     if vocabulary().contains(&scope) && !is_wildcard(scope) {
         return Ok(());
     }
@@ -178,10 +184,7 @@ pub fn validate_required_scope_v2(scope: &str) -> V2Result<()> {
     {
         return Ok(());
     }
-    err(
-        V2ErrorClass::InvalidRequiredScope,
-        "required scope must be one canonical scope or one exact custom: scope",
-    )
+    plain("required scope must be one canonical scope or one exact custom: scope")
 }
 
 pub(crate) fn is_wildcard_scope(scope: &str) -> bool {

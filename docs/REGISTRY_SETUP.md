@@ -232,10 +232,11 @@ No `NPM_TOKEN` secret is required or used.
 
 The next tag push will exercise the full four-registry pipeline.
 
-v1 versions publish under the `latest` dist-tag. `2.*` versions publish under
-the `v2-alpha` dist-tag (the same tag `publishConfig` names), so a v2
-pre-release never becomes what an unpinned `npm install
-@identities-ai/ratify-protocol` resolves to.
+v1 versions publish under the `latest` dist-tag. v2 prereleases (`2.x.y-alpha`,
+`-beta` and `-rc` versions) publish under the `next` dist-tag (the same tag
+`publishConfig` names), so a v2 prerelease never becomes what an unpinned
+`npm install @identities-ai/ratify-protocol` resolves to. `latest` stays on
+v1 until `2.0.0`.
 
 ### 3.4 Provenance attestations
 

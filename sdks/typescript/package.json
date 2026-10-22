@@ -63,7 +63,7 @@
   "license": "Apache-2.0",
   "publishConfig": {
     "access": "public",
-    "tag": "v2-alpha"
+    "tag": "next"
   },
   "dependencies": {
     "@noble/ed25519": "^2.3.0",

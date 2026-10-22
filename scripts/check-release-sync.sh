@@ -146,6 +146,14 @@ if not native_v2_match:
 if native_v2_match.group(1) != v2_version:
     fail(f"python-native-v2 version {native_v2_match.group(1)} does not match v2 line {v2_version}")
 
+# npm dist-tag. A v2 prerelease must publish under `next` (publishConfig and
+# the release workflow agree) so it never becomes `latest`; `latest` stays on
+# v1 until 2.0.0.
+if "-" in v2_version and ts_pkg.get("publishConfig", {}).get("tag") != "next":
+    fail(f"sdks/typescript/package.json publishConfig.tag must be 'next' for v2 prerelease {v2_version}")
+if "2.*-*) DIST_TAG=next ;;" not in read(".github/workflows/release.yml"):
+    fail(".github/workflows/release.yml must publish v2 prereleases under the next dist-tag")
+
 if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
 if c_version != ts_version:

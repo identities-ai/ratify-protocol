@@ -845,12 +845,13 @@ jobs:
           fi
           # v1 versions publish with --tag latest so
           # 'npm install @identities-ai/ratify-protocol' resolves to the newest
-          # v1 release. v2 pre-releases publish under the v2-alpha dist-tag
-          # (matching publishConfig.tag) so they never become latest by
-          # accident and an unpinned v1 install keeps resolving to v1.
+          # v1 release. v2 prereleases (2.x.y-alpha/beta/rc) publish under the
+          # next dist-tag (matching publishConfig.tag) so they never become
+          # latest by accident and an unpinned install keeps resolving to v1
+          # until 2.0.0.
           case "$VERSION" in
-            2.*) DIST_TAG=v2-alpha ;;
-            *)   DIST_TAG=latest ;;
+            2.*-*) DIST_TAG=next ;;
+            *)     DIST_TAG=latest ;;
           esac
           npm publish --access public --provenance --tag "$DIST_TAG"
 

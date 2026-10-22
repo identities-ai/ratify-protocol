@@ -134,6 +134,7 @@ type orderingVector struct {
 	MaxChallengeAgeSeconds int64                         `json:"max_challenge_age_seconds"`
 	FutureSkewSeconds      int64                         `json:"future_skew_seconds"`
 	RequestContext         *requestContextJSON           `json:"request_context"`
+	TZDBVersion            string                        `json:"tzdb_version"`
 	ReceiverBindingHook    string                        `json:"receiver_binding_hook"`
 	ClaimStore             string                        `json:"claim_store"`
 	ClaimTimeOffset        int64                         `json:"claim_time_offset"`
@@ -172,6 +173,7 @@ type scenario struct {
 	maxAge      int64
 	skew        int64
 	reqCtx      *requestContextJSON
+	tzdb        *string // nil = the embedded release ratify.TZDBVersionV2
 	hook        string
 	claim       string
 	claimOffset int64
@@ -313,6 +315,10 @@ func (g *gen) finish(s scenario) orderingVector {
 	if s.skew < 0 {
 		s.skew = 0
 	}
+	tzdb := ratify.TZDBVersionV2
+	if s.tzdb != nil {
+		tzdb = *s.tzdb
+	}
 	policy := orderingStatusPolicy
 	if s.policy2 != nil {
 		policy = *s.policy2
@@ -368,7 +374,7 @@ func (g *gen) finish(s scenario) orderingVector {
 	return orderingVector{
 		Name: s.name, Description: s.desc, Bundle: bundleName(s.bundle), RequiredScope: s.scope, ExpectedChallenge: s.expected,
 		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, Now: s.now,
-		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, ReceiverBindingHook: s.hook,
+		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, TZDBVersion: tzdb, ReceiverBindingHook: s.hook,
 		ClaimStore: s.claim, ClaimTimeOffset: s.claimOffset, FinalizeTimeOffset: s.finOffset, Trust: s.trust, StatusKeys: s.statusKeys,
 		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
 		Rate: s.rate, Expected: s.out,
@@ -387,6 +393,7 @@ func (g *gen) orderingFile() any {
 			"bundle":                           "key into bundles_b64; the exact presented proof bundle bytes",
 			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); evaluating = claim created but nothing committed (error_class says why; lease-expiry recovery commits evaluation_interrupted later); committed = a terminal Protocol result was committed with receipt_body_b64 (not actionable until released)",
 			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, status_policy and status_keys are validated against SPEC-v2 §2.5 bounds before the bundle is decoded",
+			"tzdb_version":                     "the configured IANA tzdata release required for time_window (SPEC-v2 §5.2); empty = not configured. The corpus assumes the pinned release named in SPEC-v2 §5.2; any other value makes every time_window constraint_unverifiable",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
 			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final < T_claim fails with clock_regressed, and an allow commits only while T_final < its allow horizon and T_final < the challenge expiry, else allow_horizon_passed; either failure commits nothing",
 			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics",
@@ -754,9 +761,23 @@ func (g *gen) terminalScenarios() []scenario {
 	add(g.terminal("max_amount_exceeded", "one micro-unit above max_amount_micros is constraint_denied", amountCerts, constraintOut("constraint_denied", 0), amountCtx(5000001, "USD")))
 	add(g.terminal("max_amount_currency_mismatch", "a request in another currency is constraint_denied", amountCerts, constraintOut("constraint_denied", 0), amountCtx(1, "EUR")))
 	add(g.terminal("max_amount_missing_context", "an absent authenticated amount is constraint_unverifiable", amountCerts, constraintOut("constraint_unverifiable", 0), nil))
+	// time_window against the pinned IANA release. Now (2027-01-15T08:00:00Z)
+	// is 03:00 EST in America/New_York and 22:30 the previous day in
+	// Pacific/Marquesas (UTC-09:30).
 	unknownZone := ratify.ConstraintV2{Type: ratify.ConstraintTimeWindow, Start: "00:00", End: "23:59", TZ: "Ratify/Conformance_Unknown_Zone"}
-	add(g.terminal("time_window_unknown_zone", "a tz the verifier time-zone database cannot load is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknownZone}}),
+	add(g.terminal("time_window_unknown_zone", "a tz that is not a zone in the configured tzdata release is constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{unknownZone}}),
 		constraintOut("constraint_unverifiable", 0), nil))
+	nyWindow := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: "02:00", End: "03:30", TZ: "America/New_York"}}})
+	add(g.terminal("time_window_tzdb_not_configured", "a time_window with no configured tzdb_version is constraint_unverifiable even inside the window", nyWindow,
+		constraintOut("constraint_unverifiable", 0), func(s *scenario) { s.tzdb = strp("") }))
+	add(g.terminal("time_window_tzdb_version_mismatch", "a configured tzdb_version other than the loaded release is constraint_unverifiable", nyWindow,
+		constraintOut("constraint_unverifiable", 0), func(s *scenario) { s.tzdb = strp("2024a") }))
+	add(g.terminal("time_window_inside_sets_horizon", "local 03:00 is inside 02:00-03:30 America/New_York; the allow horizon is the start of local minute 03:31 (08:31:00Z)", nyWindow,
+		allow(), func(s *scenario) { s.out.AllowValidUntil = Now + 1860 }))
+	add(g.terminal("time_window_outside_denied", "local 03:00 is outside 09:00-17:00 America/New_York: constraint_denied", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: "09:00", End: "17:00", TZ: "America/New_York"}}}),
+		constraintOut("constraint_denied", 0), nil))
+	add(g.terminal("time_window_wraps_midnight", "local 22:30 is inside the wrapping window 22:00-00:10 Pacific/Marquesas; its horizon (next local day 00:11, 09:41:00Z) is later than status freshness", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: "22:00", End: "00:10", TZ: "Pacific/Marquesas"}}}),
+		allow(), nil))
 	geo := ratify.ConstraintV2{Type: ratify.ConstraintGeoCircle, Params: map[string]any{"lat_microdegrees": 0, "lon_microdegrees": 0, "radius_mm": 1000}}
 	add(g.terminal("geo_circle_unregistered_in_v2", "geo_circle is not in the v2 registry and fails closed as constraint_unknown", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{geo}}),
 		constraintOut("constraint_unknown", 0), nil))

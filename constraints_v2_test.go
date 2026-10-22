@@ -76,8 +76,16 @@ func TestEvaluateConstraintV2(t *testing.T) {
 		{"max_speed_mps unregistered", ConstraintV2{Type: ConstraintMaxSpeedMps}, ConstraintContextV2{}, isUnknownV2Constraint},
 	}
 	for _, tc := range cases {
-		if err := evaluateConstraintV2(tc.c, tc.ctx, noon); !tc.check(err) {
+		if err := evaluateConstraintV2(tc.c, tc.ctx, TZDBVersionV2, noon); !tc.check(err) {
 			t.Errorf("%s: unexpected result %v", tc.name, err)
+		}
+	}
+	// A window that would pass is unverifiable unless the verifier configured
+	// exactly the embedded tzdata release: rules differ between releases.
+	inside := ConstraintV2{Type: ConstraintTimeWindow, Start: "11:00", End: "12:00", TZ: "UTC"}
+	for _, version := range []string{"", "2024a", TZDBVersionV2 + " "} {
+		if err := evaluateConstraintV2(inside, ConstraintContextV2{}, version, noon); !errors.Is(err, ErrConstraintUnverifiable) {
+			t.Errorf("tzdb_version %q: got %v, want constraint_unverifiable", version, err)
 		}
 	}
 }

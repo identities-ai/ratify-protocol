@@ -30,7 +30,7 @@ func TestLocalTimeWindowValidUntilV2(t *testing.T) {
 				t.Fatal(err)
 			}
 			bundle := &ProofBundleV2{Delegations: []DelegationCertV2{{Constraints: []ConstraintV2{{Type: ConstraintTimeWindow, Start: tc.start, End: tc.end, TZ: tc.zone}}}}}
-			got, err := localTimeWindowValidUntilV2(bundle, now)
+			got, err := localTimeWindowValidUntilV2(bundle, TZDBVersionV2, now)
 			if err != nil || got != want.Unix() {
 				t.Fatalf("terminal horizon=%d want=%d err=%v", got, want.Unix(), err)
 			}

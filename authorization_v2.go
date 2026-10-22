@@ -25,6 +25,9 @@ type V2LocalAuthorizationOptions struct {
 	TrustedRootKey    HybridPublicKey
 	TrustConfigured   bool
 	Context           ConstraintContextV2
+	// TZDBVersion is the caller-configured IANA tzdata release required for
+	// time_window evaluation; it must equal TZDBVersionV2 (SPEC-v2 §5.2).
+	TZDBVersion       string
 	ContextPolicy     *V2ContextPolicy
 	ExpectedChallenge *ExpectedChallengeV2
 	ClaimToken        *V2EvaluationToken
@@ -229,7 +232,7 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 	}
 	if localPolicyFailure == nil {
 		var err error
-		assessment.LocalTimeValidUntil, err = localTimeWindowValidUntilV2(bundle, now)
+		assessment.LocalTimeValidUntil, err = localTimeWindowValidUntilV2(bundle, opts.TZDBVersion, now)
 		if err != nil {
 			assessment.LocalPolicyFailure = &V2LocalPolicyFailure{Status: "constraint_unverifiable", Reason: "constraint_unverifiable", Detail: err.Error()}
 		}
@@ -518,7 +521,7 @@ func evaluateV2LocalConstraints(bundle *ProofBundleV2, opts V2LocalAuthorization
 				deferred = append(deferred, V2DeferredConstraint{DelegationIndex: i, ConstraintIndex: j, IssuerID: cert.IssuerID, CertID: cert.CertID, Type: constraint.Type, CanonicalJSON: encoded})
 				continue
 			}
-			if err := evaluateConstraintV2(constraint, opts.Context, now); err != nil {
+			if err := evaluateConstraintV2(constraint, opts.Context, opts.TZDBVersion, now); err != nil {
 				status := "constraint_denied"
 				switch {
 				case errors.Is(err, ErrConstraintUnverifiable):
@@ -550,14 +553,14 @@ func allowHorizonV2(assessment V2LocalAuthorizationAssessment) int64 {
 // localTimeWindowValidUntilV2 bounds an allow at the end of each currently
 // accepted local minute or the next timezone offset transition, whichever is
 // first. At a transition the verifier must evaluate the window again.
-func localTimeWindowValidUntilV2(bundle *ProofBundleV2, now time.Time) (int64, error) {
+func localTimeWindowValidUntilV2(bundle *ProofBundleV2, tzdbVersion string, now time.Time) (int64, error) {
 	var horizon int64
 	for _, cert := range bundle.Delegations {
 		for _, constraint := range cert.Constraints {
 			if constraint.Type != ConstraintTimeWindow {
 				continue
 			}
-			loc, err := loadV2TimeZone(constraint.TZ)
+			loc, err := loadV2TimeZone(tzdbVersion, constraint.TZ)
 			if err != nil {
 				return 0, err
 			}

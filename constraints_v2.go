@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/identities-ai/ratify-protocol/v2/internal/tzdbv2"
 	"strconv"
 	"strings"
 	"time"
@@ -440,13 +441,23 @@ func parseHHMMV2(s string) (int, error) {
 	return h*60 + m, nil
 }
 
-// loadV2TimeZone loads an IANA zone from the verifier's time-zone database.
-// "Local" names the host zone rather than an IANA zone and is never loaded.
-func loadV2TimeZone(tz string) (*time.Location, error) {
-	if tz == "" || tz == "Local" {
-		return nil, fmt.Errorf("time zone %q is not an IANA identifier", tz)
+// TZDBVersionV2 is the IANA tzdata release embedded in this module and used
+// for every time_window evaluation (SPEC-v2 §5.2). A verifier configures the
+// release it requires; any other configured value, or none, makes every
+// time_window constraint_unverifiable.
+const TZDBVersionV2 = tzdbv2.Version
+
+// loadV2TimeZone loads an IANA zone from the embedded, pinned time-zone
+// database after checking the configured database version. The host zone
+// database is never consulted, and "Local" is never loaded.
+func loadV2TimeZone(configuredVersion, tz string) (*time.Location, error) {
+	if configuredVersion == "" {
+		return nil, fmt.Errorf("no tzdb_version is configured")
 	}
-	return time.LoadLocation(tz)
+	if configuredVersion != TZDBVersionV2 {
+		return nil, fmt.Errorf("configured tzdb_version %q differs from the loaded IANA tzdata %s", configuredVersion, TZDBVersionV2)
+	}
+	return tzdbv2.Load(tz)
 }
 
 // evaluateConstraintV2 evaluates one registered locally decidable constraint.
@@ -455,7 +466,7 @@ func loadV2TimeZone(tz string) (*time.Location, error) {
 // unknownConstraintError for an unregistered type, and any other error for a
 // denial. max_rate and ratify.receiver_audience are deferred stages and must
 // not reach this function.
-func evaluateConstraintV2(c ConstraintV2, ctx ConstraintContextV2, now time.Time) error {
+func evaluateConstraintV2(c ConstraintV2, ctx ConstraintContextV2, tzdbVersion string, now time.Time) error {
 	switch c.Type {
 	case ConstraintResourcePath:
 		if !ctx.HasResource || ctx.RequestedResourceID == "" {
@@ -481,9 +492,9 @@ func evaluateConstraintV2(c ConstraintV2, ctx ConstraintContextV2, now time.Time
 		}
 		return nil
 	case ConstraintTimeWindow:
-		loc, err := loadV2TimeZone(c.TZ)
+		loc, err := loadV2TimeZone(tzdbVersion, c.TZ)
 		if err != nil {
-			return errConstraintUnverifiable(fmt.Sprintf("time zone %q is unavailable in the verifier time-zone database", c.TZ))
+			return errConstraintUnverifiable(fmt.Sprintf("time zone %q cannot be evaluated: %v", c.TZ, err))
 		}
 		start, err := parseHHMMV2(c.Start)
 		if err != nil {

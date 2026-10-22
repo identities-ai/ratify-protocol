@@ -76,20 +76,15 @@ type SignerV2 interface {
 	SignV2(ctx context.Context, req SignRequestV2) (HybridSignature, error)
 }
 
-// localSignerV2 adapts an in-process private key to SignerV2. The typed
-// private-key signing functions use it, so local and external signing share
-// one code path, including verification of the produced signature.
+// localSignerV2 adapts an in-process private key to SignerV2. Only the typed
+// private-key signing functions construct it, so local and external signing
+// share one code path, including verification of the produced signature. It
+// is deliberately not exported: a public local SignerV2 would sign any
+// well-formed message under any context its caller chose, which SPEC-v2 §3.2
+// forbids. A caller with an in-process key uses the typed private-key
+// functions; a caller with an external provider implements SignerV2 itself.
+// ML-DSA-65 signatures are hedged.
 type localSignerV2 struct{ priv HybridPrivateKey }
-
-// NewLocalSignerV2 returns a direct-mode SignerV2 backed by an in-process
-// hybrid private key. ML-DSA-65 signatures are hedged.
-func NewLocalSignerV2(priv HybridPrivateKey) (_ SignerV2, resultErr error) {
-	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
-	if err := validateV2PrivateKey(priv); err != nil {
-		return nil, err
-	}
-	return localSignerV2{priv: priv}, nil
-}
 
 func (s localSignerV2) PublicKeyV2() HybridPublicKey { return s.priv.Public() }
 

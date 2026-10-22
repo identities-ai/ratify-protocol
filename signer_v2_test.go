@@ -6,6 +6,10 @@ import (
 	"crypto/ed25519"
 	"crypto/sha3"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -234,5 +238,37 @@ func TestSignerV2CoversEveryTypedSigner(t *testing.T) {
 	receipt.PartySignatures = []TransactionReceiptSignatureV2{partySig}
 	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
 		t.Fatalf("transaction verify: %v", err)
+	}
+}
+
+// TestNoExportedLocalSignerV2 pins SPEC-v2 §3.2: no exported function or
+// method returns a SignerV2, so the only SignerV2 values a caller holds are
+// providers it implemented itself. A returned local signer would sign any
+// well-formed message under any context the caller chose.
+func TestNoExportedLocalSignerV2(t *testing.T) {
+	fset := token.NewFileSet()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || !fn.Name.IsExported() || fn.Type.Results == nil {
+				continue
+			}
+			for _, res := range fn.Type.Results.List {
+				if id, ok := res.Type.(*ast.Ident); ok && id.Name == "SignerV2" {
+					t.Errorf("%s: exported %s returns a SignerV2", fset.Position(fn.Pos()), fn.Name.Name)
+				}
+			}
+		}
 	}
 }

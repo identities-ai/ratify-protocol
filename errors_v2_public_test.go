@@ -144,7 +144,6 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		}},
 
 		// Signing.
-		{"NewLocalSignerV2", V2ErrConfigurationInvalid, func() error { return first(NewLocalSignerV2(HybridPrivateKey{})) }},
 		{"SignDelegationCertV2", V2ErrMalformed, func() error { return first(SignDelegationCertV2(&DelegationCertV2{}, priv)) }},
 		{"SignDelegationCertV2WithSigner failing signer", "", func() error {
 			return first(SignDelegationCertV2WithSigner(ctx, &DelegationCertV2{}, failingSignerV2{pub}))
@@ -221,6 +220,9 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		{"ExportSecurityJournalSnapshotV2", V2ErrConfigurationInvalid, func() error { return first(ExportSecurityJournalSnapshotV2(SecurityJournalV2{})) }},
 		{"MigrateSecurityJournalV2", V2ErrConfigurationInvalid, func() error { return first(MigrateSecurityJournalV2(SecurityJournalV2{})) }},
 		{"NewV2StatusPublisher", V2ErrConfigurationInvalid, func() error { return first(NewV2StatusPublisher(ctx, nil, pub, nil, 0)) }},
+		{"NewV2StatusPublisherWithKey", V2ErrConfigurationInvalid, func() error {
+			return first(NewV2StatusPublisherWithKey(ctx, nil, pub, HybridPrivateKey{}, 60))
+		}},
 		{"V2StatusPublisher.Heartbeat", V2ErrConfigurationInvalid, func() error { return first((&V2StatusPublisher{}).Heartbeat(ctx, V2StatusPublisherState{}, 1)) }},
 		{"V2StatusPublisher.Revoke", V2ErrConfigurationInvalid, func() error { return first((&V2StatusPublisher{}).Revoke(ctx, V2StatusPublisherState{}, nil, 1)) }},
 		{"V2StatusPublisher.Genesis", V2ErrConfigurationInvalid, func() error { return first((&V2StatusPublisher{}).Genesis(ctx, -1)) }},

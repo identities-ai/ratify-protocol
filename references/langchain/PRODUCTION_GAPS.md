@@ -1,8 +1,9 @@
 # Production transport profile backlog
 
 This document records what remains after the independent LangChain reference.
-The current evidence proves the receiver-side authority boundary; it does not
-claim a production deployment profile.
+The current evidence proves the receiver-side authority boundary on Ratify
+Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0a1 SDK); it
+does not claim a production deployment profile.
 
 ## Definition of done
 
@@ -13,14 +14,15 @@ decision without relying on undocumented LangChain behavior.
 
 ## Ordered work
 
-### P0 — agree on the proof carrier
+### P0: agree on the proof carrier
 
 **Open question for LangChain and MCP maintainers:** what stable,
 non-model-visible MCP carrier should contain an operation-bound authorization
 presentation?
 
-The reference uses `X-Ratify-Presentation`. A two-certificate hybrid proof is
-about 28 KB, above common 8 KiB proxy defaults. Before production:
+The reference uses `X-Ratify-Presentation`. A two-certificate v2 proof is
+28,408 bytes on the wire and 37,880 bytes as the base64 header value, above
+common 8 KiB proxy defaults. Before production:
 
 - select MCP metadata, a structured request envelope, or another documented
   carrier;
@@ -33,7 +35,7 @@ about 28 KB, above common 8 KiB proxy defaults. Before production:
 **Exit criterion:** maintainer-reviewed carrier contract plus tests through at
 least one real reverse proxy. No private LangChain API is required.
 
-### P0 — transport identity and binding
+### P0: transport identity and binding
 
 - Replace the static token with MCP OAuth 2.1, mTLS/workload identity, or an
   equivalent production credential.
@@ -45,9 +47,13 @@ least one real reverse proxy. No private LangChain API is required.
 **Exit criterion:** an arbitrary network holder of a valid proof or transport
 credential alone cannot execute the operation.
 
-### P0 — durable replay and idempotency state
+### P0: durable Part B stores, replay, and idempotency state
 
-- Replace in-memory pending/challenge state with an atomic shared store.
+- Replace the SDK's in-memory reference stores (claim store, challenge
+  issuance store, receipt log, checkpoint, security journal) and the
+  receiver's pending state with durable, atomic, shared implementations that
+  meet the SPEC-v2 §7 contracts, with the checkpoint in an independent
+  failure domain.
 - Enforce TTL, per-workload capacity, multi-instance single consumption, and
   restart-safe replay denial.
 - Add an idempotency/result ledger with `pending → executing → completed`.
@@ -56,17 +62,29 @@ credential alone cannot execute the operation.
 **Exit criterion:** concurrent presentations and post-execution retries across
 multiple receiver instances produce one business effect.
 
-### P1 — trust, revocation, and key operations
+### P0: signed status distribution
+
+- Run one status publisher per issuer with durable publisher state, persisted
+  before each signed object is published.
+- Distribute signed lists and pushes to every receiver and heartbeat them
+  before `next_update`; a receiver that misses the feed denies with
+  `status_stale`, by design.
+
+**Exit criterion:** revocation reaches every receiver within a stated bound,
+and a feed outage denies rather than allows.
+
+### P1: trust and key operations
 
 - Specify trusted-root provisioning, expected-agent policy, key rotation,
-  revocation distribution, configuration versioning, and cache freshness.
-- Define fail-closed behavior for stale or unavailable trust/revocation data.
+  status-key rotation (a new journal epoch), configuration versioning, and
+  cache freshness.
+- Define fail-closed behavior for unavailable trust data.
 - Keep all trust inputs receiver-owned.
 
 **Exit criterion:** rotation, revocation, stale-cache, and dependency-outage
 tests pass without presenter-controlled trust decisions.
 
-### P1 — stable operation mappings and failures
+### P1: stable operation mappings and failures
 
 - Publish a mapping for every protected tool: scope, canonical operation,
   resource identifier, payload digest, and extension constraints.
@@ -78,19 +96,20 @@ tests pass without presenter-controlled trust decisions.
 **Exit criterion:** two independent receivers derive identical authorization
 inputs and status classes from the same MCP call.
 
-### P1 — deployment and safe observability
+### P1: deployment and safe observability
 
 - Require TLS, request limits, timeouts, rate limits, secret rotation, and
   resource-exhaustion controls.
 - Verify that proxies, LangSmith traces, application logs, and error reporting
   never record proof bytes or credentials.
 - Record decision code, proof hash, certificate IDs, root/agent IDs, operation
-  hash, idempotency ID, receipt ID, and execution outcome under retention policy.
+  hash, idempotency ID, receipt log sequence, and execution outcome under
+  retention policy.
 
 **Exit criterion:** deployment review and log-capture tests show no proof,
 challenge, key, or credential disclosure.
 
-### P2 — LangSmith and compatibility evidence
+### P2: LangSmith and compatibility evidence
 
 - Deploy through LangSmith Agent Server custom authentication.
 - Exercise durable LangGraph checkpoints and resume behavior.

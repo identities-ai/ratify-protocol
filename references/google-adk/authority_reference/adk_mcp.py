@@ -32,13 +32,10 @@ from google.adk.tools.mcp_tool.mcp_tool import McpTool
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.genai.types import FunctionDeclaration
-from ratify_protocol import (
-    base64_standard_decode,
-    encode_proof_bundle,
-)
 
 from .authority import AuthorityFixture
 from .mcp_metadata import ADMISSION_META_KEY, AUTHORITY_META_KEY
+from .receiver import DualChallengeGrant, encode_presentation, grant_from_json
 
 
 _PRESENTATION: ContextVar[tuple[int, tuple[str, str], str, str | None] | None] = ContextVar(
@@ -128,27 +125,20 @@ class SupportedRatifyMcpAdapter(BaseToolset):
             "issue_authority_challenge",
             arguments=args,
         ))
-        if grant.get("decision") == "deny" or "challenge" not in grant:
+        if grant.get("decision") == "deny":
             return grant
-        bundle = await asyncio.to_thread(
-            partial(
-                self._authority.present,
-                challenge=base64_standard_decode(grant["challenge"]),
-                session_context=base64_standard_decode(grant["session_context"]),
+        try:
+            authority, admission = await asyncio.to_thread(
+                partial(_presentations, self._authority, grant)
             )
-        )
+        except (KeyError, TypeError, ValueError):
+            return {
+                "decision": "deny",
+                "status": "challenge_rejected",
+                "reason": "the receiver returned no usable challenge",
+            }
         key = (tool_context.invocation_id, tool_context.function_call_id)
-        admission = None
-        if self._authority.admission_delegations:
-            admission = await asyncio.to_thread(
-                partial(
-                    self._authority.present_admission,
-                    challenge=base64_standard_decode(grant["challenge"]),
-                    session_context=base64_standard_decode(grant["session_context"]),
-                )
-            )
-        _PRESENTATION.set((id(self), key, encode_proof_bundle(bundle),
-                           encode_proof_bundle(admission) if admission else None))
+        _PRESENTATION.set((id(self), key, authority, admission))
         return None
 
     async def close(self) -> None:
@@ -210,25 +200,21 @@ class ProofInjectingMcpTool(McpTool):
             arguments=args,
         )
         grant = _result_object(grant_result)
-        if grant.get("decision") == "deny" or "challenge" not in grant:
+        if grant.get("decision") == "deny":
             return grant
-        bundle = self._authority.present(
-            challenge=base64_standard_decode(grant["challenge"]),
-            session_context=base64_standard_decode(grant["session_context"]),
-        )
-        admission = (
-            self._authority.present_admission(
-                challenge=base64_standard_decode(grant["challenge"]),
-                session_context=base64_standard_decode(grant["session_context"]),
-            )
-            if self._authority.admission_delegations
-            else None
-        )
+        try:
+            authority, admission = _presentations(self._authority, grant)
+        except (KeyError, TypeError, ValueError):
+            return {
+                "decision": "deny",
+                "status": "challenge_rejected",
+                "reason": "the receiver returned no usable challenge",
+            }
         response = await session.call_tool(
             self._mcp_tool.name,
             arguments=args,
-            meta={AUTHORITY_META_KEY: encode_proof_bundle(bundle),
-                  **({ADMISSION_META_KEY: encode_proof_bundle(admission)} if admission else {})},
+            meta={AUTHORITY_META_KEY: authority,
+                  **({ADMISSION_META_KEY: admission} if admission else {})},
         )
         return _result_object(response)
 
@@ -270,6 +256,17 @@ def build_mcp_toolset(
         tool_filter=["provision_cloud_node"],
         **kwargs,
     )
+
+
+def _presentations(authority: AuthorityFixture, grant_json: dict) -> tuple[str, str | None]:
+    """Sign the receiver's challenge, or both challenges of an approval set."""
+    grant = grant_from_json(grant_json)
+    if isinstance(grant, DualChallengeGrant):
+        return (
+            encode_presentation(authority.present(grant.authority)),
+            encode_presentation(authority.present_admission(grant.admission)),
+        )
+    return encode_presentation(authority.present(grant)), None
 
 
 def _result_object(result: Any) -> dict[str, Any]:

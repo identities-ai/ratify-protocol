@@ -11,7 +11,7 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.tools import FunctionTool
 
 from .authority import AuthorityFixture
-from .receiver import InfrastructureReceiver, OperationRequest
+from .receiver import DualChallengeGrant, DualPresentation, InfrastructureReceiver, OperationRequest
 
 
 def build_provision_tool(
@@ -27,13 +27,16 @@ def build_provision_tool(
         """Provision cloud nodes under receiver-verified delegated authority."""
         request = OperationRequest(request_id, region, instance_type, count)
         grant = receiver.issue_challenge(
-            request, expected_agent_id=authority.specialist_id
+            request, agent_public_key=authority.specialist_public_key
         )
-        bundle = authority.present(
-            challenge=grant.challenge,
-            session_context=grant.session_context,
-        )
-        return receiver.execute(request, bundle)
+        if isinstance(grant, DualChallengeGrant):
+            presentation = DualPresentation(
+                authority.present(grant.authority),
+                authority.present_admission(grant.admission),
+            )
+        else:
+            presentation = authority.present(grant)
+        return receiver.execute(request, presentation)
 
     return FunctionTool(provision_cloud_node)
 

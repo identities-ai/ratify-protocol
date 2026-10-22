@@ -1,8 +1,17 @@
+"""Deterministic gate for the Google ADK reference on Protocol v2.
+
+Every test that reaches a decision runs the full v2 path: SDK-issued
+challenge, verification, signed receipt, checkpoint acknowledgement and
+release. The Part B stores are the SDK's in-memory reference stores, which is
+why this gate is development evidence, not a production claim.
+"""
+
 from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 import json
 from pathlib import Path
 import socket
@@ -27,46 +36,84 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from ratify_protocol import (
-    base64_standard_decode,
-    base64_standard_encode,
-    encode_proof_bundle,
-    generate_agent,
-    sign_challenge,
-)
+from ratify_protocol_v2 import key_id_v2
+from ratify_protocol_v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
+from ratify_protocol_v2.protocol_v2 import DelegationCertV2, sign_delegation_cert_v2
+from ratify_protocol_v2.signing_v2 import generate_keypair_v2
+from ratify_protocol_v2.v2reference.approval_ledger import ApprovalSetInvalidError
 
 from authority_reference import (
+    DualChallengeGrant,
+    DualPresentation,
     FederationPolicy,
     FederationRoute,
-    DualPresentation,
     InfrastructureReceiver,
     OperationRequest,
-    SnapshotRevocationProvider,
     SqliteNodeProvisioner,
+    StatusAuthority,
     build_adk_agent,
     build_federated_adk_system,
     build_mcp_toolset,
     build_provision_tool,
     build_supported_mcp_adapter,
+    encode_presentation,
     issue_authority,
     issue_dual_root_federated_authority,
     issue_federated_authority,
 )
 from authority_reference.adk_mcp import _result_object
-from authority_reference.deployment_config import write_configs
+from authority_reference.authority import INFRA_SCOPE
+from authority_reference.deployment_config import load_transport_token, write_configs
 from authority_reference.mcp_metadata import AUTHORITY_META_KEY
+from authority_reference.receiver import grant_from_json
 from authority_reference.scale_benchmark import run_scale_benchmark
 from authority_reference.mcp_server import TransportTokenBoundary, load_receiver
+
+
+# The published digest of com.ratifyprotocol.max_count/v1 (SPEC-v2 §5.2).
+MAX_COUNT_V1_DIGEST = (
+    "sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b"
+)
+
+
+def make_receiver(authority, *, federated=False, dual=False, **options):
+    federation = admission = None
+    if federated or dual:
+        federation = FederationPolicy(
+            roots={authority.root_id: authority.root_public_key},
+            routes=[FederationRoute(authority.specialist_id, authority.root_id, authority.agent_path)],
+        )
+    if dual:
+        admission = FederationPolicy(
+            roots={authority.admission_root_id: authority.admission_root_public_key},
+            routes=[FederationRoute(
+                authority.specialist_id, authority.admission_root_id, (authority.specialist_id,),
+            )],
+        )
+    options.setdefault("status_keys", authority.status.status_keys())
+    options.setdefault("status_source", authority.status.evidence)
+    return InfrastructureReceiver(
+        trusted_root_id=authority.root_id,
+        trusted_root_public_key=authority.root_public_key,
+        federation_policy=federation,
+        admission_policy=admission,
+        **options,
+    )
 
 
 def setup_reference(**authority_options):
     now = int(time.time())
     authority = issue_authority(now=now - 1, **authority_options)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-    )
-    return now, authority, receiver
+    return now, authority, make_receiver(authority)
+
+
+def present(authority, receiver, request):
+    grant = receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+    if isinstance(grant, DualChallengeGrant):
+        return grant, DualPresentation(
+            authority.present(grant.authority), authority.present_admission(grant.admission),
+        )
+    return grant, authority.present(grant)
 
 
 @contextmanager
@@ -74,23 +121,10 @@ def running_http_receiver(authority):
     """Receiver operator starts the service; the ADK client receives only its URL."""
     with tempfile.TemporaryDirectory() as directory:
         config = Path(directory) / "receiver-trust.json"
-        transport_token = "test-transport-token-with-sufficient-entropy"
-        receiver_identity, _ = generate_agent("Test Receiver", "custom")
-        receiver_config = {
-            "trusted_root_id": authority.root_id,
-            "trusted_agent_id": authority.specialist_id,
-            "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
-            "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
-            "receiver_ed25519": base64_standard_encode(receiver_identity.public_key.ed25519),
-            "receiver_ml_dsa_65": base64_standard_encode(receiver_identity.public_key.ml_dsa_65),
-            "transport_token": transport_token,
-        }
-        receiver_config["federation_routes"] = [{
-            "agent_id": authority.specialist_id,
-            "root_id": authority.root_id,
-            "subjects_leaf_to_root": list(authority.agent_path),
-        }]
-        config.write_text(json.dumps(receiver_config), encoding="utf-8")
+        presenter = Path(directory) / "presenter.json"
+        status_dir = Path(directory) / "status"
+        write_configs(authority, config, presenter, status_dir=status_dir)
+        transport_token = load_transport_token(str(presenter))
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
@@ -105,7 +139,7 @@ def running_http_receiver(authority):
             text=True,
         )
         try:
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise RuntimeError(process.stderr.read())
@@ -116,58 +150,39 @@ def running_http_receiver(authority):
                 time.sleep(0.05)
             else:
                 raise RuntimeError("MCP receiver did not become ready")
-            yield f"http://127.0.0.1:{port}/mcp", transport_token
+            yield f"http://127.0.0.1:{port}/mcp", transport_token, status_dir
         finally:
             process.terminate()
             process.wait(timeout=5)
 
 
-def present(authority, receiver, request, *, now):
-    grant = receiver.issue_challenge(
-        request, expected_agent_id=authority.specialist_id
-    )
-    bundle = authority.present(
-        challenge=grant.challenge,
-        session_context=grant.session_context,
-        now=now,
-    )
-    return grant, bundle
+# -- receiver decisions --------------------------------------------------------
 
 
 def test_valid_authority_invokes_tool_once():
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     request = OperationRequest("valid", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    result = receiver.execute(request, encode_proof_bundle(bundle), now=now)
+    result = receiver.execute(request, encode_presentation(bundle))
 
     assert result["decision"] == "allow"
     assert result["tool_invocations"] == 1
+    # The allow was released only after its signed receipt was appended.
+    assert result["receipt_sequences"] == [1]
 
 
 def test_durable_protected_action_exists_only_after_allow(tmp_path):
-    now, authority, _ = setup_reference()
+    _, authority, _ = setup_reference()
     database = tmp_path / "protected-actions.sqlite"
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        provisioner=SqliteNodeProvisioner(str(database)),
-    )
-    allowed_request = OperationRequest(
-        "durable-allow", "us-central1", "n2-standard-4", 1
-    )
-    _, allowed_bundle = present(
-        authority, receiver, allowed_request, now=now
-    )
-    denied_request = OperationRequest(
-        "durable-deny", "us-central1", "n2-standard-4", 2
-    )
-    _, denied_bundle = present(
-        authority, receiver, denied_request, now=now
-    )
+    receiver = make_receiver(authority, provisioner=SqliteNodeProvisioner(str(database)))
+    allowed_request = OperationRequest("durable-allow", "us-central1", "n2-standard-4", 1)
+    _, allowed_bundle = present(authority, receiver, allowed_request)
+    denied_request = OperationRequest("durable-deny", "us-central1", "n2-standard-4", 2)
+    _, denied_bundle = present(authority, receiver, denied_request)
 
-    allowed = receiver.execute(allowed_request, allowed_bundle, now=now)
-    denied = receiver.execute(denied_request, denied_bundle, now=now)
+    allowed = receiver.execute(allowed_request, allowed_bundle)
+    denied = receiver.execute(denied_request, denied_bundle)
     with sqlite3.connect(database) as connection:
         rows = connection.execute(
             "SELECT request_id FROM provisioned_nodes ORDER BY request_id"
@@ -186,92 +201,87 @@ def test_durable_protected_action_exists_only_after_allow(tmp_path):
     ],
 )
 def test_signed_bounds_deny_before_tool(operation, expected_status):
-    now, authority, receiver = setup_reference()
-    _, bundle = present(authority, receiver, operation, now=now)
+    _, authority, receiver = setup_reference()
+    _, bundle = present(authority, receiver, operation)
 
-    result = receiver.execute(operation, bundle, now=now)
+    result = receiver.execute(operation, bundle)
 
     assert result["decision"] == "deny"
     assert result["status"] == expected_status
+    # A denial is a released Protocol decision with its own signed receipt.
+    assert result["protocol_reason"] == "constraint_denied"
+    assert result["receipt_sequence"] == 1
     assert result["tool_invocations"] == 0
 
 
 def test_expired_authority_denies_before_tool():
     now = int(time.time())
     authority = issue_authority(now=now - 3600, expires_at=now - 1)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-    )
+    receiver = make_receiver(authority)
     request = OperationRequest("expired", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert result["status"] == "expired"
+    assert result["protocol_reason"] == "delegation_expired"
     assert result["tool_invocations"] == 0
 
 
 def test_revoked_authority_denies_before_tool():
     now, authority, receiver = setup_reference()
-    receiver.revocation.revoke(authority.delegations[0].cert_id)
+    leaf = authority.delegations[0]
+    # The issuer of the leaf signs the revocation under its status key.
+    authority.status.revoke(leaf.issuer_id, leaf.cert_id, at=now)
     request = OperationRequest("revoked", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert result["status"] == "revoked"
+    assert result["protocol_reason"] == "delegation_revoked"
     assert result["tool_invocations"] == 0
 
 
 def test_replay_does_not_invoke_tool_again():
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     request = OperationRequest("replay", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
-    first = receiver.execute(request, bundle, now=now)
+    _, bundle = present(authority, receiver, request)
+    pending = receiver._pending[request.request_id]
+    first = receiver.execute(request, bundle)
     assert first["decision"] == "allow"
 
-    # Recreate only the application envelope. The original challenge remains
-    # consumed, so the old cryptographic presentation cannot authorize again.
-    receiver.issue_challenge(request, expected_agent_id=authority.specialist_id)
-    replay = receiver.execute(request, bundle, now=now)
+    # Restore the application envelope, as after a lost or restored pending
+    # table. The claim store still refuses the consumed challenge.
+    receiver._pending[request.request_id] = pending
+    replay = receiver.execute(request, bundle)
 
     assert replay["decision"] == "deny"
-    assert replay["status"] == "invalid"
+    assert replay["status"] == "replay"
     assert replay["tool_invocations"] == 1
 
 
 def test_altered_operation_is_rejected_before_verification():
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     original = OperationRequest("altered", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, original, now=now)
+    _, bundle = present(authority, receiver, original)
     altered = OperationRequest("altered", "us-central1", "n2-standard-4", 2)
 
-    result = receiver.execute(altered, bundle, now=now)
+    result = receiver.execute(altered, bundle)
 
     assert result["status"] == "operation_binding_failed"
     assert result["tool_invocations"] == 0
 
 
 def test_wrong_agent_key_is_rejected_before_tool():
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     request = OperationRequest("wrong-key", "us-central1", "n2-standard-4", 1)
-    grant = receiver.issue_challenge(
-        request, expected_agent_id=authority.specialist_id
-    )
-    intruder, intruder_private = generate_agent("Intruder", "custom")
-    legitimate = authority.present(
-        challenge=grant.challenge,
-        session_context=grant.session_context,
-        now=now,
-    )
-    legitimate.agent_id = intruder.id
-    legitimate.agent_pub_key = intruder.public_key
-    legitimate.challenge_sig = sign_challenge(
-        grant.challenge, now, intruder_private, grant.session_context
-    )
+    grant = receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+    # A different worker, with its own valid chain, answers the challenge
+    # that was bound to the accepted worker's key.
+    intruder = issue_authority(now=int(time.time()) - 1)
 
-    result = receiver.execute(request, legitimate, now=now)
+    result = receiver.execute(request, intruder.present(grant))
 
     assert result["decision"] == "deny"
     assert result["status"] == "agent_binding_failed"
@@ -282,9 +292,9 @@ def test_self_issued_valid_chain_is_not_a_trusted_root():
     now, accepted, receiver = setup_reference()
     attacker = issue_authority(now=now - 1)
     request = OperationRequest("root", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(attacker, receiver, request, now=now)
+    _, bundle = present(attacker, receiver, request)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert accepted.root_id != attacker.root_id
     assert result["status"] == "untrusted_root"
@@ -293,14 +303,15 @@ def test_self_issued_valid_chain_is_not_a_trusted_root():
 
 @pytest.mark.parametrize("count", [True, 0, -1, 1001, 1.5])
 def test_invalid_counts_never_reach_the_tool(count):
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     request = OperationRequest("invalid", "us-central1", "n2-standard-4", count)
 
     with pytest.raises(ValueError):
-        receiver.issue_challenge(
-            request, expected_agent_id=authority.specialist_id
-        )
+        receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
     assert receiver.tool_invocations == 0
+
+
+# -- Google ADK composition ------------------------------------------------------
 
 
 def test_real_adk_agent_exposes_only_the_ordinary_tool_schema():
@@ -439,18 +450,7 @@ def test_valid_authority_does_not_claim_to_detect_prompt_injection():
 def test_real_adk_three_agent_handoff_reaches_federated_receiver_gate():
     now = int(time.time())
     authority = issue_federated_authority(now=now - 1)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=FederationPolicy(
-            roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(
-                agent_id=authority.specialist_id,
-                root_id=authority.root_id,
-                subjects_leaf_to_root=authority.agent_path,
-            )],
-        ),
-    )
+    receiver = make_receiver(authority, federated=True)
     agent = build_federated_adk_system(
         worker_tool=build_provision_tool(receiver, authority),
         coordinator_model=_NestedToolCallingModel(
@@ -491,11 +491,14 @@ def test_real_adk_three_agent_handoff_reaches_federated_receiver_gate():
     assert receiver.tool_invocations == 1
 
 
+# -- MCP boundary ----------------------------------------------------------------
+
+
 def test_native_adk_mcp_tool_hides_proof_and_enforces_in_receiver_process():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         toolset = build_mcp_toolset(
             authority, receiver_url=receiver_url, transport_token=token
         )
@@ -541,7 +544,7 @@ def test_real_adk_runner_executes_native_mcp_toolset():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         toolset = build_mcp_toolset(
             authority, receiver_url=receiver_url, transport_token=token
         )
@@ -583,7 +586,7 @@ def test_supported_adk_callback_uses_mcp_metadata_and_keeps_events_proof_free():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         adapter = build_supported_mcp_adapter(
             authority, receiver_url=receiver_url, transport_token=token
         )
@@ -660,7 +663,7 @@ def test_three_agent_handoff_reaches_subprocess_mcp_receiver_with_metadata():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         adapter = build_supported_mcp_adapter(
             authority, receiver_url=receiver_url, transport_token=token
         )
@@ -721,7 +724,7 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
     async def exercise():
         _, authority, _ = setup_reference()
         receiver_context = running_http_receiver(authority)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         toolset = build_mcp_toolset(
             authority, receiver_url=receiver_url, transport_token=token
         )
@@ -742,13 +745,8 @@ def test_mcp_receiver_rejects_alteration_and_replay_across_process_boundary():
                     "issue_authority_challenge",
                     arguments=args,
                 )
-                grant = _result_object(result)
-                return encode_proof_bundle(authority.present(
-                    challenge=base64_standard_decode(grant["challenge"]),
-                    session_context=base64_standard_decode(
-                        grant["session_context"]
-                    ),
-                ))
+                grant = grant_from_json(_result_object(result))
+                return encode_presentation(authority.present(grant))
 
             altered_proof = await presentation_for(original)
             altered = await session.call_tool(
@@ -786,7 +784,7 @@ def test_remote_receiver_rejects_presenter_selected_agent():
         _, accepted, _ = setup_reference()
         attacker = issue_authority(now=int(time.time()) - 1)
         receiver_context = running_http_receiver(accepted)
-        receiver_url, token = receiver_context.__enter__()
+        receiver_url, token, _ = receiver_context.__enter__()
         toolset = build_mcp_toolset(
             attacker, receiver_url=receiver_url, transport_token=token
         )
@@ -816,7 +814,7 @@ def test_remote_receiver_rejects_spoofed_agent_under_hostile_root():
         _, accepted, _ = setup_reference()
         attacker = issue_authority(now=int(time.time()) - 1)
         context = running_http_receiver(accepted)
-        url, token = context.__enter__()
+        url, token, _ = context.__enter__()
         toolset = build_mcp_toolset(
             attacker, receiver_url=url, transport_token=token
         )
@@ -829,18 +827,20 @@ def test_remote_receiver_rejects_spoofed_agent_under_hostile_root():
                 "request_id": "hostile-root", "region": "us-central1",
                 "instance_type": "n2-standard-4", "count": 1,
             }
-            grant = _result_object(await session.call_tool(
+            grant = grant_from_json(_result_object(await session.call_tool(
                 "issue_authority_challenge", arguments=request
-            ))
-            bundle = attacker.present(
-                challenge=base64_standard_decode(grant["challenge"]),
-                session_context=base64_standard_decode(grant["session_context"]),
+            )))
+            # Claim to be the accepted worker; the chain still ends at the
+            # attacker's root.
+            bundle = replace(
+                attacker.present(grant),
+                agent_id=accepted.specialist_id,
+                agent_pub_key=accepted.specialist_public_key,
             )
-            bundle.agent_id = accepted.specialist_id
             result = _result_object(await session.call_tool(
                 "provision_cloud_node",
                 arguments=request,
-                meta={AUTHORITY_META_KEY: encode_proof_bundle(bundle)},
+                meta={AUTHORITY_META_KEY: encode_presentation(bundle)},
             ))
             assert result["status"] == "untrusted_root"
             assert result["tool_invocations"] == 0
@@ -854,7 +854,7 @@ def test_adk_confirmation_gate_is_preserved_before_mcp_execution():
     async def exercise():
         _, authority, _ = setup_reference()
         context = running_http_receiver(authority)
-        url, token = context.__enter__()
+        url, token, _ = context.__enter__()
         toolset = build_mcp_toolset(
             authority, receiver_url=url, transport_token=token,
             require_confirmation=True,
@@ -882,7 +882,7 @@ def test_prefix_and_malformed_model_output_remain_structured():
     async def exercise():
         _, authority, _ = setup_reference()
         context = running_http_receiver(authority)
-        url, token = context.__enter__()
+        url, token, _ = context.__enter__()
         toolset = build_mcp_toolset(
             authority, receiver_url=url, transport_token=token,
             tool_name_prefix="infra",
@@ -909,7 +909,7 @@ def test_prefix_and_malformed_model_output_remain_structured():
 
 def test_unauthenticated_transport_cannot_reach_challenge_tool():
     _, authority, _ = setup_reference()
-    with running_http_receiver(authority) as (url, _):
+    with running_http_receiver(authority) as (url, _, _):
         response = httpx.post(url, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "issue_authority_challenge", "arguments": {}},
@@ -917,142 +917,280 @@ def test_unauthenticated_transport_cannot_reach_challenge_tool():
         assert response.status_code == 401
 
 
+def test_signed_revocation_reaches_the_receiver_through_the_local_status_feed():
+    async def exercise():
+        now, authority, _ = setup_reference()
+        context = running_http_receiver(authority)
+        url, token, status_dir = context.__enter__()
+        toolset = build_mcp_toolset(authority, receiver_url=url, transport_token=token)
+        try:
+            tool = (await toolset.get_tools())[0]
+            args = {"region": "us-central1", "instance_type": "n2-standard-4", "count": 1}
+            before = await tool.run_async(args={**args, "request_id": "feed-1"}, tool_context=None)
+            leaf = authority.delegations[0]
+            authority.status.revoke(leaf.issuer_id, leaf.cert_id, at=int(time.time()))
+            authority.status.write(status_dir)
+            after = await tool.run_async(args={**args, "request_id": "feed-2"}, tool_context=None)
+            assert before["decision"] == "allow"
+            assert after["decision"] == "deny"
+            assert after["status"] == "revoked"
+            assert after["tool_invocations"] == 1
+        finally:
+            await toolset.close()
+            context.__exit__(None, None, None)
+    asyncio.run(exercise())
+
+
+# -- receiver state ----------------------------------------------------------------
+
+
 def test_junk_presentation_does_not_cancel_honest_pending_operation():
-    now, authority, receiver = setup_reference()
+    _, authority, receiver = setup_reference()
     request = OperationRequest("not-cancelled", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
-    junk = receiver.execute(request, "not-a-bundle", now=now)
-    honest = receiver.execute(request, bundle, now=now)
+    _, bundle = present(authority, receiver, request)
+    junk = receiver.execute(request, "not-a-bundle")
+    honest = receiver.execute(request, bundle)
     assert junk["status"] == "invalid_presentation"
     assert honest["decision"] == "allow"
 
 
 def test_cryptographically_valid_denial_terminates_attempt_for_safe_retry():
-    now, authority, receiver = setup_reference(max_nodes=1)
+    _, authority, receiver = setup_reference(max_nodes=1)
     request = OperationRequest("denied-attempt", "us-central1", "n2-standard-4", 2)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    denied = receiver.execute(request, bundle, now=now)
-    retry = receiver.issue_challenge(
-        request, expected_agent_id=authority.specialist_id
-    )
+    denied = receiver.execute(request, bundle)
+    retry = receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
 
     assert denied["status"] == "constraint_denied"
     assert retry.challenge
     assert receiver.tool_invocations == 0
 
 
+def test_release_gate_withholds_the_action_until_the_checkpoint_acknowledges():
+    _, authority, receiver = setup_reference()
+    receiver.store.set_acknowledgement_withheld(True)
+    request = OperationRequest("unacknowledged", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, request)
+
+    result = receiver.execute(request, bundle)
+
+    # The proof verified and the receipt was appended, but without the
+    # checkpoint acknowledgement the decision is not released.
+    assert result["status"] == "release_withheld"
+    assert receiver.tool_invocations == 0
+
+
+def test_pending_capacity_fails_structurally_and_is_bounded():
+    _, authority, receiver = setup_reference()
+    for index in range(128):
+        receiver.issue_challenge(
+            OperationRequest(f"capacity-{index}", "us-central1", "n2-standard-4", 1),
+            agent_public_key=authority.specialist_public_key,
+        )
+    with pytest.raises(ValueError, match="receiver_pending_capacity"):
+        receiver.issue_challenge(
+            OperationRequest("capacity-overflow", "us-central1", "n2-standard-4", 1),
+            agent_public_key=authority.specialist_public_key,
+        )
+    assert len(receiver._pending) == 128
+
+
+def test_concurrent_duplicate_request_id_creates_one_pending_operation():
+    _, authority, receiver = setup_reference()
+    request = OperationRequest("duplicate", "us-central1", "n2-standard-4", 1)
+
+    def issue():
+        try:
+            receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+            return "issued"
+        except ValueError as exc:
+            return str(exc)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: issue(), range(2)))
+    assert results.count("issued") == 1
+    assert results.count("request_id already has a pending operation") == 1
+
+
+# -- Protocol v2 profile -----------------------------------------------------------
+
+
+def test_exact_custom_scope_refuses_a_wildcard_at_issuance():
+    issuer_public, issuer_private = generate_keypair_v2()
+    subject_public, _ = generate_keypair_v2()
+    now = int(time.time())
+    cert = DelegationCertV2(
+        version=2, cert_id="scope-check", issuer_id=key_id_v2(issuer_public),
+        issuer_pub_key=issuer_public, subject_id=key_id_v2(subject_public),
+        subject_pub_key=subject_public, scope=[INFRA_SCOPE], constraints=[],
+        issued_at=now, expires_at=now + 60,
+    )
+
+    # Control: the exact custom scope signs.
+    assert sign_delegation_cert_v2(cert, issuer_private).scope == [INFRA_SCOPE]
+    # A custom wildcard is never a valid v2 scope (SPEC-v2 §2.4).
+    with pytest.raises(Exception, match="(?i)scope"):
+        sign_delegation_cert_v2(replace(cert, scope=["custom:*"]), issuer_private)
+
+
+def test_standard_max_count_profile_is_sealed_into_the_signed_receipt():
+    _, authority, receiver = setup_reference()
+    request = OperationRequest("profile", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, request)
+
+    result = receiver.execute(request, bundle)
+
+    assert result["decision"] == "allow"
+    assert result["constraint_evaluators"] == [
+        {"type": CONSTRAINT_MAX_COUNT_V2, "profile_digest": MAX_COUNT_V1_DIGEST}
+    ]
+
+
+def test_status_key_cannot_be_the_issuer_key():
+    _, authority, _ = setup_reference()
+
+    # The root key is already recorded under the issuer role; a key can hold
+    # only one permanent role, so it can never become a status key.
+    with pytest.raises(Exception, match="role"):
+        make_receiver(authority, status_keys={authority.root_id: authority.root_public_key})
+
+
+def test_status_signed_by_an_unconfigured_key_cannot_allow():
+    now, authority, _ = setup_reference()
+    # Another party signs lists for the same issuer IDs with its own keys.
+    impostor = StatusAuthority()
+    for cert in authority.delegations:
+        impostor.add_issuer(cert.issuer_pub_key, at=now)
+    receiver = make_receiver(authority, status_source=impostor.evidence)
+    request = OperationRequest("impostor-status", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, request)
+
+    result = receiver.execute(request, bundle)
+
+    assert result["decision"] == "deny"
+    assert result["protocol_reason"] == "status_unavailable"
+    assert receiver.tool_invocations == 0
+
+
+def test_stale_signed_status_fails_closed():
+    now = int(time.time())
+    authority = issue_authority(now=now - 1, status_lifetime_seconds=60)
+    clock = [now]
+    receiver = make_receiver(authority, clock=lambda: clock[0])
+    fresh = OperationRequest("fresh-status", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, fresh)
+    assert receiver.execute(fresh, bundle)["decision"] == "allow"
+
+    clock[0] = now + 61  # past the list's next_update; no heartbeat arrived
+    request = OperationRequest("stale-status", "us-central1", "n2-standard-4", 1)
+    _, bundle = present(authority, receiver, request)
+    result = receiver.execute(request, bundle)
+
+    assert result["status"] == "status_stale"
+    assert receiver.tool_invocations == 1
+
+
+# -- federation and the dual-root composition profile --------------------------
+
+
 def test_federated_three_agent_route_allows_at_receiver_owned_boundary():
     now = int(time.time())
     authority = issue_federated_authority(now=now - 1)
-    policy = FederationPolicy(
-        roots={authority.root_id: authority.root_public_key},
-        routes=[FederationRoute(
-            agent_id=authority.specialist_id,
-            root_id=authority.root_id,
-            subjects_leaf_to_root=authority.agent_path,
-        )],
-    )
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=policy,
-    )
+    receiver = make_receiver(authority, federated=True)
     request = OperationRequest("federated-allow", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert len(bundle.delegations) == 3
     assert result["decision"] == "allow"
     assert receiver.tool_invocations == 1
 
 
-def test_dual_root_authority_and_workload_admission_require_same_worker_key():
+def test_dual_root_profile_executes_only_with_two_released_approvals():
     now = int(time.time())
     authority = issue_dual_root_federated_authority(now=now - 1)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=FederationPolicy(
-            roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(
-                agent_id=authority.specialist_id,
-                root_id=authority.root_id,
-                subjects_leaf_to_root=authority.agent_path,
-            )],
-        ),
-        admission_policy=FederationPolicy(
-            roots={authority.admission_root_id: authority.admission_root_public_key},
-            routes=[FederationRoute(
-                agent_id=authority.specialist_id,
-                root_id=authority.admission_root_id,
-                subjects_leaf_to_root=(authority.specialist_id,),
-            )],
-        ),
-    )
+    receiver = make_receiver(authority, dual=True)
     request = OperationRequest("dual-root-allow", "us-central1", "n2-standard-4", 1)
-    grant = receiver.issue_challenge(request, expected_agent_id=authority.specialist_id)
-    presented = DualPresentation(
-        authority=authority.present(
-            challenge=grant.challenge,
-            session_context=grant.session_context,
-            now=now,
-        ),
-        admission=authority.present_admission(
-            challenge=grant.challenge,
-            session_context=grant.session_context,
-            now=now,
-        ),
-    )
+    grant, presented = present(authority, receiver, request)
 
-    result = receiver.execute(request, presented, now=now)
+    result = receiver.execute(request, presented)
 
+    # Two distinct challenges, two released allows, one execution.
+    assert grant.authority.challenge != grant.admission.challenge
+    assert grant.authority.session_context == grant.admission.session_context
     assert result["decision"] == "allow"
+    assert result["approval_set_id"] == grant.approval_set_id
+    assert sorted(result["receipt_sequences"]) == [1, 2]
     assert receiver.tool_invocations == 1
+
+
+def test_dual_root_requires_the_second_root():
+    now = int(time.time())
+    authority = issue_dual_root_federated_authority(now=now - 1)
+    receiver = make_receiver(authority, dual=True)
+    request = OperationRequest("dual-root-missing", "us-central1", "n2-standard-4", 1)
+    grant, presented = present(authority, receiver, request)
+
+    result = receiver.execute(request, DualPresentation(presented.authority, None))
+
+    assert result["status"] == "missing_admission"
+    assert receiver.tool_invocations == 0
+
+
+def test_dual_root_admission_must_answer_its_own_challenge():
+    now = int(time.time())
+    authority = issue_dual_root_federated_authority(now=now - 1)
+    receiver = make_receiver(authority, dual=True)
+    request = OperationRequest("dual-root-one-challenge", "us-central1", "n2-standard-4", 1)
+    grant = receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+
+    result = receiver.execute(request, DualPresentation(
+        authority.present(grant.authority),
+        authority.present_admission(grant.authority),  # the wrong challenge
+    ))
+
+    assert result["status"] == "challenge_binding_failed"
+    assert receiver.tool_invocations == 0
+
+
+def test_dual_root_set_cannot_name_one_root_twice():
+    now = int(time.time())
+    authority = issue_dual_root_federated_authority(now=now - 1)
+    same_root = replace(
+        authority,
+        admission_root_id=authority.root_id,
+        admission_root_public_key=authority.root_public_key,
+    )
+    receiver = make_receiver(same_root, dual=True)
+    request = OperationRequest("dual-root-same", "us-central1", "n2-standard-4", 1)
+
+    with pytest.raises(ApprovalSetInvalidError):
+        receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+    assert receiver.tool_invocations == 0
 
 
 def test_dual_root_revoked_or_malformed_admission_denies_structurally():
     now = int(time.time())
     authority = issue_dual_root_federated_authority(now=now - 1)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=FederationPolicy(
-            roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(authority.specialist_id, authority.root_id, authority.agent_path)],
-        ),
-        admission_policy=FederationPolicy(
-            roots={authority.admission_root_id: authority.admission_root_public_key},
-            routes=[FederationRoute(authority.specialist_id, authority.admission_root_id, (authority.specialist_id,))],
-        ),
-    )
+    receiver = make_receiver(authority, dual=True)
     request = OperationRequest("dual-root-revoked", "us-central1", "n2-standard-4", 1)
-    grant = receiver.issue_challenge(request, expected_agent_id=authority.specialist_id)
-    presented = DualPresentation(
-        authority.present(challenge=grant.challenge, session_context=grant.session_context, now=now),
-        authority.present_admission(challenge=grant.challenge, session_context=grant.session_context, now=now),
-    )
-    receiver.revocation.revoke(authority.admission_delegations[0].cert_id)
-    revoked = receiver.execute(request, presented, now=now)
+    _, presented = present(authority, receiver, request)
+    admission_cert = authority.admission_delegations[0]
+    authority.status.revoke(admission_cert.issuer_id, admission_cert.cert_id, at=now)
+    revoked = receiver.execute(request, presented)
     assert revoked["decision"] == "deny"
+    assert revoked["status"] == "revoked"
+    assert revoked["approval_slot"] == "admission"
     assert receiver.tool_invocations == 0
 
     malformed_request = OperationRequest("dual-root-malformed", "us-central1", "n2-standard-4", 1)
     malformed_grant = receiver.issue_challenge(
-        malformed_request, expected_agent_id=authority.specialist_id
+        malformed_request, agent_public_key=authority.specialist_public_key
     )
     malformed = receiver.execute(
         malformed_request,
-        DualPresentation(
-            authority.present(
-                challenge=malformed_grant.challenge,
-                session_context=malformed_grant.session_context,
-                now=now,
-            ),
-            "not-json",
-        ),
-        now=now,
+        DualPresentation(authority.present(malformed_grant.authority), "not-json"),
     )
     assert malformed["status"] == "invalid_presentation"
     assert receiver.tool_invocations == 0
@@ -1061,62 +1199,44 @@ def test_dual_root_revoked_or_malformed_admission_denies_structurally():
 def test_broker_can_narrow_worker_authority_at_runtime():
     now = int(time.time())
     authority = issue_federated_authority(now=now - 1, max_nodes=10)
-    narrowed = authority.narrow_worker_authority(
-        region="us-central1", max_nodes=1, now=now
-    )
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=FederationPolicy(
-            roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(authority.specialist_id, authority.root_id, authority.agent_path)],
-        ),
-    )
+    narrowed = authority.narrow_worker_authority(region="us-central1", max_nodes=1, now=now)
+    receiver = make_receiver(authority, federated=True)
     allowed_request = OperationRequest("runtime-narrow-allow", "us-central1", "n2-standard-4", 1)
-    grant = receiver.issue_challenge(allowed_request, expected_agent_id=authority.specialist_id)
-    allowed = receiver.execute(
-        allowed_request,
-        narrowed.present(challenge=grant.challenge, session_context=grant.session_context, now=now),
-        now=now,
-    )
+    grant = receiver.issue_challenge(allowed_request, agent_public_key=authority.specialist_public_key)
+    allowed = receiver.execute(allowed_request, narrowed.present(grant))
     assert allowed["decision"] == "allow"
 
     widened = authority.narrow_worker_authority(region="europe-west4", max_nodes=500, now=now)
     denied_request = OperationRequest("runtime-widen-deny", "europe-west4", "n2-standard-4", 50)
-    denied_grant = receiver.issue_challenge(denied_request, expected_agent_id=authority.specialist_id)
-    denied = receiver.execute(
-        denied_request,
-        widened.present(challenge=denied_grant.challenge, session_context=denied_grant.session_context, now=now),
-        now=now,
-    )
+    denied_grant = receiver.issue_challenge(denied_request, agent_public_key=authority.specialist_public_key)
+    denied = receiver.execute(denied_request, widened.present(denied_grant))
     assert denied["decision"] == "deny"
     assert denied["status"] == "constraint_denied"
     assert receiver.tool_invocations == 1
+
 
 def test_receiver_rejects_chain_outside_approved_federation_route():
     now = int(time.time())
     authority = issue_federated_authority(now=now - 1)
     wrong_route = (
         authority.agent_path[0],
-        "unapproved-domain-b-broker",
+        "0" * 64,  # an unapproved domain B broker
         authority.agent_path[2],
     )
     receiver = InfrastructureReceiver(
         trusted_root_id=authority.root_id,
         trusted_root_public_key=authority.root_public_key,
+        status_keys=authority.status.status_keys(),
+        status_source=authority.status.evidence,
         federation_policy=FederationPolicy(
             roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(
-                agent_id=authority.specialist_id,
-                root_id=authority.root_id,
-                subjects_leaf_to_root=wrong_route,
-            )],
+            routes=[FederationRoute(authority.specialist_id, authority.root_id, wrong_route)],
         ),
     )
     request = OperationRequest("route-deny", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
+    _, bundle = present(authority, receiver, request)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert result["status"] == "federation_route_denied"
     assert receiver.tool_invocations == 0
@@ -1125,49 +1245,19 @@ def test_receiver_rejects_chain_outside_approved_federation_route():
 def test_cross_domain_revocation_after_challenge_denies_before_action():
     now = int(time.time())
     authority = issue_federated_authority(now=now - 1)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        federation_policy=FederationPolicy(
-            roots={authority.root_id: authority.root_public_key},
-            routes=[FederationRoute(
-                agent_id=authority.specialist_id,
-                root_id=authority.root_id,
-                subjects_leaf_to_root=authority.agent_path,
-            )],
-        ),
-    )
+    receiver = make_receiver(authority, federated=True)
     request = OperationRequest("federated-revoked", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
-    receiver.revocation.revoke(authority.delegations[1].cert_id)
+    _, bundle = present(authority, receiver, request)
+    broker_cert = authority.delegations[1]
+    authority.status.revoke(broker_cert.issuer_id, broker_cert.cert_id, at=now)
 
-    result = receiver.execute(request, bundle, now=now)
+    result = receiver.execute(request, bundle)
 
     assert result["status"] == "revoked"
     assert receiver.tool_invocations == 0
 
 
-def test_stale_revocation_snapshot_fails_closed():
-    now = int(time.time())
-    authority = issue_authority(now=now - 1)
-    revocation = SnapshotRevocationProvider(
-        max_staleness_seconds=30,
-        clock=lambda: now,
-    )
-    revocation.update(set(), published_at=now - 31)
-    receiver = InfrastructureReceiver(
-        trusted_root_id=authority.root_id,
-        trusted_root_public_key=authority.root_public_key,
-        revocation=revocation,
-    )
-    request = OperationRequest("stale-revocation", "us-central1", "n2-standard-4", 1)
-    _, bundle = present(authority, receiver, request, now=now)
-
-    result = receiver.execute(request, bundle, now=now)
-
-    assert result["status"] == "invalid"
-    assert result["verification_code"] == "revocation_error"
-    assert receiver.tool_invocations == 0
+# -- measurement and configuration --------------------------------------------------
 
 
 def test_scale_benchmark_counts_only_fully_authorized_actions():
@@ -1179,6 +1269,8 @@ def test_scale_benchmark_counts_only_fully_authorized_actions():
     assert result["denied"] == 1
     assert result["denied_by_reason"] == {"constraint_denied": 1}
     assert result["protected_action_invocations"] == 9
+    # Every allow released two receipts; the denial released one.
+    assert result["released_receipts"] == 19
     assert result["encoded_proof_bytes"] > 0
 
 
@@ -1188,38 +1280,6 @@ def test_checked_in_evidence_matches_current_dual_root_proof_size():
     )
     current = run_scale_benchmark(1, workers=1)
     assert evidence["results"][-1]["encoded_proof_bytes"] == current["encoded_proof_bytes"]
-
-
-def test_pending_capacity_fails_structurally_and_is_bounded():
-    _, authority, receiver = setup_reference()
-    for index in range(128):
-        receiver.issue_challenge(
-            OperationRequest(f"capacity-{index}", "us-central1", "n2-standard-4", 1),
-            expected_agent_id=authority.specialist_id,
-        )
-    with pytest.raises(ValueError, match="receiver_pending_capacity"):
-        receiver.issue_challenge(
-            OperationRequest("capacity-overflow", "us-central1", "n2-standard-4", 1),
-            expected_agent_id=authority.specialist_id,
-        )
-    assert len(receiver._pending) == 128
-
-
-def test_concurrent_duplicate_request_id_creates_one_pending_operation():
-    _, authority, receiver = setup_reference()
-    request = OperationRequest("duplicate", "us-central1", "n2-standard-4", 1)
-    def issue():
-        try:
-            receiver.issue_challenge(
-                request, expected_agent_id=authority.specialist_id
-            )
-            return "issued"
-        except ValueError as exc:
-            return str(exc)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(executor.map(lambda _: issue(), range(2)))
-    assert results.count("issued") == 1
-    assert results.count("request_id already has a pending operation") == 1
 
 
 def test_unavailable_receiver_fails_without_agent_loop_hang():
@@ -1247,7 +1307,7 @@ def test_transport_token_does_not_collide_with_adk_authorization_header():
     async def exercise():
         _, authority, _ = setup_reference()
         context = running_http_receiver(authority)
-        url, token = context.__enter__()
+        url, token, _ = context.__enter__()
         credential = AuthCredential(
             auth_type=AuthCredentialTypes.HTTP,
             http=HttpAuth(
@@ -1294,9 +1354,10 @@ def test_receiver_config_persists_key_derived_verifier_identity(tmp_path):
     first, _, _ = load_receiver(str(receiver_path))
     second, _, _ = load_receiver(str(receiver_path))
 
+    # A v2 verifier ID is the 64-hex key ID of the receipt-signing key.
     assert first.verifier_id == second.verifier_id
-    assert first.verifier_id.startswith("ratify-verifier:")
-    assert "ephemeral" not in first.verifier_id
+    assert first.verifier_id == key_id_v2(first.verifier_public_key)
+    assert len(first.verifier_id) == 64
 
 
 @pytest.mark.parametrize("values", [

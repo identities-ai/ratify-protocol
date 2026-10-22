@@ -49,6 +49,7 @@ func TestV2ConformanceLimits(t *testing.T) {
 		"verification_receipt":      func(b []byte) error { _, err := ratify.DecodeVerificationReceiptV2(b); return err },
 		"verification_receipt_body": func(b []byte) error { _, err := ratify.DecodeVerificationReceiptBodyV2(b); return err },
 		"transaction_receipt":       func(b []byte) error { _, err := ratify.DecodeTransactionReceiptV2(b); return err },
+		"status_evidence_batch":     func(b []byte) error { _, err := ratify.DecodeV2StatusEvidenceBatch(b); return err },
 	}
 	if len(file.Vectors) == 0 {
 		t.Fatal("limits.json has no vectors")

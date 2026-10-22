@@ -83,7 +83,7 @@ func TestV2StatusEvidenceBatchLimits(t *testing.T) {
 	batch, _ := signedStatusBatchFixtureV2(t)
 	entry := batch.Objects[0]
 	full := V2StatusEvidenceBatch{}
-	for range MaxV2StatusEvidenceObjects {
+	for range MaxStatusEvidenceBatchObjectsV2 {
 		full.Objects = append(full.Objects, entry)
 	}
 	wire, err := EncodeV2StatusEvidenceBatch(full)
@@ -100,7 +100,7 @@ func TestV2StatusEvidenceBatchLimits(t *testing.T) {
 	if _, err := EncodeV2StatusEvidenceBatch(V2StatusEvidenceBatch{Objects: append(full.Objects, entry)}); V2ErrorClassOf(err) != V2ErrMalformed {
 		t.Fatalf("encode 65 objects: %v", err)
 	}
-	padded := []byte("[]" + strings.Repeat(" ", MaxV2StatusEvidenceBytes-2))
+	padded := []byte("[]" + strings.Repeat(" ", MaxStatusEvidenceBatchBytesV2-2))
 	if _, err := DecodeV2StatusEvidenceBatch(padded); err != nil {
 		t.Fatalf("batch at the byte limit: %v", err)
 	}
@@ -126,7 +126,7 @@ func FuzzDecodeV2StatusEvidenceBatchNeverPanics(f *testing.F) {
 			}
 			return
 		}
-		if len(decoded.Objects) > MaxV2StatusEvidenceObjects {
+		if len(decoded.Objects) > MaxStatusEvidenceBatchObjectsV2 {
 			t.Fatalf("decoded %d objects", len(decoded.Objects))
 		}
 		if reencoded, err := EncodeV2StatusEvidenceBatch(decoded); err == nil {

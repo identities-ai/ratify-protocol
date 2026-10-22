@@ -35,11 +35,6 @@ import (
 // caller's context ends during the stage, nothing is committed and the
 // verifier returns V2StageEvaluating with evaluation_cancelled.
 
-// MaxV2StatusEvidenceObjects and MaxV2StatusEvidenceBytes bound one provider batch.
-const (
-	MaxV2StatusEvidenceObjects = 64
-	MaxV2StatusEvidenceBytes   = 8388608
-)
 
 // V2StatusKeyConfig is the caller-authenticated status-key binding for one
 // issuer. It must equal the binding retained in the security journal at that
@@ -215,11 +210,11 @@ func callV2StatusProvider(ctx context.Context, provider func(context.Context, V2
 // ascending sequence, then object type code (list before push), then evidence
 // digest bytes.
 func verifyV2StatusEvidenceBatch(batch V2StatusEvidenceBatch, issuerID string, key HybridPublicKey) ([]v2VerifiedStatusObject, error) {
-	if len(batch.Objects) > MaxV2StatusEvidenceObjects {
-		return nil, fmt.Errorf("v2 status batch exceeds %d objects", MaxV2StatusEvidenceObjects)
+	if len(batch.Objects) > MaxStatusEvidenceBatchObjectsV2 {
+		return nil, fmt.Errorf("v2 status batch exceeds %d objects", MaxStatusEvidenceBatchObjectsV2)
 	}
-	if v2StatusEvidenceBatchEncodedLength(batch) > MaxV2StatusEvidenceBytes {
-		return nil, fmt.Errorf("v2 status batch exceeds %d bytes", MaxV2StatusEvidenceBytes)
+	if v2StatusEvidenceBatchEncodedLength(batch) > MaxStatusEvidenceBatchBytesV2 {
+		return nil, fmt.Errorf("v2 status batch exceeds %d bytes", MaxStatusEvidenceBatchBytesV2)
 	}
 	out := make([]v2VerifiedStatusObject, 0, len(batch.Objects))
 	for _, object := range batch.Objects {

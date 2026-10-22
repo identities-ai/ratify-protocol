@@ -33,6 +33,11 @@ const (
 	MaxVerificationReceiptBytesV2 = 64 << 10
 	// MaxVerificationReceiptBodyBytesV2 bounds one prepared receipt body.
 	MaxVerificationReceiptBodyBytesV2 = 64 << 10
+	// MaxStatusEvidenceBatchBytesV2 bounds one encoded status evidence
+	// batch (SPEC-v2 §6.5).
+	MaxStatusEvidenceBatchBytesV2 = 8 << 20
+	// MaxStatusEvidenceBatchObjectsV2 bounds the entries of one batch.
+	MaxStatusEvidenceBatchObjectsV2 = 64
 	// MaxTransactionReceiptBytesV2 bounds one encoded TransactionReceiptV2
 	// including every embedded proof bundle and signature.
 	MaxTransactionReceiptBytesV2 = MaxTransactionReceiptBytes

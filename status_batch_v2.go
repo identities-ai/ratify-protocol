@@ -12,8 +12,8 @@ import (
 //
 //	[{"object":<complete signed RevocationList or RevocationPush>,"object_type_code":3|5}, ...]
 //
-// with at most MaxV2StatusEvidenceObjects entries and at most
-// MaxV2StatusEvidenceBytes encoded bytes. Each entry has exactly these two
+// with at most MaxStatusEvidenceBatchObjectsV2 entries and at most
+// MaxStatusEvidenceBatchBytesV2 encoded bytes. Each entry has exactly these two
 // members. The batch may be empty. The canonical encoding sorts each entry's
 // members and re-encodes each object canonically; a decoder accepts any
 // strict JSON spelling and keeps each object's exact received bytes, which
@@ -22,8 +22,8 @@ import (
 // EncodeV2StatusEvidenceBatch returns the canonical JSON encoding of batch.
 // Every object must decode strictly under its code.
 func EncodeV2StatusEvidenceBatch(batch V2StatusEvidenceBatch) ([]byte, error) {
-	if len(batch.Objects) > MaxV2StatusEvidenceObjects {
-		return nil, v2Errorf(V2ErrMalformed, "v2 status batch exceeds %d objects", MaxV2StatusEvidenceObjects)
+	if len(batch.Objects) > MaxStatusEvidenceBatchObjectsV2 {
+		return nil, v2Errorf(V2ErrMalformed, "v2 status batch exceeds %d objects", MaxStatusEvidenceBatchObjectsV2)
 	}
 	var buf bytes.Buffer
 	buf.WriteByte('[')
@@ -57,8 +57,8 @@ func EncodeV2StatusEvidenceBatch(batch V2StatusEvidenceBatch) ([]byte, error) {
 		buf.WriteByte('}')
 	}
 	buf.WriteByte(']')
-	if buf.Len() > MaxV2StatusEvidenceBytes {
-		return nil, v2Errorf(V2ErrMalformed, "v2 status batch exceeds %d bytes", MaxV2StatusEvidenceBytes)
+	if buf.Len() > MaxStatusEvidenceBatchBytesV2 {
+		return nil, v2Errorf(V2ErrMalformed, "v2 status batch exceeds %d bytes", MaxStatusEvidenceBatchBytesV2)
 	}
 	return buf.Bytes(), nil
 }
@@ -68,7 +68,7 @@ func EncodeV2StatusEvidenceBatch(batch V2StatusEvidenceBatch) ([]byte, error) {
 // not authenticate the objects.
 func DecodeV2StatusEvidenceBatch(data []byte) (_ V2StatusEvidenceBatch, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
-	if err := checkV2WireSize(data, "status evidence batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2", MaxV2StatusEvidenceBytes); err != nil {
+	if err := checkV2WireSize(data, "status evidence batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2", MaxStatusEvidenceBatchBytesV2); err != nil {
 		return V2StatusEvidenceBatch{}, err
 	}
 	if err := checkWireJSONV2(data); err != nil {
@@ -78,8 +78,8 @@ func DecodeV2StatusEvidenceBatch(data []byte) (_ V2StatusEvidenceBatch, err erro
 	if err := json.Unmarshal(data, &entries); err != nil || entries == nil {
 		return V2StatusEvidenceBatch{}, fmt.Errorf("wire v2: status evidence batch must be a JSON array of objects")
 	}
-	if len(entries) > MaxV2StatusEvidenceObjects {
-		return V2StatusEvidenceBatch{}, fmt.Errorf("wire v2: status evidence batch exceeds %d objects", MaxV2StatusEvidenceObjects)
+	if len(entries) > MaxStatusEvidenceBatchObjectsV2 {
+		return V2StatusEvidenceBatch{}, fmt.Errorf("wire v2: status evidence batch exceeds %d objects", MaxStatusEvidenceBatchObjectsV2)
 	}
 	batch := V2StatusEvidenceBatch{Objects: make([]V2StatusEvidenceObject, 0, len(entries))}
 	for _, entry := range entries {

@@ -14,7 +14,7 @@ import (
 // LimitConstruction is an exact, language-neutral recipe for the vector
 // bytes, so megabyte-scale inputs are not embedded in the corpus.
 type LimitConstruction struct {
-	// Method is "inline", "pad" or "repeat_items".
+	// Method is "inline", "pad", "repeat_items" or "repeat_item".
 	Method string `json:"method"`
 	// inline: the complete object.
 	WireB64 string `json:"wire_b64,omitempty"`
@@ -31,6 +31,8 @@ type LimitConstruction struct {
 	ItemSuffix      string `json:"item_suffix,omitempty"`
 	Count           int    `json:"count,omitempty"`
 	SuffixB64       string `json:"suffix_b64,omitempty"`
+	// repeat_item: prefix || item || "," || ... || item (count times) || suffix.
+	ItemB64 string `json:"item_b64,omitempty"`
 }
 
 type limitVector struct {
@@ -88,6 +90,29 @@ func BuildLimitBytes(c LimitConstruction) ([]byte, error) {
 		}
 		out.Write(suffix)
 		return out.Bytes(), nil
+	case "repeat_item":
+		prefix, err := b64d(c.PrefixB64)
+		if err != nil {
+			return nil, err
+		}
+		item, err := b64d(c.ItemB64)
+		if err != nil {
+			return nil, err
+		}
+		suffix, err := b64d(c.SuffixB64)
+		if err != nil {
+			return nil, err
+		}
+		var out bytes.Buffer
+		out.Write(prefix)
+		for i := 0; i < c.Count; i++ {
+			if i > 0 {
+				out.WriteByte(',')
+			}
+			out.Write(item)
+		}
+		out.Write(suffix)
+		return out.Bytes(), nil
 	}
 	return nil, fmt.Errorf("unknown construction method %q", c.Method)
 }
@@ -110,6 +135,8 @@ func (g *gen) limitsFile() any {
 			"MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2": ratify.MaxVerificationReceiptBodyBytesV2,
 			"MAX_TRANSACTION_RECEIPT_BYTES_V2":       ratify.MaxTransactionReceiptBytesV2,
 			"MAX_TIMESTAMP_SECONDS_V2":               int(ratify.V2MaxTimestampSeconds),
+			"MAX_STATUS_EVIDENCE_BATCH_BYTES_V2":     ratify.MaxStatusEvidenceBatchBytesV2,
+			"MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2":   ratify.MaxStatusEvidenceBatchObjectsV2,
 		},
 		Procedure: map[string]string{
 			"delegation_certificate":    "strict v2 certificate decode",
@@ -121,6 +148,7 @@ func (g *gen) limitsFile() any {
 			"verification_receipt":      "strict canonical v2 verification receipt decode",
 			"verification_receipt_body": "strict canonical v2 prepared receipt body decode",
 			"transaction_receipt":       "strict canonical v2 transaction receipt decode (party signatures and embedded bundles verified)",
+			"status_evidence_batch":     "strict v2 status evidence batch decode (SPEC-v2 §6.5): a JSON array of at most 64 entries of exactly {object, object_type_code 3|5}; objects are not authenticated by this decoder",
 		},
 	}
 	add := func(name, kind, limit string, value int, c LimitConstruction, expected, gate, note string) {
@@ -202,6 +230,20 @@ func (g *gen) limitsFile() any {
 	bytesPair("verification_receipt_body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", ratify.MaxVerificationReceiptBodyBytesV2, must(ratify.VerificationReceiptV2Body(body)), "reject", canonicalOnly)
 
 	bytesPair("transaction_receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", ratify.MaxTransactionReceiptBytesV2, g.txFixture().wire, "reject", canonicalOnly)
+
+	// Status evidence batch (SPEC-v2 §6.5): byte limit by padding the
+	// canonical one-entry batch before its closing bracket, and the entry
+	// count by repeating one canonical entry.
+	entry := []byte(`{"object":` + string(listWire) + `,"object_type_code":3}`)
+	bytesPair("status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2", ratify.MaxStatusEvidenceBatchBytesV2, append(append([]byte("["), entry...), ']'), "accept", "")
+	repeatEntry := func(count int) LimitConstruction {
+		return LimitConstruction{Method: "repeat_item", PrefixB64: b64([]byte("[")), ItemB64: b64(entry), Count: count, SuffixB64: b64([]byte("]"))}
+	}
+	add("objects_at_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2), "accept", "pass", "64 copies of one signed list entry")
+	add("objects_over_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2+1), "reject", "pass", "")
+	if !bytes.Equal(must(ratify.EncodeV2StatusEvidenceBatch(ratify.V2StatusEvidenceBatch{Objects: []ratify.V2StatusEvidenceObject{{ObjectType: 3, Wire: listWire}}})), append(append([]byte("["), entry...), ']')) {
+		panic("status evidence batch entry is not the canonical encoding")
+	}
 
 	// Timestamp domain (SPEC-v2 §2.5): a signed object whose timestamp is
 	// exactly 9999-12-31T23:59:59Z decodes; one second later is malformed at

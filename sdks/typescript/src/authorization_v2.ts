@@ -36,7 +36,7 @@ import { bundleHashV2, constraintCanonicalJSONV2, equalHybridPublicKeys, verifyP
 import { SCOPE_IDENTITY_DELEGATE_V2, intersectScopesV2, validateRequiredScopeV2, validateScopesV2 } from "./scope_v2.js";
 import type { V2CertificateStatusCheck, V2StatusAssessment } from "./status_evaluation_v2.js";
 import type { HybridPublicKey } from "./types.js";
-import { loadV2TimeZone } from "./tzdb_v2.js";
+import { loadV2TimeZone, type V2TimeZone } from "./tzdb_v2.js";
 import type { StatusEvidenceEntryV2 } from "./verification_receipt_v2.js";
 import { matchesExpectedChallengeV2, type ExpectedChallengeStateV2, type ExpectedChallengeV2 } from "./verify_v2_preflight.js";
 
@@ -169,7 +169,7 @@ export function localTimeWindowValidUntilV2(bundle: ProofBundleV2, tzdbVersion: 
       const zone = loadV2TimeZone(tzdbVersion, c.tz ?? "");
       const start = parseHHMMV2(c.start ?? "");
       const end = parseHHMMV2(c.end ?? "");
-      const { offset, end: zoneEnd } = zone.lookup(now);
+      const { offset } = zone.lookup(now);
       const local = now + offset;
       const localDay = Math.floor(local / 86400);
       const minute = Math.floor((local - localDay * 86400) / 60);
@@ -180,13 +180,41 @@ export function localTimeWindowValidUntilV2(bundle: ProofBundleV2, tzdbVersion: 
       // Local midnight of the evaluation day plus (end + 1) minutes, as UTC
       // wall time, minus the current offset (Go time.Date normalization).
       let until = (localDay + dayOffset) * 86400 + (end + 1) * 60 - offset;
-      if (zoneEnd !== null && zoneEnd < until) until = zoneEnd;
+      const change = nextUTCOffsetChangeV2(zone, now);
+      if (change !== null && change < until) until = change;
       if (!(until > now)) throw new Error("time window has no valid terminal horizon");
       const contribution = Math.min(until, V2_MAX_TIMESTAMP_SECONDS);
       if (horizon === 0 || contribution < horizon) horizon = contribution;
     }
   }
   return horizon;
+}
+
+/**
+ * The first instant after now at which the UTC offset of zone differs from its
+ * offset at now (SPEC-v2 §5.2; Go nextUTCOffsetChangeV2), or null when the
+ * offset never changes again within the timestamp domain. A period bound that
+ * keeps the offset (an abbreviation or DST-flag change, or the start of a
+ * year plus 365 days reported past a year's last footer transition) is not
+ * an offset change, so the search steps past it.
+ */
+function nextUTCOffsetChangeV2(zone: V2TimeZone, now: number): number | null {
+  const { offset } = zone.lookup(now);
+  let candidate = now;
+  while (candidate <= V2_MAX_TIMESTAMP_SECONDS) {
+    let end = zone.lookup(candidate).end;
+    if (end === null) return null;
+    if (!(end > candidate)) {
+      // The leap-year bound can equal the instant it was computed from;
+      // resume at the next UTC year, which has no footer transition before it.
+      const next = new Date(0);
+      next.setUTCFullYear(new Date(candidate * 1000).getUTCFullYear() + 1, 0, 1);
+      end = next.getTime() / 1000;
+    }
+    if (zone.lookup(end).offset !== offset) return end;
+    candidate = end;
+  }
+  return null;
 }
 
 function constraintStatusOf(err: unknown): string {

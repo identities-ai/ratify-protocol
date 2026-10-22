@@ -6,6 +6,12 @@ That is stronger deployment evidence than a loopback-only profile, but it is
 still an independent interoperability draft rather than an NVIDIA-approved
 production profile.
 
+On Protocol v2 the receiver already uses the v2 decision path (issuance helper,
+atomic claim, signed status, verification receipts with a log and checkpoint
+acknowledgement, release), but every Part B store is the SDK's in-memory
+reference store. Those are development only, and the gaps below are what
+replaces them.
+
 ## Definition of done
 
 Call this a production profile only when workload identity, durable receiver
@@ -15,7 +21,7 @@ validated under failure.
 
 ## Ordered work
 
-### P0 — stable MCP proof carrier
+### P0: stable MCP proof carrier
 
 The reference carries proof in Ratify-owned MCP metadata. Before production:
 
@@ -30,7 +36,7 @@ The reference carries proof in Ratify-owned MCP metadata. Before production:
 **Exit criterion:** maintainer-reviewed carrier contract and cross-version
 fidelity tests through the real gateway.
 
-### P0 — workload and sandbox identity binding
+### P0: workload and sandbox identity binding
 
 - Replace development credentials with supported workload identity or mTLS.
 - Bind authenticated sandbox/workload identity to the receiver-pinned Ratify
@@ -43,10 +49,14 @@ fidelity tests through the real gateway.
 **Exit criterion:** neither network admission nor a valid proof alone is enough
 to execute from the wrong workload.
 
-### P0 — durable receiver and exactly-once effects
+### P0: durable receiver and exactly-once effects
 
-- Replace process-local challenge, pending-operation, receipt-chain, and
+- Replace the in-memory v2 reference stores (claim store, challenge issuance,
+  receipt log, security journal) and the process-local pending-operation and
   idempotency state with atomic durable storage.
+- Replace the in-process checkpoint with an independent checkpoint or witness
+  in a separate failure domain, so tail truncation of the receipt log is
+  detectable.
 - Prove multi-instance single consumption, restart-safe replay prevention,
   bounded per-workload capacity, and receipt-chain continuity.
 - Return a recorded result after response loss rather than issuing a second
@@ -55,17 +65,19 @@ to execute from the wrong workload.
 **Exit criterion:** gateway, receiver, and storage failover tests yield exactly
 one refund and one durable decision/result record.
 
-### P1 — production trust and revocation
+### P1: production trust and revocation
 
-- Specify root onboarding, agent allowlisting, rotation continuity, revocation
-  distribution, cache freshness, configuration versions, and outage policy.
+- Specify root onboarding, agent allowlisting, rotation continuity, status-key
+  distribution and epochs, signed-status freshness, configuration versions, and
+  outage policy. Status is per issuer in v2, so every subdelegating issuer
+  needs a configured status key.
 - Exercise stale and unavailable revocation/trust sources.
 - Keep trust configuration receiver-controlled.
 
 **Exit criterion:** rotation/revocation/freshness tests pass across receiver
 instances without presenter-selected roots.
 
-### P1 — OpenShell deployment operations
+### P1: OpenShell deployment operations
 
 - Move from a local disposable profile to the intended NVIDIA deployment
   topology with TLS, secrets, image provenance, resource limits, rate limits,
@@ -76,7 +88,7 @@ instances without presenter-selected roots.
 **Exit criterion:** documented support matrix, repeatable clean deployment, and
 failure-injection evidence for gateway restart, policy reload, and saturation.
 
-### P1 — mappings, failures, receipts, and observability
+### P1: mappings, failures, receipts, and observability
 
 - Publish canonical mappings for every protected capability.
 - Standardize machine-readable transport, verification, policy, dependency,
@@ -89,7 +101,7 @@ failure-injection evidence for gateway restart, policy reload, and saturation.
 **Exit criterion:** independent implementations agree on inputs/statuses and
 receipts remain verifiable across rotation and retention windows.
 
-### P2 — independent conformance
+### P2: independent conformance
 
 - Publish reusable client/server fixtures for fidelity, replay, duplicate
   metadata, size bounds, concurrency, failover, version negotiation, and

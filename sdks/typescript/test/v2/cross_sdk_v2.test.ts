@@ -31,16 +31,9 @@ for (const name of files) {
 }
 
 for (const name of files) {
-  test(`cross-sdk: ${name} scenarios replay`, async (t) => {
+  test(`cross-sdk: ${name} scenarios replay`, async () => {
     const f = JSON.parse(readFileSync(join(dir, name), "utf8"));
-    if (!hasCrossScenarios(f)) {
-      // Mirrors Go TestV2CrossSDKFixtures: a fixture that predates the
-      // scenarios still verifies its objects, but SPEC-v2 §8.1 is not met
-      // for its SDK until it regenerates the fixture.
-      assert.ok(f.sdk !== "go" && f.sdk !== "typescript", `${name} has no verifier and release scenarios`);
-      t.skip(`${name} predates the SPEC-v2 §8.1 verifier and release scenarios`);
-      return;
-    }
+    assert.ok(hasCrossScenarios(f), `${name} has no verifier and release scenarios (SPEC-v2 §8.1)`);
     assert.equal(await verifyCrossScenarios(f), CROSS_SCENARIO_NAMES.length);
   });
 }

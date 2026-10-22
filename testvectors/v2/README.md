@@ -173,10 +173,8 @@ For every file in `cross-sdk/`, a conforming SDK MUST:
    certificate with every registered constraint type and an extension type, or
    a verification receipt with `constraint_evaluators` is missing.
 5. Never compare ML-DSA-65 signature bytes with anything but the wire object.
-6. Replay every scenario as specified below and fail on any difference. A
-   fixture without `scenario_configuration` and `scenarios` predates this
-   requirement: its objects are still verified, but SPEC-v2 §8.1 is not met
-   for the producing SDK until it regenerates its fixture.
+6. Replay every scenario as specified below and fail on any difference. Fail
+   if a fixture has no `scenario_configuration` or no `scenarios`.
 
 ### Verifier and release scenarios
 
@@ -301,8 +299,8 @@ vectors that closed it, or what remains open.
 | Composed transaction verification | §5.7 | `transaction-verification.json`, `object-negatives.json` | |
 | Archival results | §6.10 | `archival.json`, `object-negatives.json` (proof bundle) | Closed: per-object shared vectors, `archival.json` (19 cases, every object kind) |
 | External signer | §3.2 | `external-signer.json`, `objects.json` (`tr`, `mu`), `hedged-signatures.json` | Closed: key-binding and invalid-component shared scenarios, `external-signer.json` (17 cases) |
-| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, `typescript.json`, `python.json`, `rust.json`, and `c.json`, each verified by all five SDKs | Closed for the schema and the Go producer: verifier and release scenarios (4 per fixture, see cross-sdk/). Open: `typescript.json`, `python.json`, `rust.json`, and `c.json` predate the scenarios until each SDK regenerates its fixture, and each SDK must replay every file's scenarios |
-| Error classes | §2.7 | every file; `digest-functions.json` (10 cases) | Closed: a shared vector for every one of the 49 classes, previously missing for `unsupported_object_type` (`digest-functions.json`), `claim_not_found` and `evaluation_cancelled` (`lifecycle-scenarios.json`), and `transaction_party_mismatch` (`object-negatives.json`); `TestV2CorpusAssertsEveryErrorClass` fails if a class loses its last vector |
+| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, `typescript.json`, `python.json`, `rust.json`, and `c.json`, each verified by all five SDKs | Closed: every fixture carries the 4 verifier and release scenarios (see cross-sdk/), and every SDK replays every fixture's scenarios |
+| Error classes | §2.7 | every file; `digest-functions.json` (16 cases) | Closed: a shared vector for every one of the 49 classes, previously missing for `unsupported_object_type` (`digest-functions.json`), `claim_not_found` and `evaluation_cancelled` (`lifecycle-scenarios.json`), and `transaction_party_mismatch` (`object-negatives.json`); `TestV2CorpusAssertsEveryErrorClass` fails if a class loses its last vector |
 
 Error classes are the closed list of SPEC-v2 §2.7, declared in `errors_v2.go` (`V2ErrorClass`). Precedence for a
 single object is: strict decode and field format (`malformed`), then key-ID

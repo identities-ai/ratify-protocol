@@ -81,10 +81,7 @@ var v2CrossScenarioNames = []string{"allow_released", "deny_revoked_released", "
 func v2CheckCrossScenarios(t *testing.T, fx v2Fixture, f v2CrossSDKFile) {
 	t.Helper()
 	if f.ScenarioConfiguration == nil || len(f.Scenarios) == 0 {
-		if f.SDK == "go" {
-			t.Fatal("go.json has no verifier and release scenarios")
-		}
-		t.Skipf("%s.json predates the SPEC-v2 §8.1 verifier and release scenarios; SPEC-v2 §8.1 is not met for %s until that SDK regenerates its fixture", f.SDK, f.SDK)
+		t.Fatalf("%s.json has no verifier and release scenarios (SPEC-v2 §8.1)", f.SDK)
 	}
 	cfg := *f.ScenarioConfiguration
 	if cfg != (v2CrossScenarioConfig{VerifierNamespace: "verify-test", ReplayEpoch: 3, VerifierKey: "verifier", ReceiptLogID: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeee01", LeaseSeconds: 30,

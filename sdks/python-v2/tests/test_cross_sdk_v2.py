@@ -34,10 +34,8 @@ def test_cross_sdk_fixture_verifies(path):
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
 def test_cross_sdk_scenarios_replay(path):
     f = json.loads(path.read_bytes())
-    if f.get("scenario_configuration") is None or not f.get("scenarios"):
-        assert path.stem not in ("go", "python"), f"{path.name} has no verifier and release scenarios"
-        pytest.skip(f"{path.name} predates the SPEC-v2 §8.1 verifier and release scenarios; SPEC-v2 §8.1 is not met "
-                    f"for {path.stem} until that SDK regenerates its fixture")
+    assert f.get("scenario_configuration") is not None and f.get("scenarios"), \
+        f"{path.name} has no verifier and release scenarios (SPEC-v2 §8.1)"
     assert {sc["name"] for sc in f["scenarios"]} >= set(SCENARIO_NAMES)
     assert verify_fixture(path.read_bytes(), path.stem)["scenarios"] == len(f["scenarios"])
 

@@ -616,9 +616,8 @@ func localTimeWindowValidUntilV2(bundle *ProofBundleV2, tzdbVersion string, now 
 			}
 			year, month, day := local.Date()
 			until := time.Date(year, month, day+dayOffset, 0, end+1, 0, 0, time.UTC).Add(-time.Duration(offset) * time.Second)
-			_, zoneEnd := local.ZoneBounds()
-			if !zoneEnd.IsZero() && zoneEnd.Before(until) {
-				until = zoneEnd
+			if change, ok := nextUTCOffsetChangeV2(loc, now); ok && change.Before(until) {
+				until = change
 			}
 			if !until.After(now) {
 				return 0, fmt.Errorf("time window has no valid terminal horizon")
@@ -632,6 +631,43 @@ func localTimeWindowValidUntilV2(bundle *ProofBundleV2, tzdbVersion string, now 
 		}
 	}
 	return horizon, nil
+}
+
+// nextUTCOffsetChangeV2 returns the first instant after now at which the UTC
+// offset of loc differs from its offset at now (SPEC-v2 §5.2). Explicit tzdata
+// transitions come from the zone's transition table; after the last of them
+// the zone's POSIX TZ footer rule recurs every year. A transition that keeps
+// the offset (an abbreviation or DST-flag change) is not an offset change.
+// ok is false when the offset never changes again within the timestamp
+// domain.
+//
+// Location.ZoneBounds is exact for table transitions and for footer DST
+// transitions, but past a year's last footer transition it reports the start
+// of the year plus 365 days, which is not a transition: it can fall on
+// December 31 in a leap year and, for a nonzero offset, before local
+// midnight in any year. Such a bound keeps the offset, so the loop steps past
+// it to the next candidate instead of ending the period there.
+func nextUTCOffsetChangeV2(loc *time.Location, now time.Time) (time.Time, bool) {
+	_, offset := now.In(loc).Zone()
+	limit := time.Unix(V2MaxTimestampSeconds, 0)
+	candidate := now
+	for !candidate.After(limit) {
+		_, end := candidate.In(loc).ZoneBounds()
+		if end.IsZero() {
+			return time.Time{}, false
+		}
+		if !end.After(candidate) {
+			// The leap-year bound can equal the instant it was computed
+			// from; resume at the next UTC year, which has no footer
+			// transition before it.
+			end = time.Date(candidate.UTC().Year()+1, time.January, 1, 0, 0, 0, 0, time.UTC)
+		}
+		if _, next := end.In(loc).Zone(); next != offset {
+			return end, true
+		}
+		candidate = end
+	}
+	return time.Time{}, false
 }
 
 // v2InterruptedAssessment maps failures discovered after challenge claim to

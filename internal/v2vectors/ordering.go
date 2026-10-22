@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"time"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
@@ -898,6 +899,51 @@ func (g *gen) terminalScenarios() []scenario {
 			s.out.StatusEvidence = []EvidenceJSON{g.evidence(st["root_domain_end"]), g.evidence(st["intermediate_domain_end"])}
 			s.out.AllowValidUntil = ratify.V2MaxTimestampSeconds
 		}))
+	// time_window period ends after a zone's last explicit tzdata transition
+	// (SPEC-v2 §5.2). The pinned 2025c archive is slim: for these zones every
+	// change in the years used here comes from the POSIX TZ footer, not from
+	// an explicit transition. The cap is the next UTC offset
+	// change, never a year boundary. Each case evaluates at now with status
+	// fresh for one hour, so the expected horizon is the window's own
+	// contribution. Expected instants are written as UTC wall-clock times.
+	utc := func(year int, month time.Month, day, hour, minute int) int64 {
+		return time.Date(year, month, day, hour, minute, 0, 0, time.UTC).Unix()
+	}
+	zoneCase := func(name, desc, zone, start, end string, now, horizon int64) {
+		certs := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintTimeWindow, Start: start, End: end, TZ: zone}},
+			leafIssued: now - 3600, leafExpires: now + 86400, rootIssued: now - 3600, rootExpires: now + 86400})
+		rootList := g.zoneStatusFixture("status_root", g.k("root").ID, now)
+		intermediateList := g.zoneStatusFixture("status_intermediate", g.k("intermediate").ID, now)
+		add(g.terminal(name, desc, certs, allow(), func(s *scenario) {
+			session := g.fixtureSessionContext(agent)
+			_, s.bundle, _ = g.bundle(bundleSpec{agent: agent, certs: certs, session: session, challengeAt: now - 10})
+			s.expected.IssuedAt, s.expected.ExpiresAt = now-10, now+290
+			s.now = now
+			s.evidence = map[string]statusProviderJSON{
+				rootID: evidenceBatch(g.object(rootList)), intermediateID: evidenceBatch(g.object(intermediateList)),
+			}
+			s.out.StatusEvidence = []EvidenceJSON{g.evidence(rootList), g.evidence(intermediateList)}
+			s.out.AllowValidUntil = horizon
+		}))
+	}
+	zoneCase("time_window_leap_year_after_last_rule_transition",
+		"2028 is a leap year past America/New_York's last explicit transition; at 18:30 EST on 2028-12-30 the window 00:00-19:14 ends at 19:15 EST (2028-12-31T00:15:00Z). The start of 2028 plus 365 days (2028-12-31T00:00:00Z) is not an offset change and does not cap it",
+		"America/New_York", "00:00", "19:14", utc(2028, time.December, 30, 23, 30), utc(2028, time.December, 31, 0, 15))
+	zoneCase("time_window_year_end_nonzero_offset",
+		"in 2027, past the last explicit transition, at 18:30 EST on 2027-12-31 the window 00:00-19:14 ends at 19:15 EST (2028-01-01T00:15:00Z); the UTC year boundary is not an offset change",
+		"America/New_York", "00:00", "19:14", utc(2027, time.December, 31, 23, 30), utc(2028, time.January, 1, 0, 15))
+	zoneCase("time_window_leap_year_southern_dst",
+		"Australia/Sydney observes DST across the 2028 year end; at 10:30 AEDT on 2028-12-31 the window 00:00-11:14 ends at 11:15 AEDT (2028-12-31T00:15:00Z), not at 2028-12-31T00:00:00Z",
+		"Australia/Sydney", "00:00", "11:14", utc(2028, time.December, 30, 23, 30), utc(2028, time.December, 31, 0, 15))
+	zoneCase("time_window_footer_spring_forward_2040",
+		"in leap year 2040 the footer rule moves America/New_York from EST to EDT at 2040-03-11T07:00:00Z; at 01:30 EST the window 00:00-02:59 would end at 03:00 EST (08:00:00Z) and is capped at the offset change",
+		"America/New_York", "00:00", "02:59", utc(2040, time.March, 11, 6, 30), utc(2040, time.March, 11, 7, 0))
+	zoneCase("time_window_footer_fall_back_2040",
+		"the footer rule moves America/New_York from EDT to EST at 2040-11-04T06:00:00Z; at 01:30 EDT the window 00:00-02:44 would end at 02:45 EDT (06:45:00Z) and is capped at the offset change",
+		"America/New_York", "00:00", "02:44", utc(2040, time.November, 4, 5, 30), utc(2040, time.November, 4, 6, 0))
+	zoneCase("time_window_no_further_offset_change",
+		"Asia/Tokyo has no DST footer rule and no transition after 1951; at 23:30 JST on 2040-12-31 the window 00:00-23:44 ends at 23:45 JST (2040-12-31T14:45:00Z) with no offset cap",
+		"Asia/Tokyo", "00:00", "23:44", utc(2040, time.December, 31, 14, 30), utc(2040, time.December, 31, 14, 45))
 	geo := ratify.ConstraintV2{Type: ratify.ConstraintGeoCircle, Params: map[string]any{"lat_microdegrees": 0, "lon_microdegrees": 0, "radius_mm": 1000}}
 	add(g.terminal("geo_circle_unregistered_in_v2", "geo_circle is not in the v2 registry and fails closed as constraint_unknown", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{geo}}),
 		constraintOut("constraint_unknown", 0), nil))

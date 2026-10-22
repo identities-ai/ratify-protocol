@@ -8,6 +8,7 @@ import { signAsync as signEd25519Async } from "@noble/ed25519";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 import { v2MLDSAContext, v2SigningMessage, type HybridKeyPairV2 } from "../../src/crypto_v2.js";
+import { v2ErrorClassOf } from "../../src/errors_v2.js";
 import { base64Encode } from "../../src/json_v2.js";
 import { decodeKeyRotationStatementV2, encodeKeyRotationStatementV2, signKeyRotationStatementV2WithSigners } from "../../src/key_rotation_v2.js";
 import {
@@ -246,3 +247,90 @@ test("external signer: every typed signer reproduces objects.json through an ext
   // The old signer must hold old_key and the new signer new_key.
   await refused(() => signKeyRotationStatementV2WithSigners(decodeKeyRotationStatementV2(wire("key_rotation_genesis")), mu("rotation_second"), mu("rotation_genesis")));
 });
+
+// testvectors/v2/external-signer.json: the typed signing functions against a
+// scripted provider that answers with fixed bytes and records every request
+// (Go TestV2ConformanceExternalSigner).
+const external = load("external-signer.json");
+
+/** Answers every request with fixed bytes and records it (Go v2ScriptedSigner). */
+class VectorSigner implements SignerV2 {
+  requests: SignRequestV2[] = [];
+  constructor(
+    private readonly pub: HybridPublicKey,
+    private readonly mode: SignerModeV2,
+    private readonly response: string,
+    private readonly sig: HybridSignature,
+    private readonly cancel: () => void,
+  ) {}
+  publicKeyV2(): HybridPublicKey {
+    return this.pub;
+  }
+  modeV2(): SignerModeV2 {
+    return this.mode;
+  }
+  async signV2(req: SignRequestV2): Promise<HybridSignature> {
+    this.requests.push(req);
+    if (this.response === "error") throw new Error("scripted provider failure");
+    if (this.response === "cancel") this.cancel();
+    return this.sig;
+  }
+}
+
+test("external-signer.json: corpus shape", () => {
+  assert.equal(external.cases.length, 17);
+});
+
+for (const c of external.cases as Any[]) {
+  test(`external-signer.json: ${c.name}`, async () => {
+    const keys = await corpusKeyPairs();
+    const pub = (name: string) => keys.get(name)!.publicKey;
+    const controller = new AbortController();
+    const modes: Record<string, SignerModeV2> = { direct: SIGNER_MODE_DIRECT_V2, external_mu: SIGNER_MODE_EXTERNAL_MU_V2 };
+    const mode = modes[c.provider.mode];
+    assert.ok(mode, `unknown mode ${c.provider.mode}`);
+    const sig: HybridSignature = c.provider.signature
+      ? { ed25519: unb64(c.provider.signature.ed25519), ml_dsa_65: unb64(c.provider.signature.ml_dsa_65) }
+      : { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) };
+    const signer = new VectorSigner(pub(c.provider.public_key), mode, c.provider.response, sig, () => controller.abort());
+    if (c.caller_cancelled) controller.abort();
+    const opts = { signal: controller.signal };
+    const wire = unb64(c.object_b64);
+    let signed: Uint8Array | null = null;
+    let cls = "";
+    try {
+      switch (c.kind) {
+        case "delegation_certificate":
+          signed = encodeDelegationCertV2(await signDelegationCertV2WithSigner(decodeDelegationCertV2(wire), signer, opts));
+          break;
+        case "revocation_list":
+          signed = encodeRevocationListV2(await signRevocationListV2WithSigner(decodeRevocationListV2(wire), c.binding.issuer_id, pub(c.binding.status_key), signer, opts));
+          break;
+        case "proof_bundle":
+          signed = encodeProofBundleV2(await signProofBundleV2WithSigner(decodeProofBundleV2(wire), signer, opts));
+          break;
+        default:
+          throw new Error(`unknown kind ${c.kind}`);
+      }
+    } catch (err) {
+      cls = v2ErrorClassOf(err);
+    }
+    const e = c.expected;
+    assert.equal(signer.requests.length, e.provider_calls, "provider calls");
+    if (e.request) {
+      const r = signer.requests[0]!;
+      assert.equal(r.mode === SIGNER_MODE_DIRECT_V2 ? "direct" : "external_mu", e.request.mode);
+      assert.ok(eqBytes(r.message, unb64(e.request.message_b64)), "M");
+      assert.equal(r.mlDsaContext === null ? null : new TextDecoder().decode(r.mlDsaContext), e.request.mldsa_context, "ML-DSA context");
+      assert.equal(r.mlDsaMu === null ? null : base64Encode(r.mlDsaMu), e.request.mldsa_mu_b64, "mu");
+      assert.equal(r.keyId, e.request.key_id_v2);
+    }
+    if (e.result === "signed") {
+      assert.equal(cls, "");
+      assert.ok(signed && base64Encode(signed) === e.signed_wire_b64, "signed object");
+      return;
+    }
+    assert.equal(signed, null, "no object on error");
+    assert.equal(cls, e.error_class);
+  });
+}

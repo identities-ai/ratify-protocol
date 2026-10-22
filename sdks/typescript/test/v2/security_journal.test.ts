@@ -30,6 +30,7 @@ import {
   sameSecurityJournalContentV2,
   securityJournalSnapshotDigestV2,
 } from "../../src/security_journal_snapshot_v2.js";
+import { validateSecurityJournalTransitionV2 } from "../../src/security_journal_v2.js";
 import { JournalStoreTestOnly } from "../../src/v2reference/journal.js";
 import { decodeRevocationPushV2 } from "../../src/protocol_v2_wire.js";
 import { type Any, corpusKeyPairs, eqBytes, load, pubOf, toHex, unb64 } from "./helpers.js";
@@ -105,11 +106,32 @@ test("security-journal.json: alpha version 1 migration", () => {
   assert.throws(() => migrateSecurityJournalV2(tampered), "a tampered legacy record is refused");
 });
 
+test("security-journal.json: corpus shape", () => {
+  assert.equal(f.scenarios.length, 2);
+  assert.equal(f.import_negatives.length, 20);
+  assert.equal((f.import_negatives as Any[]).filter((n) => n.name.startsWith("invariant_")).length, 9);
+  assert.equal(f.transition_negatives.length, 6);
+});
+
 for (const n of f.import_negatives as Any[]) {
   test(`security-journal.json: import negative ${n.name}`, () => {
     let cls = "";
     try {
       importSecurityJournalSnapshotV2(unb64(n.snapshot_b64), n.head);
+    } catch (err) {
+      cls = v2ErrorClassOf(err);
+    }
+    assert.equal(cls, n.expect_error_class);
+  });
+}
+
+for (const n of f.transition_negatives as Any[]) {
+  test(`security-journal.json: transition negative ${n.name}`, () => {
+    const current = importSecurityJournalSnapshotV2(unb64(n.current_snapshot_b64), n.current_head);
+    const next = importSecurityJournalSnapshotV2(unb64(n.next_snapshot_b64), n.next_head);
+    let cls = "";
+    try {
+      validateSecurityJournalTransitionV2(current, next);
     } catch (err) {
       cls = v2ErrorClassOf(err);
     }

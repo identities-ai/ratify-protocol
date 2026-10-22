@@ -623,6 +623,46 @@ fn finalization_binds_the_completed_local_result() {
     assert!(finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, terminal, changed).is_err());
 }
 
+/// Go FinalizeClaimProofBundleV2 classifies a store's rate exhaustion as
+/// claim_store_unavailable while errors.Is still finds the sentinel. Rust
+/// keeps the matchable variant and reports the same class, so a caller sees
+/// one SPEC-v2 §2.7 class for this refusal in every SDK.
+#[test]
+fn finalization_rate_exhaustion_keeps_the_variant_and_the_reference_class() {
+    struct Exhausted(Arc<Store>);
+    impl V2AuthoritativeClock for Exhausted {
+        fn authoritative_time_v2(&self, ctx: &V2Context) -> Result<i64, V2StoreError> {
+            self.0.authoritative_time_v2(ctx)
+        }
+    }
+    impl ClaimStoreV2 for Exhausted {
+        fn claim_v2(&self, ctx: &V2Context, claim: V2ChallengeClaim) -> Result<V2ClaimResult, V2StoreError> {
+            self.0.claim_v2(ctx, claim)
+        }
+        fn finalize_v2_claim(&self, _: &V2Context, _: &str, _: &[u8], _: &[u8], _: &[u8], _: i64) -> Result<bool, V2StoreError> {
+            Err(V2StoreError::RateLimitExceeded)
+        }
+        fn record_v2_evaluation_progress(&self, ctx: &V2Context, id: &str, o: &[u8], p: V2EvaluationProgress) -> Result<(), V2StoreError> {
+            self.0.record_v2_evaluation_progress(ctx, id, o, p)
+        }
+        fn load_v2_interrupted_claim(&self, ctx: &V2Context, id: &str) -> Result<V2InterruptedClaim, V2StoreError> {
+            self.0.load_v2_interrupted_claim(ctx, id)
+        }
+        fn recover_interrupted_v2_claim(&self, ctx: &V2Context, id: &str, t: &[u8], b: &[u8]) -> Result<bool, V2StoreError> {
+            self.0.recover_interrupted_v2_claim(ctx, id, t, b)
+        }
+    }
+    let store = Exhausted(new_store(1_800_000_000));
+    let (bundle, req, claimed) = preflight_and_claim("allow_context_not_required", &store, 1_800_000_000);
+    let token = claimed.expect("claim").2.expect("token");
+    evaluate_proof_bundle_v2_local_authorization(&bundle, &local_options(&req, &token, false));
+    let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}"#;
+    let body = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
+    let e = finalize_claim_proof_bundle_v2(&V2Context::background(), &store, &token, terminal, body).expect_err("exhausted");
+    assert_eq!(e, V2StoreError::RateLimitExceeded);
+    assert_eq!(e.class(), Some(V2ErrorClass::ClaimStoreUnavailable));
+}
+
 #[test]
 fn local_authorization_is_interrupted_when_sealed_state_differs() {
     let store = new_store(1_800_000_000);

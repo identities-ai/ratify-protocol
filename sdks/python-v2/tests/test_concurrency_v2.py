@@ -11,9 +11,15 @@ from corpus import b64, load
 from v2_harness import BACKGROUND, Counts, build_verify_request, keys
 
 from ratify_protocol_v2.authorization_v2 import V2LocalAuthorizationOptions, evaluate_proof_bundle_v2_local_authorization
-from ratify_protocol_v2.claim_store_v2 import V2_CLAIM_CREATED, V2ChallengeClaim, claim_proof_bundle_v2
+from ratify_protocol_v2.claim_store_v2 import (
+    V2_CLAIM_CREATED,
+    V2ChallengeClaim,
+    claim_proof_bundle_v2,
+    finalize_claim_proof_bundle_v2,
+)
 from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
 from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
+from ratify_protocol_v2.rate_reservation_v2 import V2RateLimitExceededError
 from ratify_protocol_v2.v2reference.store import Store
 from ratify_protocol_v2.verify_v2 import verify_proof_bundle_v2
 from ratify_protocol_v2.verify_v2_preflight import preflight_proof_bundle_v2
@@ -129,6 +135,32 @@ def test_evaluator_capability_is_single_use_under_races():
     reasons = [r[1].reason for r in results]
     assert reasons.count("claim_in_progress") == THREADS - 1
     assert sum(1 for reason in reasons if reason != "claim_in_progress") == 1
+
+
+def test_finalization_rate_exhaustion_is_claim_store_unavailable():
+    # Go FinalizeClaimProofBundleV2 classifies a store's rate exhaustion as
+    # claim_store_unavailable while errors.Is still finds the sentinel; every
+    # SDK reports that one SPEC-v2 §2.7 class for this refusal.
+    class Exhausted(Store):
+        def finalize_v2_claim(self, *args):
+            raise V2RateLimitExceededError()
+
+    store = Exhausted(START, LIFECYCLE["lease_seconds"], LIFECYCLE["log_id"], keys().priv("verifier"))
+    request = _request()
+    bundle = decode_proof_bundle_v2(b64(LIFECYCLE["bundles_b64"][request["bundle"]]))
+    req, _, _ = build_verify_request(request, None, Counts())
+    pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
+                                    req.replay_epoch, START, req.max_challenge_age_seconds, req.future_skew_seconds)
+    _, _, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, START)
+    opts = V2LocalAuthorizationOptions(future_skew_seconds=req.future_skew_seconds, required_scope=req.required_scope,
+                                       context=req.context, tzdb_version=req.tzdb_version, context_policy=req.context_policy,
+                                       claim_token=token, trust_configured=False)
+    assert evaluate_proof_bundle_v2_local_authorization(bundle, opts).reason == "trust_unavailable"
+    terminal = b'{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}'
+    body = b'{"decision":"indeterminate","decision_reason":"trust_unavailable"}'
+    with pytest.raises(V2RateLimitExceededError) as raised:
+        finalize_claim_proof_bundle_v2(BACKGROUND, store, token, terminal, body)
+    assert error_class_of(raised.value) == V2ErrorClass.CLAIM_STORE_UNAVAILABLE
 
 
 def test_racing_identical_verifications_commit_once():

@@ -55,10 +55,16 @@ pub enum V2StoreError {
 
 impl V2StoreError {
     /// Go `V2ErrorClassOf` for this error: `None` means unclassified.
+    ///
+    /// `RateLimitExceeded` reaches a caller only from
+    /// [`finalize_claim_proof_bundle_v2`], which Go classifies as
+    /// `claim_store_unavailable` while the sentinel stays matchable; this
+    /// variant reports that class so the two agree.
     pub fn class(&self) -> Option<V2ErrorClass> {
         match self {
             V2StoreError::Classified(e) => Some(e.class),
             V2StoreError::ClaimProofConflict => Some(V2ErrorClass::ClaimReplay),
+            V2StoreError::RateLimitExceeded => Some(V2ErrorClass::ClaimStoreUnavailable),
             _ => None,
         }
     }
@@ -507,7 +513,9 @@ pub(crate) enum FinalizeFailure {
 /// Classes (Go returns its own refusals unclassified): a helper refusal is
 /// `configuration_invalid`, a cancelled context is `evaluation_cancelled`, an
 /// unclassified store failure is `claim_store_unavailable`; classified store
-/// errors and `RateLimitExceeded` are returned as the store reported them.
+/// errors are returned as the store reported them. `RateLimitExceeded` is
+/// returned as that variant, so callers can still match it, and its
+/// [`V2StoreError::class`] is `claim_store_unavailable`, as in Go.
 pub fn finalize_claim_proof_bundle_v2(
     ctx: &V2Context,
     store: &dyn ClaimStoreV2,

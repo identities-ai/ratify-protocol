@@ -9,8 +9,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { V2RateReservation } from "../../src/audience_v2.js";
-import type { V2ChallengeClaim } from "../../src/claim_store_v2.js";
-import { v2ErrorClassOf, ErrV2ClaimProofConflict, ErrV2RateLimitExceeded } from "../../src/errors_v2.js";
+import { claimProofBundleV2, finalizeClaimProofBundleV2, type V2ChallengeClaim } from "../../src/claim_store_v2.js";
+import { evaluateProofBundleV2LocalAuthorization } from "../../src/authorization_v2.js";
+import { errorIs, v2ErrorClassOf, ErrV2ClaimProofConflict, ErrV2RateLimitExceeded } from "../../src/errors_v2.js";
+import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
+import { preflightProofBundleV2 } from "../../src/verify_v2_preflight.js";
 import { canonicalJSONV2 } from "../../src/json_v2.js";
 import { recoverInterruptedClaimV2, initialV2EvaluationProgress } from "../../src/evaluation_progress_v2.js";
 import { releaseV2Decision } from "../../src/release_v2.js";
@@ -160,4 +163,36 @@ test("issuer collision: claims for bundles sharing a cert_id under two issuers a
   assert.equal(a.disposition, "created");
   assert.equal(b.disposition, "created");
   assert.notDeepEqual(a.ownerToken, b.ownerToken);
+});
+
+// Go FinalizeClaimProofBundleV2 classifies a store's rate exhaustion as
+// claim_store_unavailable while errors.Is still finds the sentinel; every SDK
+// reports that one SPEC-v2 §2.7 class for this refusal.
+test("finalization: a store's rate exhaustion keeps the sentinel and is claim_store_unavailable", async () => {
+  class Exhausted extends StoreTestOnly {
+    override async finalizeV2Claim(): Promise<boolean> {
+      throw ErrV2RateLimitExceeded;
+    }
+  }
+  const keys = await corpusKeyPairs();
+  const store = new Exhausted(START, lifecycle.lease_seconds, lifecycle.log_id, keys.get(lifecycle.verifier_key)!);
+  const request = { ...lifecycle.requests.A, now: START };
+  const wire = unb64(lifecycle.bundles_b64[request.bundle]);
+  const { req } = await buildVerifyRequest(request, wire, zeroCounts());
+  const bundle = decodeProofBundleV2(wire);
+  const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace,
+    req.replayEpoch, START, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
+  const { token } = await claimProofBundleV2(store, bundle, pre, req.verifierNamespace, req.replayEpoch, START);
+  const assessment = await evaluateProofBundleV2LocalAuthorization(bundle, {
+    futureSkewSeconds: req.futureSkewSeconds, requiredScope: req.requiredScope, context: req.context, tzdbVersion: req.tzdbVersion,
+    contextPolicy: req.contextPolicy, claimToken: token, trustConfigured: false,
+  });
+  assert.equal(assessment.reason, "trust_unavailable");
+  const terminal = canonicalJSONV2({ decision: "indeterminate", decision_reason: "trust_unavailable", identity_status: "authorization_unverified" });
+  const body = canonicalJSONV2({ decision: "indeterminate", decision_reason: "trust_unavailable" });
+  await assert.rejects(finalizeClaimProofBundleV2(store, token!, terminal, body), (e) => {
+    assert.ok(errorIs(e, ErrV2RateLimitExceeded), "the sentinel stays matchable");
+    assert.equal(v2ErrorClassOf(e), "claim_store_unavailable");
+    return true;
+  });
 });

@@ -795,6 +795,9 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	}
 	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowPayload, allowPayload); !errors.Is(err, ErrV2RateLimitExceeded) || finalized || atomicStore.finalizeCalls != 0 {
 		t.Fatalf("rolled-back rate exhaustion did not release the allow payload: finalized=%t err=%v", finalized, err)
+	} else if class := V2ErrorClassOf(err); class != V2ErrClaimStoreUnavailable {
+		// Every SDK reports this class for the same refusal (SPEC-v2 §2.7).
+		t.Fatalf("finalization rate exhaustion class %q, want %q", class, V2ErrClaimStoreUnavailable)
 	}
 	if _, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowPayload, allowPayload); err == nil {
 		t.Fatal("exhausted rate attempt still permitted an allow")

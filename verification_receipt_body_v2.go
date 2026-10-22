@@ -89,7 +89,7 @@ func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err
 		return nil, err
 	}
 	var body verificationReceiptBodyV2
-	if err := strictUnmarshal(data, &body); err != nil {
+	if err := strictUnmarshalV2(data, &body); err != nil {
 		return nil, err
 	}
 	receipt := &VerificationReceiptV2{

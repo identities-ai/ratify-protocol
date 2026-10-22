@@ -311,6 +311,12 @@ func ImportSecurityJournalSnapshotV2(snapshot []byte, head SecurityJournalHeadV2
 	if !utf8.Valid(snapshot) {
 		return SecurityJournalV2{}, fmt.Errorf("security journal snapshot is not UTF-8")
 	}
+	// The snapshot is RatifyCanonicalJSON (§6.6), so every §2.1 strict-decode
+	// rule applies, including the safe-integer range for generation, epochs,
+	// and sequences.
+	if err := checkWireJSONV2(snapshot); err != nil {
+		return SecurityJournalV2{}, fmt.Errorf("security journal snapshot: %w", err)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(snapshot))
 	root, err := decoder.Token()
 	if err != nil || root != json.Delim('{') || validateUniqueJSONObjectV2(decoder) != nil {
@@ -324,6 +330,9 @@ func ImportSecurityJournalSnapshotV2(snapshot []byte, head SecurityJournalHeadV2
 	strict.DisallowUnknownFields()
 	if err := strict.Decode(&decoded); err != nil {
 		return SecurityJournalV2{}, fmt.Errorf("decode security journal snapshot: %w", err)
+	}
+	if err := requireV2RoundTrip(snapshot, &decoded); err != nil {
+		return SecurityJournalV2{}, err
 	}
 	if decoded.Version != securityJournalVersionV2 {
 		return SecurityJournalV2{}, fmt.Errorf("security journal snapshot version %d is unsupported", decoded.Version)

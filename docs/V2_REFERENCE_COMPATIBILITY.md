@@ -119,7 +119,7 @@ passing it. Changes to `testvectors/v2`:
 
 | File | Change since alpha.1 |
 |---|---|
-| `object-negatives.json` | 224 → 281 negatives: the closed v2 constraint registry, every wire timestamp outside 0..253402300799, `custom:*` and bare-prefix required scopes in receipts, and the optional receipt member `constraint_evaluators` |
+| `object-negatives.json` | 224 → 399 negatives: the closed v2 constraint registry, every wire timestamp outside 0..253402300799, `custom:*` and bare-prefix required scopes in receipts, the optional receipt member `constraint_evaluators`, and 118 `strict_shape/` decode negatives (empty objects, `null` in arrays and non-nullable members, byte strings as number arrays, member-name case and Unicode case-folding variants) |
 | `verifier-ordering.json` | 81 → 194 cases (57 pre-claim, 2 replay, 133 committed, 2 evaluating), including 10 Middleware Custody Profile cases; new input fields (`tzdb_version`, amount and currency request context, `extension_counts` and `extension_values`, `constraint_evaluators`, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` and `evaluator` callback counts; exact `custom:` required scopes; committed outcomes are not decisions |
 | `operation-session-context.json` | `invalid_required_scopes` replaces `custom:invoice:read`, now a valid exact required scope, with the bare prefix `custom:` |
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
@@ -127,7 +127,7 @@ passing it. Changes to `testvectors/v2`:
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
 | `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
-| `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
+| `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, 11 import negatives (including unsafe integers, a member-name case variant, and a `null` array element) |
 | `lifecycle-scenarios.json` | New: 28 Part B scripts (140 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |

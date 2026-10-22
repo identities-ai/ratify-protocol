@@ -549,6 +549,9 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, fmt.Errorf("wire v2: trailing transaction receipt JSON")
 	}
+	if err := requireV2RoundTrip(data, &wire); err != nil {
+		return nil, err
+	}
 	receipt := &TransactionReceiptV2{
 		Version: wire.Version, TransactionID: wire.TransactionID, CreatedAt: wire.CreatedAt,
 		TermsSchemaURI: wire.TermsSchemaURI, TermsCanonicalJSON: wire.TermsCanonicalJSON,
@@ -556,8 +559,8 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		PartySignatures: make([]TransactionReceiptSignatureV2, len(wire.PartySignatures)),
 	}
 	for i, party := range wire.Parties {
-		if len(party.ProofBundle) == 0 {
-			return nil, fmt.Errorf("wire v2: party %d proof_bundle is required", i)
+		if len(party.ProofBundle) == 0 || party.ProofBundle[0] != '{' {
+			return nil, fmt.Errorf("wire v2: party %d proof_bundle must be a JSON object", i)
 		}
 		hash := sha512.New384()
 		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))

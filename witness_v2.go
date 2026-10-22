@@ -77,7 +77,7 @@ func validateWitnessSignableBodyV2(body []byte) error {
 		return fmt.Errorf("witness signable body: %w", err)
 	}
 	var signable witnessEntrySignableV2
-	if err := strictUnmarshal(body, &signable); err != nil {
+	if err := strictUnmarshalV2(body, &signable); err != nil {
 		return fmt.Errorf("witness signable body: %w", err)
 	}
 	canonical, err := CanonicalJSON(signable)
@@ -178,7 +178,7 @@ func DecodeWitnessEntryV2(data []byte) (_ *WitnessEntryV2, err error) {
 		return nil, err
 	}
 	var entry WitnessEntryV2
-	if err := strictUnmarshal(data, &entry); err != nil {
+	if err := strictUnmarshalV2(data, &entry); err != nil {
 		return nil, err
 	}
 	if err := validateWitnessEntryV2(&entry, true); err != nil {

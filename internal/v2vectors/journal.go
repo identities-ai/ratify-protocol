@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -256,6 +257,27 @@ func (g *gen) journalFile() any {
 	observations[0], observations[len(observations)-1] = observations[len(observations)-1], observations[0]
 	reordered := canon(snap)
 	neg("observations_out_of_compaction_order", "observations not in compaction order are rejected", reordered, selfHead(reordered), "malformed")
+	// Integers above 2^53-1 are malformed under the safe-integer rule of
+	// SPEC-v2 §2.1 even where the Go field is a 64-bit integer.
+	replaceFirst := func(pattern, replacement string) []byte {
+		loc := regexp.MustCompile(pattern).FindIndex(snapshot)
+		if loc == nil {
+			panic("journal negative pattern not found: " + pattern)
+		}
+		return append(append(append([]byte(nil), snapshot[:loc[0]]...), replacement...), snapshot[loc[1]:]...)
+	}
+	for _, c := range []struct{ name, member, value string }{
+		{"unsafe_integer_max_observed_sequence", "max_observed_sequence", "9007199254740992"},
+		{"unsafe_integer_fork_sequence", "fork_sequence", "9007199254740992"},
+		{"unsafe_integer_status_key_epoch", "status_key_epoch", "18446744073709551615"},
+	} {
+		bad := replaceFirst(`"`+c.member+`":[0-9]+`, `"`+c.member+`":`+c.value)
+		neg(c.name, "the first "+c.member+" is "+c.value+", above 2^53-1", bad, selfHead(bad), "malformed")
+	}
+	caseVariant := bytes.Replace(snapshot, []byte(`"issuers":`), []byte(`"Issuers":`), 1)
+	neg("member_name_case", "the member issuers is spelled Issuers", caseVariant, selfHead(caseVariant), "malformed")
+	nullElement := replaceFirst(`"accepted_cert_ids":\["[^"]*"`, `"accepted_cert_ids":[null`)
+	neg("null_array_element", "the first accepted_cert_ids element is null", nullElement, selfHead(nullElement), "malformed")
 	genesisBad := []byte(strings.Replace(genesisSnapshot, strings.Repeat("0", 96), strings.Repeat("1", 96), 1))
 	neg("genesis_with_predecessor", "a genesis snapshot whose previous_digest is not all zeros", genesisBad, journalHeadJSON{Generation: 0, Digest: journalDigest(genesisBad)}, "malformed")
 	return f

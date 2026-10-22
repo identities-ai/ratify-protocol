@@ -550,7 +550,7 @@ func DecodeVerificationReceiptV2(data []byte) (_ *VerificationReceiptV2, err err
 		return nil, err
 	}
 	var wire verificationReceiptWireV2
-	if err := strictUnmarshal(data, &wire); err != nil {
+	if err := strictUnmarshalV2(data, &wire); err != nil {
 		return nil, err
 	}
 	receipt := &VerificationReceiptV2{
@@ -588,8 +588,8 @@ func validateVerificationReceiptSignableV2(data []byte) error {
 	if _, exists := fields["signature"]; exists {
 		return fmt.Errorf("signable body must exclude signature")
 	}
-	var wire verificationReceiptWireV2
-	if err := strictUnmarshal(data, &wire); err != nil {
+	var wire verificationReceiptSignableV2
+	if err := strictUnmarshalV2(data, &wire); err != nil {
 		return err
 	}
 	receipt := &VerificationReceiptV2{

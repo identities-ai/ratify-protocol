@@ -199,6 +199,134 @@ func requireV2Fields(data []byte, names []string, nullable ...string) error {
 	return checkV2SchemaKeyCase(data)
 }
 
+// strictUnmarshalV2 decodes data into v and then requires the decoded value
+// to re-encode to the same JSON value as the input. encoding/json is lenient
+// in ways a v2 decoder must not be: it matches member names
+// case-insensitively, decodes null into a zero value, accepts {} for a
+// structure whose members are then left empty, and accepts an array of
+// numbers for a byte string. Each of those spellings decodes to a Go value
+// that encodes differently, so the comparison rejects all of them, at every
+// nesting level, before any field is interpreted.
+func strictUnmarshalV2(data []byte, v any) error {
+	if err := strictUnmarshal(data, v); err != nil {
+		return err
+	}
+	return requireV2RoundTrip(data, v)
+}
+
+// requireV2RoundTrip compares the JSON value of data with the JSON value of
+// decoded re-encoded. Member names compare byte-exactly; numbers compare by
+// their exact token.
+func requireV2RoundTrip(data []byte, decoded any) error {
+	reencoded, err := json.Marshal(decoded)
+	if err != nil {
+		return fmt.Errorf("wire v2: decoded value does not re-encode: %w", err)
+	}
+	input, err := parseV2JSONValue(data)
+	if err != nil {
+		return err
+	}
+	output, err := parseV2JSONValue(reencoded)
+	if err != nil {
+		return err
+	}
+	if path, equal := equalV2JSONValues(input, output, "$"); !equal {
+		return fmt.Errorf("wire v2: %s does not decode to the value it spells (wrong member case, null, empty object, or non-string byte field)", path)
+	}
+	return rejectV2UnexpectedNull(input, "$")
+}
+
+// v2NullableMembers are the only v2 schema members whose value may be null.
+// Everywhere else, including every array element, null is malformed: a null
+// byte string or array would otherwise decode to the same Go value as an
+// empty one. Values inside a constraint "params" object follow the general
+// value model, where null is a value.
+var v2NullableMembers = map[string]bool{
+	"session_context":       true,
+	"stream_id":             true,
+	"stream_seq":            true,
+	"context_policy_digest": true,
+	"floor":                 true,
+	"accepted_snapshot":     true,
+	"preceding_checkpoint":  true,
+}
+
+func rejectV2UnexpectedNull(value any, path string) error {
+	switch x := value.(type) {
+	case nil:
+		return fmt.Errorf("wire v2: %s must not be null", path)
+	case map[string]any:
+		for key, member := range x {
+			if key == "params" || (member == nil && v2NullableMembers[key]) {
+				continue
+			}
+			if err := rejectV2UnexpectedNull(member, path+"."+key); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, item := range x {
+			if err := rejectV2UnexpectedNull(item, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parseV2JSONValue(data []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, fmt.Errorf("wire v2: %w", err)
+	}
+	return value, nil
+}
+
+func equalV2JSONValues(a, b any, path string) (string, bool) {
+	switch x := a.(type) {
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		if !ok || len(x) != len(y) {
+			return path, false
+		}
+		for key, value := range x {
+			other, ok := y[key]
+			if !ok {
+				return path + "." + key, false
+			}
+			if p, equal := equalV2JSONValues(value, other, path+"."+key); !equal {
+				return p, false
+			}
+		}
+		return "", true
+	case []any:
+		y, ok := b.([]any)
+		if !ok || len(x) != len(y) {
+			return path, false
+		}
+		for i := range x {
+			if p, equal := equalV2JSONValues(x[i], y[i], fmt.Sprintf("%s[%d]", path, i)); !equal {
+				return p, false
+			}
+		}
+		return "", true
+	case json.Number:
+		y, ok := b.(json.Number)
+		return path, ok && x == y
+	case string:
+		y, ok := b.(string)
+		return path, ok && x == y
+	case bool:
+		y, ok := b.(bool)
+		return path, ok && x == y
+	case nil:
+		return path, b == nil
+	}
+	return path, false
+}
+
 func checkV2SchemaKeyCase(data []byte) error {
 	var walk func(json.RawMessage, bool) error
 	walk = func(raw json.RawMessage, inParams bool) error {
@@ -260,7 +388,7 @@ func DecodeDelegationCertV2(data []byte) (_ *DelegationCertV2, err error) {
 		}
 	}
 	var cert DelegationCertV2
-	if err := strictUnmarshal(data, &cert); err != nil {
+	if err := strictUnmarshalV2(data, &cert); err != nil {
 		return nil, err
 	}
 	if err := validateDelegationCertV2(&cert); err != nil {
@@ -291,7 +419,7 @@ func DecodeRevocationListV2(data []byte) (_ *RevocationListV2, err error) {
 		return nil, err
 	}
 	var list RevocationListV2
-	if err := strictUnmarshal(data, &list); err != nil {
+	if err := strictUnmarshalV2(data, &list); err != nil {
 		return nil, err
 	}
 	if err := validateRevocationListV2(&list); err != nil {
@@ -315,7 +443,7 @@ func DecodeRevocationPushV2(data []byte) (_ *RevocationPushV2, err error) {
 		return nil, err
 	}
 	var push RevocationPushV2
-	if err := strictUnmarshal(data, &push); err != nil {
+	if err := strictUnmarshalV2(data, &push); err != nil {
 		return nil, err
 	}
 	if err := validateRevocationPushV2(&push); err != nil {
@@ -643,7 +771,7 @@ func DecodeProofBundleV2(data []byte) (_ *ProofBundleV2, err error) {
 		}
 	}
 	var bundle ProofBundleV2
-	if err := strictUnmarshal(data, &bundle); err != nil {
+	if err := strictUnmarshalV2(data, &bundle); err != nil {
 		return nil, err
 	}
 	if bundle.Version != 2 {

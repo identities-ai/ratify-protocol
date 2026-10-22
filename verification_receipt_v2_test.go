@@ -242,7 +242,7 @@ func TestVerificationReceiptV2RejectsMalformedWireAndDecisionTuples(t *testing.T
 		"wildcard required scope":                   {func(m map[string]json.RawMessage) { m["required_scope"] = json.RawMessage(`"meeting:*"`) }, "required scope must be one canonical scope or one exact custom: scope"},
 		"bundle hash must be hex digest not base64": {func(m map[string]json.RawMessage) { m["bundle_hash"] = json.RawMessage(`"YWJj"`) }, "bundle hash"},
 		"missing required field":                    {func(m map[string]json.RawMessage) { delete(m, "decision_reason") }, "required field"},
-		"empty optional human ID":                   {func(m map[string]json.RawMessage) { m["human_id"] = json.RawMessage(`""`) }, "not canonical ratify json"},
+		"empty optional human ID":                   {func(m map[string]json.RawMessage) { m["human_id"] = json.RawMessage(`""`) }, "does not decode to the value it spells"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := make(map[string]json.RawMessage, len(fields))

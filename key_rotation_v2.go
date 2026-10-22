@@ -224,7 +224,7 @@ func validateKeyRotationSignableBodyV2(body []byte) error {
 		return fmt.Errorf("rotation signable body: %w", err)
 	}
 	var signable keyRotationSignableV2
-	if err := strictUnmarshal(body, &signable); err != nil {
+	if err := strictUnmarshalV2(body, &signable); err != nil {
 		return fmt.Errorf("rotation signable body: %w", err)
 	}
 	canonical, err := CanonicalJSON(signable)
@@ -268,7 +268,7 @@ func DecodeKeyRotationStatementV2(data []byte) (_ *KeyRotationStatementV2, err e
 		return nil, err
 	}
 	var stmt KeyRotationStatementV2
-	if err := strictUnmarshal(data, &stmt); err != nil {
+	if err := strictUnmarshalV2(data, &stmt); err != nil {
 		return nil, err
 	}
 	if err := validateKeyRotationStatementV2(&stmt, true); err != nil {

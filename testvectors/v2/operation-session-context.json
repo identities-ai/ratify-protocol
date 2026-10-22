@@ -34,7 +34,7 @@
   "invalid_required_scopes": [
     "",
     "data:*",
-    "custom:invoice:read",
+    "custom:",
     "custom:*",
     "unregistered:read"
   ],

@@ -452,7 +452,7 @@ func (g *gen) preflightScenarios() []scenario {
 	add(std("malformed_json", "truncated JSON never reaches signatures, claim, or callbacks", bundle[:len(bundle)/3], "malformed", nil))
 	add(std("unknown_field", "unknown bundle field is a strict decode failure", mutate(bundle, func(o map[string]any) { o["extra"] = true }), "malformed", nil))
 	add(std("v1_bundle", "v1 objects are never accepted by a v2 verifier", canon(map[string]any{"agent_id": ratify.DeriveID(agent.Pub), "agent_pub_key": pubJSON(agent.Pub), "delegations": []any{}, "challenge": b64(defaultChallenge()), "challenge_at": num(Now - 10), "challenge_sig": sigJSON(placeholderSig())}), "malformed", nil))
-	for _, bad := range []struct{ name, scope string }{{"wildcard", "data:*"}, {"custom", "custom:read"}, {"empty", ""}, {"unregistered", "data:read:all"}} {
+	for _, bad := range []struct{ name, scope string }{{"wildcard", "data:*"}, {"custom_wildcard", "custom:*"}, {"custom_bare_prefix", "custom:"}, {"empty", ""}, {"unregistered", "data:read:all"}} {
 		add(std("required_scope_"+bad.name, "invalid request scope is rejected before claim", bundle, "invalid_required_scope", func(s *scenario) { s.scope = bad.scope }))
 	}
 	add(std("delegation_digest_mismatch", "digest mismatch is a structural preflight failure", mutate(bundle, func(o map[string]any) { o["delegation_digest"] = flipB64(o["delegation_digest"]) }), "delegation_digest_mismatch", nil))
@@ -657,8 +657,22 @@ func (g *gen) terminalScenarios() []scenario {
 		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "data:write" }))
 	add(g.terminal("wildcard_grants_non_sensitive", "data:* expands to the registered non-sensitive data scopes", g.chain(chainSpec{leafScope: []string{"data:*"}, rootScope: []string{"data:*", "identity:delegate"}}),
 		allow(), func(s *scenario) { s.out.GrantedScope = []string{"data:read", "data:share"} }))
-	add(g.terminal("custom_scope_passes_through", "exact custom: scopes are carried into granted_scope but cannot be requested", g.chain(chainSpec{leafScope: []string{"custom:billing", "data:read"}, rootScope: []string{"custom:billing", "data:read", "identity:delegate"}}),
+	add(g.terminal("custom_scope_passes_through", "exact custom: scopes are carried into granted_scope", g.chain(chainSpec{leafScope: []string{"custom:billing", "data:read"}, rootScope: []string{"custom:billing", "data:read", "identity:delegate"}}),
 		allow(), func(s *scenario) { s.out.GrantedScope = []string{"custom:billing", "data:read"} }))
+	// SPEC-v2 §2.4: one exact custom: scope may be requested and is matched
+	// by byte equality against the effective delegation scope.
+	customChain := g.chain(chainSpec{leafScope: []string{"custom:infra:provision", "data:read"}, rootScope: []string{"custom:infra:provision", "data:read", "identity:delegate"}})
+	add(g.terminal("custom_required_scope_exact_grant", "an exact custom: required scope granted by every link allows", customChain,
+		allow(), func(s *scenario) {
+			s.scope = "custom:infra:provision"
+			s.out.GrantedScope = []string{"custom:infra:provision", "data:read"}
+		}))
+	add(g.terminal("custom_required_scope_canonical_only_grant", "a chain that grants only canonical scopes never covers a custom: required scope", def,
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
+	add(g.terminal("custom_required_scope_spelling_differs", "custom: matching is byte equality: a grant spelled with different case does not cover the request", g.chain(chainSpec{leafScope: []string{"custom:infra:Provision", "data:read"}, rootScope: []string{"custom:infra:Provision", "data:read", "identity:delegate"}}),
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
+	add(g.terminal("custom_required_scope_parent_lacks", "the custom grant must be present at every link; a parent without it narrows it away", g.chain(chainSpec{leafScope: []string{"custom:infra:provision", "data:read"}}),
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
 	add(g.terminal("revoked_outranks_unavailable", "one reference revoked and the other unavailable: revoked wins and both references are queried", def,
 		deny("delegation_revoked", "revoked", "trusted", "revoked", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_revoked_leaf"])}, allowCounts), func(s *scenario) {
 			s.evidence[intermediateID] = revoked

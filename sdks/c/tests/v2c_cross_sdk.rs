@@ -1495,28 +1495,28 @@ fn v2c_external_signer_contract() {
     p.mu_context = b"ratify-protocol/2/0001".to_vec();
     assert_eq!(
         class_of(&sign_witness_external(&entry, &p.signer(2))),
-        "sign_signature_rejected"
+        "invalid_signature"
     );
 
     // Refusals.
     let cases = [
-        (Behaviour::Refuse, 1, witness.public, "sign_provider"),
         (
-            Behaviour::Tamper,
+            Behaviour::Refuse,
             1,
             witness.public,
-            "sign_signature_rejected",
+            "configuration_invalid",
         ),
+        (Behaviour::Tamper, 1, witness.public, "invalid_signature"),
+        (Behaviour::Short, 1, witness.public, "invalid_signature"),
+        (Behaviour::Cancel, 1, witness.public, "evaluation_cancelled"),
         (
-            Behaviour::Short,
+            Behaviour::PublicKeyCancel,
             1,
             witness.public,
-            "sign_signature_rejected",
+            "evaluation_cancelled",
         ),
-        (Behaviour::Cancel, 1, witness.public, "cancelled"),
-        (Behaviour::PublicKeyCancel, 1, witness.public, "cancelled"),
-        (Behaviour::Sign, 1, other.public, "sign_key_binding"),
-        (Behaviour::Sign, 3, witness.public, "sign_unsupported_mode"),
+        (Behaviour::Sign, 1, other.public, "key_id_mismatch"),
+        (Behaviour::Sign, 3, witness.public, "configuration_invalid"),
     ];
     for (behaviour, mode, reported, want) in cases {
         let p = Provider::new(&witness.ed_seed, &witness.ml_seed, reported, behaviour);
@@ -1568,6 +1568,6 @@ fn v2c_external_signer_contract() {
     let refused: Signed = buf(|o| unsafe {
         ratify_v2_sign_delegation_certificate(cert.as_ptr(), cert.len(), ptr::null(), &ext, o)
     });
-    assert_eq!(class_of(&refused), "sign_issuer_duty");
+    assert_eq!(class_of(&refused), "malformed");
     assert_eq!(p.calls(), 0, "a refused certificate invoked the signer");
 }

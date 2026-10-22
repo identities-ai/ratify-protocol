@@ -1240,7 +1240,7 @@ unsafe extern "C" fn counting_sign(
     (*(user as *const CountingRefusal))
         .calls
         .fetch_add(1, Ordering::SeqCst);
-    RatifyV2Code::RatifyV2SignProvider as i32
+    RatifyV2Code::RatifyV2StoreUnavailable as i32
 }
 
 #[test]
@@ -1297,10 +1297,8 @@ fn v2c_issuer_duties() {
                         o,
                     )
                 });
-                r.as_ref().err().map(|e| e.code)
-                    == Some(RatifyV2Code::RatifyV2SignIssuerDuty as i32)
-                    && local.err().map(|e| e.code)
-                        == Some(RatifyV2Code::RatifyV2SignIssuerDuty as i32)
+                r.as_ref().err().map(|e| e.code) == Some(RatifyV2Code::RatifyV2Malformed as i32)
+                    && local.err().map(|e| e.code) == Some(RatifyV2Code::RatifyV2Malformed as i32)
                     && counter.calls.load(Ordering::SeqCst) == 0
             }
             other => panic!("unknown expectation {other}"),

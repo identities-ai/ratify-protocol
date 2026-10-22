@@ -350,7 +350,7 @@ unsafe extern "C" fn counting_sign(
     (*(user as *const CountingRefusal))
         .calls
         .fetch_add(1, Ordering::SeqCst);
-    RatifyV2Code::RatifyV2SignProvider as i32
+    RatifyV2Code::RatifyV2StoreUnavailable as i32
 }
 
 /// One publication: list wire, optional push wire, next state JSON.

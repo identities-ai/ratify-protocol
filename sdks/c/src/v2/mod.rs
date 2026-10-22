@@ -91,9 +91,10 @@ pub const RATIFY_V2_ERROR_CLASS_COUNT: u32 = 49;
 /// Positive values are the SPEC-v2 §2.7 failure classes in table order.
 /// Negative values are not Protocol failure classes: `-1..=-4` are ABI
 /// conditions; `-10..=-17` are Part B store sentinels a callback returns
-/// (and that a few store-facing functions report); `-20..=-25` are typed
-/// signing refusals (SPEC-v2 §3.2). Values are stable within one
-/// `RATIFY_V2_ABI_VERSION`; a C `switch` must include a `default` case.
+/// (and that a few store-facing functions report). A signing refusal
+/// reports its SPEC-v2 §2.7 class like every other failure. Values are
+/// stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
+/// `default` case.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RatifyV2Code {
@@ -155,7 +156,7 @@ pub enum RatifyV2Code {
     /// An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     /// Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    /// §6.11); signing reports it when the signer cancelled.
+    /// §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
     RatifyV2ErrCancelled = -4,
     /// Store sentinel: an unclassified store, provider, or clock failure. The
     /// verifier assigns the class SPEC-v2 names for that step.
@@ -175,19 +176,6 @@ pub enum RatifyV2Code {
     /// Store sentinel: a security-journal compare-and-swap lost to another
     /// writer.
     RatifyV2StoreJournalConflict = -17,
-    /// Signing refusal: an issuer duty (SPEC-v2 §5.1, §5.4) refuses the object.
-    RatifyV2SignIssuerDuty = -20,
-    /// Signing refusal: the signer's key is not the key bound to the role.
-    RatifyV2SignKeyBinding = -21,
-    /// Signing refusal: the signer reported invalid key material.
-    RatifyV2SignInvalidSignerKey = -22,
-    /// Signing refusal: the signer reported an unsupported mode.
-    RatifyV2SignUnsupportedMode = -23,
-    /// Signing refusal: the signer failed or refused.
-    RatifyV2SignProvider = -24,
-    /// Signing refusal: a returned signature did not verify; nothing was
-    /// produced.
-    RatifyV2SignSignatureRejected = -25,
 }
 
 /// Object kinds used by `ratify_v2_verify_object`, `ratify_v2_object_*`, and
@@ -439,12 +427,6 @@ const OTHER_CODES: &[(RatifyV2Code, &CStr)] = {
             c"challenge_issuance_not_found",
         ),
         (RatifyV2StoreJournalConflict, c"journal_conflict"),
-        (RatifyV2SignIssuerDuty, c"sign_issuer_duty"),
-        (RatifyV2SignKeyBinding, c"sign_key_binding"),
-        (RatifyV2SignInvalidSignerKey, c"sign_invalid_signer_key"),
-        (RatifyV2SignUnsupportedMode, c"sign_unsupported_mode"),
-        (RatifyV2SignProvider, c"sign_provider"),
-        (RatifyV2SignSignatureRejected, c"sign_signature_rejected"),
     ]
 };
 
@@ -510,20 +492,13 @@ impl From<V2Error> for Failure {
 }
 
 impl From<V2SignError> for Failure {
+    /// A signing refusal reports the SPEC-v2 §2.7 class the Rust
+    /// implementation assigns it ([`V2SignError::class`]).
     fn from(e: V2SignError) -> Self {
-        use RatifyV2Code::*;
-        let message = e.to_string();
-        let code = match &e {
-            V2SignError::InvalidObject(inner) => class_code(inner.class),
-            V2SignError::IssuerDuty(_) => RatifyV2SignIssuerDuty,
-            V2SignError::KeyBinding(_) => RatifyV2SignKeyBinding,
-            V2SignError::InvalidSignerKey(_) => RatifyV2SignInvalidSignerKey,
-            V2SignError::UnsupportedMode => RatifyV2SignUnsupportedMode,
-            V2SignError::Provider(_) => RatifyV2SignProvider,
-            V2SignError::Cancelled => RatifyV2ErrCancelled,
-            V2SignError::SignatureRejected(_) => RatifyV2SignSignatureRejected,
-        };
-        Failure { code, message }
+        Failure {
+            code: class_code(e.class()),
+            message: e.to_string(),
+        }
     }
 }
 

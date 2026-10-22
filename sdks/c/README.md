@@ -424,8 +424,13 @@ and every returned signature is verified before an object is produced.
 success; a positive code naming exactly one of the 49 SPEC-v2 §2.7 classes,
 numbered in the order of that table; or a negative code. `-1` to `-4` are ABI
 conditions (`null_pointer`, `bad_argument`, `internal`, `cancelled`), `-10` to
-`-17` are store sentinels a callback returns, and `-20` to `-25` are typed
-signing refusals. `ratify_v2_error_class_str` gives the stable spelling. The
+`-17` are store sentinels a callback returns. A signing refusal reports its
+§2.7 class like any other failure: an issuer-duty refusal is `malformed`, a
+signer holding a key other than the one the object names is
+`key_id_mismatch`, an invalid, unsupported, or failing signer is
+`configuration_invalid`, a cancelled signer is `evaluation_cancelled`, and a
+returned signature that does not verify is `invalid_signature`.
+`ratify_v2_error_class_str` gives the stable spelling. The
 diagnostic of the last call on the calling thread is
 `ratify_v2_last_error_message()`; it is valid until the next `ratify_v2_*`
 call on that thread and must not be freed. Messages are diagnostic only.

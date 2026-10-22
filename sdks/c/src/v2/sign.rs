@@ -224,7 +224,7 @@ pub(crate) unsafe fn build(
                 2 => SignerModeV2::ExternalMu,
                 other => {
                     return Err(Failure::new(
-                        RatifyV2Code::RatifyV2SignUnsupportedMode,
+                        RatifyV2Code::RatifyV2ConfigurationInvalid,
                         format!("{name}: external signer mode {other} is not supported"),
                     ))
                 }
@@ -245,11 +245,11 @@ pub(crate) unsafe fn build(
 }
 
 /// Map a signing result, reporting a signer cancellation as
-/// `RatifyV2ErrCancelled`.
+/// `RatifyV2EvaluationCancelled`.
 pub(crate) fn finish<R>(result: V2SignResult<R>, built: &[&Built]) -> AbiResult<R> {
     match result {
         Err(e) if built.iter().any(|b| b.cancelled()) => Err(Failure::new(
-            RatifyV2Code::RatifyV2ErrCancelled,
+            RatifyV2Code::RatifyV2EvaluationCancelled,
             format!("signer cancelled: {e}"),
         )),
         other => Ok(other?),
@@ -316,7 +316,7 @@ fn key_arg(k: *const RatifyV2PublicKey, name: &str) -> AbiResult<HybridPublicKey
 /// Sign a delegation certificate (code 0x0001) with the issuer key. `object`
 /// is the certificate wire JSON; an absent `signature` is allowed. Issuer
 /// duties (§5.1, §5.2) are checked before any signer method runs and refuse
-/// with `RatifyV2SignIssuerDuty`. On success `*out` is the canonical signed
+/// with `RatifyV2Malformed`. On success `*out` is the canonical signed
 /// certificate.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_sign_delegation_certificate(

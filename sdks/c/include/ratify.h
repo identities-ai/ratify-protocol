@@ -78,9 +78,10 @@ typedef enum RatifyStatus {
 // Positive values are the SPEC-v2 §2.7 failure classes in table order.
 // Negative values are not Protocol failure classes: `-1..=-4` are ABI
 // conditions; `-10..=-17` are Part B store sentinels a callback returns
-// (and that a few store-facing functions report); `-20..=-25` are typed
-// signing refusals (SPEC-v2 §3.2). Values are stable within one
-// `RATIFY_V2_ABI_VERSION`; a C `switch` must include a `default` case.
+// (and that a few store-facing functions report). A signing refusal
+// reports its SPEC-v2 §2.7 class like every other failure. Values are
+// stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
+// `default` case.
 enum RatifyV2Code
 #ifdef __cplusplus
   : int32_t
@@ -144,7 +145,7 @@ enum RatifyV2Code
     // An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     // Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    // §6.11); signing reports it when the signer cancelled.
+    // §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
     RatifyV2ErrCancelled = -4,
     // Store sentinel: an unclassified store, provider, or clock failure. The
     // verifier assigns the class SPEC-v2 names for that step.
@@ -164,19 +165,6 @@ enum RatifyV2Code
     // Store sentinel: a security-journal compare-and-swap lost to another
     // writer.
     RatifyV2StoreJournalConflict = -17,
-    // Signing refusal: an issuer duty (SPEC-v2 §5.1, §5.4) refuses the object.
-    RatifyV2SignIssuerDuty = -20,
-    // Signing refusal: the signer's key is not the key bound to the role.
-    RatifyV2SignKeyBinding = -21,
-    // Signing refusal: the signer reported invalid key material.
-    RatifyV2SignInvalidSignerKey = -22,
-    // Signing refusal: the signer reported an unsupported mode.
-    RatifyV2SignUnsupportedMode = -23,
-    // Signing refusal: the signer failed or refused.
-    RatifyV2SignProvider = -24,
-    // Signing refusal: a returned signature did not verify; nothing was
-    // produced.
-    RatifyV2SignSignatureRejected = -25,
 };
 #ifndef __cplusplus
 typedef int32_t RatifyV2Code;
@@ -2804,7 +2792,7 @@ int32_t ratify_v2_ref_ledger_execute(const struct RatifyV2RefLedger *l,
 // Sign a delegation certificate (code 0x0001) with the issuer key. `object`
 // is the certificate wire JSON; an absent `signature` is allowed. Issuer
 // duties (§5.1, §5.2) are checked before any signer method runs and refuse
-// with `RatifyV2SignIssuerDuty`. On success `*out` is the canonical signed
+// with `RatifyV2Malformed`. On success `*out` is the canonical signed
 // certificate.
 int32_t ratify_v2_sign_delegation_certificate(const uint8_t *object,
                                               uintptr_t object_len,

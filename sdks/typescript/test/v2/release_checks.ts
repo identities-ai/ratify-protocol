@@ -34,6 +34,7 @@ export async function checkReleasedDecisionAllowed(step: number, d: V2ReleasedDe
   }
   const deadline = Math.min(horizon, d.challengeExpiresAt());
   assert.ok(await at(d.releaseTime()), `step ${step} allowed at release`);
+  await checkCopiesNotActionable(step, d);
   assert.ok(await at(deadline - 1), `step ${step} allowed before deadline`);
   assert.equal(await at(deadline), false, `step ${step} exclusive deadline`);
   assert.equal(await at(deadline + 1), false, `step ${step} after deadline`);
@@ -51,3 +52,25 @@ export async function checkReleasedDecisionAllowed(step: number, d: V2ReleasedDe
     `step ${step}: a returned copy changed the released decision`);
 }
 
+
+/**
+ * No copy of a genuine released allow is actionable: only the instance
+ * releaseV2Decision returned is in the SDK's registry (SPEC-v2 §1.3).
+ */
+async function checkCopiesNotActionable(step: number, d: V2ReleasedDecision): Promise<void> {
+  const now = fixedClock(d.releaseTime());
+  const proto = Object.getPrototypeOf(d) as object;
+  const cloned = structuredClone(d) as object;
+  const copies: object[] = [
+    Object.setPrototypeOf(cloned, proto),
+    Object.setPrototypeOf({ ...d }, proto),
+    Object.create(proto, Object.getOwnPropertyDescriptors(d)),
+    Object.create(d),
+  ];
+  for (const copy of copies) {
+    const c = copy as V2ReleasedDecision;
+    assert.equal(await c.allowed(now), false, `step ${step}: a copy of a released allow is actionable`);
+    assert.equal(c.decision(), "", `step ${step}: a copy carries the decision`);
+  }
+  assert.ok(Object.isFrozen(d), `step ${step}: released decision is not frozen`);
+}

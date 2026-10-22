@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { V2_ERROR_CLASSES, v2ErrorClassOf, type V2ErrorClass } from "../../src/errors_v2.js";
 import { hybridKeypairFromSeeds } from "../../src/crypto.js";
 import type { HybridKeyPairV2 } from "../../src/crypto_v2.js";
-import { SIGNER_MODE_DIRECT_V2, keyIDV2, newLocalSignerV2, type SignerV2 } from "../../src/signer_v2.js";
+import { SIGNER_MODE_DIRECT_V2, keyIDV2, type SignerV2 } from "../../src/signer_v2.js";
 import type { HybridPublicKey } from "../../src/types.js";
 import {
   bundleHashV2,
@@ -127,7 +127,7 @@ import {
   importSecurityJournalSnapshotV2,
   migrateSecurityJournalV2,
 } from "../../src/security_journal_snapshot_v2.js";
-import { V2StatusPublisher, newV2StatusPublisher } from "../../src/status_publisher_v2.js";
+import { V2StatusPublisher, newV2StatusPublisher, newV2StatusPublisherWithKey } from "../../src/status_publisher_v2.js";
 import { newV2ContextPolicy } from "../../src/context_policy_v2.js";
 import { constraintProfileDigestV2, newConstraintEvaluatorRegistryV2 } from "../../src/constraint_evaluator_v2.js";
 import { preflightProofBundleV2, validateProofBundleV2Preflight } from "../../src/verify_v2_preflight.js";
@@ -284,7 +284,6 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     },
 
     // Signing.
-    { name: "newLocalSignerV2", want: "configuration_invalid", run: () => newLocalSignerV2({ publicKey: zeroKey(), privateKey: { ed25519: empty(), ml_dsa_65: empty() } }) },
     { name: "signDelegationCertV2", want: "malformed", run: () => signDelegationCertV2(zeroCert(), pair) },
     { name: "signDelegationCertV2WithSigner failing signer", want: "", run: () => signDelegationCertV2WithSigner(zeroCert(), failingSigner(pub)) },
     { name: "signProofBundleV2 agent key binding", want: "key_id_mismatch", run: () => signProofBundleV2(zeroBundle(), pair) },
@@ -351,6 +350,7 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     { name: "exportSecurityJournalSnapshotV2", want: "configuration_invalid", run: () => exportSecurityJournalSnapshotV2(zeroJournal()) },
     { name: "migrateSecurityJournalV2", want: "configuration_invalid", run: () => migrateSecurityJournalV2(zeroJournal()) },
     { name: "newV2StatusPublisher", want: "configuration_invalid", run: () => newV2StatusPublisher(nil, pub, nil, 0) },
+    { name: "newV2StatusPublisherWithKey", want: "configuration_invalid", run: () => newV2StatusPublisherWithKey(nil, pub, { publicKey: zeroKey(), privateKey: { ed25519: empty(), ml_dsa_65: empty() } }, 60) },
     {
       name: "V2StatusPublisher.heartbeat", want: "configuration_invalid",
       run: () => (Object.create(V2StatusPublisher.prototype) as V2StatusPublisher).heartbeat({ issuerID: "", statusKeyID: "", sequence: 0, updatedAt: 0, revoked: [] }, 1),

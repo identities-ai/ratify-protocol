@@ -21,7 +21,8 @@ import {
   type RevocationPushV2,
 } from "./protocol_v2_wire.js";
 import { keyRoleBindingV2, loadAnchoredSecurityJournalV2, type SecurityJournalStoreV2, type StatusKeyBindingV2 } from "./security_journal_v2.js";
-import { signerPublicKeyV2, type SignerV2 } from "./signer_v2.js";
+import type { HybridKeyPairV2 } from "./crypto_v2.js";
+import { newLocalSignerV2, signerPublicKeyV2, type SignerV2 } from "./signer_v2.js";
 import { MAX_IDENTIFIER_LENGTH_BYTES, type HybridPublicKey } from "./types.js";
 
 /** The publisher's durable state. */
@@ -206,4 +207,16 @@ export class V2StatusPublisher {
 /** Go NewV2StatusPublisher. */
 export function newV2StatusPublisher(roles: SecurityJournalStoreV2 | null | undefined, issuerKey: HybridPublicKey, statusSigner: SignerV2 | null | undefined, lifetimeSeconds: number, signal?: AbortSignal): Promise<V2StatusPublisher> {
   return V2StatusPublisher.create(roles, issuerKey, statusSigner, lifetimeSeconds, signal);
+}
+
+/**
+ * Go NewV2StatusPublisherWithKey: newV2StatusPublisher for a status key pair
+ * held in process. The publisher signs through the same typed, verified
+ * signing path, with every refusal of newV2StatusPublisher; an invalid key
+ * pair is configuration_invalid. No local SignerV2 is exported (SPEC-v2
+ * §3.2), so this is the in-process key path.
+ */
+export function newV2StatusPublisherWithKey(roles: SecurityJournalStoreV2 | null | undefined, issuerKey: HybridPublicKey, statusKey: HybridKeyPairV2, lifetimeSeconds: number, signal?: AbortSignal): Promise<V2StatusPublisher> {
+  return classifiedAsync("configuration_invalid", async () =>
+    V2StatusPublisher.create(roles, issuerKey, await newLocalSignerV2(statusKey), lifetimeSeconds, signal));
 }

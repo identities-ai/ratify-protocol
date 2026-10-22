@@ -79,7 +79,7 @@ export interface SignerV2 {
   signV2(req: SignRequestV2, signal?: AbortSignal): Promise<HybridSignature>;
 }
 
-/** Options for an in-process signer. */
+/** @internal Options for the internal in-process signer. */
 export interface LocalSignerOptionsV2 {
   /**
    * Deterministic ML-DSA-65 (no hedging randomness), for reproducing fixed
@@ -123,7 +123,15 @@ class LocalSignerV2 implements SignerV2 {
   }
 }
 
-/** A direct-mode SignerV2 backed by an in-process hybrid key pair. */
+/**
+ * @internal A direct-mode SignerV2 backed by an in-process hybrid key pair,
+ * for the typed private-key signing functions only. It is deliberately not
+ * exported from any package entry point: a local SignerV2 in a caller's hands
+ * would sign any well-formed message under any context the caller chose,
+ * which SPEC-v2 §3.2 forbids. A caller with an in-process key uses the typed
+ * key-pair signing functions; a caller with an external provider implements
+ * SignerV2 itself.
+ */
 export async function newLocalSignerV2(pair: HybridKeyPairV2, opts: LocalSignerOptionsV2 = {}): Promise<SignerV2> {
   return classifiedAsync("configuration_invalid", async () => {
     await validateHybridKeyPairV2(pair);

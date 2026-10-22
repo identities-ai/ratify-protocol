@@ -64,7 +64,6 @@ export {
 } from "./crypto_v2.js";
 export {
   keyIDV2,
-  newLocalSignerV2,
   externalMuV2,
   SIGNER_MODE_DIRECT_V2,
   SIGNER_MODE_EXTERNAL_MU_V2,
@@ -72,7 +71,6 @@ export {
   type SignRequestV2,
   type SignerV2,
   type SignOptionsV2,
-  type LocalSignerOptionsV2,
 } from "./signer_v2.js";
 
 // Operation, session and challenge-claim digests; scopes.
@@ -300,6 +298,7 @@ export {
 export {
   V2StatusPublisher,
   newV2StatusPublisher,
+  newV2StatusPublisherWithKey,
   type V2StatusPublisherState,
   type V2StatusPublication,
 } from "./status_publisher_v2.js";

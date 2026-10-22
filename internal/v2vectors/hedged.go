@@ -40,7 +40,7 @@ func GenerateHedged() ([]byte, error) {
 		g := newGen()
 		objects := g.objectsFile().(objectsFile)
 		f := hedgedFile{
-			Version: 2,
+			Version:     2,
 			Description: "Randomized (hedged) ML-DSA-65 signatures over the exact statements of objects.json. Each object's hedged_wire_b64 variants carry the same signed bodies as deterministic_wire_b64; only the ML-DSA-65 component of each field in resigned_fields was produced with fresh FIPS 204 hedging randomness (Ed25519 is deterministic and unchanged). An implementation MUST decode each variant, re-encode it to identical bytes, and verify it with verify exactly as objects.json; MUST derive identical signable projections and statement body digests for every variant; and MUST NOT require signature bytes to match the deterministic fixture or each other. Idempotency, replay and fork checks compare StatementBodyDigestV2, never signature bytes. This file is not reproducible: the generator writes it only when run with -hedged.",
 		}
 		for _, o := range objects.Objects {

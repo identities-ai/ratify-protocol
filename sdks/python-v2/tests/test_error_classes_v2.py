@@ -211,7 +211,7 @@ def _calls():
          lambda: rr.build_v2_rate_reservation_batch([cp.V2DeferredConstraint(0, 0, "", "", CONSTRAINT_MAX_RATE, GARBAGE)])),
 
         # Signing.
-        ("new_local_signer_v2", C.CONFIGURATION_INVALID, lambda: sig.new_local_signer_v2(HybridPrivateKey(b"", b""))),
+        ("new_v2_status_publisher_with_key", C.CONFIGURATION_INVALID, lambda: sp.new_v2_status_publisher_with_key(CTX, None, pub, HybridPrivateKey(b"", b""), 60)),
         ("sign_delegation_cert_v2", C.MALFORMED, lambda: pv2.sign_delegation_cert_v2(_empty_cert(), priv)),
         ("sign_delegation_cert_v2_with_signer failing signer", None,
          lambda: pv2.sign_delegation_cert_v2_with_signer(CTX, _empty_cert(), FailingSigner(pub))),

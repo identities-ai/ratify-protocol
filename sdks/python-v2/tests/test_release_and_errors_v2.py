@@ -4,8 +4,10 @@ the live verifier never crashes on arbitrary input."""
 from __future__ import annotations
 
 import copy
+import copyreg
 import pickle
 import re
+import weakref
 from pathlib import Path
 
 import pytest
@@ -43,8 +45,7 @@ def test_released_decision_has_no_public_constructor():
     with pytest.raises(TypeError):
         V2ReleasedDecision()
     with pytest.raises(TypeError):
-        V2ReleasedDecision._create(object(), claim_id="c", decision="allow", reason="authorized", identity_status="authorized_agent",
-                                   granted_scope=[], receipt_wire=b"x", release_time=1, challenge_expires_at=10, allow_horizon=10)
+        V2ReleasedDecision(object(), claim_id="c", decision="allow")
     with pytest.raises(TypeError):
         CommittedV2Outcome()
     with pytest.raises(TypeError):
@@ -53,21 +54,56 @@ def test_released_decision_has_no_public_constructor():
         V2PreflightResult()
 
 
-def test_zero_or_decoded_decision_is_never_actionable():
-    forged = object.__new__(V2ReleasedDecision)
-    assert forged.decision() == "" and not forged.allowed(BACKGROUND, FixedClock(1))
-    with pytest.raises(AttributeError):
-        forged._decision = "allow"
-    with pytest.raises(AttributeError):
-        object.__setattr__(forged, "_unknown", 1)
-    # Setting the private slots directly still lacks the module-private seal.
-    for name, value in (("_decision", "allow"), ("_receipt_wire", b"x"), ("_allow_horizon", 100), ("_challenge_expires_at", 100)):
-        object.__setattr__(forged, name, value)
-    object.__setattr__(forged, "_sealed", object())
-    assert not forged.allowed(BACKGROUND, FixedClock(1))
+def test_importers_find_no_seal_or_factory():
+    """No module attribute lets an importer register a released decision:
+    the former sentinel and factory are gone, and the registry exists only
+    in the closure behind release_v2_decision."""
+    for name in ("_SEAL", "_create", "_seal", "_token"):
+        assert not hasattr(release_v2, name)
+        assert not hasattr(V2ReleasedDecision, name)
+    for value in vars(release_v2).values():
+        assert not isinstance(value, weakref.WeakKeyDictionary)
+        assert not isinstance(value, weakref.WeakSet)
     with pytest.raises(TypeError):
-        pickle.dumps(forged)
-    assert copy.copy(forged) is forged
+        type("Sub", (V2ReleasedDecision,), {})
+    with pytest.raises(TypeError):
+        type("Sub", (CommittedV2Outcome,), {})
+
+
+def _forgeries():
+    cls = V2ReleasedDecision
+    yield object.__new__(cls)
+    yield cls.__new__(cls)
+    yield copy.copy(object.__new__(cls))
+    yield copy._reconstruct(object.__new__(cls), None, copyreg.__newobj__, (cls,), None)
+
+
+def test_zero_or_decoded_decision_is_never_actionable():
+    clock = FixedClock(1)
+    for forged in _forgeries():
+        assert forged.decision() == "" and forged.claim_id() == "" and not forged.allowed(BACKGROUND, clock)
+        assert forged.allow_horizon() == (0, False) and forged.receipt_wire() == b""
+        with pytest.raises(AttributeError):
+            forged._decision = "allow"
+        # The instance has no storage of its own to fill in.
+        with pytest.raises(AttributeError):
+            object.__setattr__(forged, "_decision", "allow")
+        with pytest.raises(AttributeError):
+            object.__setattr__(forged, "_unknown", 1)
+        with pytest.raises(TypeError):
+            pickle.dumps(forged)
+        assert copy.copy(forged) is forged and copy.deepcopy(forged) is forged
+        assert not forged.allowed(BACKGROUND, clock)
+    # Calling the accessor on an unrelated object with the right-looking
+    # fields does not help either.
+    class LooksReleased:
+        _decision, _receipt_wire, _allow_horizon, _challenge_expires_at = "allow", b"x", 100, 100
+    assert not V2ReleasedDecision.allowed(LooksReleased(), BACKGROUND, clock)
+
+
+def test_forged_result_wrapper_is_not_actionable():
+    forged = release_v2.V2ReleaseResult(status="released", decision=object.__new__(V2ReleasedDecision))
+    assert not forged.decision.allowed(BACKGROUND, FixedClock(1))
 
 
 def test_forged_committed_outcome_is_rejected():

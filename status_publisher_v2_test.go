@@ -9,7 +9,7 @@ func TestV2StatusPublisherRejectsForeignStateAndBadConfiguration(t *testing.T) {
 	ctx := context.Background()
 	issuerPub, _, _ := GenerateHybridKeypair()
 	_, statusPriv, _ := GenerateHybridKeypair()
-	signer, _ := NewLocalSignerV2(statusPriv)
+	signer := localSignerV2{priv: statusPriv}
 	statusPub := statusPriv.Public()
 	otherPub, _, _ := GenerateHybridKeypair()
 	roles := newMemorySecurityJournalStoreV2()
@@ -51,6 +51,26 @@ func TestV2StatusPublisherRejectsForeignStateAndBadConfiguration(t *testing.T) {
 	publisher, err := NewV2StatusPublisher(ctx, roles, issuerPub, signer, 60)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The key-holding constructor applies the same role checks and binds the
+	// same status key; it is the only local-key path, since no local
+	// SignerV2 is exported (SPEC-v2 §3.2).
+	if _, err := NewV2StatusPublisherWithKey(ctx, mixedRoles, issuerPub, statusPriv, 60); err == nil {
+		t.Error("the key-holding constructor accepted a status key sharing a component with a recorded role key")
+	}
+	if _, err := NewV2StatusPublisherWithKey(ctx, roles, issuerPub, HybridPrivateKey{}, 60); V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
+		t.Errorf("an invalid status private key was accepted: %v", err)
+	}
+	withKey, err := NewV2StatusPublisherWithKey(ctx, roles, issuerPub, statusPriv, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyGenesis, err := withKey.Genesis(ctx, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRevocationListV2Signature(keyGenesis.List, withKey.IssuerID(), statusPub); err != nil {
+		t.Fatalf("the key-holding publisher did not sign under the status key: %v", err)
 	}
 	genesis, err := publisher.Genesis(ctx, 1000)
 	if err != nil {

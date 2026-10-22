@@ -121,9 +121,9 @@ def test_native_backend_reproduces_shared_vector():
     assert derived_public == public
     key = _native.signing_key(private.ed25519, private.ml_dsa_65)
     message, context = delegation_signature_message_v2(signable), decode(v["mldsa_context"])
-    ed, ml = key.sign(message, context, deterministic_for_test_vectors=True)
+    ed, ml = key._sign(message, context, deterministic_for_test_vectors=True)
     assert HybridSignature(bytes(ed), bytes(ml)) == signature(v)
-    hed, hml = key.sign(message, context)
+    hed, hml = key._sign(message, context)
     assert hed == ed and hml != ml
     assert verify_delegation_signature_v2(signable, HybridSignature(bytes(hed), bytes(hml)), public)
 

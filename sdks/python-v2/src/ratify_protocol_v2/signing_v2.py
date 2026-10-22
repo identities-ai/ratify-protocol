@@ -8,14 +8,18 @@ Python and strict AND: canonical non-identity prime-order Ed25519 A and R,
 canonical S, a valid Ed25519 signature, and a valid ML-DSA-65 signature under
 the code's context.
 
-Signing goes only through a :class:`SignerV2`. The local signer
-(:func:`new_local_signer_v2`) runs in the ``ratify-protocol-native-v2``
-extension; there is no pure-Python signing path, and without the extension
-it raises ``ImportError``. External signers (an HSM or a key-management
-service) implement the same interface in direct or external-mu mode. The SDK
-computes ``M``, the context and ``mu`` itself and verifies every returned
-signature with the ordinary verifier before using it. No public function in
-this package signs caller-selected bytes, object codes, or contexts.
+Signing goes only through the typed signing functions, which take either a
+:class:`HybridPrivateKey` or an external :class:`SignerV2` provider. A
+private key is signed with inside the ``ratify-protocol-native-v2``
+extension through an internal signer that is never returned to callers;
+there is no pure-Python signing path, and without the extension signing
+raises ``ImportError``. External signers (an HSM or a key-management
+service) implement :class:`SignerV2` in direct or external-mu mode and hold
+their own keys. The SDK computes ``M``, the context and ``mu`` itself and
+verifies every returned signature with the ordinary verifier before using
+it. No public function in this package signs caller-selected bytes, object
+codes, or contexts, and no local :class:`SignerV2` is exported (SPEC-v2
+§3.2).
 """
 from __future__ import annotations
 
@@ -210,7 +214,10 @@ _DETERMINISTIC_FOR_TEST_VECTORS: ContextVar[bool] = ContextVar(
 
 
 class _LocalSignerV2:
-    """A direct-mode signer backed by a native in-process hybrid key."""
+    """A direct-mode signer backed by a native in-process hybrid key.
+    Internal: only the typed signing functions create one, and it is never
+    returned to a caller, because a local SignerV2 in a caller's hands would
+    sign any well-formed message under any context the caller chose."""
 
     __slots__ = ("_key", "_public")
 
@@ -232,7 +239,7 @@ class _LocalSignerV2:
             raise err
         if req.mode != SignerModeV2.DIRECT or len(req.message) != V2_SIGNING_MESSAGE_SIZE or not req.mldsa_context:
             raise V2SigningError("local v2 signer supports only direct-mode requests")
-        ed_sig, ml_sig = self._key.sign(
+        ed_sig, ml_sig = self._key._sign(
             bytes(req.message), bytes(req.mldsa_context),
             deterministic_for_test_vectors=_DETERMINISTIC_FOR_TEST_VECTORS.get(),
         )
@@ -243,10 +250,11 @@ class _LocalSignerV2:
 
 
 @classified(V2ErrorClass.CONFIGURATION_INVALID)
-def new_local_signer_v2(private_key: HybridPrivateKey) -> SignerV2:
-    """Go ``NewLocalSignerV2``: a direct-mode signer for an in-process hybrid
-    private key. The key is loaded into the native extension (ImportError
-    without it). ML-DSA-65 signatures are hedged."""
+def _new_local_signer_v2(private_key: HybridPrivateKey) -> SignerV2:
+    """Internal: the direct-mode signer the typed signing functions use for
+    an in-process hybrid private key. Not public API and not re-exported.
+    The key is loaded into the native extension (ImportError without it).
+    ML-DSA-65 signatures are hedged."""
     if not isinstance(private_key, HybridPrivateKey):
         raise V2SigningError("a HybridPrivateKey is required")
     ed, ml = bytes(private_key.ed25519), bytes(private_key.ml_dsa_65)
@@ -265,7 +273,7 @@ def _as_signer(signer_or_key) -> SignerV2:
     """Typed private-key signing functions accept a HybridPrivateKey and wrap
     it in a local signer, so local and external signing share one path."""
     if isinstance(signer_or_key, HybridPrivateKey):
-        return new_local_signer_v2(signer_or_key)
+        return _new_local_signer_v2(signer_or_key)
     return signer_or_key
 
 
@@ -354,4 +362,4 @@ def generate_keypair_v2() -> tuple[HybridPublicKey, HybridPrivateKey]:
 
 def public_key_of(priv: HybridPrivateKey) -> HybridPublicKey:
     """The hybrid public key of a private key (native; ImportError without it)."""
-    return new_local_signer_v2(priv).public_key_v2()
+    return _new_local_signer_v2(priv).public_key_v2()

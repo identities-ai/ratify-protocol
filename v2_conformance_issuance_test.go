@@ -2,12 +2,38 @@ package ratify_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"errors"
 	"testing"
+
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
-// v2CountingSigner wraps a local key as an external signer and counts every
+// v2TestKeyProvider is a test-only external signing provider that holds its
+// own key, as an HSM or KMS would. The SDK exports no local SignerV2 (SPEC-v2
+// §3.2), so a provider that signs whatever it is handed is the provider's own
+// capability; the SDK still prepares every request and verifies every
+// returned signature.
+type v2TestKeyProvider struct{ priv ratify.HybridPrivateKey }
+
+func (p v2TestKeyProvider) PublicKeyV2() ratify.HybridPublicKey { return p.priv.Public() }
+
+func (p v2TestKeyProvider) ModeV2() ratify.SignerModeV2 { return ratify.SignerModeDirectV2 }
+
+func (p v2TestKeyProvider) SignV2(ctx context.Context, req ratify.SignRequestV2) (ratify.HybridSignature, error) {
+	if req.Mode != ratify.SignerModeDirectV2 {
+		return ratify.HybridSignature{}, errors.New("test provider signs direct-mode requests only")
+	}
+	ml := make([]byte, mldsa65.SignatureSize)
+	if err := mldsa65.SignTo(p.priv.MLDSA65, req.Message, req.MLDSAContext, true, ml); err != nil {
+		return ratify.HybridSignature{}, err
+	}
+	return ratify.HybridSignature{Ed25519: ed25519.Sign(p.priv.Ed25519, req.Message), MLDSA65: ml}, nil
+}
+
+// v2CountingSigner wraps a provider as an external signer and counts every
 // method call, so a vector can require that no signer method ran.
 type v2CountingSigner struct {
 	inner ratify.SignerV2
@@ -53,11 +79,7 @@ func TestV2ConformanceIssuerDuties(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unsigned certificate must decode: %v", err)
 			}
-			local, err := ratify.NewLocalSignerV2(fx.priv[v.Issuer])
-			if err != nil {
-				t.Fatal(err)
-			}
-			signer := &v2CountingSigner{inner: local}
+			signer := &v2CountingSigner{inner: v2TestKeyProvider{fx.priv[v.Issuer]}}
 			signed, err := ratify.SignDelegationCertV2WithSigner(context.Background(), cert, signer)
 			switch v.Expected {
 			case "sign":

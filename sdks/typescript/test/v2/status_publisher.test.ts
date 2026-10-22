@@ -18,7 +18,7 @@ import {
 import { newLocalSignerV2, type SignRequestV2, type SignerV2 } from "../../src/signer_v2.js";
 import { runV2StatusStage, type V2StatusEvidenceRequest } from "../../src/status_provenance_v2.js";
 import { encodeV2StatusEvidenceBatch } from "../../src/status_batch_v2.js";
-import { newV2StatusPublisher, type V2StatusPublication, type V2StatusPublisherState } from "../../src/status_publisher_v2.js";
+import { newV2StatusPublisher, newV2StatusPublisherWithKey, type V2StatusPublication, type V2StatusPublisherState } from "../../src/status_publisher_v2.js";
 import { JournalStoreTestOnly } from "../../src/v2reference/journal.js";
 import { type Any, corpusKeyPairs, load } from "./helpers.js";
 
@@ -158,7 +158,7 @@ test("provenance stage: provider evidence is authenticated through the journal; 
     await configureStatusKeyEpochV2(store, issuerID, 1, sk.publicKey);
     configs.set(issuerID, { epoch: 1, key: sk.publicKey });
     const issuerKey = certs.find((c) => c.issuer_id === issuerID)!.issuer_pub_key;
-    publishers.set(issuerID, await newV2StatusPublisher(store, issuerKey, await newLocalSignerV2(sk), 3600));
+    publishers.set(issuerID, await newV2StatusPublisherWithKey(store, issuerKey, sk, 3600));
   }
   const now = 1_800_000_000;
   const genesis = new Map<string, Uint8Array>();

@@ -98,11 +98,7 @@ func TestV2ConformanceStatusPublisher(t *testing.T) {
 			if setup != sc.JournalSetup {
 				t.Fatalf("journal setup %q, want %q", setup, sc.JournalSetup)
 			}
-			signer, err := ratify.NewLocalSignerV2(fx.priv[sc.StatusKey])
-			if err != nil {
-				t.Fatal(err)
-			}
-			counting := &v2CountingSigner{inner: signer}
+			counting := &v2CountingSigner{inner: v2TestKeyProvider{fx.priv[sc.StatusKey]}}
 			publisher, err := ratify.NewV2StatusPublisher(ctx, journal, issuerKey, counting, sc.LifetimeSeconds)
 			switch sc.Publisher {
 			case "ok":

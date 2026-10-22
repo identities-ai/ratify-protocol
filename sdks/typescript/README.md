@@ -323,16 +323,20 @@ SPEC-v2:
   `signProofBundleV2`, ...). Each has a `...WithSigner` form that takes a
   `SignerV2`, an external signer in direct or external-mu mode; every
   returned signature is verified before use. No export signs caller-selected
-  bytes. The delegation signer refuses certificates that break the issuer
+  bytes, and no local `SignerV2` is exported: an in-process key signs only
+  through the typed key-pair functions. The delegation signer refuses certificates that break the issuer
   duties of SPEC-v2 §5.1 before any signer method runs.
 - **Live verification.** `verifyProofBundleV2` runs the SPEC-v2 §6 order and
   returns a committed outcome, which exposes no decision. Only
-  `releaseV2Decision` produces a `V2ReleasedDecision`. Gate a side effect on
-  `await decision.allowed(clock)`, which compares the receiver's clock with
-  the sealed exclusive deadlines.
+  `releaseV2Decision` produces a `V2ReleasedDecision`; its constructor
+  throws for any other caller, and an object it did not return is never
+  actionable. Gate a side effect on `await decision.allowed(clock)`, which
+  compares the receiver's clock with the sealed exclusive deadlines. This
+  guards against API misuse, not against hostile code in the same process.
 - **Status.** Status comes only from signed evidence batches applied to a
   `SecurityJournalV2` (canonical snapshot, labelled digest, alpha migration).
-  `newV2StatusPublisher` builds a minimal signed-status publisher from the
+  `newV2StatusPublisher` (external signer) and `newV2StatusPublisherWithKey`
+  (in-process key pair) build a minimal signed-status publisher from the
   role journal.
 - **Constraints.** `time_window` is evaluated against the embedded IANA
   tzdata `2025c` (SHA-256 checked at load; host zone data is never used).

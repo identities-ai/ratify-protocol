@@ -15,7 +15,7 @@ from ratify_protocol_v2.signing_v2 import (
     external_mu_v2,
     key_id_v2,
     mldsa_context_v2,
-    new_local_signer_v2,
+    _new_local_signer_v2,
 )
 from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey, HybridSignature
 
@@ -63,7 +63,7 @@ class ExternalMuSigner:
         code = int.from_bytes(req.message[27:29], "big")
         context = mldsa_context_v2(code)
         assert req.mldsa_mu == external_mu_v2(self._pub.ml_dsa_65, context, req.message)
-        ed, ml = self._key.sign(req.message, context)
+        ed, ml = self._key._sign(req.message, context)
         return HybridSignature(bytes(ed), bytes(ml))
 
 
@@ -71,7 +71,7 @@ class FaultySigner:
     """A direct-mode signer whose output can be corrupted or delayed."""
 
     def __init__(self, priv: HybridPrivateKey, fault: str, on_sign=None):
-        self.inner = new_local_signer_v2(priv)
+        self.inner = _new_local_signer_v2(priv)
         self.fault = fault
         self.on_sign = on_sign
 

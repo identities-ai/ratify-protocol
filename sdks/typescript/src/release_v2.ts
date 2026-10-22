@@ -41,19 +41,25 @@ interface CommittedState {
 
 const committedStates = new WeakMap<CommittedV2Outcome, CommittedState>();
 
+// Module-private construction capabilities. Neither symbol is exported, so a
+// constructor call from outside this module throws. The state maps above and
+// below are the registries of genuine instances: an object that is not a key
+// there (built with Object.create, structuredClone, a prototype change, or a
+// spread copy) carries no state and is never actionable.
+const COMMITTED_TOKEN: unique symbol = Symbol("v2 committed outcome");
+const RELEASED_TOKEN: unique symbol = Symbol("v2 released decision");
+
 /**
  * The immutable, non-actionable handoff from a committed verification to
  * publication and releaseV2Decision. It exposes no decision; applications
- * must not parse the receipt body to authorize.
+ * must not parse the receipt body to authorize. Only the verifier and
+ * interruption recovery construct one; its constructor throws for any other
+ * caller.
  */
 export class CommittedV2Outcome {
-  private constructor() {}
-  /** @internal */
-  static create(state: CommittedState): CommittedV2Outcome {
-    const c = new CommittedV2Outcome();
-    committedStates.set(c, state);
-    Object.freeze(c);
-    return c;
+  /** Not constructible outside the SDK: the constructor throws without a module-private token. */
+  private constructor(token?: unknown) {
+    if (token !== COMMITTED_TOKEN) throw new TypeError("CommittedV2Outcome is created only by the v2 verifier and recovery");
   }
   get #s(): CommittedState {
     const s = committedStates.get(this);
@@ -87,12 +93,18 @@ export function committedStateV2(c: CommittedV2Outcome | null | undefined): Comm
   return c ? (committedStates.get(c) ?? null) : null;
 }
 
-/** @internal Only the verifier and recovery construct a committed outcome. */
+/**
+ * @internal Only the verifier and recovery construct a committed outcome.
+ * Not exported from any package entry point.
+ */
 export function newCommittedV2Outcome(claim: V2ChallengeClaim, body: Uint8Array, allowHorizon: number): CommittedV2Outcome {
-  return CommittedV2Outcome.create({
+  const c = new (CommittedV2Outcome as unknown as new (token: symbol) => CommittedV2Outcome)(COMMITTED_TOKEN);
+  committedStates.set(c, {
     claimID: claim.claimID, verifierID: claim.verifierID, receiptBody: Uint8Array.from(body),
     challengeExpiresAt: claim.expiresAt, allowHorizon,
   });
+  Object.freeze(c);
+  return c;
 }
 
 /**
@@ -162,24 +174,36 @@ interface ReleasedState {
   allowHorizon: number;
 }
 
+// The registry of genuine released decisions. Only mintReleasedDecision adds
+// to it, and only releaseV2Decision calls mintReleasedDecision; neither is
+// exported.
 const releasedStates = new WeakMap<V2ReleasedDecision, ReleasedState>();
 const releasedStateOf = (d: V2ReleasedDecision): ReleasedState | null => releasedStates.get(d) ?? null;
 
+function mintReleasedDecision(state: ReleasedState): V2ReleasedDecision {
+  const d = new (V2ReleasedDecision as unknown as new (token: symbol) => V2ReleasedDecision)(RELEASED_TOKEN);
+  releasedStates.set(d, state);
+  Object.freeze(d);
+  return d;
+}
+
 /**
- * The only actionable value of this SDK (SPEC-v2 §6.9). Sealed: its
- * constructor is private, its state is held outside the instance, and
- * releaseV2Decision is its only producer. Every accessor returns a copy. An
- * instance not produced by releaseV2Decision (for example one built with
- * Object.create) is never actionable.
+ * The only actionable value of this SDK (SPEC-v2 §6.9). Sealed:
+ * releaseV2Decision is its only producer, its constructor throws for any
+ * other caller, and its state lives in a module-private registry rather than
+ * on the instance. Every accessor returns a copy. An object that
+ * releaseV2Decision did not return (one built with Object.create,
+ * structuredClone, Object.setPrototypeOf, or a copy of a genuine instance)
+ * is not in the registry and is never actionable.
+ *
+ * This protects against API misuse and accidental construction. It is not a
+ * defense against hostile code running in the same process, which can
+ * already read the application's keys and stores (SPEC-v2 §1.3).
  */
 export class V2ReleasedDecision {
-  private constructor() {}
-  /** @internal */
-  static release(state: ReleasedState): V2ReleasedDecision {
-    const d = new V2ReleasedDecision();
-    releasedStates.set(d, state);
-    Object.freeze(d);
-    return d;
+  /** Not constructible outside the SDK: the constructor throws without a module-private token. */
+  private constructor(token?: unknown) {
+    if (token !== RELEASED_TOKEN) throw new TypeError("V2ReleasedDecision is created only by releaseV2Decision");
   }
   claimID(): string {
     return releasedStateOf(this)?.claimID ?? "";
@@ -239,6 +263,13 @@ export class V2ReleasedDecision {
     return now < s.challengeExpiresAt && now < s.allowHorizon;
   }
 }
+
+// Freeze both classes and their prototypes so no caller can replace an
+// accessor such as allowed() for every instance.
+Object.freeze(CommittedV2Outcome.prototype);
+Object.freeze(CommittedV2Outcome);
+Object.freeze(V2ReleasedDecision.prototype);
+Object.freeze(V2ReleasedDecision);
 
 /** The result of releaseV2Decision. decision is non-null only when released. */
 export interface V2ReleaseResult {
@@ -363,7 +394,7 @@ export async function releaseV2Decision(
     }
   }
   // 10. Return.
-  const decision = V2ReleasedDecision.release({
+  const decision = mintReleasedDecision({
     claimID: c.claimID, decision: receipt.decision, reason: receipt.decision_reason, identityStatus: receipt.identity_status,
     grantedScope: [...(receipt.granted_scope ?? [])], receiptWire: Uint8Array.from(signedReceipt), releaseTime: ack.timestamp,
     challengeExpiresAt: c.challengeExpiresAt, allowHorizon: receipt.decision === "allow" ? c.allowHorizon : 0,

@@ -115,6 +115,14 @@ func NewV2StatusPublisher(ctx context.Context, roles SecurityJournalStoreV2, iss
 	return &V2StatusPublisher{issuerID: issuerBinding.KeyID, statusKey: cloneHybridPublicKeyV2(statusKey), statusKeyID: statusBinding.KeyID, signer: statusSigner, lifetime: lifetimeSeconds}, nil
 }
 
+// NewV2StatusPublisherWithKey is NewV2StatusPublisher for a status key held
+// in process: the publisher signs with statusKey through the same typed,
+// verified signing path, with every refusal of NewV2StatusPublisher. An
+// invalid statusKey is configuration_invalid.
+func NewV2StatusPublisherWithKey(ctx context.Context, roles SecurityJournalStoreV2, issuerKey HybridPublicKey, statusKey HybridPrivateKey, lifetimeSeconds int64) (*V2StatusPublisher, error) {
+	return NewV2StatusPublisher(ctx, roles, issuerKey, localSignerV2{priv: statusKey}, lifetimeSeconds)
+}
+
 // IssuerID and StatusKey report the binding a verifier configures.
 func (p *V2StatusPublisher) IssuerID() string { return p.issuerID }
 

@@ -29,7 +29,10 @@ signer (`SignerV2`) in direct mode (it receives the 77-byte message `M` and
 the registered ML-DSA context) or external-μ mode (it receives only `mu`).
 The SDK checks the signer's complete public key against the object before
 any signer call, and verifies every returned signature before using it. No
-function signs caller-selected bytes, codes, or contexts. Production signing
+function signs caller-selected bytes, codes, or contexts, and no local
+`SignerV2` is exported: an in-process key signs only through the typed
+signers, and the status publisher takes it through
+`status_publisher_v2.new_v2_status_publisher_with_key`. Production signing
 is hedged; byte-reproducible signing for the shared vectors is available only
 to tests through `ratify_protocol_v2._testing.deterministic_test_vector_signing()`.
 
@@ -48,8 +51,15 @@ A committed outcome is not a decision. `release_v2.release_v2_decision`
 checks the published receipt, its checkpoint acknowledgement, the
 authoritative clock and the exclusive deadlines, and returns a
 `V2ReleasedDecision` only when every step passes. That class has no public
-constructor; `decision.allowed(ctx, clock)` is the only value an application
-may use to gate a side effect.
+constructor, holds no state of its own, and cannot be subclassed or pickled;
+only the exact instance `release_v2_decision` returned is in its release
+registry, which lives in a closure rather than a module attribute, so a copy
+or a hand-built instance is never actionable.
+`decision.allowed(ctx, clock)` is the only value an application may use to
+gate a side effect. This guards against API misuse and accidental
+construction. It does not defend against hostile code in the same
+interpreter (for example `gc` or closure introspection, or monkeypatching the
+module), which could read the application's keys and stores anyway.
 
 Every function whose Go counterpart takes a `context.Context` takes a
 `context_v2.Context` as its first argument (`context_v2.background()`,

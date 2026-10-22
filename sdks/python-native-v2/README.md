@@ -15,8 +15,13 @@ signing. ML-DSA-65 comes from the constant-time `fips204` crate and Ed25519 from
 no pure-Python signing path.
 
 The SDK computes the 77-byte v2 signing message and the ML-DSA context and
-passes both to `HybridSigningKey.sign`. The extension checks that they name the
-same registered object type, then signs exactly those bytes. ML-DSA-65 signing
+passes both to the internal `HybridSigningKey._sign` method. The extension
+checks that they name the same registered object type, then signs exactly those
+bytes. `_sign` is not public API and the SDK never re-exports it: applications
+sign only through the SDK's typed signing functions. A compiled module cannot
+hide a method from code in the same interpreter, so code that already holds a
+`HybridSigningKey`, and therefore the private key, can still call it; that is
+outside the SDK's API guarantee. ML-DSA-65 signing
 is hedged with fresh OS randomness. The keyword-only
 `deterministic_for_test_vectors=True` flag selects the FIPS 204 deterministic
 variant, which is how the shared test vectors are generated; it is for

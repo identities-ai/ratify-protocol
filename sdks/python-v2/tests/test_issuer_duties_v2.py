@@ -10,7 +10,7 @@ from corpus import b64, load
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2 import protocol_v2 as pv2
 from ratify_protocol_v2.context_v2 import background
-from ratify_protocol_v2.signing_v2 import V2SigningError, new_local_signer_v2
+from ratify_protocol_v2.signing_v2 import V2SigningError, _new_local_signer_v2
 from signer_fixtures import CountingSigner, ExternalMuSigner
 from test_v2_conformance import PUB, private_key
 
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(not _native.AVAILABLE, reason="ratify-protocol-n
 def test_issuer_duty(v, mode):
     cert = pv2.decode_delegation_cert_v2(b64(v["unsigned_certificate_b64"]))
     if mode == "direct":
-        inner = new_local_signer_v2(private_key(v["issuer"]))
+        inner = _new_local_signer_v2(private_key(v["issuer"]))
     else:
         inner = ExternalMuSigner(private_key(v["issuer"]), PUB[v["issuer"]])
     signer = CountingSigner(inner)

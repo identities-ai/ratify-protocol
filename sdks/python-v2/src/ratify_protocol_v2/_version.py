@@ -1,4 +1,4 @@
-"""Distribution version of ratify-protocol-v2 and its lockstep native extra."""
+"""Distribution version of ratify-protocol-v2 and its lockstep native extension."""
 
 __version__ = "2.0.0a1"
 

@@ -10,10 +10,19 @@ This is a separate distribution from the v1 SDK. It imports as
 `ratify_protocol_v2`, so it can be installed next to `ratify-protocol`
 (`ratify_protocol`) in the same environment. Existing v1 pins are unaffected.
 
-The SDK is pure Python. The optional `native` extra
-(`ratify-protocol-native-v2`) adds native deterministic key generation. It is
-versioned in lockstep with this package, and importing `ratify_protocol_v2`
-fails if a mismatched extension is installed.
+Key generation and signing run only in the required native extension
+`ratify-protocol-native-v2` (constant-time Ed25519 and ML-DSA-65), which pip
+installs with this package. There is no pure-Python signing path: without the
+extension every signer raises `ImportError`. Each signature the extension
+returns is checked by the SDK's pure-Python verifier before it is used.
+Verification handles only public data, is pure Python, and works without the
+extension. The extension is versioned in lockstep with this package, and
+importing `ratify_protocol_v2` fails if a mismatched extension is installed.
+
+Production signing is always hedged. The typed signers take no
+`deterministic` argument; byte-reproducible signing for the shared vectors is
+available only to tests, through
+`ratify_protocol_v2._testing.deterministic_test_vector_signing()`.
 
 The v2 API covers strict decoding and canonical encoding of every v2 signed
 object, hybrid signature verification with full 256-bit v2 key IDs, the

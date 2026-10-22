@@ -5,8 +5,11 @@ reproduced byte-for-byte; negatives must be rejected with the exact error
 class; verifier-ordering vectors must match the stage, class, terminal
 tuple, receipt outbox body, allow horizon, rate batch, and every callback
 count. A file or vector class this runner does not understand fails the run
-(see test_every_corpus_file_is_consumed); nothing is skipped. These tests do
-not use the optional native extension.
+(see test_every_corpus_file_is_consumed). Verification runs in pure Python.
+Re-deriving keys from seeds and re-signing byte-for-byte need the native
+extension (the only signer); those tests are marked ``requires_native`` and
+skip, with that reason, only when the extension is absent and
+RATIFY_REQUIRE_NATIVE is not set.
 """
 from __future__ import annotations
 
@@ -20,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from ratify_protocol_v2 import _mldsa65
+from ratify_protocol_v2 import _mldsa65, _native
 from ratify_protocol_v2 import _v2json
 from ratify_protocol_v2 import key_rotation_v2 as kr
 from ratify_protocol_v2 import protocol_v2 as pv2
@@ -41,11 +44,14 @@ from ratify_protocol_v2.signing_v2 import (
     keypair_from_seeds_v2,
     key_id_v2,
     mldsa_context_v2,
-    sign_v2_statement,
+    _sign_v2_statement,
     signing_message_v2,
     verify_v2_statement,
 )
+from ratify_protocol_v2._testing import deterministic_test_vector_signing
 from ratify_protocol_v2.types import HybridPublicKey, HybridSignature, VerifierContext
+
+requires_native = pytest.mark.skipif(not _native.AVAILABLE, reason="ratify-protocol-native-v2 not installed")
 
 
 def derive_id(pub: HybridPublicKey) -> str:
@@ -119,11 +125,17 @@ def test_every_corpus_file_is_consumed():
 
 @pytest.mark.parametrize("entry", KEYS["keys"], ids=lambda e: e["name"])
 def test_keys(entry):
-    pub, _ = keypair_from_seeds_v2(bytes.fromhex(entry["ed25519_seed_hex"]), bytes.fromhex(entry["ml_dsa_65_seed_hex"]))
-    assert pub == pubkey(entry["public_key"]), "seeds do not derive the pinned public key"
+    pub = pubkey(entry["public_key"])
     independent = hashlib.sha256(b"ratify-key-id-v2\x00" + pub.ed25519 + pub.ml_dsa_65).hexdigest()
     assert key_id_v2(pub) == entry["key_id_v2"] == independent
     assert derive_id(pub) == entry["v1_key_id_128"] != entry["key_id_v2"][:32]
+
+
+@requires_native
+@pytest.mark.parametrize("entry", KEYS["keys"], ids=lambda e: e["name"])
+def test_keys_derive_from_seeds(entry):
+    pub, _ = keypair_from_seeds_v2(bytes.fromhex(entry["ed25519_seed_hex"]), bytes.fromhex(entry["ml_dsa_65_seed_hex"]))
+    assert pub == pubkey(entry["public_key"]), "seeds do not derive the pinned public key"
 
 
 def _set_top_level_string(wire: bytes, name: str, value: str) -> bytes:
@@ -312,9 +324,19 @@ def test_object(o):
         pinned = sig(s["signature"])
         assert base64.b64encode(pinned.ml_dsa_65) in wire and base64.b64encode(pinned.ed25519) in wire
         verify_v2_statement(code, signable, pinned, signer)
-        # Byte-for-byte: deterministic Ed25519 and unhedged ML-DSA-65 from the fixture seeds.
-        assert sign_v2_statement(code, signable, private_key(s["signer"]), deterministic=True) == pinned
     _check_object_digests(o, wire)
+
+
+@requires_native
+@pytest.mark.parametrize("o", OBJECTS["objects"], ids=lambda o: o["name"])
+def test_object_native_resign(o):
+    """The native signer reproduces every pinned signature byte-for-byte
+    (deterministic Ed25519, unhedged ML-DSA-65 from the fixture seeds)."""
+    for s in o["signatures"]:
+        signable = b64(s["signable_b64"])
+        with deterministic_test_vector_signing():
+            resigned = _sign_v2_statement(s["object_type_code"], signable, private_key(s["signer"]))
+        assert resigned == sig(s["signature"]), s["field"]
 
 
 def test_objects_cover_every_object_code():
@@ -646,11 +668,8 @@ def test_delegation_signature_vector():
     assert key_id_v2(pub) == v["key_id_v2"]
     assert _mldsa65.compute_tr(pub.ml_dsa_65) == b64(v["mldsa_tr"])
     assert _mldsa65.compute_mu(pub.ml_dsa_65, message, context) == b64(v["mldsa_mu"])
-    derived, priv = keypair_from_seeds_v2(b64(v["issuer_seeds"]["ed25519"]), b64(v["issuer_seeds"]["ml_dsa_65"]))
-    assert derived == pub
     signature = sig(v["signature"])
     verify_v2_statement(1, signable, signature, pub)
-    assert sign_v2_statement(1, signable, priv, deterministic=True) == signature
     assert not _mldsa65.verify(pub.ml_dsa_65, message, b64(v["alternate_mldsa_context"]), signature.ml_dsa_65)
     mask = v["negative_mutations"]["xor_mask"]
     targets = v["negative_mutations"]["targets"]
@@ -673,6 +692,15 @@ def test_delegation_signature_vector():
         with pytest.raises(Exception) as info:
             verify_v2_statement(1, data, s, k)
         assert error_class_of(info.value) == "invalid_signature", target
+
+
+@requires_native
+def test_delegation_signature_vector_native_resign():
+    v = load("delegation-signature.json")
+    derived, priv = keypair_from_seeds_v2(b64(v["issuer_seeds"]["ed25519"]), b64(v["issuer_seeds"]["ml_dsa_65"]))
+    assert derived == pubkey(v["issuer_public_key"])
+    with deterministic_test_vector_signing():
+        assert _sign_v2_statement(1, b64(v["signable_bytes"]), priv) == sig(v["signature"])
 
 
 def test_derive_external_mu_script():
@@ -749,14 +777,23 @@ def test_key_rotation_signature_vector(v):
     assert kr.key_rotation_statement_v2_digest(stmt).hex() == v["statement_body_digest"]
     assert mldsa_context_v2(4).decode() == v["old_mldsa_context"] and mldsa_context_v2(9).decode() == v["new_mldsa_context"]
     assert stmt.old_signature == sig(v["old_signature"]) and stmt.new_signature == sig(v["new_signature"])
-    old_pub, old_priv = keypair_from_seeds_v2(bytes.fromhex(v["old_key_seeds"]["ed25519"]), bytes.fromhex(v["old_key_seeds"]["ml_dsa_65"]))
-    new_pub, new_priv = keypair_from_seeds_v2(bytes.fromhex(v["new_key_seeds"]["ed25519"]), bytes.fromhex(v["new_key_seeds"]["ml_dsa_65"]))
-    assert old_pub == stmt.old_key and new_pub == stmt.new_key
+    old_pub, new_pub = stmt.old_key, stmt.new_key
     verify_v2_statement(4, signable, stmt.old_signature, old_pub)
     verify_v2_statement(9, signable, stmt.new_signature, new_pub)
-    signed = kr.sign_key_rotation_statement_v2(stmt, old_priv, new_priv, deterministic=True)
-    assert kr.encode_key_rotation_statement_v2(signed) == wire
     for code, signature, key in ((9, stmt.old_signature, old_pub), (4, stmt.new_signature, new_pub)):
         with pytest.raises(Exception) as info:
             verify_v2_statement(code, signable, signature, key)
         assert error_class_of(info.value) == "invalid_signature"
+
+
+@requires_native
+@pytest.mark.parametrize("v", [ROTATION_SIGNATURE, ROTATION_SIGNATURE["continuation"]], ids=["genesis", "continuation"])
+def test_key_rotation_signature_vector_native_resign(v):
+    wire = b64(v["wire"])
+    stmt = kr.decode_key_rotation_statement_v2(wire)
+    old_pub, old_priv = keypair_from_seeds_v2(bytes.fromhex(v["old_key_seeds"]["ed25519"]), bytes.fromhex(v["old_key_seeds"]["ml_dsa_65"]))
+    new_pub, new_priv = keypair_from_seeds_v2(bytes.fromhex(v["new_key_seeds"]["ed25519"]), bytes.fromhex(v["new_key_seeds"]["ml_dsa_65"]))
+    assert old_pub == stmt.old_key and new_pub == stmt.new_key
+    with deterministic_test_vector_signing():
+        signed = kr.sign_key_rotation_statement_v2(stmt, old_priv, new_priv)
+    assert kr.encode_key_rotation_statement_v2(signed) == wire

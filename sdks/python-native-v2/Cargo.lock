@@ -453,8 +453,11 @@ dependencies = [
 name = "ratify-protocol-native-v2"
 version = "2.0.0-alpha.1"
 dependencies = [
+ "ed25519-dalek",
+ "fips204",
  "pyo3",
  "ratify-protocol",
+ "zeroize",
 ]
 
 [[package]]

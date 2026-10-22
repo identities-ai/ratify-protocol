@@ -1,14 +1,13 @@
-"""Pure-Python ML-DSA-65 (FIPS 204), used when the native extra is absent.
+"""Pure-Python ML-DSA-65 (FIPS 204) verification.
 
-Implements ML-DSA.KeyGen_internal from a 32-byte seed, the pure (non-prehash)
-external interface with a context string, and the external-mu helpers that
-Protocol v2 vectors pin. Signing with an all-zero ``rnd`` is the FIPS 204
-deterministic variant. Only ``hashlib`` is required.
+Implements the pure (non-prehash) external verification interface with a
+context string, and the external-mu helpers that Protocol v2 vectors pin.
+Only ``hashlib`` is required.
 
-This module is a correctness fallback, not a constant-time implementation:
-Python big-integer arithmetic leaks timing. Verification handles only public
-data. Signing with long-term production keys should use a hardened,
-constant-time provider.
+This module is verification-only and deliberately has no key generation or
+signing: Python big-integer arithmetic is not constant-time, which is
+acceptable for public data only. Every private-key operation goes through the
+``ratify-protocol-native-v2`` extension.
 """
 from __future__ import annotations
 
@@ -83,10 +82,6 @@ def _intt(f):
     return [x * _N_INV % Q for x in w]
 
 
-def _mul(a, b):
-    return [x * y % Q for x, y in zip(a, b)]
-
-
 def _mat_vec(a_hat, v_hat):
     out = []
     for row in a_hat:
@@ -122,34 +117,6 @@ def _expand_a(rho: bytes):
         tuple(_rej_ntt_poly(rho + bytes([s, r])) for s in range(L))
         for r in range(K)
     )
-
-
-def _rej_bounded_poly(seed: bytes):
-    nbytes = 272
-    while True:
-        buf = shake_256(seed).digest(nbytes)
-        out = []
-        for byte in buf:
-            for nib in (byte & 0x0F, byte >> 4):
-                if nib < 9:
-                    out.append((ETA - nib) % Q)
-            if len(out) >= N:
-                return out[:N]
-        nbytes *= 2
-
-
-def _expand_s(rho_prime: bytes):
-    s1 = [_rej_bounded_poly(rho_prime + r.to_bytes(2, "little")) for r in range(L)]
-    s2 = [_rej_bounded_poly(rho_prime + (r + L).to_bytes(2, "little")) for r in range(K)]
-    return s1, s2
-
-
-def _expand_mask(rho2: bytes, kappa: int):
-    out = []
-    for r in range(L):
-        buf = shake_256(rho2 + (kappa + r).to_bytes(2, "little")).digest(640)
-        out.append([(GAMMA1 - v) % Q for v in _unpack(buf, 20)])
-    return out
 
 
 def _sample_in_ball(seed: bytes):
@@ -197,10 +164,6 @@ def _decompose(r: int):
     return (r - r0) // (2 * GAMMA2), r0
 
 
-def _high_bits(r: int) -> int:
-    return _decompose(r)[0]
-
-
 def _use_hint(h: int, r: int) -> int:
     r1, r0 = _decompose(r)
     if h:
@@ -235,29 +198,12 @@ def _unpack(buf: bytes, bits: int):
     return [(acc >> (i * bits)) & mask for i in range(len(buf) * 8 // bits)]
 
 
-def _pack_centered(poly, bound: int, bits: int) -> bytes:
-    # BitPack(w, a, b) stores b - w_i.
-    return _pack([(bound - _centered(x, Q)) for x in poly], bits)
-
-
 def _unpack_centered(buf: bytes, bound: int, bits: int):
     return [(bound - v) % Q for v in _unpack(buf, bits)]
 
 
 def _w1_encode(w1) -> bytes:
     return b"".join(_pack(p, 4) for p in w1)
-
-
-def _hint_pack(h) -> bytes:
-    out = bytearray(OMEGA + K)
-    index = 0
-    for i, poly in enumerate(h):
-        for j, bit in enumerate(poly):
-            if bit:
-                out[index] = j
-                index += 1
-        out[OMEGA + i] = index
-    return bytes(out)
 
 
 def _hint_unpack(y: bytes):
@@ -298,67 +244,6 @@ def _public_precompute(pk: bytes):
     return _expand_a(rho), t1_hat, _h(pk, 64)
 
 
-def keygen_from_seed(seed: bytes) -> tuple[bytes, bytes]:
-    """ML-DSA-65 KeyGen_internal(xi). Returns (public_key, secret_key)."""
-    if not isinstance(seed, (bytes, bytearray)) or len(seed) != 32:
-        raise ValueError("ML-DSA-65 seed must be 32 bytes")
-    expanded = _h(bytes(seed) + bytes([K, L]), 128)
-    rho, rho_prime, key = expanded[:32], expanded[32:96], expanded[96:]
-    a_hat = _expand_a(rho)
-    s1, s2 = _expand_s(rho_prime)
-    s1_hat = [_ntt(p) for p in s1]
-    t = [
-        [(x + y) % Q for x, y in zip(_intt(row), e)]
-        for row, e in zip(_mat_vec(a_hat, s1_hat), s2)
-    ]
-    t1, t0 = [], []
-    for poly in t:
-        hi, lo = [], []
-        for x in poly:
-            r0 = _centered(x, 1 << D)
-            hi.append((x - r0) >> D)
-            lo.append(r0 % Q)
-        t1.append(hi)
-        t0.append(lo)
-    pk = rho + b"".join(_pack(p, 10) for p in t1)
-    tr = _h(pk, 64)
-    sk = (
-        rho + key + tr
-        + b"".join(_pack_centered(p, ETA, 4) for p in s1)
-        + b"".join(_pack_centered(p, ETA, 4) for p in s2)
-        + b"".join(_pack_centered(p, 1 << (D - 1), 13) for p in t0)
-    )
-    return pk, sk
-
-
-
-def public_key_from_secret(sk: bytes) -> bytes:
-    """Recompute the public key from a FIPS 204 secret key and check its tr."""
-    if not isinstance(sk, (bytes, bytearray)) or len(sk) != SECRET_KEY_SIZE:
-        raise ValueError("ML-DSA-65 secret key has the wrong length")
-    sk = bytes(sk)
-    rho, tr = sk[:32], sk[64:128]
-    offset = 128
-    s1 = []
-    for _ in range(L):
-        s1.append(_unpack_centered(sk[offset:offset + 128], ETA, 4))
-        offset += 128
-    s2 = []
-    for _ in range(K):
-        s2.append(_unpack_centered(sk[offset:offset + 128], ETA, 4))
-        offset += 128
-    a_hat = _expand_a(rho)
-    s1_hat = [_ntt(p) for p in s1]
-    t = [
-        [(x + y) % Q for x, y in zip(_intt(row), e)]
-        for row, e in zip(_mat_vec(a_hat, s1_hat), s2)
-    ]
-    t1 = [[(x - _centered(x, 1 << D)) >> D for x in poly] for poly in t]
-    pk = rho + b"".join(_pack(p, 10) for p in t1)
-    if _h(pk, 64) != tr:
-        raise ValueError("ML-DSA-65 secret key is inconsistent with its public key hash")
-    return pk
-
 def _message_prime(message: bytes, ctx: bytes) -> bytes:
     if len(ctx) > 255:
         raise ValueError("ML-DSA context exceeds 255 bytes")
@@ -373,68 +258,6 @@ def compute_tr(pk: bytes) -> bytes:
 def compute_mu(pk: bytes, message: bytes, ctx: bytes) -> bytes:
     """External mu = H(tr || 0x00 || len(ctx) || ctx || M, 64)."""
     return _h(compute_tr(pk) + _message_prime(message, ctx), 64)
-
-
-def sign(sk: bytes, message: bytes, ctx: bytes, rnd: bytes = bytes(32)) -> bytes:
-    """ML-DSA-65 pure signing with context. All-zero ``rnd`` is deterministic."""
-    sk = bytes(sk)
-    if len(sk) != SECRET_KEY_SIZE:
-        raise ValueError("ML-DSA-65 secret key must be 4032 bytes")
-    if len(rnd) != 32:
-        raise ValueError("ML-DSA-65 rnd must be 32 bytes")
-    m_prime = _message_prime(message, ctx)
-    rho, key, tr = sk[:32], sk[32:64], sk[64:128]
-    off = 128
-    s1 = [_unpack_centered(sk[off + 128 * i: off + 128 * (i + 1)], ETA, 4) for i in range(L)]
-    off += 128 * L
-    s2 = [_unpack_centered(sk[off + 128 * i: off + 128 * (i + 1)], ETA, 4) for i in range(K)]
-    off += 128 * K
-    t0 = [_unpack_centered(sk[off + 416 * i: off + 416 * (i + 1)], 1 << (D - 1), 13) for i in range(K)]
-    s1_hat = [_ntt(p) for p in s1]
-    s2_hat = [_ntt(p) for p in s2]
-    t0_hat = [_ntt(p) for p in t0]
-    a_hat = _expand_a(rho)
-    mu = _h(tr + m_prime, 64)
-    rho2 = _h(key + bytes(rnd) + mu, 64)
-    kappa = 0
-    bound_z = GAMMA1 - BETA
-    bound_r0 = GAMMA2 - BETA
-    while True:
-        y = _expand_mask(rho2, kappa)
-        kappa += L
-        w = [_intt(p) for p in _mat_vec(a_hat, [_ntt(p) for p in y])]
-        w1 = [[_high_bits(x) for x in p] for p in w]
-        c_tilde = _h(mu + _w1_encode(w1), C_TILDE_BYTES)
-        c_hat = _ntt(_sample_in_ball(c_tilde))
-        cs1 = [_intt(_mul(c_hat, p)) for p in s1_hat]
-        z = [[(a + b) % Q for a, b in zip(yp, cp)] for yp, cp in zip(y, cs1)]
-        if max(_inf_norm(p) for p in z) >= bound_z:
-            continue
-        cs2 = [_intt(_mul(c_hat, p)) for p in s2_hat]
-        w_minus = [[(a - b) % Q for a, b in zip(wp, cp)] for wp, cp in zip(w, cs2)]
-        if max(max(abs(_decompose(x)[1]) for x in p) for p in w_minus) >= bound_r0:
-            continue
-        ct0 = [_intt(_mul(c_hat, p)) for p in t0_hat]
-        if max(_inf_norm(p) for p in ct0) >= GAMMA2:
-            continue
-        hint = []
-        count = 0
-        for cp, wp in zip(ct0, w_minus):
-            row = []
-            for c0, wm in zip(cp, wp):
-                # MakeHint(-ct0, w - cs2 + ct0)
-                r = (wm + c0) % Q
-                bit = 1 if _high_bits(r) != _high_bits(wm) else 0
-                count += bit
-                row.append(bit)
-            hint.append(row)
-        if count > OMEGA:
-            continue
-        return (
-            c_tilde
-            + b"".join(_pack_centered(p, GAMMA1, 20) for p in z)
-            + _hint_pack(hint)
-        )
 
 
 def verify(pk: bytes, message: bytes, ctx: bytes, sig: bytes) -> bool:

@@ -36,7 +36,7 @@ from .signing_v2 import (
     WITNESS_ENTRY,
     key_id_v2,
     public_key_of,
-    sign_v2_statement,
+    _sign_v2_statement,
     verify_v2_statement,
 )
 from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
@@ -197,12 +197,12 @@ def decode_witness_entry_v2(data: bytes) -> WitnessEntryV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
-def sign_witness_entry_v2(entry: WitnessEntryV2, witness_private: HybridPrivateKey, *, deterministic: bool = False) -> WitnessEntryV2:
+def sign_witness_entry_v2(entry: WitnessEntryV2, witness_private: HybridPrivateKey) -> WitnessEntryV2:
     validate_witness_entry_v2(entry, False)
     if key_id_v2(public_key_of(witness_private)) != entry.witness_id:
         raise ValueError("witness_id does not match signing key")
     body = witness_entry_signable_bytes_v2(entry)
-    result = replace(entry, signature=sign_v2_statement(WITNESS_ENTRY, body, witness_private, deterministic=deterministic))
+    result = replace(entry, signature=_sign_v2_statement(WITNESS_ENTRY, body, witness_private))
     encode_witness_entry_v2(result)
     return result
 

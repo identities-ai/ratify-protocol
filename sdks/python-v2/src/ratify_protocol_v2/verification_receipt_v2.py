@@ -31,7 +31,7 @@ from .protocol_v2 import (
     validate_scopes_v2,
 )
 from .scope import scope_wildcards
-from .signing_v2 import VERIFICATION_RECEIPT, key_id_v2, public_key_of, sign_v2_statement, verify_v2_statement
+from .signing_v2 import VERIFICATION_RECEIPT, key_id_v2, public_key_of, _sign_v2_statement, verify_v2_statement
 from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
 from .witness_v2 import ZERO_HASH, WitnessEntryV2Result, _validate_log_head, log_position_result, statement_body_digest_v2
 
@@ -444,13 +444,12 @@ def validate_verification_receipt_signable_v2(data: bytes) -> None:
         raise ValueError("signable body must use RatifyCanonicalJSON")
 
 
-def sign_verification_receipt_v2(r: VerificationReceiptV2, verifier_private: HybridPrivateKey,
-                                 *, deterministic: bool = False) -> VerificationReceiptV2:
+def sign_verification_receipt_v2(r: VerificationReceiptV2, verifier_private: HybridPrivateKey) -> VerificationReceiptV2:
     validate_verification_receipt_v2(r, False)
     if key_id_v2(public_key_of(verifier_private)) != r.verifier_id:
         raise ValueError("receipt verifier_id does not match signing key")
     body = receipt_v2_signable_bytes(r)
-    result = replace(r, signature=sign_v2_statement(VERIFICATION_RECEIPT, body, verifier_private, deterministic=deterministic))
+    result = replace(r, signature=_sign_v2_statement(VERIFICATION_RECEIPT, body, verifier_private))
     encode_verification_receipt_v2(result)
     return result
 
@@ -551,10 +550,9 @@ def bind_verification_receipt_body_v2(data: bytes, head: ReceiptV2Head) -> Verif
     return receipt
 
 
-def sign_prepared_verification_receipt_v2(data: bytes, head: ReceiptV2Head, private: HybridPrivateKey,
-                                          *, deterministic: bool = False) -> VerificationReceiptV2:
+def sign_prepared_verification_receipt_v2(data: bytes, head: ReceiptV2Head, private: HybridPrivateKey) -> VerificationReceiptV2:
     bound = bind_verification_receipt_body_v2(data, head)
-    signed = sign_verification_receipt_v2(bound, private, deterministic=deterministic)
+    signed = sign_verification_receipt_v2(bound, private)
     if verification_receipt_v2_body(signed) != data:
         raise ValueError("wire v2: signed receipt differs from prepared body")
     return signed

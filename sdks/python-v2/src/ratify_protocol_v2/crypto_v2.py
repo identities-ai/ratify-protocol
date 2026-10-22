@@ -1,14 +1,15 @@
 """Ratify Protocol v2 delegation-signature helpers.
 
 Thin wrappers over :mod:`signing_v2` fixed to the delegation-certificate object
-code. They need no native extension.
+code. Signing requires the ratify-protocol-native-v2 extension; verification
+does not.
 """
 from __future__ import annotations
 
 from .signing_v2 import (
     DELEGATION_CERTIFICATE,
     key_id_v2,
-    sign_v2_statement,
+    _sign_v2_statement,
     signing_message_v2,
     verify_v2_statement,
 )
@@ -30,15 +31,11 @@ def derive_key_id_v2(public_key: HybridPublicKey) -> str:
 def sign_delegation_v2(
     signable_bytes: bytes,
     private_key: HybridPrivateKey,
-    *,
-    deterministic: bool = False,
 ) -> HybridSignature:
     """Sign a delegation projection with both v2 components."""
     if not isinstance(signable_bytes, bytes):
         raise TypeError("signable_bytes must be bytes")
-    return sign_v2_statement(
-        DELEGATION_CERTIFICATE, signable_bytes, private_key, deterministic=deterministic
-    )
+    return _sign_v2_statement(DELEGATION_CERTIFICATE, signable_bytes, private_key)
 
 
 def verify_delegation_signature_v2(

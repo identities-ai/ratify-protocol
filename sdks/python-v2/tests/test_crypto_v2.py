@@ -24,8 +24,9 @@ import ratify_protocol_v2
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2._version import NATIVE_VERSION, __version__
 
-if os.environ.get("RATIFY_REQUIRE_NATIVE") == "1" and not _native.AVAILABLE:
-    raise RuntimeError("RATIFY_REQUIRE_NATIVE=1 but ratify-protocol-native-v2 is not installed")
+from ratify_protocol_v2._testing import deterministic_test_vector_signing
+
+requires_native = pytest.mark.skipif(not _native.AVAILABLE, reason="ratify-protocol-native-v2 not installed")
 
 VECTOR_PATH = (
     Path(os.environ.get("RATIFY_V2_VECTOR_DIR") or Path(__file__).resolve().parents[3] / "testvectors" / "v2")
@@ -90,15 +91,6 @@ def test_v2_signature_vector_and_component_mutations():
     known_signature = signature(v)
     assert verify_delegation_signature_v2(signable, known_signature, public)
 
-    seeds = v["issuer_seeds"]
-    derived_public, private = keypair_from_seeds_v2(
-        decode(seeds["ed25519"]), decode(seeds["ml_dsa_65"])
-    )
-    assert derived_public == public
-    generated = sign_delegation_v2(signable, private, deterministic=True)
-    assert generated == known_signature
-    assert verify_delegation_signature_v2(signable, generated, public)
-
     changed = bytearray(signable)
     changed[0] ^= 1
     assert not verify_delegation_signature_v2(bytes(changed), known_signature, public)
@@ -120,6 +112,21 @@ def test_v2_signature_vector_and_component_mutations():
         assert not verify_delegation_signature_v2(signable, known_signature, candidate_key)
 
 
+@requires_native
+def test_native_delegation_signing_reproduces_shared_vector():
+    v = vector()
+    signable, public = decode(v["signable_bytes"]), public_key(v)
+    seeds = v["issuer_seeds"]
+    derived_public, private = keypair_from_seeds_v2(decode(seeds["ed25519"]), decode(seeds["ml_dsa_65"]))
+    assert derived_public == public
+    with deterministic_test_vector_signing():
+        generated = sign_delegation_v2(signable, private)
+    assert generated == signature(v)
+    hedged = sign_delegation_v2(signable, private)
+    assert hedged.ed25519 == generated.ed25519 and hedged.ml_dsa_65 != generated.ml_dsa_65
+    assert verify_delegation_signature_v2(signable, hedged, public)
+
+
 def test_native_version_is_lockstep_with_sdk_version():
     # 2.0.0a1 (PEP 440) <-> 2.0.0-alpha.1 (Cargo): the same release.
     major_minor_patch, _, pre = NATIVE_VERSION.partition("-")
@@ -127,15 +134,15 @@ def test_native_version_is_lockstep_with_sdk_version():
     assert __version__ == f"{major_minor_patch}a{pre.removeprefix('alpha.')}"
 
 
-@pytest.mark.skipif(not _native.AVAILABLE, reason="ratify-protocol-native-v2 not installed")
-def test_native_keygen_matches_pure_python_and_shared_vector(monkeypatch):
+@requires_native
+def test_native_keygen_paths_agree_with_shared_vector():
     v = vector()
     ed_seed, ml_seed = decode(v["issuer_seeds"]["ed25519"]), decode(v["issuer_seeds"]["ml_dsa_65"])
-    native_pub, native_priv = keypair_from_seeds_v2(ed_seed, ml_seed)
-    monkeypatch.setattr(_native, "AVAILABLE", False)
-    pure_pub, pure_priv = keypair_from_seeds_v2(ed_seed, ml_seed)
-    assert native_pub == pure_pub == public_key(v)
-    assert native_priv == pure_priv
+    pub, priv = keypair_from_seeds_v2(ed_seed, ml_seed)
+    assert pub == public_key(v)
+    handle = _native.require().HybridSigningKey.from_seeds(ed_seed, ml_seed)
+    assert handle.public_key() == (pub.ed25519, pub.ml_dsa_65)
+    assert handle.private_key_bytes() == (priv.ed25519, priv.ml_dsa_65)
 
 
 # Directory holding the ratify_protocol_v2 under test (source tree or site-packages).

@@ -198,7 +198,7 @@ def run_v2_status_stage(ctx: Context, bundle, checks, req, cb, now: int) -> V2St
     return V2StatusStageResult(assessment=assessment, queries=queries)
 
 
-# The coordinator's verifier imports the Go-private name.
+# The live verifier imports the Go-private name.
 _run_v2_status_stage = run_v2_status_stage
 
 

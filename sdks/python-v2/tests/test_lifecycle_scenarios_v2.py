@@ -5,6 +5,8 @@ TestV2ConformanceProfileScenarios)."""
 from __future__ import annotations
 
 import copy
+import copyreg
+import pickle
 import threading
 
 import pytest
@@ -120,6 +122,24 @@ def check_released_allowed(step: int, d) -> None:
     with pytest.raises(AttributeError):
         d._decision = "allow"
     assert not at(-1) and not d.allowed(BACKGROUND, None)
+    check_copies_not_actionable(step, d)
+
+
+def check_copies_not_actionable(step: int, d) -> None:
+    """Only the exact object release returned is actionable: copying,
+    pickling, or re-creating a genuine released allow yields nothing that
+    allowed() accepts (SPEC-v2 §1.3)."""
+    now = FixedClock(d.release_time())
+    assert copy.copy(d) is d and copy.deepcopy(d) is d, step
+    with pytest.raises(TypeError):
+        pickle.dumps(d)
+    cls = type(d)
+    for forged in (object.__new__(cls), cls.__new__(cls)):
+        assert forged is not d and not forged.allowed(BACKGROUND, now) and forged.decision() == "", step
+    # Reconstructing through copyreg's protocol 2 path also yields an
+    # unregistered instance.
+    rebuilt = copy._reconstruct(d, None, copyreg.__newobj__, (cls,), None)
+    assert rebuilt is not d and not rebuilt.allowed(BACKGROUND, now), step
 
 
 def check_release(step: int, result, want: dict) -> None:

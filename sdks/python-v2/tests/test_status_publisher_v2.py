@@ -16,7 +16,7 @@ from ratify_protocol_v2 import security_journal_v2 as sj
 from ratify_protocol_v2 import status_publisher_v2 as sp
 from ratify_protocol_v2.errors_v2 import error_class_of
 from ratify_protocol_v2.protocol_v2 import verify_revocation_list_v2_signature, verify_revocation_push_v2_signature
-from ratify_protocol_v2.signing_v2 import key_id_v2, keypair_from_seeds_v2, new_local_signer_v2
+from ratify_protocol_v2.signing_v2 import key_id_v2, keypair_from_seeds_v2, _new_local_signer_v2
 from ratify_protocol_v2.status_state_v2 import RevocationStatusPolicyV2, revoked_cert_ids_v2
 from ratify_protocol_v2.v2reference.journal import JournalStore
 
@@ -43,7 +43,7 @@ class CountingSigner:
     """A direct-mode signer that counts calls, to prove refusals sign nothing."""
 
     def __init__(self, name):
-        self._inner = new_local_signer_v2(_private(name))
+        self._inner = _new_local_signer_v2(_private(name))
         self.calls = 0
 
     def public_key_v2(self):
@@ -102,11 +102,17 @@ def test_status_publisher_scenario(sc):
             sp.new_v2_status_publisher(CTX, store, issuer_pub, signer, sc["lifetime_seconds"])
         assert error_class_of(excinfo.value) == "configuration_invalid"
         assert signer.calls == 0
+        # The in-process key path applies the same role checks.
+        with pytest.raises(Exception) as excinfo:
+            sp.new_v2_status_publisher_with_key(CTX, store, issuer_pub, _private(sc["status_key"]), sc["lifetime_seconds"])
+        assert error_class_of(excinfo.value) == "configuration_invalid"
         assert not sc["steps"]
         return
     publisher = sp.new_v2_status_publisher(CTX, store, issuer_pub, signer, sc["lifetime_seconds"])
     assert publisher.issuer_id() == issuer_id
     assert publisher.status_key() == status_pub
+    keyed = sp.new_v2_status_publisher_with_key(CTX, store, issuer_pub, _private(sc["status_key"]), sc["lifetime_seconds"])
+    assert (keyed.issuer_id(), keyed.status_key()) == (issuer_id, status_pub)
     state = None
     publications = []
     for i, step in enumerate(sc["steps"]):

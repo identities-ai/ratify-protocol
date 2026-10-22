@@ -518,7 +518,7 @@ def test_delegation_signature_vector_native_resign():
     assert derived == pubkey(v["issuer_public_key"])
     native = _native.signing_key(priv.ed25519, priv.ml_dsa_65)
     signable = b64(v["signable_bytes"])
-    ed, ml = native.sign(signing_message_v2(1, signable), mldsa_context_v2(1), deterministic_for_test_vectors=True)
+    ed, ml = native._sign(signing_message_v2(1, signable), mldsa_context_v2(1), deterministic_for_test_vectors=True)
     assert HybridSignature(bytes(ed), bytes(ml)) == sig(v["signature"])
 
 

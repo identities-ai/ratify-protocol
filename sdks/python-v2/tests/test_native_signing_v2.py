@@ -28,7 +28,7 @@ from ratify_protocol_v2.signing_v2 import (
     V2SigningError,
     keypair_from_seeds_v2,
     mldsa_context_v2,
-    new_local_signer_v2,
+    _new_local_signer_v2,
     public_key_of,
     signing_message_v2,
 )
@@ -117,7 +117,7 @@ def test_signing_and_keygen_fail_closed_without_native(monkeypatch):
     junk = HybridPrivateKey(ed25519=bytes(32), ml_dsa_65=bytes(4032))
     for call in (lambda: keypair_from_seeds_v2(seed, seed),
                  lambda: public_key_of(junk),
-                 lambda: new_local_signer_v2(junk),
+                 lambda: _new_local_signer_v2(junk),
                  lambda: signing_v2.generate_keypair_v2()):
         with pytest.raises(ImportError, match="ratify-protocol-native-v2") as info:
             call()
@@ -219,8 +219,8 @@ def test_signature_is_verified_before_it_is_returned(monkeypatch):
         def public_key(self):
             return self._key.public_key()
 
-        def sign(self, message, context, **kw):
-            ed, ml = self._key.sign(message, context, **kw)
+        def _sign(self, message, context, **kw):
+            ed, ml = self._key._sign(message, context, **kw)
             return ed, bytes([ml[0] ^ 1]) + ml[1:]
 
     monkeypatch.setattr(_native, "signing_key", lambda e, m: Corrupting(real(e, m)))
@@ -237,18 +237,18 @@ def test_native_signer_rejects_mismatched_or_malformed_transcripts():
     priv = conf.private_key("root")
     key = _native.signing_key(priv.ed25519, priv.ml_dsa_65)
     message = signing_message_v2(1, b"x")
-    assert key.sign(message, mldsa_context_v2(1))
+    assert key._sign(message, mldsa_context_v2(1))
     with pytest.raises(ValueError, match="does not match"):
-        key.sign(message, mldsa_context_v2(2))
+        key._sign(message, mldsa_context_v2(2))
     with pytest.raises(ValueError, match="77-byte"):
-        key.sign(message[:-1], mldsa_context_v2(1))
+        key._sign(message[:-1], mldsa_context_v2(1))
     with pytest.raises(ValueError, match="77-byte"):
-        key.sign(b"X" + message[1:], mldsa_context_v2(1))
+        key._sign(b"X" + message[1:], mldsa_context_v2(1))
     unregistered = message[:27] + (0x000A).to_bytes(2, "big") + message[29:]
     with pytest.raises(ValueError, match="unsupported"):
-        key.sign(unregistered, b"ratify-protocol/2/000a")
+        key._sign(unregistered, b"ratify-protocol/2/000a")
     with pytest.raises(TypeError):
-        key.sign(message, mldsa_context_v2(1), True)  # the test-vector flag is keyword-only
+        key._sign(message, mldsa_context_v2(1), True)  # the test-vector flag is keyword-only
 
 
 @requires_native
@@ -260,7 +260,7 @@ def test_native_key_rejects_bad_private_key_lengths():
         ext.HybridSigningKey.from_private_bytes(bytes(32), bytes(4031))
     assert repr(ext.HybridSigningKey.from_seeds(bytes(32), bytes(32))) == "<HybridSigningKey>"
     with pytest.raises(V2SigningError):
-        new_local_signer_v2(HybridPrivateKey(bytes(31), bytes(4032)))
+        _new_local_signer_v2(HybridPrivateKey(bytes(31), bytes(4032)))
 
 
 @requires_native

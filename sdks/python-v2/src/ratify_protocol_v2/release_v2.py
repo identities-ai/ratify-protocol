@@ -3,15 +3,27 @@
 ``verify_proof_bundle_v2`` commits a terminal Protocol result and returns an
 opaque :class:`CommittedV2Outcome` that exposes no decision.
 :func:`release_v2_decision` is the only path to an actionable decision. Its
-result :class:`V2ReleasedDecision` has no public constructor: instances are
-created only inside this module with a module-private sentinel, every
-accessor returns a copy, and only :meth:`V2ReleasedDecision.allowed` may
-gate a side effect.
+result :class:`V2ReleasedDecision` has no public constructor and holds no
+state of its own: the state of every genuine instance lives in a registry
+that only :func:`release_v2_decision` can write, because the registry exists
+only in the closure that defines that function. There is no module-level
+seal or token. An instance that is not in the registry (one made with
+``object.__new__``, ``copy``, ``pickle``, or a subclass) is never actionable.
+Every accessor returns a copy, and only :meth:`V2ReleasedDecision.allowed`
+may gate a side effect.
+
+Scope of this guarantee (SPEC-v2 §1.3): it prevents API misuse and
+accidental construction. It is not a defense against hostile code running in
+the same interpreter, which can already read the application's keys and
+stores, and which can reach any Python object through ``gc`` or frame
+introspection, a function's ``__closure__`` cells, or by monkeypatching this
+module.
 """
 from __future__ import annotations
 
 import abc
 import hashlib
+import weakref
 from dataclasses import dataclass
 from typing import Optional
 
@@ -35,32 +47,34 @@ V2_RELEASE_PENDING = "pending"
 V2_RELEASE_WITHHELD = "withheld"
 V2_RELEASE_REJECTED = "rejected"
 
-# Module-private capability: only code in this module holds it, so only this
-# module can construct a CommittedV2Outcome or a V2ReleasedDecision.
-_SEAL = object()
-
-
 def receipt_outbox_digest_v2(body: bytes) -> str:
     """Go ``ReceiptOutboxDigestV2``: ``sha384:`` hex of
     SHA-384("ratify-protocol-receipt-outbox-v2" || 0x00 || body)."""
     return "sha384:" + hashlib.sha384(b"ratify-protocol-receipt-outbox-v2\x00" + bytes(body)).hexdigest()
 
 
+@dataclass(frozen=True)
+class _CommittedState:
+    claim_id: str
+    verifier_id: str
+    receipt_body: bytes
+    challenge_expires_at: int
+    allow_horizon: int
+
+
 class CommittedV2Outcome:
     """The immutable, non-actionable handoff from a committed verification to
-    publication and :func:`release_v2_decision`."""
+    publication and :func:`release_v2_decision`. Only the verifier and
+    interruption recovery create one; it holds no state of its own, and an
+    instance they did not create is rejected by release."""
 
-    __slots__ = ("_claim_id", "_verifier_id", "_receipt_body", "_challenge_expires_at", "_allow_horizon")
+    __slots__ = ("__weakref__",)
 
-    def __init__(self, seal: object = None, *, claim_id: str = "", verifier_id: str = "", receipt_body: bytes = b"",
-                 challenge_expires_at: int = 0, allow_horizon: int = 0):
-        if seal is not _SEAL:
-            raise TypeError("CommittedV2Outcome is created only by the v2 verifier and recovery")
-        object.__setattr__(self, "_claim_id", claim_id)
-        object.__setattr__(self, "_verifier_id", verifier_id)
-        object.__setattr__(self, "_receipt_body", bytes(receipt_body))
-        object.__setattr__(self, "_challenge_expires_at", challenge_expires_at)
-        object.__setattr__(self, "_allow_horizon", allow_horizon)
+    def __init__(self, *args, **kwargs):
+        raise TypeError("CommittedV2Outcome is created only by the v2 verifier and recovery")
+
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("CommittedV2Outcome cannot be subclassed")
 
     def __setattr__(self, name, value):
         raise AttributeError("CommittedV2Outcome is immutable")
@@ -71,41 +85,64 @@ class CommittedV2Outcome:
     def __reduce__(self):
         raise TypeError("CommittedV2Outcome cannot be serialized")
 
-    def _get(self, name: str, default):
-        try:
-            return object.__getattribute__(self, name)
-        except AttributeError:
-            return default
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
 
     def claim_id(self) -> str:
         """The Protocol claim ID of the committed evaluation."""
-        return self._get("_claim_id", "")
+        st = _committed_state(self)
+        return st.claim_id if st else ""
 
     def receipt_body(self) -> bytes:
         """A copy of the sealed receipt outbox body, for the receipt publisher
         only. Applications must not parse it to authorize."""
-        return bytes(self._get("_receipt_body", b""))
+        st = _committed_state(self)
+        return bytes(st.receipt_body) if st else b""
 
     def receipt_body_digest(self) -> str:
         """ReceiptOutboxDigest of the sealed body (SPEC-v2 §4)."""
         return receipt_outbox_digest_v2(self.receipt_body())
 
     def challenge_expires_at(self) -> int:
-        return self._get("_challenge_expires_at", 0)
+        st = _committed_state(self)
+        return st.challenge_expires_at if st else 0
 
     def allow_horizon(self) -> tuple[int, bool]:
         """The exclusive allow deadline; ``ok`` is False unless the committed
         result can become an allow."""
-        horizon = self._get("_allow_horizon", 0)
+        st = _committed_state(self)
+        horizon = st.allow_horizon if st else 0
         return horizon, horizon > 0
 
     def __repr__(self) -> str:
         return f"<CommittedV2Outcome claim_id={self.claim_id()!r}>"
 
 
-def _new_committed_v2_outcome(claim, body: bytes, allow_horizon: int) -> CommittedV2Outcome:
-    return CommittedV2Outcome(_SEAL, claim_id=claim.claim_id, verifier_id=claim.verifier_id, receipt_body=body,
-                              challenge_expires_at=claim.expires_at, allow_horizon=allow_horizon)
+def _define_committed_registry():
+    # The registry of genuine committed outcomes exists only in this closure.
+    registry: "weakref.WeakKeyDictionary[CommittedV2Outcome, _CommittedState]" = weakref.WeakKeyDictionary()
+
+    def committed_state(c) -> Optional[_CommittedState]:
+        if type(c) is not CommittedV2Outcome:
+            return None
+        return registry.get(c)
+
+    def new_committed_v2_outcome(claim, body: bytes, allow_horizon: int) -> CommittedV2Outcome:
+        """Internal to the verifier and recovery; not part of the public API."""
+        c = object.__new__(CommittedV2Outcome)
+        registry[c] = _CommittedState(claim_id=claim.claim_id, verifier_id=claim.verifier_id,
+                                      receipt_body=bytes(body), challenge_expires_at=claim.expires_at,
+                                      allow_horizon=allow_horizon)
+        return c
+
+    return committed_state, new_committed_v2_outcome
+
+
+_committed_state, _new_committed_v2_outcome = _define_committed_registry()
+del _define_committed_registry
 
 
 class AcknowledgementNotFoundErrorV2(Exception):
@@ -187,29 +224,36 @@ class V2ReleaseConfig:
     checkpoint: Optional[V2ReceiptCheckpoint] = None
 
 
+@dataclass(frozen=True)
+class _ReleasedState:
+    claim_id: str
+    decision: str
+    reason: str
+    identity_status: str
+    granted_scope: tuple
+    receipt_wire: bytes
+    release_time: int
+    challenge_expires_at: int
+    allow_horizon: int
+
+
 class V2ReleasedDecision:
     """The only actionable value in this package (SPEC-v2 §6.9).
 
-    It has no public constructor or setter, cannot be pickled or copied into
-    a new actionable instance, and every accessor returns a copy. An instance
-    not created by :func:`release_v2_decision` is never actionable."""
+    It has no public constructor, setter, or state of its own; it cannot be
+    subclassed or pickled, and every accessor returns a copy. Only the exact
+    object :func:`release_v2_decision` returned is in the release registry;
+    any other instance is never actionable. This guards against API misuse,
+    not against hostile code in the same interpreter (see the module
+    docstring)."""
 
-    __slots__ = ("_claim_id", "_decision", "_reason", "_identity_status", "_granted_scope", "_receipt_wire",
-                 "_release_time", "_challenge_expires_at", "_allow_horizon", "_sealed")
+    __slots__ = ("__weakref__",)
 
     def __init__(self, *args, **kwargs):
         raise TypeError("V2ReleasedDecision is created only by release_v2_decision")
 
-    @classmethod
-    def _create(cls, seal: object, **values) -> "V2ReleasedDecision":
-        if seal is not _SEAL:
-            raise TypeError("V2ReleasedDecision is created only by release_v2_decision")
-        decision = object.__new__(cls)
-        for name in ("claim_id", "decision", "reason", "identity_status", "granted_scope", "receipt_wire",
-                     "release_time", "challenge_expires_at", "allow_horizon"):
-            object.__setattr__(decision, "_" + name, values[name])
-        object.__setattr__(decision, "_sealed", _SEAL)
-        return decision
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("V2ReleasedDecision cannot be subclassed")
 
     def __setattr__(self, name, value):
         raise AttributeError("V2ReleasedDecision is immutable")
@@ -226,35 +270,33 @@ class V2ReleasedDecision:
     def __deepcopy__(self, memo):
         return self
 
-    def _get(self, name: str, default):
-        try:
-            if object.__getattribute__(self, "_sealed") is not _SEAL:
-                return default
-            return object.__getattribute__(self, name)
-        except AttributeError:
-            return default
-
     def claim_id(self) -> str:
-        return self._get("_claim_id", "")
+        st = _released_state(self)
+        return st.claim_id if st else ""
 
     def decision(self) -> str:
         """``allow``, ``deny``, or ``indeterminate``. Use :meth:`allowed`, not
         this value, to gate a side effect."""
-        return self._get("_decision", "")
+        st = _released_state(self)
+        return st.decision if st else ""
 
     def reason(self) -> str:
-        return self._get("_reason", "")
+        st = _released_state(self)
+        return st.reason if st else ""
 
     def identity_status(self) -> str:
-        return self._get("_identity_status", "")
+        st = _released_state(self)
+        return st.identity_status if st else ""
 
     def granted_scope(self) -> list:
         """A copy of the released granted scope."""
-        return list(self._get("_granted_scope", []))
+        st = _released_state(self)
+        return list(st.granted_scope) if st else []
 
     def receipt_wire(self) -> bytes:
         """A copy of the signed receipt wire verified during release."""
-        return bytes(self._get("_receipt_wire", b""))
+        st = _released_state(self)
+        return bytes(st.receipt_wire) if st else b""
 
     @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def receipt(self):
@@ -268,29 +310,34 @@ class V2ReleasedDecision:
 
     def release_time(self) -> int:
         """The checkpoint acknowledgement time of the release."""
-        return self._get("_release_time", 0)
+        st = _released_state(self)
+        return st.release_time if st else 0
 
     def challenge_expires_at(self) -> int:
-        return self._get("_challenge_expires_at", 0)
+        st = _released_state(self)
+        return st.challenge_expires_at if st else 0
 
     def allow_horizon(self) -> tuple[int, bool]:
-        horizon = self._get("_allow_horizon", 0)
+        st = _released_state(self)
+        horizon = st.allow_horizon if st else 0
         return horizon, horizon > 0
 
     def allowed(self, ctx: context_v2.Context, clock: V2AuthoritativeClock) -> bool:
         """Whether this released allow may be acted on now: True only for an
-        allow while now < challenge_expires_at and now < allow_horizon (both
+        instance :func:`release_v2_decision` returned, sealed as an allow,
+        while now < challenge_expires_at and now < allow_horizon (both
         exclusive), read from the receiver's authoritative clock. A clock
         error, exception, or reading outside the timestamp domain is False.
         Call it immediately before the side effect."""
-        if (not isinstance(ctx, context_v2.Context) or clock is None or self.decision() != "allow"
-                or not self.receipt_wire() or self._get("_allow_horizon", 0) <= 0):
+        st = _released_state(self)
+        if (st is None or not isinstance(ctx, context_v2.Context) or clock is None or st.decision != "allow"
+                or not st.receipt_wire or st.allow_horizon <= 0):
             return False
         try:
             now = _read_v2_authoritative_time(ctx, clock)
         except Exception:  # noqa: BLE001
             return False
-        return now < self.challenge_expires_at() and now < self._get("_allow_horizon", 0)
+        return now < st.challenge_expires_at and now < st.allow_horizon
 
     def __repr__(self) -> str:
         return f"<V2ReleasedDecision claim_id={self.claim_id()!r} decision={self.decision()!r}>"
@@ -331,21 +378,26 @@ def _verify_published_v2_receipt(wire: bytes, config: V2ReleaseConfig):
     return receipt
 
 
-def release_v2_decision(ctx: context_v2.Context, committed: CommittedV2Outcome, signed_receipt: Optional[bytes],
-                        config: V2ReleaseConfig) -> V2ReleaseResult:
-    """Go ``ReleaseV2Decision``: the release steps of SPEC-v2 §6.9 in order,
-    stopping at the first that does not pass."""
+def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signed_receipt: Optional[bytes],
+                   config: V2ReleaseConfig):
+    """Steps 1 through 9 of SPEC-v2 §6.9. Returns the first non-released
+    :class:`V2ReleaseResult`, or the state to seal when every step passed.
+    The state is not actionable: only :func:`release_v2_decision` can turn it
+    into a registered :class:`V2ReleasedDecision`."""
     from .signing_v2 import key_id_v2
     from .verification_receipt_v2 import verification_receipt_v2_body, verification_receipt_v2_digest
 
     if (not isinstance(ctx, context_v2.Context) or not isinstance(committed, CommittedV2Outcome)
             or not isinstance(config, V2ReleaseConfig)):
         return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
-    claim_id = committed.claim_id()
-    committed_body = committed.receipt_body()
-    verifier_id_committed = committed._get("_verifier_id", "")
-    challenge_expires_at = committed.challenge_expires_at()
-    allow_horizon, _ = committed.allow_horizon()
+    c = _committed_state(committed)
+    if c is None:
+        return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
+    claim_id = c.claim_id
+    committed_body = bytes(c.receipt_body)
+    verifier_id_committed = c.verifier_id
+    challenge_expires_at = c.challenge_expires_at
+    allow_horizon = c.allow_horizon
     if claim_id == "" or len(committed_body) == 0 or config.claim_store is None or config.checkpoint is None:
         return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
     if not isinstance(config.log_id, str) or len(config.log_id) != 32 or not lower_hex_string(config.log_id):
@@ -438,11 +490,40 @@ def release_v2_decision(ctx: context_v2.Context, committed: CommittedV2Outcome, 
             return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
         except Exception:  # noqa: BLE001
             return _result(V2_RELEASE_PENDING, "claim_store_unavailable")
-    # 10. Return.
-    decision = V2ReleasedDecision._create(
-        _SEAL, claim_id=claim_id, decision=receipt.decision, reason=receipt.decision_reason,
-        identity_status=receipt.identity_status, granted_scope=list(receipt.granted_scope or []),
+    return _ReleasedState(
+        claim_id=claim_id, decision=receipt.decision, reason=receipt.decision_reason,
+        identity_status=receipt.identity_status, granted_scope=tuple(receipt.granted_scope or ()),
         receipt_wire=bytes(signed_receipt), release_time=ack.timestamp, challenge_expires_at=challenge_expires_at,
         allow_horizon=allow_horizon if receipt.decision == "allow" else 0,
     )
-    return V2ReleaseResult(status=V2_RELEASE_RELEASED, decision=decision)
+
+
+def _define_release_v2_decision():
+    # The registry of genuine released decisions exists only in this closure,
+    # so only release_v2_decision below can add to it. There is no module
+    # attribute through which an importer can register an instance.
+    registry: "weakref.WeakKeyDictionary[V2ReleasedDecision, _ReleasedState]" = weakref.WeakKeyDictionary()
+
+    def released_state(d) -> Optional[_ReleasedState]:
+        if type(d) is not V2ReleasedDecision:
+            return None
+        return registry.get(d)
+
+    def release_v2_decision(ctx: context_v2.Context, committed: CommittedV2Outcome, signed_receipt: Optional[bytes],
+                            config: V2ReleaseConfig) -> V2ReleaseResult:
+        """Go ``ReleaseV2Decision``: the release steps of SPEC-v2 §6.9 in
+        order, stopping at the first that does not pass. The only producer
+        of an actionable :class:`V2ReleasedDecision`."""
+        outcome = _release_steps(ctx, committed, signed_receipt, config)
+        if not isinstance(outcome, _ReleasedState):
+            return outcome
+        # 10. Return.
+        decision = object.__new__(V2ReleasedDecision)
+        registry[decision] = outcome
+        return V2ReleaseResult(status=V2_RELEASE_RELEASED, decision=decision)
+
+    return released_state, release_v2_decision
+
+
+_released_state, release_v2_decision = _define_release_v2_decision()
+del _define_release_v2_decision

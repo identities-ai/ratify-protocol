@@ -17,7 +17,7 @@ from ratify_protocol_v2.signing_v2 import (
     external_mu_v2,
     key_id_v2,
     mldsa_context_v2,
-    new_local_signer_v2,
+    _new_local_signer_v2,
     signer_public_key_v2,
 )
 from signer_fixtures import CountingSigner, ExternalMuSigner, FaultySigner
@@ -37,7 +37,7 @@ def _cert():
 
 
 def test_direct_request_carries_exactly_m_and_the_registry_context():
-    signer = CountingSigner(new_local_signer_v2(private_key("root")))
+    signer = CountingSigner(_new_local_signer_v2(private_key("root")))
     cert = _cert()
     signed = pv2.sign_delegation_cert_v2_with_signer(background(), cert, signer)
     pv2.verify_delegation_cert_v2_signature(signed)
@@ -60,7 +60,7 @@ def test_external_mu_request_carries_only_mu():
 
 
 def test_signer_bound_to_another_key_is_refused_before_signing():
-    signer = CountingSigner(new_local_signer_v2(private_key("attacker")))
+    signer = CountingSigner(_new_local_signer_v2(private_key("attacker")))
     with pytest.raises(V2SigningError, match="does not match"):
         pv2.sign_delegation_cert_v2_with_signer(background(), _cert(), signer)
     assert signer.requests == []
@@ -85,7 +85,7 @@ def test_invalid_provider_output_fails_signing(fault):
 def test_cancellation_before_signing_returns_no_object():
     ctx = with_cancel(background())
     ctx.cancel()
-    signer = CountingSigner(new_local_signer_v2(private_key("witness")))
+    signer = CountingSigner(_new_local_signer_v2(private_key("witness")))
     with pytest.raises(Cancelled):
         wv2.sign_witness_entry_v2_with_signer(ctx, _witness(), signer)
     assert signer.requests == []
@@ -100,14 +100,30 @@ def test_signature_arriving_after_cancellation_is_discarded():
 
 def test_signing_requires_a_context():
     with pytest.raises(V2SigningError):
-        wv2.sign_witness_entry_v2_with_signer(None, _witness(), new_local_signer_v2(private_key("witness")))
+        wv2.sign_witness_entry_v2_with_signer(None, _witness(), _new_local_signer_v2(private_key("witness")))
 
 
 def test_local_signer_refuses_external_mu_requests():
     from ratify_protocol_v2.signing_v2 import SignRequestV2
 
-    signer = new_local_signer_v2(private_key("root"))
+    signer = _new_local_signer_v2(private_key("root"))
     req = SignRequestV2(SignerModeV2.EXTERNAL_MU, bytes(77), None, bytes(64), PUB["root"], key_id_v2(PUB["root"]))
     with pytest.raises(V2SigningError):
         signer.sign_v2(background(), req)
     assert "Private" not in repr(signer) and "seed" not in repr(signer)
+
+
+def test_no_local_signer_or_raw_native_sign_is_exported():
+    """SPEC-v2 §3.2: no public API returns a local SignerV2 or signs
+    caller-selected bytes. In-process keys sign only through the typed
+    signing functions; the native method is underscored and internal."""
+    import ratify_protocol_v2 as pkg
+    from ratify_protocol_v2 import signing_v2, status_publisher_v2
+
+    for mod in (pkg, signing_v2, status_publisher_v2):
+        public = [n for n in dir(mod) if not n.startswith("_")]
+        assert not [n for n in public if "local_signer" in n.lower() or n.lower().startswith("sign_v2")], mod.__name__
+    assert "_new_local_signer_v2" not in getattr(pkg, "__all__", [])
+    priv = private_key("root")
+    key = _native.signing_key(priv.ed25519, priv.ml_dsa_65)
+    assert not hasattr(key, "sign")

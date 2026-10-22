@@ -133,14 +133,21 @@ impl HybridSigningKey {
         out
     }
 
-    /// Sign a v2 transcript with both components.
+    /// Internal to `ratify_protocol_v2`: sign an SDK-computed v2 transcript
+    /// with both components. It is not public API. The SDK's typed signing
+    /// functions are the only supported callers; they compute the message
+    /// and context and verify every returned signature. The name is
+    /// underscored and the SDK never re-exports it, but a compiled module
+    /// cannot hide a method from code running in the same interpreter, so a
+    /// caller that already holds a `HybridSigningKey` (and therefore the key
+    /// bytes) can still reach it. It signs only registered v2 transcripts.
     ///
     /// Returns `(ed25519_signature, ml_dsa_65_signature)`. ML-DSA-65 signing is
     /// hedged with fresh OS randomness. `deterministic_for_test_vectors=True`
     /// uses the FIPS 204 deterministic variant (all-zero `rnd`), which is how
     /// the shared test vectors are generated; it exists for conformance tests
     /// and must not be used for production signatures.
-    #[pyo3(signature = (message, context, *, deterministic_for_test_vectors = false))]
+    #[pyo3(name = "_sign", signature = (message, context, *, deterministic_for_test_vectors = false))]
     fn sign(
         &self,
         py: Python<'_>,

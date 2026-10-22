@@ -19,7 +19,7 @@ from . import security_journal_v2 as sj
 from . import status_state_v2 as ss
 from .context_v2 import Context, require_context
 from .errors_v2 import V2Error, V2ErrorClass, classify, classified
-from .types import HybridPublicKey
+from .types import HybridPrivateKey, HybridPublicKey
 from .types_v2 import MAX_SAFE_INTEGER, is_int
 
 MAX_REVOCATION_PUSH_REFS_V2 = 512
@@ -253,3 +253,17 @@ def new_v2_status_publisher(ctx: Context, roles, issuer_key: HybridPublicKey, st
         _token=_CONSTRUCT, issuer_id=issuer_binding.key_id, status_key=status_key,
         status_key_id=status_binding.key_id, signer=status_signer, lifetime=lifetime_seconds,
     )
+
+
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
+def new_v2_status_publisher_with_key(ctx: Context, roles, issuer_key: HybridPublicKey, status_key: HybridPrivateKey,
+                                     lifetime_seconds: int) -> V2StatusPublisher:
+    """Go ``NewV2StatusPublisherWithKey``: :func:`new_v2_status_publisher`
+    for a status key held in process. The publisher signs through the same
+    typed, verified signing path (in the native extension), with every
+    refusal of :func:`new_v2_status_publisher`; an invalid key is
+    configuration_invalid. No local SignerV2 is exported (SPEC-v2 §3.2), so
+    this is the in-process key path."""
+    from .signing_v2 import _new_local_signer_v2
+
+    return new_v2_status_publisher(ctx, roles, issuer_key, _new_local_signer_v2(status_key), lifetime_seconds)

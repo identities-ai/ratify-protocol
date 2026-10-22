@@ -212,7 +212,7 @@ fn main() {
   • A verifier checked the bundle in a single function call.
   • Every one of four tampering/misuse scenarios was rejected
     deterministically — no fuzzy detection, no false positives.
-  • Signatures are hybrid Ed25519 + ML-DSA-65 (FIPS 204):
+  • Signatures are post-quantum hybrid, Ed25519 + ML-DSA-65 (NIST FIPS 204):
     breaking either algorithm alone is insufficient to forge.
 
   This is the full Ratify Protocol v1, end to end, in one process."#

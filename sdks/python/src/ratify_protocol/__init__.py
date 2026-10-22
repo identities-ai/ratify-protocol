@@ -1,7 +1,7 @@
 """Ratify Protocol v1 — Python reference SDK.
 
 Delegated-authority proofs for human-agent and agent-agent interactions.
-Every signature is hybrid Ed25519 + ML-DSA-65 (FIPS 204), and it verifies
+Every signature is a post-quantum hybrid of Ed25519 and ML-DSA-65 (NIST FIPS 204), and it verifies
 only when both components verify.
 
 Quickstart:

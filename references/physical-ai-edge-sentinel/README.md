@@ -194,7 +194,7 @@ Not bound: the receiver's local policy file, its reading of the RTC, and the Ard
 
 ## Evidence, security status, and limitations
 
-v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The ARMv7 build for the Raspberry Pi 2 is prepared; the v2 hardware run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, has not yet been performed, and its section of the evidence file is a placeholder.
+v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The same day the ARMv7 test build ran on the Raspberry Pi 2 and passed all 30 rows with the mock actuator (5 mock invocations, 74 s). The v2 production run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, has not yet been performed, and its section of the evidence file is a placeholder.
 
 Earlier hardware evidence is v1 only and kept as dated history: on 2026-10-11 the alpha.20 C SDK and v1 production receiver ran on the Pi 2 with the DS3231 RTC, allowed one 500 ms LED action, and denied a captured proof's replay without another actuator call.
 

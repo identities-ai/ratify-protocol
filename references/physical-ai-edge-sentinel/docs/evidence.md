@@ -57,20 +57,22 @@ promotion of an anchored `state.next` after a crash between anchoring and
 rename, the checkpoint freezing on a forked acknowledgement, and the
 checkpoint refusing when its capacity is used.
 
-## Protocol v2: Raspberry Pi 2 ARMv7 (pending)
+## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix
 
-The ARMv7 bundle is built from the revision below; it has not yet been
-executed on ARM hardware or under emulation. Fill each `PENDING` field from
-the run.
+The ARMv7 bundle built from the revision below was copied to the Pi, its
+`SHA256SUMS` manifest was verified there, and the deterministic matrix was run
+with `./run-matrix.sh` on 2026-10-22. These are the test builds (fixture clock,
+mock actuator); no serial or GPIO output was produced.
 
-- Target: Raspberry Pi 2 Model B Rev 1.1, ARMv7l, `PENDING_OS`
+- Target: Raspberry Pi 2 Model B Rev 1.1, armv7l, Raspbian 13 (trixie), glibc 2.41; `edge` links only libc and libarmmem
 - Build: C SDK cross-compiled with `cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36` (rustc 1.95.0, cargo-zigbuild 0.22.3, zig 0.16.0); binaries cross-compiled with `zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7`, stripped, Ratify library linked statically, glibc linked dynamically (highest symbol version `GLIBC_2.34`)
 - SDK SHA-256: `ratify.h` `ef0242f72b614fb3775368462acb3e3e0597f3ba3b8cfa16e38e1630707c6cec`, `libratify_c.a` (armv7) `0e2d3c16aeb565c7820eb1dd6e17f93a432df06de91f214665802be33c2dec25`
 - Source revision: `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`
 - Binary SHA-256: `edge` `7cce2b13ce71d1d6eaff4648f8fe3ceece052f6d559c0a32c733b834331e3237`, `edge-checkpoint` `f1532188d7b053b2d58f2cc15581d539e03fcc4e7b8d81ff71b590d453608f7b`, `edge-test` `765bbb4fef524dd4b7315ed5a8f95a773a94dee8f0d718ab8989a0023b7a5806`, `edge-checkpoint-test` `7e8029e80f87d3b3dbcc2115350ac82ca677971820b4b43a0f63ca92260d8e94`, `controller` `5d827e26d45d03b3555fb074b5b27e9586be7985a2c09c07e2ee0ff3854830f1`
-- Deterministic matrix on the Pi (mock actuator): `PENDING` passed, `PENDING` failed, `PENDING` skipped
-- Matrix wall time on the Pi: `PENDING`
-- Decision latency on the Pi (challenge to released decision): `PENDING`
+- Deterministic matrix on the Pi (mock actuator): `ALL ROWS PASSED (30/30)`, 30 passed, 0 failed, 0 skipped, no `UNEXPECTED` lines
+- Actuator: mock only; 5 invocations in total
+- Matrix wall time on the Pi: 74 s
+- Decision latency on the Pi (challenge to released decision): not measured in this run
 
 ## Protocol v2: production binaries, DS3231 RTC, and Arduino (pending)
 
@@ -88,7 +90,8 @@ Run only with the owner's approval for each actuation.
 
 The local gate establishes the decision logic, the durable stores, the
 checkpoint protocol, and exact actuator accounting with a fixture clock on a
-development machine. It does not establish ARMv7 behavior, trusted time,
+development machine; the same matrix also passed on the Pi 2 ARMv7 target with
+the test builds. It does not establish trusted time,
 behavior through power loss, single-device offline profile conformance (a
 second process on the same host never qualifies; see `v2-design.md`), or
 suitability for hazardous, safety-critical, or regulated actuation.

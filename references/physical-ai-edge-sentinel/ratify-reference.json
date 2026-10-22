@@ -5,8 +5,10 @@
   "platform": "Linux edge receiver with a separate checkpoint process, and an Arduino Uno actuator",
   "endorsement": "self-authored, no platform endorsement",
   "agent_adapter": "../../adk/edge_agent.py",
+  "agent_adapter_protocol": "v1 only: speaks the Protocol v1 receiver interface and does not work with this v2 receiver; not ported",
   "evidence": "docs/evidence.md",
   "tests": 30,
   "skips": 0,
-  "gate": "./run-reference-check.sh"
+  "gate": "./run-reference-check.sh",
+  "protocol": "v2 2.0.0-alpha.1 through the C ABI (SDK built from this tree; prerelease)"
 }

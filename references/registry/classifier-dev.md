@@ -3,6 +3,7 @@
 - **Canonical profile:** [`references/classifier-dev/README.md`](../classifier-dev/README.md)
 - **Status:** Published open reference; Labs route pending deployment
 - **Source:** `https://github.com/identities-ai/ratify-classifier-reference`
+- **Protocol line:** v1 (`1.0.0-alpha.20`); not yet ported to Protocol v2
 - **Ratify:** `1.0.0-alpha.20`
 - **Platform:** classifier.dev API, multidimensional `POST /v1/classify`
 - **Gate:** `npm run check` in the source repository

@@ -417,7 +417,11 @@ was not run for the recorded v2 evidence.
   lost after execution, replay is denied; a production tool needs an
   idempotency/result ledger before an operator retries the business action.
 - The Python v2 verifier is much slower than the v1 package that produced the
-  one-million-call run; see the measured tiers in `FEDERATION_SCALE.md`.
+  one-million-call run. The checked-in tiers in `FEDERATION_SCALE.md` were
+  measured while the Python v2 SDK still verified in pure Python. With hybrid
+  verification in the native extension, the same 10 / 100 / 1,000-call tiers
+  ran at 13.2 / 15.6 / 14.2 calls/s on the same host; see
+  [`sdks/python-v2/README.md`](../../sdks/python-v2/README.md#performance).
 - The executed draft uses the real ADK runner and native `McpToolset` across an
   independently started Streamable HTTP MCP receiver with receiver-owned trust
   configuration. It does not yet execute A2A, TLS workload authentication,

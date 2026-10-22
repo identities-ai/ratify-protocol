@@ -1,14 +1,172 @@
-//! Native deterministic key generation for the Ratify Protocol v2 Python SDK.
+//! Native key generation and hybrid signing for the Ratify Protocol v2 Python SDK.
 //!
 //! A separate distribution and module (`ratify-protocol-native-v2` /
 //! `ratify_protocol_native_v2`) from the v1 extension, so both install
-//! together. It supplies key generation only; it is not a wire verifier.
-//! `ratify_protocol_v2` checks `version()` at import time and rejects a
-//! mismatched build.
+//! together. `ratify_protocol_v2` signs only through this extension and checks
+//! `version()` at import time, rejecting a mismatched build.
+//!
+//! Signing uses `ed25519-dalek` and the constant-time `fips204` ML-DSA-65
+//! implementation, the same crates the Ratify Rust core depends on. The SDK
+//! computes the 77-byte v2 signing message and the ML-DSA context; this module
+//! checks that the two describe the same registered object type and signs
+//! exactly those bytes. It is not a wire verifier: the SDK verifies every
+//! signature returned here with its ordinary verifier before using it.
+//!
+//! Key material: a `HybridSigningKey` holds the parsed private keys in Rust
+//! memory and zeroizes them on drop. Constructing one from private-key bytes
+//! copies those bytes in from Python; `private_key_bytes()` and
+//! `hybrid_keypair_from_seeds_py` copy them out, because the SDK's
+//! `HybridPrivateKey` is bytes-backed. Python `bytes` objects cannot be wiped,
+//! so callers should keep their lifetime short.
 
+use ed25519_dalek::{Signer as _, SigningKey};
+use fips204::ml_dsa_65;
+use fips204::traits::{SerDes, Signer};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use ratify_protocol::crypto::hybrid_keypair_from_seeds;
+use zeroize::Zeroize;
+
+const SIGNATURE_PREFIX: &[u8] = b"ratify-protocol-signature\0\x02";
+const MESSAGE_LEN: usize = 77;
+const CONTEXT_PREFIX: &str = "ratify-protocol/2/";
+const MIN_OBJECT_TYPE: u16 = 0x0001;
+const MAX_OBJECT_TYPE: u16 = 0x0009;
+
+fn value_error(msg: &str) -> PyErr {
+    PyValueError::new_err(msg.to_string())
+}
+
+/// Check that `message` is a v2 transcript for a registered object type and
+/// that `context` is exactly that type's ML-DSA context.
+fn check_transcript(message: &[u8], context: &[u8]) -> PyResult<()> {
+    if message.len() != MESSAGE_LEN || !message.starts_with(SIGNATURE_PREFIX) {
+        return Err(value_error(
+            "message is not a 77-byte Ratify v2 signing transcript",
+        ));
+    }
+    let code = u16::from_be_bytes([
+        message[SIGNATURE_PREFIX.len()],
+        message[SIGNATURE_PREFIX.len() + 1],
+    ]);
+    if !(MIN_OBJECT_TYPE..=MAX_OBJECT_TYPE).contains(&code) {
+        return Err(value_error("message names an unsupported v2 object type"));
+    }
+    if context != format!("{CONTEXT_PREFIX}{code:04x}").as_bytes() {
+        return Err(value_error(
+            "ML-DSA context does not match the message object type",
+        ));
+    }
+    Ok(())
+}
+
+/// A hybrid (Ed25519 + ML-DSA-65) private key held in native memory.
+#[pyclass(frozen, module = "ratify_protocol_native_v2")]
+struct HybridSigningKey {
+    ed25519: SigningKey,
+    ml_dsa_65: ml_dsa_65::PrivateKey,
+}
+
+impl HybridSigningKey {
+    fn from_parts(ed_seed: &[u8], ml_secret: &[u8]) -> PyResult<Self> {
+        let mut seed: [u8; 32] = ed_seed
+            .try_into()
+            .map_err(|_| value_error("Ed25519 private key must be a 32-byte seed"))?;
+        let mut secret: [u8; ml_dsa_65::SK_LEN] = ml_secret
+            .try_into()
+            .map_err(|_| value_error("ML-DSA-65 private key must be 4032 bytes"))?;
+        let ed25519 = SigningKey::from_bytes(&seed);
+        seed.zeroize();
+        // try_from_bytes takes the array by value; the copy left here is wiped.
+        let parsed = ml_dsa_65::PrivateKey::try_from_bytes(secret);
+        secret.zeroize();
+        let ml_dsa_65 = parsed.map_err(|_| value_error("ML-DSA-65 private key is malformed"))?;
+        Ok(Self { ed25519, ml_dsa_65 })
+    }
+}
+
+#[pymethods]
+impl HybridSigningKey {
+    /// Load a key from a 32-byte Ed25519 seed and a 4032-byte ML-DSA-65
+    /// secret key (the SDK's `HybridPrivateKey` layout).
+    #[staticmethod]
+    fn from_private_bytes(ed25519: &[u8], ml_dsa_65: &[u8]) -> PyResult<Self> {
+        Self::from_parts(ed25519, ml_dsa_65)
+    }
+
+    /// Derive a key from two 32-byte seeds (Go `HybridKeypairFromSeeds`).
+    #[staticmethod]
+    fn from_seeds(ed_seed: &[u8], ml_seed: &[u8]) -> PyResult<Self> {
+        let ed_seed: [u8; 32] = ed_seed
+            .try_into()
+            .map_err(|_| value_error("Ed25519 seed must be 32 bytes"))?;
+        let ml_seed: [u8; 32] = ml_seed
+            .try_into()
+            .map_err(|_| value_error("ML-DSA-65 seed must be 32 bytes"))?;
+        let (_, mut private) = hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
+        let key = Self::from_parts(&private.ed25519, &private.ml_dsa_65);
+        private.ed25519.zeroize();
+        private.ml_dsa_65.zeroize();
+        key
+    }
+
+    /// Return `(ed25519_public, ml_dsa_65_public)`.
+    fn public_key(&self, py: Python<'_>) -> (Py<PyBytes>, Py<PyBytes>) {
+        let ml_pub = self.ml_dsa_65.get_public_key().into_bytes();
+        (
+            PyBytes::new(py, &self.ed25519.verifying_key().to_bytes()).unbind(),
+            PyBytes::new(py, &ml_pub).unbind(),
+        )
+    }
+
+    /// Copy the private key out as `(ed25519_seed, ml_dsa_65_secret)` bytes.
+    fn private_key_bytes(&self, py: Python<'_>) -> (Py<PyBytes>, Py<PyBytes>) {
+        let mut seed = self.ed25519.to_bytes();
+        let mut secret = self.ml_dsa_65.clone().into_bytes();
+        let out = (
+            PyBytes::new(py, &seed).unbind(),
+            PyBytes::new(py, &secret).unbind(),
+        );
+        seed.zeroize();
+        secret.zeroize();
+        out
+    }
+
+    /// Sign a v2 transcript with both components.
+    ///
+    /// Returns `(ed25519_signature, ml_dsa_65_signature)`. ML-DSA-65 signing is
+    /// hedged with fresh OS randomness. `deterministic_for_test_vectors=True`
+    /// uses the FIPS 204 deterministic variant (all-zero `rnd`), which is how
+    /// the shared test vectors are generated; it exists for conformance tests
+    /// and must not be used for production signatures.
+    #[pyo3(signature = (message, context, *, deterministic_for_test_vectors = false))]
+    fn sign(
+        &self,
+        py: Python<'_>,
+        message: &[u8],
+        context: &[u8],
+        deterministic_for_test_vectors: bool,
+    ) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
+        check_transcript(message, context)?;
+        let ed_sig = self.ed25519.sign(message).to_bytes();
+        let ml_sig = if deterministic_for_test_vectors {
+            self.ml_dsa_65
+                .try_sign_with_seed(&[0u8; 32], message, context)
+        } else {
+            self.ml_dsa_65.try_sign(message, context)
+        }
+        .map_err(|e| PyRuntimeError::new_err(format!("ML-DSA-65 signing failed: {e}")))?;
+        Ok((
+            PyBytes::new(py, &ed_sig).unbind(),
+            PyBytes::new(py, &ml_sig).unbind(),
+        ))
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "<HybridSigningKey>"
+    }
+}
 
 /// Derive a hybrid keypair from two 32-byte seeds.
 ///
@@ -20,20 +178,23 @@ fn hybrid_keypair_from_seeds_py(
     ed_seed: &[u8],
     ml_seed: &[u8],
 ) -> PyResult<(Py<PyBytes>, Py<PyBytes>, Py<PyBytes>, Py<PyBytes>)> {
-    let ed_seed: [u8; 32] = ed_seed.try_into().map_err(|_| {
-        pyo3::exceptions::PyValueError::new_err("Ed25519 seed must be 32 bytes")
-    })?;
-    let ml_seed: [u8; 32] = ml_seed.try_into().map_err(|_| {
-        pyo3::exceptions::PyValueError::new_err("ML-DSA-65 seed must be 32 bytes")
-    })?;
+    let ed_seed: [u8; 32] = ed_seed
+        .try_into()
+        .map_err(|_| value_error("Ed25519 seed must be 32 bytes"))?;
+    let ml_seed: [u8; 32] = ml_seed
+        .try_into()
+        .map_err(|_| value_error("ML-DSA-65 seed must be 32 bytes"))?;
 
-    let (public, private) = hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
-    Ok((
+    let (public, mut private) = hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
+    let out = (
         PyBytes::new(py, &public.ed25519).unbind(),
         PyBytes::new(py, &public.ml_dsa_65).unbind(),
         PyBytes::new(py, &private.ed25519).unbind(),
         PyBytes::new(py, &private.ml_dsa_65).unbind(),
-    ))
+    );
+    private.ed25519.zeroize();
+    private.ml_dsa_65.zeroize();
+    Ok(out)
 }
 
 /// Distribution version of this extension (Cargo form, e.g. 2.0.0-alpha.1).
@@ -44,6 +205,7 @@ fn version() -> &'static str {
 
 #[pymodule]
 fn ratify_protocol_native_v2(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<HybridSigningKey>()?;
     m.add_function(wrap_pyfunction!(hybrid_keypair_from_seeds_py, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     Ok(())

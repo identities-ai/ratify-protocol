@@ -8,9 +8,13 @@ The object set, verifier and status machinery live in submodules such as
 ``canonical``, ``types``, ``scope``, ``resource_path`` and ``constraints`` are
 copies of the v1 modules of the same name, so this package does not depend on
 the v1 distribution.
+
+Key generation and signing run only in the required ``ratify-protocol-native-v2``
+extension (constant-time Ed25519 and ML-DSA-65). Verification is pure Python
+and works without it; signing without it raises ImportError.
 """
 from ._version import __version__
-from . import _native  # import-time lockstep check of the optional native extra
+from . import _native  # import-time lockstep check of the native signing extension
 from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 from .crypto_v2 import (
     delegation_signature_message_v2,

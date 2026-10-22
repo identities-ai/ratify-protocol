@@ -28,7 +28,7 @@ from .signing_v2 import (
     equal_public_keys,
     key_id_v2,
     public_key_of,
-    sign_v2_statement,
+    _sign_v2_statement,
     verify_v2_statement,
 )
 from .types import (
@@ -598,7 +598,7 @@ def verify_delegation_cert_v2_signature(cert: DelegationCertV2) -> None:
     verify_v2_statement(DELEGATION_CERTIFICATE, signable, cert.signature, cert.issuer_pub_key)
 
 
-def sign_delegation_cert_v2(cert: DelegationCertV2, issuer_key: HybridPrivateKey, *, deterministic: bool = False) -> DelegationCertV2:
+def sign_delegation_cert_v2(cert: DelegationCertV2, issuer_key: HybridPrivateKey) -> DelegationCertV2:
     issuer_pub = public_key_of(issuer_key)
     issuer_id = key_id_v2(issuer_pub)
     if cert.issuer_id != issuer_id or not equal_public_keys(cert.issuer_pub_key, issuer_pub):
@@ -607,7 +607,7 @@ def sign_delegation_cert_v2(cert: DelegationCertV2, issuer_key: HybridPrivateKey
     validate_scopes_v2(cert.scope or [])
     prepared = decode_delegation_cert_v2(encode_delegation_cert_v2(replace(cert, signature=placeholder_signature_v2())))
     signable = cert_signable_bytes_v2(prepared)
-    prepared.signature = sign_v2_statement(DELEGATION_CERTIFICATE, signable, issuer_key, deterministic=deterministic)
+    prepared.signature = _sign_v2_statement(DELEGATION_CERTIFICATE, signable, issuer_key)
     signed = decode_delegation_cert_v2(encode_delegation_cert_v2(prepared))
     verify_v2_statement(DELEGATION_CERTIFICATE, signable, signed.signature, issuer_pub)
     return signed
@@ -810,7 +810,7 @@ def verify_proof_bundle_v2_signatures(b: ProofBundleV2) -> None:
     verify_proof_bundle_v2_signatures_only(b)
 
 
-def sign_proof_bundle_v2(bundle: ProofBundleV2, agent_key: HybridPrivateKey, *, deterministic: bool = False) -> ProofBundleV2:
+def sign_proof_bundle_v2(bundle: ProofBundleV2, agent_key: HybridPrivateKey) -> ProofBundleV2:
     agent_pub = public_key_of(agent_key)
     if bundle.agent_id != key_id_v2(agent_pub) or not equal_public_keys(bundle.agent_pub_key, agent_pub):
         raise ValueError("v2 agent key does not match proof bundle agent")
@@ -818,7 +818,7 @@ def sign_proof_bundle_v2(bundle: ProofBundleV2, agent_key: HybridPrivateKey, *, 
     prepared = decode_proof_bundle_v2(encode_proof_bundle_v2(unsigned))
     prepared.delegation_digest = delegation_digest_v2(prepared.delegations)
     signable = presentation_signable_bytes_v2(prepared)
-    prepared.challenge_sig = sign_v2_statement(CHALLENGE_PRESENTATION, signable, agent_key, deterministic=deterministic)
+    prepared.challenge_sig = _sign_v2_statement(CHALLENGE_PRESENTATION, signable, agent_key)
     signed = decode_proof_bundle_v2(encode_proof_bundle_v2(prepared))
     verify_proof_bundle_v2_signatures(signed)
     return signed
@@ -1004,7 +1004,7 @@ def verify_revocation_push_v2_signature(push: RevocationPushV2, trusted_issuer_i
 
 
 def _sign_status(kind: str, obj, bound_issuer_id: str, bound_status_key: HybridPublicKey,
-                 status_key: HybridPrivateKey, deterministic: bool):
+                 status_key: HybridPrivateKey):
     if kind == "list":
         validate, encode, decode, signable_of, code, verify = (
             validate_revocation_list_v2, encode_revocation_list_v2, decode_revocation_list_v2,
@@ -1019,20 +1019,20 @@ def _sign_status(kind: str, obj, bound_issuer_id: str, bound_status_key: HybridP
     if not equal_public_keys(bound_status_key, public_key_of(status_key)):
         raise ValueError("status private key does not match caller-authenticated issuer status-key binding")
     prepared = decode(encode(replace(obj, signature=placeholder_signature_v2())))
-    prepared.signature = sign_v2_statement(code, signable_of(prepared), status_key, deterministic=deterministic)
+    prepared.signature = _sign_v2_statement(code, signable_of(prepared), status_key)
     signed = decode(encode(prepared))
     verify(signed, bound_issuer_id, bound_status_key)
     return signed
 
 
 def sign_revocation_list_v2(lst: RevocationListV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
-                            status_key: HybridPrivateKey, *, deterministic: bool = False) -> RevocationListV2:
-    return _sign_status("list", lst, bound_issuer_id, bound_status_key, status_key, deterministic)
+                            status_key: HybridPrivateKey) -> RevocationListV2:
+    return _sign_status("list", lst, bound_issuer_id, bound_status_key, status_key)
 
 
 def sign_revocation_push_v2(push: RevocationPushV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
-                            status_key: HybridPrivateKey, *, deterministic: bool = False) -> RevocationPushV2:
-    return _sign_status("push", push, bound_issuer_id, bound_status_key, status_key, deterministic)
+                            status_key: HybridPrivateKey) -> RevocationPushV2:
+    return _sign_status("push", push, bound_issuer_id, bound_status_key, status_key)
 
 
 def status_evidence_digest(object_type: int, obj: Any) -> bytes:

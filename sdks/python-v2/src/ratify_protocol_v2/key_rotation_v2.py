@@ -33,7 +33,7 @@ from .signing_v2 import (
     equal_public_keys,
     key_id_v2,
     public_key_of,
-    sign_v2_statement,
+    _sign_v2_statement,
     verify_v2_statement,
 )
 from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
@@ -187,16 +187,15 @@ def encode_key_rotation_statement_v2(stmt: KeyRotationStatementV2) -> bytes:
     })
 
 
-def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: HybridPrivateKey, new_key: HybridPrivateKey,
-                                   *, deterministic: bool = False) -> KeyRotationStatementV2:
+def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: HybridPrivateKey, new_key: HybridPrivateKey) -> KeyRotationStatementV2:
     validate_key_rotation_statement_v2(stmt, False)
     if not equal_public_keys(public_key_of(old_key), stmt.old_key) or not equal_public_keys(public_key_of(new_key), stmt.new_key):
         raise ValueError("rotation private keys do not match the statement keys")
     signable = key_rotation_signable_bytes_v2(stmt)
     return replace(
         stmt,
-        old_signature=sign_v2_statement(KEY_ROTATION_AUTHORIZATION, signable, old_key, deterministic=deterministic),
-        new_signature=sign_v2_statement(KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_key, deterministic=deterministic),
+        old_signature=_sign_v2_statement(KEY_ROTATION_AUTHORIZATION, signable, old_key),
+        new_signature=_sign_v2_statement(KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_key),
     )
 
 

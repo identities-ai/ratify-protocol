@@ -1,22 +1,23 @@
 """Protocol v2 typed signing transcripts and strict hybrid verification.
 
-Pure Python (mirrors Go crypto_v2.go): every object code has its own 77-byte
-transcript ``"ratify-protocol-signature\\x00\\x02" || code || SHA-384(signable)``
-and ML-DSA-65 context ``"ratify-protocol/2/<code>"``. Verification is strict
-AND: canonical non-identity prime-order Ed25519 A and R, canonical S, a valid
-Ed25519 signature, and a valid ML-DSA-65 signature under the code's context.
+Mirrors Go crypto_v2.go: every object code has its own 77-byte transcript
+``"ratify-protocol-signature\\x00\\x02" || code || SHA-384(signable)`` and
+ML-DSA-65 context ``"ratify-protocol/2/<code>"``. Verification is pure Python
+and strict AND: canonical non-identity prime-order Ed25519 A and R, canonical
+S, a valid Ed25519 signature, and a valid ML-DSA-65 signature under the code's
+context. It handles only public data.
 
-The ML-DSA implementation here is not constant-time. It is suitable for
-verification; production signing keys should prefer a hardened provider.
+Every private-key operation goes through the ``ratify-protocol-native-v2``
+extension (constant-time Ed25519 and ML-DSA-65); there is no pure-Python
+signing path, and signing without the extension raises ImportError.
 """
 from __future__ import annotations
 
-import os
+from contextvars import ContextVar
 from hashlib import sha256, sha384
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from . import _ed25519_strict, _mldsa65, _native
 from .errors_v2 import V2Error, V2ErrorClass
@@ -64,53 +65,60 @@ def mldsa_context_v2(code: int) -> bytes:
 def keypair_from_seeds_v2(ed_seed: bytes, ml_seed: bytes) -> tuple[HybridPublicKey, HybridPrivateKey]:
     """Deterministic hybrid keypair (Go HybridKeypairFromSeeds).
 
-    Uses the optional ``ratify-protocol-native-v2`` extension when installed,
-    otherwise the pure-Python fallback; both derive the same keys.
+    Requires the ``ratify-protocol-native-v2`` extension; raises ImportError
+    without it. The returned private key is bytes-backed, so the key material
+    crosses into Python here.
     """
     if len(ed_seed) != 32 or len(ml_seed) != 32:
         raise ValueError("hybrid seeds must be 32 bytes each")
-    if _native.AVAILABLE:
-        ed_pub, ml_pub, ed_priv, ml_priv = _native.keypair_from_seeds(bytes(ed_seed), bytes(ml_seed))
-        return (
-            HybridPublicKey(ed25519=bytes(ed_pub), ml_dsa_65=bytes(ml_pub)),
-            HybridPrivateKey(ed25519=bytes(ed_priv), ml_dsa_65=bytes(ml_priv)),
-        )
-    ed_pub = ed25519.Ed25519PrivateKey.from_private_bytes(bytes(ed_seed)).public_key().public_bytes(
-        Encoding.Raw, PublicFormat.Raw
-    )
-    ml_pub, ml_priv = _mldsa65.keygen_from_seed(bytes(ml_seed))
+    ed_pub, ml_pub, ed_priv, ml_priv = _native.keypair_from_seeds(bytes(ed_seed), bytes(ml_seed))
     return (
-        HybridPublicKey(ed25519=ed_pub, ml_dsa_65=ml_pub),
-        HybridPrivateKey(ed25519=bytes(ed_seed), ml_dsa_65=ml_priv),
+        HybridPublicKey(ed25519=bytes(ed_pub), ml_dsa_65=bytes(ml_pub)),
+        HybridPrivateKey(ed25519=bytes(ed_priv), ml_dsa_65=bytes(ml_priv)),
     )
+
+
+def _signing_key(priv: HybridPrivateKey):
+    if len(priv.ed25519) != 32 or len(priv.ml_dsa_65) != _mldsa65.SECRET_KEY_SIZE:
+        raise ValueError("incomplete hybrid private key")
+    return _native.signing_key(bytes(priv.ed25519), bytes(priv.ml_dsa_65))
 
 
 def public_key_of(priv: HybridPrivateKey) -> HybridPublicKey:
-    """Derive the hybrid public key from a seed-format private key."""
-    if len(priv.ed25519) != 32 or len(priv.ml_dsa_65) != _mldsa65.SECRET_KEY_SIZE:
-        raise ValueError("incomplete hybrid private key")
-    ed_pub = ed25519.Ed25519PrivateKey.from_private_bytes(bytes(priv.ed25519)).public_key().public_bytes(
-        Encoding.Raw, PublicFormat.Raw
-    )
-    return HybridPublicKey(ed25519=ed_pub, ml_dsa_65=_mldsa65.public_key_from_secret(bytes(priv.ml_dsa_65)))
+    """Derive the hybrid public key of a private key (native; ImportError without it)."""
+    ed_pub, ml_pub = _signing_key(priv).public_key()
+    return HybridPublicKey(ed25519=bytes(ed_pub), ml_dsa_65=bytes(ml_pub))
 
 
-def sign_v2_statement(
-    code: int, signable: bytes, priv: HybridPrivateKey, *, deterministic: bool = False
-) -> HybridSignature:
-    """Sign under the code's transcript and context.
+# Test-only switch for the FIPS 204 deterministic ML-DSA variant, which is how
+# the shared vectors are generated. Set only through
+# ratify_protocol_v2._testing.deterministic_test_vector_signing().
+_DETERMINISTIC_FOR_TEST_VECTORS: ContextVar[bool] = ContextVar(
+    "ratify_v2_deterministic_for_test_vectors", default=False
+)
 
-    ``deterministic=True`` uses an all-zero ML-DSA ``rnd`` (byte-reproducible,
-    as the shared vectors were generated); the default is hedged.
+
+def _sign_v2_statement(code: int, signable: bytes, priv: HybridPrivateKey) -> HybridSignature:
+    """Sign under the code's transcript and context through the native signer.
+
+    Internal: callers are the typed signers, which first check that the key
+    matches the object's bound signer. ML-DSA-65 is hedged unless the
+    test-only deterministic switch is set. The signature is verified with the
+    ordinary pure-Python verifier before it is returned.
     """
-    if len(priv.ed25519) != 32 or len(priv.ml_dsa_65) != _mldsa65.SECRET_KEY_SIZE:
-        raise ValueError("incomplete hybrid private key")
+    key = _signing_key(priv)
     message = signing_message_v2(code, signable)
     context = mldsa_context_v2(code)
-    ed_sig = ed25519.Ed25519PrivateKey.from_private_bytes(bytes(priv.ed25519)).sign(message)
-    rnd = bytes(32) if deterministic else os.urandom(32)
-    ml_sig = _mldsa65.sign(bytes(priv.ml_dsa_65), message, context, rnd)
-    return HybridSignature(ed25519=ed_sig, ml_dsa_65=ml_sig)
+    ed_sig, ml_sig = key.sign(
+        message, context, deterministic_for_test_vectors=_DETERMINISTIC_FOR_TEST_VECTORS.get()
+    )
+    signature = HybridSignature(ed25519=bytes(ed_sig), ml_dsa_65=bytes(ml_sig))
+    ed_pub, ml_pub = key.public_key()
+    try:
+        verify_v2_statement(code, signable, signature, HybridPublicKey(ed25519=bytes(ed_pub), ml_dsa_65=bytes(ml_pub)))
+    except V2Error as exc:
+        raise RuntimeError(f"native v2 signature failed verification: {exc}") from exc
+    return signature
 
 
 def _verify_unclassified(code: int, signable: bytes, sig: HybridSignature, pub: HybridPublicKey) -> None:

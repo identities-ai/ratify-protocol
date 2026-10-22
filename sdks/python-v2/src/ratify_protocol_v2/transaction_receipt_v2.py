@@ -37,7 +37,7 @@ from .signing_v2 import (
     equal_public_keys,
     key_id_v2,
     public_key_of,
-    sign_v2_statement,
+    _sign_v2_statement,
     verify_v2_statement,
 )
 from .types import MAX_JSON_NESTING_DEPTH, HybridPrivateKey, HybridPublicKey, HybridSignature
@@ -266,8 +266,7 @@ def verify_transaction_receipt_v2_signatures(receipt: TransactionReceiptV2) -> N
         verify_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, signature, party.agent_pub_key)
 
 
-def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: str, key: HybridPrivateKey,
-                                      *, deterministic: bool = False) -> TransactionReceiptSignatureV2:
+def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: str, key: HybridPrivateKey) -> TransactionReceiptSignatureV2:
     party = next((p for p in receipt.parties if p.party_id == party_id), None)
     if party is None:
         raise ValueError(f"party {party_id!r} is not listed in the transaction receipt")
@@ -275,8 +274,7 @@ def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: s
         raise ValueError(f"signing key does not match party {party_id!r} agent public key")
     validate_transaction_receipt_v2(receipt, False)
     signable = transaction_receipt_v2_sign_bytes(receipt)
-    return TransactionReceiptSignatureV2(party_id, sign_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, key,
-                                                                     deterministic=deterministic))
+    return TransactionReceiptSignatureV2(party_id, _sign_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, key))
 
 
 def _encode_canonical(receipt: TransactionReceiptV2) -> bytes:

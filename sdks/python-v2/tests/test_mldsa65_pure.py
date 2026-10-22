@@ -1,8 +1,10 @@
-"""Pure-Python ML-DSA-65 and strict Ed25519 checks against the shared v2 vectors.
+"""Pure-Python ML-DSA-65 verification and strict Ed25519 checks against the
+shared v2 vectors.
 
-These primitives let Protocol v2 run without the native extra, so they must
-reproduce Go byte-for-byte: key derivation from seed, external tr/mu, and the
-deterministic (unhedged) signatures the vector generator pins.
+These primitives verify Protocol v2 signatures without the native extension,
+so they must agree with Go on external tr/mu and on every accept/reject. The
+module is verification-only: key generation and signing live in the native
+extension (see test_native_signing_v2.py).
 """
 from __future__ import annotations
 
@@ -34,24 +36,15 @@ OBJECTS = _load("objects.json")["objects"]
 NEGATIVES = {v["name"]: v for v in _load("object-negatives.json")["vectors"]}
 
 
-@pytest.fixture(scope="module")
-def secret_keys():
-    out = {}
-    for key in KEYS:
-        pk, sk = mldsa.keygen_from_seed(bytes.fromhex(key["ml_dsa_65_seed_hex"]))
-        out[key["key_id_v2"]] = (pk, sk)
-    return out
-
-
 def test_sizes():
     assert (mldsa.PUBLIC_KEY_SIZE, mldsa.SECRET_KEY_SIZE, mldsa.SIGNATURE_SIZE) == (1952, 4032, 3309)
 
 
-@pytest.mark.parametrize("key", KEYS, ids=[k["name"] for k in KEYS])
-def test_keygen_from_seed_matches_fixture(key, secret_keys):
-    pk, sk = secret_keys[key["key_id_v2"]]
-    assert pk == _b64(key["public_key"]["ml_dsa_65"])
-    assert len(sk) == mldsa.SECRET_KEY_SIZE
+def test_module_has_no_private_key_operations():
+    # Pure-Python signing and key generation were removed: Python big-integer
+    # arithmetic is not constant-time, so only public-data verification stays.
+    for name in ("sign", "keygen_from_seed", "public_key_from_secret", "_expand_s", "_expand_mask"):
+        assert not hasattr(mldsa, name), name
 
 
 class TestDelegationSignatureVector:
@@ -59,10 +52,6 @@ class TestDelegationSignatureVector:
     message = _b64(DELEGATION["message"])
     ctx = _b64(DELEGATION["mldsa_context"])
     sig = _b64(DELEGATION["signature"]["ml_dsa_65"])
-
-    def test_keygen(self):
-        pk, _ = mldsa.keygen_from_seed(_b64(DELEGATION["issuer_seeds"]["ml_dsa_65"]))
-        assert pk == self.pk_expected
 
     def test_tr_and_mu(self):
         assert mldsa.compute_tr(self.pk_expected) == _b64(DELEGATION["mldsa_tr"])
@@ -73,10 +62,6 @@ class TestDelegationSignatureVector:
         alt = _b64(DELEGATION["alternate_mldsa_context"])
         assert not mldsa.verify(self.pk_expected, self.message, alt, self.sig)
         assert not mldsa.verify(self.pk_expected, self.message, b"", self.sig)
-
-    def test_deterministic_sign_reproduces_vector(self):
-        _, sk = mldsa.keygen_from_seed(_b64(DELEGATION["issuer_seeds"]["ml_dsa_65"]))
-        assert mldsa.sign(sk, self.message, self.ctx) == self.sig
 
     @pytest.mark.parametrize("target", DELEGATION["negative_mutations"]["targets"])
     def test_negative_mutations(self, target):
@@ -105,8 +90,8 @@ SIGNATURE_ENTRIES = [
 @pytest.mark.parametrize(
     "name,entry", SIGNATURE_ENTRIES, ids=[f"{n}/{e['field']}" for n, e in SIGNATURE_ENTRIES]
 )
-def test_objects_signatures(name, entry, secret_keys):
-    pk, sk = secret_keys[entry["signer_key_id_v2"]]
+def test_objects_signatures(name, entry):
+    pk = _b64(KEYS_BY_ID[entry["signer_key_id_v2"]]["public_key"]["ml_dsa_65"])
     message = _b64(entry["message_b64"])
     ctx = entry["mldsa_context"].encode("ascii")
     sig = _b64(entry["signature"]["ml_dsa_65"])
@@ -114,7 +99,6 @@ def test_objects_signatures(name, entry, secret_keys):
     assert mldsa.compute_tr(pk) == _b64(entry["mldsa_tr_b64"])
     assert mldsa.compute_mu(pk, message, ctx) == _b64(entry["mldsa_mu_b64"])
     assert mldsa.verify(pk, message, ctx, sig)
-    assert mldsa.sign(sk, message, ctx) == sig
     assert ed.valid_prime_order_point(_b64(entry["signature"]["ed25519"])[:32])
     assert ed.valid_canonical_scalar(_b64(entry["signature"]["ed25519"])[32:])
 
@@ -132,8 +116,6 @@ def test_verify_rejects_wrong_lengths():
     assert not mldsa.verify(pk, msg, ctx, sig[:-1])
     assert not mldsa.verify(pk, msg, ctx, sig + b"\x00")
     assert not mldsa.verify(pk, msg, b"x" * 256, sig)
-    with pytest.raises(ValueError):
-        mldsa.sign(bytes(mldsa.SECRET_KEY_SIZE), msg, b"x" * 256)
 
 
 def test_verify_rejects_z_out_of_bound():
@@ -190,13 +172,6 @@ def test_verify_rejects_malformed_hints():
 def test_verify_never_raises_on_garbage():
     assert not mldsa.verify(b"\xff" * 1952, b"m", b"c", b"\xff" * 3309)
     assert not mldsa.verify(None, b"m", b"c", b"\x00" * 3309)  # type: ignore[arg-type]
-
-
-def test_hedged_sign_differs_but_verifies():
-    _, sk = mldsa.keygen_from_seed(_b64(DELEGATION["issuer_seeds"]["ml_dsa_65"]))
-    sig = mldsa.sign(sk, b"hello", b"ctx", rnd=b"\x01" * 32)
-    assert sig != mldsa.sign(sk, b"hello", b"ctx")
-    assert mldsa.verify(TestDelegationSignatureVector.pk_expected, b"hello", b"ctx", sig)
 
 
 # --- Strict Ed25519 --------------------------------------------------------

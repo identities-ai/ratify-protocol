@@ -27,14 +27,14 @@ dependencies = [
     "cryptography>=44.0",
     # IANA time zone data for the time_window constraint (see the v1 package).
     "tzdata>=2024.1",
+    # Every key-generation and signing operation runs in this native
+    # extension (constant-time Ed25519 and ML-DSA-65); there is no pure-Python
+    # signing path. Version-locked to this release; the SDK rejects a
+    # mismatched extension at import time.
+    "ratify-protocol-native-v2==2.0.0a1",
 ]
 
 [project.optional-dependencies]
-# Native deterministic key generation, version-locked to this release. The
-# SDK rejects a mismatched extension at import time.
-native = [
-    "ratify-protocol-native-v2==2.0.0a1",
-]
 dev = [
     "pytest>=8.0",
 ]

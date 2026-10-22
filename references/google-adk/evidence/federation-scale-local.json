@@ -1,0 +1,86 @@
+{
+  "environment": {
+    "google_adk": "2.6.3",
+    "logical_cpus": 10,
+    "mcp": "1.29.0",
+    "platform": "macOS-26.6-arm64-arm-64bit",
+    "python": "3.12.10",
+    "ratify_protocol_native_v2": "2.0.0a1",
+    "ratify_protocol_v2": "2.0.0a1"
+  },
+  "measured_at": 1792683901,
+  "methodology": {
+    "claim_boundary": "single-host measurements with in-memory reference stores, not Google production capacity",
+    "excluded": "ADK model latency, MCP HTTP transport, status feed distribution, durable Part B stores, and multi-host orchestration",
+    "measured": "approval set, two issued challenges, two worker signatures, two full v2 verifications with signed status and the max_count profile, two signed receipts with checkpoint acknowledgement, two releases, the approval ledger, and the protected counter increment"
+  },
+  "results": [
+    {
+      "allowed": 9,
+      "calls_completed": 10,
+      "calls_requested": 10,
+      "denied": 1,
+      "denied_by_reason": {
+        "constraint_denied": 1
+      },
+      "encoded_proof_bytes": 76148,
+      "latency_ms": {
+        "max": 3070.646,
+        "p50": 2556.425,
+        "p95": 3070.646,
+        "p99": 3070.646
+      },
+      "mode": "local_dual_root_composition_profile",
+      "protected_action_invocations": 9,
+      "released_receipts": 19,
+      "throughput_calls_per_second": 1.79,
+      "wall_seconds": 5.587943,
+      "workers": 5
+    },
+    {
+      "allowed": 90,
+      "calls_completed": 100,
+      "calls_requested": 100,
+      "denied": 10,
+      "denied_by_reason": {
+        "constraint_denied": 10
+      },
+      "encoded_proof_bytes": 76148,
+      "latency_ms": {
+        "max": 8086.022,
+        "p50": 5413.662,
+        "p95": 7194.725,
+        "p99": 8016.94
+      },
+      "mode": "local_dual_root_composition_profile",
+      "protected_action_invocations": 90,
+      "released_receipts": 190,
+      "throughput_calls_per_second": 1.406,
+      "wall_seconds": 71.112274,
+      "workers": 8
+    },
+    {
+      "allowed": 900,
+      "calls_completed": 1000,
+      "calls_requested": 1000,
+      "denied": 100,
+      "denied_by_reason": {
+        "constraint_denied": 100
+      },
+      "encoded_proof_bytes": 76148,
+      "latency_ms": {
+        "max": 29371.693,
+        "p50": 7185.036,
+        "p95": 19358.957,
+        "p99": 25503.182
+      },
+      "mode": "local_dual_root_composition_profile",
+      "protected_action_invocations": 900,
+      "released_receipts": 1900,
+      "throughput_calls_per_second": 0.89,
+      "wall_seconds": 1123.928496,
+      "workers": 8
+    }
+  ],
+  "schema": "ratify.google-adk.federation-scale.v2"
+}

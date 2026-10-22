@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,8 @@ import (
 //	time_window              {"end","start","tz","type"}
 //	                         start, end: "HH:MM" local wall-clock minutes,
 //	                         00:00..23:59, inclusive; start > end wraps midnight.
-//	                         tz: IANA time-zone identifier. A zone the verifier's
+//	                         tz: IANA time-zone identifier, 1-64 bytes of
+//	                         /-separated [A-Za-z0-9_+-] segments. A zone the verifier's
 //	                         time-zone database cannot load (unknown ID, missing
 //	                         or different tz data) is constraint_unverifiable.
 //	max_amount               {"currency","max_amount_micros","type"}
@@ -41,6 +43,11 @@ import (
 const (
 	// MaxRateWindowSecondsV2 bounds max_rate.window_s.
 	MaxRateWindowSecondsV2 = 86400
+	// MaxMembershipAgeSecondsV2 bounds receiver-audience
+	// max_membership_age_seconds.
+	MaxMembershipAgeSecondsV2 = 86400
+	// MaxAudienceIDsV2 bounds each receiver-audience ID array.
+	MaxAudienceIDsV2 = 64
 )
 
 // ConstraintV2 is one entry of a v2 delegation certificate's constraints
@@ -228,8 +235,8 @@ func validateV2ConstraintFields(data []byte) error {
 			}
 		}
 		tz, err := v2StringField(fields["tz"])
-		if err != nil || tz == "" || len(tz) > MaxIdentifierLengthBytes {
-			return fmt.Errorf("time_window tz must be a non-empty IANA time-zone identifier")
+		if err != nil || !validTimeZoneIDV2(tz) {
+			return fmt.Errorf("time_window tz must be 1 to 64 bytes of /-separated [A-Za-z0-9_+-] segments")
 		}
 	case ConstraintMaxAmount:
 		if err := exact([]string{"currency", "max_amount_micros"}); err != nil {
@@ -277,6 +284,9 @@ func validateV2ConstraintFields(data []byte) error {
 	default:
 		// Unregistered type, including geo_circle, geo_polygon, geo_bbox and
 		// max_speed_mps: evaluated as constraint_unknown.
+		if len(kind) > MaxIdentifierLengthBytes {
+			return fmt.Errorf("unregistered constraint type exceeds MAX_IDENTIFIER_LENGTH_BYTES")
+		}
 		if err := exact(nil, "params"); err != nil {
 			return err
 		}
@@ -311,10 +321,13 @@ func validateV2ReceiverAudience(raw json.RawMessage) error {
 		return fmt.Errorf("receiver audience must name an exact receiver or trust domain")
 	}
 	for _, values := range [][]string{exact, domains} {
+		if len(values) > MaxAudienceIDsV2 {
+			return fmt.Errorf("receiver audience arrays hold at most %d IDs", MaxAudienceIDsV2)
+		}
 		seen := map[string]bool{}
 		for _, value := range values {
-			if value == "" || seen[value] {
-				return fmt.Errorf("receiver audience IDs must be non-empty and unique")
+			if value == "" || len(value) > MaxIdentifierLengthBytes || seen[value] {
+				return fmt.Errorf("receiver audience IDs must be unique and 1 to %d bytes", MaxIdentifierLengthBytes)
 			}
 			seen[value] = true
 		}
@@ -325,8 +338,8 @@ func validateV2ReceiverAudience(raw json.RawMessage) error {
 	}
 	if hasAge {
 		seconds, err := v2IntegerField(age)
-		if err != nil || seconds <= 0 {
-			return fmt.Errorf("max_membership_age_seconds must be a positive safe integer")
+		if err != nil || seconds <= 0 || seconds > MaxMembershipAgeSecondsV2 {
+			return fmt.Errorf("max_membership_age_seconds must be an integer in 1..%d", MaxMembershipAgeSecondsV2)
 		}
 	}
 	if len(domains) == 0 && hasAge {
@@ -383,6 +396,27 @@ func validISO4217AlphaV2(code string) bool {
 	for i := 0; i < 3; i++ {
 		if code[i] < 'A' || code[i] > 'Z' {
 			return false
+		}
+	}
+	return true
+}
+
+// validTimeZoneIDV2 checks the SPEC-v2 §5.2 tz shape: 1 to 64 ASCII bytes of
+// '/'-separated segments of [A-Za-z0-9_+-], with no empty, "." or ".."
+// segment. Whether the zone exists is decided at evaluation time.
+func validTimeZoneIDV2(tz string) bool {
+	if len(tz) == 0 || len(tz) > 64 {
+		return false
+	}
+	for _, segment := range strings.Split(tz, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+		for i := 0; i < len(segment); i++ {
+			c := segment[i]
+			if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '+' || c == '-') {
+				return false
+			}
 		}
 	}
 	return true

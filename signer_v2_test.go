@@ -22,6 +22,9 @@ type remoteSignerV2Test struct {
 	tamper   func(*HybridSignature)
 	err      error
 	onSign   func()
+	// muContext is the registry context the test provider uses to emulate
+	// external-mu signing; a real provider signs MLDSAMu directly.
+	muContext []byte
 }
 
 func (s *remoteSignerV2Test) PublicKeyV2() HybridPublicKey { return s.priv.Public() }
@@ -40,7 +43,7 @@ func (s *remoteSignerV2Test) SignV2(ctx context.Context, req SignRequestV2) (Hyb
 	// statement in pure mode, which yields an equally valid signature.
 	mlContext := req.MLDSAContext
 	if req.Mode == SignerModeExternalMuV2 {
-		mlContext = []byte("ratify-protocol/2/" + hex4(req.ObjectType))
+		mlContext = s.muContext
 	}
 	ml := make([]byte, mldsa65.SignatureSize)
 	if err := mldsa65.SignTo(s.priv.MLDSA65, req.Message, mlContext, true, ml); err != nil {
@@ -51,11 +54,6 @@ func (s *remoteSignerV2Test) SignV2(ctx context.Context, req SignRequestV2) (Hyb
 		s.tamper(&sig)
 	}
 	return sig, nil
-}
-
-func hex4(v uint16) string {
-	const digits = "0123456789abcdef"
-	return string([]byte{digits[v>>12&15], digits[v>>8&15], digits[v>>4&15], digits[v&15]})
 }
 
 func unsignedCertV2Test(t *testing.T, issuer HybridPublicKey) *DelegationCertV2 {
@@ -91,14 +89,14 @@ func TestSignerV2DirectModeRequestAndVerification(t *testing.T) {
 	}
 	req := signer.requests[0]
 	keyID, _ := KeyIDV2(pub)
-	if signer.calls != 1 || req.ObjectType != 1 || len(req.Message) != 77 || string(req.MLDSAContext) != "ratify-protocol/2/0001" || req.MLDSAMu != nil || req.KeyID != keyID || !equalHybridPublicKeys(req.PublicKey, pub) {
+	if signer.calls != 1 || req.Message[len("ratify-protocol-signature\x00\x02")+1] != 1 || len(req.Message) != 77 || string(req.MLDSAContext) != "ratify-protocol/2/0001" || req.MLDSAMu != nil || req.KeyID != keyID || !equalHybridPublicKeys(req.PublicKey, pub) {
 		t.Fatalf("direct-mode request = %+v", req)
 	}
 }
 
 func TestSignerV2ExternalMuRequest(t *testing.T) {
 	pub, priv, _ := GenerateHybridKeypair()
-	signer := &remoteSignerV2Test{priv: priv, mode: SignerModeExternalMuV2}
+	signer := &remoteSignerV2Test{priv: priv, mode: SignerModeExternalMuV2, muContext: []byte("ratify-protocol/2/0001")}
 	if _, err := SignDelegationCertV2WithSigner(context.Background(), unsignedCertV2Test(t, pub), signer); err != nil {
 		t.Fatal(err)
 	}

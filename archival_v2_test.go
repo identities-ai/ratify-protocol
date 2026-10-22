@@ -12,23 +12,23 @@ func TestArchivalV2ResultsAreLabelledAndNonActionable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := VerifyProofBundleV2Archival(wire)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := VerifyArchivalProofBundleV2(wire)
 	hash, _ := BundleHashV2(bundle)
-	if FreshnessUnverifiedV2 != "freshness_unverified" || got.Freshness != FreshnessUnverifiedV2 || got.Actionable || got.Digest != hash || got.ObjectType != 2 || got.SignerKeyIDs[len(got.SignerKeyIDs)-1] != bundle.AgentID {
+	if FreshnessUnverifiedV2 != "freshness_unverified" || got.Assessment != FreshnessUnverifiedV2 || got.Actionable || got.ErrorClass != "" || got.BundleHash != hash || got.AgentID != bundle.AgentID || len(got.IssuerIDs) != len(bundle.Delegations) {
 		t.Fatalf("archival bundle result = %+v", got)
 	}
 	tampered := bytes.Replace(wire, []byte(`"challenge_at":`), []byte(`"challenge_at":1`), 1)
-	if _, err := VerifyProofBundleV2Archival(tampered); err == nil {
-		t.Fatal("tampered bundle passed archival verification")
+	if got := VerifyArchivalProofBundleV2(tampered); got.ErrorClass != V2ErrInvalidSignature || got.Actionable || got.Assessment != FreshnessUnverifiedV2 {
+		t.Fatalf("tampered bundle archival result = %+v", got)
+	}
+	if got := VerifyArchivalProofBundleV2([]byte("{")); got.ErrorClass != V2ErrMalformed {
+		t.Fatalf("malformed bundle archival result = %+v", got)
 	}
 	certWire, err := EncodeDelegationCertV2(&bundle.Delegations[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := VerifyDelegationCertV2Archival(certWire); err != nil || got.Actionable || got.Freshness != FreshnessUnverifiedV2 || got.Digest != "" {
+	if got, err := VerifyArchivalDelegationCertV2(certWire); err != nil || got.Actionable || got.Freshness != FreshnessUnverifiedV2 || got.Digest != "" {
 		t.Fatalf("archival certificate = %+v, %v", got, err)
 	}
 }
@@ -42,10 +42,10 @@ func TestArchivalV2StatusAndLogObjectsUseCallerKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	wire, _ := EncodeRevocationListV2(list)
-	if got, err := VerifyRevocationListV2Archival(wire, issuer, statusPub); err != nil || got.Actionable || got.Freshness != FreshnessUnverifiedV2 {
+	if got, err := VerifyArchivalRevocationListV2(wire, issuer, statusPub); err != nil || got.Actionable || got.Freshness != FreshnessUnverifiedV2 {
 		t.Fatalf("archival list = %+v, %v", got, err)
 	}
-	if _, err := VerifyRevocationListV2Archival(wire, issuer, otherPub); V2ErrorClassOf(err) != V2ErrInvalidSignature {
+	if _, err := VerifyArchivalRevocationListV2(wire, issuer, otherPub); V2ErrorClassOf(err) != V2ErrInvalidSignature {
 		t.Fatalf("list under another status key: %v", err)
 	}
 	witnessPub, witnessPriv, _ := GenerateHybridKeypair()
@@ -56,12 +56,12 @@ func TestArchivalV2StatusAndLogObjectsUseCallerKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	entryWire, _ := EncodeWitnessEntryV2(signed)
-	got, err := VerifyWitnessEntryV2Archival(entryWire, witnessPub)
+	got, err := VerifyArchivalWitnessEntryV2(entryWire, witnessPub)
 	digest, _ := WitnessEntryV2Digest(signed)
 	if err != nil || got.Actionable || !strings.HasSuffix(got.Digest, strings.ToLower(hexV2Test(digest))) {
 		t.Fatalf("archival witness entry (no log head needed) = %+v, %v", got, err)
 	}
-	if _, err := VerifyWitnessEntryV2Archival(entryWire, otherPub); V2ErrorClassOf(err) != V2ErrKeyIDMismatch {
+	if _, err := VerifyArchivalWitnessEntryV2(entryWire, otherPub); V2ErrorClassOf(err) != V2ErrKeyIDMismatch {
 		t.Fatalf("witness entry under another key: %v", err)
 	}
 }

@@ -114,133 +114,91 @@ func (f txVerifyFixtureV2) statusSource(override map[string]RevocationStatusResu
 	}, roles
 }
 
-func TestVerifyTransactionReceiptV2PerPartyTrustAndStatus(t *testing.T) {
+func TestVerifyTransactionReceiptV2PerPartyTrustStatusScope(t *testing.T) {
 	base := buildTxVerifyFixtureV2(t, []string{"execute:tool"}, nil, false)
 	status, roles := base.statusSource(nil)
 	leafIssuer := base.chain[0].IssuerID
+	trusted := func(f txVerifyFixtureV2) func(context.Context, []DelegationCertV2) (V2TrustResolution, error) {
+		return f.trust(f.rootID, f.rootPub, nil)
+	}
 	tests := []struct {
-		name          string
-		fixture       txVerifyFixtureV2
-		now           int64
-		sources       func(f txVerifyFixtureV2) TransactionVerifySourcesV2
-		context       map[string]ConstraintContextV2
-		trust, status string
-		freshness     string
-		authorization string
-		reason        string
-		validUntil    int64
+		name                 string
+		fixture              txVerifyFixtureV2
+		now                  int64
+		sources              func(f txVerifyFixtureV2) TransactionVerifySourcesV2
+		trust, status, scope string
 	}{
-		{name: "no sources configured", fixture: base, now: 20,
-			sources: func(txVerifyFixtureV2) TransactionVerifySourcesV2 { return TransactionVerifySourcesV2{} },
-			trust:   "unknown", status: "not_evaluated", freshness: "unknown", authorization: "unknown", reason: "trust_unavailable"},
-		{name: "trust only", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil)}
-			},
-			trust: "trusted", status: "unknown", freshness: "unknown", authorization: "unknown", reason: "status_unavailable"},
-		{name: "trust error", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, errors.New("trust store down")), Status: status, StatusRoles: roles}
-			},
-			trust: "unavailable", status: "not_evaluated", freshness: "unknown", authorization: "unknown", reason: "trust_unavailable"},
-		{name: "other root", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				return TransactionVerifySourcesV2{Trust: f.trust(leafIssuer, f.chain[0].IssuerPubKey, nil), Status: status, StatusRoles: roles}
-			},
-			trust: "untrusted", status: "not_evaluated", freshness: "unknown", authorization: "denied", reason: "unauthorized"},
-		{name: "authorized", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: status, StatusRoles: roles}
-			},
-			trust: "trusted", status: "current", freshness: "fresh", authorization: "authorized", reason: "authorized", validUntil: 80},
-		{name: "revoked leaf", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				src, r := f.statusSource(map[string]RevocationStatusResultV2{"leaf": {Status: "revoked", Evidence: []StatusEvidenceEntryV2{{IssuerID: leafIssuer, StatusKeyID: fmt.Sprintf("%064x", 100), Sequence: 2, ObjectType: uint16(v2RevocationPush), Digest: "sha384:" + strings.Repeat("c", 96)}}}})
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: src, StatusRoles: r}
-			},
-			trust: "trusted", status: "revoked", freshness: "unknown", authorization: "denied", reason: "delegation_revoked"},
-		{name: "stale status", fixture: base, now: 20,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				src, r := f.statusSource(nil)
-				stale := src(context.Background(), CertificateRefV2{IssuerID: f.chain[1].IssuerID, CertID: "root"})
-				stale.Status, stale.Reason = "indeterminate", "stale"
-				src2, _ := f.statusSource(map[string]RevocationStatusResultV2{"root": stale})
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: src2, StatusRoles: r}
-			},
-			trust: "trusted", status: "stale", freshness: "stale", authorization: "unknown", reason: "status_stale"},
-		{name: "expired delegation", fixture: base, now: 95,
-			sources: func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
-				return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: status, StatusRoles: roles}
-			},
-			trust: "trusted", status: "not_evaluated", freshness: "unknown", authorization: "denied", reason: "delegation_expired"},
+		{"no sources configured", base, 20, func(txVerifyFixtureV2) TransactionVerifySourcesV2 { return TransactionVerifySourcesV2{} },
+			"unavailable", "not_evaluated", "not_evaluated"},
+		{"trust error", base, 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			return TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, errors.New("trust store down")), Status: status, StatusRoles: roles}
+		}, "unavailable", "not_evaluated", "not_evaluated"},
+		{"other root", base, 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			return TransactionVerifySourcesV2{Trust: f.trust(leafIssuer, f.chain[0].IssuerPubKey, nil), Status: status, StatusRoles: roles}
+		}, "untrusted", "not_evaluated", "not_evaluated"},
+		{"trust only", base, 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			return TransactionVerifySourcesV2{Trust: trusted(f)}
+		}, "trusted", "unavailable", "covered"},
+		{"current", base, 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			return TransactionVerifySourcesV2{Trust: trusted(f), Status: status, StatusRoles: roles}
+		}, "trusted", "current", "covered"},
+		{"current result past its fresh_until is stale", base, 80, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			return TransactionVerifySourcesV2{Trust: trusted(f), Status: status, StatusRoles: roles}
+		}, "trusted", "stale", "covered"},
+		{"revoked leaf", base, 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			src, r := f.statusSource(map[string]RevocationStatusResultV2{"leaf": {Status: "revoked", Evidence: []StatusEvidenceEntryV2{{IssuerID: leafIssuer, StatusKeyID: fmt.Sprintf("%064x", 100), Sequence: 2, ObjectType: uint16(v2RevocationPush), Digest: "sha384:" + strings.Repeat("c", 96)}}}})
+			return TransactionVerifySourcesV2{Trust: trusted(f), Status: src, StatusRoles: r}
+		}, "trusted", "revoked", "covered"},
+		{"scope not covered", buildTxVerifyFixtureV2(t, []string{"data:read"}, nil, false), 20, func(f txVerifyFixtureV2) TransactionVerifySourcesV2 {
+			src, r := f.statusSource(nil)
+			return TransactionVerifySourcesV2{Trust: trusted(f), Status: src, StatusRoles: r}
+		}, "trusted", "current", "not_covered"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: tt.fixture.wire, Now: tt.now, PartyContext: tt.context}, tt.sources(tt.fixture))
+			got, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: tt.fixture.wire, Now: tt.now}, tt.sources(tt.fixture))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(got.Parties) != 1 {
-				t.Fatalf("parties = %+v", got.Parties)
+			if got.Actionable || len(got.Parties) != 1 {
+				t.Fatalf("result = %+v", got)
 			}
 			p := got.Parties[0]
-			if p.TrustAssessment != tt.trust || p.StatusAssessment != tt.status || p.Freshness != tt.freshness || p.Authorization != tt.authorization || p.Reason != tt.reason || p.ValidUntil != tt.validUntil {
+			if p.TrustAssessment != tt.trust || p.StatusAssessment != tt.status || p.ScopeAssessment != tt.scope || p.Freshness != FreshnessUnverifiedV2 {
 				t.Fatalf("party = %+v", p)
-			}
-			if got.AllAuthorized != (tt.authorization == "authorized") {
-				t.Fatalf("AllAuthorized = %t for %s", got.AllAuthorized, tt.authorization)
 			}
 		})
 	}
 }
 
-func TestVerifyTransactionReceiptV2ScopeAndConstraints(t *testing.T) {
-	run := func(t *testing.T, f txVerifyFixtureV2, ctx map[string]ConstraintContextV2) TransactionPartyVerificationV2 {
-		t.Helper()
-		status, roles := f.statusSource(nil)
-		got, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: 20, PartyContext: ctx},
-			TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: status, StatusRoles: roles})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return got.Parties[0]
-	}
-	if p := run(t, buildTxVerifyFixtureV2(t, []string{"data:read"}, nil, false), nil); p.Authorization != "denied" || p.Reason != "scope_denied" {
-		t.Fatalf("leaf scope without the signed required_scope = %+v", p)
-	}
-	amount := []ConstraintV2{{Type: ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: 7_000_000}}
+func TestVerifyTransactionReceiptV2DoesNotEvaluateRequestConstraints(t *testing.T) {
+	amount := []ConstraintV2{{Type: ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: 1}}
 	f := buildTxVerifyFixtureV2(t, []string{"execute:tool"}, amount, false)
-	if p := run(t, f, nil); p.Authorization != "unknown" || p.Reason != "constraint_unverifiable" {
-		t.Fatalf("absent authenticated amount = %+v", p)
-	}
-	if p := run(t, f, map[string]ConstraintContextV2{"buyer": {HasAmount: true, RequestedAmountMicros: 7_000_001, RequestedCurrency: "USD"}}); p.Authorization != "denied" || p.Reason != "constraint_denied" {
-		t.Fatalf("amount over the limit = %+v", p)
-	}
-	if p := run(t, f, map[string]ConstraintContextV2{"buyer": {HasAmount: true, RequestedAmountMicros: 7_000_000, RequestedCurrency: "USD"}}); p.Authorization != "authorized" {
-		t.Fatalf("amount at the limit = %+v", p)
-	}
-	rate := []ConstraintV2{{Type: ConstraintMaxRate, Count: 1, WindowS: 60}}
-	if p := run(t, buildTxVerifyFixtureV2(t, []string{"execute:tool"}, rate, false), nil); p.Authorization != "unknown" || p.Reason != "constraint_unverifiable" {
-		t.Fatalf("max_rate cannot be exercised for a completed transaction: %+v", p)
-	}
-	geo := []ConstraintV2{{Type: ConstraintGeoCircle, Params: map[string]any{"radius_mm": 1}}}
-	if p := run(t, buildTxVerifyFixtureV2(t, []string{"execute:tool"}, geo, false), nil); p.Authorization != "denied" || p.Reason != "constraint_unknown" {
-		t.Fatalf("unregistered geo_circle must fail closed: %+v", p)
+	src, roles := f.statusSource(nil)
+	got, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: 20},
+		TransactionVerifySourcesV2{Trust: f.trust(f.rootID, f.rootPub, nil), Status: src, StatusRoles: roles})
+	if err != nil || got.Parties[0].ScopeAssessment != "covered" || got.Actionable {
+		t.Fatalf("constraints must not be evaluated here: %+v %v", got, err)
 	}
 }
 
 func TestVerifyTransactionReceiptV2RejectsEmptyDelegationParty(t *testing.T) {
 	f := buildTxVerifyFixtureV2(t, nil, nil, true)
-	_, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: 20}, TransactionVerifySourcesV2{})
-	if V2ErrorClassOf(err) != V2ErrTransactionPartyMismatch || !strings.Contains(err.Error(), "no delegation certificates") {
-		t.Fatalf("empty-delegation party: class=%q err=%v", V2ErrorClassOf(err), err)
+	called := false
+	trust := func(context.Context, []DelegationCertV2) (V2TrustResolution, error) {
+		called = true
+		return V2TrustResolution{}, nil
+	}
+	_, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: 20}, TransactionVerifySourcesV2{Trust: trust})
+	if V2ErrorClassOf(err) != V2ErrTransactionPartyMismatch || !strings.Contains(err.Error(), "no delegation certificates") || called {
+		t.Fatalf("empty-delegation party: class=%q err=%v providerCalled=%t", V2ErrorClassOf(err), err, called)
 	}
 }
 
 func TestVerifyTransactionReceiptV2RejectsBadInputs(t *testing.T) {
 	f := buildTxVerifyFixtureV2(t, []string{"execute:tool"}, nil, false)
-	if _, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: 20, FutureSkewSeconds: 301}, TransactionVerifySourcesV2{}); V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
-		t.Fatalf("future skew above 300 seconds: %v", err)
+	if _, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: f.wire, Now: -1}, TransactionVerifySourcesV2{}); V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
+		t.Fatalf("negative time: %v", err)
 	}
 	tampered := bytes.Replace(f.wire, []byte(`"tx-verify-1"`), []byte(`"tx-verify-2"`), 1)
 	if _, err := VerifyTransactionReceiptV2(context.Background(), TransactionVerifyRequestV2{Receipt: tampered, Now: 20}, TransactionVerifySourcesV2{}); err == nil {

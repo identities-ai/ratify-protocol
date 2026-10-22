@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"filippo.io/edwards25519"
@@ -148,6 +149,15 @@ func (g *gen) certNegatives(n *negBuilder) {
 	constraint("constraint_time_window_hour_24", "time_window start is 24:00", map[string]any{"type": "time_window", "start": "24:00", "end": "23:59", "tz": "UTC"})
 	constraint("constraint_time_window_single_digit_hour", "time_window start is 9:00", map[string]any{"type": "time_window", "start": "9:00", "end": "17:00", "tz": "UTC"})
 	constraint("constraint_time_window_empty_tz", "time_window tz is empty", map[string]any{"type": "time_window", "start": "09:00", "end": "17:00", "tz": ""})
+	constraint("constraint_time_window_tz_dotdot_segment", "time_window tz has a .. segment", map[string]any{"type": "time_window", "start": "09:00", "end": "17:00", "tz": "../etc/localtime"})
+	constraint("constraint_time_window_tz_65_bytes", "time_window tz is 65 bytes", map[string]any{"type": "time_window", "start": "09:00", "end": "17:00", "tz": strings.Repeat("A", 65)})
+	constraint("constraint_audience_age_over_limit", "receiver_audience max_membership_age_seconds is 86401", map[string]any{"type": "ratify.receiver_audience", "params": map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"d"}, "max_membership_age_seconds": num(86401)}})
+	sixtyFive := make([]any, 65)
+	for i := range sixtyFive {
+		sixtyFive[i] = fmt.Sprintf("receiver-%02d", i)
+	}
+	constraint("constraint_audience_65_ids", "receiver_audience exact_receiver_ids has 65 entries", map[string]any{"type": "ratify.receiver_audience", "params": map[string]any{"exact_receiver_ids": sixtyFive, "trust_domain_ids": []any{}}})
+	constraint("constraint_unregistered_type_513_bytes", "unregistered constraint type is 513 bytes", map[string]any{"type": strings.Repeat("t", 513)})
 	constraint("constraint_resource_path_empty_prefix", "resource_path path_prefix is empty", map[string]any{"type": "resource_path", "resource_id": "r", "path_prefix": ""})
 	constraint("constraint_resource_path_long_id", "resource_path resource_id exceeds 512 bytes", map[string]any{"type": "resource_path", "resource_id": strings.Repeat("r", 513)})
 	constraint("constraint_registered_type_with_params", "max_rate carries params", map[string]any{"type": "max_rate", "count": num(1), "window_s": num(60), "params": map[string]any{}})

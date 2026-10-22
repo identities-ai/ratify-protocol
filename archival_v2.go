@@ -3,6 +3,7 @@ package ratify
 import (
 	"encoding/hex"
 	"fmt"
+	"slices"
 )
 
 // FreshnessUnverifiedV2 is the mandatory label of every archival result.
@@ -23,7 +24,8 @@ type ArchivalVerificationV2 struct {
 	// Digest identifies the verified content as "sha384:" + 96 hex: the
 	// bundle hash for a proof bundle, StatementBodyDigestV2 for rotation,
 	// witness and verification-receipt statements, and the status evidence
-	// digest for revocation lists and pushes. It is empty for certificates
+	// digest for revocation lists and pushes. (Proof bundles use
+	// VerifyArchivalProofBundleV2.) It is empty for certificates
 	// and transaction receipts, which have no registered object digest.
 	Digest string
 	// SignerKeyIDs lists the v2 key IDs whose signatures were verified, in
@@ -41,32 +43,54 @@ func archivalResultV2(code v2ObjectType, digest []byte, signers ...string) Archi
 	return result
 }
 
-// VerifyProofBundleV2Archival checks a stored proof bundle's structure, chain
-// linkage and every signature under the keys it carries.
-func VerifyProofBundleV2Archival(data []byte) (ArchivalVerificationV2, error) {
-	bundle, err := DecodeProofBundleV2(data)
-	if err != nil {
-		return ArchivalVerificationV2{}, err
-	}
-	if err := VerifyProofBundleV2Signatures(bundle); err != nil {
-		return ArchivalVerificationV2{}, err
-	}
-	hash, err := BundleHashV2(bundle)
-	if err != nil {
-		return ArchivalVerificationV2{}, v2Classify(V2ErrMalformed, err)
-	}
-	digest, _ := hex.DecodeString(hash[len("sha384:"):])
-	signers := make([]string, 0, len(bundle.Delegations)+1)
-	for _, cert := range bundle.Delegations {
-		signers = append(signers, cert.IssuerID)
-	}
-	signers = append(signers, bundle.AgentID)
-	return archivalResultV2(v2ChallengePresentation, digest, signers...), nil
+// ArchivalProofBundleResultV2 is the SPEC-v2 §6.10 archival result. It has
+// no decision field and is never actionable: no challenge was consumed and
+// no provider was invoked. ErrorClass is empty when every check passed.
+type ArchivalProofBundleResultV2 struct {
+	Assessment string
+	Actionable bool
+	BundleHash string
+	AgentID    string
+	IssuerIDs  []string
+	ErrorClass V2ErrorClass
+	// Err carries the diagnostic for ErrorClass; it is not part of the
+	// language-neutral result.
+	Err error
 }
 
-// VerifyDelegationCertV2Archival checks one stored certificate and its issuer
+// VerifyArchivalProofBundleV2 performs only the signature-and-structure
+// pre-claim steps on a stored proof bundle: bounded strict decode, key IDs,
+// delegation digest, duplicate CertificateRef and linkage, and every
+// certificate and challenge signature. It omits required-scope validation,
+// expected-challenge checks and every provider.
+func VerifyArchivalProofBundleV2(data []byte) ArchivalProofBundleResultV2 {
+	result := ArchivalProofBundleResultV2{Assessment: FreshnessUnverifiedV2, Actionable: false, IssuerIDs: []string{}}
+	fail := func(err error) ArchivalProofBundleResultV2 {
+		result.ErrorClass, result.Err = V2ErrorClassOf(err), err
+		return result
+	}
+	bundle, err := DecodeProofBundleV2(data)
+	if err != nil {
+		return fail(err)
+	}
+	result.AgentID = bundle.AgentID
+	if result.BundleHash, err = BundleHashV2(bundle); err != nil {
+		return fail(v2Classify(V2ErrMalformed, err))
+	}
+	for _, cert := range bundle.Delegations {
+		result.IssuerIDs = append(result.IssuerIDs, cert.IssuerID)
+	}
+	slices.Sort(result.IssuerIDs)
+	result.IssuerIDs = slices.Compact(result.IssuerIDs)
+	if err := VerifyProofBundleV2Signatures(bundle); err != nil {
+		return fail(err)
+	}
+	return result
+}
+
+// VerifyArchivalDelegationCertV2 checks one stored certificate and its issuer
 // signature under the issuer key it carries.
-func VerifyDelegationCertV2Archival(data []byte) (ArchivalVerificationV2, error) {
+func VerifyArchivalDelegationCertV2(data []byte) (ArchivalVerificationV2, error) {
 	cert, err := DecodeDelegationCertV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -77,9 +101,9 @@ func VerifyDelegationCertV2Archival(data []byte) (ArchivalVerificationV2, error)
 	return archivalResultV2(v2DelegationCertificate, nil, cert.IssuerID), nil
 }
 
-// VerifyRevocationListV2Archival checks a stored revocation list under a
+// VerifyArchivalRevocationListV2 checks a stored revocation list under a
 // caller-authenticated issuer status key.
-func VerifyRevocationListV2Archival(data []byte, issuerID string, statusKey HybridPublicKey) (ArchivalVerificationV2, error) {
+func VerifyArchivalRevocationListV2(data []byte, issuerID string, statusKey HybridPublicKey) (ArchivalVerificationV2, error) {
 	list, err := DecodeRevocationListV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -95,9 +119,9 @@ func VerifyRevocationListV2Archival(data []byte, issuerID string, statusKey Hybr
 	return archivalResultV2(v2RevocationList, digest, keyID), nil
 }
 
-// VerifyRevocationPushV2Archival checks a stored revocation push under a
+// VerifyArchivalRevocationPushV2 checks a stored revocation push under a
 // caller-authenticated issuer status key.
-func VerifyRevocationPushV2Archival(data []byte, issuerID string, statusKey HybridPublicKey) (ArchivalVerificationV2, error) {
+func VerifyArchivalRevocationPushV2(data []byte, issuerID string, statusKey HybridPublicKey) (ArchivalVerificationV2, error) {
 	push, err := DecodeRevocationPushV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -113,10 +137,10 @@ func VerifyRevocationPushV2Archival(data []byte, issuerID string, statusKey Hybr
 	return archivalResultV2(v2RevocationPush, digest, keyID), nil
 }
 
-// VerifyKeyRotationStatementV2Archival checks a stored rotation statement's
+// VerifyArchivalKeyRotationStatementV2 checks a stored rotation statement's
 // old-key authorization and new-key proof of possession under the keys it
 // names. It does not establish that old_key was the authority's current key.
-func VerifyKeyRotationStatementV2Archival(data []byte) (ArchivalVerificationV2, error) {
+func VerifyArchivalKeyRotationStatementV2(data []byte) (ArchivalVerificationV2, error) {
 	stmt, err := DecodeKeyRotationStatementV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -138,9 +162,9 @@ func VerifyKeyRotationStatementV2Archival(data []byte) (ArchivalVerificationV2, 
 	return archivalResultV2(v2KeyRotationAuthorization, digest, stmt.OldKeyID, stmt.NewKeyID), nil
 }
 
-// VerifyWitnessEntryV2Archival checks a stored witness entry under a
+// VerifyArchivalWitnessEntryV2 checks a stored witness entry under a
 // caller-authenticated witness key, without log position or fork checks.
-func VerifyWitnessEntryV2Archival(data []byte, witnessPublic HybridPublicKey) (ArchivalVerificationV2, error) {
+func VerifyArchivalWitnessEntryV2(data []byte, witnessPublic HybridPublicKey) (ArchivalVerificationV2, error) {
 	entry, err := DecodeWitnessEntryV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -163,10 +187,10 @@ func VerifyWitnessEntryV2Archival(data []byte, witnessPublic HybridPublicKey) (A
 	return archivalResultV2(v2WitnessEntry, digest, witnessID), nil
 }
 
-// VerifyVerificationReceiptV2Archival checks a stored verification receipt
+// VerifyArchivalVerificationReceiptV2 checks a stored verification receipt
 // under a caller-authenticated verifier key, without log position, fork or
 // bundle-binding checks.
-func VerifyVerificationReceiptV2Archival(data []byte, verifierPublic HybridPublicKey) (ArchivalVerificationV2, error) {
+func VerifyArchivalVerificationReceiptV2(data []byte, verifierPublic HybridPublicKey) (ArchivalVerificationV2, error) {
 	receipt, err := DecodeVerificationReceiptV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err
@@ -189,11 +213,11 @@ func VerifyVerificationReceiptV2Archival(data []byte, verifierPublic HybridPubli
 	return archivalResultV2(v2VerificationReceipt, digest, verifierID), nil
 }
 
-// VerifyTransactionReceiptV2Archival checks a stored transaction receipt:
+// VerifyArchivalTransactionReceiptV2 checks a stored transaction receipt:
 // canonical form, every party signature, and every embedded proof bundle's
 // signatures, hash and transaction context. Use VerifyTransactionReceiptV2
 // for per-party trust and status.
-func VerifyTransactionReceiptV2Archival(data []byte) (ArchivalVerificationV2, error) {
+func VerifyArchivalTransactionReceiptV2(data []byte) (ArchivalVerificationV2, error) {
 	receipt, err := DecodeTransactionReceiptV2(data)
 	if err != nil {
 		return ArchivalVerificationV2{}, err

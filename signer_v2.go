@@ -33,12 +33,11 @@ const (
 )
 
 // SignRequestV2 is everything an external signer receives for one typed v2
-// statement. The SDK computes every field; the provider never chooses an
-// object type, context or message. Ed25519 always signs Message.
+// statement. The SDK computes every field; the provider never receives the
+// object or its type code and never chooses a context or message. Ed25519
+// always signs Message.
 type SignRequestV2 struct {
-	// ObjectType is the registered SPEC-v2 object code being signed.
-	ObjectType uint16
-	Mode       SignerModeV2
+	Mode SignerModeV2
 	// Message is the 77-byte M: "ratify-protocol-signature" || 0x00 || 0x02 ||
 	// u16be(ObjectType) || SHA-384(signable).
 	Message []byte
@@ -165,7 +164,7 @@ func signV2StatementWithSigner(ctx context.Context, objectType v2ObjectType, sig
 		return HybridSignature{}, err
 	}
 	req := SignRequestV2{
-		ObjectType: uint16(objectType), Mode: signer.ModeV2(), Message: message,
+		Mode: signer.ModeV2(), Message: message,
 		PublicKey: HybridPublicKey{Ed25519: bytes.Clone(pub.Ed25519), MLDSA65: bytes.Clone(pub.MLDSA65)},
 		KeyID:     keyID,
 	}

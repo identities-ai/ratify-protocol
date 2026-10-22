@@ -1,0 +1,19 @@
+# Runnable Ratify Protocol v2 examples for the Rust SDK. The path dependency
+# builds them against this source tree; examples/v2/rust/test.sh runs each
+# program and compares its output with examples/v2/expected.
+[package]
+name = "ratify-v2-examples"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+
+# A standalone package, never a member of another workspace.
+[workspace]
+
+[dependencies]
+ratify-protocol = { path = "../../../sdks/rust" }
+# The external_signer provider signs with raw primitives; versions match the SDK.
+ed25519-dalek = "2.1"
+fips204 = "0.4.6"
+rand_core = { version = "0.6", features = ["getrandom"] }

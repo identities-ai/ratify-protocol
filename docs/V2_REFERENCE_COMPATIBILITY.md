@@ -99,15 +99,16 @@ passing it. Changes to `testvectors/v2`:
 | File | Change since alpha.1 |
 |---|---|
 | `object-negatives.json` | 224 → 273 negatives: the closed v2 constraint registry and every wire timestamp outside 0..253402300799 |
-| `verifier-ordering.json` | 81 → 153 cases (43 pre-claim, 2 replay, 106 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
+| `verifier-ordering.json` | 81 → 163 cases (53 pre-claim, 2 replay, 106 committed, 2 evaluating), including 10 Middleware Custody Profile cases; new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
 | `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
-| `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps over 14 requests) against each SDK's in-memory reference store |
+| `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps) against each SDK's in-memory reference store, plus 18 `profile_scenarios` for the single-device offline and dual-root profiles, over 22 requests |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
+| `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 
 SDK test files that read these vector files, and therefore fail until ported:
 

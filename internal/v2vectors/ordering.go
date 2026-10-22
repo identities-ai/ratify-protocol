@@ -419,7 +419,7 @@ func (g *gen) orderingFile() any {
 		},
 	}
 	f.Bundles = map[string]string{}
-	for _, s := range append(g.preflightScenarios(), g.terminalScenarios()...) {
+	for _, s := range append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...) {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}

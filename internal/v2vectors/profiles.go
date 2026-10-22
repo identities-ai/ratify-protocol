@@ -1,0 +1,321 @@
+package v2vectors
+
+// Part B profile scenarios (SPEC-v2 §7.13 single-device offline profile and
+// §7.14 dual-root composition profile), written into the profile_scenarios
+// member of lifecycle-scenarios.json. They replay against the in-memory
+// reference store plus a test-only component: the device scenarios use an
+// independent monotonic authenticated checkpoint component on the same
+// device, and the dual-root scenarios use an application approval ledger.
+// Expected outcomes are written from the spec rules here.
+
+import ratify "github.com/identities-ai/ratify-protocol/v2"
+
+type profileExpectJSON struct {
+	lifecycleExpectJSON
+	DeviceStatus   string  `json:"device_status,omitempty"`
+	DeviceError    string  `json:"device_error,omitempty"`
+	Acknowledged   []int64 `json:"acknowledged,omitempty"`
+	AckTime        int64   `json:"ack_time,omitempty"`
+	Uploaded       []int64 `json:"uploaded,omitempty"`
+	LedgerComplete bool    `json:"ledger_complete,omitempty"`
+	LedgerError    string  `json:"ledger_error,omitempty"`
+	Executed       int     `json:"executed,omitempty"`
+}
+
+type approvalSetJSON struct {
+	ID                string    `json:"id"`
+	AgentID           string    `json:"agent_id"`
+	RequiredScope     string    `json:"required_scope"`
+	SessionContextB64 string    `json:"session_context_b64"`
+	Roots             [2]string `json:"roots"`
+}
+
+type profileStepJSON struct {
+	Op          string            `json:"op"`
+	Request     string            `json:"request,omitempty"`
+	Requests    []string          `json:"requests,omitempty"`
+	Time        int64             `json:"time,omitempty"`
+	Withheld    *bool             `json:"withheld,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
+	Checkpoint  string            `json:"checkpoint,omitempty"`
+	Snapshot    string            `json:"snapshot,omitempty"`
+	Sequence    int64             `json:"sequence,omitempty"`
+	Slot        *int              `json:"slot,omitempty"`
+	Count       int               `json:"count,omitempty"`
+	ApprovalSet *approvalSetJSON  `json:"approval_set,omitempty"`
+	Expect      profileExpectJSON `json:"expect"`
+}
+
+type deviceConfigJSON struct {
+	ComponentSeedB64 string `json:"component_seed_b64"`
+	Capacity         int    `json:"capacity"`
+}
+
+type profileScenarioJSON struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Profile     string            `json:"profile"`
+	StartTime   int64             `json:"start_time"`
+	Device      *deviceConfigJSON `json:"device,omitempty"`
+	Steps       []profileStepJSON `json:"steps"`
+}
+
+// profileRequestSpec describes one profile request. Zero values select the
+// lifecycle defaults: challenge issued at Now-10, the default chain rooted at
+// root, and the fixture session context.
+type profileRequestSpec struct {
+	challenge   byte
+	challengeAt int64
+	certs       []ratify.DelegationCertV2
+	session     []byte
+	trustRoot   string
+	edit        func(*scenario)
+}
+
+func (g *gen) profileRequest(p profileRequestSpec) (orderingVector, []byte) {
+	agent := g.k("agent")
+	if p.challengeAt == 0 {
+		p.challengeAt = Now - 10
+	}
+	if p.certs == nil {
+		p.certs = g.chain(chainSpec{})
+	}
+	if p.session == nil {
+		p.session = g.fixtureSessionContext(agent)
+	}
+	if p.trustRoot == "" {
+		p.trustRoot = "root"
+	}
+	challenge := defaultChallenge()
+	challenge[0] = p.challenge
+	_, bundle, _ := g.bundle(bundleSpec{agent: agent, certs: p.certs, session: p.session, challenge: challenge, challengeAt: p.challengeAt})
+	expected := g.defaultExpected(agent, p.session)
+	expected.ValueB64 = b64(challenge)
+	expected.IssuedAt, expected.ExpiresAt = p.challengeAt, p.challengeAt+300
+	evidence := g.currentEvidenceBatches(p.certs)
+	if root := g.k("untrusted_root"); p.certs[len(p.certs)-1].IssuerID == root.ID {
+		_, wire, _ := g.list(g.k("status_party_b"), root.ID, 1, Now-60, Now+3600)
+		evidence[root.ID] = evidenceBatch(evidenceObjectJSON{ObjectTypeCode: int(codeList), WireB64: b64(wire)})
+	}
+	s := scenario{bundle: bundle, certs: p.certs, scope: "data:read", expected: expected, policy: g.verifyPolicyJSON(p.session),
+		trust: g.trustRoot(p.trustRoot), evidence: evidence, claim: "reference", out: outcomeJSON{Stage: "lifecycle"}}
+	if p.edit != nil {
+		p.edit(&s)
+	}
+	v := g.finish(s)
+	v.Expected = outcomeJSON{}
+	return v, bundle
+}
+
+func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVector, []byte)) {
+	f.Semantics["profile_scenarios"] = "SPEC-v2 §7.13 and §7.14 profile scripts. Each starts from a fresh reference store (as for scenarios) and adds the test-only component its profile names. Steps use the lifecycle ops (set_time, set_ack_withheld, verify, publish, release) plus the profile ops below; release checkpoint device = the device component, reference = the store checkpoint"
+	f.Semantics["profile single_device_offline"] = "the store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that records, per receipt-log entry, the entry hash and the primary's complete-state digest, signs every acknowledgement with its own key, and reads the same security clock as the store"
+	f.Semantics["device_submit"] = "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed"
+	f.Semantics["device_resubmit"] = "retry the exact tuple for sequence; expect ack_time (the original acknowledgement time on an identical retry) or device_error"
+	f.Semantics["device_power_loss"] = "arm a power loss for the next submission only: before_commit records nothing; after_commit records the acknowledgement durably but loses the response"
+	f.Semantics["device_startup"] = "the primary compares its complete-state digest at the component head with the acknowledged digest before serving; expect device_status ready, primary_behind (fewer appended entries than acknowledged: rollback or lost state), state_digest_mismatch, or checkpoint_frozen"
+	f.Semantics["snapshot"] = "copy the complete primary store state under snapshot"
+	f.Semantics["restore"] = "mode snapshot = replace the primary with the named copy (a rollback); the component and the clock are unchanged"
+	f.Semantics["corrupt_state"] = "alter one byte of the request's sealed terminal result in the primary store"
+	f.Semantics["upload"] = "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release"
+	f.Semantics["profile dual_root"] = "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set"
+	f.Semantics["ledger_open"] = "open approval_set (roots are complete-key IDs in slot order); expect ledger_error approval_set_invalid when it is malformed or names one root twice"
+	f.Semantics["ledger_record"] = "record the request's released decision (from its last release step; none if that release was not released) and its exact bundle in slot; expect ledger_complete, or ledger_error not_released, action_mismatch, root_mismatch (the chain does not end at the slot's pinned root), or slot_filled"
+	f.Semantics["ledger_record_concurrent"] = "record requests[i] in slot i concurrently; expect ledger_complete for the final state"
+	f.Semantics["ledger_execute"] = "atomically mark the set executed at the store clock; expect ledger_error incomplete, expired (an approval is no longer Allowed), already_executed, or none"
+	f.Semantics["ledger_execute_concurrent"] = "count concurrent executions of the set; expect executed, the number that succeeded"
+
+	agent := g.k("agent")
+	// Single-device offline profile requests.
+	for _, r := range []struct {
+		name      string
+		challenge byte
+	}{{"D1", 0xd1}, {"D2", 0xd2}} {
+		v, bundle := g.profileRequest(profileRequestSpec{challenge: r.challenge})
+		add(r.name, v, bundle)
+	}
+	// DS: status staged into the anchored journal before disconnection (at
+	// Now); offline, the providers return nothing new, and the challenge is
+	// issued when the staged lists reach next_update.
+	st := g.statusFixtures()
+	staged := func(s *scenario) {
+		s.journal.Preload = []journalPreloadJSON{g.preload(st["root_current"], Now), g.preload(st["intermediate_current"], Now)}
+		for issuer := range s.evidence {
+			s.evidence[issuer] = evidenceBatch()
+		}
+	}
+	ds, dsBundle := g.profileRequest(profileRequestSpec{challenge: 0xd5, challengeAt: statusFreshUntil - 10, edit: staged})
+	add("DS", ds, dsBundle)
+
+	// Dual-root requests. Both approvals bind one action and the approval set
+	// through the session context: invocation_id is the approval set ID and
+	// request_hash is the action's operation-context hash.
+	const approvalSetID = "approval-set-01"
+	actionPayload := make([]byte, 32)
+	for i := range actionPayload {
+		actionPayload[i] = 0x44
+	}
+	setContext := func(payload []byte) []byte {
+		request := operationContextHash("data:read", "records.export", "batch/7", "/v1/batches/7", payload)
+		return sessionContext(g.k("verifier").ID, fixtureWorkspace, agent.ID, "approval-session-01", approvalSetID, request)
+	}
+	action := setContext(actionPayload)
+	otherPayload := make([]byte, 32)
+	for i := range otherPayload {
+		otherPayload[i] = 0x45
+	}
+	chainA, chainB := g.chain(chainSpec{}), g.chain(chainSpec{root: g.k("untrusted_root")})
+	for _, r := range []struct {
+		name      string
+		challenge byte
+		certs     []ratify.DelegationCertV2
+		session   []byte
+		trust     string
+	}{
+		{"RA", 0xa1, chainA, action, "root"},
+		{"RA2", 0xa2, chainA, action, "root"},
+		{"RB", 0xb1, chainB, action, "untrusted_root"},
+		// RBr reuses RA's challenge with a root B proof: a replay.
+		{"RBr", 0xa1, chainB, action, "untrusted_root"},
+		// RBm approves a different action under its own challenge.
+		{"RBm", 0xb2, chainB, setContext(otherPayload), "untrusted_root"},
+	} {
+		v, bundle := g.profileRequest(profileRequestSpec{challenge: r.challenge, certs: r.certs, session: r.session, trustRoot: r.trust})
+		add(r.name, v, bundle)
+	}
+	set := &approvalSetJSON{ID: approvalSetID, AgentID: agent.ID, RequiredScope: "data:read", SessionContextB64: b64(action), Roots: [2]string{g.k("root").ID, g.k("untrusted_root").ID}}
+	sameRootSet := *set
+	sameRootSet.Roots = [2]string{g.k("root").ID, g.k("root").ID}
+
+	type ex = profileExpectJSON
+	type le = lifecycleExpectJSON
+	committedAllow := ex{lifecycleExpectJSON: le{Stage: "committed", Decision: "allow", DecisionReason: "authorized", AllowHorizon: statusFreshUntil}}
+	released := func(t, seq int64) ex {
+		return ex{lifecycleExpectJSON: le{ReleaseStatus: "released", Decision: "allow", ReleaseTime: t, ReceiptSeq: seq}}
+	}
+	releaseState := func(status, reason string) ex {
+		return ex{lifecycleExpectJSON: le{ReleaseStatus: status, ReleaseReason: reason}}
+	}
+	step := func(op, request string, expect ex) profileStepJSON {
+		return profileStepJSON{Op: op, Request: request, Expect: expect}
+	}
+	setTime := func(t int64) profileStepJSON { return profileStepJSON{Op: "set_time", Time: t} }
+	verify := func(request string, expect ex) profileStepJSON { return step("verify", request, expect) }
+	publish := func(request string, seq int64) profileStepJSON {
+		return profileStepJSON{Op: "publish", Request: request, Mode: "ok", Expect: ex{lifecycleExpectJSON: le{ReceiptSeq: seq}}}
+	}
+	release := func(request, checkpoint string, expect ex) profileStepJSON {
+		return profileStepJSON{Op: "release", Request: request, Checkpoint: checkpoint, Expect: expect}
+	}
+	submit := func(errClass string, acknowledged ...int64) profileStepJSON {
+		return profileStepJSON{Op: "device_submit", Expect: ex{DeviceError: errClass, Acknowledged: acknowledged}}
+	}
+	startup := func(status string) profileStepJSON {
+		return profileStepJSON{Op: "device_startup", Expect: ex{DeviceStatus: status}}
+	}
+	powerLoss := func(mode string) profileStepJSON { return profileStepJSON{Op: "device_power_loss", Mode: mode} }
+	upload := func(seqs ...int64) profileStepJSON { return profileStepJSON{Op: "upload", Expect: ex{Uploaded: seqs}} }
+	device := func(name, desc string, capacity int, steps ...profileStepJSON) {
+		f.ProfileScenarios = append(f.ProfileScenarios, profileScenarioJSON{Name: name, Description: desc, Profile: "single_device_offline", StartTime: Now,
+			Device: &deviceConfigJSON{ComponentSeedB64: b64(g.k("witness").EdSeed[:]), Capacity: capacity}, Steps: steps})
+	}
+
+	device("device_release_requires_component_ack", "a committed and appended allow stays pending until the on-device component acknowledges it; the acknowledgement releases it and the uplink sends the receipt", 8,
+		verify("D1", committedAllow), publish("D1", 1), release("D1", "device", releaseState("pending", "acknowledgement_unavailable")),
+		submit("", 1), release("D1", "device", released(Now, 1)), upload(1))
+	device("device_power_loss_before_ack", "power fails before the component commits: nothing is recorded and release stays pending; after restart the primary matches the component head and the retried submission releases at its own acknowledgement time", 8,
+		verify("D1", committedAllow), publish("D1", 1), powerLoss("before_commit"), submit("power_loss"),
+		release("D1", "device", releaseState("pending", "acknowledgement_unavailable")),
+		setTime(Now+20), startup("ready"), submit("", 1), release("D1", "device", released(Now+20, 1)))
+	device("device_power_loss_after_ack", "power fails after the component commits: the acknowledgement is durable though its response was lost, so release uses the original acknowledgement time and an identical resubmission returns the same acknowledgement", 8,
+		verify("D1", committedAllow), publish("D1", 1), powerLoss("after_commit"), submit("power_loss"),
+		setTime(Now+20), startup("ready"), release("D1", "device", released(Now, 1)),
+		profileStepJSON{Op: "device_resubmit", Sequence: 1, Expect: ex{AckTime: Now}})
+	device("device_primary_rollback", "the primary is restored to a state before an acknowledged entry: startup reports primary_behind; a different entry the rolled-back primary commits at the acknowledged sequence is refused as a fork, the component freezes, and its release is rejected because the acknowledgement names the original entry", 8,
+		profileStepJSON{Op: "snapshot", Snapshot: "before"},
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
+		profileStepJSON{Op: "restore", Mode: "snapshot", Snapshot: "before"},
+		startup("primary_behind"),
+		verify("D2", committedAllow), publish("D2", 1), submit("frozen"),
+		release("D2", "device", releaseState("rejected", "acknowledgement_mismatch")),
+		startup("checkpoint_frozen"))
+	device("device_state_digest_mismatch", "the primary's sealed state changes after acknowledgement: startup reports state_digest_mismatch and the next entry cannot extend the component head, so its release stays pending", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1),
+		step("corrupt_state", "D1", ex{}), startup("state_digest_mismatch"),
+		verify("D2", committedAllow), publish("D2", 2), submit("state_mismatch"),
+		release("D2", "device", releaseState("pending", "acknowledgement_unavailable")))
+	device("device_checkpoint_storage_full", "a component with room for one acknowledgement refuses the second entry without overwriting the first: the second release stays pending and the first still releases", 1,
+		verify("D1", committedAllow), verify("D2", committedAllow), publish("D1", 1), publish("D2", 2), submit("storage_full", 1),
+		release("D2", "device", releaseState("pending", "acknowledgement_unavailable")), release("D1", "device", released(Now, 1)))
+	device("device_staged_status_goes_stale", "status staged before disconnection supports an allow until its next_update; offline at that deadline the same staged evidence is stale, so the next decision is a non-actionable indeterminate", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
+		setTime(statusFreshUntil),
+		verify("DS", ex{lifecycleExpectJSON: le{Stage: "committed", Decision: "indeterminate", DecisionReason: "status_stale"}}),
+		publish("DS", 2), submit("", 2),
+		release("DS", "device", ex{lifecycleExpectJSON: le{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: statusFreshUntil, ReceiptSeq: 2}}))
+	device("device_rtc_regression", "the device clock moves backward: the component cannot acknowledge, a new claim is refused, and a release reading below the acknowledgement time is withheld; once the clock recovers the entry releases at its acknowledgement time", 8,
+		setTime(Now+10), verify("D1", committedAllow), publish("D1", 1), setTime(Now+5),
+		submit("clock_regressed"), release("D1", "device", releaseState("pending", "acknowledgement_unavailable")),
+		verify("D2", ex{lifecycleExpectJSON: le{Stage: "preflight", ErrorClass: "claim_store_unavailable"}}),
+		setTime(Now+10), submit("", 1), setTime(Now+9), release("D1", "device", releaseState("withheld", "clock_regressed")),
+		setTime(Now+11), release("D1", "device", released(Now+10, 1)))
+	device("device_offline_recovery_upload", "while the uplink is down the device releases locally; the uplink later sends only the acknowledged prefix, each receipt once; a receipt acknowledged after its challenge expired is uploaded as evidence but stays withheld, because upload is an outbox operation and not a deferred release", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
+		verify("D2", committedAllow), publish("D2", 2), upload(1),
+		setTime(Now+290), submit("", 2), release("D2", "device", releaseState("withheld", "challenge_expired")),
+		upload(2), release("D2", "device", releaseState("withheld", "challenge_expired")), upload())
+
+	slot := func(i int) *int { return &i }
+	open := func(s *approvalSetJSON, errClass string) profileStepJSON {
+		return profileStepJSON{Op: "ledger_open", ApprovalSet: s, Expect: ex{LedgerError: errClass}}
+	}
+	record := func(request string, i int, complete bool, errClass string) profileStepJSON {
+		return profileStepJSON{Op: "ledger_record", Request: request, Slot: slot(i), Expect: ex{LedgerComplete: complete, LedgerError: errClass}}
+	}
+	execute := func(errClass string) profileStepJSON {
+		return profileStepJSON{Op: "ledger_execute", Expect: ex{LedgerError: errClass}}
+	}
+	approve := func(request string, seq int64) []profileStepJSON {
+		return []profileStepJSON{verify(request, committedAllow), publish(request, seq), release(request, "reference", released(Now, seq))}
+	}
+	dual := func(name, desc string, steps ...[]profileStepJSON) {
+		var all []profileStepJSON
+		for _, s := range steps {
+			all = append(all, s...)
+		}
+		f.ProfileScenarios = append(f.ProfileScenarios, profileScenarioJSON{Name: name, Description: desc, Profile: "dual_root", StartTime: Now, Steps: all})
+	}
+	one := func(s ...profileStepJSON) []profileStepJSON { return s }
+
+	dual("dual_root_both_released_executes_once", "root A and root B each release an allow under their own challenge for the same action and approval set; the ledger is incomplete after one, executable after both, and executes once",
+		one(open(set, "")), approve("RA", 1), one(record("RA", 0, false, ""), execute("incomplete")),
+		approve("RB", 2), one(record("RB", 1, true, ""), execute(""), execute("already_executed")))
+	dual("dual_root_one_root_missing", "only root A has approved: root A's decision cannot fill root B's slot and the action is not executable",
+		one(open(set, "")), approve("RA", 1), one(record("RA", 0, false, ""), record("RA", 1, false, "root_mismatch"), execute("incomplete")))
+	dual("dual_root_other_root_missing", "only root B has approved: the action is not executable",
+		one(open(set, "")), approve("RB", 1), one(record("RB", 1, false, ""), execute("incomplete")))
+	dual("dual_root_duplicate_root", "a set naming one root twice is invalid; a second, separately released approval chaining to root A does not count for root B",
+		one(open(&sameRootSet, "approval_set_invalid"), open(set, "")), approve("RA", 1), approve("RA2", 2),
+		one(record("RA", 0, false, ""), record("RA2", 1, false, "root_mismatch"), execute("incomplete")))
+	dual("dual_root_replay", "a root B proof presented on root A's already claimed challenge is a replay before claim; the set stays incomplete",
+		one(open(set, "")), approve("RA", 1), one(record("RA", 0, false, ""),
+			verify("RBr", ex{lifecycleExpectJSON: le{Stage: "preflight", ErrorClass: "claim_replay"}}), execute("incomplete")))
+	dual("dual_root_mismatched_action", "root B releases an allow for a different action under its own challenge; the ledger refuses it for this set",
+		one(open(set, "")), approve("RA", 1), one(record("RA", 0, false, "")), approve("RBm", 2),
+		one(record("RBm", 1, false, "action_mismatch"), execute("incomplete")))
+	withheld := true
+	notWithheld := false
+	dual("dual_root_committed_unreleased", "root B's allow is committed and appended but never released (its acknowledgement arrives at challenge expiry); a committed outcome cannot fill a slot",
+		one(open(set, "")), approve("RA", 1), one(record("RA", 0, false, ""),
+			profileStepJSON{Op: "set_ack_withheld", Withheld: &withheld}, verify("RB", committedAllow), publish("RB", 2),
+			release("RB", "reference", releaseState("pending", "acknowledgement_unavailable")), record("RB", 1, false, "not_released"), execute("incomplete"),
+			setTime(Now+290), profileStepJSON{Op: "set_ack_withheld", Withheld: &notWithheld},
+			release("RB", "reference", releaseState("withheld", "challenge_expired")), record("RB", 1, false, "not_released"), execute("incomplete")))
+	dual("dual_root_concurrent_completion", "both approvals are recorded concurrently and eight concurrent executions race; exactly one executes",
+		one(open(set, "")), approve("RA", 1), approve("RB", 2),
+		one(profileStepJSON{Op: "ledger_record_concurrent", Requests: []string{"RA", "RB"}, Expect: ex{LedgerComplete: true}},
+			profileStepJSON{Op: "ledger_execute_concurrent", Count: 8, Expect: ex{Executed: 1}}))
+	dual("dual_root_expired_before_execution", "both approvals are recorded but the action is attempted at the challenge expiry; it is not executable",
+		one(open(set, "")), approve("RA", 1), approve("RB", 2),
+		one(record("RA", 0, false, ""), record("RB", 1, true, ""), setTime(Now+290), execute("expired")))
+}

@@ -405,6 +405,8 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 						t.Fatalf("unknown restore mode %s", step.Mode)
 					}
 					config.ClaimStore, config.Checkpoint = store, store
+				case "plant_release":
+					store.PlantReleaseTestOnly(committed[step.Request].ClaimID(), step.Time)
 				case "release", "release_forged":
 					c := committed[step.Request]
 					receipt := receipts[step.Request]

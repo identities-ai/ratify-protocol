@@ -61,6 +61,9 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 		"claim progress":  func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].progress.TrustAssessment = "trusted" },
 		"claim abandoned": func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].abandoned = true },
 		"claim removed":   func(p *DevicePrimaryTestOnly) { delete(p.Store.claims, "claim-1") },
+		"release record": func(p *DevicePrimaryTestOnly) {
+			p.Store.claims["claim-1"].release = &ratify.V2ReleaseRecord{ClaimID: "claim-1", EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000}
+		},
 		"stream sequence": func(p *DevicePrimaryTestOnly) { p.Store.streams["stream"] = 2 },
 		"rate counter":    func(p *DevicePrimaryTestOnly) { p.Store.rateCommits[rateKey{"issuer", "cert", 60}] = []int64{1_000} },
 		"outbox entry": func(p *DevicePrimaryTestOnly) {
@@ -87,6 +90,20 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if bytes.Equal(digest, base) {
+			t.Errorf("changing the %s does not change the complete-state digest", name)
+		}
+	}
+	// Every field of a release record is covered, not only its presence.
+	released := primary.Clone()
+	released.Store.claims["claim-1"].release = &ratify.V2ReleaseRecord{ClaimID: "claim-1", EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000}
+	withRelease, _ := released.CompleteStateDigestTestOnly()
+	for name, alter := range map[string]func(*ratify.V2ReleaseRecord){
+		"release entry hash":    func(r *ratify.V2ReleaseRecord) { r.EntryHash = bytes.Repeat([]byte{2}, 48) },
+		"release ack timestamp": func(r *ratify.V2ReleaseRecord) { r.AckTimestamp-- },
+	} {
+		mutated := released.Clone()
+		alter(mutated.Store.claims["claim-1"].release)
+		if digest, _ := mutated.CompleteStateDigestTestOnly(); bytes.Equal(digest, withRelease) {
 			t.Errorf("changing the %s does not change the complete-state digest", name)
 		}
 	}

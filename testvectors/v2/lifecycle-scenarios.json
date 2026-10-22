@@ -14,6 +14,7 @@
     "ledger_open": "open approval_set: agent_key and root_keys name keys.json fixture keys whose complete public keys the set pins (roots in slot order); request_hash_b64 is the action's operation-context hash. The ledger derives the expected session context from verifier_id, workspace_id, the agent key ID, session_id, invocation_id = id, and request_hash (§2.4); session_context_b64 is that derivation as a known answer and is never a ledger input. Expect ledger_error approval_set_invalid when the set is malformed or names one root key twice",
     "ledger_record": "record the request's released decision (from its last release step; none if that release was not released) and its exact bundle in slot of set (default: the last set opened). Checks in order: not_released (not a released allow); action_mismatch (receipt bundle_hash differs from the bundle); approval_reused (the claim is already recorded in another approval set); action_mismatch (receipt or bundle verifier, receipt or bundle agent ID, bundle agent key, receipt required scope, or bundle session_context differs from the set and its derived context); root_mismatch (the chain's terminal issuer key is not the slot's pinned root key, or the receipt's issuer_ids omit it); slot_filled. Expect ledger_complete or that ledger_error",
     "ledger_record_concurrent": "record requests[i] in slot i concurrently; expect ledger_complete for the final state",
+    "plant_release": "write a release record for the request's claim directly into primary storage, bypassing release and anchoring: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage compromise)",
     "profile dual_root": "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set",
     "profile single_device_offline": "the primary is the reference store plus an anchored SecurityJournalV2 store, a challenge issuance store, and device.replay_epoch; its complete-state digest is SHA-384 over the versioned canonical projection of SPEC-v2 §7.13. The store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that is provisioned with the primary's initial digest, anchors the primary's new complete-state digest before every durable security-state change takes effect (a change whose previous digest differs from the anchored one is refused and undone, so a verify fails before claim with claim_store_unavailable), records per receipt-log entry the entry hash and the anchored digest, signs every acknowledgement with its own key, and reads the same security clock as the store. rate_at_finalization makes the store admit max_rate inside finalization, as in scenarios",
     "profile_scenarios": "SPEC-v2 §7.13 and §7.14 profile scripts. Each starts from a fresh reference store (as for scenarios) and adds the test-only component its profile names. Steps use the lifecycle ops (set_time, set_ack_withheld, verify, publish, release) plus the profile ops below; release checkpoint device = the device component, reference = the store checkpoint",
@@ -3481,6 +3482,126 @@
       ]
     },
     {
+      "name": "planted_release_record_does_not_replace_acknowledgement",
+      "description": "a release record written into the claim store with the appended receipt's entry hash and a plausible acknowledgement time is not evidence of acknowledgement: release stays pending while the entry is unacknowledged, and once acknowledged at a different time the planted record is a release_state_mismatch",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "set_ack_withheld",
+          "withheld": true,
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "plant_release",
+          "request": "A",
+          "time": 1800000000,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "acknowledgement_unavailable"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000100,
+          "expect": {}
+        },
+        {
+          "op": "set_ack_withheld",
+          "withheld": false,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "rejected",
+            "release_reason": "release_state_mismatch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "repeated_release_reverifies_acknowledgement",
+      "description": "a repeated release of an already released claim obtains the acknowledgement again: an acknowledgement for a different entry is rejected rather than answered from the release record",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "wrong_entry",
+          "expect": {
+            "release_status": "rejected",
+            "release_reason": "acknowledgement_mismatch"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
       "name": "forged_committed_outcome_is_rejected",
       "description": "an application cannot release a committed outcome the verifier did not produce",
       "start_time": 1800000000,
@@ -4847,6 +4968,244 @@
           "op": "device_startup",
           "expect": {
             "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_planted_release_record",
+      "description": "primary storage gains a release record naming the appended but unacknowledged receipt entry with a plausible acknowledgement time: release still obtains the component acknowledgement and stays pending, and the record is outside the anchored state, so startup reports state_digest_mismatch and no further claim is made",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "D1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "D1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "plant_release",
+          "request": "D1",
+          "time": 1800000000,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "D1",
+          "checkpoint": "device",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "acknowledgement_unavailable"
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_altered_release_record",
+      "description": "after an anchored release, primary storage rewrites the release record with a different plausible acknowledgement time: a repeated release compares it with the component acknowledgement and is rejected, and startup reports state_digest_mismatch",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "D1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "D1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "release",
+          "request": "D1",
+          "checkpoint": "device",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000005,
+          "expect": {}
+        },
+        {
+          "op": "plant_release",
+          "request": "D1",
+          "time": 1800000003,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "D1",
+          "checkpoint": "device",
+          "expect": {
+            "release_status": "rejected",
+            "release_reason": "release_state_mismatch"
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_rollback_loses_release_record",
+      "description": "with the receipt log unchanged, a restore loses an anchored release record: startup reports state_digest_mismatch, and recording the release again does not extend the anchored state, so release stays pending",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "D1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "D1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "D1",
+          "checkpoint": "device",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "restore",
+          "mode": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "release",
+          "request": "D1",
+          "checkpoint": "device",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "claim_store_unavailable"
           }
         },
         {

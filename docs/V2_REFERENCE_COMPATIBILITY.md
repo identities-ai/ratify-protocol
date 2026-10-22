@@ -107,7 +107,7 @@ passing it. Changes to `testvectors/v2`:
 | `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
-| `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps) against each SDK's in-memory reference store, plus 26 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |
+| `lifecycle-scenarios.json` | New: 28 Part B scripts (140 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 | `issuer-duties.json` | New: 11 delegation issuer-duty cases for the typed signer |

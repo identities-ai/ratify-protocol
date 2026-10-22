@@ -125,6 +125,7 @@ func (g *gen) lifecycleFile() any {
 			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
 			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
+			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
 		},
 		VerifierKey: "verifier", LogID: lifecycleLogID, LeaseSeconds: lifecycleLeaseSeconds,
@@ -233,6 +234,15 @@ func (g *gen) lifecycleFile() any {
 	sc("acknowledgement_for_another_entry_is_rejected", "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected",
 		step("verify", "A", committedAllow), publish("A", "ok", 1),
 		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}})
+	sc("planted_release_record_does_not_replace_acknowledgement", "a release record written into the claim store with the appended receipt's entry hash and a plausible acknowledgement time is not evidence of acknowledgement: release stays pending while the entry is unacknowledged, and once acknowledged at a different time the planted record is a release_state_mismatch",
+		withhold(true), step("verify", "A", committedAllow), publish("A", "ok", 1),
+		lifecycleStepJSON{Op: "plant_release", Request: "A", Time: Now},
+		release("A", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "acknowledgement_unavailable"}),
+		setTime(Now+100), withhold(false), release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}))
+	sc("repeated_release_reverifies_acknowledgement", "a repeated release of an already released claim obtains the acknowledgement again: an acknowledgement for a different entry is rejected rather than answered from the release record",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), release("A", released(Now, 1)),
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}},
+		release("A", released(Now, 1)))
 	sc("forged_committed_outcome_is_rejected", "an application cannot release a committed outcome the verifier did not produce",
 		ls("release_forged", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}))
 	sc("clock_regression_at_release_is_withheld", "a release reading earlier than the acknowledgement time is a clock regression",

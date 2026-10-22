@@ -543,7 +543,8 @@ func (s *Store) LoadV2TerminalClaim(_ context.Context, claimID string) (ratify.V
 }
 
 // RecordV2Release implements ratify.V2ReleaseClaimStore. An identical repeat
-// is a no-op; a different existing record is ErrV2ReleaseStateMismatch.
+// is a no-op; a different existing record is ErrV2ReleaseStateMismatch. A
+// new record is a durable security-state change, anchored like any other.
 func (s *Store) RecordV2Release(_ context.Context, release ratify.V2ReleaseRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -558,8 +559,19 @@ func (s *Store) RecordV2Release(_ context.Context, release ratify.V2ReleaseRecor
 		return ratify.ErrV2ReleaseStateMismatch
 	}
 	release.EntryHash = bytes.Clone(release.EntryHash)
-	record.release = &release
-	return nil
+	return s.changeLocked(func() { record.release = &release })
+}
+
+// PlantReleaseTestOnly writes a release record for claimID directly into
+// primary storage, bypassing release and anchoring: the record names the
+// claim's appended receipt entry and ackTimestamp. It models an attacker who
+// can write the primary's storage.
+func (s *Store) PlantReleaseTestOnly(claimID string, ackTimestamp int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if record, ok := s.claims[claimID]; ok && record.outboxIndex >= 0 && s.outbox[record.outboxIndex].wire != nil {
+		record.release = &ratify.V2ReleaseRecord{ClaimID: claimID, EntryHash: bytes.Clone(s.outbox[record.outboxIndex].digest), AckTimestamp: ackTimestamp}
+	}
 }
 
 // PublishV2Receipt implements ratify.V2ReceiptPublisher: it signs and appends

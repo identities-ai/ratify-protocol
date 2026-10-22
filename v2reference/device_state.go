@@ -4,8 +4,8 @@ package v2reference
 // §7.13), TEST ONLY.
 //
 // DevicePrimaryTestOnly groups every durable security record the primary
-// holds: the claim store with its stream sequences, rate counters and
-// receipt log (Store), its anchored SecurityJournalV2 store, its challenge
+// holds: the claim store with its release records, stream sequences, rate
+// counters and receipt log (Store), its anchored SecurityJournalV2 store, its challenge
 // issuance records, and its replay epoch. Its complete-state digest is a
 // labelled SHA-384 over a versioned canonical projection of all of them.
 // Once bound to a device component, every durable change in any of these
@@ -82,6 +82,7 @@ type claimProjection struct {
 	OwnerDigest       string `json:"owner_digest"`
 	ProgressSHA384    string `json:"progress_sha384"`
 	ReceiptBodySHA384 string `json:"receipt_body_sha384"`
+	ReleaseSHA384     string `json:"release_sha384"`
 	State             string `json:"state"`
 	TerminalSHA384    string `json:"terminal_sha384"`
 }
@@ -135,9 +136,9 @@ type deviceStateProjection struct {
 
 // stateDigestsLocked digests every durable security record of the store:
 // claims in every state (evaluating, terminal, interrupted, abandoned) with
-// their sealed values, stream sequences, rate counters, and the receipt log
-// with its outbox. Checkpoint acknowledgements, release records (derived
-// release state), and clock readings are excluded.
+// their sealed values and release records, stream sequences, rate counters,
+// and the receipt log with its outbox. Checkpoint acknowledgements and clock
+// readings are excluded.
 func (s *Store) stateDigestsLocked() (storeStateTestOnly, error) {
 	var out storeStateTestOnly
 	ids := make([]string, 0, len(s.claims))
@@ -156,10 +157,16 @@ func (s *Store) stateDigestsLocked() (storeStateTestOnly, error) {
 		if err != nil {
 			return out, err
 		}
+		releaseDigest := ""
+		if r.release != nil {
+			if releaseDigest, err = recordDigest(r.release); err != nil {
+				return out, err
+			}
+		}
 		claims = append(claims, claimProjection{
 			Abandoned: r.abandoned, AllowHorizon: r.allowHorizon, ClaimID: id, ClaimSHA384: claimDigest, ClaimedAt: r.claimedAt,
 			FinalizedAt: r.finalizedAt, LeaseExpiresAt: r.leaseExpiresAt, OutboxIndex: r.outboxIndex, OwnerDigest: hex.EncodeToString(r.ownerDigest[:]),
-			ProgressSHA384: progressDigest, ReceiptBodySHA384: optionalDigest(r.receiptBody), State: string(r.state), TerminalSHA384: optionalDigest(r.terminal),
+			ProgressSHA384: progressDigest, ReceiptBodySHA384: optionalDigest(r.receiptBody), ReleaseSHA384: releaseDigest, State: string(r.state), TerminalSHA384: optionalDigest(r.terminal),
 		})
 	}
 	streams := make([]streamProjection, 0, len(s.streams))

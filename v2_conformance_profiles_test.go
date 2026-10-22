@@ -130,7 +130,7 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 	for _, sc := range f.ProfileScenarios {
 		profiles[sc.Profile]++
 	}
-	if profiles["single_device_offline"] < 13 || profiles["dual_root"] < 13 || len(profiles) != 2 {
+	if profiles["single_device_offline"] < 16 || profiles["dual_root"] < 13 || len(profiles) != 2 {
 		t.Fatalf("profile scenarios %v", profiles)
 	}
 	ctx := context.Background()
@@ -252,6 +252,8 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 					// Stage the request's status keys and evidence into the
 					// device's anchored journal (SPEC-v2 §7.13).
 					v2PopulateStatusJournal(t, primary.Journal, request.v2OrderingInputs)
+				case "plant_release":
+					store.PlantReleaseTestOnly(committed[step.Request].ClaimID(), step.Time)
 				case "corrupt_state":
 					store.CorruptSealedStateTestOnly(committed[step.Request].ClaimID())
 				case "upload":

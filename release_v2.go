@@ -321,32 +321,31 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if err != nil {
 		return releaseResultV2(V2ReleaseRejected, "receipt_invalid")
 	}
-	var ack V2CheckpointAcknowledgement
-	if record.Release != nil {
-		// 4. Prior release: the same receipt entry, then the clock and deadlines.
-		if record.Release.ClaimID != committed.claimID || !bytes.Equal(record.Release.EntryHash, entryHash) {
-			return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
-		}
-		ack = V2CheckpointAcknowledgement{LogID: receipt.LogID, Sequence: receipt.Sequence, EntryHash: entryHash, Timestamp: record.Release.AckTimestamp}
-	} else {
-		// 5. Predecessor.
-		if receipt.Sequence > 1 {
-			previous, err := getV2AcknowledgementSafely(ctx, config.Checkpoint, receipt.LogID, receipt.Sequence-1)
-			if err != nil {
-				return releaseResultV2(V2ReleasePending, "acknowledgement_unavailable")
-			}
-			if previous.LogID != receipt.LogID || previous.Sequence != receipt.Sequence-1 || !bytes.Equal(previous.EntryHash, receipt.PreviousReceiptHash) {
-				return releaseResultV2(V2ReleaseRejected, "log_predecessor_mismatch")
-			}
-		}
-		// 6. Acknowledgement.
-		ack, err = getV2AcknowledgementSafely(ctx, config.Checkpoint, receipt.LogID, receipt.Sequence)
+	// 4. Prior release: the same receipt entry. A recorded release only
+	// enforces sameness; it never substitutes for the acknowledgement.
+	if record.Release != nil && (record.Release.ClaimID != committed.claimID || !bytes.Equal(record.Release.EntryHash, entryHash)) {
+		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
+	}
+	// 5. Predecessor.
+	if receipt.Sequence > 1 {
+		previous, err := getV2AcknowledgementSafely(ctx, config.Checkpoint, receipt.LogID, receipt.Sequence-1)
 		if err != nil {
 			return releaseResultV2(V2ReleasePending, "acknowledgement_unavailable")
 		}
-		if ack.LogID != receipt.LogID || ack.Sequence != receipt.Sequence || !bytes.Equal(ack.EntryHash, entryHash) {
-			return releaseResultV2(V2ReleaseRejected, "acknowledgement_mismatch")
+		if previous.LogID != receipt.LogID || previous.Sequence != receipt.Sequence-1 || !bytes.Equal(previous.EntryHash, receipt.PreviousReceiptHash) {
+			return releaseResultV2(V2ReleaseRejected, "log_predecessor_mismatch")
 		}
+	}
+	// 6. Acknowledgement.
+	ack, err := getV2AcknowledgementSafely(ctx, config.Checkpoint, receipt.LogID, receipt.Sequence)
+	if err != nil {
+		return releaseResultV2(V2ReleasePending, "acknowledgement_unavailable")
+	}
+	if ack.LogID != receipt.LogID || ack.Sequence != receipt.Sequence || !bytes.Equal(ack.EntryHash, entryHash) {
+		return releaseResultV2(V2ReleaseRejected, "acknowledgement_mismatch")
+	}
+	if record.Release != nil && record.Release.AckTimestamp != ack.Timestamp {
+		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
 	// 7. Clock.
 	now, err := readV2AuthoritativeTime(ctx, config.ClaimStore)

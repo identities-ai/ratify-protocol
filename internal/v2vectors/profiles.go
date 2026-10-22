@@ -126,6 +126,7 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	f.Semantics["snapshot"] = "copy the complete primary state (store, journal, issuance records) under snapshot"
 	f.Semantics["restore"] = "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged"
 	f.Semantics["stage_status"] = "stage the request's status keys (configured in ascending issuer order) and journal preload into the primary's anchored SecurityJournalV2 store, as before disconnection; each journal transition is anchored"
+	f.Semantics["plant_release"] = "write a release record for the request's claim directly into primary storage, bypassing release and anchoring: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage compromise)"
 	f.Semantics["corrupt_state"] = "alter one byte of the request's sealed terminal result in the primary store"
 	f.Semantics["upload"] = "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release"
 	f.Semantics["profile dual_root"] = "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set"
@@ -289,6 +290,24 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 		verify("D1", committedAllow), publish("D1", 1), submit("", 1),
 		snapshot("acknowledged"), step("stage_status", "DS", ex{}), startup("ready"),
 		restore("acknowledged"), startup("state_digest_mismatch"),
+		verify("D2", claimRefused))
+	plant := func(request string, t int64) profileStepJSON {
+		return profileStepJSON{Op: "plant_release", Request: request, Time: t}
+	}
+	device("device_planted_release_record", "primary storage gains a release record naming the appended but unacknowledged receipt entry with a plausible acknowledgement time: release still obtains the component acknowledgement and stays pending, and the record is outside the anchored state, so startup reports state_digest_mismatch and no further claim is made", 8,
+		verify("D1", committedAllow), publish("D1", 1), plant("D1", Now),
+		release("D1", "device", releaseState("pending", "acknowledgement_unavailable")),
+		startup("state_digest_mismatch"), verify("D2", claimRefused), startup("state_digest_mismatch"))
+	device("device_altered_release_record", "after an anchored release, primary storage rewrites the release record with a different plausible acknowledgement time: a repeated release compares it with the component acknowledgement and is rejected, and startup reports state_digest_mismatch", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)), startup("ready"),
+		setTime(Now+5), plant("D1", Now+3),
+		release("D1", "device", releaseState("rejected", "release_state_mismatch")),
+		startup("state_digest_mismatch"))
+	device("device_rollback_loses_release_record", "with the receipt log unchanged, a restore loses an anchored release record: startup reports state_digest_mismatch, and recording the release again does not extend the anchored state, so release stays pending", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1),
+		snapshot("acknowledged"), release("D1", "device", released(Now, 1)), startup("ready"),
+		restore("acknowledged"), startup("state_digest_mismatch"),
+		release("D1", "device", releaseState("pending", "claim_store_unavailable")),
 		verify("D2", claimRefused))
 	device("device_checkpoint_storage_full", "a component with room for one acknowledgement refuses the second entry without overwriting the first: the second release stays pending and the first still releases", 1,
 		verify("D1", committedAllow), verify("D2", committedAllow), publish("D1", 1), publish("D2", 2), submit("storage_full", 1),

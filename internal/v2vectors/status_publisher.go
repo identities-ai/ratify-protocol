@@ -37,16 +37,22 @@ type publisherStepJSON struct {
 	Expect      publisherExpectJSON `json:"expect"`
 }
 
+type roleKeyJSON struct {
+	Key  string `json:"key"`
+	Role string `json:"role"`
+}
+
 type publisherScenarioJSON struct {
-	Name            string              `json:"name"`
-	Description     string              `json:"description"`
-	Issuer          string              `json:"issuer"`
-	StatusKey       string              `json:"status_key"`
-	OtherRoleKeys   []string            `json:"other_role_keys"`
-	LifetimeSeconds int64               `json:"lifetime_seconds"`
-	Publisher       string              `json:"publisher"`
-	JournalSetup    string              `json:"journal_setup"`
-	Steps           []publisherStepJSON `json:"steps"`
+	Name                string              `json:"name"`
+	Description         string              `json:"description"`
+	Issuer              string              `json:"issuer"`
+	StatusKey           string              `json:"status_key"`
+	RoleKeys            []roleKeyJSON       `json:"role_keys"`
+	StatusConfiguredFor string              `json:"status_configured_for"`
+	LifetimeSeconds     int64               `json:"lifetime_seconds"`
+	Publisher           string              `json:"publisher"`
+	JournalSetup        string              `json:"journal_setup"`
+	Steps               []publisherStepJSON `json:"steps"`
 }
 
 type statusPublisherFile struct {
@@ -81,15 +87,16 @@ func (g *gen) statusPublisherFile() any {
 		if steps == nil {
 			steps = []publisherStepJSON{}
 		}
-		return publisherScenarioJSON{Name: name, Description: desc, Issuer: "root", StatusKey: "status_root", OtherRoleKeys: []string{"intermediate", "agent"},
-			LifetimeSeconds: life, Publisher: "ok", JournalSetup: "configured", Steps: steps}
+		return publisherScenarioJSON{Name: name, Description: desc, Issuer: "root", StatusKey: "status_root", RoleKeys: []roleKeyJSON{
+			{"root", "issuer"}, {"intermediate", "delegation"}, {"agent", "delegation"}, {"verifier", "verifier"},
+		}, StatusConfiguredFor: "root", LifetimeSeconds: life, Publisher: "ok", JournalSetup: "configured", Steps: steps}
 	}
 	f := statusPublisherFile{
 		Version:      1,
 		Description:  "Minimal signed-status publisher (SPEC-v2 §5.4). A publisher binds an issuer's complete key to a separate status key and produces a genesis full list, same-sequence heartbeats, and revocations as a push plus the cumulative full list at the next sequence. Each produced object MUST verify under the status key with the typed revocation verifiers (codes 0x0003, 0x0005) and is described here by its signed fields; signature bytes may differ because ML-DSA-65 signing may be hedged.",
 		StatusPolicy: statusPolicyJSON{MaxListLifetimeSeconds: 7200, MaxStatusAgeSeconds: 7200, ClockSkewSeconds: 5},
 		Operations: map[string]string{
-			"setup":     "construct the publisher from the issuer key, the status signer and other_role_keys (keys.json names) with lifetime_seconds; publisher ok = constructed, refused = the status key or a component equals the issuer key or another role key, and no object is signed. Then build a SecurityJournalV2: genesis, record the issuer key under role issuer and every other_role_keys entry under role delegation, then configure the status key for the issuer at epoch 1. journal_setup configured = accepted; rejected = the journal refuses the status key (cross-role reuse)",
+			"setup":     "build the authenticated role configuration, a SecurityJournalV2: genesis, record every role_keys entry (keys.json names) under its role in order, then configure status_key at epoch 1 for the issuer named by status_configured_for (skipped when empty). journal_setup configured = that configuration was accepted, rejected = the journal refused it (cross-role reuse), not_configured = skipped. Then construct the publisher from that anchored journal, the issuer key, the status signer and lifetime_seconds. The publisher never takes a caller list of other keys. publisher ok = constructed; refused = configuration_invalid and no object is signed, because the status key or either component equals the key ID or a component of any recorded non-status key, the issuer key is not recorded under a non-status role, or the status key is not the issuer's highest-epoch configured status key. The same journal ingests the published objects",
 			"genesis":   "publish the first full list at at. Publications are numbered from 0 in step order",
 			"heartbeat": "re-sign the current sequence and revoked set with updated_at = at; refused when at is not later than the last list's updated_at",
 			"revoke":    "revoke cert_ids at at: a push with exactly those IDs (sorted) and the cumulative full list, both at the next sequence; refused for an empty, duplicate or already revoked ID",
@@ -148,10 +155,21 @@ func (g *gen) statusPublisherFile() any {
 			status("cert-leaf", t+life+61, "not_revoked", ""),
 		),
 	}
-	reuseIssuer := scenario("status_key_is_issuer_key", "a status key equal to the issuer key is refused by the publisher before any signature, and a verifier journal that recorded the issuer role refuses it too")
-	reuseIssuer.StatusKey, reuseIssuer.Publisher, reuseIssuer.JournalSetup = "root", "refused", "rejected"
-	reuseOther := scenario("status_key_is_other_role_key", "a status key equal to another configured role key (an intermediate issuer) is refused by the publisher and the journal")
-	reuseOther.StatusKey, reuseOther.Publisher, reuseOther.JournalSetup = "intermediate", "refused", "rejected"
-	f.Scenarios = append(f.Scenarios, reuseIssuer, reuseOther)
+	refusedScenario := func(name, desc, issuer, statusKey, configuredFor, journalSetup string) publisherScenarioJSON {
+		sc := scenario(name, desc)
+		sc.Issuer, sc.StatusKey, sc.StatusConfiguredFor, sc.Publisher, sc.JournalSetup = issuer, statusKey, configuredFor, "refused", journalSetup
+		return sc
+	}
+	issuerUnrecorded := refusedScenario("issuer_not_in_role_configuration", "the role configuration does not record the issuer key under a non-status role: the publisher refuses although the status key is configured for that issuer", "root", "status_root", "root", "configured")
+	issuerUnrecorded.RoleKeys = issuerUnrecorded.RoleKeys[1:]
+	f.Scenarios = append(f.Scenarios,
+		refusedScenario("status_key_is_issuer_key", "a status key equal to the issuer key is refused by the publisher before any signature, and the role journal refuses to configure it", "root", "root", "root", "rejected"),
+		refusedScenario("status_key_is_other_role_key", "a status key equal to a recorded intermediate issuer key is refused by the publisher and the journal", "root", "intermediate", "root", "rejected"),
+		refusedScenario("status_key_is_unlisted_root_key", "the intermediate's publisher is given the organization root key as its status key; no caller list names the root, but the role configuration records it, so the publisher refuses", "intermediate", "root", "intermediate", "rejected"),
+		refusedScenario("status_key_is_agent_key", "a status key equal to a recorded agent key is refused by the publisher and the journal", "root", "agent", "root", "rejected"),
+		refusedScenario("status_key_is_verifier_key", "a status key equal to a recorded verifier key is refused by the publisher and the journal", "root", "verifier", "root", "rejected"),
+		refusedScenario("status_key_not_configured", "a role-separated status key that the role configuration never bound to the issuer is refused", "root", "status_root", "", "not_configured"),
+		refusedScenario("status_key_configured_for_other_issuer", "a status key bound to a different issuer in the role configuration is refused for this issuer", "root", "status_root", "intermediate", "configured"),
+		issuerUnrecorded)
 	return f
 }

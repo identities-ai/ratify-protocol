@@ -1,7 +1,6 @@
 package ratify
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -49,17 +48,26 @@ type V2StatusPublisher struct {
 }
 
 // NewV2StatusPublisher binds an issuer's complete key to a separate status
-// signer. It refuses, before any signature exists, a status key whose key ID
-// or either component equals the issuer key or any key in otherRoleKeys (for
-// example the organization root, other issuers, or agents): status-key role
-// separation is mandatory (SPEC-v2 §5.4). lifetimeSeconds sets next_update -
-// updated_at for every full list and is 1..86400; it must not exceed the
-// relying verifiers' configured maximum list lifetime.
-func NewV2StatusPublisher(issuerKey HybridPublicKey, statusSigner SignerV2, otherRoleKeys []HybridPublicKey, lifetimeSeconds int64) (*V2StatusPublisher, error) {
+// signer, using the deployment's authenticated role configuration: the
+// anchored SecurityJournalV2 in roles, whose key-role history records every
+// non-status key the deployment knows (organization roots, other issuers,
+// intermediates, agents, verifiers) and whose status-key history binds the
+// issuer to its current status key (SPEC-v2 §5.4, §6.6). It refuses, before
+// any signature exists, when roles is nil or does not load as an anchored
+// journal; when the issuer key is not recorded there under a non-status role;
+// when the status key's ID or either component equals the ID or a component
+// of any recorded non-status key; or when the status key is not the
+// issuer's highest-epoch configured status key. lifetimeSeconds sets
+// next_update - updated_at for every full list and is 1..86400; it must not
+// exceed the relying verifiers' configured maximum list lifetime.
+func NewV2StatusPublisher(ctx context.Context, roles SecurityJournalStoreV2, issuerKey HybridPublicKey, statusSigner SignerV2, lifetimeSeconds int64) (*V2StatusPublisher, error) {
 	if lifetimeSeconds < 1 || lifetimeSeconds > V2MaxStatusLifetimeSeconds {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status list lifetime must be 1..%d seconds", V2MaxStatusLifetimeSeconds)
 	}
-	issuerID, err := keyIDV2(issuerKey)
+	if roles == nil {
+		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status publisher requires the authenticated role configuration")
+	}
+	issuerBinding, err := keyRoleBindingV2("issuer", issuerKey)
 	if err != nil {
 		return nil, v2Classify(V2ErrConfigurationInvalid, fmt.Errorf("v2 status publisher issuer key: %w", err))
 	}
@@ -70,20 +78,40 @@ func NewV2StatusPublisher(issuerKey HybridPublicKey, statusSigner SignerV2, othe
 	if err != nil {
 		return nil, v2Classify(V2ErrConfigurationInvalid, err)
 	}
-	statusKeyID, err := keyIDV2(statusKey)
+	statusBinding, err := keyRoleBindingV2("status", statusKey)
 	if err != nil {
 		return nil, v2Classify(V2ErrConfigurationInvalid, err)
 	}
-	for _, other := range append([]HybridPublicKey{issuerKey}, otherRoleKeys...) {
-		otherID, err := keyIDV2(other)
-		if err != nil {
-			return nil, v2Classify(V2ErrConfigurationInvalid, fmt.Errorf("v2 status publisher role key: %w", err))
+	journal, err := loadAnchoredSecurityJournalV2(ctx, roles)
+	if err != nil {
+		return nil, v2Classify(V2ErrConfigurationInvalid, fmt.Errorf("v2 status publisher role configuration: %w", err))
+	}
+	issuerKnown := false
+	for _, b := range journal.KeyRoleHistory {
+		if b.Role == "status" {
+			continue
 		}
-		if otherID == statusKeyID || bytes.Equal(other.Ed25519, statusKey.Ed25519) || bytes.Equal(other.MLDSA65, statusKey.MLDSA65) {
-			return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status key reuses an issuer or other non-status key or component; status keys must be role-separated")
+		if b.KeyID == issuerBinding.KeyID && b.Ed25519Digest == issuerBinding.Ed25519Digest && b.MLDSA65Digest == issuerBinding.MLDSA65Digest {
+			issuerKnown = true
+		}
+		if b.KeyID == statusBinding.KeyID || b.Ed25519Digest == statusBinding.Ed25519Digest || b.MLDSA65Digest == statusBinding.MLDSA65Digest ||
+			b.Ed25519Digest == statusBinding.MLDSA65Digest || b.MLDSA65Digest == statusBinding.Ed25519Digest {
+			return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status key reuses the key or a component of recorded %s key %s; status keys must be role-separated", b.Role, b.KeyID)
 		}
 	}
-	return &V2StatusPublisher{issuerID: issuerID, statusKey: cloneHybridPublicKeyV2(statusKey), statusKeyID: statusKeyID, signer: statusSigner, lifetime: lifetimeSeconds}, nil
+	if !issuerKnown {
+		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status publisher issuer key is not recorded under a non-status role")
+	}
+	var current StatusKeyBindingV2
+	for _, b := range journal.StatusKeyHistory {
+		if b.IssuerID == issuerBinding.KeyID && b.Epoch > current.Epoch {
+			current = b
+		}
+	}
+	if current.Epoch == 0 || current.StatusKeyID != statusBinding.KeyID || current.Ed25519Digest != statusBinding.Ed25519Digest || current.MLDSA65Digest != statusBinding.MLDSA65Digest {
+		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status signer is not the issuer's current configured status key")
+	}
+	return &V2StatusPublisher{issuerID: issuerBinding.KeyID, statusKey: cloneHybridPublicKeyV2(statusKey), statusKeyID: statusBinding.KeyID, signer: statusSigner, lifetime: lifetimeSeconds}, nil
 }
 
 // IssuerID and StatusKey report the binding a verifier configures.

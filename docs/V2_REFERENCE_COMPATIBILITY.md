@@ -112,7 +112,7 @@ passing it. Changes to `testvectors/v2`:
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 | `issuer-duties.json` | New: 11 delegation issuer-duty cases for the typed signer |
 | `challenge-issuance.json` | New: 9 challenge issuance helper scenarios (33 steps) |
-| `status-publisher.json` | New: 7 signed-status publisher scenarios (39 steps) with journal ingestion |
+| `status-publisher.json` | New: 13 signed-status publisher scenarios (39 steps) with journal ingestion and role-configuration refusals |
 
 SDK test files that read these vector files, and therefore fail until ported:
 

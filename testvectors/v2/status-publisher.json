@@ -11,7 +11,7 @@
     "heartbeat": "re-sign the current sequence and revoked set with updated_at = at; refused when at is not later than the last list's updated_at",
     "ingest": "apply the list or push of publication number publication to the journal at now = at under status_policy; the operation succeeds",
     "revoke": "revoke cert_ids at at: a push with exactly those IDs (sorted) and the cumulative full list, both at the next sequence; refused for an empty, duplicate or already revoked ID",
-    "setup": "construct the publisher from the issuer key, the status signer and other_role_keys (keys.json names) with lifetime_seconds; publisher ok = constructed, refused = the status key or a component equals the issuer key or another role key, and no object is signed. Then build a SecurityJournalV2: genesis, record the issuer key under role issuer and every other_role_keys entry under role delegation, then configure the status key for the issuer at epoch 1. journal_setup configured = accepted; rejected = the journal refuses the status key (cross-role reuse)",
+    "setup": "build the authenticated role configuration, a SecurityJournalV2: genesis, record every role_keys entry (keys.json names) under its role in order, then configure status_key at epoch 1 for the issuer named by status_configured_for (skipped when empty). journal_setup configured = that configuration was accepted, rejected = the journal refused it (cross-role reuse), not_configured = skipped. Then construct the publisher from that anchored journal, the issuer key, the status signer and lifetime_seconds. The publisher never takes a caller list of other keys. publisher ok = constructed; refused = configuration_invalid and no object is signed, because the status key or either component equals the key ID or a component of any recorded non-status key, the issuer key is not recorded under a non-status role, or the status key is not the issuer's highest-epoch configured status key. The same journal ingests the published objects",
     "status": "derive the status of (issuer, cert_id) from the journal at now = at: not_revoked, revoked, or indeterminate with reason stale or unavailable"
   },
   "scenarios": [
@@ -20,10 +20,25 @@
       "description": "the genesis list is sequence 1 with an empty revoked set and makes every certificate not_revoked while fresh",
       "issuer": "root",
       "status_key": "status_root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "ok",
       "journal_setup": "configured",
@@ -65,10 +80,25 @@
       "description": "a same-sequence heartbeat with a later updated_at keeps status current past the genesis next_update; a heartbeat that does not move forward is refused",
       "issuer": "root",
       "status_key": "status_root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "ok",
       "journal_setup": "configured",
@@ -146,10 +176,25 @@
       "description": "a revocation publishes a push and the cumulative list at sequence 2; the revoked certificate is revoked and others stay current",
       "issuer": "root",
       "status_key": "status_root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "ok",
       "journal_setup": "configured",
@@ -278,10 +323,25 @@
       "description": "a verifier that misses sequence 2 and sees the push at sequence 3 has a gap: the pushed certificate is revoked, everything else is unavailable until the sequence 3 list reconciles it",
       "issuer": "root",
       "status_key": "status_root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "ok",
       "journal_setup": "configured",
@@ -426,10 +486,25 @@
       "description": "a publisher that stops heartbeating leaves status stale exactly at next_update; a later heartbeat restores current status",
       "issuer": "root",
       "status_key": "status_root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "ok",
       "journal_setup": "configured",
@@ -507,13 +582,28 @@
     },
     {
       "name": "status_key_is_issuer_key",
-      "description": "a status key equal to the issuer key is refused by the publisher before any signature, and a verifier journal that recorded the issuer role refuses it too",
+      "description": "a status key equal to the issuer key is refused by the publisher before any signature, and the role journal refuses to configure it",
       "issuer": "root",
       "status_key": "root",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "refused",
       "journal_setup": "rejected",
@@ -521,16 +611,201 @@
     },
     {
       "name": "status_key_is_other_role_key",
-      "description": "a status key equal to another configured role key (an intermediate issuer) is refused by the publisher and the journal",
+      "description": "a status key equal to a recorded intermediate issuer key is refused by the publisher and the journal",
       "issuer": "root",
       "status_key": "intermediate",
-      "other_role_keys": [
-        "intermediate",
-        "agent"
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
       ],
+      "status_configured_for": "root",
       "lifetime_seconds": 3600,
       "publisher": "refused",
       "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_unlisted_root_key",
+      "description": "the intermediate's publisher is given the organization root key as its status key; no caller list names the root, but the role configuration records it, so the publisher refuses",
+      "issuer": "intermediate",
+      "status_key": "root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "intermediate",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_agent_key",
+      "description": "a status key equal to a recorded agent key is refused by the publisher and the journal",
+      "issuer": "root",
+      "status_key": "agent",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_verifier_key",
+      "description": "a status key equal to a recorded verifier key is refused by the publisher and the journal",
+      "issuer": "root",
+      "status_key": "verifier",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_not_configured",
+      "description": "a role-separated status key that the role configuration never bound to the issuer is refused",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "not_configured",
+      "steps": []
+    },
+    {
+      "name": "status_key_configured_for_other_issuer",
+      "description": "a status key bound to a different issuer in the role configuration is refused for this issuer",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "intermediate",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "configured",
+      "steps": []
+    },
+    {
+      "name": "issuer_not_in_role_configuration",
+      "description": "the role configuration does not record the issuer key under a non-status role: the publisher refuses although the status key is configured for that issuer",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "configured",
       "steps": []
     }
   ]

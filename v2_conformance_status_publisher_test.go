@@ -23,15 +23,19 @@ type v2PublisherPush struct {
 }
 
 type v2PublisherScenario struct {
-	Name            string   `json:"name"`
-	Description     string   `json:"description"`
-	Issuer          string   `json:"issuer"`
-	StatusKey       string   `json:"status_key"`
-	OtherRoleKeys   []string `json:"other_role_keys"`
-	LifetimeSeconds int64    `json:"lifetime_seconds"`
-	Publisher       string   `json:"publisher"`
-	JournalSetup    string   `json:"journal_setup"`
-	Steps           []struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Issuer      string `json:"issuer"`
+	StatusKey   string `json:"status_key"`
+	RoleKeys    []struct {
+		Key  string `json:"key"`
+		Role string `json:"role"`
+	} `json:"role_keys"`
+	StatusConfiguredFor string `json:"status_configured_for"`
+	LifetimeSeconds     int64  `json:"lifetime_seconds"`
+	Publisher           string `json:"publisher"`
+	JournalSetup        string `json:"journal_setup"`
+	Steps               []struct {
 		Op          string   `json:"op"`
 		At          int64    `json:"at"`
 		CertIDs     []string `json:"cert_ids"`
@@ -75,16 +79,31 @@ func TestV2ConformanceStatusPublisher(t *testing.T) {
 			ctx := context.Background()
 			issuerKey, statusKey := fx.pub[sc.Issuer], fx.pub[sc.StatusKey]
 			issuerID := fx.id[sc.Issuer]
-			var others []ratify.HybridPublicKey
-			for _, name := range sc.OtherRoleKeys {
-				others = append(others, fx.pub[name])
+			journal, err := v2reference.NewJournalStore()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, rk := range sc.RoleKeys {
+				if _, err := ratify.RecordSecurityKeyRoleV2(ctx, journal, rk.Role, fx.pub[rk.Key]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			setup := "not_configured"
+			if sc.StatusConfiguredFor != "" {
+				setup = "configured"
+				if _, err := ratify.ConfigureStatusKeyEpochV2(ctx, journal, fx.id[sc.StatusConfiguredFor], 1, statusKey); err != nil {
+					setup = "rejected"
+				}
+			}
+			if setup != sc.JournalSetup {
+				t.Fatalf("journal setup %q, want %q", setup, sc.JournalSetup)
 			}
 			signer, err := ratify.NewLocalSignerV2(fx.priv[sc.StatusKey])
 			if err != nil {
 				t.Fatal(err)
 			}
 			counting := &v2CountingSigner{inner: signer}
-			publisher, err := ratify.NewV2StatusPublisher(issuerKey, counting, others, sc.LifetimeSeconds)
+			publisher, err := ratify.NewV2StatusPublisher(ctx, journal, issuerKey, counting, sc.LifetimeSeconds)
 			switch sc.Publisher {
 			case "ok":
 				if err != nil {
@@ -92,28 +111,11 @@ func TestV2ConformanceStatusPublisher(t *testing.T) {
 				}
 			case "refused":
 				if err == nil || publisher != nil {
-					t.Fatal("publisher accepted a status key that reuses a non-status role key")
+					t.Fatal("publisher accepted a status key outside the authenticated role configuration")
 				}
 				if ratify.V2ErrorClassOf(err) != ratify.V2ErrConfigurationInvalid {
 					t.Fatalf("refusal class %q", ratify.V2ErrorClassOf(err))
 				}
-			}
-
-			journal, err := v2reference.NewJournalStore()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := ratify.RecordSecurityKeyRoleV2(ctx, journal, "issuer", issuerKey); err != nil {
-				t.Fatal(err)
-			}
-			for _, other := range others {
-				if _, err := ratify.RecordSecurityKeyRoleV2(ctx, journal, "delegation", other); err != nil {
-					t.Fatal(err)
-				}
-			}
-			_, err = ratify.ConfigureStatusKeyEpochV2(ctx, journal, issuerID, 1, statusKey)
-			if (err == nil) != (sc.JournalSetup == "configured") {
-				t.Fatalf("journal setup %q: %v", sc.JournalSetup, err)
 			}
 			if sc.Publisher != "ok" {
 				if counting.calls > 1 {

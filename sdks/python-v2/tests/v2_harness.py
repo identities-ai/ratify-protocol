@@ -20,6 +20,7 @@ from ratify_protocol_v2.claim_store_v2 import (
     V2RateReservationStore,
 )
 from ratify_protocol_v2.errors_v2 import V2Error, V2ErrorClass
+from ratify_protocol_v2.v2reference.trust_registry import TrustRegistry
 from ratify_protocol_v2.verify_v2 import V2TrustResolution, V2VerifyCallbacks, V2VerifyRequest
 from ratify_protocol_v2.verify_v2_preflight import ExpectedChallengeV2
 
@@ -292,11 +293,16 @@ def build_verify_request(inputs: dict, bundle: Optional[bytes], counts: Counts):
         req.constraint_evaluators = build_evaluator_registry(inputs, counts)
 
     trust_in = inputs.get("trust")
+    registry = None
+    if trust_in is not None and trust_in.get("mode") == "registry":
+        registry = TrustRegistry([pubkey(k) for k in trust_in.get("registry") or []])
 
     def trust(ctx, chain):
         counts.trust += 1
         if trust_in is None:
             return V2TrustResolution(outcome="unavailable")
+        if trust_in.get("mode") == "registry":
+            return registry.resolve(ctx, chain)
         if trust_in.get("mode") == "error":
             raise RuntimeError("scripted trust provider failure")
         if trust_in.get("mode") == "panic":

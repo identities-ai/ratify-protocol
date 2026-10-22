@@ -14,6 +14,7 @@ import {
   gInt,
   gString,
   gStruct,
+  rejectV2UnexpectedNull,
   requireV2Fields,
 } from "./json_v2.js";
 import { checkV2WireSize } from "./limits_v2.js";
@@ -57,6 +58,7 @@ export function decodeV2CheckpointAcknowledgement(data: Uint8Array): V2Checkpoin
     checkV2WireSize(data, "checkpoint acknowledgement", "MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2", MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2);
     const root = checkWireJSONV2(data, ["entry_hash"]);
     requireV2Fields(root, ACK_FIELDS);
+    rejectV2UnexpectedNull(root);
     const f = gStruct(root, ACK_FIELDS, "checkpoint acknowledgement");
     const hash = base64DecodeCanonical(gString(f.get("entry_hash"), "entry_hash"));
     if (hash === null) throw new Error("wire v2: checkpoint acknowledgement entry_hash is not canonical base64");

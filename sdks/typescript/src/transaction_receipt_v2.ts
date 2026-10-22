@@ -25,9 +25,11 @@ import {
   isWellFormedString,
   parseJSONV2,
   rawSlice,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   uint64BE,
   utf8,
+  type Fields,
   type JNode,
 } from "./json_v2.js";
 import { buildSessionContextV2 } from "./operation_context_v2.js";
@@ -337,6 +339,13 @@ export async function encodeTransactionReceiptV2(r: TransactionReceiptV2): Promi
  * context bindings. Trust, status, freshness and final scope authorization
  * are not inferred by this codec.
  */
+// Every party and party-signature member is required: an object missing one
+// does not spell the value it would decode to (SPEC-v2 §2.1).
+function requireAllMembers(f: Fields, names: readonly string[], what: string): Fields {
+  for (const name of names) if (!f.has(name)) throw new Error(`wire v2: ${what} member ${JSON.stringify(name)} is missing`);
+  return f;
+}
+
 export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<TransactionReceiptV2> {
   try {
     checkV2WireSize(data, "transaction receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", MAX_TRANSACTION_RECEIPT_BYTES_V2);
@@ -349,9 +358,11 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       throw new Error(`wire v2: transaction receipt exceeds MAX_TRANSACTION_PARTIES (${MAX_TRANSACTION_PARTIES})`);
     }
     const f = gStruct(root, RECEIPT_FIELDS, "transaction receipt");
-    const partyStructs = partiesNode.a.map((n) => gStruct(n, PARTY_FIELDS, "transaction party"));
+    rejectV2UnexpectedNull(root);
+    const partyStructs = partiesNode.a.map((n) => requireAllMembers(gStruct(n, PARTY_FIELDS, "transaction party"), PARTY_FIELDS, "transaction party"));
     const sigNode = f.get("party_signatures")!;
     if (sigNode.k !== "arr") throw new Error("wire v2: party_signatures must be an array");
+    for (const n of sigNode.a) requireAllMembers(gStruct(n, SIGNATURE_FIELDS, "party signature"), SIGNATURE_FIELDS, "party signature");
     const receipt: TransactionReceiptV2 = {
       version: gInt(f.get("version"), "version"),
       transaction_id: gString(f.get("transaction_id"), "transaction_id"),
@@ -379,7 +390,7 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
     }));
     for (let i = 0; i < typed.length; i++) {
       const p = typed[i]!;
-      if (p.raw === undefined) throw new Error(`wire v2: party ${i} proof_bundle is required`);
+      if (p.raw === undefined || p.raw.k !== "obj") throw new Error(`wire v2: party ${i} proof_bundle must be a JSON object`);
       const raw = rawSlice(data, p.raw);
       if (p.proof_bundle_hash !== bundleHashOfBytesV2(raw)) {
         throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);

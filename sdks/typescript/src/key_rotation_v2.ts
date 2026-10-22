@@ -28,6 +28,7 @@ import {
   gInt,
   gString,
   gStruct,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   uint16BE,
   utf8,
@@ -226,6 +227,7 @@ function validateKeyRotationSignableBodyV2(root: JNode, body: Uint8Array): void 
   let s: KeyRotationStatementV2;
   try {
     requireV2Fields(root, KEY_ROTATION_SIGNABLE_FIELDS);
+    rejectV2UnexpectedNull(root);
     s = decodeRotationStruct(root, KEY_ROTATION_SIGNABLE_FIELDS);
   } catch (err) {
     throw wrapError("rotation signable body", err);
@@ -253,6 +255,7 @@ export function decodeKeyRotationStatementV2(data: Uint8Array): KeyRotationState
     checkV2WireSize(data, "rotation statement", "MAX_KEY_ROTATION_STATEMENT_BYTES_V2", MAX_KEY_ROTATION_STATEMENT_BYTES_V2);
     const root = checkWireJSONV2(data, ["previous_statement_hash"]);
     requireV2Fields(root, KEY_ROTATION_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const s = decodeRotationStruct(root, KEY_ROTATION_V2_FIELDS);
     validateKeyRotationStatementV2(s, true);
     return s;

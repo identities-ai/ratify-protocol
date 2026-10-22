@@ -24,6 +24,7 @@ import {
   gInt,
   gString,
   gStruct,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   type JNode,
 } from "./json_v2.js";
@@ -115,6 +116,7 @@ export function validateWitnessSignableBodyV2(root: JNode, body: Uint8Array): vo
   let e: WitnessEntryV2;
   try {
     requireV2Fields(root, WITNESS_SIGNABLE_FIELDS);
+    rejectV2UnexpectedNull(root);
     e = decodeWitnessStruct(root, WITNESS_SIGNABLE_FIELDS);
   } catch (err) {
     throw wrapError("witness signable body", err);
@@ -152,6 +154,7 @@ export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
     checkV2WireSize(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
     const root = checkWireJSONV2(data);
     requireV2Fields(root, WITNESS_ENTRY_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const e = decodeWitnessStruct(root, WITNESS_ENTRY_V2_FIELDS);
     validateWitnessEntryV2(e, true);
     let canonical: Uint8Array | null = null;

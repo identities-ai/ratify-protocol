@@ -29,6 +29,7 @@ import {
   gStringArray,
   gStruct,
   hexOf,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   uint16BE,
   utf8,
@@ -160,6 +161,13 @@ export function isSafeInt(n: number): boolean {
 // Go-typed sub-decoders ------------------------------------------------------
 
 export function decodeHybridKey(n: JNode | undefined, what: string): HybridPublicKey {
+  // A present key or signature carries both members: {} or a missing
+  // component does not spell the structure it would decode to (SPEC-v2 §2.1).
+  if (n !== undefined && n.k === "obj") {
+    for (const member of ["ed25519", "ml_dsa_65"]) {
+      if (!n.m.has(member)) throw new Error(`wire v2: ${what}.${member} is missing`);
+    }
+  }
   const f = gStruct(n, ["ed25519", "ml_dsa_65"], what);
   return {
     ed25519: gBytes(f.get("ed25519"), `${what}.ed25519`) ?? new Uint8Array(0),
@@ -298,6 +306,7 @@ export function decodeDelegationCertV2(data: Uint8Array): DelegationCertV2 {
     checkV2WireSize(data, "certificate", "MAX_DELEGATION_CERT_BYTES_V2", MAX_DELEGATION_CERT_BYTES_V2);
     const root = checkWireJSONV2(data);
     checkRawCertificate(root, "wire v2");
+    rejectV2UnexpectedNull(root);
     const cert = decodeCertStruct(root, "certificate");
     validateDelegationCertV2(cert);
     validateHybridSignatureV2(cert.signature);
@@ -476,6 +485,7 @@ export function decodeProofBundleV2(data: Uint8Array): ProofBundleV2 {
     const rawDelegations = top.get("delegations")!;
     if (rawDelegations.k !== "arr") throw new Error("wire v2: delegations must be an array");
     rawDelegations.a.forEach((raw, i) => checkRawCertificate(raw, `wire v2 delegation ${i}`));
+    rejectV2UnexpectedNull(root);
     const f: Fields = gStruct(root, PROOF_BUNDLE_V2_FIELDS, "proof bundle");
     const delegations = gArray(f.get("delegations"), "delegations");
     const stream = f.get("stream_seq");
@@ -715,6 +725,7 @@ export function decodeRevocationListV2(data: Uint8Array): RevocationListV2 {
     checkV2WireSize(data, "revocation list", "MAX_REVOCATION_LIST_BYTES_V2", MAX_REVOCATION_LIST_BYTES_V2);
     const root = checkWireJSONV2(data);
     requireV2Fields(root, REVOCATION_LIST_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const f = gStruct(root, REVOCATION_LIST_V2_FIELDS, "revocation list");
     const list: RevocationListV2 = {
       version: gInt(f.get("version"), "version"),
@@ -736,6 +747,7 @@ export function decodeRevocationPushV2(data: Uint8Array): RevocationPushV2 {
     checkV2WireSize(data, "revocation push", "MAX_REVOCATION_PUSH_BYTES_V2", MAX_REVOCATION_PUSH_BYTES_V2);
     const root = checkWireJSONV2(data);
     requireV2Fields(root, REVOCATION_PUSH_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const f = gStruct(root, REVOCATION_PUSH_V2_FIELDS, "revocation push");
     const push: RevocationPushV2 = {
       version: gInt(f.get("version"), "version"),

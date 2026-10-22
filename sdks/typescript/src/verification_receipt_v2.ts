@@ -24,6 +24,7 @@ import {
   gUint16,
   hexDecodeGo,
   isWellFormedString,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   type JNode,
 } from "./json_v2.js";
@@ -473,6 +474,7 @@ export function decodeVerificationReceiptV2(data: Uint8Array): VerificationRecei
     checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2);
     const root = checkWireJSONV2(data, ["previous_receipt_hash"], ["bundle_hash"]);
     requireV2Fields(root, RECEIPT_V2_FIELDS, ["context_policy_digest"]);
+    rejectV2UnexpectedNull(root);
     const r = decodeReceiptStruct(root, RECEIPT_WIRE_FIELDS);
     validateVerificationReceiptV2(r, true);
     let canonical: Uint8Array | null = null;
@@ -491,6 +493,7 @@ export function validateVerificationReceiptSignableV2(data: Uint8Array): void {
   const root = checkWireJSONV2(data, ["previous_receipt_hash"], ["bundle_hash"]);
   requireV2Fields(root, RECEIPT_V2_FIELDS.slice(0, -1), ["context_policy_digest"]);
   if (root.k === "obj" && root.m.has("signature")) throw new Error("signable body must exclude signature");
+  rejectV2UnexpectedNull(root);
   const r = decodeReceiptStruct(root, RECEIPT_WIRE_FIELDS);
   validateVerificationReceiptV2(r, false);
   let canonical: Uint8Array | null = null;
@@ -617,6 +620,7 @@ export function decodeVerificationReceiptBodyV2(data: Uint8Array): VerificationR
     checkV2WireSize(data, "verification receipt body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2);
     const root = checkWireJSONV2(data, [], ["bundle_hash"]);
     requireV2Fields(root, RECEIPT_BODY_REQUIRED, ["context_policy_digest"]);
+    rejectV2UnexpectedNull(root);
     const decoded = decodeReceiptStruct(root, RECEIPT_BODY_FIELDS);
     const receipt: VerificationReceiptV2 = { ...decoded, ...emptyReceiptEnvelope() };
     let canonical: Uint8Array;

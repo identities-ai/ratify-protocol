@@ -386,6 +386,7 @@ fn v2c_objects() {
         );
     }
     let n = arr(&f["objects"]).len();
+    assert_eq!((n, n_sigs), (11, 15), "objects.json objects and signatures");
     t.finish(&[
         ("re-encode", n),
         ("verify", n),
@@ -422,6 +423,11 @@ fn v2c_object_negatives() {
         });
     }
     assert!(kinds.len() >= 9, "negative kinds: {kinds:?}");
+    assert_eq!(
+        arr(&f["vectors"]).len(),
+        401,
+        "object-negatives.json vectors"
+    );
     t.finish(&[("negatives", arr(&f["vectors"]).len())]);
 }
 

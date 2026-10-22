@@ -163,6 +163,12 @@ def vector_dir(rel, v, bundle):
     if t and t.get("root_public_key"):
         write(f"{rel}/root.ed", b64d(t["root_public_key"]["ed25519"]))
         write(f"{rel}/root.ml", b64d(t["root_public_key"]["ml_dsa_65"]))
+    # trust.mode "registry": the candidate-record records, in order.
+    registry = (t or {}).get("registry") or []
+    meta["registry"] = len(registry)
+    for j, k in enumerate(registry):
+        write(f"{rel}/reg{j}.ed", b64d(k["ed25519"]))
+        write(f"{rel}/reg{j}.ml", b64d(k["ml_dsa_65"]))
     if exp.get("receipt_body_b64"):
         write(f"{rel}/expect_body.bin", b64d(exp["receipt_body_b64"]))
     skeys = v.get("status_keys") or {}

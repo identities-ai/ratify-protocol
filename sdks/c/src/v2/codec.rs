@@ -387,7 +387,8 @@ pub unsafe extern "C" fn ratify_v2_status_evidence_digest(
 }
 
 /// `StatementBodyDigest(code, body)` (48 bytes) over an exact canonical
-/// signable body.
+/// signable body, defined for codes 0x0003, 0x0004, 0x0005, 0x0006 and
+/// 0x0008; any other code is `unsupported_object_type`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_statement_body_digest(
     object_type_code: u32,
@@ -410,9 +411,10 @@ pub unsafe extern "C" fn ratify_v2_statement_body_digest(
 
 /// `StatementBodyDigest` (48 bytes) of a strictly decoded signed object:
 /// the chain digest of a rotation statement (`kind` 4), witness entry (6),
-/// or verification receipt (8), and for the other signed kinds the digest
-/// of their signable projection under their own code. It is independent of
-/// signature bytes, so hedged re-signatures share it.
+/// or verification receipt (8), and the digest of the signable projection
+/// of a revocation list (3) or push (5). Kinds 1, 2 and 7 are
+/// `unsupported_object_type` (SPEC-v2 §4). It is independent of signature
+/// bytes, so hedged re-signatures share it.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_object_body_digest(
     kind: i32,

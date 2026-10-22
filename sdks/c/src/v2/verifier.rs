@@ -111,7 +111,9 @@ unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
 /// exists. A malformed request or evaluator registry fails the call itself
 /// (`bad_argument` or its class) without running the verifier. A callback
 /// returning `RatifyV2ErrCancelled` after the claim yields
-/// `evaluation_cancelled` and commits nothing.
+/// `evaluation_cancelled` and commits nothing; the receiver-binding hook
+/// returning it cancels before the claim, so the outcome is a preflight
+/// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
     bundle: *const u8,
@@ -151,7 +153,20 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
             req.constraint_evaluators = evaluator_registry(evaluators)?;
             let (ctx, cancel) = V2Context::background().with_cancel();
             let deps = build_callbacks(callbacks, &Cancel(cancel));
-            let result = verify_proof_bundle_v2(&ctx, &req, &deps.callbacks);
+            let mut result = verify_proof_bundle_v2(&ctx, &req, &deps.callbacks);
+            // The receiver-binding hook is the only callback before the
+            // claim; its cancellation is the caller's cancellation there.
+            if result.stage == V2VerifyStage::Preflight
+                && result.error_class == Some(V2ErrorClass::ReceiverBindingRejected)
+                && ctx.is_done()
+            {
+                let e = V2Error::new(
+                    V2ErrorClass::EvaluationCancelled,
+                    "v2 verification cancelled before the claim: context done",
+                );
+                result.error_class = Some(e.class);
+                result.error = Some(e);
+            }
             *outcome = RatifyV2VerifyOutcome {
                 stage: stage_code(result.stage),
                 error_code: result.error_class.map_or(0, |c| class_code(c) as i32),

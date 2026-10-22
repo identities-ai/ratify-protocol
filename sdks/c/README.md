@@ -489,7 +489,10 @@ The two standard profiles (`com.ratifyprotocol.max_count/v1`,
 **Cancellation.** A callback cancels an operation by returning
 `RatifyV2ErrCancelled`; the library treats it as a provider cancellation
 under SPEC-v2 §6.11 (after the claim this yields `evaluation_cancelled` and
-commits nothing). There is no other asynchronous cancellation.
+commits nothing). The receiver-binding hook is the only callback before the
+claim; returning `RatifyV2ErrCancelled` from it cancels before the claim, so
+verification stops with `evaluation_cancelled` and consumes nothing. There is
+no other asynchronous cancellation.
 
 **Decisions.** `ratify_v2_verify_proof_bundle` reports a stage (`preflight`,
 `replay`, `evaluating`, `committed`) and never a decision. A committed

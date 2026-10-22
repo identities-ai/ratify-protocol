@@ -301,6 +301,11 @@ fn v2c_challenge_issuance() {
     let steps: usize = scenarios.iter().map(|sc| run_scenario(sc, &fx)).sum();
     let want: usize = scenarios.iter().map(|sc| arr(&sc["steps"]).len()).sum();
     assert_eq!(steps, want, "every issuance step must run");
+    assert_eq!(
+        (scenarios.len(), steps),
+        (10, 36),
+        "challenge-issuance.json"
+    );
     println!(
         "C-ABI COVERAGE challenge-issuance.json: {} scenarios, {steps} steps",
         scenarios.len()

@@ -433,6 +433,14 @@ typedef struct RatifyV2RefPrimary RatifyV2RefPrimary;
 typedef struct RatifyV2RefStore RatifyV2RefStore;
 #endif
 
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the reference candidate-record trust registry of SPEC-v2 §6.1
+// (`v2reference.TrustRegistry`). No candidate is untrusted; more than one
+// candidate, including the same key configured twice, is ambiguous; exactly
+// one is trusted with that record's complete key.
+typedef struct RatifyV2RefTrustRegistry RatifyV2RefTrustRegistry;
+#endif
+
 // The opaque released decision (SPEC-v2 §6.9): the only actionable value of
 // this ABI. `ratify_v2_release_decision` is its only constructor; every
 // accessor returns a copy. Gate a side effect only on
@@ -850,6 +858,31 @@ typedef struct RatifyV2JournalStoreCallbacks {
     RatifyV2JournalCasFn compare_and_swap;
 } RatifyV2JournalStoreCallbacks;
 
+// One delegation certificate of a verified chain, root-most last.
+typedef struct RatifyV2CertView {
+    const char *cert_id;
+    const char *issuer_id;
+    const char *subject_id;
+    const struct RatifyV2PublicKey *issuer_public_key;
+    const struct RatifyV2PublicKey *subject_public_key;
+    struct RatifyV2Slice wire;
+} RatifyV2CertView;
+
+// Resolves trust for a verified chain. For `RatifyV2TrustTrusted` write the
+// complete configured root key into `*root_key`; the verifier requires it
+// to equal the chain's terminal issuer.
+typedef int32_t (*RatifyV2TrustFn)(void *user,
+                                   const struct RatifyV2CertView *chain,
+                                   uintptr_t chain_len,
+                                   int32_t *outcome,
+                                   struct RatifyV2PublicKey *root_key);
+
+// The caller-authenticated trust provider.
+typedef struct RatifyV2TrustCallbacks {
+    void *user;
+    RatifyV2TrustFn resolve;
+} RatifyV2TrustCallbacks;
+
 // Persists a complete issuance record keyed by (namespace, replay epoch,
 // `ChallengeClaimDigest`); an existing key is `RatifyV2StoreIssuanceConflict`
 // and is never overwritten. `record` is the ExpectedChallenge JSON.
@@ -987,31 +1020,6 @@ typedef struct RatifyV2EvaluatorConfig {
     uintptr_t count;
 } RatifyV2EvaluatorConfig;
 
-// One delegation certificate of a verified chain, root-most last.
-typedef struct RatifyV2CertView {
-    const char *cert_id;
-    const char *issuer_id;
-    const char *subject_id;
-    const struct RatifyV2PublicKey *issuer_public_key;
-    const struct RatifyV2PublicKey *subject_public_key;
-    struct RatifyV2Slice wire;
-} RatifyV2CertView;
-
-// Resolves trust for a verified chain. For `RatifyV2TrustTrusted` write the
-// complete configured root key into `*root_key`; the verifier requires it
-// to equal the chain's terminal issuer.
-typedef int32_t (*RatifyV2TrustFn)(void *user,
-                                   const struct RatifyV2CertView *chain,
-                                   uintptr_t chain_len,
-                                   int32_t *outcome,
-                                   struct RatifyV2PublicKey *root_key);
-
-// The caller-authenticated trust provider.
-typedef struct RatifyV2TrustCallbacks {
-    void *user;
-    RatifyV2TrustFn resolve;
-} RatifyV2TrustCallbacks;
-
 // An issuer-scoped certificate reference.
 typedef struct RatifyV2CertRef {
     const char *issuer_id;
@@ -1091,7 +1099,9 @@ typedef struct RatifyV2AudienceCallbacks {
 
 // The application's pure pre-claim receiver-binding hook. `bundle` is the
 // canonical proof bundle; `expected_challenge` is the ExpectedChallenge JSON.
-// Return 0 to accept; anything else rejects (`receiver_binding_rejected`).
+// Return 0 to accept; `RatifyV2ErrCancelled` cancels the operation before
+// the claim (`evaluation_cancelled`, nothing consumed, SPEC-v2 §6.11);
+// anything else rejects (`receiver_binding_rejected`).
 typedef int32_t (*RatifyV2ReceiverBindingFn)(void *user,
                                              struct RatifyV2Slice bundle,
                                              struct RatifyV2Slice expected_challenge);
@@ -2318,7 +2328,8 @@ int32_t ratify_v2_status_evidence_digest(int32_t kind,
                                          struct RatifyV2Buffer *out);
 
 // `StatementBodyDigest(code, body)` (48 bytes) over an exact canonical
-// signable body.
+// signable body, defined for codes 0x0003, 0x0004, 0x0005, 0x0006 and
+// 0x0008; any other code is `unsupported_object_type`.
 int32_t ratify_v2_statement_body_digest(uint32_t object_type_code,
                                         const uint8_t *body,
                                         uintptr_t body_len,
@@ -2326,9 +2337,10 @@ int32_t ratify_v2_statement_body_digest(uint32_t object_type_code,
 
 // `StatementBodyDigest` (48 bytes) of a strictly decoded signed object:
 // the chain digest of a rotation statement (`kind` 4), witness entry (6),
-// or verification receipt (8), and for the other signed kinds the digest
-// of their signable projection under their own code. It is independent of
-// signature bytes, so hedged re-signatures share it.
+// or verification receipt (8), and the digest of the signable projection
+// of a revocation list (3) or push (5). Kinds 1, 2 and 7 are
+// `unsupported_object_type` (SPEC-v2 §4). It is independent of signature
+// bytes, so hedged re-signatures share it.
 int32_t ratify_v2_object_body_digest(int32_t kind,
                                      const uint8_t *wire,
                                      uintptr_t wire_len,
@@ -2679,6 +2691,26 @@ int32_t ratify_v2_ref_journal_callbacks(const struct RatifyV2RefJournal *j,
 #endif
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a registry over `records_len` complete root public keys, in
+// order.
+int32_t ratify_v2_ref_trust_registry_new(const struct RatifyV2PublicKey *records,
+                                         uintptr_t records_len,
+                                         struct RatifyV2RefTrustRegistry **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a reference trust registry. NULL is a no-op.
+void ratify_v2_ref_trust_registry_free(struct RatifyV2RefTrustRegistry *r);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the trust callbacks that resolve through the registry. They
+// borrow the registry, which must outlive every call.
+int32_t ratify_v2_ref_trust_registry_callbacks(const struct RatifyV2RefTrustRegistry *r,
+                                               struct RatifyV2TrustCallbacks *callbacks_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
 // TEST ONLY: a new, empty reference issuance store.
 int32_t ratify_v2_ref_issuance_new(struct RatifyV2RefIssuance **out);
 #endif
@@ -2945,7 +2977,9 @@ int32_t ratify_v2_status_state_query(const struct RatifyV2StatusState *state,
 // A JSON view of the reducer state (`has_floor`, `floor`,
 // `accepted_cert_ids`, `deny_union_cert_ids`, `max_observed_sequence`,
 // `fork_sequence`, `reconciliation_required`,
-// `future_dated_object_observed`, and the status key fields).
+// `future_dated_object_observed`, the status key fields, and
+// `observations`: the SPEC-v2 §6.6 observation members, digests in
+// Base64; `body_digest` is the unlabelled SHA-384 of the signable body).
 int32_t ratify_v2_status_state_json(const struct RatifyV2StatusState *state,
                                     struct RatifyV2Buffer *out);
 
@@ -3002,6 +3036,20 @@ int32_t ratify_v2_journal_import(const uint8_t *snapshot,
                                  uint64_t generation,
                                  const char *digest,
                                  struct RatifyV2Buffer *head_out);
+
+// Validate the transition from one imported snapshot to the next
+// (`ValidateSecurityJournalTransitionV2`): each snapshot is imported against
+// its anchored head first (`malformed` on any import failure), then
+// generation continuity and append-only histories are enforced; an invalid
+// transition between valid records is `status_object_rejected`.
+int32_t ratify_v2_journal_validate_transition(const uint8_t *current_snapshot,
+                                              uintptr_t current_snapshot_len,
+                                              uint64_t current_generation,
+                                              const char *current_digest,
+                                              const uint8_t *next_snapshot,
+                                              uintptr_t next_snapshot_len,
+                                              uint64_t next_generation,
+                                              const char *next_digest);
 
 // Migrate a version 1 journal record (Go JSON encoding) to the version 2
 // logical snapshot. Writes the snapshot and its head JSON.
@@ -3143,7 +3191,9 @@ int32_t ratify_v2_archival_verify(int32_t kind,
 // exists. A malformed request or evaluator registry fails the call itself
 // (`bad_argument` or its class) without running the verifier. A callback
 // returning `RatifyV2ErrCancelled` after the claim yields
-// `evaluation_cancelled` and commits nothing.
+// `evaluation_cancelled` and commits nothing; the receiver-binding hook
+// returning it cancels before the claim, so the outcome is a preflight
+// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
 int32_t ratify_v2_verify_proof_bundle(const uint8_t *bundle,
                                       uintptr_t bundle_len,
                                       const uint8_t *request_json,

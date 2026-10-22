@@ -56,6 +56,7 @@ fn v2c_status_sequences() {
     let scenarios = arr(&f["scenarios"]);
     assert!(!scenarios.is_empty(), "no status scenarios");
     let (mut steps_run, mut queries, mut errors, mut total) = (0usize, 0usize, 0usize, 0usize);
+    let mut body_digests = 0usize;
     for sc in &scenarios {
         let name = s(&sc["name"]);
         let issuer = cs(&s(&sc["issuer_id"]));
@@ -132,11 +133,32 @@ fn v2c_status_sequences() {
                     parse(&buf(|o| unsafe { ratify_v2_status_state_json(state.0, o) }).unwrap());
                 check_state(&format!("{name} step {n} {op} {label}"), &st, w);
             }
+            // SPEC-v2 §6.6: the observation's body_digest is the unlabelled
+            // SHA-384 of the canonical signable body.
+            if let Some(want) = step.get("expect_body_digest").and_then(Value::as_str) {
+                body_digests += 1;
+                let st =
+                    parse(&buf(|o| unsafe { ratify_v2_status_state_json(state.0, o) }).unwrap());
+                let code = if op == "apply_push" { 5 } else { 3 };
+                let found = arr(&st["observations"]).iter().any(|o| {
+                    u(&o["status_key_epoch"]) == epoch
+                        && u(&o["object_type_code"]) == code
+                        && format!("sha384:{}", hex::encode(b64(&o["body_digest"]))) == want
+                });
+                assert!(
+                    found,
+                    "{name} step {n} {op} {label}: no observation with body_digest {want}: {st}"
+                );
+            }
         }
     }
     println!("C-ABI COVERAGE status-sequences.json: {} scenarios, {steps_run} steps ({queries} queries, {errors} errors)", scenarios.len());
     assert_eq!(steps_run, total);
-    assert!(queries > 0 && errors > 0);
+    assert_eq!(
+        (scenarios.len(), total, queries, errors, body_digests),
+        (22, 112, 43, 3, 63),
+        "status-sequences.json"
+    );
     let readme = readme_line("status-sequences.json");
     assert!(
         readme.contains(&format!(
@@ -319,12 +341,63 @@ fn v2c_security_journal() {
         );
         negatives += 1;
     }
-    assert!(negatives > 0);
-    println!("C-ABI COVERAGE security-journal.json: {scenarios} scenarios, {steps} steps, 1 migration, {negatives} import negatives");
+    // Transition negatives: valid snapshot pairs whose transition fails.
+    let mut transitions = 0usize;
+    for neg in arr(&f["transition_negatives"]) {
+        let name = s(&neg["name"]);
+        let (cur, next) = (
+            b64(&neg["current_snapshot_b64"]),
+            b64(&neg["next_snapshot_b64"]),
+        );
+        let (cur_d, next_d) = (
+            cs(&s(&neg["current_head"]["digest"])),
+            cs(&s(&neg["next_head"]["digest"])),
+        );
+        for (snap, head, d) in [
+            (&cur, &neg["current_head"], &cur_d),
+            (&next, &neg["next_head"], &next_d),
+        ] {
+            check(unsafe {
+                ratify_v2_journal_import(
+                    ptr_of(snap),
+                    snap.len(),
+                    u(&head["generation"]),
+                    d.as_ptr(),
+                    ptr::null_mut(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("transition_{name}: snapshot does not import: {e:?}"));
+        }
+        let r = check(unsafe {
+            ratify_v2_journal_validate_transition(
+                ptr_of(&cur),
+                cur.len(),
+                u(&neg["current_head"]["generation"]),
+                cur_d.as_ptr(),
+                ptr_of(&next),
+                next.len(),
+                u(&neg["next_head"]["generation"]),
+                next_d.as_ptr(),
+            )
+        });
+        assert_eq!(
+            class_of(&r),
+            s(&neg["expect_error_class"]),
+            "transition_{name}: {r:?}"
+        );
+        transitions += 1;
+    }
+    assert_eq!(
+        (scenarios, steps, negatives, transitions),
+        (2, 17, 20, 6),
+        "security-journal.json"
+    );
+    println!("C-ABI COVERAGE security-journal.json: {scenarios} scenarios, {steps} steps, 1 migration, {negatives} import negatives, {transitions} transition negatives");
     let readme = readme_line("security-journal.json");
     assert!(
         readme.contains(&format!("{scenarios} transition scenarios ({steps} steps"))
-            && readme.contains(&format!("{negatives} import negatives")),
+            && readme.contains(&format!("{negatives} import negatives"))
+            && readme.contains(&format!("{transitions} `transition_negatives`")),
         "README disagrees: {readme}"
     );
 }

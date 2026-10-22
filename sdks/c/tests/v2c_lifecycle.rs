@@ -351,12 +351,17 @@ unsafe extern "C" fn mode_fetch(
         return RatifyV2Code::RatifyV2ErrCancelled as i32;
     }
     if m.fired.fetch_add(1, Ordering::SeqCst) == 0 {
-        check(ratify_v2_ref_store_control(m.store, 1, m.time)).unwrap();
         match m.mode.as_str() {
+            // The caller cancels during the lookup and the provider
+            // reports that cancellation (SPEC-v2 §6.11).
+            "cancel_during_status" => return RatifyV2Code::RatifyV2ErrCancelled as i32,
             "recover_during_status" => {
+                check(ratify_v2_ref_store_control(m.store, 1, m.time)).unwrap();
                 *m.recovered.lock().unwrap() = Some(recover(&m.claim_cb, &m.claim_id));
             }
-            "expire_lease_during_status" | "regress_clock_during_status" => {}
+            "expire_lease_during_status" | "regress_clock_during_status" => {
+                check(ratify_v2_ref_store_control(m.store, 1, m.time)).unwrap();
+            }
             other => panic!("unknown verify mode {other}"),
         }
     }
@@ -389,6 +394,58 @@ fn receipt_sequence(wire: &[u8]) -> i64 {
     i(&parse(&canonicalize(8, wire).expect("published receipt decodes"))["sequence"])
 }
 
+type ClaimIds = (BTreeMap<String, String>, BTreeMap<String, String>);
+
+/// Go `runVerify`: one verify step against the scenario store at its clock.
+/// Safe for concurrent use with mode "" (`verify_concurrent`). Returns the
+/// outcome and, for `recover_during_status`, the recovery run mid-lookup.
+/// `cancel_before_claim` is the C caller's cancellation before the claim:
+/// the receiver-binding hook, the only callback before the claim, returns
+/// `RatifyV2ErrCancelled`.
+fn run_verify(
+    store: &RefStore,
+    rate_at_finalization: bool,
+    request: &str,
+    mode: &str,
+    time: i64,
+    epoch_override: i64,
+    ids: &Mutex<ClaimIds>,
+) -> (Outcome, Option<R<Committed>>) {
+    let inputs = request_inputs(request, store.now(), epoch_override);
+    let mut setup = setup_for(&inputs, store, rate_at_finalization);
+    let claim_id = claim_id_of(&inputs);
+    {
+        let mut ids = ids.lock().unwrap();
+        ids.0.insert(request.to_string(), claim_id.clone());
+        ids.1.insert(claim_id.clone(), request.to_string());
+    }
+    let wrapper = (!mode.is_empty() && mode != "cancel_before_claim").then(|| {
+        Box::new(ModeStatus {
+            inner: setup.status_callbacks(),
+            store: store.0,
+            claim_cb: store.claim(false),
+            claim_id: claim_id.clone(),
+            mode: mode.to_string(),
+            time,
+            fired: AtomicUsize::new(0),
+            recovered: Mutex::new(None),
+            cancel_after: false,
+        })
+    });
+    if let Some(w) = &wrapper {
+        setup.set_status(w.callbacks());
+    }
+    if mode == "cancel_before_claim" {
+        setup.set_binding(Binding(Box::new(|| {
+            RatifyV2Code::RatifyV2ErrCancelled as i32
+        })));
+    }
+    let outcome =
+        verify(&setup, &bundle_of(request)).unwrap_or_else(|e| panic!("verify {request}: {e:?}"));
+    let recovered = wrapper.and_then(|w| w.recovered.lock().unwrap().take());
+    (outcome, recovered)
+}
+
 #[test]
 fn v2c_lifecycle_scenarios() {
     let f = file();
@@ -402,8 +459,9 @@ fn v2c_lifecycle_scenarios() {
         let mut log_id = s(&f["log_id"]);
         let mut committed: BTreeMap<String, Committed> = BTreeMap::new();
         let mut receipts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        let mut claim_ids: BTreeMap<String, String> = BTreeMap::new();
-        let mut request_of: BTreeMap<String, String> = BTreeMap::new();
+        // (claim IDs by request, request by claim ID), written by
+        // concurrent verify steps.
+        let ids: Mutex<ClaimIds> = Mutex::new((BTreeMap::new(), BTreeMap::new()));
         let mut epoch_override = 0;
         let steps = arr(&sc["steps"]);
         want_steps += steps.len();
@@ -418,33 +476,16 @@ fn v2c_lifecycle_scenarios() {
                 "set_time" => store.set_time(i(&step["time"])),
                 "set_ack_withheld" => store.set_ack_withheld(b(&step["withheld"])),
                 "verify" => {
-                    let inputs = request_inputs(&request, now, epoch_override);
-                    let mut setup = setup_for(&inputs, &store, rate_at_finalization);
-                    let claim_id = claim_id_of(&inputs);
-                    claim_ids.insert(request.clone(), claim_id.clone());
-                    request_of.insert(claim_id.clone(), request.clone());
-                    let wrapper = (!mode.is_empty()).then(|| {
-                        Box::new(ModeStatus {
-                            inner: setup.status_callbacks(),
-                            store: store.0,
-                            claim_cb: store.claim(false),
-                            claim_id: claim_id.clone(),
-                            mode: mode.clone(),
-                            time: i(&step["time"]),
-                            fired: AtomicUsize::new(0),
-                            recovered: Mutex::new(None),
-                            cancel_after: false,
-                        })
-                    });
-                    if let Some(w) = &wrapper {
-                        setup.set_status(w.callbacks());
-                    }
-                    let outcome = verify(&setup, &bundle_of(&request))
-                        .unwrap_or_else(|e| panic!("{at}: {e:?}"));
-                    if let Some(result) = wrapper
-                        .as_ref()
-                        .and_then(|w| w.recovered.lock().unwrap().take())
-                    {
+                    let (outcome, recovered) = run_verify(
+                        &store,
+                        rate_at_finalization,
+                        &request,
+                        &mode,
+                        i(&step["time"]),
+                        epoch_override,
+                        &ids,
+                    );
+                    if let Some(result) = recovered {
                         if let Some(c) = check_recover(&at, result, &want["recovered"]) {
                             committed.insert(request.clone(), c);
                         }
@@ -464,6 +505,49 @@ fn v2c_lifecycle_scenarios() {
                         check_committed(&at, &c, want);
                         committed.insert(request.clone(), c);
                     }
+                }
+                "verify_concurrent" => {
+                    let names: Vec<String> = arr(&step["requests"]).iter().map(s).collect();
+                    let start = std::sync::Barrier::new(names.len());
+                    let results: Vec<Outcome> = std::thread::scope(|scope| {
+                        let handles: Vec<_> = names
+                            .iter()
+                            .map(|name| {
+                                let (store, start, ids) = (&store, &start, &ids);
+                                scope.spawn(move || {
+                                    start.wait();
+                                    run_verify(
+                                        store,
+                                        rate_at_finalization,
+                                        name,
+                                        "",
+                                        0,
+                                        epoch_override,
+                                        ids,
+                                    )
+                                    .0
+                                })
+                            })
+                            .collect();
+                        handles
+                            .into_iter()
+                            .map(|h| h.join().expect("verify thread"))
+                            .collect()
+                    });
+                    let mut got = Vec::new();
+                    for (name, outcome) in names.iter().zip(results) {
+                        let mut label = outcome.stage.clone();
+                        if label == "preflight" || label == "evaluating" {
+                            label = format!("{label}/{}", outcome.class);
+                        }
+                        got.push(label);
+                        if let Some(c) = outcome.committed {
+                            committed.insert(name.clone(), c);
+                        }
+                    }
+                    got.sort();
+                    let expected: Vec<String> = arr(&want["outcomes"]).iter().map(s).collect();
+                    assert_eq!(got, expected, "{at} verify_concurrent {names:?}");
                 }
                 "claim_only" => {
                     let mut req = request_json(&file()["requests"][&request]);
@@ -499,11 +583,21 @@ fn v2c_lifecycle_scenarios() {
                         ),
                         "{at} claim_only"
                     );
-                    claim_ids.insert(request.clone(), claim_id.clone());
-                    request_of.insert(claim_id, request.clone());
+                    let mut ids = ids.lock().unwrap();
+                    ids.0.insert(request.clone(), claim_id.clone());
+                    ids.1.insert(claim_id, request.clone());
                 }
                 "recover" => {
-                    let result = recover(&store.claim(false), &claim_ids[&request]);
+                    // A request never claimed recovers its own claim ID
+                    // (claim_not_found).
+                    let claim_id = ids
+                        .lock()
+                        .unwrap()
+                        .0
+                        .get(&request)
+                        .cloned()
+                        .unwrap_or_else(|| claim_id_of(&file()["requests"][&request]));
+                    let result = recover(&store.claim(false), &claim_id);
                     if let Some(c) = check_recover(&at, result, want) {
                         committed.insert(request.clone(), c);
                     }
@@ -542,7 +636,7 @@ fn v2c_lifecycle_scenarios() {
                     let got: Vec<String> = store
                         .abandon()
                         .iter()
-                        .map(|id| request_of.get(id).cloned().unwrap_or_default())
+                        .map(|id| ids.lock().unwrap().1.get(id).cloned().unwrap_or_default())
                         .collect();
                     let expected: Vec<String> = arr(&want["abandoned"]).iter().map(s).collect();
                     assert_eq!(got, expected, "{at} abandon");
@@ -618,6 +712,12 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
+    assert_eq!((scenarios.len(), ran), (32, 162), "Part B scripts");
+    let readme = readme_line(FILE);
+    assert!(
+        readme.contains("32 Part B scripts (162 steps)"),
+        "README row: {readme}"
+    );
     println!(
         "C-ABI COVERAGE {FILE} scenarios: {} scenarios, {ran} steps",
         scenarios.len()

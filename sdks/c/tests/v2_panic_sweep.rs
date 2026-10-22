@@ -97,6 +97,9 @@ const SWEPT: &[&str] = &[
     "ratify_v2_ref_journal_new",
     "ratify_v2_ref_journal_free",
     "ratify_v2_ref_journal_callbacks",
+    "ratify_v2_ref_trust_registry_new",
+    "ratify_v2_ref_trust_registry_free",
+    "ratify_v2_ref_trust_registry_callbacks",
     "ratify_v2_ref_issuance_new",
     "ratify_v2_ref_issuance_free",
     "ratify_v2_ref_issuance_control",
@@ -134,6 +137,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_journal_status",
     "ratify_v2_journal_genesis",
     "ratify_v2_journal_import",
+    "ratify_v2_journal_validate_transition",
     "ratify_v2_journal_migrate",
     "ratify_v2_journal_legacy_encode",
     "ratify_v2_status_publish",
@@ -628,6 +632,23 @@ fn every_v2_export_contains_a_panic() {
     fired();
     arm_before_body();
     assert_eq!(
+        unsafe { ratify_v2_ref_trust_registry_new(z(), z(), z()) },
+        -3,
+        "ratify_v2_ref_trust_registry_new"
+    );
+    fired();
+    arm_before_body();
+    unsafe { ratify_v2_ref_trust_registry_free(z()) };
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_ref_trust_registry_callbacks(z(), z()) },
+        -3,
+        "ratify_v2_ref_trust_registry_callbacks"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
         unsafe { ratify_v2_ref_issuance_new(z()) },
         -3,
         "ratify_v2_ref_issuance_new"
@@ -863,6 +884,13 @@ fn every_v2_export_contains_a_panic() {
         unsafe { ratify_v2_journal_import(z(), z(), z(), z(), z()) },
         -3,
         "ratify_v2_journal_import"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_journal_validate_transition(z(), z(), z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_journal_validate_transition"
     );
     fired();
     arm_before_body();

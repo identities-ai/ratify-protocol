@@ -27,6 +27,7 @@
 #define MAX_MEMBERS 16
 #define MAX_DOMAINS 8
 #define MAX_EVAL 16
+#define MAX_REGISTRY 8
 #define MAX_META 64
 
 enum { C_BINDING, C_CLAIM, C_TRUST, C_STATUS, C_AUDIENCE, C_RATE, C_FINALIZE, C_PROGRESS, C_EVALUATOR, C_N };
@@ -86,6 +87,10 @@ struct v2c_vector {
     /* providers */
     RatifyV2PublicKey root;
     int has_root;
+    /* trust.mode "registry": candidate records and their key IDs */
+    RatifyV2PublicKey registry[MAX_REGISTRY];
+    char registry_ids[MAX_REGISTRY][RATIFY_V2_KEY_ID_BUF_LEN];
+    int nregistry;
     status_script status[MAX_ISSUERS];
     int nstatus;
     int cancel_status;
@@ -187,12 +192,37 @@ static int32_t sc_recover(void *user, const char *claim_id, RatifyV2Slice t, Rat
 
 /* ---- providers ---------------------------------------------------------- */
 
+/* The candidate-record trust registry of SPEC-v2 §6.1, implemented in C: a
+ * record is a candidate when its key ID equals the terminal issuer ID or
+ * either component equals that issuer key's component; no candidate is
+ * untrusted, more than one is ambiguous, exactly one is trusted with that
+ * record's complete key. */
+static int32_t registry_resolve(const v2c_vector *v, const RatifyV2CertView *chain, size_t len, int32_t *outcome,
+                                RatifyV2PublicKey *root) {
+    if (len == 0) { *outcome = RatifyV2TrustUntrusted; return 0; }
+    const RatifyV2CertView *last = &chain[len - 1];
+    int match = -1;
+    for (int i = 0; i < v->nregistry; i++) {
+        const RatifyV2PublicKey *k = &v->registry[i];
+        if (strcmp(v->registry_ids[i], last->issuer_id) != 0 &&
+            memcmp(k->ed25519, last->issuer_public_key->ed25519, sizeof k->ed25519) != 0 &&
+            memcmp(k->ml_dsa_65, last->issuer_public_key->ml_dsa_65, sizeof k->ml_dsa_65) != 0)
+            continue;
+        if (match >= 0) { *outcome = RatifyV2TrustAmbiguous; return 0; }
+        match = i;
+    }
+    if (match < 0) { *outcome = RatifyV2TrustUntrusted; return 0; }
+    *outcome = RatifyV2TrustTrusted;
+    *root = v->registry[match];
+    return 0;
+}
+
 static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, int32_t *outcome, RatifyV2PublicKey *root) {
-    (void)chain; (void)len;
     v2c_vector *v = user;
     bump(v, C_TRUST);
     const char *mode = v2c_vector_meta(v, "trust_mode");
     if (strcmp(v2c_vector_meta(v, "trust"), "none") == 0) { *outcome = RatifyV2TrustUnavailable; return 0; }
+    if (strcmp(mode, "registry") == 0) return registry_resolve(v, chain, len, outcome, root);
     if (strcmp(mode, "error") == 0) return RatifyV2StoreUnavailable;
     if (strcmp(mode, "panic") == 0) return RatifyV2ErrInternal;
     const char *o = v2c_vector_meta(v, "trust_outcome");
@@ -367,6 +397,21 @@ v2c_vector *v2c_vector_load(const char *subdir) {
     if (strcmp(v2c_vector_meta(v, "root"), "yes") == 0) {
         v2c_load_key(path(v, "root.ed"), path(v, "root.ml"), &v->root);
         v->has_root = 1;
+    }
+    v->nregistry = (int)meta_i(v, "registry");
+    if (v->nregistry > MAX_REGISTRY) {
+        fprintf(stderr, "%s: too many trust registry records\n", v2c_vector_meta(v, "name"));
+        exit(2);
+    }
+    for (int i = 0; i < v->nregistry; i++) {
+        char ed[32], ml[32];
+        snprintf(ed, sizeof ed, "reg%d.ed", i);
+        snprintf(ml, sizeof ml, "reg%d.ml", i);
+        v2c_load_key(path(v, ed), path(v, ml), &v->registry[i]);
+        if (ratify_v2_public_key_id(&v->registry[i], v->registry_ids[i], sizeof v->registry_ids[i]) != 0) {
+            fprintf(stderr, "%s: trust registry record %d has no key ID\n", v2c_vector_meta(v, "name"), i);
+            exit(2);
+        }
     }
     char a[256], b[256], c[256], d[256], e[256];
     /* status scripts */

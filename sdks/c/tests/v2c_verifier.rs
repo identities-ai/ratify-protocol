@@ -318,11 +318,26 @@ fn run_ordering(builtin_standard: bool) {
         vectors.len(),
         failures.join("\n")
     );
-    // The README states the vector count and stage split.
+    // Exact counts, so a dropped vector fails; the README states the same.
+    assert_eq!(vectors.len(), 213, "verifier-ordering vectors");
+    let want_stages: BTreeMap<String, usize> = [
+        ("committed", 146),
+        ("evaluating", 2),
+        ("preflight", 63),
+        ("replay", 2),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
+    assert_eq!(stages, want_stages, "verifier-ordering stages");
+    let registry = vectors
+        .iter()
+        .filter(|v| s(&v["name"]).starts_with("trust_registry_"))
+        .count();
+    assert_eq!(registry, 5, "reference trust registry cases");
     let readme = readme_line("verifier-ordering.json");
-    let total = vectors.len().to_string();
     assert!(
-        readme.contains(&format!("{total} end-to-end live-verifier cases")),
+        readme.contains("213 end-to-end live-verifier cases (63 pre-claim, 2 replay, 146 committed, 2 evaluating"),
         "README row: {readme}"
     );
 }

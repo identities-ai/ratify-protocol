@@ -459,7 +459,9 @@ pub struct RatifyV2AudienceCallbacks {
 
 /// The application's pure pre-claim receiver-binding hook. `bundle` is the
 /// canonical proof bundle; `expected_challenge` is the ExpectedChallenge JSON.
-/// Return 0 to accept; anything else rejects (`receiver_binding_rejected`).
+/// Return 0 to accept; `RatifyV2ErrCancelled` cancels the operation before
+/// the claim (`evaluation_cancelled`, nothing consumed, SPEC-v2 §6.11);
+/// anything else rejects (`receiver_binding_rejected`).
 pub type RatifyV2ReceiverBindingFn = Option<
     unsafe extern "C" fn(
         user: *mut c_void,
@@ -1561,7 +1563,10 @@ pub(crate) fn audience_provider(
     )
 }
 
-pub(crate) fn receiver_binding_hook(cb: RatifyV2ReceiverBindingCallbacks) -> V2ReceiverBindingHook {
+pub(crate) fn receiver_binding_hook(
+    cb: RatifyV2ReceiverBindingCallbacks,
+    cancel: Cancel,
+) -> V2ReceiverBindingHook {
     let cb = Raw(cb);
     Arc::new(
         move |bundle: &ProofBundleV2, expected: &ExpectedChallengeV2| {
@@ -1575,6 +1580,7 @@ pub(crate) fn receiver_binding_hook(cb: RatifyV2ReceiverBindingCallbacks) -> V2R
             // SAFETY: caller-supplied callback.
             let code = unsafe { f(cb.user, RatifyV2Slice::of(&wire), RatifyV2Slice::of(&exp)) };
             if code != 0 {
+                cancel.note(code);
                 return Err(V2ProviderError::new(format!(
                     "receiver binding callback returned {}",
                     code_str(code)
@@ -1836,7 +1842,7 @@ pub(crate) unsafe fn build_callbacks(
         }));
     }
     if let Some(h) = cb.receiver_binding.as_ref() {
-        out.receiver_binding = Some(receiver_binding_hook(*h));
+        out.receiver_binding = Some(receiver_binding_hook(*h, cancel.clone()));
     }
     VerifyDeps { callbacks: out }
 }

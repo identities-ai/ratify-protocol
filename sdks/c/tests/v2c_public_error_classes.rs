@@ -1030,6 +1030,25 @@ fn v2c_public_api_errors_are_classified() {
             let digest = cs("");
             buffer_call(|o| unsafe { ratify_v2_journal_import(gp, gl, 0, digest.as_ptr(), o) })
         }),
+        call(
+            "ratify_v2_journal_validate_transition",
+            "malformed",
+            move || {
+                let digest = cs("");
+                unsafe {
+                    ratify_v2_journal_validate_transition(
+                        gp,
+                        gl,
+                        0,
+                        digest.as_ptr(),
+                        gp,
+                        gl,
+                        0,
+                        digest.as_ptr(),
+                    )
+                }
+            },
+        ),
         call("ratify_v2_journal_migrate", "", move || {
             let mut snapshot = empty_buf();
             let code =

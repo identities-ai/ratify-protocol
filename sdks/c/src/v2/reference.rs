@@ -28,7 +28,7 @@ use super::verifier::RatifyV2Released;
 use super::{
     bad_arg, bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable,
     run, run_h, store_failure, write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2Code,
-    RatifyV2Slice,
+    RatifyV2PublicKey, RatifyV2Slice,
 };
 
 // ---------------------------------------------------------------------------
@@ -911,6 +911,149 @@ pub unsafe extern "C" fn ratify_v2_ref_journal_callbacks(
             super::write_opt_string(digest_out, &head.digest)
         },
     )
+}
+
+// ---------------------------------------------------------------------------
+// Reference candidate-record trust registry
+
+/// TEST ONLY: the reference candidate-record trust registry of SPEC-v2 §6.1
+/// (`v2reference.TrustRegistry`). No candidate is untrusted; more than one
+/// candidate, including the same key configured twice, is ambiguous; exactly
+/// one is trusted with that record's complete key.
+pub struct RatifyV2RefTrustRegistry {
+    pub(crate) poisoned: AtomicBool,
+    registry: TrustRegistry,
+}
+
+poisonable!(RatifyV2RefTrustRegistry);
+
+/// TEST ONLY: a registry over `records_len` complete root public keys, in
+/// order.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_ref_trust_registry_new(
+    records: *const RatifyV2PublicKey,
+    records_len: usize,
+    out: *mut *mut RatifyV2RefTrustRegistry,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(out),
+        || {
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            let keys: Vec<_> = if records_len == 0 {
+                Vec::new()
+            } else if records.is_null() {
+                return Err(null_arg("records"));
+            } else {
+                std::slice::from_raw_parts(records, records_len)
+                    .iter()
+                    .map(RatifyV2PublicKey::as_hybrid)
+                    .collect()
+            };
+            *out = Box::into_raw(Box::new(RatifyV2RefTrustRegistry {
+                poisoned: AtomicBool::new(false),
+                registry: TrustRegistry::new(&keys)?,
+            }));
+            Ok(())
+        },
+    )
+}
+
+/// TEST ONLY: release a reference trust registry. NULL is a no-op.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_ref_trust_registry_free(r: *mut RatifyV2RefTrustRegistry) {
+    crate::guard::ffi_guard(
+        || (),
+        || {
+            if !r.is_null() {
+                drop(Box::from_raw(r));
+            }
+        },
+    )
+}
+
+/// TEST ONLY: the trust callbacks that resolve through the registry. They
+/// borrow the registry, which must outlive every call.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_ref_trust_registry_callbacks(
+    r: *const RatifyV2RefTrustRegistry,
+    callbacks_out: *mut RatifyV2TrustCallbacks,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(r)],
+        || {},
+        || {
+            handle(r, "trust registry")?;
+            if callbacks_out.is_null() {
+                return Err(null_arg("callbacks_out"));
+            }
+            *callbacks_out = RatifyV2TrustCallbacks {
+                user: r as *mut c_void,
+                resolve: Some(br_trust_resolve),
+            };
+            Ok(())
+        },
+    )
+}
+
+unsafe extern "C" fn br_trust_resolve(
+    user: *mut c_void,
+    chain: *const RatifyV2CertView,
+    chain_len: usize,
+    outcome: *mut i32,
+    root_key: *mut RatifyV2PublicKey,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: `user` is the registry the callbacks were taken from.
+        let Some(r) = (unsafe { (user as *const RatifyV2RefTrustRegistry).as_ref() }) else {
+            return RatifyV2Code::RatifyV2ErrNullPointer as i32;
+        };
+        if outcome.is_null() || root_key.is_null() || (chain.is_null() && chain_len != 0) {
+            return RatifyV2Code::RatifyV2ErrNullPointer as i32;
+        }
+        let views = if chain_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: the verifier passes `chain_len` views.
+            unsafe { std::slice::from_raw_parts(chain, chain_len) }
+        };
+        let mut certs = Vec::with_capacity(views.len());
+        for v in views {
+            // SAFETY: each view's wire points to the verifier's encoding.
+            let decoded = unsafe { v.wire.bytes("wire") }
+                .ok()
+                .map(decode_delegation_cert_v2);
+            match decoded {
+                Some(Ok(c)) => certs.push(c),
+                Some(Err(e)) => return class_code(e.class) as i32,
+                None => return RatifyV2Code::RatifyV2ErrNullPointer as i32,
+            }
+        }
+        match r.registry.resolve(&ctx(), &certs) {
+            Ok(res) => {
+                // SAFETY: both outputs were checked non-NULL above.
+                unsafe {
+                    *outcome = match res.outcome {
+                        V2TrustOutcome::Trusted => RatifyV2TrustOutcome::RatifyV2TrustTrusted,
+                        V2TrustOutcome::Untrusted => RatifyV2TrustOutcome::RatifyV2TrustUntrusted,
+                        V2TrustOutcome::Unavailable => {
+                            RatifyV2TrustOutcome::RatifyV2TrustUnavailable
+                        }
+                        V2TrustOutcome::Ambiguous => RatifyV2TrustOutcome::RatifyV2TrustAmbiguous,
+                    } as i32;
+                    if res.outcome == V2TrustOutcome::Trusted {
+                        let _ = RatifyV2PublicKey::write(root_key, &res.root_key);
+                    }
+                }
+                0
+            }
+            Err(_) => RatifyV2Code::RatifyV2StoreUnavailable as i32,
+        }
+    }))
+    .unwrap_or(RatifyV2Code::RatifyV2ErrInternal as i32)
 }
 
 // ---------------------------------------------------------------------------

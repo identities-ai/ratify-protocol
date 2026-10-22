@@ -240,7 +240,9 @@ pub unsafe extern "C" fn ratify_v2_status_state_query(
 /// A JSON view of the reducer state (`has_floor`, `floor`,
 /// `accepted_cert_ids`, `deny_union_cert_ids`, `max_observed_sequence`,
 /// `fork_sequence`, `reconciliation_required`,
-/// `future_dated_object_observed`, and the status key fields).
+/// `future_dated_object_observed`, the status key fields, and
+/// `observations`: the SPEC-v2 §6.6 observation members, digests in
+/// Base64; `body_digest` is the unlabelled SHA-384 of the signable body).
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_status_state_json(
     state: *const RatifyV2StatusState,
@@ -464,6 +466,56 @@ pub unsafe extern "C" fn ratify_v2_journal_import(
                 &head,
             )?;
             super::write_opt_buffer(head_out, to_bytes(&snapshot_head_json(&j)))
+        },
+    )
+}
+
+/// Validate the transition from one imported snapshot to the next
+/// (`ValidateSecurityJournalTransitionV2`): each snapshot is imported against
+/// its anchored head first (`malformed` on any import failure), then
+/// generation continuity and append-only histories are enforced; an invalid
+/// transition between valid records is `status_object_rejected`.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ratify_v2_journal_validate_transition(
+    current_snapshot: *const u8,
+    current_snapshot_len: usize,
+    current_generation: u64,
+    current_digest: *const c_char,
+    next_snapshot: *const u8,
+    next_snapshot_len: usize,
+    next_generation: u64,
+    next_digest: *const c_char,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let import = |snapshot, len, generation, digest, what: &str| -> AbiResult<_> {
+                let head = SecurityJournalHeadV2 {
+                    generation,
+                    digest: cstr(digest, what)?.to_string(),
+                };
+                Ok(import_security_journal_snapshot_v2(
+                    bytes(snapshot, len, what)?,
+                    &head,
+                )?)
+            };
+            let current = import(
+                current_snapshot,
+                current_snapshot_len,
+                current_generation,
+                current_digest,
+                "current",
+            )?;
+            let next = import(
+                next_snapshot,
+                next_snapshot_len,
+                next_generation,
+                next_digest,
+                "next",
+            )?;
+            Ok(validate_security_journal_transition_v2(&current, &next)?)
         },
     )
 }

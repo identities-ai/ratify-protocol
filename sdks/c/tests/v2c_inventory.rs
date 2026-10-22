@@ -14,6 +14,11 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("README.md", "v2c_verifier.rs", "readme_line("),
     ("annex-a.json", "v2c_objects.rs", "\"annex-a.json\""),
     (
+        "archival.json",
+        "v2c_archival_signer.rs",
+        "\"archival.json\"",
+    ),
+    (
         "challenge-claim.json",
         "v2c_objects.rs",
         "\"challenge-claim.json\"",
@@ -40,9 +45,19 @@ const CONSUMED: &[(&str, &str, &str)] = &[
         "\"device-state.json\"",
     ),
     (
+        "digest-functions.json",
+        "v2c_archival_signer.rs",
+        "\"digest-functions.json\"",
+    ),
+    (
         "evaluator-profiles.json",
         "v2c_objects.rs",
         "\"evaluator-profiles.json\"",
+    ),
+    (
+        "external-signer.json",
+        "v2c_archival_signer.rs",
+        "\"external-signer.json\"",
     ),
     (
         "hedged-signatures.json",

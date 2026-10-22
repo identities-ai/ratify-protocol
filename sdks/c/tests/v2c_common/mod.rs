@@ -584,6 +584,63 @@ unsafe extern "C" fn trust_tramp(
     }
 }
 
+/// The reference candidate-record trust registry (SPEC-v2 §6.1), driven
+/// through `ratify_v2_ref_trust_registry_*`.
+pub struct RefTrustRegistry(pub *mut RatifyV2RefTrustRegistry);
+
+unsafe impl Send for RefTrustRegistry {}
+unsafe impl Sync for RefTrustRegistry {}
+
+impl RefTrustRegistry {
+    pub fn new(records: &[RatifyV2PublicKey]) -> RefTrustRegistry {
+        let mut out = ptr::null_mut();
+        check(unsafe {
+            ratify_v2_ref_trust_registry_new(records.as_ptr(), records.len(), &mut out)
+        })
+        .expect("trust registry");
+        RefTrustRegistry(out)
+    }
+
+    pub fn callbacks(&self) -> RatifyV2TrustCallbacks {
+        let mut c = unsafe { std::mem::zeroed::<RatifyV2TrustCallbacks>() };
+        check(unsafe { ratify_v2_ref_trust_registry_callbacks(self.0, &mut c) }).unwrap();
+        c
+    }
+}
+
+impl Drop for RefTrustRegistry {
+    fn drop(&mut self) {
+        unsafe { ratify_v2_ref_trust_registry_free(self.0) };
+    }
+}
+
+/// Forwards to other trust callbacks and counts each call.
+pub struct CountedTrust {
+    pub inner: RatifyV2TrustCallbacks,
+    pub counts: Arc<Counts>,
+}
+
+unsafe extern "C" fn counted_trust_tramp(
+    user: *mut c_void,
+    chain: *const RatifyV2CertView,
+    len: usize,
+    outcome: *mut i32,
+    root: *mut RatifyV2PublicKey,
+) -> i32 {
+    let t = &*(user as *const CountedTrust);
+    t.counts.bump("trust");
+    (t.inner.resolve.unwrap())(t.inner.user, chain, len, outcome, root)
+}
+
+impl CountedTrust {
+    pub fn callbacks(&self) -> RatifyV2TrustCallbacks {
+        RatifyV2TrustCallbacks {
+            user: self as *const CountedTrust as *mut c_void,
+            resolve: Some(counted_trust_tramp),
+        }
+    }
+}
+
 impl Trust {
     pub fn callbacks(&self) -> RatifyV2TrustCallbacks {
         RatifyV2TrustCallbacks {
@@ -1458,6 +1515,8 @@ pub struct Setup {
     pub evaluators: Vec<Evaluator>,
     pub registrations: Vec<RatifyV2EvaluatorRegistration>,
     pub has_evaluators: bool,
+    /// `trust.mode = "registry"`: the reference registry and its counter.
+    pub registry: Option<(RefTrustRegistry, CountedTrust)>,
     // callback structs the pointers in `callbacks()` refer to
     trust_cb: Option<RatifyV2TrustCallbacks>,
     status_cb: Option<RatifyV2StatusEvidenceCallbacks>,
@@ -1600,6 +1659,18 @@ impl Setup {
             rate,
             rate_batch,
             has_evaluators: !evaluators.is_empty(),
+            registry: (s(&inputs["trust"]["mode"]) == "registry").then(|| {
+                let records: Vec<RatifyV2PublicKey> = arr(&inputs["trust"]["registry"])
+                    .iter()
+                    .map(key_struct)
+                    .collect();
+                let registry = RefTrustRegistry::new(&records);
+                let counted = CountedTrust {
+                    inner: registry.callbacks(),
+                    counts: Arc::clone(counts),
+                };
+                (registry, counted)
+            }),
             evaluators,
             registrations: Vec::new(),
             trust_cb: None,
@@ -1629,7 +1700,10 @@ impl Setup {
             })
             .collect();
         setup.registrations = regs;
-        setup.trust_cb = setup.trust.as_ref().map(Trust::callbacks);
+        setup.trust_cb = match &setup.registry {
+            Some((_, counted)) => Some(counted.callbacks()),
+            None => setup.trust.as_ref().map(Trust::callbacks),
+        };
         setup.status_cb = Some(setup.status.callbacks());
         setup.audience_cb = Some(setup.audience.callbacks());
         setup.journal_cb = setup.journal.as_ref().map(|(_, m)| m.callbacks());
@@ -1641,6 +1715,12 @@ impl Setup {
     /// Replace the rate store (e.g. the reference store's admission view).
     pub fn set_rate(&mut self, rate: RatifyV2RateCallbacks) {
         self.rate_cb = Some(rate);
+    }
+
+    /// Install a receiver-binding hook.
+    pub fn set_binding(&mut self, binding: Binding) {
+        self.binding = Some(binding);
+        self.binding_cb = self.binding.as_ref().map(Binding::callbacks);
     }
 
     /// Wrap the status provider (e.g. to run a step mid-lookup).

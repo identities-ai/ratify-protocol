@@ -30,16 +30,22 @@ from .protocol_v2 import (
     valid_v2_id,
     validate_hybrid_signature_v2,
 )
+from .clock_bounds_v2 import valid_v2_timestamp
+from .context_v2 import Context, background
+from .limits_v2 import MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2, check_v2_wire_size
 from .signing_v2 import (
     KEY_ROTATION_AUTHORIZATION,
     VERIFICATION_RECEIPT,
     WITNESS_ENTRY,
+    SignerV2,
+    V2SigningError,
+    _as_signer,
     key_id_v2,
-    public_key_of,
-    _sign_v2_statement,
+    _sign_v2_statement_with_signer,
+    signer_public_key_v2,
     verify_v2_statement,
 )
-from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 
 
 class WitnessEntryV2Result(IntEnum):
@@ -78,18 +84,18 @@ _WITNESS_SIGNABLE_FIELDS = ("entry_data", "log_id", "prev_hash", "sequence", "ti
 
 
 def validate_witness_entry_v2(entry: WitnessEntryV2, signature: bool) -> None:
-    if entry is None or entry.version != 2:
+    if not isinstance(entry, WitnessEntryV2) or entry.version != 2:
         raise ValueError("wire v2: witness entry version must be 2")
     if len(entry.log_id) != 32 or not lower_hex_string(entry.log_id):
         raise ValueError("wire v2: log_id must be 32 lowercase hexadecimal characters")
-    if entry.sequence <= 0 or entry.sequence > MAX_SAFE_INTEGER or not -MAX_SAFE_INTEGER <= entry.timestamp <= MAX_SAFE_INTEGER:
+    if type(entry.sequence) is not int or entry.sequence <= 0 or entry.sequence > MAX_SAFE_INTEGER or not valid_v2_timestamp(entry.timestamp):
         raise ValueError("wire v2: sequence and timestamp must be safe integers")
     if len(entry.prev_hash or b"") != 48:
         raise ValueError("wire v2: prev_hash must be 48 bytes")
     if entry.entry_data is None:
         raise ValueError("wire v2: entry_data must be a base64 byte string, not null")
-    if len(entry.entry_data) > MAX_PROOF_BUNDLE_BYTES:
-        raise ValueError("wire v2: entry_data exceeds the witness wire size limit")
+    if len(entry.entry_data) > MAX_WITNESS_ENTRY_DATA_BYTES_V2:
+        raise ValueError(f"wire v2: entry_data exceeds MAX_WITNESS_ENTRY_DATA_BYTES_V2 ({MAX_WITNESS_ENTRY_DATA_BYTES_V2} bytes)")
     if entry.sequence == 1 and bytes(entry.prev_hash) != ZERO_HASH:
         raise ValueError("wire v2: genesis witness entry must use a zero prev_hash")
     if entry.sequence > 1 and bytes(entry.prev_hash) == ZERO_HASH:
@@ -173,15 +179,13 @@ def witness_entry_v2_digest(entry: WitnessEntryV2) -> bytes:
 def encode_witness_entry_v2(entry: WitnessEntryV2) -> bytes:
     validate_witness_entry_v2(entry, True)
     wire = canonical({**_witness_signable_dict(entry), "signature": key_dict(entry.signature)})
-    if len(wire) > MAX_PROOF_BUNDLE_BYTES:
-        raise ValueError("wire v2: witness entry exceeds the wire size limit")
+    check_v2_wire_size(wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2)
     return wire
 
 
 def decode_witness_entry_v2(data: bytes) -> WitnessEntryV2:
     def run() -> WitnessEntryV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: witness entry exceeds the wire size limit")
+        check_v2_wire_size(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2)
         obj = _v2json.check_wire_json(data)
         require_fields(obj, WITNESS_ENTRY_V2_FIELDS)
         entry = _witness_from_obj(obj, WITNESS_ENTRY_V2_FIELDS)
@@ -198,18 +202,26 @@ def decode_witness_entry_v2(data: bytes) -> WitnessEntryV2:
 
 
 def sign_witness_entry_v2(entry: WitnessEntryV2, witness_private: HybridPrivateKey) -> WitnessEntryV2:
+    """Go ``SignWitnessEntryV2``: sign the witness body under code 0x0006."""
+    return sign_witness_entry_v2_with_signer(background(), entry, _as_signer(witness_private))
+
+
+def sign_witness_entry_v2_with_signer(ctx: Context, entry: WitnessEntryV2, signer: SignerV2) -> WitnessEntryV2:
+    """Go ``SignWitnessEntryV2WithSigner``: the signer's key ID must equal witness_id."""
     validate_witness_entry_v2(entry, False)
-    if key_id_v2(public_key_of(witness_private)) != entry.witness_id:
-        raise ValueError("witness_id does not match signing key")
+    witness_public = signer_public_key_v2(signer)
+    if key_id_v2(witness_public) != entry.witness_id:
+        raise V2SigningError("witness_id does not match signing key")
     body = witness_entry_signable_bytes_v2(entry)
-    result = replace(entry, signature=_sign_v2_statement(WITNESS_ENTRY, body, witness_private))
+    signature = _sign_v2_statement_with_signer(ctx, WITNESS_ENTRY, body, signer, witness_public)
+    result = replace(entry, prev_hash=bytes(entry.prev_hash), entry_data=bytes(entry.entry_data), signature=signature)
     encode_witness_entry_v2(result)
     return result
 
 
 def _validate_log_head(log_id: str, sequence: int, head_hash: bytes, accepted: dict, label: str) -> None:
     cfg = V2ErrorClass.CONFIGURATION_INVALID
-    if len(log_id) != 32 or not lower_hex_string(log_id) or sequence < 0 or sequence > MAX_SAFE_INTEGER or len(head_hash) != 48:
+    if not isinstance(log_id, str) or len(log_id) != 32 or not lower_hex_string(log_id) or type(sequence) is not int or sequence < 0 or sequence > MAX_SAFE_INTEGER or len(head_hash) != 48:
         raise V2Error(cfg, f"caller {label} head is invalid")
     if (sequence == 0 and (bytes(head_hash) != ZERO_HASH or len(accepted) != 0)) or (sequence > 0 and bytes(head_hash) == ZERO_HASH):
         raise V2Error(cfg, f"caller {label} head has inconsistent genesis state")

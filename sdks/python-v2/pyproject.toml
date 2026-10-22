@@ -25,8 +25,10 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=44.0",
-    # IANA time zone data for the time_window constraint (see the v1 package).
-    "tzdata>=2024.1",
+    # IANA time zone data for the time_window constraint, pinned to the IANA
+    # release 2025c that SPEC-v2 §5.2 evaluates against (tzdata 2025.3). The
+    # SDK checks tzdata.IANA_VERSION at runtime and never reads host zoneinfo.
+    "tzdata==2025.3",
     # Every key-generation and signing operation runs in this native
     # extension (constant-time Ed25519 and ML-DSA-65); there is no pure-Python
     # signing path. Version-locked to this release; the SDK rejects a
@@ -37,6 +39,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "hypothesis>=6.100",
 ]
 
 [project.urls]

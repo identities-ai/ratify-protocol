@@ -1,4 +1,4 @@
-"""Canonical scope vocabulary for Ratify Protocol v1.
+"""Canonical scope vocabulary (SPEC-v2 Annex A §A.4) and the v2 scope rules.
 
 MUST stay in lock-step with Go's scope.go, TS's scope.ts, and Rust's scope.rs.
 """
@@ -312,3 +312,44 @@ def intersect_scopes(*lists: list[str]) -> list[str]:
     for lst in lists[1:]:
         effective &= set(expand_scopes(lst))
     return sorted(effective)
+
+
+_MAX_SCOPE_LENGTH_BYTES = 256
+
+
+def validate_scopes_v2(scopes: list[str]) -> None:
+    """Go ``ValidateScopesV2``: a non-empty list of valid, unique scopes, with
+    no ``custom:*``. A post-claim authorization check (``invalid_scope``).
+    Raises ``ValueError``."""
+    if not isinstance(scopes, (list, tuple)) or len(scopes) == 0:
+        raise ValueError("scope must be a non-empty array")
+    if not all(isinstance(s, str) for s in scopes):
+        raise ValueError("scope entries must be strings")
+    err = validate_scopes(list(scopes))
+    if err is not None:
+        raise ValueError(err)
+    seen: set[str] = set()
+    for scope in scopes:
+        if scope == "custom:*":
+            raise ValueError("custom:* is not a valid scope")
+        if scope in seen:
+            raise ValueError(f"duplicate scope {scope!r}")
+        seen.add(scope)
+
+
+def validate_required_scope_v2(scope: str) -> None:
+    """Go ``ValidateRequiredScopeV2`` (SPEC-v2 §2.4): exactly one registered
+    canonical non-wildcard scope, or one exact ``custom:`` scope (the prefix
+    plus at least one byte, valid UTF-8, at most 256 bytes, not ``custom:*``).
+    Raises ``ValueError``."""
+    if isinstance(scope, str):
+        if scope in _VALID_SCOPES and scope not in _SCOPE_WILDCARDS:
+            return
+        try:
+            length = len(scope.encode("utf-8"))
+        except UnicodeEncodeError:
+            length = -1
+        if (scope.startswith(CUSTOM_SCOPE_PREFIX) and len(scope) > len(CUSTOM_SCOPE_PREFIX)
+                and scope != "custom:*" and 0 < length <= _MAX_SCOPE_LENGTH_BYTES):
+            return
+    raise ValueError("required scope must be one canonical scope or one exact custom: scope")

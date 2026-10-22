@@ -29,21 +29,30 @@ from .protocol_v2 import (
     key_dict,
     require_fields,
     valid_v2_id,
-    validate_required_scope_v2,
     verify_proof_bundle_v2_signatures,
 )
+from .clock_bounds_v2 import valid_v2_timestamp
+from .context_v2 import Context, background
+from .limits_v2 import (
+    MAX_JSON_NESTING_DEPTH,
+    MAX_TRANSACTION_PARTIES,
+    MAX_TRANSACTION_RECEIPT_BYTES,
+    MAX_TRANSACTION_RECEIPT_BYTES_V2,
+    check_v2_wire_size,
+)
+from .scope import validate_required_scope_v2
 from .signing_v2 import (
     TRANSACTION_PARTY_STATEMENT,
+    SignerV2,
+    V2SigningError,
+    _as_signer,
     equal_public_keys,
     key_id_v2,
-    public_key_of,
-    _sign_v2_statement,
+    _sign_v2_statement_with_signer,
+    signer_public_key_v2,
     verify_v2_statement,
 )
-from .types import MAX_JSON_NESTING_DEPTH, HybridPrivateKey, HybridPublicKey, HybridSignature
-
-MAX_TRANSACTION_RECEIPT_BYTES = 5 << 20
-MAX_TRANSACTION_PARTIES = 32
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 _WORKSPACE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -101,6 +110,16 @@ def transaction_party_request_hash_v2(transaction_hash: bytes, required_scope: s
     return sha256(
         b"ratify/transaction-party-request/v2" + _lp(transaction_hash) + _lp(required_scope.encode("utf-8"))
     ).digest()
+
+
+def _valid_text(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _depth_ok(value: Any, depth: int) -> None:
@@ -166,9 +185,10 @@ def transaction_receipt_v2_sign_bytes(receipt: TransactionReceiptV2) -> bytes:
 
 def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signatures: bool) -> None:
     if (
-        receipt is None or receipt.version != 2 or receipt.transaction_id == ""
-        or not -MAX_SAFE_INTEGER <= receipt.created_at <= MAX_SAFE_INTEGER
-        or receipt.terms_schema_uri == "" or not receipt.terms_canonical_json or not receipt.parties
+        not isinstance(receipt, TransactionReceiptV2) or receipt.version != 2 or receipt.transaction_id == ""
+        or not valid_v2_timestamp(receipt.created_at)
+        or receipt.terms_schema_uri == "" or not isinstance(receipt.terms_canonical_json, (bytes, bytearray))
+        or not receipt.terms_canonical_json or not isinstance(receipt.parties, list) or not receipt.parties
     ):
         raise ValueError("wire v2: transaction receipt header or terms are invalid")
     if len(receipt.parties) > MAX_TRANSACTION_PARTIES:
@@ -177,10 +197,19 @@ def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signa
         validate_canonical_transaction_terms_v2(receipt.terms_canonical_json)
     except ValueError as exc:
         raise ValueError(f"wire v2: transaction terms are not canonical Ratify JSON: {exc}") from exc
+    for name in ("transaction_id", "terms_schema_uri"):
+        if not _valid_text(getattr(receipt, name)):
+            raise ValueError(f"wire v2: {name} is not valid UTF-8")
     seen_parties: set[str] = set()
     seen_agents: set[str] = set()
     transaction_hash = transaction_context_hash_v2(receipt)
     for i, party in enumerate(receipt.parties):
+        if not isinstance(party, TransactionReceiptPartyV2):
+            raise ValueError(f"wire v2: transaction party {i} must be a TransactionReceiptPartyV2")
+        for name in ("party_id", "role", "session_id", "invocation_id", "verifier_id", "workspace_id",
+                     "agent_id", "required_scope", "proof_bundle_hash"):
+            if not _valid_text(getattr(party, name)):
+                raise ValueError(f"wire v2: transaction party {i} {name} is not valid UTF-8")
         if (
             party.party_id == "" or party.role == "" or party.session_id == "" or party.invocation_id == ""
             or not valid_v2_id(party.verifier_id) or not _WORKSPACE.fullmatch(party.workspace_id)
@@ -221,6 +250,7 @@ def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signa
         ):
             raise V2Error(V2ErrorClass.TRANSACTION_PARTY_MISMATCH,
                           f"wire v2: party {party.party_id!r} proof bundle identity does not match its signed party")
+
         try:
             expected = session_context_v2_hash(
                 party.verifier_id, party.workspace_id, party.agent_id, party.session_id, party.invocation_id,
@@ -266,15 +296,32 @@ def verify_transaction_receipt_v2_signatures(receipt: TransactionReceiptV2) -> N
         verify_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, signature, party.agent_pub_key)
 
 
-def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: str, key: HybridPrivateKey) -> TransactionReceiptSignatureV2:
+def sign_transaction_receipt_party_v2(receipt: TransactionReceiptV2, party_id: str,
+                                      key: HybridPrivateKey) -> TransactionReceiptSignatureV2:
+    """Go ``SignTransactionReceiptPartyV2``: one party's signature over the
+    shared transaction statement (code 0x0007)."""
+    return sign_transaction_receipt_party_v2_with_signer(background(), receipt, party_id, _as_signer(key))
+
+
+def sign_transaction_receipt_party_v2_with_signer(ctx: Context, receipt: TransactionReceiptV2, party_id: str,
+                                                  signer: SignerV2) -> TransactionReceiptSignatureV2:
+    """Go ``SignTransactionReceiptPartyV2WithSigner``: the signer's complete
+    key must equal the party agent key."""
+    if not isinstance(receipt, TransactionReceiptV2):
+        raise V2SigningError("transaction receipt is required")
     party = next((p for p in receipt.parties if p.party_id == party_id), None)
     if party is None:
-        raise ValueError(f"party {party_id!r} is not listed in the transaction receipt")
-    if not equal_public_keys(public_key_of(key), party.agent_pub_key):
-        raise ValueError(f"signing key does not match party {party_id!r} agent public key")
-    validate_transaction_receipt_v2(receipt, False)
+        raise V2SigningError(f"party {party_id!r} is not listed in the transaction receipt")
+    party_public = signer_public_key_v2(signer)
+    if not equal_public_keys(party_public, party.agent_pub_key):
+        raise V2SigningError(f"signing key does not match party {party_id!r} agent public key")
+    try:
+        validate_transaction_receipt_v2(receipt, False)
+    except (ValueError, V2Error) as exc:
+        raise V2SigningError(f"cannot sign invalid transaction receipt: {exc}") from exc
     signable = transaction_receipt_v2_sign_bytes(receipt)
-    return TransactionReceiptSignatureV2(party_id, _sign_v2_statement(TRANSACTION_PARTY_STATEMENT, signable, key))
+    signature = _sign_v2_statement_with_signer(ctx, TRANSACTION_PARTY_STATEMENT, signable, signer, party_public)
+    return TransactionReceiptSignatureV2(party_id, signature)
 
 
 def _encode_canonical(receipt: TransactionReceiptV2) -> bytes:
@@ -308,8 +355,8 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
     identity and context bindings."""
 
     def run() -> TransactionReceiptV2:
-        if len(data) > MAX_TRANSACTION_RECEIPT_BYTES:
-            raise ValueError("wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES")
+        check_v2_wire_size(data, "transaction receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2",
+                           MAX_TRANSACTION_RECEIPT_BYTES_V2)
         obj = _v2json.check_wire_json(data, ("terms_canonical_json",))
         require_fields(obj, _TOP_FIELDS)
         raw_parties = obj.get("parties")

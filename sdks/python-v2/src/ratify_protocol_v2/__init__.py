@@ -19,7 +19,6 @@ from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 from .crypto_v2 import (
     delegation_signature_message_v2,
     derive_key_id_v2,
-    sign_delegation_v2,
     verify_delegation_signature_v2,
 )
 from .operation_context_v2 import (
@@ -34,16 +33,33 @@ from .challenge_claim_v2 import (
     protocol_claim_id_v2,
     protocol_claim_id_from_digest_v2,
 )
-from .signing_v2 import keypair_from_seeds_v2
+from .signing_v2 import (
+    SignerModeV2,
+    SignerV2,
+    SignRequestV2,
+    keypair_from_seeds_v2,
+    key_id_v2,
+    key_id_v2_classified,
+    new_local_signer_v2,
+)
+from .context_v2 import Context, background, with_cancel, with_timeout
+from .errors_v2 import ALL_ERROR_CLASSES, V2Error, V2ErrorClass, error_class_of
+from .verify_v2 import V2TrustResolution, V2VerifyCallbacks, V2VerifyOutcome, V2VerifyRequest, verify_proof_bundle_v2
+from .release_v2 import CommittedV2Outcome, V2ReleaseConfig, V2ReleasedDecision, V2ReleaseResult, release_v2_decision
 
 NATIVE_AVAILABLE = _native.AVAILABLE
 
 __all__ = [
     "__version__", "NATIVE_AVAILABLE",
     "HybridPrivateKey", "HybridPublicKey", "HybridSignature",
-    "keypair_from_seeds_v2",
+    "keypair_from_seeds_v2", "key_id_v2", "key_id_v2_classified",
+    "SignerModeV2", "SignerV2", "SignRequestV2", "new_local_signer_v2",
+    "Context", "background", "with_cancel", "with_timeout",
+    "ALL_ERROR_CLASSES", "V2Error", "V2ErrorClass", "error_class_of",
+    "V2TrustResolution", "V2VerifyCallbacks", "V2VerifyOutcome", "V2VerifyRequest", "verify_proof_bundle_v2",
+    "CommittedV2Outcome", "V2ReleaseConfig", "V2ReleasedDecision", "V2ReleaseResult", "release_v2_decision",
     "delegation_signature_message_v2", "derive_key_id_v2",
-    "sign_delegation_v2", "verify_delegation_signature_v2",
+    "verify_delegation_signature_v2",
     "decode_payload_digest", "operation_context_v2_bytes",
     "operation_context_v2_hash", "session_context_v2_bytes",
     "session_context_v2_hash",

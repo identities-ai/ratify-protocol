@@ -1,67 +1,86 @@
 """Protocol v2 wire objects: delegation certificates, proof bundles, and
-issuer status objects (mirrors Go protocol_v2_wire.go).
+issuer status objects (Go protocol_v2_wire.go).
 
-Decoders are strict and bounded. Field semantics follow Go encoding/json: a
-JSON ``null`` or absent nested field takes its zero value (the top-level
-required-field check rejects null where the schema forbids it), unknown
-fields and wrong JSON types are rejected, and every failure is classified.
+Decoders are strict and bounded: the per-object byte limit is checked before
+parsing, then canonical-JSON acceptance, required and nullable members,
+unknown-member rejection, and field validation. Field semantics follow Go
+encoding/json: a JSON ``null`` in a nested member takes its zero value (the
+top-level required-member check rejects null where the schema forbids it).
+Every decode failure is classified (``malformed`` unless a later stage names a
+more specific class).
 """
 from __future__ import annotations
 
 import base64
 import binascii
-import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from hashlib import sha384
 from typing import Any, Callable, Optional
 
 from . import _v2json
 from ._v2json import MAX_SAFE_INTEGER, canonical
+from .clock_bounds_v2 import V2_MAX_DELEGATION_LIFETIME_SECONDS, valid_v2_timestamp
+from .constraints_v2 import (
+    CONSTRAINT_RECEIVER_AUDIENCE,
+    CONSTRAINT_RESOURCE_PATH,
+    ConstraintV2,
+    constraint_v2_from_fields,
+)
+from .context_v2 import Context, background
 from .errors_v2 import V2Error, V2ErrorClass, classify
-from .resource_path import is_canonical_constraint_type, validate_params_value
-from .scope import CUSTOM_SCOPE_PREFIX, scope_wildcards, vocabulary
+from .limits_v2 import (
+    MAX_CONSTRAINTS_PER_CERT,
+    MAX_DELEGATION_CERT_BYTES_V2,
+    MAX_DELEGATION_CHAIN_DEPTH,
+    MAX_IDENTIFIER_LENGTH_BYTES,
+    MAX_PROOF_BUNDLE_BYTES_V2,
+    MAX_REVOCATION_LIST_BYTES_V2,
+    MAX_REVOCATION_LIST_REFS_V2,
+    MAX_REVOCATION_PUSH_BYTES_V2,
+    MAX_REVOCATION_PUSH_REFS_V2,
+    MAX_SCOPE_LENGTH_BYTES,
+    MAX_SCOPES_PER_CERT,
+    check_v2_wire_size,
+)
+from .resource_path import normalize_resource_path, resource_paths_nested
+from .scope import validate_required_scope_v2, validate_scopes_v2  # noqa: F401 - re-exported
 from .signing_v2 import (
     CHALLENGE_PRESENTATION,
     DELEGATION_CERTIFICATE,
     REVOCATION_LIST,
     REVOCATION_PUSH,
+    SignerV2,
+    V2SigningError,
+    _as_signer,
     equal_public_keys,
     key_id_v2,
-    public_key_of,
-    _sign_v2_statement,
+    _sign_v2_statement_with_signer,
+    signer_public_key_v2,
     verify_v2_statement,
 )
-from .types import (
-    MAX_CONSTRAINTS_PER_CERT,
-    MAX_DELEGATION_CHAIN_DEPTH,
-    MAX_IDENTIFIER_LENGTH_BYTES,
-    MAX_PROOF_BUNDLE_BYTES,
-    MAX_SCOPE_LENGTH_BYTES,
-    MAX_SCOPES_PER_CERT,
-    Constraint,
-    HybridPrivateKey,
-    HybridPublicKey,
-    HybridSignature,
-)
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
+from .types_v2 import lower_hex_string, valid_prefixed_digest_v2, valid_v2_id  # noqa: F401 - re-exported
 
-RECEIVER_AUDIENCE = "ratify.receiver_audience"
+RECEIVER_AUDIENCE = CONSTRAINT_RECEIVER_AUDIENCE
 SCOPE_IDENTITY_DELEGATE = "identity:delegate"
 
 # ---------------------------------------------------------------------------
-# Generic strict field access (Go encoding/json semantics)
+# Generic strict member access (Go encoding/json semantics)
 
 
 def _run(class_: str, fn: Callable[[], Any]) -> Any:
+    """Run ``fn`` and classify any unclassified failure with ``class_``."""
     try:
         return fn()
     except V2Error:
         raise
-    except (ValueError, TypeError, KeyError, IndexError, OverflowError) as exc:
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError, UnicodeError) as exc:
         raise classify(class_, exc) from exc
 
 
 def require_fields(obj: Any, names, nullable=()) -> dict:
-    """Go ``requireV2Fields``: object, required members present, non-null."""
+    """Go ``requireV2Fields``: an object whose required members are present
+    and non-null unless listed in ``nullable``."""
     if not isinstance(obj, dict):
         raise ValueError("wire v2: expected a JSON object")
     for name in names:
@@ -87,27 +106,17 @@ def get_str(obj: dict, key: str) -> str:
     return value
 
 
-def get_int(obj: dict, key: str, lo: int = -(2**63), hi: int = 2**63 - 1) -> int:
+def get_int(obj: dict, key: str) -> int:
     value = obj.get(key)
     if value is None:
         return 0
-    if isinstance(value, bool) or not isinstance(value, int) or isinstance(value, float):
+    if type(value) is not int:
         raise ValueError(f"wire v2: {key} must be an integer")
-    if value < lo or value > hi:
-        raise ValueError(f"wire v2: {key} is out of range")
     return value
 
 
-def get_float(obj: dict, key: str) -> float:
-    value = obj.get(key)
-    if value is None:
-        return 0.0
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"wire v2: {key} must be a number")
-    return float(value)
-
-
 def decode_bytes_value(value: Any, key: str) -> Optional[bytes]:
+    """Go ``[]byte`` member: null is nil, otherwise strict padded base64."""
     if value is None:
         return None
     if not isinstance(value, str):
@@ -139,24 +148,13 @@ def get_str_list(obj: dict, key: str) -> Optional[list[str]]:
     return out
 
 
-def get_obj(obj: dict, key: str) -> dict:
-    value = obj.get(key)
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ValueError(f"wire v2: {key} must be an object")
-    return value
-
-
 def decode_public_key(value: Any, key: str = "public key") -> HybridPublicKey:
     if value is None:
         return HybridPublicKey(ed25519=b"", ml_dsa_65=b"")
     if not isinstance(value, dict):
         raise ValueError(f"wire v2: {key} must be an object")
     check_keys(value, ("ed25519", "ml_dsa_65"), key)
-    return HybridPublicKey(
-        ed25519=get_bytes(value, "ed25519") or b"", ml_dsa_65=get_bytes(value, "ml_dsa_65") or b""
-    )
+    return HybridPublicKey(ed25519=get_bytes(value, "ed25519") or b"", ml_dsa_65=get_bytes(value, "ml_dsa_65") or b"")
 
 
 def decode_signature(value: Any, key: str = "signature") -> HybridSignature:
@@ -164,291 +162,29 @@ def decode_signature(value: Any, key: str = "signature") -> HybridSignature:
     return HybridSignature(ed25519=pub.ed25519, ml_dsa_65=pub.ml_dsa_65)
 
 
-def key_dict(key: HybridPublicKey | HybridSignature) -> dict:
+def key_dict(key) -> dict:
     return {"ed25519": bytes(key.ed25519), "ml_dsa_65": bytes(key.ml_dsa_65)}
-
-
-def valid_v2_id(value: Any) -> bool:
-    return isinstance(value, str) and len(value) == 64 and _LOWER_HEX.fullmatch(value) is not None
-
-
-def lower_hex_string(value: str) -> bool:
-    return _LOWER_HEX_ANY.fullmatch(value) is not None
-
-
-_LOWER_HEX = re.compile(r"[0-9a-f]{64}")
-_LOWER_HEX_ANY = re.compile(r"[0-9a-f]*")
-
-
-def valid_prefixed_digest_v2(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and value.startswith("sha384:")
-        and len(value) == 7 + 96
-        and re.fullmatch(r"[0-9a-f]{96}", value[7:]) is not None
-    )
-
-
-def validate_hybrid_signature_v2(sig: HybridSignature) -> None:
-    if len(sig.ed25519) != 64 or len(sig.ml_dsa_65) != 3309:
-        raise ValueError(
-            "wire v2: signature must contain 64-byte Ed25519 and 3309-byte ML-DSA-65 components"
-        )
-
-
-def placeholder_signature_v2() -> HybridSignature:
-    return HybridSignature(ed25519=bytes(64), ml_dsa_65=bytes(3309))
 
 
 def utf8_len(value: str) -> int:
     return len(value.encode("utf-8", "surrogatepass"))
 
 
-# ---------------------------------------------------------------------------
-# Scopes
+def validate_hybrid_signature_v2(sig: HybridSignature) -> None:
+    if (not isinstance(sig, HybridSignature) or not isinstance(sig.ed25519, (bytes, bytearray))
+            or not isinstance(sig.ml_dsa_65, (bytes, bytearray)) or len(sig.ed25519) != 64
+            or len(sig.ml_dsa_65) != 3309):
+        raise ValueError("wire v2: signature must contain 64-byte Ed25519 and 3309-byte ML-DSA-65 components")
 
 
-def _is_valid_scope(scope: str) -> bool:
-    return (
-        scope in _VOCABULARY
-        or scope in scope_wildcards()
-        or (scope.startswith(CUSTOM_SCOPE_PREFIX) and len(scope) > len(CUSTOM_SCOPE_PREFIX))
-    )
+def placeholder_signature_v2() -> HybridSignature:
+    return HybridSignature(ed25519=bytes(64), ml_dsa_65=bytes(3309))
 
 
-_VOCABULARY = frozenset(vocabulary())
-
-
-def validate_scopes_v2(scopes: list[str]) -> None:
-    """Go ``ValidateScopesV2``."""
-    if not scopes:
-        raise ValueError("scope must be a non-empty array")
-    for scope in scopes:
-        if not _is_valid_scope(scope):
-            raise ValueError(f"unknown scope {scope!r}: not in canonical vocabulary and not a custom: extension")
-    seen = set()
-    for scope in scopes:
-        if scope == "custom:*":
-            raise ValueError("custom:* is not a valid scope")
-        if scope in seen:
-            raise ValueError(f"duplicate scope {scope!r}")
-        seen.add(scope)
-
-
-def validate_required_scope_v2(scope: str) -> None:
-    """Go ``ValidateRequiredScopeV2``: one registered canonical scope."""
-    if (
-        not isinstance(scope, str)
-        or scope not in _VOCABULARY
-        or scope in scope_wildcards()
-        or scope.startswith(CUSTOM_SCOPE_PREFIX)
-    ):
-        raise ValueError("required scope must be one non-empty canonical scope")
-
-
-# ---------------------------------------------------------------------------
-# Constraints
-
-_CONSTRAINT_FIELDS = frozenset({
-    "count", "currency", "end", "lat", "lon", "max_alt_m", "max_amount", "max_lat",
-    "max_lon", "max_mps", "min_alt_m", "min_lat", "min_lon", "params", "path_prefix",
-    "points", "radius_m", "resource_id", "start", "type", "tz", "window_s",
-})
-_REQUIRED = {
-    "geo_circle": ("lat", "lon", "radius_m"),
-    "geo_polygon": ("points",),
-    "geo_bbox": ("min_lat", "min_lon", "max_lat", "max_lon"),
-    "time_window": ("start", "end", "tz"),
-    "max_speed_mps": ("max_mps",),
-    "max_amount": ("max_amount", "currency"),
-    "max_rate": ("count", "window_s"),
-    "resource_path": ("resource_id",),
-}
-_ALLOWED = {
-    "geo_circle": ("type", "lat", "lon", "radius_m"),
-    "geo_polygon": ("type", "points"),
-    "geo_bbox": ("type", "min_lat", "min_lon", "max_lat", "max_lon", "min_alt_m", "max_alt_m"),
-    "time_window": ("type", "start", "end", "tz"),
-    "max_speed_mps": ("type", "max_mps"),
-    "max_amount": ("type", "max_amount", "currency"),
-    "max_rate": ("type", "count", "window_s"),
-    "resource_path": ("type", "resource_id", "path_prefix"),
-}
-_FLOAT_FIELDS = ("lat", "lon", "max_alt_m", "max_amount", "max_lat", "max_lon", "max_mps",
-                 "min_alt_m", "min_lat", "min_lon", "radius_m")
-_STR_FIELDS = ("currency", "end", "start", "tz", "resource_id", "path_prefix")
-
-
-def _check_v2_nulls(value: Any) -> None:
-    if value is None:
-        raise ValueError("null is not allowed in this v2 object")
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if key == "params":
-                continue
-            _check_v2_nulls(item)
-    elif isinstance(value, list):
-        for item in value:
-            _check_v2_nulls(item)
-
-
-def _go_unmarshal_constraint(obj: dict) -> Constraint:
-    """Go ``Constraint.UnmarshalJSON`` (alias decode with unknown-field rejection)."""
-    if "path_prefix" in obj:
-        pp = obj["path_prefix"]
-        if pp is not None and not isinstance(pp, str):
-            raise ValueError("constraint path_prefix must be a string")
-        if not pp:
-            raise ValueError("constraint path_prefix must not be empty or null")
-    check_keys(obj, _CONSTRAINT_FIELDS, "constraint")
-    kwargs: dict[str, Any] = {"type": get_str(obj, "type")}
-    for name in _FLOAT_FIELDS:
-        kwargs[name] = get_float(obj, name)
-    for name in _STR_FIELDS:
-        kwargs[name] = get_str(obj, name)
-    kwargs["count"] = get_int(obj, "count")
-    kwargs["window_s"] = get_int(obj, "window_s")
-    points = obj.get("points")
-    if points is not None:
-        if not isinstance(points, list):
-            raise ValueError("constraint points must be an array")
-        parsed = []
-        for point in points:
-            if point is None:
-                parsed.append([0.0, 0.0])
-                continue
-            if not isinstance(point, list) or len(point) != 2:
-                raise ValueError("constraint points must be [lat, lon] pairs")
-            pair = []
-            for coordinate in point:
-                if coordinate is None:
-                    coordinate = 0.0
-                if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)):
-                    raise ValueError("constraint points must be numbers")
-                pair.append(float(coordinate))
-            parsed.append(pair)
-        kwargs["points"] = parsed
-    else:
-        kwargs["points"] = None
-    params = obj.get("params")
-    if params is not None and not isinstance(params, dict):
-        raise ValueError("constraint params must be an object")
-    kwargs["params"] = params
-    if kwargs["type"] == "resource_path":
-        rid = obj.get("resource_id")
-        if not isinstance(rid, str) or rid == "":
-            raise ValueError("resource_path constraint requires a non-empty resource_id string")
-    return Constraint(**kwargs)
-
-
-def _plain_ints(value: Any) -> Any:
-    """Params decode as Go map[string]any (numbers are float64)."""
-    if isinstance(value, bool) or value is None or isinstance(value, str):
-        return value
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, list):
-        return [_plain_ints(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _plain_ints(item) for key, item in value.items()}
+def _check_int(value: Any, name: str) -> int:
+    if type(value) is not int:
+        raise ValueError(f"{name} must be an integer")
     return value
-
-
-def validate_v2_constraint_fields(raw: Any) -> Constraint:
-    """Go ``validateV2ConstraintFields``; returns the decoded constraint."""
-    _check_v2_nulls(raw)
-    if not isinstance(raw, dict):
-        raise ValueError("constraint must be an object")
-    c = _go_unmarshal_constraint(raw)
-    allowed = _ALLOWED.get(c.type, ())
-    for key in raw:
-        if key in allowed:
-            continue
-        if c.type == RECEIVER_AUDIENCE and key in ("type", "params"):
-            continue
-        if not allowed and c.type != RECEIVER_AUDIENCE and key in ("type", "params"):
-            continue
-        raise ValueError(f"field {key!r} is not allowed for constraint type {c.type!r}")
-    for name in _REQUIRED.get(c.type, ()):
-        if name not in raw:
-            raise ValueError(f"constraint type {c.type!r} requires field {name!r}")
-    if c.type == "geo_bbox" and (("min_alt_m" in raw) != ("max_alt_m" in raw)):
-        raise ValueError("geo_bbox altitude bounds must be both present or both absent")
-    if c.type == RECEIVER_AUDIENCE:
-        params = raw.get("params")
-        if not isinstance(params, dict):
-            raise ValueError("receiver audience requires params object")
-        exact = params.get("exact_receiver_ids")
-        domains = params.get("trust_domain_ids")
-        if not isinstance(exact, list) or not isinstance(domains, list) or not all(
-            isinstance(v, str) or v is None for v in exact + domains
-        ):
-            raise ValueError("receiver audience requires exact_receiver_ids and trust_domain_ids arrays")
-        exact = ["" if v is None else v for v in exact]
-        domains = ["" if v is None else v for v in domains]
-        if len(exact) + len(domains) == 0:
-            raise ValueError("receiver audience must name an exact receiver or trust domain")
-        for values in (exact, domains):
-            seen = set()
-            for value in values:
-                if value == "" or value in seen:
-                    raise ValueError("receiver audience IDs must be non-empty and unique")
-                seen.add(value)
-        has_age = "max_membership_age_seconds" in params
-        age = params.get("max_membership_age_seconds")
-        if domains and (not has_age or age is None):
-            raise ValueError("receiver audience trust domains require max_membership_age_seconds")
-        if has_age:
-            if age is None:
-                age = 0
-            if isinstance(age, bool) or not isinstance(age, int) or isinstance(age, float) or age <= 0 or age > MAX_SAFE_INTEGER:
-                raise ValueError("max_membership_age_seconds must be a positive safe integer")
-        if not domains and has_age:
-            raise ValueError("receiver audience without trust domains must omit max_membership_age_seconds")
-        validate_params_value(_plain_ints(params), 0)
-        for key in params:
-            if key not in ("exact_receiver_ids", "trust_domain_ids", "max_membership_age_seconds"):
-                raise ValueError(f"unknown receiver audience parameter {key!r}")
-    return c
-
-
-def constraint_canonical_dict(c: Constraint) -> dict:
-    """Go ``Constraint.MarshalJSON``."""
-    out: dict[str, Any] = {"type": c.type}
-    t = c.type
-    if t == "geo_circle":
-        out.update(lat=float(c.lat), lon=float(c.lon), radius_m=float(c.radius_m))
-    elif t == "geo_polygon":
-        out["points"] = None if c.points is None else [[float(p[0]), float(p[1])] for p in c.points]
-    elif t == "geo_bbox":
-        out.update(max_lat=float(c.max_lat), max_lon=float(c.max_lon), min_lat=float(c.min_lat), min_lon=float(c.min_lon))
-        if c.min_alt_m != 0 or c.max_alt_m != 0:
-            out.update(max_alt_m=float(c.max_alt_m), min_alt_m=float(c.min_alt_m))
-    elif t == "time_window":
-        out.update(end=c.end, start=c.start, tz=c.tz)
-    elif t == "max_speed_mps":
-        out["max_mps"] = float(c.max_mps)
-    elif t == "max_amount":
-        out.update(currency=c.currency, max_amount=float(c.max_amount))
-    elif t == "max_rate":
-        out.update(count=c.count, window_s=c.window_s)
-    elif t == "resource_path":
-        if not c.resource_id:
-            raise ValueError("resource_path constraint requires a non-empty resource_id")
-        out["resource_id"] = c.resource_id
-        if c.path_prefix:
-            out["path_prefix"] = c.path_prefix
-    else:
-        if c.params is not None:
-            validate_params_value(_plain_ints(c.params), 0)
-            out["params"] = _plain_ints(c.params)
-    if t != "" and c.params is not None and is_canonical_constraint_type(t):
-        raise ValueError(f"canonical constraint type {t!r} must not carry params")
-    return out
-
-
-def constraint_canonical_json(c: Constraint) -> bytes:
-    return canonical(constraint_canonical_dict(c))
 
 
 # ---------------------------------------------------------------------------
@@ -464,10 +200,10 @@ class DelegationCertV2:
     subject_id: str
     subject_pub_key: HybridPublicKey
     scope: Optional[list[str]]
-    constraints: Optional[list[Constraint]]
+    constraints: Optional[list[ConstraintV2]]
     issued_at: int
     expires_at: int
-    signature: HybridSignature
+    signature: HybridSignature = field(default_factory=placeholder_signature_v2)
 
 
 DELEGATION_V2_FIELDS = ("version", "cert_id", "issuer_id", "issuer_pub_key", "subject_id",
@@ -475,6 +211,7 @@ DELEGATION_V2_FIELDS = ("version", "cert_id", "issuer_id", "issuer_pub_key", "su
 
 
 def _validate_v2_scope_array(value: Any) -> None:
+    """Go ``validateV2ScopeArray``: wire shape and resource bounds only."""
     if not isinstance(value, list):
         raise ValueError("wire v2: scope must be an array of strings")
     if len(value) > MAX_SCOPES_PER_CERT:
@@ -492,7 +229,7 @@ def _cert_from_obj(obj: dict) -> DelegationCertV2:
     if not isinstance(raw_constraints, list):
         raise ValueError("wire v2: constraints must be an array")
     _validate_v2_scope_array(obj.get("scope"))
-    constraints = [validate_v2_constraint_fields(raw) for raw in raw_constraints]
+    constraints = [constraint_v2_from_fields(raw) for raw in raw_constraints]
     check_keys(obj, DELEGATION_V2_FIELDS, "delegation")
     return DelegationCertV2(
         version=get_int(obj, "version"),
@@ -511,12 +248,13 @@ def _cert_from_obj(obj: dict) -> DelegationCertV2:
 
 def validate_delegation_cert_v2(c: DelegationCertV2) -> None:
     """Go ``validateDelegationCertV2`` (raises V2Error key_id_mismatch or ValueError)."""
-    if c.version != 2:
+    if not isinstance(c, DelegationCertV2):
+        raise ValueError("v2 delegation certificate is required")
+    if _check_int(c.version, "version") != 2:
         raise ValueError("version must be 2")
-    for value in (c.issued_at, c.expires_at):
-        if value < -MAX_SAFE_INTEGER or value > MAX_SAFE_INTEGER:
-            raise ValueError("issued_at and expires_at must be safe integers")
-    if c.cert_id == "" or utf8_len(c.cert_id) > MAX_IDENTIFIER_LENGTH_BYTES:
+    if not valid_v2_timestamp(c.issued_at) or not valid_v2_timestamp(c.expires_at):
+        raise ValueError("issued_at and expires_at must be inside the v2 timestamp domain")
+    if not isinstance(c.cert_id, str) or c.cert_id == "" or utf8_len(c.cert_id) > MAX_IDENTIFIER_LENGTH_BYTES:
         raise ValueError("cert_id must be non-empty and within the identifier byte limit")
     if not valid_v2_id(c.issuer_id) or not valid_v2_id(c.subject_id):
         raise ValueError("issuer_id and subject_id must be 64 lowercase hexadecimal characters")
@@ -524,27 +262,29 @@ def validate_delegation_cert_v2(c: DelegationCertV2) -> None:
     subject = key_id_v2(c.subject_pub_key)
     if c.issuer_id != issuer or c.subject_id != subject:
         raise V2Error(V2ErrorClass.KEY_ID_MISMATCH, "key ID does not match complete public key")
-    if c.scope is None:
+    if not isinstance(c.scope, list):
         raise ValueError("scope must be an array")
     for scope in c.scope:
-        if utf8_len(scope) > MAX_SCOPE_LENGTH_BYTES:
+        if not isinstance(scope, str) or utf8_len(scope) > MAX_SCOPE_LENGTH_BYTES:
             raise ValueError("scope exceeds the protocol byte limit")
-    if c.constraints is None:
+    if not isinstance(c.constraints, list):
         raise ValueError("constraints must be an array")
     if len(c.scope) > MAX_SCOPES_PER_CERT or len(c.constraints) > MAX_CONSTRAINTS_PER_CERT:
         raise ValueError("scope or constraint count exceeds protocol bound")
-    for constraint in c.constraints:
-        encoded = constraint_canonical_json(constraint)
-        validate_v2_constraint_fields(_v2json.parse(encoded))
+    for i, constraint in enumerate(c.constraints):
+        if not isinstance(constraint, ConstraintV2):
+            raise ValueError(f"constraint {i} must be a ConstraintV2")
+        constraint.to_canonical_dict()
 
 
-def _cert_canonical_dict(c: DelegationCertV2, *, signature: bool, constraints_default: bool) -> dict:
-    constraints = c.constraints
-    if constraints is None and constraints_default:
-        constraints = []
+def _constraints_list(c: DelegationCertV2) -> list:
+    return [x.to_canonical_dict() for x in (c.constraints or [])]
+
+
+def _cert_canonical_dict(c: DelegationCertV2, *, signature: bool) -> dict:
     out = {
         "cert_id": c.cert_id,
-        "constraints": None if constraints is None else [constraint_canonical_dict(x) for x in constraints],
+        "constraints": None if c.constraints is None else _constraints_list(c),
         "expires_at": c.expires_at,
         "issued_at": c.issued_at,
         "issuer_id": c.issuer_id,
@@ -560,13 +300,16 @@ def _cert_canonical_dict(c: DelegationCertV2, *, signature: bool, constraints_de
 
 
 def cert_signable_bytes_v2(c: DelegationCertV2) -> bytes:
-    return canonical(_cert_canonical_dict(c, signature=False, constraints_default=True))
+    """Go ``certSignableBytesV2``: every member except ``signature``."""
+    d = _cert_canonical_dict(c, signature=False)
+    if d["constraints"] is None:
+        d["constraints"] = []
+    return canonical(d)
 
 
 def decode_delegation_cert_v2(data: bytes) -> DelegationCertV2:
     def run() -> DelegationCertV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: certificate exceeds MAX_PROOF_BUNDLE_BYTES")
+        check_v2_wire_size(data, "certificate", "MAX_DELEGATION_CERT_BYTES_V2", MAX_DELEGATION_CERT_BYTES_V2)
         obj = _v2json.check_wire_json(data)
         require_fields(obj, DELEGATION_V2_FIELDS)
         cert = _cert_from_obj(obj)
@@ -578,14 +321,19 @@ def decode_delegation_cert_v2(data: bytes) -> DelegationCertV2:
 
 
 def encode_delegation_cert_v2(c: DelegationCertV2) -> bytes:
-    validate_delegation_cert_v2(c)
-    validate_hybrid_signature_v2(c.signature)
-    encoded = canonical(_cert_canonical_dict(c, signature=True, constraints_default=False))
-    decode_delegation_cert_v2(encoded)
-    return encoded
+    def run() -> bytes:
+        validate_delegation_cert_v2(c)
+        validate_hybrid_signature_v2(c.signature)
+        encoded = canonical(_cert_canonical_dict(c, signature=True))
+        decode_delegation_cert_v2(encoded)
+        return encoded
+
+    return _run(V2ErrorClass.MALFORMED, run)
 
 
 def verify_delegation_cert_v2_signature(cert: DelegationCertV2) -> None:
+    """Go ``VerifyDelegationCertV2Signature``: structure, key-ID bindings,
+    and the issuer signature under code 0x0001. Does not establish trust."""
     if cert is None:
         raise V2Error(V2ErrorClass.MALFORMED, "v2 delegation certificate is nil")
 
@@ -598,16 +346,68 @@ def verify_delegation_cert_v2_signature(cert: DelegationCertV2) -> None:
     verify_v2_statement(DELEGATION_CERTIFICATE, signable, cert.signature, cert.issuer_pub_key)
 
 
+def validate_delegation_issuance_v2(cert: DelegationCertV2) -> None:
+    """Go ``validateDelegationIssuanceV2``: the issuer duties a decoder does
+    not enforce (SPEC-v2 §5.1, §5.2). Raises ``V2SigningError``."""
+    if cert.issued_at >= cert.expires_at:
+        raise V2SigningError("v2 issuer duty: issued_at must be earlier than expires_at")
+    if cert.expires_at - cert.issued_at > V2_MAX_DELEGATION_LIFETIME_SECONDS:
+        raise V2SigningError(f"v2 issuer duty: delegation lifetime exceeds {V2_MAX_DELEGATION_LIFETIME_SECONDS} seconds")
+    resource_id = ""
+    prefixes: list[str] = []
+    for i, c in enumerate(cert.constraints or []):
+        if c.type != CONSTRAINT_RESOURCE_PATH:
+            continue
+        if c.path_prefix != "":
+            try:
+                normalize_resource_path(c.path_prefix)
+            except ValueError as exc:
+                raise V2SigningError(f"v2 issuer duty: constraint {i} path_prefix can never match: {exc}") from exc
+        if resource_id == "":
+            resource_id = c.resource_id
+        elif c.resource_id != resource_id:
+            raise V2SigningError(
+                f"v2 issuer duty: constraint {i} names a different resource_id; the resource_path set is jointly unsatisfiable")
+        for prior in prefixes:
+            if not resource_paths_nested(prior, c.path_prefix):
+                raise V2SigningError(
+                    f"v2 issuer duty: constraint {i} path_prefix {c.path_prefix!r} does not nest with {prior!r}; "
+                    "the resource_path set is jointly unsatisfiable")
+        prefixes.append(c.path_prefix)
+
+
 def sign_delegation_cert_v2(cert: DelegationCertV2, issuer_key: HybridPrivateKey) -> DelegationCertV2:
-    issuer_pub = public_key_of(issuer_key)
+    """Go ``SignDelegationCertV2``: a signed copy of ``cert`` under the
+    issuer's private key (native extension)."""
+    if cert is None:
+        raise V2SigningError("v2 delegation certificate is nil")
+    _check_issuer_duties(cert)
+    return sign_delegation_cert_v2_with_signer(background(), cert, _as_signer(issuer_key))
+
+
+def _check_issuer_duties(cert: DelegationCertV2) -> None:
+    validate_delegation_cert_v2(cert)
+    try:
+        validate_scopes_v2(cert.scope)
+    except ValueError as exc:
+        raise V2SigningError(f"v2 issuer scope: {exc}") from exc
+    validate_delegation_issuance_v2(cert)
+
+
+def sign_delegation_cert_v2_with_signer(ctx: Context, cert: DelegationCertV2, signer: SignerV2) -> DelegationCertV2:
+    """Go ``SignDelegationCertV2WithSigner``. The issuer duties are checked
+    before any signer method runs, so a refused certificate never reaches the
+    signer."""
+    if cert is None:
+        raise V2SigningError("v2 delegation certificate is nil")
+    _check_issuer_duties(cert)
+    issuer_pub = signer_public_key_v2(signer)
     issuer_id = key_id_v2(issuer_pub)
     if cert.issuer_id != issuer_id or not equal_public_keys(cert.issuer_pub_key, issuer_pub):
-        raise ValueError("v2 issuer key does not match certificate issuer")
-    validate_delegation_cert_v2(cert)
-    validate_scopes_v2(cert.scope or [])
+        raise V2SigningError("v2 issuer key does not match certificate issuer")
     prepared = decode_delegation_cert_v2(encode_delegation_cert_v2(replace(cert, signature=placeholder_signature_v2())))
     signable = cert_signable_bytes_v2(prepared)
-    prepared.signature = _sign_v2_statement(DELEGATION_CERTIFICATE, signable, issuer_key)
+    prepared.signature = _sign_v2_statement_with_signer(ctx, DELEGATION_CERTIFICATE, signable, signer, issuer_pub)
     signed = decode_delegation_cert_v2(encode_delegation_cert_v2(prepared))
     verify_v2_statement(DELEGATION_CERTIFICATE, signable, signed.signature, issuer_pub)
     return signed
@@ -640,8 +440,7 @@ PROOF_BUNDLE_V2_FIELDS = ("version", "verifier_id", "agent_id", "agent_pub_key",
 
 def decode_proof_bundle_v2(data: bytes) -> ProofBundleV2:
     def run() -> ProofBundleV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError(f"wire v2: proof bundle exceeds MAX_PROOF_BUNDLE_BYTES ({MAX_PROOF_BUNDLE_BYTES})")
+        check_v2_wire_size(data, "proof bundle", "MAX_PROOF_BUNDLE_BYTES_V2", MAX_PROOF_BUNDLE_BYTES_V2)
         obj = _v2json.check_wire_json(data, ("delegation_digest",))
         require_fields(obj, PROOF_BUNDLE_V2_FIELDS, ("session_context", "stream_id", "stream_seq"))
         raw_delegations = obj.get("delegations")
@@ -674,9 +473,11 @@ def decode_proof_bundle_v2(data: bytes) -> ProofBundleV2:
         if not valid_v2_id(bundle.verifier_id) or not valid_v2_id(bundle.agent_id):
             raise ValueError("wire v2: verifier_id and agent_id must be 64 lowercase hexadecimal characters")
         if len(delegations) > MAX_DELEGATION_CHAIN_DEPTH:
-            raise ValueError("wire v2: delegation chain exceeds MAX_DELEGATION_CHAIN_DEPTH")
+            raise ValueError(f"wire v2: delegation chain exceeds MAX_DELEGATION_CHAIN_DEPTH ({MAX_DELEGATION_CHAIN_DEPTH})")
         if len(bundle.challenge) != 32:
             raise ValueError("wire v2: challenge must be 32 bytes")
+        if not valid_v2_timestamp(bundle.challenge_at):
+            raise ValueError("wire v2: challenge_at is outside 0..253402300799")
         if len(bundle.delegation_digest) != 48:
             raise ValueError("wire v2: delegation_digest must be 48 bytes")
         if bundle.session_context is not None and len(bundle.session_context) != 32:
@@ -688,7 +489,7 @@ def decode_proof_bundle_v2(data: bytes) -> ProofBundleV2:
         if bundle.stream_seq is not None and bundle.stream_seq > MAX_SAFE_INTEGER:
             raise ValueError("wire v2: stream_seq exceeds the safe integer range")
         validate_hybrid_signature_v2(bundle.challenge_sig)
-        for cert in delegations:
+        for i, cert in enumerate(delegations):
             validate_delegation_cert_v2(cert)
             validate_hybrid_signature_v2(cert.signature)
         return bundle
@@ -705,10 +506,10 @@ def _bundle_canonical_dict(b: ProofBundleV2) -> dict:
         "challenge_sig": key_dict(b.challenge_sig),
         "delegation_digest": bytes(b.delegation_digest),
         "delegations": None if b.delegations is None else [
-            _cert_canonical_dict(c, signature=True, constraints_default=False) for c in b.delegations
+            _cert_canonical_dict(c, signature=True) for c in b.delegations
         ],
-        "session_context": b.session_context,
-        "stream_id": b.stream_id,
+        "session_context": None if b.session_context is None else bytes(b.session_context),
+        "stream_id": None if b.stream_id is None else bytes(b.stream_id),
         "stream_seq": b.stream_seq,
         "verifier_id": b.verifier_id,
         "version": b.version,
@@ -717,8 +518,8 @@ def _bundle_canonical_dict(b: ProofBundleV2) -> dict:
 
 def encode_proof_bundle_v2(b: ProofBundleV2) -> bytes:
     if b is None:
-        raise ValueError("v2 proof bundle is nil")
-    encoded = canonical(_bundle_canonical_dict(b))
+        raise V2Error(V2ErrorClass.MALFORMED, "v2 proof bundle is nil")
+    encoded = _run(V2ErrorClass.MALFORMED, lambda: canonical(_bundle_canonical_dict(b)))
     try:
         decode_proof_bundle_v2(encoded)
     except V2Error as exc:
@@ -733,8 +534,8 @@ def presentation_signable_bytes_v2(b: ProofBundleV2) -> bytes:
         "challenge": bytes(b.challenge),
         "challenge_at": b.challenge_at,
         "delegation_digest": bytes(b.delegation_digest),
-        "session_context": b.session_context,
-        "stream_id": b.stream_id,
+        "session_context": None if b.session_context is None else bytes(b.session_context),
+        "stream_id": None if b.stream_id is None else bytes(b.stream_id),
         "stream_seq": b.stream_seq,
         "verifier_id": b.verifier_id,
         "version": b.version,
@@ -742,28 +543,35 @@ def presentation_signable_bytes_v2(b: ProofBundleV2) -> bytes:
 
 
 def delegation_digest_v2(certs: list[DelegationCertV2]) -> bytes:
-    ordered = [_cert_canonical_dict(c, signature=True, constraints_default=True) for c in certs]
+    """Go ``delegationDigestV2``: SHA-384 over the canonical signed chain."""
+    ordered = []
+    for c in certs:
+        d = _cert_canonical_dict(c, signature=True)
+        if d["constraints"] is None:
+            d["constraints"] = []
+        ordered.append(d)
     return sha384(b"ratify-protocol-delegations-v2\x00" + canonical(ordered)).digest()
 
 
 def bundle_hash_v2(bundle: ProofBundleV2) -> str:
-    """BundleHashV2: ``sha384:`` hex of the complete canonical signed bundle."""
+    """BundleHashV2: ``sha384:`` hex over the complete canonical signed bundle."""
     encoded = encode_proof_bundle_v2(bundle)
     return "sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + encoded).hexdigest()
 
 
 def verify_proof_bundle_v2_structure(b: ProofBundleV2) -> None:
-    """Every key ID, delegation digest, duplicate CertificateRef, and linkage."""
+    """Every key ID, the delegation digest, duplicate CertificateRefs, and linkage."""
     malformed = V2ErrorClass.MALFORMED
-    if b is None:
+    if not isinstance(b, ProofBundleV2):
         raise V2Error(malformed, "v2 proof bundle is nil")
     if b.version != 2:
         raise V2Error(malformed, "v2 proof bundle version must be 2")
-    if b.delegations is None:
+    if not isinstance(b.delegations, list):
         raise V2Error(malformed, "v2 delegations must be an array")
-    if len(b.delegations) > MAX_DELEGATION_CHAIN_DEPTH or len(b.challenge) != 32 or len(b.delegation_digest) != 48:
+    if (len(b.delegations) > MAX_DELEGATION_CHAIN_DEPTH or len(b.challenge or b"") != 32
+            or len(b.delegation_digest or b"") != 48):
         raise V2Error(malformed, "v2 proof bundle exceeds a chain bound or has an invalid challenge/digest length")
-    if b.stream_seq is not None and b.stream_seq > MAX_SAFE_INTEGER:
+    if b.stream_seq is not None and (type(b.stream_seq) is not int or b.stream_seq > MAX_SAFE_INTEGER):
         raise V2Error(malformed, "v2 stream sequence exceeds the safe integer range")
     if b.session_context is not None and len(b.session_context) != 32:
         raise V2Error(malformed, "v2 session_context must be null or 32 bytes")
@@ -805,20 +613,32 @@ def verify_proof_bundle_v2_signatures_only(b: ProofBundleV2) -> None:
 
 
 def verify_proof_bundle_v2_signatures(b: ProofBundleV2) -> None:
-    """All structural checks first, then every certificate and the challenge signature."""
+    """Go ``VerifyProofBundleV2Signatures``: every structural check first,
+    then each certificate signature and the challenge signature. Does not
+    resolve trust, consume a challenge, or query status."""
     verify_proof_bundle_v2_structure(b)
     verify_proof_bundle_v2_signatures_only(b)
 
 
 def sign_proof_bundle_v2(bundle: ProofBundleV2, agent_key: HybridPrivateKey) -> ProofBundleV2:
-    agent_pub = public_key_of(agent_key)
-    if bundle.agent_id != key_id_v2(agent_pub) or not equal_public_keys(bundle.agent_pub_key, agent_pub):
-        raise ValueError("v2 agent key does not match proof bundle agent")
+    """Go ``SignProofBundleV2``: compute the delegation digest and sign the
+    challenge presentation with the agent key."""
+    return sign_proof_bundle_v2_with_signer(background(), bundle, _as_signer(agent_key))
+
+
+def sign_proof_bundle_v2_with_signer(ctx: Context, bundle: ProofBundleV2, signer: SignerV2) -> ProofBundleV2:
+    """Go ``SignProofBundleV2WithSigner``."""
+    if bundle is None:
+        raise V2SigningError("v2 proof bundle is nil")
+    agent_pub = signer_public_key_v2(signer)
+    agent_id = key_id_v2(agent_pub)
+    if bundle.agent_id != agent_id or not equal_public_keys(bundle.agent_pub_key, agent_pub):
+        raise V2SigningError("v2 agent key does not match proof bundle agent")
     unsigned = replace(bundle, challenge_sig=placeholder_signature_v2(), delegation_digest=bytes(48))
     prepared = decode_proof_bundle_v2(encode_proof_bundle_v2(unsigned))
     prepared.delegation_digest = delegation_digest_v2(prepared.delegations)
     signable = presentation_signable_bytes_v2(prepared)
-    prepared.challenge_sig = _sign_v2_statement(CHALLENGE_PRESENTATION, signable, agent_key)
+    prepared.challenge_sig = _sign_v2_statement_with_signer(ctx, CHALLENGE_PRESENTATION, signable, signer, agent_pub)
     signed = decode_proof_bundle_v2(encode_proof_bundle_v2(prepared))
     verify_proof_bundle_v2_signatures(signed)
     return signed
@@ -836,7 +656,7 @@ class RevocationListV2:
     next_update: int
     sequence: int
     revoked: Optional[list[str]]  # issuer-scoped cert IDs, wire [{"cert_id": ...}]
-    signature: HybridSignature
+    signature: HybridSignature = field(default_factory=placeholder_signature_v2)
 
 
 @dataclass
@@ -846,7 +666,7 @@ class RevocationPushV2:
     sequence: int
     pushed_at: int
     revoked: Optional[list[str]]
-    signature: HybridSignature
+    signature: HybridSignature = field(default_factory=placeholder_signature_v2)
 
 
 REVOCATION_LIST_V2_FIELDS = ("version", "issuer_id", "updated_at", "next_update", "sequence", "revoked", "signature")
@@ -871,35 +691,39 @@ def _decode_revoked(value: Any) -> Optional[list[str]]:
 
 
 def _validate_revoked(refs: Optional[list[str]]) -> None:
-    if refs is None:
+    if not isinstance(refs, list):
         raise ValueError("v2 revoked must be an array")
     seen = set()
     for ref in refs:
-        if ref == "" or ref in seen:
+        if not isinstance(ref, str) or ref == "" or ref in seen:
             raise ValueError("v2 revoked cert IDs must be non-empty and unique")
         seen.add(ref)
 
 
-def _safe(value: int) -> bool:
-    return -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER
+def _positive_safe(value: Any) -> bool:
+    return type(value) is int and 0 < value <= MAX_SAFE_INTEGER
 
 
 def validate_revocation_list_v2(lst: RevocationListV2) -> None:
     if (
-        lst is None or lst.version != 2 or not valid_v2_id(lst.issuer_id) or lst.sequence <= 0
-        or lst.sequence > MAX_SAFE_INTEGER or not _safe(lst.updated_at) or not _safe(lst.next_update)
-        or lst.next_update <= lst.updated_at
+        not isinstance(lst, RevocationListV2) or lst.version != 2 or not valid_v2_id(lst.issuer_id)
+        or not _positive_safe(lst.sequence) or not valid_v2_timestamp(lst.updated_at)
+        or not valid_v2_timestamp(lst.next_update) or lst.next_update <= lst.updated_at
     ):
         raise ValueError("v2 revocation list has invalid version, issuer, sequence, or time bounds")
+    if isinstance(lst.revoked, list) and len(lst.revoked) > MAX_REVOCATION_LIST_REFS_V2:
+        raise ValueError(f"v2 revocation list exceeds MAX_REVOCATION_LIST_REFS_V2 ({MAX_REVOCATION_LIST_REFS_V2})")
     _validate_revoked(lst.revoked)
 
 
 def validate_revocation_push_v2(push: RevocationPushV2) -> None:
     if (
-        push is None or push.version != 2 or not valid_v2_id(push.issuer_id) or push.sequence <= 0
-        or push.sequence > MAX_SAFE_INTEGER or not _safe(push.pushed_at)
+        not isinstance(push, RevocationPushV2) or push.version != 2 or not valid_v2_id(push.issuer_id)
+        or not _positive_safe(push.sequence) or not valid_v2_timestamp(push.pushed_at)
     ):
         raise ValueError("v2 revocation push has invalid version, issuer, sequence, or timestamp")
+    if isinstance(push.revoked, list) and len(push.revoked) > MAX_REVOCATION_PUSH_REFS_V2:
+        raise ValueError(f"v2 revocation push exceeds MAX_REVOCATION_PUSH_REFS_V2 ({MAX_REVOCATION_PUSH_REFS_V2})")
     _validate_revoked(push.revoked)
 
 
@@ -925,8 +749,7 @@ def revocation_push_signable_bytes_v2(push: RevocationPushV2) -> bytes:
 
 def decode_revocation_list_v2(data: bytes) -> RevocationListV2:
     def run() -> RevocationListV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: revocation list exceeds MAX_PROOF_BUNDLE_BYTES")
+        check_v2_wire_size(data, "revocation list", "MAX_REVOCATION_LIST_BYTES_V2", MAX_REVOCATION_LIST_BYTES_V2)
         obj = _v2json.check_wire_json(data)
         require_fields(obj, REVOCATION_LIST_V2_FIELDS)
         check_keys(obj, REVOCATION_LIST_V2_FIELDS, "revocation list")
@@ -945,8 +768,7 @@ def decode_revocation_list_v2(data: bytes) -> RevocationListV2:
 
 def decode_revocation_push_v2(data: bytes) -> RevocationPushV2:
     def run() -> RevocationPushV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: revocation push exceeds MAX_PROOF_BUNDLE_BYTES")
+        check_v2_wire_size(data, "revocation push", "MAX_REVOCATION_PUSH_BYTES_V2", MAX_REVOCATION_PUSH_BYTES_V2)
         obj = _v2json.check_wire_json(data)
         require_fields(obj, REVOCATION_PUSH_V2_FIELDS)
         check_keys(obj, REVOCATION_PUSH_V2_FIELDS, "revocation push")
@@ -963,29 +785,37 @@ def decode_revocation_push_v2(data: bytes) -> RevocationPushV2:
 
 
 def encode_revocation_list_v2(lst: RevocationListV2) -> bytes:
-    validate_revocation_list_v2(lst)
-    validate_hybrid_signature_v2(lst.signature)
-    encoded = canonical({
-        "issuer_id": lst.issuer_id, "next_update": lst.next_update, "revoked": _revoked_dicts(lst.revoked),
-        "sequence": lst.sequence, "signature": key_dict(lst.signature), "updated_at": lst.updated_at,
-        "version": lst.version,
-    })
-    decode_revocation_list_v2(encoded)
-    return encoded
+    def run() -> bytes:
+        validate_revocation_list_v2(lst)
+        validate_hybrid_signature_v2(lst.signature)
+        encoded = canonical({
+            "issuer_id": lst.issuer_id, "next_update": lst.next_update, "revoked": _revoked_dicts(lst.revoked),
+            "sequence": lst.sequence, "signature": key_dict(lst.signature), "updated_at": lst.updated_at,
+            "version": lst.version,
+        })
+        decode_revocation_list_v2(encoded)
+        return encoded
+
+    return _run(V2ErrorClass.MALFORMED, run)
 
 
 def encode_revocation_push_v2(push: RevocationPushV2) -> bytes:
-    validate_revocation_push_v2(push)
-    validate_hybrid_signature_v2(push.signature)
-    encoded = canonical({
-        "issuer_id": push.issuer_id, "pushed_at": push.pushed_at, "revoked": _revoked_dicts(push.revoked),
-        "sequence": push.sequence, "signature": key_dict(push.signature), "version": push.version,
-    })
-    decode_revocation_push_v2(encoded)
-    return encoded
+    def run() -> bytes:
+        validate_revocation_push_v2(push)
+        validate_hybrid_signature_v2(push.signature)
+        encoded = canonical({
+            "issuer_id": push.issuer_id, "pushed_at": push.pushed_at, "revoked": _revoked_dicts(push.revoked),
+            "sequence": push.sequence, "signature": key_dict(push.signature), "version": push.version,
+        })
+        decode_revocation_push_v2(encoded)
+        return encoded
+
+    return _run(V2ErrorClass.MALFORMED, run)
 
 
 def verify_revocation_list_v2_signature(lst: RevocationListV2, trusted_issuer_id: str, status_key: HybridPublicKey) -> None:
+    """Status signatures are checked only against the caller-authenticated
+    status key bound to this issuer; the object never supplies its own key."""
     _run(V2ErrorClass.MALFORMED, lambda: validate_revocation_list_v2(lst))
     if trusted_issuer_id != lst.issuer_id:
         raise V2Error(V2ErrorClass.STATUS_KEY_BINDING_MISMATCH,
@@ -1003,8 +833,8 @@ def verify_revocation_push_v2_signature(push: RevocationPushV2, trusted_issuer_i
     verify_v2_statement(REVOCATION_PUSH, signable, push.signature, status_key)
 
 
-def _sign_status(kind: str, obj, bound_issuer_id: str, bound_status_key: HybridPublicKey,
-                 status_key: HybridPrivateKey):
+def _sign_status(ctx: Context, kind: str, obj, bound_issuer_id: str, bound_status_key: HybridPublicKey,
+                 signer: SignerV2):
     if kind == "list":
         validate, encode, decode, signable_of, code, verify = (
             validate_revocation_list_v2, encode_revocation_list_v2, decode_revocation_list_v2,
@@ -1015,11 +845,12 @@ def _sign_status(kind: str, obj, bound_issuer_id: str, bound_status_key: HybridP
             revocation_push_signable_bytes_v2, REVOCATION_PUSH, verify_revocation_push_v2_signature)
     validate(obj)
     if not bound_issuer_id or obj.issuer_id != bound_issuer_id:
-        raise ValueError("status object issuer does not match caller-authenticated status-key binding")
-    if not equal_public_keys(bound_status_key, public_key_of(status_key)):
-        raise ValueError("status private key does not match caller-authenticated issuer status-key binding")
+        raise V2SigningError(f"revocation-{kind} issuer does not match caller-authenticated status-key binding")
+    derived = signer_public_key_v2(signer)
+    if not isinstance(bound_status_key, HybridPublicKey) or not equal_public_keys(bound_status_key, derived):
+        raise V2SigningError("status private key does not match caller-authenticated issuer status-key binding")
     prepared = decode(encode(replace(obj, signature=placeholder_signature_v2())))
-    prepared.signature = _sign_v2_statement(code, signable_of(prepared), status_key)
+    prepared.signature = _sign_v2_statement_with_signer(ctx, code, signable_of(prepared), signer, derived)
     signed = decode(encode(prepared))
     verify(signed, bound_issuer_id, bound_status_key)
     return signed
@@ -1027,16 +858,27 @@ def _sign_status(kind: str, obj, bound_issuer_id: str, bound_status_key: HybridP
 
 def sign_revocation_list_v2(lst: RevocationListV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
                             status_key: HybridPrivateKey) -> RevocationListV2:
-    return _sign_status("list", lst, bound_issuer_id, bound_status_key, status_key)
+    return _sign_status(background(), "list", lst, bound_issuer_id, bound_status_key, _as_signer(status_key))
+
+
+def sign_revocation_list_v2_with_signer(ctx: Context, lst: RevocationListV2, bound_issuer_id: str,
+                                        bound_status_key: HybridPublicKey, signer: SignerV2) -> RevocationListV2:
+    return _sign_status(ctx, "list", lst, bound_issuer_id, bound_status_key, signer)
 
 
 def sign_revocation_push_v2(push: RevocationPushV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
                             status_key: HybridPrivateKey) -> RevocationPushV2:
-    return _sign_status("push", push, bound_issuer_id, bound_status_key, status_key)
+    return _sign_status(background(), "push", push, bound_issuer_id, bound_status_key, _as_signer(status_key))
+
+
+def sign_revocation_push_v2_with_signer(ctx: Context, push: RevocationPushV2, bound_issuer_id: str,
+                                        bound_status_key: HybridPublicKey, signer: SignerV2) -> RevocationPushV2:
+    return _sign_status(ctx, "push", push, bound_issuer_id, bound_status_key, signer)
 
 
 def status_evidence_digest(object_type: int, obj: Any) -> bytes:
-    """StatusEvidenceDigest over the complete canonical signed status object."""
+    """Go ``StatusEvidenceDigest``: SHA-384 over the complete canonical signed
+    status object. It is a reference to evidence, not proof of validity."""
     if object_type == REVOCATION_LIST:
         if not isinstance(obj, RevocationListV2):
             raise ValueError("status evidence type 0x0003 requires RevocationListV2")
@@ -1046,6 +888,5 @@ def status_evidence_digest(object_type: int, obj: Any) -> bytes:
             raise ValueError("status evidence type 0x0005 requires RevocationPushV2")
         encoded = encode_revocation_push_v2(obj)
     else:
-        raise ValueError(f"unsupported status evidence object type: {object_type:04x}")
+        raise ValueError(f"unsupported status evidence object type: {object_type!r}")
     return sha384(b"ratify-protocol-status-evidence-v2\x00" + object_type.to_bytes(2, "big") + encoded).digest()
-

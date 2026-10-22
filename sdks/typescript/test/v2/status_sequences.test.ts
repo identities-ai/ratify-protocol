@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import fc from "fast-check";
 
 import { v2ErrorClassOf } from "../../src/errors_v2.js";
+import { hexOf } from "../../src/json_v2.js";
 import { MAX_STATUS_EVIDENCE_BATCH_BYTES_V2, MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 } from "../../src/limits_v2.js";
 import { decodeRevocationListV2, decodeRevocationPushV2, encodeRevocationListV2 } from "../../src/protocol_v2_wire.js";
 import { decodeV2StatusEvidenceBatch, encodeV2StatusEvidenceBatch } from "../../src/status_batch_v2.js";
@@ -23,8 +24,9 @@ import { type Any, corpusKeyPairs, load, unb64 } from "./helpers.js";
 const f = load("status-sequences.json");
 const policyOf = (p: Any) => ({ maxListLifetimeSeconds: p.max_list_lifetime_seconds, maxStatusAgeSeconds: p.max_status_age_seconds, clockSkewSeconds: p.clock_skew_seconds });
 
-test("status-sequences.json: has scenarios", () => {
-  assert.ok(f.scenarios.length >= 22);
+test("status-sequences.json: corpus shape", () => {
+  assert.equal(f.scenarios.length, 22);
+  assert.equal((f.scenarios as Any[]).reduce((n, sc) => n + sc.steps.filter((st: Any) => st.expect_body_digest !== undefined).length, 0), 63);
 });
 
 for (const sc of f.scenarios as Any[]) {
@@ -68,6 +70,12 @@ for (const sc of f.scenarios as Any[]) {
       assert.equal(err, null, `${where}: ${err}`);
       state = next;
       const w = step.expect_state;
+      if (step.expect_body_digest) {
+        // The unlabelled SHA-384 of the signable body (SPEC-v2 §6.6).
+        const code = step.op === "apply_push" ? 5 : 3;
+        assert.ok(state.observations.some((o) => o.statusKeyEpoch === step.status_key_epoch && o.objectType === code &&
+          `sha384:${hexOf(o.bodyDigest)}` === step.expect_body_digest), `${where}: no observation with body_digest ${step.expect_body_digest}`);
+      }
       if (w) {
         if (w.has_floor !== undefined) assert.equal(state.hasFloor, w.has_floor, `${where}: has_floor`);
         if (w.floor !== undefined) assert.equal(state.floor, w.floor, `${where}: floor`);

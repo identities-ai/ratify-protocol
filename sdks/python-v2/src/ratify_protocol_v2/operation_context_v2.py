@@ -1,10 +1,10 @@
-"""Protocol v2 operation and session context construction."""
+"""Protocol v2 operation and session context construction (Go operation_context_v2.go, SPEC-v2 §2.4)."""
 from __future__ import annotations
 
 from hashlib import sha256
 import re
 
-from .scope import vocabulary
+from .scope import validate_required_scope_v2
 
 _OPERATION_TAG = b"ratify/operation-context/v2"
 _SESSION_TAG = b"ratify/session-context/v2"
@@ -38,8 +38,7 @@ def operation_context_v2_bytes(
     payload_digest: bytes | None = None,
 ) -> bytes:
     """Build the length-prefixed operation-context preimage from SPEC-v2 §2.2."""
-    if required_scope not in vocabulary():
-        raise ValueError("required scope must be one registered canonical scope")
+    validate_required_scope_v2(required_scope)
     digest = b"" if payload_digest is None else payload_digest
     if not isinstance(digest, bytes):
         raise TypeError("payload digest must be bytes or None")

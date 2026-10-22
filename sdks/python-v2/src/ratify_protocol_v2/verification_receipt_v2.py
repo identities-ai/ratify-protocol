@@ -3,7 +3,6 @@ verification (mirrors Go verification_receipt_v2.go and
 verification_receipt_body_v2.go)."""
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
@@ -30,19 +29,28 @@ from .protocol_v2 import (
     validate_required_scope_v2,
     validate_scopes_v2,
 )
+from .clock_bounds_v2 import valid_v2_timestamp
+from .context_v2 import Context, background
+from .limits_v2 import MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2, MAX_VERIFICATION_RECEIPT_BYTES_V2, check_v2_wire_size
 from .scope import scope_wildcards
-from .signing_v2 import VERIFICATION_RECEIPT, key_id_v2, public_key_of, _sign_v2_statement, verify_v2_statement
-from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
+from .signing_v2 import (
+    VERIFICATION_RECEIPT,
+    SignerV2,
+    V2SigningError,
+    _as_signer,
+    key_id_v2,
+    sign_v2_statement_with_signer,
+    signer_public_key_v2,
+    verify_v2_statement,
+)
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
+from .types_v2 import (
+    ConstraintEvaluatorRefV2,
+    StatusEvidenceEntryV2,
+    clone_constraint_evaluator_refs_v2,
+    valid_constraint_evaluator_refs_v2,
+)
 from .witness_v2 import ZERO_HASH, WitnessEntryV2Result, _validate_log_head, log_position_result, statement_body_digest_v2
-
-
-@dataclass(frozen=True, order=False)
-class StatusEvidenceEntryV2:
-    issuer_id: str
-    status_key_id: str
-    sequence: int
-    object_type: int
-    digest: str
 
 
 def _evidence_sort_key(e: StatusEvidenceEntryV2):
@@ -72,6 +80,9 @@ class VerificationReceiptV2:
     granted_scope: Optional[list[str]] = None
     status_evidence: Optional[list[StatusEvidenceEntryV2]] = None
     previous_receipt_hash: bytes = b""
+    # Present exactly when the claim sealed at least one extension evaluator
+    # profile (SPEC-v2 §5.2, §5.8); sorted and unique by type.
+    constraint_evaluators: Optional[list[ConstraintEvaluatorRefV2]] = None
     signature: HybridSignature = field(default_factory=lambda: HybridSignature(b"", b""))
 
 
@@ -92,14 +103,14 @@ VERIFICATION_RECEIPT_V2_FIELDS = (
     "context_policy_digest", "verified_at", "required_scope", "granted_scope",
     "status_evidence_digests", "previous_receipt_hash", "signature",
 )
-_WIRE_KEYS = VERIFICATION_RECEIPT_V2_FIELDS + ("agent_id", "human_id")
+_WIRE_KEYS = VERIFICATION_RECEIPT_V2_FIELDS + ("agent_id", "human_id", "constraint_evaluators")
 _BODY_REQUIRED = (
     "version", "verifier_id", "bundle_hash", "issuer_ids", "decision", "decision_reason",
     "identity_status", "trust_assessment", "status_assessment", "challenge_assessment",
     "context_assessment", "context_policy_digest", "verified_at", "required_scope",
     "granted_scope", "status_evidence_digests",
 )
-_BODY_KEYS = _BODY_REQUIRED + ("agent_id", "human_id")
+_BODY_KEYS = _BODY_REQUIRED + ("agent_id", "human_id", "constraint_evaluators")
 
 
 def _evidence_dict(e: StatusEvidenceEntryV2) -> dict:
@@ -122,6 +133,9 @@ def _body_dict(r: VerificationReceiptV2) -> dict:
         out["agent_id"] = r.agent_id
     if r.human_id:
         out["human_id"] = r.human_id
+    refs = clone_constraint_evaluator_refs_v2(r.constraint_evaluators)
+    if refs:
+        out["constraint_evaluators"] = [ref.to_canonical_dict() for ref in refs]
     return out
 
 
@@ -148,9 +162,30 @@ def _decode_evidence(value) -> Optional[list[StatusEvidenceEntryV2]]:
         check_keys(item, ("digest", "issuer_id", "object_type_code", "sequence", "status_key_id"), "status evidence")
         out.append(StatusEvidenceEntryV2(
             issuer_id=get_str(item, "issuer_id"), status_key_id=get_str(item, "status_key_id"),
-            sequence=get_int(item, "sequence"), object_type=get_int(item, "object_type_code", 0, 0xFFFF),
+            sequence=get_int(item, "sequence"), object_type=_uint16(get_int(item, "object_type_code")),
             digest=get_str(item, "digest"),
         ))
+    return out
+
+
+def _uint16(value: int) -> int:
+    if value < 0 or value > 0xFFFF:
+        raise ValueError("wire v2: object_type_code is out of range")
+    return value
+
+
+def _decode_evaluator_refs(value) -> Optional[list[ConstraintEvaluatorRefV2]]:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("wire v2: constraint_evaluators must be an array")
+    out = []
+    for item in value:
+        item = {} if item is None else item
+        if not isinstance(item, dict):
+            raise ValueError("wire v2: constraint_evaluators entries must be objects")
+        check_keys(item, ("profile_digest", "type"), "constraint evaluator")
+        out.append(ConstraintEvaluatorRefV2(profile_digest=get_str(item, "profile_digest"), type=get_str(item, "type")))
     return out
 
 
@@ -172,6 +207,7 @@ def _receipt_from_obj(obj: dict, allowed) -> VerificationReceiptV2:
         status_evidence=_decode_evidence(obj.get("status_evidence_digests")),
         previous_receipt_hash=get_bytes(obj, "previous_receipt_hash") or b"",
         signature=decode_signature(obj.get("signature")),
+        constraint_evaluators=_decode_evaluator_refs(obj.get("constraint_evaluators")),
     )
 
 
@@ -337,14 +373,11 @@ def _validate_receipt_decision(r: VerificationReceiptV2) -> None:
         if trust != "trusted" or status != "current" or ctx not in ("unbound", "unverified"):
             raise ValueError("wire v2: action_context_unverified assessment tuple is invalid")
     elif reason == "evaluation_interrupted":
-        if (
-            trust == "untrusted" or status in ("revoked", "stale") or ctx in ("unbound", "unverified", "mismatch")
-            or (trust == "not_evaluated" and (status != "not_evaluated" or ctx != "not_evaluated"))
-            or (trust == "unavailable" and (status != "not_evaluated" or ctx != "not_evaluated"))
-            or (trust == "trusted" and status not in ("not_evaluated", "unavailable", "current"))
-            or (ctx == "not_evaluated" and status != "not_evaluated")
-            or (status in ("unavailable", "current") and (trust != "trusted" or ctx not in ("bound", "not_required")))
-        ):
+        # Each dimension is independent (SPEC-v2 §6.7): trust keeps its last
+        # state; status and context exist only under a trusted root; context
+        # is recorded only when it completed as bound or not_required.
+        if (ctx not in ("not_evaluated", "bound", "not_required")
+                or (trust != "trusted" and (status != "not_evaluated" or ctx != "not_evaluated"))):
             raise ValueError("wire v2: evaluation_interrupted assessment tuple is invalid")
     else:
         raise ValueError("wire v2: indeterminate reason is invalid")
@@ -352,11 +385,27 @@ def _validate_receipt_decision(r: VerificationReceiptV2) -> None:
 
 def validate_verification_receipt_v2(r: VerificationReceiptV2, signature: bool) -> None:
     if (
-        r is None or r.version != 2 or len(r.log_id) != 32 or not lower_hex_string(r.log_id)
-        or r.sequence <= 0 or r.sequence > MAX_SAFE_INTEGER
-        or not -MAX_SAFE_INTEGER <= r.verified_at <= MAX_SAFE_INTEGER
+        not isinstance(r, VerificationReceiptV2) or r.version != 2 or not isinstance(r.log_id, str)
+        or len(r.log_id) != 32 or not lower_hex_string(r.log_id)
+        or type(r.sequence) is not int or r.sequence <= 0 or r.sequence > MAX_SAFE_INTEGER
+        or not valid_v2_timestamp(r.verified_at)
     ):
         raise ValueError("wire v2: receipt version, log ID, sequence, or verified_at is invalid")
+    for name in ("verifier_id", "agent_id", "human_id", "bundle_hash", "decision", "decision_reason",
+                 "identity_status", "trust_assessment", "status_assessment", "challenge_assessment",
+                 "context_assessment", "required_scope"):
+        if not isinstance(getattr(r, name), str):
+            raise ValueError(f"wire v2: receipt {name} must be a string")
+    if not isinstance(r.previous_receipt_hash, (bytes, bytearray)):
+        raise ValueError("wire v2: previous_receipt_hash must be bytes")
+    for values in (r.issuer_ids, r.granted_scope):
+        if values is not None and (not isinstance(values, list) or not all(isinstance(v, str) for v in values)):
+            raise ValueError("wire v2: receipt arrays must be lists of strings")
+    if r.status_evidence is not None and (not isinstance(r.status_evidence, list) or not all(
+            isinstance(e, StatusEvidenceEntryV2) and type(e.sequence) is int and type(e.object_type) is int
+            and isinstance(e.issuer_id, str) and isinstance(e.status_key_id, str) and isinstance(e.digest, str)
+            for e in r.status_evidence)):
+        raise ValueError("wire v2: status evidence must be a list of StatusEvidenceEntryV2")
     if not valid_v2_id(r.verifier_id) or (r.agent_id != "" and not valid_v2_id(r.agent_id)):
         raise ValueError("wire v2: receipt verifier_id and optional agent_id must be v2 key IDs")
     if not valid_prefixed_digest_v2(r.bundle_hash) or len(r.previous_receipt_hash) != 48:
@@ -382,6 +431,10 @@ def validate_verification_receipt_v2(r: VerificationReceiptV2, signature: bool) 
         raise ValueError("wire v2: evaluated status requires authenticated evidence")
     if r.context_policy_digest is not None and not valid_prefixed_digest_v2(r.context_policy_digest):
         raise ValueError("wire v2: context_policy_digest is invalid")
+    if not valid_constraint_evaluator_refs_v2(r.constraint_evaluators) or (
+            r.constraint_evaluators and not r.issuer_ids):
+        raise ValueError("wire v2: constraint_evaluators must be valid extension types with sha384 profile digests, "
+                         "sorted and unique by type, and only for a delegated chain")
     if (r.context_assessment in ("not_evaluated", "unbound") and r.context_policy_digest is not None) or (
         r.context_assessment in ("bound", "not_required", "mismatch") and r.context_policy_digest is None
     ):
@@ -409,15 +462,14 @@ def verification_receipt_v2_digest(r: VerificationReceiptV2) -> bytes:
 def encode_verification_receipt_v2(r: VerificationReceiptV2) -> bytes:
     validate_verification_receipt_v2(r, True)
     data = canonical({**_signable_dict(r), "signature": key_dict(r.signature)})
-    if len(data) > MAX_PROOF_BUNDLE_BYTES:
-        raise ValueError("wire v2: verification receipt exceeds the wire size limit")
+    check_v2_wire_size(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2)
     return data
 
 
 def decode_verification_receipt_v2(data: bytes) -> VerificationReceiptV2:
     def run() -> VerificationReceiptV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: verification receipt exceeds the wire size limit")
+        check_v2_wire_size(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2",
+                           MAX_VERIFICATION_RECEIPT_BYTES_V2)
         obj = _v2json.check_wire_json(data, ("previous_receipt_hash",), ("bundle_hash",))
         require_fields(obj, VERIFICATION_RECEIPT_V2_FIELDS, ("context_policy_digest",))
         receipt = _receipt_from_obj(obj, _WIRE_KEYS)
@@ -445,11 +497,21 @@ def validate_verification_receipt_signable_v2(data: bytes) -> None:
 
 
 def sign_verification_receipt_v2(r: VerificationReceiptV2, verifier_private: HybridPrivateKey) -> VerificationReceiptV2:
+    """Go ``SignVerificationReceiptV2``."""
+    return sign_verification_receipt_v2_with_signer(background(), r, _as_signer(verifier_private))
+
+
+def sign_verification_receipt_v2_with_signer(ctx: Context, r: VerificationReceiptV2,
+                                             signer: SignerV2) -> VerificationReceiptV2:
+    """Go ``SignVerificationReceiptV2WithSigner``: the signer's key ID must
+    equal verifier_id."""
     validate_verification_receipt_v2(r, False)
-    if key_id_v2(public_key_of(verifier_private)) != r.verifier_id:
-        raise ValueError("receipt verifier_id does not match signing key")
+    verifier_public = signer_public_key_v2(signer)
+    if key_id_v2(verifier_public) != r.verifier_id:
+        raise V2SigningError("receipt verifier_id does not match signing key")
     body = receipt_v2_signable_bytes(r)
-    result = replace(r, signature=_sign_v2_statement(VERIFICATION_RECEIPT, body, verifier_private))
+    signature = sign_v2_statement_with_signer(ctx, VERIFICATION_RECEIPT, body, signer, verifier_public)
+    result = replace(r, signature=signature)
     encode_verification_receipt_v2(result)
     return result
 
@@ -505,7 +567,7 @@ def verification_receipt_v2_body(r: VerificationReceiptV2) -> bytes:
     previous hash, or signature)."""
     if r is None:
         raise ValueError("wire v2: receipt body is nil")
-    candidate = copy.copy(r)
+    candidate = replace(r, previous_receipt_hash=bytes(48))
     candidate.log_id = "0123456789abcdef0123456789abcdef"
     candidate.sequence = 1
     candidate.previous_receipt_hash = bytes(48)
@@ -520,8 +582,8 @@ def verification_receipt_v2_body(r: VerificationReceiptV2) -> bytes:
 
 def decode_verification_receipt_body_v2(data: bytes) -> VerificationReceiptV2:
     def run() -> VerificationReceiptV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: verification receipt body exceeds the wire size limit")
+        check_v2_wire_size(data, "verification receipt body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2",
+                           MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2)
         obj = _v2json.check_wire_json(data, (), ("bundle_hash",))
         require_fields(obj, _BODY_REQUIRED, ("context_policy_digest",))
         receipt = _receipt_from_obj(obj, _BODY_KEYS)
@@ -551,8 +613,16 @@ def bind_verification_receipt_body_v2(data: bytes, head: ReceiptV2Head) -> Verif
 
 
 def sign_prepared_verification_receipt_v2(data: bytes, head: ReceiptV2Head, private: HybridPrivateKey) -> VerificationReceiptV2:
+    """Go ``SignPreparedVerificationReceiptV2``."""
+    return sign_prepared_verification_receipt_v2_with_signer(background(), data, head, _as_signer(private))
+
+
+def sign_prepared_verification_receipt_v2_with_signer(ctx: Context, data: bytes, head: ReceiptV2Head,
+                                                      signer: SignerV2) -> VerificationReceiptV2:
+    """Go ``SignPreparedVerificationReceiptV2WithSigner``: bind an exact
+    prepared body to the next log position and sign it."""
     bound = bind_verification_receipt_body_v2(data, head)
-    signed = sign_verification_receipt_v2(bound, private)
+    signed = sign_verification_receipt_v2_with_signer(ctx, bound, signer)
     if verification_receipt_v2_body(signed) != data:
         raise ValueError("wire v2: signed receipt differs from prepared body")
     return signed

@@ -27,16 +27,23 @@ from .protocol_v2 import (
     valid_v2_id,
     validate_hybrid_signature_v2,
 )
+from .clock_bounds_v2 import valid_v2_timestamp
+from .context_v2 import Context, background
+from .limits_v2 import MAX_KEY_ROTATION_STATEMENT_BYTES_V2, check_v2_wire_size
 from .signing_v2 import (
     KEY_ROTATION_AUTHORIZATION,
     KEY_ROTATION_PROOF_OF_POSSESSION,
+    SignerV2,
+    V2SigningError,
+    _as_signer,
+    clone_public_key,
     equal_public_keys,
     key_id_v2,
-    public_key_of,
-    _sign_v2_statement,
+    sign_v2_statement_with_signer,
+    signer_public_key_v2,
     verify_v2_statement,
 )
-from .types import MAX_PROOF_BUNDLE_BYTES, HybridPrivateKey, HybridPublicKey, HybridSignature
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 from .witness_v2 import ZERO_HASH, WitnessEntryV2Result, statement_body_digest_v2
 
 ROTATION_ROLES = ("organization_root", "issuer", "agent")
@@ -94,17 +101,18 @@ _SIGNABLE_FIELDS = ("authority_id", "issued_at", "new_key", "new_key_id", "not_b
 
 
 def validate_key_rotation_statement_v2(stmt: KeyRotationStatementV2, signatures: bool) -> None:
-    if stmt is None or stmt.version != 2:
+    if not isinstance(stmt, KeyRotationStatementV2) or stmt.version != 2:
         raise ValueError("wire v2: rotation version must be 2")
-    if len(stmt.authority_id) != 32 or not lower_hex_string(stmt.authority_id):
+    if not isinstance(stmt.authority_id, str) or len(stmt.authority_id) != 32 or not lower_hex_string(stmt.authority_id):
         raise ValueError("wire v2: authority_id must be 32 lowercase hexadecimal characters")
-    if not (0 < stmt.recovery_epoch <= MAX_SAFE_INTEGER) or not (0 < stmt.sequence <= MAX_SAFE_INTEGER):
+    if (type(stmt.recovery_epoch) is not int or type(stmt.sequence) is not int
+            or not (0 < stmt.recovery_epoch <= MAX_SAFE_INTEGER) or not (0 < stmt.sequence <= MAX_SAFE_INTEGER)):
         raise ValueError("wire v2: recovery_epoch and sequence must be positive safe integers")
-    if not (-MAX_SAFE_INTEGER <= stmt.issued_at <= MAX_SAFE_INTEGER) or not (-MAX_SAFE_INTEGER <= stmt.not_before <= MAX_SAFE_INTEGER):
-        raise ValueError("wire v2: issued_at and not_before must be safe integers")
+    if not valid_v2_timestamp(stmt.issued_at) or not valid_v2_timestamp(stmt.not_before):
+        raise ValueError("wire v2: issued_at and not_before must be inside the v2 timestamp domain")
     if stmt.role not in ROTATION_ROLES:
         raise ValueError("wire v2: rotation role is invalid")
-    if len(stmt.previous_statement_hash) != 48:
+    if not isinstance(stmt.previous_statement_hash, (bytes, bytearray)) or len(stmt.previous_statement_hash) != 48:
         raise ValueError("wire v2: previous_statement_hash must be 48 bytes")
     if stmt.sequence == 1 and bytes(stmt.previous_statement_hash) != ZERO_HASH:
         raise ValueError("wire v2: genesis rotation must use a zero previous_statement_hash")
@@ -167,8 +175,8 @@ def key_rotation_statement_v2_digest(stmt: KeyRotationStatementV2) -> bytes:
 
 def decode_key_rotation_statement_v2(data: bytes) -> KeyRotationStatementV2:
     def run() -> KeyRotationStatementV2:
-        if len(data) > MAX_PROOF_BUNDLE_BYTES:
-            raise ValueError("wire v2: rotation statement exceeds the wire size limit")
+        check_v2_wire_size(data, "rotation statement", "MAX_KEY_ROTATION_STATEMENT_BYTES_V2",
+                           MAX_KEY_ROTATION_STATEMENT_BYTES_V2)
         obj = _v2json.check_wire_json(data, ("previous_statement_hash",))
         require_fields(obj, KEY_ROTATION_V2_FIELDS)
         stmt = _stmt_from_obj(obj, KEY_ROTATION_V2_FIELDS)
@@ -187,16 +195,34 @@ def encode_key_rotation_statement_v2(stmt: KeyRotationStatementV2) -> bytes:
     })
 
 
-def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: HybridPrivateKey, new_key: HybridPrivateKey) -> KeyRotationStatementV2:
+def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: HybridPrivateKey,
+                                   new_key: HybridPrivateKey) -> KeyRotationStatementV2:
+    """Go ``SignKeyRotationStatementV2``: the old key signs 0x0004 and the new
+    key signs 0x0009 over the same body. Callers still authenticate the
+    current key and validate rotation-chain state."""
+    return sign_key_rotation_statement_v2_with_signers(background(), stmt, _as_signer(old_key), _as_signer(new_key))
+
+
+def sign_key_rotation_statement_v2_with_signers(ctx: Context, stmt: KeyRotationStatementV2, old_signer: SignerV2,
+                                                new_signer: SignerV2) -> KeyRotationStatementV2:
+    """Go ``SignKeyRotationStatementV2WithSigners``."""
     validate_key_rotation_statement_v2(stmt, False)
-    if not equal_public_keys(public_key_of(old_key), stmt.old_key) or not equal_public_keys(public_key_of(new_key), stmt.new_key):
-        raise ValueError("rotation private keys do not match the statement keys")
+    try:
+        old_pub = signer_public_key_v2(old_signer)
+    except V2SigningError as exc:
+        raise V2SigningError(f"old rotation key: {exc}") from exc
+    try:
+        new_pub = signer_public_key_v2(new_signer)
+    except V2SigningError as exc:
+        raise V2SigningError(f"new rotation key: {exc}") from exc
+    if not equal_public_keys(old_pub, stmt.old_key) or not equal_public_keys(new_pub, stmt.new_key):
+        raise V2SigningError("rotation private keys do not match the statement keys")
     signable = key_rotation_signable_bytes_v2(stmt)
-    return replace(
-        stmt,
-        old_signature=_sign_v2_statement(KEY_ROTATION_AUTHORIZATION, signable, old_key),
-        new_signature=_sign_v2_statement(KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_key),
-    )
+    old_signature = sign_v2_statement_with_signer(ctx, KEY_ROTATION_AUTHORIZATION, signable, old_signer, old_pub)
+    new_signature = sign_v2_statement_with_signer(ctx, KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_signer, new_pub)
+    return replace(stmt, previous_statement_hash=bytes(stmt.previous_statement_hash),
+                   old_key=clone_public_key(stmt.old_key), new_key=clone_public_key(stmt.new_key),
+                   old_signature=old_signature, new_signature=new_signature)
 
 
 def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRotationV2State, now_unix: int,
@@ -208,7 +234,9 @@ def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRot
         current_id = key_id_v2(state.current_key)
     except ValueError as exc:
         raise V2Error(cfg, f"caller state current key: {exc}") from exc
-    if state.sequence < 0 or state.sequence >= MAX_SAFE_INTEGER or not (0 < state.recovery_epoch <= MAX_SAFE_INTEGER) or len(state.head_hash) != 48:
+    if (type(state.sequence) is not int or type(state.recovery_epoch) is not int or state.sequence < 0
+            or state.sequence >= MAX_SAFE_INTEGER or not (0 < state.recovery_epoch <= MAX_SAFE_INTEGER)
+            or not isinstance(state.head_hash, (bytes, bytearray)) or len(state.head_hash) != 48):
         raise V2Error(cfg, "caller rotation state is invalid")
     if state.sequence == 0 and bytes(state.head_hash) != ZERO_HASH:
         raise V2Error(cfg, "caller genesis state must have a zero head hash")
@@ -227,7 +255,8 @@ def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRot
         raise V2Error(cfg, "caller used-key history does not contain the current key")
     if stmt.new_key_id in used:
         raise V2Error(V2ErrorClass.ROTATION_KEY_REUSED, "rotation replacement key was already used by this authority")
-    if future_skew < 0 or not (-MAX_SAFE_INTEGER <= now_unix <= MAX_SAFE_INTEGER) or future_skew > MAX_SAFE_INTEGER:
+    if (type(now_unix) is not int or type(future_skew) is not int or future_skew < 0
+            or not (-MAX_SAFE_INTEGER <= now_unix <= MAX_SAFE_INTEGER) or future_skew > MAX_SAFE_INTEGER):
         raise V2Error(cfg, "rotation verification clock inputs are outside safe bounds")
     if now_unix > MAX_SAFE_INTEGER - future_skew:
         future_skew = MAX_SAFE_INTEGER - now_unix

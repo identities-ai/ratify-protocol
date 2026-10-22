@@ -1,19 +1,13 @@
 """Ratify Protocol v2 delegation-signature helpers.
 
-Thin wrappers over :mod:`signing_v2` fixed to the delegation-certificate object
-code. Signing requires the ratify-protocol-native-v2 extension; verification
-does not.
+Verification helpers fixed to the delegation-certificate object code. There
+is deliberately no function here that signs caller-selected bytes (SPEC-v2
+§3.2); sign certificates with ``protocol_v2.sign_delegation_cert_v2``.
 """
 from __future__ import annotations
 
-from .signing_v2 import (
-    DELEGATION_CERTIFICATE,
-    key_id_v2,
-    _sign_v2_statement,
-    signing_message_v2,
-    verify_v2_statement,
-)
-from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
+from .signing_v2 import DELEGATION_CERTIFICATE, key_id_v2, signing_message_v2, verify_v2_statement
+from .types import HybridPublicKey, HybridSignature
 
 
 def delegation_signature_message_v2(signable_bytes: bytes) -> bytes:
@@ -28,14 +22,12 @@ def derive_key_id_v2(public_key: HybridPublicKey) -> str:
     return key_id_v2(public_key)
 
 
-def sign_delegation_v2(
-    signable_bytes: bytes,
-    private_key: HybridPrivateKey,
-) -> HybridSignature:
-    """Sign a delegation projection with both v2 components."""
-    if not isinstance(signable_bytes, bytes):
-        raise TypeError("signable_bytes must be bytes")
-    return _sign_v2_statement(DELEGATION_CERTIFICATE, signable_bytes, private_key)
+def sign_delegation_v2(*_args, **_kwargs):
+    """Removed: signing caller-selected bytes is not part of the v2 API.
+    Use ``protocol_v2.sign_delegation_cert_v2`` (a typed signer)."""
+    raise NotImplementedError(
+        "sign_delegation_v2 signed caller-selected bytes and is removed; use protocol_v2.sign_delegation_cert_v2"
+    )
 
 
 def verify_delegation_signature_v2(

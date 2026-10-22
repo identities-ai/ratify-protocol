@@ -9,31 +9,33 @@ import (
 // verificationReceiptBodyV2 is the immutable receipt content prepared before
 // the receipt log assigns its position and the verifier signs it.
 type verificationReceiptBodyV2 struct {
-	AgentID             string                      `json:"agent_id,omitempty"`
-	BundleHash          string                      `json:"bundle_hash"`
-	ChallengeAssessment string                      `json:"challenge_assessment"`
-	ContextAssessment   string                      `json:"context_assessment"`
-	ContextPolicyDigest *string                     `json:"context_policy_digest"`
-	Decision            string                      `json:"decision"`
-	DecisionReason      string                      `json:"decision_reason"`
-	GrantedScope        []string                    `json:"granted_scope"`
-	HumanID             string                      `json:"human_id,omitempty"`
-	IdentityStatus      string                      `json:"identity_status"`
-	IssuerIDs           []string                    `json:"issuer_ids"`
-	RequiredScope       string                      `json:"required_scope"`
-	StatusAssessment    string                      `json:"status_assessment"`
-	StatusEvidence      []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
-	TrustAssessment     string                      `json:"trust_assessment"`
-	VerifiedAt          int64                       `json:"verified_at"`
-	VerifierID          string                      `json:"verifier_id"`
-	Version             int                         `json:"version"`
+	AgentID              string                      `json:"agent_id,omitempty"`
+	BundleHash           string                      `json:"bundle_hash"`
+	ChallengeAssessment  string                      `json:"challenge_assessment"`
+	ConstraintEvaluators []ConstraintEvaluatorRefV2  `json:"constraint_evaluators,omitempty"`
+	ContextAssessment    string                      `json:"context_assessment"`
+	ContextPolicyDigest  *string                     `json:"context_policy_digest"`
+	Decision             string                      `json:"decision"`
+	DecisionReason       string                      `json:"decision_reason"`
+	GrantedScope         []string                    `json:"granted_scope"`
+	HumanID              string                      `json:"human_id,omitempty"`
+	IdentityStatus       string                      `json:"identity_status"`
+	IssuerIDs            []string                    `json:"issuer_ids"`
+	RequiredScope        string                      `json:"required_scope"`
+	StatusAssessment     string                      `json:"status_assessment"`
+	StatusEvidence       []statusEvidenceCanonicalV2 `json:"status_evidence_digests"`
+	TrustAssessment      string                      `json:"trust_assessment"`
+	VerifiedAt           int64                       `json:"verified_at"`
+	VerifierID           string                      `json:"verifier_id"`
+	Version              int                         `json:"version"`
 }
 
 func receiptBodyFieldsV2(r *VerificationReceiptV2) verificationReceiptBodyV2 {
 	return verificationReceiptBodyV2{
 		AgentID: r.AgentID, BundleHash: r.BundleHash,
 		ChallengeAssessment: r.ChallengeAssessment, ContextAssessment: r.ContextAssessment,
-		ContextPolicyDigest: r.ContextPolicyDigest, Decision: r.Decision,
+		ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(r.ConstraintEvaluators),
+		ContextPolicyDigest:  r.ContextPolicyDigest, Decision: r.Decision,
 		DecisionReason: r.DecisionReason, GrantedScope: r.GrantedScope,
 		HumanID: r.HumanID, IdentityStatus: r.IdentityStatus, IssuerIDs: r.IssuerIDs,
 		RequiredScope: r.RequiredScope, StatusAssessment: r.StatusAssessment,
@@ -97,7 +99,8 @@ func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err
 		IdentityStatus: body.IdentityStatus, TrustAssessment: body.TrustAssessment,
 		StatusAssessment: body.StatusAssessment, ChallengeAssessment: body.ChallengeAssessment,
 		ContextAssessment: body.ContextAssessment, ContextPolicyDigest: body.ContextPolicyDigest,
-		VerifiedAt: body.VerifiedAt, RequiredScope: body.RequiredScope,
+		ConstraintEvaluators: body.ConstraintEvaluators,
+		VerifiedAt:           body.VerifiedAt, RequiredScope: body.RequiredScope,
 		GrantedScope: body.GrantedScope, StatusEvidence: statusEvidenceFromCanonicalV2(body.StatusEvidence),
 	}
 	canonical, err := VerificationReceiptV2Body(receipt)

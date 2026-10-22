@@ -442,6 +442,7 @@ func cloneClaim(claim ratify.V2ChallengeClaim) ratify.V2ChallengeClaim {
 		seq := *claim.StreamSeq
 		claim.StreamSeq = &seq
 	}
+	claim.ConstraintEvaluators = slices.Clone(claim.ConstraintEvaluators)
 	return claim
 }
 

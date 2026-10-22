@@ -43,6 +43,10 @@ type V2ChallengeClaim struct {
 	ClockSkewSeconds    int64
 	StreamID            []byte
 	StreamSeq           *int64
+	// ConstraintEvaluators is the sealed extension evaluator snapshot for the
+	// chain (SPEC-v2 §5.2, §6.3), sorted by type; every terminal receipt for
+	// the claim, including evaluation_interrupted, carries it.
+	ConstraintEvaluators []ConstraintEvaluatorRefV2
 }
 
 // V2EvaluationToken grants one local evaluation attempt for a newly created
@@ -238,6 +242,7 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 		IssuedAt: sealed.IssuedAt, ExpiresAt: sealed.ExpiresAt,
 		MaxAgeSeconds: maxAgeSeconds, ClockSkewSeconds: futureSkewSeconds,
 		StreamID: streamID, StreamSeq: streamSeq,
+		ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(sealed.EvaluatorRefs),
 	}
 	claim.RateBatch, err = signedV2RateReservationBatch(bundle)
 	if err != nil {
@@ -283,6 +288,7 @@ func cloneV2ChallengeClaim(claim V2ChallengeClaim) V2ChallengeClaim {
 		sequence := *claim.StreamSeq
 		claim.StreamSeq = &sequence
 	}
+	claim.ConstraintEvaluators = cloneConstraintEvaluatorRefsV2(claim.ConstraintEvaluators)
 	return claim
 }
 

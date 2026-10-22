@@ -16,7 +16,7 @@ func TestV2WireTimestampDomainAtDecode(t *testing.T) {
 	subjectID, _ := KeyIDV2(subjectPub)
 	cert, err := SignDelegationCertV2(&DelegationCertV2{Version: 2, CertID: "c", IssuerID: issuerID, IssuerPubKey: issuerPub,
 		SubjectID: subjectID, SubjectPubKey: subjectPub, Scope: []string{"data:read"}, Constraints: []ConstraintV2{},
-		IssuedAt: 1, ExpiresAt: V2MaxTimestampSeconds}, issuerKey)
+		IssuedAt: V2MaxTimestampSeconds - 3600, ExpiresAt: V2MaxTimestampSeconds}, issuerKey)
 	if err != nil {
 		t.Fatalf("certificate at the timestamp bound must sign: %v", err)
 	}

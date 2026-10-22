@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 	"github.com/identities-ai/ratify-protocol/v2/v2reference"
@@ -36,6 +37,7 @@ type v2Counts struct {
 	Rate            int `json:"rate"`
 	Finalize        int `json:"finalize"`
 	Progress        int `json:"progress"`
+	Evaluator       int `json:"evaluator"`
 }
 
 type v2Rate struct {
@@ -107,12 +109,14 @@ type v2OrderingInputs struct {
 	MaxChallengeAgeSeconds int64                    `json:"max_challenge_age_seconds"`
 	FutureSkewSeconds      int64                    `json:"future_skew_seconds"`
 	RequestContext         *struct {
-		HasResource           bool   `json:"has_resource"`
-		RequestedResourceID   string `json:"requested_resource_id"`
-		RequestedPath         string `json:"requested_path"`
-		HasAmount             bool   `json:"has_amount"`
-		RequestedAmountMicros int64  `json:"requested_amount_micros"`
-		RequestedCurrency     string `json:"requested_currency"`
+		HasResource           bool              `json:"has_resource"`
+		RequestedResourceID   string            `json:"requested_resource_id"`
+		RequestedPath         string            `json:"requested_path"`
+		HasAmount             bool              `json:"has_amount"`
+		RequestedAmountMicros int64             `json:"requested_amount_micros"`
+		RequestedCurrency     string            `json:"requested_currency"`
+		ExtensionCounts       map[string]int64  `json:"extension_counts"`
+		ExtensionValues       map[string]string `json:"extension_values"`
 	} `json:"request_context"`
 	TZDBVersion         string `json:"tzdb_version"`
 	ReceiverBindingHook string `json:"receiver_binding_hook"`
@@ -128,9 +132,15 @@ type v2OrderingInputs struct {
 		Mode    string                 `json:"mode"`
 		Objects []v2EvidenceObjectJSON `json:"objects"`
 	} `json:"status_evidence"`
-	AudienceMode        string             `json:"audience_mode"`
-	AudienceMemberships []v2MembershipJSON `json:"audience_memberships"`
-	Rate                string             `json:"rate"`
+	AudienceMode         string             `json:"audience_mode"`
+	AudienceMemberships  []v2MembershipJSON `json:"audience_memberships"`
+	Rate                 string             `json:"rate"`
+	ConstraintEvaluators []struct {
+		Type           string `json:"type"`
+		Profile        string `json:"profile"`
+		Implementation string `json:"implementation"`
+		ValidUntil     int64  `json:"valid_until"`
+	} `json:"constraint_evaluators"`
 }
 
 type v2OrderingVector struct {
@@ -357,7 +367,11 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 	}
 	if c := in.RequestContext; c != nil {
 		req.Context = ratify.ConstraintContextV2{HasResource: c.HasResource, RequestedResourceID: c.RequestedResourceID, RequestedPath: c.RequestedPath,
-			HasAmount: c.HasAmount, RequestedAmountMicros: c.RequestedAmountMicros, RequestedCurrency: c.RequestedCurrency}
+			HasAmount: c.HasAmount, RequestedAmountMicros: c.RequestedAmountMicros, RequestedCurrency: c.RequestedCurrency,
+			ExtensionCounts: c.ExtensionCounts, ExtensionValues: c.ExtensionValues}
+	}
+	if len(in.ConstraintEvaluators) != 0 {
+		req.ConstraintEvaluators = v2BuildEvaluatorRegistry(t, in, counts)
 	}
 	cb := ratify.V2VerifyCallbacks{
 		Trust: func(context.Context, []ratify.DelegationCertV2) (ratify.V2TrustResolution, error) {
@@ -429,6 +443,62 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 		cb.Rate = rate
 	}
 	return req, cb, rate
+}
+
+// v2BuildEvaluatorRegistry binds each configured profile descriptor to the
+// standard implementation or scripted fault the vector names.
+func v2BuildEvaluatorRegistry(t *testing.T, in v2OrderingInputs, counts *v2Counts) *ratify.ConstraintEvaluatorRegistryV2 {
+	t.Helper()
+	standard := map[string]ratify.ConstraintEvaluatorFuncV2{
+		ratify.ProfileMaxCountV2:      ratify.StandardMaxCountEvaluatorV2().Evaluate,
+		ratify.ProfileAllowedValuesV2: ratify.StandardAllowedValuesEvaluatorV2().Evaluate,
+	}
+	var registrations []ratify.ConstraintEvaluatorRegistrationV2
+	for _, e := range in.ConstraintEvaluators {
+		e := e
+		var impl ratify.ConstraintEvaluatorFuncV2
+		switch e.Implementation {
+		case "fault:error":
+			impl = func(context.Context, ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				return ratify.ConstraintEvaluationResultV2{}, fmt.Errorf("scripted evaluator failure")
+			}
+		case "fault:panic":
+			impl = func(context.Context, ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				panic("scripted evaluator panic")
+			}
+		case "fault:timeout":
+			impl = func(ctx context.Context, _ ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				<-ctx.Done()
+				return ratify.ConstraintEvaluationResultV2{Outcome: ratify.ConstraintOutcomePassV2}, nil
+			}
+		case "fault:invalid_outcome":
+			impl = func(context.Context, ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				return ratify.ConstraintEvaluationResultV2{Outcome: "maybe"}, nil
+			}
+		case "fault:pass_until":
+			impl = func(context.Context, ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				return ratify.ConstraintEvaluationResultV2{Outcome: ratify.ConstraintOutcomePassV2, ValidUntil: e.ValidUntil}, nil
+			}
+		default:
+			impl = standard[e.Implementation]
+			if impl == nil {
+				t.Fatalf("unknown evaluator implementation %q", e.Implementation)
+			}
+		}
+		inner := impl
+		registrations = append(registrations, ratify.ConstraintEvaluatorRegistrationV2{
+			Descriptor: ratify.ConstraintProfileDescriptorV2{Profile: e.Profile, Type: ratify.ConstraintType(e.Type)},
+			Evaluate: func(ctx context.Context, input ratify.ConstraintEvaluationInputV2) (ratify.ConstraintEvaluationResultV2, error) {
+				counts.Evaluator++
+				return inner(ctx, input)
+			},
+		})
+	}
+	registry, err := ratify.NewConstraintEvaluatorRegistryV2(time.Second, registrations...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
 }
 
 func TestV2ConformanceVerifierOrdering(t *testing.T) {

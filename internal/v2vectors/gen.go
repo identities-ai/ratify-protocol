@@ -48,6 +48,9 @@ var Files = []string{
 	"lifecycle-scenarios.json",
 	"transaction-verification.json",
 	"annex-a.json",
+	"issuer-duties.json",
+	"challenge-issuance.json",
+	"status-publisher.json",
 }
 
 // Generate returns the exact bytes of every generated vector file.
@@ -68,6 +71,9 @@ func Generate() (map[string][]byte, error) {
 		"lifecycle-scenarios.json":      g.lifecycleFile,
 		"transaction-verification.json": g.txVerifyFile,
 		"annex-a.json":                  g.annexFile,
+		"issuer-duties.json":            g.issuerDutiesFile,
+		"challenge-issuance.json":       g.challengeIssuanceFile,
+		"status-publisher.json":         g.statusPublisherFile,
 	}
 	for _, name := range Files {
 		var value any

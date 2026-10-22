@@ -114,6 +114,7 @@ func V2EvaluationInterruptedResult(claim V2ChallengeClaim, verifiedAt int64, pro
 		ContextAssessment: progress.ContextAssessment, ContextPolicyDigest: progress.ContextPolicyDigest,
 		VerifiedAt: verifiedAt, RequiredScope: claim.RequiredScope,
 		GrantedScope: []string{}, StatusEvidence: progress.StatusEvidence,
+		ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(claim.ConstraintEvaluators),
 	}
 	receiptBody, err = VerificationReceiptV2Body(receipt)
 	if err != nil {

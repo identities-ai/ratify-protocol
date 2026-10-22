@@ -3,7 +3,9 @@ package ratify
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
+	"time"
 )
 
 // ExpectedChallengeV2 contains verifier-authenticated issuance state. Values
@@ -48,6 +50,12 @@ type expectedChallengeStateV2 struct {
 	// configured context policy. Only the internal end-to-end verifier sets it;
 	// the terminal result is then indeterminate/action_context_unverified.
 	NoContextPolicy bool
+	// EvaluatorRefs, evaluators and evaluatorTimeout are the extension
+	// evaluator profiles the chain uses, snapshotted from the
+	// caller-authenticated registry at preflight and sealed with the claim.
+	EvaluatorRefs    []ConstraintEvaluatorRefV2
+	evaluators       map[ConstraintType]registeredConstraintEvaluatorV2
+	evaluatorTimeout time.Duration
 }
 
 func snapshotExpectedChallengeV2(expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, bundleHash string, issuerIDs []string, maxAge, futureSkew int64) *expectedChallengeStateV2 {
@@ -82,6 +90,8 @@ func cloneExpectedChallengeStateV2(state *expectedChallengeStateV2) *expectedCha
 	clone.ExpectedSessionContext = bytes.Clone(state.ExpectedSessionContext)
 	clone.IssuerIDs = append([]string(nil), state.IssuerIDs...)
 	clone.ContextPolicy = cloneV2ContextPolicy(state.ContextPolicy)
+	clone.EvaluatorRefs = cloneConstraintEvaluatorRefsV2(state.EvaluatorRefs)
+	clone.evaluators = maps.Clone(state.evaluators)
 	if state.ExpectedAgentPublicKey != nil {
 		key := *state.ExpectedAgentPublicKey
 		key.Ed25519 = bytes.Clone(key.Ed25519)
@@ -109,17 +119,20 @@ func matchesExpectedChallengeV2(expected *ExpectedChallengeV2, state *expectedCh
 
 // PreflightProofBundleV2 binds the challenge's
 // expected context to the same immutable policy used by terminal evaluation.
+// It seals no extension evaluator profile, so a staged evaluation that starts
+// here treats every extension constraint type as constraint_unknown; only
+// VerifyProofBundleV2 accepts a ConstraintEvaluatorRegistryV2.
 // Verify callers use this entry point so a missing or divergent policy value
 // cannot consume the challenge before context validation.
 func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
-	return preflightProofBundleV2(bundle, expected, policy, false, nil, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds)
+	return preflightProofBundleV2(bundle, expected, policy, false, nil, nil, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds)
 }
 
 // preflightProofBundleV2 is the ordered pre-claim pipeline. allowNoPolicy is
 // used only by VerifyProofBundleV2 for a generic verifier that explicitly has
 // no context policy. hook is the application's pure receiver-binding check; it
 // runs only after every built-in pre-claim check has passed.
-func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, allowNoPolicy bool, hook func(*ProofBundleV2, ExpectedChallengeV2) error, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
+func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, allowNoPolicy bool, hook func(*ProofBundleV2, ExpectedChallengeV2) error, evaluators *ConstraintEvaluatorRegistryV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
 	if expected == nil {
 		return nil, v2Errorf(V2ErrExpectedChallengeMissing, "v2 expected challenge is unavailable")
 	}
@@ -168,7 +181,9 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 		}
 	}
 	slices.Sort(issuerIDs)
-	return &V2PreflightResult{state: snapshotExpectedChallengeV2(expected, policy, requiredScope, bundleHash, issuerIDs, maxAgeSeconds, futureSkewSeconds)}, nil
+	state := snapshotExpectedChallengeV2(expected, policy, requiredScope, bundleHash, issuerIDs, maxAgeSeconds, futureSkewSeconds)
+	state.evaluators, state.EvaluatorRefs, state.evaluatorTimeout = snapshotConstraintEvaluatorsV2(evaluators, bundle)
+	return &V2PreflightResult{state: state}, nil
 }
 
 // ValidateProofBundleV2Preflight performs the pure pre-claim checks required

@@ -837,9 +837,25 @@ func SignDelegationCertV2(cert *DelegationCertV2, issuerKey HybridPrivateKey) (*
 
 // SignDelegationCertV2WithSigner is SignDelegationCertV2 with an external
 // signer whose complete public key must equal the certificate issuer key.
+//
+// The issuer duties of SPEC-v2 §5.1 and §5.2 are checked before any signer
+// method runs: the certificate must decode-validate, carry valid v2 scopes,
+// have issued_at < expires_at and a lifetime of at most 315360000 seconds,
+// and carry a jointly satisfiable set of resource_path constraints. These
+// checks are issuer hygiene only; a verifier still rejects or denies a
+// certificate that violates them independently.
 func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2, signer SignerV2) (*DelegationCertV2, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("v2 delegation certificate is nil")
+	}
+	if err := validateDelegationCertV2(cert); err != nil {
+		return nil, err
+	}
+	if err := ValidateScopesV2(cert.Scope); err != nil {
+		return nil, fmt.Errorf("v2 issuer scope: %w", err)
+	}
+	if err := validateDelegationIssuanceV2(cert); err != nil {
+		return nil, err
 	}
 	issuerPub, err := signerPublicKeyV2(signer)
 	if err != nil {
@@ -851,12 +867,6 @@ func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2,
 	}
 	if cert.IssuerID != issuerID || !bytes.Equal(cert.IssuerPubKey.Ed25519, issuerPub.Ed25519) || !bytes.Equal(cert.IssuerPubKey.MLDSA65, issuerPub.MLDSA65) {
 		return nil, fmt.Errorf("v2 issuer key does not match certificate issuer")
-	}
-	if err := validateDelegationCertV2(cert); err != nil {
-		return nil, err
-	}
-	if err := ValidateScopesV2(cert.Scope); err != nil {
-		return nil, fmt.Errorf("v2 issuer scope: %w", err)
 	}
 	unsigned := *cert
 	unsigned.Signature = placeholderV2Signature()
@@ -889,6 +899,46 @@ func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2,
 		return nil, fmt.Errorf("signed v2 delegation certificate failed verification: %w", err)
 	}
 	return signed, nil
+}
+
+// validateDelegationIssuanceV2 enforces the issuer duties a decoder does
+// not (SPEC-v2 §5.1, §5.2): issued_at < expires_at, a lifetime of at most
+// V2MaxDelegationLifetimeSeconds, and a jointly satisfiable resource_path
+// set. Every resource_path constraint must name the same resource_id, each
+// present path_prefix must satisfy the path model, and every two prefixes
+// must nest under the segment-prefix relation (an absent prefix orders as
+// "/"). A set that fails any rule could never pass verification together.
+func validateDelegationIssuanceV2(cert *DelegationCertV2) error {
+	if cert.IssuedAt >= cert.ExpiresAt {
+		return fmt.Errorf("v2 issuer duty: issued_at must be earlier than expires_at")
+	}
+	if cert.ExpiresAt-cert.IssuedAt > V2MaxDelegationLifetimeSeconds {
+		return fmt.Errorf("v2 issuer duty: delegation lifetime exceeds %d seconds", V2MaxDelegationLifetimeSeconds)
+	}
+	resourceID := ""
+	var prefixes []string
+	for i, c := range cert.Constraints {
+		if c.Type != ConstraintResourcePath {
+			continue
+		}
+		if c.PathPrefix != "" {
+			if _, err := NormalizeResourcePath(c.PathPrefix); err != nil {
+				return fmt.Errorf("v2 issuer duty: constraint %d path_prefix can never match: %v", i, err)
+			}
+		}
+		if resourceID == "" {
+			resourceID = c.ResourceID
+		} else if c.ResourceID != resourceID {
+			return fmt.Errorf("v2 issuer duty: constraint %d names a different resource_id; the resource_path set is jointly unsatisfiable", i)
+		}
+		for _, prior := range prefixes {
+			if !resourcePathsNested(prior, c.PathPrefix) {
+				return fmt.Errorf("v2 issuer duty: constraint %d path_prefix %q does not nest with %q; the resource_path set is jointly unsatisfiable", i, c.PathPrefix, prior)
+			}
+		}
+		prefixes = append(prefixes, c.PathPrefix)
+	}
+	return nil
 }
 
 func presentationSignableBytesV2(b *ProofBundleV2) ([]byte, error) {

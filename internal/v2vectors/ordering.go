@@ -83,6 +83,20 @@ type requestContextJSON struct {
 	HasAmount             bool   `json:"has_amount,omitempty"`
 	RequestedAmountMicros int64  `json:"requested_amount_micros,omitempty"`
 	RequestedCurrency     string `json:"requested_currency,omitempty"`
+	// Authenticated inputs for extension evaluator profiles (SPEC-v2 §5.2).
+	ExtensionCounts map[string]int64  `json:"extension_counts,omitempty"`
+	ExtensionValues map[string]string `json:"extension_values,omitempty"`
+}
+
+// evaluatorJSON registers one extension evaluator profile in the verifier's
+// caller-authenticated configuration. profile and type form the descriptor
+// whose digest is recorded; implementation names the behavior the harness
+// binds to it: a standard profile identifier, or a fault: test behavior.
+type evaluatorJSON struct {
+	Type           string `json:"type"`
+	Profile        string `json:"profile"`
+	Implementation string `json:"implementation"`
+	ValidUntil     int64  `json:"valid_until,omitempty"`
 }
 
 type rateJSON struct {
@@ -101,6 +115,7 @@ type countsJSON struct {
 	Rate            int `json:"rate"`
 	Finalize        int `json:"finalize"`
 	Progress        int `json:"progress"`
+	Evaluator       int `json:"evaluator,omitempty"`
 }
 
 type outcomeJSON struct {
@@ -149,6 +164,7 @@ type orderingVector struct {
 	AudienceMode           string                        `json:"audience_mode"`
 	AudienceMemberships    []membershipJSON              `json:"audience_memberships"`
 	Rate                   string                        `json:"rate"`
+	ConstraintEvaluators   []evaluatorJSON               `json:"constraint_evaluators,omitempty"`
 	Expected               outcomeJSON                   `json:"expected"`
 }
 
@@ -188,6 +204,7 @@ type scenario struct {
 	audience    string
 	memberships []membershipJSON
 	rate        string
+	evaluators  []evaluatorJSON
 	out         outcomeJSON
 }
 
@@ -354,6 +371,7 @@ func (g *gen) finish(s scenario) orderingVector {
 			TrustAssessment: s.out.TrustAssessment, StatusAssessment: s.out.StatusAssessment, ChallengeAssessment: "current",
 			ContextAssessment: s.out.ContextAssessment, ContextPolicyDigest: s.out.ContextPolicyDigest, VerifiedAt: s.out.VerifiedAt,
 			RequiredScope: s.scope, GrantedScope: granted, StatusEvidence: toLibEvidence(s.out.StatusEvidence),
+			ConstraintEvaluators: sealedEvaluatorRefs(b, s.evaluators),
 		}
 		s.out.ReceiptBodyB64 = b64(must(ratify.VerificationReceiptV2Body(r)))
 		s.out.CallbackCounts.Finalize = 1
@@ -379,7 +397,7 @@ func (g *gen) finish(s scenario) orderingVector {
 		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, TZDBVersion: tzdb, ReceiverBindingHook: s.hook,
 		ClaimStore: s.claim, ClaimTimeOffset: s.claimOffset, FinalizeTimeOffset: s.finOffset, Trust: s.trust, StatusKeys: s.statusKeys,
 		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
-		Rate: s.rate, Expected: s.out,
+		Rate: s.rate, ConstraintEvaluators: s.evaluators, Expected: s.out,
 	}
 }
 
@@ -423,6 +441,10 @@ func (g *gen) orderingFile() any {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}
+	f.Semantics["constraint_evaluators"] = "caller-authenticated extension evaluator registry (SPEC-v2 §5.2); absent = none registered. Each entry's profile and type form the descriptor {\"profile\",\"type\"} whose digest is sha384:hex(SHA-384(\"ratify-protocol-constraint-profile-v2\" || 0x00 || RatifyCanonicalJSON(descriptor))). implementation binds the behavior: com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1 are the standard profiles; fault:error returns an error; fault:panic panics; fault:timeout never answers within the registry timeout; fault:invalid_outcome returns an outcome outside pass/denied/unverifiable; fault:pass_until returns pass with horizon valid_until. The registry entries for types present in the chain are sealed with the claim and recorded, sorted by type, in the receipt member constraint_evaluators"
+	f.Semantics["request_context.extension_counts"] = "authenticated named quantities for extension profiles: names 1 to 128 bytes of [a-z0-9_.:-], values 0..2^53-1, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["request_context.extension_values"] = "authenticated named exact values for extension profiles: names as for extension_counts, values valid UTF-8 of at most 512 bytes, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["callback_counts.evaluator"] = "number of extension evaluator invocations; omitted when zero"
 	return f
 }
 
@@ -452,7 +474,7 @@ func (g *gen) preflightScenarios() []scenario {
 	add(std("malformed_json", "truncated JSON never reaches signatures, claim, or callbacks", bundle[:len(bundle)/3], "malformed", nil))
 	add(std("unknown_field", "unknown bundle field is a strict decode failure", mutate(bundle, func(o map[string]any) { o["extra"] = true }), "malformed", nil))
 	add(std("v1_bundle", "v1 objects are never accepted by a v2 verifier", canon(map[string]any{"agent_id": ratify.DeriveID(agent.Pub), "agent_pub_key": pubJSON(agent.Pub), "delegations": []any{}, "challenge": b64(defaultChallenge()), "challenge_at": num(Now - 10), "challenge_sig": sigJSON(placeholderSig())}), "malformed", nil))
-	for _, bad := range []struct{ name, scope string }{{"wildcard", "data:*"}, {"custom", "custom:read"}, {"empty", ""}, {"unregistered", "data:read:all"}} {
+	for _, bad := range []struct{ name, scope string }{{"wildcard", "data:*"}, {"custom_wildcard", "custom:*"}, {"custom_bare_prefix", "custom:"}, {"empty", ""}, {"unregistered", "data:read:all"}} {
 		add(std("required_scope_"+bad.name, "invalid request scope is rejected before claim", bundle, "invalid_required_scope", func(s *scenario) { s.scope = bad.scope }))
 	}
 	add(std("delegation_digest_mismatch", "digest mismatch is a structural preflight failure", mutate(bundle, func(o map[string]any) { o["delegation_digest"] = flipB64(o["delegation_digest"]) }), "delegation_digest_mismatch", nil))
@@ -657,8 +679,22 @@ func (g *gen) terminalScenarios() []scenario {
 		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "data:write" }))
 	add(g.terminal("wildcard_grants_non_sensitive", "data:* expands to the registered non-sensitive data scopes", g.chain(chainSpec{leafScope: []string{"data:*"}, rootScope: []string{"data:*", "identity:delegate"}}),
 		allow(), func(s *scenario) { s.out.GrantedScope = []string{"data:read", "data:share"} }))
-	add(g.terminal("custom_scope_passes_through", "exact custom: scopes are carried into granted_scope but cannot be requested", g.chain(chainSpec{leafScope: []string{"custom:billing", "data:read"}, rootScope: []string{"custom:billing", "data:read", "identity:delegate"}}),
+	add(g.terminal("custom_scope_passes_through", "exact custom: scopes are carried into granted_scope", g.chain(chainSpec{leafScope: []string{"custom:billing", "data:read"}, rootScope: []string{"custom:billing", "data:read", "identity:delegate"}}),
 		allow(), func(s *scenario) { s.out.GrantedScope = []string{"custom:billing", "data:read"} }))
+	// SPEC-v2 §2.4: one exact custom: scope may be requested and is matched
+	// by byte equality against the effective delegation scope.
+	customChain := g.chain(chainSpec{leafScope: []string{"custom:infra:provision", "data:read"}, rootScope: []string{"custom:infra:provision", "data:read", "identity:delegate"}})
+	add(g.terminal("custom_required_scope_exact_grant", "an exact custom: required scope granted by every link allows", customChain,
+		allow(), func(s *scenario) {
+			s.scope = "custom:infra:provision"
+			s.out.GrantedScope = []string{"custom:infra:provision", "data:read"}
+		}))
+	add(g.terminal("custom_required_scope_canonical_only_grant", "a chain that grants only canonical scopes never covers a custom: required scope", def,
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
+	add(g.terminal("custom_required_scope_spelling_differs", "custom: matching is byte equality: a grant spelled with different case does not cover the request", g.chain(chainSpec{leafScope: []string{"custom:infra:Provision", "data:read"}, rootScope: []string{"custom:infra:Provision", "data:read", "identity:delegate"}}),
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
+	add(g.terminal("custom_required_scope_parent_lacks", "the custom grant must be present at every link; a parent without it narrows it away", g.chain(chainSpec{leafScope: []string{"custom:infra:provision", "data:read"}}),
+		deny("scope_denied", "scope_denied", "trusted", "current", "bound", strp(vp), g.currentEvidence(), allowCounts), func(s *scenario) { s.scope = "custom:infra:provision" }))
 	add(g.terminal("revoked_outranks_unavailable", "one reference revoked and the other unavailable: revoked wins and both references are queried", def,
 		deny("delegation_revoked", "revoked", "trusted", "revoked", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_revoked_leaf"])}, allowCounts), func(s *scenario) {
 			s.evidence[intermediateID] = revoked
@@ -686,6 +722,7 @@ func (g *gen) terminalScenarios() []scenario {
 			s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_signed_by_party_b"]))
 		}))
 	g.statusProvenanceScenarios(add, def, allow, indeterminate, allowCounts, vp)
+	g.extensionScenarios(add, allow, deny, vp)
 
 	// Context policy cases.
 	add(g.terminal("no_policy_unbound_context", "no context policy and a null session_context: never allow", def,

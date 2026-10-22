@@ -88,6 +88,14 @@ type ConstraintContextV2 struct {
 	RequestedResourceID string
 	RequestedPath       string
 	HasResource         bool
+
+	// ExtensionCounts and ExtensionValues are authenticated request inputs
+	// for registered extension evaluator profiles (SPEC-v2 §5.2): a named
+	// quantity (0..2^53-1) and a named exact value (valid UTF-8, at most 512
+	// bytes). Names are 1 to 128 bytes of [a-z0-9_.:-]; each map holds at
+	// most 64 entries. An absent name is missing context, never a pass.
+	ExtensionCounts map[string]int64
+	ExtensionValues map[string]string
 }
 
 // MarshalJSON emits exactly the registered members for c.Type, with keys in

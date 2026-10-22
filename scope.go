@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Canonical scope constants. Use these instead of bare strings.
@@ -357,13 +358,22 @@ func ValidateScopesV2(scopes []string) error {
 	return nil
 }
 
-// ValidateRequiredScopeV2 requires one registered canonical scope. Wildcards
-// and custom extension scopes cannot be requested as a verifier decision.
+// ValidateRequiredScopeV2 requires exactly one requestable action scope
+// (SPEC-v2 §2.4): a registered canonical scope, or one exact custom:
+// extension scope. A canonical wildcard, custom:*, the bare prefix custom:,
+// an empty string, invalid UTF-8, and a scope longer than
+// MAX_SCOPE_LENGTH_BYTES are rejected. A custom required scope is an exact
+// string: it is matched by byte equality against the effective delegation
+// scope and never expanded, folded, or mapped to a canonical scope.
 func ValidateRequiredScopeV2(scope string) error {
-	if !validScopes[scope] || scopeWildcards[scope] != nil || strings.HasPrefix(scope, CustomScopePrefix) {
-		return fmt.Errorf("required scope must be one non-empty canonical scope")
+	if validScopes[scope] && scopeWildcards[scope] == nil {
+		return nil
 	}
-	return nil
+	if strings.HasPrefix(scope, CustomScopePrefix) && len(scope) > len(CustomScopePrefix) &&
+		scope != "custom:*" && len(scope) <= MaxScopeLengthBytes && utf8.ValidString(scope) {
+		return nil
+	}
+	return fmt.Errorf("required scope must be one canonical scope or one exact custom: scope")
 }
 
 // isValidScope returns true iff s is canonical, a wildcard, or a custom extension.

@@ -321,7 +321,7 @@ func TestV2AuthenticatedChallengePreflight(t *testing.T) {
 			t.Errorf("accepted invalid %s", name)
 		}
 	}
-	for _, invalid := range []string{"", "custom:invoice:read", "custom:*", "data:*"} {
+	for _, invalid := range []string{"", "custom:", "custom:*", "data:*"} {
 		if err := ValidateProofBundleV2Preflight(bundle, expected, invalid, "local-verifier", 4, 15, 10, 0); err == nil {
 			t.Errorf("accepted invalid required scope %q", invalid)
 		}

@@ -124,7 +124,8 @@ func matchesExpectedChallengeV2(expected *ExpectedChallengeV2, state *expectedCh
 // VerifyProofBundleV2 accepts a ConstraintEvaluatorRegistryV2.
 // Verify callers use this entry point so a missing or divergent policy value
 // cannot consume the challenge before context validation.
-func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
+func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (_ *V2PreflightResult, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	return preflightProofBundleV2(bundle, expected, policy, false, nil, nil, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds)
 }
 
@@ -191,7 +192,8 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 // the requested canonical scope, then proof/challenge bindings. It performs
 // no trust, status, policy, billing, or other external calls and issues no
 // authorization decision.
-func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) error {
+func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if expected.ContextPolicy != nil {
 		if !expected.ContextPolicy.valid || expected.ContextPolicy.digest == "" || !validPrefixedDigestV2(expected.ContextPolicy.digest) {
 			return v2Errorf(V2ErrConfigurationInvalid, "v2 expected context policy is invalid")

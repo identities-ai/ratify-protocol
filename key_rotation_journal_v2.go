@@ -35,7 +35,8 @@ type KeyRotationV2Journal struct {
 
 // NewKeyRotationV2Journal creates the SPEC-v2 §5.5 initial state from a
 // caller-authenticated genesis key and recovery epoch.
-func NewKeyRotationV2Journal(authorityID string, recoveryEpoch int64, role string, genesisKey HybridPublicKey) (KeyRotationV2Journal, error) {
+func NewKeyRotationV2Journal(authorityID string, recoveryEpoch int64, role string, genesisKey HybridPublicKey) (_ KeyRotationV2Journal, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	genesisID, err := keyIDV2(genesisKey)
 	if err != nil {
 		return KeyRotationV2Journal{}, v2Errorf(V2ErrConfigurationInvalid, "rotation genesis key: %w", err)
@@ -62,7 +63,8 @@ func NewKeyRotationV2Journal(authorityID string, recoveryEpoch int64, role strin
 // error. A validly signed different body at an accepted sequence returns
 // ErrKeyRotationForkV2 together with a frozen journal the caller must persist.
 // Any other error leaves the journal unchanged.
-func AcceptKeyRotationStatementV2(stmt *KeyRotationStatementV2, journal KeyRotationV2Journal, nowUnix, futureSkew int64) (KeyRotationV2Journal, WitnessEntryV2Result, error) {
+func AcceptKeyRotationStatementV2(stmt *KeyRotationStatementV2, journal KeyRotationV2Journal, nowUnix, futureSkew int64) (_ KeyRotationV2Journal, _ WitnessEntryV2Result, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrRotationStateMismatch, resultErr) }()
 	if err := validateKeyRotationStatementV2(stmt, true); err != nil {
 		return journal, 0, v2Classify(V2ErrMalformed, err)
 	}
@@ -122,7 +124,8 @@ func AcceptKeyRotationStatementV2(stmt *KeyRotationStatementV2, journal KeyRotat
 // caller's independently authenticated control plane: it increments the
 // recovery epoch, anchors a new genesis to a never-used key, and preserves the
 // complete used-key history. Resetting without an epoch increase is rejected.
-func RecoverKeyRotationV2(journal KeyRotationV2Journal, newRecoveryEpoch int64, newGenesisKey HybridPublicKey) (KeyRotationV2Journal, error) {
+func RecoverKeyRotationV2(journal KeyRotationV2Journal, newRecoveryEpoch int64, newGenesisKey HybridPublicKey) (_ KeyRotationV2Journal, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrRotationRecoveryInvalid, resultErr) }()
 	newID, err := keyIDV2(newGenesisKey)
 	if err != nil {
 		return journal, v2Errorf(V2ErrRotationRecoveryInvalid, "recovery genesis key: %w", err)

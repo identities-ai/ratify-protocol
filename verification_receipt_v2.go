@@ -466,7 +466,8 @@ func compareStatusEvidenceV2(a, b StatusEvidenceEntryV2) int {
 	return 0
 }
 
-func VerificationReceiptV2Digest(receipt *VerificationReceiptV2) ([]byte, error) {
+func VerificationReceiptV2Digest(receipt *VerificationReceiptV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateVerificationReceiptV2(receipt, false); err != nil {
 		return nil, err
 	}
@@ -483,7 +484,8 @@ func SignVerificationReceiptV2(receipt *VerificationReceiptV2, verifierPrivate H
 
 // SignVerificationReceiptV2WithSigner is SignVerificationReceiptV2 with an
 // external signer whose key ID must equal verifier_id.
-func SignVerificationReceiptV2WithSigner(ctx context.Context, receipt *VerificationReceiptV2, signer SignerV2) (*VerificationReceiptV2, error) {
+func SignVerificationReceiptV2WithSigner(ctx context.Context, receipt *VerificationReceiptV2, signer SignerV2) (_ *VerificationReceiptV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateVerificationReceiptV2(receipt, false); err != nil {
 		return nil, err
 	}
@@ -493,7 +495,7 @@ func SignVerificationReceiptV2WithSigner(ctx context.Context, receipt *Verificat
 	}
 	verifierID, err := keyIDV2(verifierPublic)
 	if err != nil || verifierID != receipt.VerifierID {
-		return nil, fmt.Errorf("receipt verifier_id does not match signing key")
+		return nil, v2Errorf(V2ErrKeyIDMismatch, "receipt verifier_id does not match signing key")
 	}
 	body, err := CanonicalJSON(receiptV2Signable(receipt))
 	if err != nil {
@@ -511,7 +513,8 @@ func SignVerificationReceiptV2WithSigner(ctx context.Context, receipt *Verificat
 	return &result, nil
 }
 
-func EncodeVerificationReceiptV2(receipt *VerificationReceiptV2) ([]byte, error) {
+func EncodeVerificationReceiptV2(receipt *VerificationReceiptV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateVerificationReceiptV2(receipt, true); err != nil {
 		return nil, err
 	}
@@ -616,7 +619,8 @@ func validateVerificationReceiptSignableV2(data []byte) error {
 // VerifyVerificationReceiptV2 verifies a receipt with a verifier key supplied
 // by the caller and authenticated log state. The receipt never supplies trust
 // in its own key. The result distinguishes an append candidate from replay.
-func VerifyVerificationReceiptV2(receipt *VerificationReceiptV2, verifierPublic HybridPublicKey, head ReceiptV2Head) (WitnessEntryV2Result, error) {
+func VerifyVerificationReceiptV2(receipt *VerificationReceiptV2, verifierPublic HybridPublicKey, head ReceiptV2Head) (_ WitnessEntryV2Result, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateVerificationReceiptV2(receipt, true); err != nil {
 		return 0, v2Classify(V2ErrMalformed, err)
 	}
@@ -690,7 +694,8 @@ func validateReceiptV2Head(head ReceiptV2Head) error {
 // CheckVerificationReceiptV2BundleBinding checks the fields that can be
 // compared when a receipt and its proof bundle are both available. It does not
 // establish root trust or current revocation status for the bundle.
-func CheckVerificationReceiptV2BundleBinding(receipt *VerificationReceiptV2, bundle *ProofBundleV2) error {
+func CheckVerificationReceiptV2BundleBinding(receipt *VerificationReceiptV2, bundle *ProofBundleV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrReceiptBundleMismatch, resultErr) }()
 	if err := validateVerificationReceiptV2(receipt, false); err != nil {
 		return v2Classify(V2ErrMalformed, err)
 	}

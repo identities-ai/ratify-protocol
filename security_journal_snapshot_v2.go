@@ -289,7 +289,8 @@ func legacySecurityJournalDigestV1(journal SecurityJournalV2) (string, error) {
 // ExportSecurityJournalSnapshotV2 validates a version 2 journal and returns
 // its canonical snapshot bytes. The journal's digest is
 // SecurityJournalSnapshotDigestV2 of the returned bytes.
-func ExportSecurityJournalSnapshotV2(journal SecurityJournalV2) ([]byte, error) {
+func ExportSecurityJournalSnapshotV2(journal SecurityJournalV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if journal.Version != securityJournalVersionV2 {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "only version %d security journals can be exported; migrate first", securityJournalVersionV2)
 	}
@@ -417,7 +418,8 @@ func ImportSecurityJournalSnapshotV2(snapshot []byte, head SecurityJournalHeadV2
 // content at generation+1, previous_digest set to the legacy digest, and the
 // canonical snapshot digest. The caller commits it with the store's anchored
 // compare-and-swap from the legacy head, like any other transition.
-func MigrateSecurityJournalV2(legacy SecurityJournalV2) (SecurityJournalV2, error) {
+func MigrateSecurityJournalV2(legacy SecurityJournalV2) (_ SecurityJournalV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if legacy.Version != securityJournalLegacyVersion {
 		return SecurityJournalV2{}, v2Errorf(V2ErrConfigurationInvalid, "security journal migration requires a version %d record", securityJournalLegacyVersion)
 	}

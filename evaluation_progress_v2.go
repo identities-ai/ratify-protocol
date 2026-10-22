@@ -64,7 +64,8 @@ func cloneV2EvaluationProgress(p V2EvaluationProgress) V2EvaluationProgress {
 // ValidateV2EvaluationProgress checks the per-dimension rules above. A claim
 // store rejects an invalid record, and recovery refuses to build a receipt
 // from one.
-func ValidateV2EvaluationProgress(p V2EvaluationProgress) error {
+func ValidateV2EvaluationProgress(p V2EvaluationProgress) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	switch p.TrustAssessment {
 	case "not_evaluated", "unavailable", "trusted", "untrusted":
 	default:
@@ -98,6 +99,7 @@ func ValidateV2EvaluationProgress(p V2EvaluationProgress) error {
 // is bound to the claim's sealed bundle hash, issuers, verifier, agent and
 // required scope; verifiedAt is the claim's authoritative claim time T_claim.
 func V2EvaluationInterruptedResult(claim V2ChallengeClaim, verifiedAt int64, progress V2EvaluationProgress) (terminalResult, receiptBody []byte, err error) {
+	defer func() { err = v2Classify(V2ErrMalformed, err) }()
 	if !validV2Timestamp(verifiedAt) {
 		return nil, nil, v2Errorf(V2ErrConfigurationInvalid, "v2 recovery time is outside the timestamp domain")
 	}
@@ -133,7 +135,8 @@ func V2EvaluationInterruptedResult(claim V2ChallengeClaim, verifiedAt int64, pro
 // evaluation_interrupted result built from them, and returns the committed
 // (non-actionable) outcome for publication and release. An identical repeat
 // returns the same outcome.
-func RecoverInterruptedClaimV2(ctx context.Context, store ClaimStoreV2, claimID string) (*CommittedV2Outcome, error) {
+func RecoverInterruptedClaimV2(ctx context.Context, store ClaimStoreV2, claimID string) (_ *CommittedV2Outcome, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrClaimStoreUnavailable, resultErr) }()
 	if ctx == nil || store == nil || claimID == "" {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 recovery requires a context, claim store and claim ID")
 	}

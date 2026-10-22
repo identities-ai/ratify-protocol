@@ -333,7 +333,8 @@ func resolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, aggregate fu
 // The application adapter, not Protocol, authenticates these results.
 // Membership freshness is evaluated at the authoritative claim time sealed in
 // the token, never at a caller-supplied time (SPEC-v2 §7.2).
-func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, memberships []V2AudienceMembership) (V2LocalAuthorizationAssessment, error) {
+func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, memberships []V2AudienceMembership) (_ V2LocalAuthorizationAssessment, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if token == nil || token.state == nil {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("v2 claim evaluator capability is required")
 	}
@@ -406,12 +407,13 @@ type V2RateReservationStore interface {
 // constraint stage. The caller must pass a bounded context and finalize the
 // returned terminal result through the same claim store; an ambiguous store
 // error never authorizes, and claim recovery releases any provisional rows.
-func ResolveClaimProofBundleV2AfterRate(ctx context.Context, store V2RateReservationStore, token *V2EvaluationToken) (V2LocalAuthorizationAssessment, error) {
+func ResolveClaimProofBundleV2AfterRate(ctx context.Context, store V2RateReservationStore, token *V2EvaluationToken) (_ V2LocalAuthorizationAssessment, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if ctx == nil || token == nil || token.state == nil {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("v2 rate evaluation requires context and claim capability")
 	}
 	if err := ctx.Err(); err != nil {
-		return V2LocalAuthorizationAssessment{}, err
+		return V2LocalAuthorizationAssessment{}, v2Classify(V2ErrEvaluationCancelled, err)
 	}
 	state := token.state
 	state.finalizationMu.Lock()

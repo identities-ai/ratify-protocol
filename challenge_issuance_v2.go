@@ -81,7 +81,8 @@ const maxV2IssuanceAttempts = 3
 // complete record, and only then return it. A key conflict draws fresh bytes
 // (at most three attempts in total) and never overwrites the existing record.
 // On any error no challenge is returned.
-func (issuer V2ChallengeIssuer) IssueChallengeV2(ctx context.Context, req V2ChallengeIssueRequest) (*ExpectedChallengeV2, error) {
+func (issuer V2ChallengeIssuer) IssueChallengeV2(ctx context.Context, req V2ChallengeIssueRequest) (_ *ExpectedChallengeV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrClaimStoreUnavailable, resultErr) }()
 	if ctx == nil || issuer.Clock == nil || issuer.Store == nil {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 challenge issuer requires a context, authoritative clock and issuance store")
 	}
@@ -103,7 +104,7 @@ func (issuer V2ChallengeIssuer) IssueChallengeV2(ctx context.Context, req V2Chal
 	for attempt := 0; attempt < maxV2IssuanceAttempts; attempt++ {
 		value := make([]byte, 32)
 		if _, err := io.ReadFull(random, value); err != nil {
-			return nil, fmt.Errorf("v2 challenge issuance: random source: %w", err)
+			return nil, v2Classify(V2ErrConfigurationInvalid, fmt.Errorf("v2 challenge issuance: random source: %w", err))
 		}
 		record := ExpectedChallengeV2{
 			Value: value, IssuedAt: issuedAt, ExpiresAt: expiresAt,
@@ -125,7 +126,7 @@ func (issuer V2ChallengeIssuer) IssueChallengeV2(ctx context.Context, req V2Chal
 		out := cloneExpectedChallengeV2(record)
 		return &out, nil
 	}
-	return nil, fmt.Errorf("v2 challenge issuance: %d consecutive key conflicts; the random source is not trustworthy", maxV2IssuanceAttempts)
+	return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 challenge issuance: %d consecutive key conflicts; the random source is not trustworthy", maxV2IssuanceAttempts)
 }
 
 // LoadExpectedChallengeV2 retrieves the issuance record for presented
@@ -134,7 +135,8 @@ func (issuer V2ChallengeIssuer) IssueChallengeV2(ctx context.Context, req V2Chal
 // pre-claim checks of SPEC-v2 §6.2 against the returned record; a public API
 // MUST collapse unknown, expired, consumed and wrong-binding challenges into
 // one response.
-func LoadExpectedChallengeV2(ctx context.Context, store V2ChallengeIssuanceStore, namespace string, replayEpoch int64, challenge []byte) (*ExpectedChallengeV2, error) {
+func LoadExpectedChallengeV2(ctx context.Context, store V2ChallengeIssuanceStore, namespace string, replayEpoch int64, challenge []byte) (_ *ExpectedChallengeV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrExpectedChallengeMissing, resultErr) }()
 	if ctx == nil || store == nil {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 challenge lookup requires a context and issuance store")
 	}

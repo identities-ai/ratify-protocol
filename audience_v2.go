@@ -42,7 +42,8 @@ type v2AudienceConstraint struct {
 // EvaluateReceiverAudienceV2 evaluates every deferred audience link. A valid
 // nonmatching membership takes precedence over unavailable membership in
 // another link. Only the verifier's authenticated expected receiver is used.
-func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID string, memberships []V2AudienceMembership, now, futureSkew int64) (V2AudienceAssessment, error) {
+func EvaluateReceiverAudienceV2(deferred []V2DeferredConstraint, receiverID string, memberships []V2AudienceMembership, now, futureSkew int64) (_ V2AudienceAssessment, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if receiverID == "" || !validV2Timestamp(now) || futureSkew < 0 || futureSkew > V2MaxFutureSkewSeconds {
 		return V2AudienceAssessment{}, fmt.Errorf("v2 audience requires a sealed receiver and valid security time")
 	}

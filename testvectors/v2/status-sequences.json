@@ -2364,7 +2364,7 @@
           "op": "transition_epoch",
           "status_key": "status_root",
           "status_key_epoch": 3,
-          "expect_error_class": "configuration_invalid"
+          "expect_error_class": "status_object_rejected"
         }
       ]
     }

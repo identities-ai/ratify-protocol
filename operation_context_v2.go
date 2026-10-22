@@ -23,7 +23,8 @@ var (
 // DecodePayloadDigest converts the Verify API's canonical sha256: text form
 // into the raw 32-byte digest used by Protocol v2 operation contexts. The
 // nil represents an absent payload digest; an empty string is invalid.
-func DecodePayloadDigest(encoded *string) ([]byte, error) {
+func DecodePayloadDigest(encoded *string) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if encoded == nil {
 		return nil, nil
 	}
@@ -61,7 +62,8 @@ type SessionContextV2Inputs struct {
 
 // BuildOperationContextV2 returns SHA-256 of the §2.2 operation-context
 // preimage. It uses the v2 domain tag and leaves v1 construction unchanged.
-func BuildOperationContextV2(in OperationContextV2Inputs) ([]byte, error) {
+func BuildOperationContextV2(in OperationContextV2Inputs) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := ValidateRequiredScopeV2(in.RequiredScope); err != nil {
 		return nil, fmt.Errorf("required scope: %w", err)
 	}
@@ -78,7 +80,8 @@ func BuildOperationContextV2(in OperationContextV2Inputs) ([]byte, error) {
 }
 
 // BuildSessionContextV2 returns the 32-byte §2.2 session-context digest.
-func BuildSessionContextV2(in SessionContextV2Inputs) ([]byte, error) {
+func BuildSessionContextV2(in SessionContextV2Inputs) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if !validProtocolV2Text(in.VerifierID, in.WorkspaceID, in.AgentID, in.SessionID, in.InvocationID) {
 		return nil, fmt.Errorf("text inputs must be valid UTF-8")
 	}

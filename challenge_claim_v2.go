@@ -12,7 +12,8 @@ import (
 // ChallengeClaimDigestV2 returns the replay key digest for one decoded
 // 32-byte challenge. It is independent of the proof bundle so a different
 // signed proof cannot claim the same challenge a second time.
-func ChallengeClaimDigestV2(challenge []byte) ([]byte, error) {
+func ChallengeClaimDigestV2(challenge []byte) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if len(challenge) != 32 {
 		return nil, fmt.Errorf("v2 challenge claim requires exactly 32 challenge bytes")
 	}
@@ -25,7 +26,8 @@ func ChallengeClaimDigestV2(challenge []byte) ([]byte, error) {
 // ProtocolClaimIDV2 returns the stable identifier for a challenge claim in a
 // locally configured replay namespace and epoch. It does not implement claim
 // storage, freshness checks, or atomicity.
-func ProtocolClaimIDV2(verifierNamespace string, replayEpoch int64, challenge []byte) (string, error) {
+func ProtocolClaimIDV2(verifierNamespace string, replayEpoch int64, challenge []byte) (_ string, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if verifierNamespace == "" || !utf8.ValidString(verifierNamespace) {
 		return "", fmt.Errorf("v2 verifier namespace must be non-empty valid UTF-8")
 	}
@@ -34,14 +36,15 @@ func ProtocolClaimIDV2(verifierNamespace string, replayEpoch int64, challenge []
 	}
 	claimDigest, err := ChallengeClaimDigestV2(challenge)
 	if err != nil {
-		return "", err
+		return "", v2Classify(V2ErrMalformed, err)
 	}
 	return ProtocolClaimIDFromDigestV2(verifierNamespace, replayEpoch, claimDigest)
 }
 
 // ProtocolClaimIDFromDigestV2 returns the stable claim identifier when the
 // caller already has the canonical 48-byte ChallengeClaimDigestV2 value.
-func ProtocolClaimIDFromDigestV2(verifierNamespace string, replayEpoch int64, claimDigest []byte) (string, error) {
+func ProtocolClaimIDFromDigestV2(verifierNamespace string, replayEpoch int64, claimDigest []byte) (_ string, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if verifierNamespace == "" || !utf8.ValidString(verifierNamespace) {
 		return "", fmt.Errorf("v2 verifier namespace must be non-empty valid UTF-8")
 	}
@@ -49,7 +52,7 @@ func ProtocolClaimIDFromDigestV2(verifierNamespace string, replayEpoch int64, cl
 		return "", fmt.Errorf("v2 replay epoch is outside the safe integer range")
 	}
 	if len(claimDigest) != 48 {
-		return "", fmt.Errorf("v2 challenge claim digest must be exactly 48 bytes")
+		return "", v2Errorf(V2ErrMalformed, "v2 challenge claim digest must be exactly 48 bytes")
 	}
 	h := sha256.New()
 	h.Write([]byte("ratify-protocol-claim-id-v2\x00"))

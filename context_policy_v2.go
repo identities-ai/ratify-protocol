@@ -35,7 +35,8 @@ type V2ContextPolicyAssessment struct {
 
 // NewV2ContextPolicy validates and fingerprints a policy. expectedSessionContext
 // is per-invocation authenticated state and is excluded from the policy digest.
-func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) (*V2ContextPolicy, error) {
+func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) (_ *V2ContextPolicy, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if profile == "" || !utf8.ValidString(profile) {
 		return nil, fmt.Errorf("v2 context policy profile must be non-empty valid UTF-8")
 	}

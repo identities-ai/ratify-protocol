@@ -60,7 +60,8 @@ type V2StatusPublisher struct {
 // issuer's highest-epoch configured status key. lifetimeSeconds sets
 // next_update - updated_at for every full list and is 1..86400; it must not
 // exceed the relying verifiers' configured maximum list lifetime.
-func NewV2StatusPublisher(ctx context.Context, roles SecurityJournalStoreV2, issuerKey HybridPublicKey, statusSigner SignerV2, lifetimeSeconds int64) (*V2StatusPublisher, error) {
+func NewV2StatusPublisher(ctx context.Context, roles SecurityJournalStoreV2, issuerKey HybridPublicKey, statusSigner SignerV2, lifetimeSeconds int64) (_ *V2StatusPublisher, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if lifetimeSeconds < 1 || lifetimeSeconds > V2MaxStatusLifetimeSeconds {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 status list lifetime must be 1..%d seconds", V2MaxStatusLifetimeSeconds)
 	}
@@ -121,14 +122,16 @@ func (p *V2StatusPublisher) IssuerID() string { return p.issuerID }
 func (p *V2StatusPublisher) StatusKey() HybridPublicKey { return cloneHybridPublicKeyV2(p.statusKey) }
 
 // Genesis signs the first full list: sequence 1, an empty revoked set.
-func (p *V2StatusPublisher) Genesis(ctx context.Context, updatedAt int64) (V2StatusPublication, error) {
+func (p *V2StatusPublisher) Genesis(ctx context.Context, updatedAt int64) (_ V2StatusPublication, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	state := V2StatusPublisherState{IssuerID: p.issuerID, StatusKeyID: p.statusKeyID, Revoked: []string{}}
 	return p.list(ctx, state, 1, updatedAt)
 }
 
 // Heartbeat re-signs the current sequence and revoked set with a later
 // updated_at, which refreshes freshness without a new sequence (SPEC-v2 §5.4).
-func (p *V2StatusPublisher) Heartbeat(ctx context.Context, state V2StatusPublisherState, updatedAt int64) (V2StatusPublication, error) {
+func (p *V2StatusPublisher) Heartbeat(ctx context.Context, state V2StatusPublisherState, updatedAt int64) (_ V2StatusPublication, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := p.checkState(state, updatedAt); err != nil {
 		return V2StatusPublication{}, err
 	}
@@ -138,7 +141,8 @@ func (p *V2StatusPublisher) Heartbeat(ctx context.Context, state V2StatusPublish
 // Revoke advances one sequence: a push carrying exactly the newly revoked
 // certificate IDs, and the cumulative full list at the same sequence, both
 // timestamped at. Every ID must be new, unique, and 1..512 bytes of UTF-8.
-func (p *V2StatusPublisher) Revoke(ctx context.Context, state V2StatusPublisherState, certIDs []string, at int64) (V2StatusPublication, error) {
+func (p *V2StatusPublisher) Revoke(ctx context.Context, state V2StatusPublisherState, certIDs []string, at int64) (_ V2StatusPublication, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := p.checkState(state, at); err != nil {
 		return V2StatusPublication{}, err
 	}

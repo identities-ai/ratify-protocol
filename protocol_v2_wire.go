@@ -12,7 +12,8 @@ import (
 
 // BundleHashV2 hashes the complete canonical signed proof bundle, including
 // certificate and challenge signatures, under the v2 domain separator.
-func BundleHashV2(bundle *ProofBundleV2) (string, error) {
+func BundleHashV2(bundle *ProofBundleV2) (_ string, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	encoded, err := EncodeProofBundleV2(bundle)
 	if err != nil {
 		return "", err
@@ -503,7 +504,8 @@ func revocationPushSignableBytesV2(push *RevocationPushV2) ([]byte, error) {
 	return CanonicalJSON(revocationPushSignableV2{push.IssuerID, push.PushedAt, push.Revoked, push.Sequence, push.Version})
 }
 
-func EncodeRevocationListV2(list *RevocationListV2) ([]byte, error) {
+func EncodeRevocationListV2(list *RevocationListV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationListV2(list); err != nil {
 		return nil, err
 	}
@@ -522,7 +524,8 @@ func EncodeRevocationListV2(list *RevocationListV2) ([]byte, error) {
 	return encoded, nil
 }
 
-func EncodeRevocationPushV2(push *RevocationPushV2) ([]byte, error) {
+func EncodeRevocationPushV2(push *RevocationPushV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationPushV2(push); err != nil {
 		return nil, err
 	}
@@ -549,19 +552,20 @@ func SignRevocationListV2(list *RevocationListV2, boundIssuerID string, boundSta
 
 // SignRevocationListV2WithSigner is SignRevocationListV2 with an external
 // signer whose complete public key must equal boundStatusKey.
-func SignRevocationListV2WithSigner(ctx context.Context, list *RevocationListV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (*RevocationListV2, error) {
+func SignRevocationListV2WithSigner(ctx context.Context, list *RevocationListV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (_ *RevocationListV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationListV2(list); err != nil {
 		return nil, err
 	}
 	if boundIssuerID == "" || list.IssuerID != boundIssuerID {
-		return nil, fmt.Errorf("revocation-list issuer does not match caller-authenticated status-key binding")
+		return nil, v2Errorf(V2ErrStatusKeyBindingMismatch, "revocation-list issuer does not match caller-authenticated status-key binding")
 	}
 	derivedStatusKey, err := signerPublicKeyV2(signer)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(boundStatusKey.Ed25519, derivedStatusKey.Ed25519) || !bytes.Equal(boundStatusKey.MLDSA65, derivedStatusKey.MLDSA65) {
-		return nil, fmt.Errorf("status private key does not match caller-authenticated issuer status-key binding")
+		return nil, v2Errorf(V2ErrStatusKeyBindingMismatch, "status private key does not match caller-authenticated issuer status-key binding")
 	}
 	unsigned := *list
 	unsigned.Signature = placeholderV2Signature()
@@ -604,19 +608,20 @@ func SignRevocationPushV2(push *RevocationPushV2, boundIssuerID string, boundSta
 
 // SignRevocationPushV2WithSigner is SignRevocationPushV2 with an external
 // signer whose complete public key must equal boundStatusKey.
-func SignRevocationPushV2WithSigner(ctx context.Context, push *RevocationPushV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (*RevocationPushV2, error) {
+func SignRevocationPushV2WithSigner(ctx context.Context, push *RevocationPushV2, boundIssuerID string, boundStatusKey HybridPublicKey, signer SignerV2) (_ *RevocationPushV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationPushV2(push); err != nil {
 		return nil, err
 	}
 	if boundIssuerID == "" || push.IssuerID != boundIssuerID {
-		return nil, fmt.Errorf("revocation-push issuer does not match caller-authenticated status-key binding")
+		return nil, v2Errorf(V2ErrStatusKeyBindingMismatch, "revocation-push issuer does not match caller-authenticated status-key binding")
 	}
 	derivedStatusKey, err := signerPublicKeyV2(signer)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(boundStatusKey.Ed25519, derivedStatusKey.Ed25519) || !bytes.Equal(boundStatusKey.MLDSA65, derivedStatusKey.MLDSA65) {
-		return nil, fmt.Errorf("status private key does not match caller-authenticated issuer status-key binding")
+		return nil, v2Errorf(V2ErrStatusKeyBindingMismatch, "status private key does not match caller-authenticated issuer status-key binding")
 	}
 	unsigned := *push
 	unsigned.Signature = placeholderV2Signature()
@@ -653,7 +658,8 @@ func SignRevocationPushV2WithSigner(ctx context.Context, push *RevocationPushV2,
 
 // Status signatures are checked only against the caller-authenticated status
 // key bound to this issuer. The signed object never supplies its own key.
-func VerifyRevocationListV2Signature(list *RevocationListV2, trustedIssuerID string, statusKey HybridPublicKey) error {
+func VerifyRevocationListV2Signature(list *RevocationListV2, trustedIssuerID string, statusKey HybridPublicKey) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationListV2(list); err != nil {
 		return v2Classify(V2ErrMalformed, err)
 	}
@@ -667,7 +673,8 @@ func VerifyRevocationListV2Signature(list *RevocationListV2, trustedIssuerID str
 	return verifyV2Statement(v2RevocationList, signable, list.Signature, statusKey)
 }
 
-func VerifyRevocationPushV2Signature(push *RevocationPushV2, trustedIssuerID string, statusKey HybridPublicKey) error {
+func VerifyRevocationPushV2Signature(push *RevocationPushV2, trustedIssuerID string, statusKey HybridPublicKey) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationPushV2(push); err != nil {
 		return v2Classify(V2ErrMalformed, err)
 	}
@@ -684,7 +691,8 @@ func VerifyRevocationPushV2Signature(push *RevocationPushV2, trustedIssuerID str
 // StatusEvidenceDigest binds an audit reference to the complete canonical
 // signed status object. The digest does not establish signature validity,
 // freshness, or policy evaluation; callers must verify those separately.
-func StatusEvidenceDigest(objectType uint16, object any) ([]byte, error) {
+func StatusEvidenceDigest(objectType uint16, object any) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	var encoded []byte
 	switch v2ObjectType(objectType) {
 	case v2RevocationList:
@@ -718,7 +726,7 @@ func StatusEvidenceDigest(objectType uint16, object any) ([]byte, error) {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported status evidence object type: %04x", objectType)
+		return nil, v2Errorf(V2ErrUnsupportedObjectType, "unsupported status evidence object type: %04x", objectType)
 	}
 	h := sha512.New384()
 	h.Write([]byte("ratify-protocol-status-evidence-v2\x00"))
@@ -972,7 +980,8 @@ func SignDelegationCertV2(cert *DelegationCertV2, issuerKey HybridPrivateKey) (*
 // and carry a jointly satisfiable set of resource_path constraints. These
 // checks are issuer hygiene only; a verifier still rejects or denies a
 // certificate that violates them independently.
-func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2, signer SignerV2) (*DelegationCertV2, error) {
+func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2, signer SignerV2) (_ *DelegationCertV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if cert == nil {
 		return nil, fmt.Errorf("v2 delegation certificate is nil")
 	}
@@ -994,7 +1003,7 @@ func SignDelegationCertV2WithSigner(ctx context.Context, cert *DelegationCertV2,
 		return nil, err
 	}
 	if cert.IssuerID != issuerID || !bytes.Equal(cert.IssuerPubKey.Ed25519, issuerPub.Ed25519) || !bytes.Equal(cert.IssuerPubKey.MLDSA65, issuerPub.MLDSA65) {
-		return nil, fmt.Errorf("v2 issuer key does not match certificate issuer")
+		return nil, v2Errorf(V2ErrKeyIDMismatch, "v2 issuer key does not match certificate issuer")
 	}
 	unsigned := *cert
 	unsigned.Signature = placeholderV2Signature()
@@ -1096,7 +1105,8 @@ func delegationDigestV2(certs []DelegationCertV2) ([]byte, error) {
 // key-ID bindings, and its issuer signature under code 0x0001 using the
 // certificate's own issuer key. It does not establish that the issuer is
 // trusted; chain and root evaluation remain the verifier's responsibility.
-func VerifyDelegationCertV2Signature(cert *DelegationCertV2) error {
+func VerifyDelegationCertV2Signature(cert *DelegationCertV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if cert == nil {
 		return v2Errorf(V2ErrMalformed, "v2 delegation certificate is nil")
 	}
@@ -1115,7 +1125,8 @@ func VerifyDelegationCertV2Signature(cert *DelegationCertV2) error {
 
 // EncodeDelegationCertV2 and EncodeProofBundleV2 emit the exact sorted-key
 // canonical wire form used by v2 statements and delegation-chain digests.
-func EncodeDelegationCertV2(c *DelegationCertV2) ([]byte, error) {
+func EncodeDelegationCertV2(c *DelegationCertV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if c == nil {
 		return nil, fmt.Errorf("v2 delegation certificate is nil")
 	}
@@ -1136,7 +1147,8 @@ func EncodeDelegationCertV2(c *DelegationCertV2) ([]byte, error) {
 	return encoded, nil
 }
 
-func EncodeProofBundleV2(b *ProofBundleV2) ([]byte, error) {
+func EncodeProofBundleV2(b *ProofBundleV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if b == nil {
 		return nil, fmt.Errorf("v2 proof bundle is nil")
 	}
@@ -1164,7 +1176,8 @@ func SignProofBundleV2(bundle *ProofBundleV2, agentKey HybridPrivateKey) (*Proof
 
 // SignProofBundleV2WithSigner is SignProofBundleV2 with an external signer
 // whose complete public key must equal the bundle agent key.
-func SignProofBundleV2WithSigner(ctx context.Context, bundle *ProofBundleV2, signer SignerV2) (*ProofBundleV2, error) {
+func SignProofBundleV2WithSigner(ctx context.Context, bundle *ProofBundleV2, signer SignerV2) (_ *ProofBundleV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if bundle == nil {
 		return nil, fmt.Errorf("v2 proof bundle is nil")
 	}
@@ -1222,7 +1235,8 @@ func SignProofBundleV2WithSigner(ctx context.Context, bundle *ProofBundleV2, sig
 // challenge, query status, or issue an authorization decision. Every
 // structural check completes before any signature is verified, so a
 // structural failure is reported with its structural class.
-func VerifyProofBundleV2Signatures(b *ProofBundleV2) error {
+func VerifyProofBundleV2Signatures(b *ProofBundleV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := verifyProofBundleV2Structure(b); err != nil {
 		return err
 	}

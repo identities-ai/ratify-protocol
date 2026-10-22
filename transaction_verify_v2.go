@@ -71,7 +71,8 @@ type TransactionReceiptVerificationV2 struct {
 // order: trust of the party's chain, status of every chain CertificateRef,
 // and the effective delegated scope against the signed required_scope. It
 // never claims a challenge and never evaluates request-context constraints.
-func VerifyTransactionReceiptV2(ctx context.Context, req TransactionVerifyRequestV2, sources TransactionVerifySourcesV2) (TransactionReceiptVerificationV2, error) {
+func VerifyTransactionReceiptV2(ctx context.Context, req TransactionVerifyRequestV2, sources TransactionVerifySourcesV2) (_ TransactionReceiptVerificationV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if ctx == nil {
 		return TransactionReceiptVerificationV2{}, v2Errorf(V2ErrConfigurationInvalid, "transaction verification requires a context")
 	}
@@ -85,7 +86,7 @@ func VerifyTransactionReceiptV2(ctx context.Context, req TransactionVerifyReques
 	result := TransactionReceiptVerificationV2{TransactionID: receipt.TransactionID, Parties: []TransactionPartyVerificationV2{}}
 	for _, party := range receipt.Parties {
 		if err := ctx.Err(); err != nil {
-			return TransactionReceiptVerificationV2{}, err
+			return TransactionReceiptVerificationV2{}, v2Classify(V2ErrEvaluationCancelled, err)
 		}
 		party, err := verifyTransactionPartyV2(ctx, party, req, sources)
 		if err != nil {
@@ -124,7 +125,7 @@ func verifyTransactionPartyV2(ctx context.Context, party TransactionReceiptParty
 	root := chain[len(chain)-1] // decoding rejects an empty chain
 	resolution, err := callV2TrustSafely(ctx, sources.Trust, slices.Clone(chain))
 	if err != nil && ctx.Err() != nil {
-		return out, ctx.Err()
+		return out, v2Classify(V2ErrEvaluationCancelled, ctx.Err())
 	}
 	if err == nil && sources.Trust != nil {
 		switch resolution.Outcome {

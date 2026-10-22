@@ -92,3 +92,19 @@ func FuzzV2Constraint(f *testing.F) {
 		}
 	})
 }
+
+// FuzzVerifyArchivalProofBundleV2NeverPanics: the archival entry point never
+// panics and its result is never actionable, whatever the input (SPEC-v2
+// §6.10). An accepted input has no error class and a bundle hash.
+func FuzzVerifyArchivalProofBundleV2NeverPanics(f *testing.F) {
+	v2FuzzSeeds(f, "proof_bundle")
+	f.Fuzz(func(t *testing.T, data []byte) {
+		result := VerifyArchivalProofBundleV2(data)
+		if result.Actionable || result.Assessment != FreshnessUnverifiedV2 {
+			t.Fatalf("archival result is actionable or not freshness_unverified: %+v", result)
+		}
+		if result.ErrorClass == "" && result.BundleHash == "" {
+			t.Fatalf("accepted archival bundle has no bundle hash: %+v", result)
+		}
+	})
+}

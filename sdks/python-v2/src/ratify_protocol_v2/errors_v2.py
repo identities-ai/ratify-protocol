@@ -66,8 +66,9 @@ class V2ErrorClass:
     # An authoritative clock reading below the store's high-water mark or
     # below T_claim (SPEC-v2 §7.2).
     CLOCK_REGRESSED = "clock_regressed"
-    # The caller's context ended after the claim; nothing was committed and
-    # the claim remains recoverable.
+    # The caller's context ended. After the claim, nothing was committed and
+    # the claim remains recoverable; before the claim, nothing was consumed
+    # (SPEC-v2 §6.11).
     EVALUATION_CANCELLED = "evaluation_cancelled"
 
     # Part B claim lifecycle.

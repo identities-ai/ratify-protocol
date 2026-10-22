@@ -297,6 +297,11 @@ def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: 
     except Exception as exc:  # noqa: BLE001
         raise classify(V2ErrorClass.MALFORMED, ValueError(f"v2 signed rate batch: {exc}")) from exc
     claim.requires_rate = len(claim.rate_batch) != 0
+    # SPEC-v2 §6.11: cancellation before the claim consumes nothing, so a
+    # caller that has already cancelled never reaches the store.
+    err = ctx.err()
+    if err is not None:
+        raise V2Error(V2ErrorClass.EVALUATION_CANCELLED, f"v2 claim cancelled before the store was called: {err}") from err
     result = store.claim_v2(ctx, clone_v2_challenge_claim(claim))
     if not isinstance(result, V2ClaimResult):
         raise ValueError("v2 claim store returned an invalid result")

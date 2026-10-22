@@ -29,12 +29,12 @@ type V2StatusRoleBindings struct {
 	ReservedKeyIDs      map[string]struct{}
 }
 
-// AggregateCertificateStatusV2 requires exactly one reducer result for each
+// aggregateCertificateStatusResultsV2 (internal; SPEC-v2 §6.5) requires exactly one reducer result for each
 // requested CertificateRef, in the same order. Revocation takes precedence
 // over unavailable, which takes precedence over stale, independent of chain
 // order. Authenticated evidence is deduplicated and sorted; malformed rows are
 // excluded and make their result unavailable.
-func AggregateCertificateStatusV2(checks []V2CertificateStatusCheck, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2StatusAssessment, error) {
+func aggregateCertificateStatusResultsV2(checks []V2CertificateStatusCheck, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2StatusAssessment, error) {
 	return aggregateCertificateStatusV2(checks, results, roles, false)
 }
 

@@ -35,7 +35,6 @@ import (
 // caller's context ends during the stage, nothing is committed and the
 // verifier returns V2StageEvaluating with evaluation_cancelled.
 
-
 // V2StatusKeyConfig is the caller-authenticated status-key binding for one
 // issuer. It must equal the binding retained in the security journal at that
 // epoch, and the epoch must be the issuer's current journal epoch.

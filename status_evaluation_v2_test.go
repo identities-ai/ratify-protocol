@@ -36,7 +36,7 @@ func aggregateTestStatus(checks []V2CertificateStatusCheck, results []Revocation
 			roles.StatusKeyIssuers[key] = check.IssuerID
 		}
 	}
-	return AggregateCertificateStatusV2(checks, results, roles)
+	return aggregateCertificateStatusResultsV2(checks, results, roles)
 }
 
 func testV2StatusEvidence(issuer, key string, sequence int64, objectType uint16, digit string) StatusEvidenceEntryV2 {
@@ -131,7 +131,7 @@ func TestAggregateCertificateStatusV2EvidenceUsesReceiptCanonicalOrder(t *testin
 			roles.CurrentStatusKeyIDs[e.IssuerID] = e.StatusKeyID
 		}
 	}
-	got, err := AggregateCertificateStatusV2(checks, results, roles)
+	got, err := aggregateCertificateStatusResultsV2(checks, results, roles)
 	if err != nil || got.Assessment != "current" || !sortedEvidenceV2(got.Evidence, []string{issuerA, issuerB}, strings.Repeat("c", 64), strings.Repeat("d", 64)) {
 		t.Fatalf("assessment evidence is not receipt-compatible: %+v, %v", got, err)
 	}
@@ -247,7 +247,7 @@ func TestAggregateCertificateStatusV2UnauthenticatedEvidenceCannotPoisonIssuerBi
 		checks  []V2CertificateStatusCheck
 		results []RevocationStatusResultV2
 	}{{checks, []RevocationStatusResultV2{malicious, revoked}}, {[]V2CertificateStatusCheck{{DelegationIndex: 0, IssuerID: issuerB, SubjectID: testV2IssuerID("agent"), CertID: "revoked"}, {DelegationIndex: 1, IssuerID: issuerA, SubjectID: testV2IssuerID("agent"), CertID: "unknown"}}, []RevocationStatusResultV2{revoked, malicious}}} {
-		got, err := AggregateCertificateStatusV2(pair.checks, pair.results, roles)
+		got, err := aggregateCertificateStatusResultsV2(pair.checks, pair.results, roles)
 		if err != nil || got.Assessment != "revoked" || got.Reason != "delegation_revoked" || len(got.Evidence) != 1 || got.Evidence[0].IssuerID != issuerB {
 			t.Fatalf("unauthenticated evidence affected valid revocation: %+v, %v", got, err)
 		}
@@ -258,7 +258,7 @@ func TestAggregateCertificateStatusV2RejectsStatusKeyRoleCollision(t *testing.T)
 	issuer, key := testV2IssuerID("issuer-a"), strings.Repeat("1", 64)
 	check := V2CertificateStatusCheck{DelegationIndex: 0, IssuerID: issuer, SubjectID: testV2IssuerID("agent"), CertID: "cert"}
 	roles := V2StatusRoleBindings{StatusKeyIssuers: map[string]string{key: issuer}, CurrentStatusKeyIDs: map[string]string{issuer: key}, ReservedKeyIDs: map[string]struct{}{key: {}}}
-	if _, err := AggregateCertificateStatusV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{testV2StatusEvidence(issuer, "1", 1, uint16(v2RevocationList), "a")}}}, roles); err == nil {
+	if _, err := aggregateCertificateStatusResultsV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{testV2StatusEvidence(issuer, "1", 1, uint16(v2RevocationList), "a")}}}, roles); err == nil {
 		t.Fatal("status key reused for a reserved non-status role was accepted")
 	}
 }
@@ -273,7 +273,7 @@ func TestAggregateCertificateStatusV2RejectsSubjectKeyAsStatusKey(t *testing.T) 
 		ReservedKeyIDs:      map[string]struct{}{},
 	}
 	result := RevocationStatusResultV2{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{testV2StatusEvidence("issuer-a", "1", 1, uint16(v2RevocationList), "a")}}
-	got, err := AggregateCertificateStatusV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{result}, roles)
+	got, err := aggregateCertificateStatusResultsV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{result}, roles)
 	if err != nil || got.Assessment != "unavailable" {
 		t.Fatalf("subject key was accepted as an issuer status key: %+v, %v", got, err)
 	}
@@ -293,7 +293,7 @@ func TestAggregateCertificateStatusV2RejectsChainRoleKeyAsRevokedStatusKey(t *te
 			evidence := testV2StatusEvidence("issuer-a", "1", 2, uint16(v2RevocationPush), "a")
 			evidence.StatusKeyID = roleID
 			result := RevocationStatusResultV2{Status: "revoked", Evidence: []StatusEvidenceEntryV2{evidence}}
-			got, err := AggregateCertificateStatusV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{result}, roles)
+			got, err := aggregateCertificateStatusResultsV2([]V2CertificateStatusCheck{check}, []RevocationStatusResultV2{result}, roles)
 			if err != nil || got.Assessment != "unavailable" {
 				t.Fatalf("chain role key was accepted as revoked status evidence: %+v, %v", got, err)
 			}

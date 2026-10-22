@@ -297,7 +297,7 @@ func TestAuthenticatedStatusChecksAggregateWithVerifiedChainRoles(t *testing.T) 
 		evidence.StatusKeyID = keyID
 		results[i] = RevocationStatusResultV2{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{evidence}}
 	}
-	assessmentResult, err := AggregateCertificateStatusV2(assessment.StatusChecks, results, roles)
+	assessmentResult, err := aggregateCertificateStatusResultsV2(assessment.StatusChecks, results, roles)
 	if err != nil || assessmentResult.Assessment != "current" || assessmentResult.Reason != "" || len(assessmentResult.Evidence) != len(assessment.StatusChecks) {
 		t.Fatalf("authenticated chain status did not aggregate as current: %+v, %v", assessmentResult, err)
 	}
@@ -352,7 +352,7 @@ func TestAuthenticatedStatusAggregationRejectsCrossCertificateRoleKeys(t *testin
 			evidence.IssuerID = check.IssuerID
 			evidence.StatusKeyID = tt.roleID
 			results[tt.checkIdx] = RevocationStatusResultV2{Status: "revoked", Evidence: []StatusEvidenceEntryV2{evidence}}
-			got, err := AggregateCertificateStatusV2(assessment.StatusChecks, results, roles)
+			got, err := aggregateCertificateStatusResultsV2(assessment.StatusChecks, results, roles)
 			if err != nil || got.Assessment != "unavailable" || len(got.Evidence) != 0 {
 				t.Fatalf("cross-certificate role collision produced a revocation decision: %+v, %v", got, err)
 			}
@@ -547,7 +547,7 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 				results[statusCase.target].Status = "indeterminate"
 				results[statusCase.target].Reason = "stale"
 			}
-			resolved, err := ResolveClaimProofBundleV2AfterStatus(token, results, roles)
+			resolved, err := resolveClaimProofBundleV2AfterStatusResults(token, results, roles)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -589,7 +589,7 @@ func TestResolveClaimProofBundleV2AllowsOnlyAfterCurrentStatus(t *testing.T) {
 		ReservedKeyIDs:      map[string]struct{}{},
 	}
 	evidence := StatusEvidenceEntryV2{IssuerID: check.IssuerID, StatusKeyID: keyID, Sequence: 1, ObjectType: uint16(v2RevocationList), Digest: "sha384:" + strings.Repeat("a", 96)}
-	resolved, err := ResolveClaimProofBundleV2AfterStatus(token, []RevocationStatusResultV2{{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{evidence}}}, roles)
+	resolved, err := resolveClaimProofBundleV2AfterStatusResults(token, []RevocationStatusResultV2{{Status: "not_revoked", FreshUntil: 100, Evidence: []StatusEvidenceEntryV2{evidence}}}, roles)
 	if err != nil || resolved.Status != "authorized_agent" || resolved.Reason != "authorized" || resolved.StatusAssessment != "current" {
 		t.Fatalf("current status did not resolve the pending allow: %+v, %v", resolved, err)
 	}
@@ -752,7 +752,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 			Digest: "sha384:" + strings.Repeat(string(rune('a'+i)), 96),
 		}}}
 	}
-	resolved, err := ResolveClaimProofBundleV2AfterStatus(token, results, roles)
+	resolved, err := resolveClaimProofBundleV2AfterStatusResults(token, results, roles)
 	if err != nil || resolved.Status != "pending_external_checks" || resolved.StatusAssessment != "current" || resolved.Reason != "deferred_policy_checks_required" {
 		t.Fatalf("current status incorrectly finalized unresolved audience/rate checks: %+v, %v", resolved, err)
 	}

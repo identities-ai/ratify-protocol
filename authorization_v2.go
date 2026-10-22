@@ -242,14 +242,16 @@ func EvaluateProofBundleV2LocalAuthorization(bundle *ProofBundleV2, opts V2Local
 	return assessment
 }
 
-// ResolveClaimProofBundleV2AfterStatus completes the ordered post-claim status
-// stage for the assessment sealed by the single-use claim evaluator. It
-// aggregates exactly one authenticated result for every certificate reference.
+// resolveClaimProofBundleV2AfterStatusResults completes the ordered post-claim
+// status stage for the assessment sealed by the single-use claim evaluator
+// from one reducer result per certificate reference. It is internal: status
+// results reach a claim only through the authenticated evidence path of
+// SPEC-v2 §6.5 (runV2StatusStage), never from a caller.
 // Local denials are applied only when every status is current. Deferred
 // audience and rate constraints remain pending for their dedicated evaluators.
-func ResolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2LocalAuthorizationAssessment, error) {
+func resolveClaimProofBundleV2AfterStatusResults(token *V2EvaluationToken, results []RevocationStatusResultV2, roles V2StatusRoleBindings) (V2LocalAuthorizationAssessment, error) {
 	return resolveClaimProofBundleV2AfterStatus(token, func(checks []V2CertificateStatusCheck) (V2StatusAssessment, error) {
-		return AggregateCertificateStatusV2(checks, results, roles)
+		return aggregateCertificateStatusResultsV2(checks, results, roles)
 	})
 }
 

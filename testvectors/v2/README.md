@@ -54,6 +54,120 @@ tests.
 | `evaluator-profiles.json` | Exhaustive semantics of the two standard extension evaluator profiles (SPEC-v2 §5.2): 34 `com.ratifyprotocol.max_count/v1` and 36 `com.ratifyprotocol.allowed_values/v1` cases giving params, extension request context, and the one required outcome (boundaries at 0 and 2^53−1, 64 allowed values and 512-byte values, every out-of-shape params form and wrong JSON type, missing context including an entry only in the other map, exact-byte matching without normalization, params checked before context), each profile's descriptor digest, and 13 request-context bound cases checked before claim. A matching `profile_digest` names a profile; passing this file is the evidence that an SDK implements the standard profiles identically. |
 | `rotation-sequences.json` | AcceptRotation journal: genesis, repeat signatures, skipped sequence, continuation, fork freeze, frozen rejection, invalid recoveries, recovery epoch increase, and rejection of old-epoch statements. |
 
+## cross-sdk/
+
+[SPEC-v2 §8.1](../../SPEC-v2.md#8-conformance-and-release-gates) requires
+fixtures produced by every SDK to be verified by every other SDK. Each SDK
+writes one file, `cross-sdk/<sdk>.json`, where `<sdk>` is one of `go`,
+`typescript`, `python`, `rust`, or `c`. Each SDK's conformance suite verifies
+every file present in the directory, including its own, and fails on any
+error. A missing file from another SDK is not a failure; that SDK's
+column in the cross-SDK matrix of
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](../../docs/V2_REFERENCE_COMPATIBILITY.md)
+simply stays empty.
+
+Fixtures are not reproducible by design. The producing SDK generates fresh
+random keys and signs every ML-DSA-65 component with hedged (randomized)
+FIPS 204 signing; Ed25519 is deterministic. Every other field, including
+timestamps relative to the fixed evaluation time `1800000000`, follows the
+values below so verifiers can recompute every digest. The producer MUST
+verify its own output before writing it. The Go fixture is written by
+`go run ./cmd/ratify-v2-cross-sdk -out testvectors/v2/cross-sdk/go.json` and
+verified by `TestV2CrossSDKFixtures` (`cross_sdk_v2_test.go`).
+
+### File schema
+
+```
+{
+  "version": 2,
+  "description": string,
+  "sdk": "<sdk>",                 // equals the file name without .json
+  "sdk_version": string,          // exact package version or source revision
+  "generator": string,            // command or note that produced the file
+  "kind_object_type_codes": { same map as objects.json },
+  "keys":    [ keys.json "keys" entries ],
+  "objects": [ objects.json "objects" entries ]
+}
+```
+
+- `keys` uses the entry schema of `keys.json` `keys`: `name`,
+  `ed25519_seed_hex`, `ml_dsa_65_seed_hex`, `public_key` (`ed25519`,
+  `ml_dsa_65`, Base64), `key_id_v2`, and `v1_key_id_128`. Seeds are throwaway
+  test data. The file MUST define these 11 names: `root`, `intermediate`,
+  `agent`, `verifier`, `status_root`, `status_intermediate`, `witness`,
+  `party_b_root`, `party_b_agent`, `rotation_genesis`, `rotation_second`.
+- `objects` uses the object schema of `objects.json`: `name`, `kind`,
+  `description`, `wire_b64`, `verify`, `signatures`, and `digests`, with one
+  optional addition, `bundle_b64`, used only by kind `receipt_bundle_binding`.
+  Each signature record has the objects.json fields `field`,
+  `object_type_code`, `signer`, `signer_key_id_v2`, `signable_b64`,
+  `signable_sha384_hex`, `message_b64`, `mldsa_context`, `mldsa_tr_b64`,
+  `mldsa_mu_b64`, and `signature` (`ed25519`, `ml_dsa_65`). Signer and
+  `verify` key names (`status_key`, `witness_key`, `verifier_key`,
+  `rotation_state.current_key`) resolve to this file's `keys`, never to
+  `keys.json`.
+- `verify` and `digests` use exactly the objects.json conventions. The digest
+  names are `issuer_key_id_v2`, `subject_key_id_v2`, `delegation_digest_hex`,
+  `bundle_hash_v2`, `session_context_hex`, `challenge_claim_digest_hex`,
+  `claim_id`, `claim_verifier_namespace`, `claim_replay_epoch`,
+  `status_evidence_digest`, `statement_body_digest_hex`,
+  `receipt_outbox_body_b64`, `transaction_context_hex`, and
+  `<party_id>.transaction_party_request_hash_hex`,
+  `<party_id>.session_context_hex`, `<party_id>.proof_bundle_hash`.
+  `session_context_hex` is the objects.json fixture request: workspace
+  `00000000-0000-4000-8000-000000000001`, session `session-01`, invocation
+  `invocation-01`, and the operation context of `data:read`, `records.get`,
+  `customer/123`, `/v1/customers/123` with no payload, bound to the bundle's
+  `verifier_id` and `agent_id`.
+
+### Required objects
+
+A fixture MUST contain at least one object of every kind below; the Go
+fixture contains exactly these 15:
+
+| Name | Kind | Content |
+| --- | --- | --- |
+| `delegation_root_to_intermediate` | `delegation_certificate` | `root` to `intermediate`, `cert-root`, scope `data:read`, `files:read`, `identity:delegate` |
+| `delegation_every_registered_constraint_and_extension` | `delegation_certificate` | `intermediate` to `agent`, `cert-leaf-constrained`, scope `data:read`, constraints: every closed-registry type (`max_rate`, `ratify.receiver_audience`, `resource_path`, `time_window`, `max_amount`) and the extension evaluator type `com.ratifyprotocol.max_count` with params `{"counter":"nodes","max":10}` |
+| `proof_bundle_two_link_bound_context` | `proof_bundle` | `[cert-leaf, cert-root]` (`cert-leaf`: `intermediate` to `agent`, `data:read`, `files:read`), bound session context, challenge bytes `0xa0..0xbf`, claim digests for namespace `verify-test` and replay epoch 3 |
+| `proof_bundle_constrained_chain` | `proof_bundle` | `[cert-leaf-constrained, cert-root]`, bound session context, challenge bytes `0xb0..0xcf` |
+| `proof_bundle_empty_chain_stream_bound` | `proof_bundle` | empty chain, null session context, stream ID 32 bytes of `0x5a` at sequence 1 |
+| `revocation_list_root` | `revocation_list` | `status_root` for `root`, sequence 7, revokes `cert-a`, `cert-b` |
+| `revocation_list_intermediate_empty` | `revocation_list` | `status_intermediate` for `intermediate`, sequence 1, empty |
+| `revocation_push` | `revocation_push` | `status_root` for `root`, sequence 8, revokes `cert-c` |
+| `key_rotation_genesis` | `key_rotation_statement` | `rotation_genesis` to `rotation_second`, codes `0x0004` and `0x0009`, genesis rotation state |
+| `witness_entry_genesis` | `witness_entry` | `witness`, log `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1`, sequence 1, genesis head |
+| `transaction_receipt_two_parties` | `transaction_receipt` | parties `party-a` (`agent`, rooted at `root`) and `party-b` (`party_b_agent`, rooted at `party_b_root`) as in objects.json |
+| `verification_receipt_allow_genesis` | `verification_receipt` | allow receipt by `verifier` for `proof_bundle_two_link_bound_context`, log `cccccccccccccccccccccccccccccc01`, status evidence from both revocation lists |
+| `verification_receipt_allow_genesis/bundle_binding` | `receipt_bundle_binding` | that receipt (`wire_b64`) with its bundle (`bundle_b64`) |
+| `verification_receipt_constraint_evaluators` | `verification_receipt` | allow receipt for `proof_bundle_constrained_chain`, log `cccccccccccccccccccccccccccccc02`, `constraint_evaluators` naming `com.ratifyprotocol.max_count` with the `com.ratifyprotocol.max_count/v1` profile digest |
+| `verification_receipt_constraint_evaluators/bundle_binding` | `receipt_bundle_binding` | that receipt with its bundle |
+
+Signatures under all nine codes `0x0001` to `0x0009` MUST appear.
+
+### Verification procedure
+
+For every file in `cross-sdk/`, a conforming SDK MUST:
+
+1. Strictly decode the file, check `version` is 2 and `sdk` equals the file
+   name, and derive each public key and `key_id_v2` from its seeds.
+2. For every object other than `receipt_bundle_binding`, run the objects.json
+   positive procedure: decode `wire_b64`, re-encode to identical bytes, verify
+   with `verify` (per-kind procedure of `object-negatives.json`
+   `procedure_by_kind`), and for each signature check the signable projection,
+   its SHA-384, the 77-byte `M`, the ML-DSA context, `tr` and `mu` against the
+   signer's public key, the signer key ID, and that both pinned signature
+   components are the ones carried by the wire object. Then reproduce every
+   digest.
+3. For `receipt_bundle_binding`, decode and byte-identically re-encode
+   `wire_b64` as a verification receipt and `bundle_b64` as a proof bundle,
+   and pass the receipt/bundle binding check (`bundle_hash`, `verifier_id`,
+   `agent_id`, `issuer_ids`). `signatures` and `digests` are empty.
+4. Fail if a kind listed above, any of the nine signature codes, a delegation
+   certificate with every registered constraint type and an extension type, or
+   a verification receipt with `constraint_evaluators` is missing.
+5. Never compare ML-DSA-65 signature bytes with anything but the wire object.
+
 ## Required for 2.0.0-beta.1
 
 [SPEC-v2 §8](../../SPEC-v2.md#8-conformance-and-release-gates) requires every
@@ -78,7 +192,7 @@ follows; the last column names what is still missing.
 | Composed transaction verification | §5.7 | `transaction-verification.json`, `object-negatives.json` | |
 | Archival results | §6.10 | `object-negatives.json` (proof bundle), Go unit tests | Per-object shared vectors |
 | External signer | §3.2 | `objects.json` (`tr`, `mu`), `hedged-signatures.json`, Go unit tests | Key-binding and invalid-component shared vectors |
-| Cross-SDK fixtures | §8.1 | | `cross-sdk/` fixtures from every SDK |
+| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, verified by Go | Fixtures from TypeScript, Python, Rust, and C, and every SDK verifying every other's fixture |
 
 Error classes are the closed list of SPEC-v2 §2.7, declared in `errors_v2.go` (`V2ErrorClass`). Precedence for a
 single object is: strict decode and field format (`malformed`), then key-ID

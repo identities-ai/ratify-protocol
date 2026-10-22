@@ -89,6 +89,27 @@ closure of the internal adversarial review. Embedded v2 target builds remain
 untested. External independent review is a `2.0.0` gate (SPEC-v2 §8.2), not a
 beta gate. v2.0.0-alpha.1 is therefore not a v2 conformance claim.
 
+## Cross-SDK fixture matrix (SPEC-v2 §8.1)
+
+Each SDK writes `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys and
+hedged ML-DSA-65 signatures, and every SDK verifies every fixture present
+with its `objects.json` positive procedure. The format and procedure are in
+[`testvectors/v2/README.md`](../testvectors/v2/README.md#cross-sdk). Rows
+are the producing SDK and columns the verifying SDK. A cell is filled only
+when that verifier's suite runs that fixture and passes.
+
+| Producer (row), verifier (column) | Go | TypeScript | Python v2 | Rust | C ABI |
+|---|---|---|---|---|---|
+| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass (`TestV2CrossSDKFixtures`) | Not run | Not run | Not run | Not run |
+| TypeScript | No fixture | No fixture | No fixture | No fixture | No fixture |
+| Python v2 | No fixture | No fixture | No fixture | No fixture | No fixture |
+| Rust | No fixture | No fixture | No fixture | No fixture | No fixture |
+| C ABI | No fixture | No fixture | No fixture | No fixture | No fixture |
+
+Only Go to Go is covered. The §8.1 gate requires every cell. The TypeScript
+runner's unconsumed-entry check lists directory entries, so it also reports
+`cross-sdk` until that port consumes the directory.
+
 ## Corpus changes pending SDK ports (beta reconciliation)
 
 The Go reference and SPEC-v2 were reconciled for `2.0.0-beta.1` after alpha.1.

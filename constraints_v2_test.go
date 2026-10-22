@@ -12,7 +12,7 @@ func TestConstraintV2CanonicalRoundTrip(t *testing.T) {
 		{Type: ConstraintTimeWindow, Start: "22:00", End: "06:00", TZ: "Europe/Paris"},
 		{Type: ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: 0},
 		{Type: ConstraintMaxAmount, Currency: "JPY", MaxAmountMicros: maxSafeInteger},
-		{Type: ConstraintMaxRate, Count: 1, WindowS: MaxRateWindowSecondsV2},
+		{Type: ConstraintMaxRate, Count: 1, WindowS: V2MaxRateWindowSeconds},
 		{Type: ConstraintResourcePath, ResourceID: "a<b>&c"},
 		{Type: ConstraintResourcePath, ResourceID: "r", PathPrefix: "/x/"},
 		{Type: ConstraintReceiverAudience, Params: map[string]any{"exact_receiver_ids": []any{"r"}, "trust_domain_ids": []any{}}},
@@ -37,7 +37,7 @@ func TestConstraintV2CanonicalRoundTrip(t *testing.T) {
 	}
 	for _, bad := range []ConstraintV2{
 		{Type: ConstraintMaxAmount, Currency: "USD", MaxAmountMicros: -1},
-		{Type: ConstraintMaxRate, Count: 1, WindowS: MaxRateWindowSecondsV2 + 1},
+		{Type: ConstraintMaxRate, Count: 1, WindowS: V2MaxRateWindowSeconds + 1},
 		{Type: ConstraintTimeWindow, Start: "7:00", End: "08:00", TZ: "UTC"},
 		{Type: ConstraintMaxRate, Count: 1, WindowS: 60, Params: map[string]any{}},
 		{Type: ""},

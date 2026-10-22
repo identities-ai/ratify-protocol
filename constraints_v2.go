@@ -42,11 +42,6 @@ import (
 // object; it decodes, and fails closed as constraint_unknown at evaluation.
 // v1 member names on an unregistered type (for example "lat") are malformed.
 const (
-	// MaxRateWindowSecondsV2 bounds max_rate.window_s.
-	MaxRateWindowSecondsV2 = 86400
-	// MaxMembershipAgeSecondsV2 bounds receiver-audience
-	// max_membership_age_seconds.
-	MaxMembershipAgeSecondsV2 = 86400
 	// MaxAudienceIDsV2 bounds each receiver-audience ID array.
 	MaxAudienceIDsV2 = 64
 )
@@ -260,8 +255,8 @@ func validateV2ConstraintFields(data []byte) error {
 			return fmt.Errorf("max_rate count must be a positive safe integer")
 		}
 		window, err := v2IntegerField(fields["window_s"])
-		if err != nil || window <= 0 || window > MaxRateWindowSecondsV2 {
-			return fmt.Errorf("max_rate window_s must be an integer in 1..%d", MaxRateWindowSecondsV2)
+		if err != nil || window <= 0 || window > V2MaxRateWindowSeconds {
+			return fmt.Errorf("max_rate window_s must be an integer in 1..%d", V2MaxRateWindowSeconds)
 		}
 	case ConstraintResourcePath:
 		if err := exact([]string{"resource_id"}, "path_prefix"); err != nil {
@@ -339,8 +334,8 @@ func validateV2ReceiverAudience(raw json.RawMessage) error {
 	}
 	if hasAge {
 		seconds, err := v2IntegerField(age)
-		if err != nil || seconds <= 0 || seconds > MaxMembershipAgeSecondsV2 {
-			return fmt.Errorf("max_membership_age_seconds must be an integer in 1..%d", MaxMembershipAgeSecondsV2)
+		if err != nil || seconds <= 0 || seconds > V2MaxAudienceMembershipAgeSeconds {
+			return fmt.Errorf("max_membership_age_seconds must be an integer in 1..%d", V2MaxAudienceMembershipAgeSeconds)
 		}
 	}
 	if len(domains) == 0 && hasAge {

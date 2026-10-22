@@ -3,6 +3,7 @@ package ratify
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -21,7 +22,9 @@ import (
 //     failure rejects the whole batch);
 //  5. applies the batch, sorted by sequence, then code, then
 //     StatusEvidenceDigest, as one journal transition committed by
-//     compare-and-swap against the head loaded in step 1 (never retried);
+//     compare-and-swap against the head loaded in step 1; on a conflict it
+//     reloads, rechecks steps 1 and 2, and reapplies the same batch exactly
+//     once more;
 //  6. derives each CertificateRef result from the committed journal state.
 //
 // A missing binding, unanchored or unmigrated journal, role violation,
@@ -137,15 +140,36 @@ func runV2StatusStage(ctx context.Context, bundle *ProofBundleV2, checks []V2Cer
 		if err != nil {
 			continue
 		}
-		// 5. Apply as one transition against the loaded head.
+		// 5. Apply as one transition against the loaded head. On a
+		// compare-and-swap conflict, reload the anchored journal, repeat the
+		// binding and role-separation checks, and reapply the same batch
+		// exactly once more (no second provider call); a second conflict or
+		// any other failure makes the issuer unavailable.
 		var committed SecurityJournalV2
-		if err := callV2JournalSafely(func() (err error) {
-			committed, err = applyV2StatusBatchToJournal(ctx, cb.StatusJournal, current, issuerID, config, objects, req.StatusPolicy, now)
-			return err
-		}); err != nil {
-			if ctx.Err() != nil {
-				return v2StatusStageResult{cancelled: ctx.Err(), queries: queries}
+		applied := false
+		for attempt := 0; attempt < 2 && !applied; attempt++ {
+			if attempt > 0 {
+				if err := callV2JournalSafely(func() (err error) { current, err = loadAnchoredSecurityJournalV2(ctx, cb.StatusJournal); return err }); err != nil {
+					break
+				}
+				if err := checkV2StatusRoleSeparation(&current, issuerID, config, bundle); err != nil {
+					break
+				}
 			}
+			err := callV2JournalSafely(func() (err error) {
+				committed, err = applyV2StatusBatchToJournal(ctx, cb.StatusJournal, current, issuerID, config, objects, req.StatusPolicy, now)
+				return err
+			})
+			if err == nil {
+				applied = true
+			} else if !errors.Is(err, ErrSecurityJournalConflictV2) {
+				break
+			}
+		}
+		if ctx.Err() != nil {
+			return v2StatusStageResult{cancelled: ctx.Err(), queries: queries}
+		}
+		if !applied {
 			continue
 		}
 		// 6. Derive from committed state.
@@ -194,12 +218,8 @@ func verifyV2StatusEvidenceBatch(batch V2StatusEvidenceBatch, issuerID string, k
 	if len(batch.Objects) > MaxV2StatusEvidenceObjects {
 		return nil, fmt.Errorf("v2 status batch exceeds %d objects", MaxV2StatusEvidenceObjects)
 	}
-	total := 0
-	for _, object := range batch.Objects {
-		total += len(object.Wire)
-		if total > MaxV2StatusEvidenceBytes {
-			return nil, fmt.Errorf("v2 status batch exceeds %d bytes", MaxV2StatusEvidenceBytes)
-		}
+	if v2StatusEvidenceBatchEncodedLength(batch) > MaxV2StatusEvidenceBytes {
+		return nil, fmt.Errorf("v2 status batch exceeds %d bytes", MaxV2StatusEvidenceBytes)
 	}
 	out := make([]v2VerifiedStatusObject, 0, len(batch.Objects))
 	for _, object := range batch.Objects {

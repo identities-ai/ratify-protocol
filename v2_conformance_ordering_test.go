@@ -246,8 +246,9 @@ func (r *v2ScriptedRateStore) ReserveV2RateBatch(_ context.Context, _ string, _ 
 // v2ModalJournalStore wraps the reference journal with the scripted failure
 // modes of the vectors.
 type v2ModalJournalStore struct {
-	inner *v2reference.JournalStore
-	mode  string
+	inner    *v2reference.JournalStore
+	mode     string
+	casCalls int
 }
 
 func (s *v2ModalJournalStore) Load(ctx context.Context) (ratify.SecurityJournalV2, ratify.SecurityJournalHeadV2, error) {
@@ -263,7 +264,8 @@ func (s *v2ModalJournalStore) Load(ctx context.Context) (ratify.SecurityJournalV
 }
 
 func (s *v2ModalJournalStore) CompareAndSwap(ctx context.Context, head ratify.SecurityJournalHeadV2, next ratify.SecurityJournalV2) error {
-	if s.mode == "cas_conflict" {
+	s.casCalls++
+	if s.mode == "cas_conflict" || s.mode == "cas_conflict_once" && s.casCalls%2 == 1 {
 		return ratify.ErrSecurityJournalConflictV2
 	}
 	return s.inner.CompareAndSwap(ctx, head, next)

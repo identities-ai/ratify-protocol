@@ -392,7 +392,7 @@ func (g *gen) orderingFile() any {
 			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics",
 			"status_keys":                      "caller-authenticated status key per issuer_id (epoch and complete public key)",
 			"status_policy":                    "configured status freshness bounds",
-			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
+			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict; cas_conflict_once = the 1st, 3rd, 5th, ... CompareAndSwap calls report a conflict and the others proceed. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
 			"status_evidence":                  "per issuer_id provider response: mode ok returns objects (each object_type_code and exact wire bytes); error returns an error; panic panics. An issuer absent from the map returns an empty batch",
 			"audience_mode":                    "ok returns audience_memberships; error returns an error; panic panics",
 			"audience_memberships":             "caller-authenticated membership results returned by the audience provider",
@@ -851,6 +851,10 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 			s.statusKeys = g.statusKeyConfig()
 			s.statusKeys[intermediateID] = statusKeyJSON{Epoch: 1, StatusKeyID: mixed.ID, PublicKey: pubJSON(mixed.Pub)}
 		}))
+	unavailableIntermediate("status_key_is_verifier_key", "a status key equal to the verifier key named by the proof's verifier_id violates role separation (SPEC-v2 §6.5 step 2): that issuer is unavailable and its provider is not called", countsJSON{Claim: 1, Trust: 1, Status: 1}, func(s *scenario) {
+		s.statusKeys = g.statusKeyConfig()
+		s.statusKeys[intermediateID] = statusKeyJSON{Epoch: 1, StatusKeyID: g.k("verifier").ID, PublicKey: pubJSON(g.k("verifier").Pub)}
+	})
 	for _, c := range []struct {
 		mode, desc string
 		queries    int
@@ -858,12 +862,14 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 		{"absent", "no status journal is configured: every reference is unavailable and no provider is called", 0},
 		{"unanchored", "the journal record does not match the store's anchored head: never not_revoked, no provider call", 0},
 		{"load_error", "the journal store fails to load: unavailable, no provider call", 0},
-		{"cas_conflict", "the compare-and-swap of each issuer's transition conflicts and is not retried: unavailable", 2},
+		{"cas_conflict", "the compare-and-swap of each issuer's transition conflicts on both the attempt and its single reload-and-reapply retry: unavailable", 2},
 	} {
 		mode := c.mode
 		add(g.terminal("status_journal_"+c.mode, c.desc, def, indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), nil, countsJSON{Claim: 1, Trust: 1, Status: c.queries}),
 			func(s *scenario) { s.journal.Mode = mode }))
 	}
+	add(g.terminal("status_journal_cas_conflict_once", "each issuer's first compare-and-swap conflicts; the verifier reloads the anchored journal, rechecks the binding and role separation, and reapplies the same batch once without calling the provider again: allow", def, allow(),
+		func(s *scenario) { s.journal.Mode = "cas_conflict_once" }))
 	add(g.terminal("status_next_update_exact_deadline", "a list whose next_update equals the evaluation time is not fresh (exclusive deadline): stale", def,
 		indeterminate("status_stale", "trusted", "stale", "bound", strp(vp), []EvidenceJSON{g.evidence(st["intermediate_current"]), g.evidence(st["root_next_at_now"])}, allowCounts), func(s *scenario) {
 			s.journal.Preload = []journalPreloadJSON{g.preload(st["root_next_at_now"], Now-30)}

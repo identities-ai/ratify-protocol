@@ -98,8 +98,9 @@ passing it. Changes to `testvectors/v2`:
 
 | File | Change since alpha.1 |
 |---|---|
-| `object-negatives.json` | 224 → 273 negatives: the closed v2 constraint registry and every wire timestamp outside 0..253402300799 |
-| `verifier-ordering.json` | 81 → 153 cases (43 pre-claim, 2 replay, 106 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
+| `object-negatives.json` | 224 → 281 negatives: the closed v2 constraint registry, every wire timestamp outside 0..253402300799, `custom:*` and bare-prefix required scopes in receipts, and the optional receipt member `constraint_evaluators` |
+| `verifier-ordering.json` | 81 → 184 cases (47 pre-claim, 2 replay, 133 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `extension_counts` and `extension_values`, `constraint_evaluators`, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` and `evaluator` callback counts; exact `custom:` required scopes; committed outcomes are not decisions |
+| `operation-session-context.json` | `invalid_required_scopes` replaces `custom:invoice:read`, now a valid exact required scope, with the bare prefix `custom:` |
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
@@ -108,12 +109,15 @@ passing it. Changes to `testvectors/v2`:
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
 | `lifecycle-scenarios.json` | New: 26 Part B scripts (127 steps over 14 requests) against each SDK's in-memory reference store |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
+| `issuer-duties.json` | New: 11 delegation issuer-duty cases for the typed signer |
+| `challenge-issuance.json` | New: 9 challenge issuance helper scenarios (33 steps) |
+| `status-publisher.json` | New: 7 signed-status publisher scenarios (39 steps) with journal ingestion |
 
 SDK test files that read these vector files, and therefore fail until ported:
 
 | SDK | Test file | Changed files it reads |
 |---|---|---|
-| TypeScript | `sdks/typescript/test/conformance_v2.test.ts` | `objects.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `log-sequences.json`, `rotation-sequences.json`; also fails on the five new files it does not consume |
+| TypeScript | `sdks/typescript/test/conformance_v2.test.ts` | `objects.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `log-sequences.json`, `rotation-sequences.json`; also fails on the eight new files it does not consume |
 | Python v2 | `sdks/python-v2/tests/test_v2_conformance.py` | Same files as TypeScript, and the same unconsumed-file check |
 | Python v2 | `sdks/python-v2/tests/test_mldsa65_pure.py` | `objects.json`, `object-negatives.json` |
 | Rust | `sdks/rust/tests/v2_conformance.rs` | Same files as TypeScript, with per-file minimum counts, and the same unconsumed-file check |

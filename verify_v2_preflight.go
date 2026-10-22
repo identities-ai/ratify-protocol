@@ -119,6 +119,9 @@ func matchesExpectedChallengeV2(expected *ExpectedChallengeV2, state *expectedCh
 
 // PreflightProofBundleV2 binds the challenge's
 // expected context to the same immutable policy used by terminal evaluation.
+// It seals no extension evaluator profile, so a staged evaluation that starts
+// here treats every extension constraint type as constraint_unknown; only
+// VerifyProofBundleV2 accepts a ConstraintEvaluatorRegistryV2.
 // Verify callers use this entry point so a missing or divergent policy value
 // cannot consume the challenge before context validation.
 func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {

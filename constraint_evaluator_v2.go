@@ -109,7 +109,9 @@ type ConstraintEvaluationResultV2 struct {
 
 // ConstraintEvaluatorFuncV2 evaluates one signed extension constraint. It
 // must be a pure function of its input: no I/O, no clock, no randomness.
-// An error, a panic, a timeout, or an invalid result is unverifiable.
+// An error, a panic, a timeout, or an invalid result is unverifiable. The
+// verifier stops waiting at the registry timeout; an implementation must
+// also return once ctx is done, or its goroutine outlives the call.
 type ConstraintEvaluatorFuncV2 func(ctx context.Context, in ConstraintEvaluationInputV2) (ConstraintEvaluationResultV2, error)
 
 // ConstraintEvaluatorRegistrationV2 binds one profile descriptor to its

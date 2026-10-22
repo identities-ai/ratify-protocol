@@ -166,22 +166,23 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: install in clean venv
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e '.[dev]'
-
-      - name: full test suite (testvectors/v2)
-        run: pytest -v
-
+      # Signing is native-only, and ratify-protocol-native-v2 is a required
+      # dependency pinned to the same release, so the extension is built and
+      # installed before the SDK; pip then resolves the pin locally instead of
+      # from PyPI.
       - uses: actions-rust-lang/setup-rust-toolchain@v2
-      - name: build and install the v2 native extra
+      - name: build and install the v2 native extension
         working-directory: sdks/python-native-v2
         run: |
+          python -m pip install --upgrade pip
           python -m pip install 'maturin>=1.7,<2'
           maturin build --release --out dist
           pip install dist/*.whl
-      - name: test suite with the v2 native extra required
+
+      - name: install the SDK in the same environment
+        run: pip install -e '.[dev]'
+
+      - name: full test suite with the native extension required (testvectors/v2)
         env:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
@@ -340,6 +341,9 @@ jobs:
 
       - name: v2 ABI tests (testvectors/v2)
         run: cargo test --test v2_abi
+
+      - name: panic containment at every C ABI export
+        run: cargo test --test panic_containment
 
       # Compiles a C program against include/ratify.h and the static library
       # and runs it over every testvectors/v2 key, object, and negative, so

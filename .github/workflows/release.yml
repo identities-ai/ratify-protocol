@@ -167,20 +167,18 @@ jobs:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
-      # Python v2 (ratify-protocol-v2), same two passes: pure Python first,
-      # then with its own native extra required.
-      - name: Python v2 install
-        working-directory: sdks/python-v2
-        run: pip install -e '.[dev]'
-      - name: Python v2 full test suite
-        working-directory: sdks/python-v2
-        run: pytest -v
-      - name: Build and install the v2 native Python extra
+      # Python v2 (ratify-protocol-v2). Signing is native-only and the native
+      # extension is a required, exactly pinned dependency, so it is built and
+      # installed first and the SDK suite runs with it required.
+      - name: Build and install the v2 native Python extension
         working-directory: sdks/python-native-v2
         run: |
           maturin build --release --out dist
           pip install dist/*.whl
-      - name: Python v2 native-extra test suite
+      - name: Python v2 install
+        working-directory: sdks/python-v2
+        run: pip install -e '.[dev]'
+      - name: Python v2 full test suite (native required)
         working-directory: sdks/python-v2
         env:
           RATIFY_REQUIRE_NATIVE: '1'
@@ -515,7 +513,9 @@ jobs:
   publish-pypi-v2:
     name: Publish v2 Python SDK to PyPI
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v2' }}
-    needs: gate-tests
+    # ratify-protocol-v2 pins ratify-protocol-native-v2 exactly, so the native
+    # package must be on PyPI first or the SDK is uninstallable.
+    needs: [gate-tests, publish-pypi-native-v2]
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish

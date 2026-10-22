@@ -121,9 +121,10 @@ type v2OrderingInputs struct {
 	TZDBVersion         string `json:"tzdb_version"`
 	ReceiverBindingHook string `json:"receiver_binding_hook"`
 	Trust               *struct {
-		Mode          string                  `json:"mode"`
-		Outcome       string                  `json:"outcome"`
-		RootPublicKey *ratify.HybridPublicKey `json:"root_public_key"`
+		Mode          string                   `json:"mode"`
+		Outcome       string                   `json:"outcome"`
+		RootPublicKey *ratify.HybridPublicKey  `json:"root_public_key"`
+		Registry      []ratify.HybridPublicKey `json:"registry"`
 	} `json:"trust"`
 	StatusKeys     map[string]v2StatusKeyJSON `json:"status_keys"`
 	StatusPolicy   v2StatusPolicy             `json:"status_policy"`
@@ -380,13 +381,22 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 	if len(in.ConstraintEvaluators) != 0 {
 		req.ConstraintEvaluators = v2BuildEvaluatorRegistry(t, in, counts)
 	}
+	var registry *v2reference.TrustRegistry
+	if in.Trust != nil && in.Trust.Mode == "registry" {
+		var err error
+		if registry, err = v2reference.NewTrustRegistry(in.Trust.Registry); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cb := ratify.V2VerifyCallbacks{
-		Trust: func(context.Context, []ratify.DelegationCertV2) (ratify.V2TrustResolution, error) {
+		Trust: func(ctx context.Context, chain []ratify.DelegationCertV2) (ratify.V2TrustResolution, error) {
 			counts.Trust++
 			if in.Trust == nil {
 				return ratify.V2TrustResolution{Outcome: ratify.V2TrustUnavailable}, nil
 			}
 			switch in.Trust.Mode {
+			case "registry":
+				return registry.Resolve(ctx, chain)
 			case "error":
 				return ratify.V2TrustResolution{}, fmt.Errorf("scripted trust provider failure")
 			case "panic":

@@ -150,6 +150,12 @@ func (g *gen) challengeIssuanceFile() any {
 		issuanceStepJSON{Op: "issue", At: at + 31, Request: request(30, true, session), Expect: issued(r2, at+31, 30, 2)},
 		issuanceStepJSON{Op: "present", At: at + 60, Bundles: []string{present(agent, r2, at+31, session, "")}, Expect: claimed("created")},
 	)
+	end := maxTimestampV2 - 300
+	add("expiry_at_timestamp_domain_end", "issued_at + lifetime is computed with checked arithmetic (SPEC-v2 §2.5): a 300-second challenge issued at 253402300499 expires exactly at 253402300799 and still claims; one issued a second later would expire outside the timestamp domain and is configuration_invalid before any randomness is drawn", [][]byte{r1, r2},
+		issuanceStepJSON{Op: "issue", At: end, Request: request(300, true, session), Expect: issued(r1, end, 300, 1)},
+		issuanceStepJSON{Op: "issue", At: end + 1, Request: request(300, true, session), Expect: issuanceExpectJSON{Result: "error", ErrorClass: "configuration_invalid", RecordsAfter: intp(1)}},
+		issuanceStepJSON{Op: "present", At: maxTimestampV2 - 1, Bundles: []string{present(agent, r1, end, session, "")}, Expect: claimed("created")},
+	)
 	add("concurrent_claims", "concurrent presentations of one issued challenge: exactly one creates the claim; an identical proof is an in-progress retry and a different proof is a conflict", [][]byte{r1, r2},
 		issuanceStepJSON{Op: "issue", At: at, Request: request(120, true, nil), Expect: issued(r1, at, 120, 1)},
 		issuanceStepJSON{Op: "present_concurrent", At: at + 5, Bundles: []string{present(agent, r1, at, nil, ""), present(agent, r1, at, nil, ""), present(agent, r1, at, nil, "")},

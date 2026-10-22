@@ -32,11 +32,14 @@ type contextPolicyJSON struct {
 }
 
 // trustJSON scripts the trust provider: mode ok returns outcome (with
-// root_public_key for trusted); mode error returns an error; mode panic panics.
+// root_public_key for trusted); mode error returns an error; mode panic panics;
+// mode registry resolves through the SDK's reference candidate-record
+// registry configured with registry (complete public keys, in order).
 type trustJSON struct {
-	Mode          string         `json:"mode"`
-	Outcome       string         `json:"outcome,omitempty"`
-	RootPublicKey map[string]any `json:"root_public_key,omitempty"`
+	Mode          string           `json:"mode"`
+	Outcome       string           `json:"outcome,omitempty"`
+	RootPublicKey map[string]any   `json:"root_public_key,omitempty"`
+	Registry      []map[string]any `json:"registry,omitempty"`
 }
 
 type evidenceObjectJSON struct {
@@ -417,7 +420,7 @@ func (g *gen) orderingFile() any {
 			"tzdb_version":                     "the configured IANA tzdata release required for time_window (SPEC-v2 §5.2); empty = not configured. The corpus assumes the pinned release named in SPEC-v2 §5.2; any other value makes every time_window constraint_unverifiable",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
 			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final < T_claim fails with clock_regressed, and an allow commits only while T_final < its allow horizon and T_final < the challenge expiry, else allow_horizon_passed; either failure commits nothing",
-			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics",
+			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics; mode registry = the SDK's reference candidate-record trust registry (SPEC-v2 §6.1) holding the complete public keys of registry in order: a record is a candidate when its key ID equals the chain's terminal issuer ID or either component equals the terminal issuer key's component; no candidate is untrusted, more than one (including the same key twice) is ambiguous and never a first match, exactly one is trusted with that record's key",
 			"status_keys":                      "caller-authenticated status key per issuer_id (epoch and complete public key)",
 			"status_policy":                    "configured status freshness bounds",
 			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict; cas_conflict_once = the 1st, 3rd, 5th, ... CompareAndSwap calls report a conflict and the others proceed. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
@@ -529,6 +532,25 @@ func (g *gen) preflightScenarios() []scenario {
 		s.reqCtx = &requestContextJSON{RequestedAmountMicros: 5, RequestedCurrency: "USD"}
 	}))
 	add(std("config_now_outside_timestamp_domain", "a verifier time below 0 is configuration_invalid", bundle, "configuration_invalid", func(s *scenario) { s.now = -1 }))
+	// Checked arithmetic (SPEC-v2 §2.5): every sum that could leave the
+	// safe-integer range has an operand outside its configured or timestamp
+	// bound, so it is rejected before claim with the class of that input and
+	// never wraps or saturates into a passing comparison.
+	const maxSafe = int64(1)<<53 - 1
+	add(std("overflow_now_max_safe_integer", "a verifier time of 2^53-1 would overflow now + future_skew_seconds in the timestamp domain; it is configuration_invalid before claim", bundle, "configuration_invalid", func(s *scenario) { s.now = maxSafe }))
+	add(std("overflow_future_skew_max_safe_integer", "a configured future skew of 2^53-1 would overflow now + skew; it is outside 0..300 and configuration_invalid", bundle, "configuration_invalid", func(s *scenario) { s.skew = maxSafe }))
+	add(std("overflow_max_age_max_safe_integer", "a configured challenge maximum age of 2^53-1 would overflow issued_at + max_age; it is outside 1..300 and configuration_invalid", bundle, "configuration_invalid", func(s *scenario) { s.maxAge = maxSafe }))
+	add(std("overflow_status_age_max_safe_integer", "a configured status age of 2^53-1 would overflow updated_at + max_status_age_seconds; it is outside 1..86400 and configuration_invalid", bundle, "configuration_invalid", func(s *scenario) {
+		p := orderingStatusPolicy
+		p.MaxStatusAgeSeconds = maxSafe
+		s.policy2 = &p
+	}))
+	add(std("overflow_status_lifetime_max_safe_integer", "a configured status list lifetime of 2^53-1 is outside 1..86400 and configuration_invalid", bundle, "configuration_invalid", func(s *scenario) {
+		p := orderingStatusPolicy
+		p.MaxListLifetimeSeconds = maxSafe
+		s.policy2 = &p
+	}))
+	add(std("overflow_expected_expires_at_outside_timestamp_domain", "an authenticated expected challenge expires_at of 2^53-1 is outside the timestamp domain: configuration_invalid before any freshness sum", bundle, "configuration_invalid", func(s *scenario) { s.expected.ExpiresAt = maxSafe }))
 	futureChallenge := func() []byte {
 		_, w, _ := g.bundle(bundleSpec{agent: agent, certs: certs, session: session, challengeAt: Now + 60})
 		return w
@@ -658,6 +680,28 @@ func (g *gen) terminalScenarios() []scenario {
 		trust := c.trust
 		add(g.terminal(c.name, c.desc, def, indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = trust }))
 	}
+	// Candidate-record trust registry (SPEC-v2 §6.1, §8.1): resolution through
+	// the SDK's reference registry never selects a first match.
+	registry := func(keys ...*Key) func(*scenario) {
+		return func(s *scenario) {
+			s.trust = &trustJSON{Mode: "registry", Registry: []map[string]any{}}
+			for _, k := range keys {
+				s.trust.Registry = append(s.trust.Registry, pubJSON(k.Pub))
+			}
+		}
+	}
+	rootEdOther := g.splitKey("root_ed25519_other_ml_dsa", g.k("root").EdSeed, g.k("attacker").MLSeed)
+	rootMLOther := g.splitKey("root_ml_dsa_other_ed25519", g.k("attacker").EdSeed, g.k("root").MLSeed)
+	add(g.terminal("trust_registry_single_record", "the reference trust registry holds the root and an unrelated record: exactly one candidate matches and is trusted", def,
+		allow(), registry(g.k("untrusted_root"), g.k("root"))))
+	add(g.terminal("trust_registry_duplicate_record", "the same root key is configured twice: two candidates match one ID, the registry reports ambiguous, and the verifier commits trust_unavailable instead of selecting the first", def,
+		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), registry(g.k("root"), g.k("root"))))
+	add(g.terminal("trust_registry_two_candidates_sharing_component", "the root and a different key carrying the root's Ed25519 component are both configured: two candidates, ambiguous, trust_unavailable", def,
+		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), registry(rootEdOther, g.k("root"))))
+	add(g.terminal("trust_registry_component_only_candidate", "the only candidate shares the root's ML-DSA-65 component but not its key ID: the registry returns that record and the verifier rejects the mismatched key as ambiguous, never trusted", def,
+		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), registry(rootMLOther)))
+	add(g.terminal("trust_registry_no_candidate", "no configured record matches the chain root: untrusted, a sticky deny without status lookup", def,
+		deny("unauthorized", "unauthorized", "untrusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), registry(g.k("untrusted_root"))))
 	add(g.terminal("delegation_lifetime_exceeds_bound", "expires_at - issued_at above 315360000 seconds is proof_invalid", g.chain(chainSpec{leafIssued: Now - 3600, leafExpires: Now - 3600 + 315360001}),
 		deny("proof_invalid", "invalid", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
 	add(g.terminal("delegation_lifetime_at_bound", "expires_at - issued_at exactly 315360000 seconds passes the lifetime check", g.chain(chainSpec{leafIssued: Now - 3600, leafExpires: Now - 3600 + 315360000}),
@@ -899,6 +943,28 @@ func (g *gen) terminalScenarios() []scenario {
 			s.out.StatusEvidence = []EvidenceJSON{g.evidence(st["root_domain_end"]), g.evidence(st["intermediate_domain_end"])}
 			s.out.AllowValidUntil = ratify.V2MaxTimestampSeconds
 		}))
+	// Every configured bound at its maximum at the end of the timestamp domain
+	// (SPEC-v2 §2.5): issued_at + max_challenge_age_seconds, now +
+	// future_skew_seconds and updated_at + max_status_age_seconds all exceed
+	// 253402300799 without overflowing, the challenge and status stay fresh,
+	// and every derived deadline clamps to 253402300799.
+	maxBoundCerts := g.chain(chainSpec{leafIssued: domainEndNow - 3600, leafExpires: ratify.V2MaxTimestampSeconds, rootIssued: domainEndNow - 3600, rootExpires: ratify.V2MaxTimestampSeconds})
+	add(g.terminal("overflow_maximum_bounds_at_timestamp_domain_end", "future skew 300, challenge maximum age 300, status list lifetime 86400 and status age 86400 at 253402300794: every sum lands past the timestamp domain without overflow, the proof allows, and the allow horizon is 253402300799", maxBoundCerts,
+		allow(), func(s *scenario) {
+			session := g.fixtureSessionContext(agent)
+			_, s.bundle, _ = g.bundle(bundleSpec{agent: agent, certs: maxBoundCerts, session: session, challengeAt: ratify.V2MaxTimestampSeconds - 10})
+			s.expected.IssuedAt, s.expected.ExpiresAt = ratify.V2MaxTimestampSeconds-10, ratify.V2MaxTimestampSeconds
+			s.now = ratify.V2MaxTimestampSeconds - 5
+			s.skew, s.maxAge = 300, 300
+			s.policy2 = &statusPolicyJSON{MaxListLifetimeSeconds: 86400, MaxStatusAgeSeconds: 86400, ClockSkewSeconds: 300}
+			s.evidence = map[string]statusProviderJSON{
+				rootID: evidenceBatch(g.object(st["root_domain_end"])), intermediateID: evidenceBatch(g.object(st["intermediate_domain_end"])),
+			}
+			s.out.StatusEvidence = []EvidenceJSON{g.evidence(st["root_domain_end"]), g.evidence(st["intermediate_domain_end"])}
+			s.out.AllowValidUntil = ratify.V2MaxTimestampSeconds
+		}))
+	add(g.terminal("overflow_delegation_lifetime_whole_domain", "a certificate valid from 1 to 253402300799 has a lifetime far above 315360000: the difference is computed exactly and the proof is proof_invalid", g.chain(chainSpec{leafIssued: 1, leafExpires: ratify.V2MaxTimestampSeconds}),
+		deny("proof_invalid", "invalid", "trusted", "not_evaluated", "not_evaluated", nil, nil, noStatus), nil))
 	// time_window period ends after a zone's last explicit tzdata transition
 	// (SPEC-v2 §5.2). The pinned 2025c archive is slim: for these zones every
 	// change in the years used here comes from the POSIX TZ footer, not from
@@ -1091,6 +1157,13 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 	add(g.terminal("allow_one_second_before_challenge_expiry_at_finalization", "an allow finalized one second before the challenge expiry commits with verified_at equal to the claim time", def, allow(), func(s *scenario) {
 		s.finOffset = 289
 	}))
+}
+
+// splitKey combines the Ed25519 seed of one fixture key with the ML-DSA-65
+// seed of another, giving a distinct key ID that shares one component.
+func (g *gen) splitKey(name string, ed, ml [32]byte) *Key {
+	pub, priv := must2(ratify.HybridKeypairFromSeeds(ed, ml))
+	return &Key{Name: name, Pub: pub, Priv: priv, ID: keyIDV2(pub), EdSeed: ed, MLSeed: ml}
 }
 
 // mixedKey is a status key that reuses the intermediate issuer's Ed25519

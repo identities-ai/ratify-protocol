@@ -457,7 +457,19 @@ fn v2_public_api_errors_are_classified() {
             None,
             sign_class(sign_delegation_cert_v2_with_signer(&ctx, &zero_cert(), &failing_signer)),
         ),
-        ("SignProofBundleV2", Some(Malformed), sign_class(sign_proof_bundle_v2(&zero_bundle(), &private))),
+        (
+            "SignProofBundleV2 agent key binding",
+            Some(KeyIdMismatch),
+            sign_class(sign_proof_bundle_v2(&zero_bundle(), &private)),
+        ),
+        (
+            "SignProofBundleV2",
+            Some(Malformed),
+            sign_class(sign_proof_bundle_v2(
+                &ProofBundleV2 { agent_id: key_id.clone(), agent_pub_key: public.clone(), ..zero_bundle() },
+                &private,
+            )),
+        ),
         (
             "SignRevocationListV2 issuer binding",
             Some(StatusKeyBindingMismatch),
@@ -794,8 +806,8 @@ fn v2_public_api_errors_are_classified() {
     }
     assert!(failures.is_empty(), "{} misclassified:\n{}", failures.len(), failures.join("\n"));
     // Every Go entry point is either exercised here or has no Rust
-    // counterpart (errors_v2_public_test.go lists 116).
-    assert_eq!(rows.len() + NOT_REPRESENTABLE.len(), 116);
+    // counterpart (errors_v2_public_test.go lists 117).
+    assert_eq!(rows.len() + NOT_REPRESENTABLE.len(), 117);
 
     // The live verifier reports a listed class in its outcome as well.
     let outcome = verify_proof_bundle_v2(

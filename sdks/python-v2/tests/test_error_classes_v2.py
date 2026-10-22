@@ -8,6 +8,8 @@ the reference class for the same input.
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ratify_protocol_v2 import archival_v2 as arch
@@ -213,7 +215,10 @@ def _calls():
         ("sign_delegation_cert_v2", C.MALFORMED, lambda: pv2.sign_delegation_cert_v2(_empty_cert(), priv)),
         ("sign_delegation_cert_v2_with_signer failing signer", None,
          lambda: pv2.sign_delegation_cert_v2_with_signer(CTX, _empty_cert(), FailingSigner(pub))),
-        ("sign_proof_bundle_v2", C.MALFORMED, lambda: pv2.sign_proof_bundle_v2(_empty_bundle(), priv)),
+        ("sign_proof_bundle_v2 agent key binding", C.KEY_ID_MISMATCH,
+         lambda: pv2.sign_proof_bundle_v2(_empty_bundle(), priv)),
+        ("sign_proof_bundle_v2", C.MALFORMED,
+         lambda: pv2.sign_proof_bundle_v2(replace(_empty_bundle(), agent_id=key_id, agent_pub_key=pub), priv)),
         ("sign_revocation_list_v2 issuer binding", C.STATUS_KEY_BINDING_MISMATCH,
          lambda: pv2.sign_revocation_list_v2(lst, "other", pub, priv)),
         ("sign_revocation_list_v2 status key binding", C.STATUS_KEY_BINDING_MISMATCH,
@@ -368,9 +373,9 @@ CALLS = _calls() if _native.AVAILABLE else []
 
 
 def test_call_list_matches_the_reference():
-    # Go TestV2PublicAPIErrorsAreClassified calls 116 entry points and the
+    # Go TestV2PublicAPIErrorsAreClassified calls 117 entry points and the
     # live verifier (below).
-    assert len(CALLS) == 116
+    assert len(CALLS) == 117
     assert len({name for name, _, _ in CALLS}) == len(CALLS)
 
 

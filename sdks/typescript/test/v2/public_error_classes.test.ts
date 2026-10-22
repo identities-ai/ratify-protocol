@@ -1,7 +1,7 @@
 // SPEC-v2 §2.7: every error returned by a public v2 API carries exactly one
 // class from the closed list, never "unclassified". Each public entry point
 // is called with an input it must reject, mirroring the reference SDK's
-// table of 116 entry points; where the specification fixes the class it is
+// table of 117 entry points; where the specification fixes the class it is
 // asserted exactly, so this SDK reports the same class for the same input.
 
 import { test } from "node:test";
@@ -287,7 +287,8 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     { name: "newLocalSignerV2", want: "configuration_invalid", run: () => newLocalSignerV2({ publicKey: zeroKey(), privateKey: { ed25519: empty(), ml_dsa_65: empty() } }) },
     { name: "signDelegationCertV2", want: "malformed", run: () => signDelegationCertV2(zeroCert(), pair) },
     { name: "signDelegationCertV2WithSigner failing signer", want: "", run: () => signDelegationCertV2WithSigner(zeroCert(), failingSigner(pub)) },
-    { name: "signProofBundleV2", want: "malformed", run: () => signProofBundleV2(zeroBundle(), pair) },
+    { name: "signProofBundleV2 agent key binding", want: "key_id_mismatch", run: () => signProofBundleV2(zeroBundle(), pair) },
+    { name: "signProofBundleV2", want: "malformed", run: () => signProofBundleV2({ ...zeroBundle(), agent_id: keyID, agent_pub_key: pub }, pair) },
     { name: "signRevocationListV2 issuer binding", want: "status_key_binding_mismatch", run: () => signRevocationListV2(list(), "other", pub, pair) },
     { name: "signRevocationListV2 status key binding", want: "status_key_binding_mismatch", run: () => signRevocationListV2(list(), keyID, other.publicKey, pair) },
     { name: "signRevocationListV2WithSigner failing signer", want: "configuration_invalid", run: () => signRevocationListV2WithSigner(list(), keyID, pub, failingSigner(pub)) },
@@ -393,11 +394,11 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     },
   ];
 
-  // The reference table has 116 entries: the 115 calls above (Go's
+  // The reference table has 117 entries: the 116 calls above (Go's
   // DecodePayloadDigest has no counterpart here; its ConstraintV2 JSON
   // unmarshalling is reached through decodeDelegationCertV2) and the live
   // verifier below.
-  assert.equal(calls.length, 115);
+  assert.equal(calls.length, 116);
   assert.equal(new Set(calls.map((c) => c.name)).size, calls.length, "duplicate entry point name");
 
   for (const c of calls) {

@@ -1190,7 +1190,7 @@ func SignProofBundleV2WithSigner(ctx context.Context, bundle *ProofBundleV2, sig
 		return nil, err
 	}
 	if bundle.AgentID != agentID || !bytes.Equal(bundle.AgentPubKey.Ed25519, agentPub.Ed25519) || !bytes.Equal(bundle.AgentPubKey.MLDSA65, agentPub.MLDSA65) {
-		return nil, fmt.Errorf("v2 agent key does not match proof bundle agent")
+		return nil, v2Errorf(V2ErrKeyIDMismatch, "v2 agent key does not match proof bundle agent")
 	}
 	unsigned := *bundle
 	unsigned.ChallengeSig = placeholderV2Signature()

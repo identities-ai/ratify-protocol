@@ -149,7 +149,10 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		{"SignDelegationCertV2WithSigner failing signer", "", func() error {
 			return first(SignDelegationCertV2WithSigner(ctx, &DelegationCertV2{}, failingSignerV2{pub}))
 		}},
-		{"SignProofBundleV2", V2ErrMalformed, func() error { return first(SignProofBundleV2(&ProofBundleV2{}, priv)) }},
+		{"SignProofBundleV2 agent key binding", V2ErrKeyIDMismatch, func() error { return first(SignProofBundleV2(&ProofBundleV2{}, priv)) }},
+		{"SignProofBundleV2", V2ErrMalformed, func() error {
+			return first(SignProofBundleV2(&ProofBundleV2{AgentID: keyID, AgentPubKey: pub}, priv))
+		}},
 		{"SignRevocationListV2 issuer binding", V2ErrStatusKeyBindingMismatch, func() error { return first(SignRevocationListV2(list, "other", pub, priv)) }},
 		{"SignRevocationListV2 status key binding", V2ErrStatusKeyBindingMismatch, func() error { return first(SignRevocationListV2(list, keyID, other, priv)) }},
 		{"SignRevocationListV2WithSigner failing signer", V2ErrConfigurationInvalid, func() error {

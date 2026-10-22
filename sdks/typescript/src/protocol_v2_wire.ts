@@ -655,7 +655,7 @@ export async function signProofBundleV2WithSigner(bundle: ProofBundleV2, signer:
     const agentPub = await signerPublicKeyV2(signer);
     const agentID = keyIDV2(agentPub);
     if (bundle.agent_id !== agentID || !equalHybridPublicKeys(bundle.agent_pub_key, agentPub)) {
-      throw new Error("v2 agent key does not match proof bundle agent");
+      throw v2Errorf("key_id_mismatch", "v2 agent key does not match proof bundle agent");
     }
     const prepared = decodeProofBundleV2(encodeProofBundleV2({
       ...bundle, challenge_sig: placeholderV2Signature(), delegation_digest: new Uint8Array(48),

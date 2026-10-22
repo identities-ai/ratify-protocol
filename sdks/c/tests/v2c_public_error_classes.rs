@@ -593,6 +593,19 @@ fn v2c_public_api_errors_are_classified() {
             })
         }),
         call(
+            "ratify_v2_sign_proof_bundle agent key binding",
+            "key_id_mismatch",
+            move || {
+                // A well-formed corpus bundle whose agent is not `kp`.
+                let f = load("verifier-ordering.json");
+                let (_, wire) = f["bundles_b64"].as_object().unwrap().iter().next().unwrap();
+                let wire = b64(wire);
+                buffer_call(|o| unsafe {
+                    ratify_v2_sign_proof_bundle(wire.as_ptr(), wire.len(), kp.0, ptr::null(), o)
+                })
+            },
+        ),
+        call(
             "ratify_v2_sign_revocation_list issuer binding",
             "status_key_binding_mismatch",
             move || {

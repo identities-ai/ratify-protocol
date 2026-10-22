@@ -653,12 +653,9 @@ pub fn sign_proof_bundle_v2_with_signer(
     let agent_pub = signer_public_key_v2(signer)?;
     let agent_id = key_id_v2(&agent_pub).classify(V2ErrorClass::Malformed)?;
     if bundle.agent_id != agent_id || !equal_keys(&bundle.agent_pub_key, &agent_pub) {
-        // The Go reference leaves this refusal unclassified, so its signing
-        // default (`malformed`) applies.
-        return Err(V2SignError::InvalidObject(V2Error::new(
-            V2ErrorClass::Malformed,
-            "v2 agent key does not match proof bundle agent",
-        )));
+        return Err(V2SignError::KeyBinding(
+            "v2 agent key does not match proof bundle agent".into(),
+        ));
     }
     let mut unsigned = bundle.clone();
     unsigned.challenge_sig = placeholder_signature();

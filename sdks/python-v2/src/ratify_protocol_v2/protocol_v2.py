@@ -720,7 +720,7 @@ def sign_proof_bundle_v2_with_signer(ctx: Context, bundle: ProofBundleV2, signer
     agent_pub = signer_public_key_v2(signer)
     agent_id = key_id_v2(agent_pub)
     if bundle.agent_id != agent_id or not equal_public_keys(bundle.agent_pub_key, agent_pub):
-        raise V2SigningError("v2 agent key does not match proof bundle agent")
+        raise V2SigningError("v2 agent key does not match proof bundle agent", V2ErrorClass.KEY_ID_MISMATCH)
     unsigned = replace(bundle, challenge_sig=placeholder_signature_v2(), delegation_digest=bytes(48))
     prepared = decode_proof_bundle_v2(encode_proof_bundle_v2(unsigned))
     prepared.delegation_digest = delegation_digest_v2(prepared.delegations)

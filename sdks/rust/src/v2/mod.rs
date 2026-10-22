@@ -18,6 +18,11 @@ pub(crate) mod tzdb;
 pub mod signer;
 pub mod wire;
 
+// Key generation lives in the shared crypto module because v1 and v2 use the
+// same hybrid key types. It is re-exported here so a v2 caller can import
+// everything it needs from `ratify_protocol::v2`.
+pub use crate::crypto::{generate_hybrid_keypair, hybrid_keypair_from_seeds};
+
 pub use constraints::*;
 pub use context::*;
 pub use crypto::*;

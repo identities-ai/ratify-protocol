@@ -23,11 +23,17 @@ type profileExpectJSON struct {
 }
 
 type approvalSetJSON struct {
-	ID                string    `json:"id"`
-	AgentID           string    `json:"agent_id"`
-	RequiredScope     string    `json:"required_scope"`
-	SessionContextB64 string    `json:"session_context_b64"`
-	Roots             [2]string `json:"roots"`
+	ID             string    `json:"id"`
+	VerifierID     string    `json:"verifier_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	SessionID      string    `json:"session_id"`
+	AgentKey       string    `json:"agent_key"`
+	RequiredScope  string    `json:"required_scope"`
+	RequestHashB64 string    `json:"request_hash_b64"`
+	RootKeys       [2]string `json:"root_keys"`
+	// SessionContextB64 is the context the ledger must derive (§2.4 with
+	// invocation_id = id); it is a known answer, never a ledger input.
+	SessionContextB64 string `json:"session_context_b64"`
 }
 
 type profileStepJSON struct {
@@ -41,6 +47,7 @@ type profileStepJSON struct {
 	Snapshot    string            `json:"snapshot,omitempty"`
 	Sequence    int64             `json:"sequence,omitempty"`
 	Slot        *int              `json:"slot,omitempty"`
+	Set         string            `json:"set,omitempty"`
 	Count       int               `json:"count,omitempty"`
 	ApprovalSet *approvalSetJSON  `json:"approval_set,omitempty"`
 	Expect      profileExpectJSON `json:"expect"`
@@ -119,10 +126,10 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	f.Semantics["corrupt_state"] = "alter one byte of the request's sealed terminal result in the primary store"
 	f.Semantics["upload"] = "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release"
 	f.Semantics["profile dual_root"] = "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set"
-	f.Semantics["ledger_open"] = "open approval_set (roots are complete-key IDs in slot order); expect ledger_error approval_set_invalid when it is malformed or names one root twice"
-	f.Semantics["ledger_record"] = "record the request's released decision (from its last release step; none if that release was not released) and its exact bundle in slot; expect ledger_complete, or ledger_error not_released, action_mismatch, root_mismatch (the chain does not end at the slot's pinned root), or slot_filled"
+	f.Semantics["ledger_open"] = "open approval_set: agent_key and root_keys name keys.json fixture keys whose complete public keys the set pins (roots in slot order); request_hash_b64 is the action's operation-context hash. The ledger derives the expected session context from verifier_id, workspace_id, the agent key ID, session_id, invocation_id = id, and request_hash (§2.4); session_context_b64 is that derivation as a known answer and is never a ledger input. Expect ledger_error approval_set_invalid when the set is malformed or names one root key twice"
+	f.Semantics["ledger_record"] = "record the request's released decision (from its last release step; none if that release was not released) and its exact bundle in slot of set (default: the last set opened). Checks in order: not_released (not a released allow); action_mismatch (receipt bundle_hash differs from the bundle); approval_reused (the claim is already recorded in another approval set); action_mismatch (receipt or bundle verifier, receipt or bundle agent ID, bundle agent key, receipt required scope, or bundle session_context differs from the set and its derived context); root_mismatch (the chain's terminal issuer key is not the slot's pinned root key, or the receipt's issuer_ids omit it); slot_filled. Expect ledger_complete or that ledger_error"
 	f.Semantics["ledger_record_concurrent"] = "record requests[i] in slot i concurrently; expect ledger_complete for the final state"
-	f.Semantics["ledger_execute"] = "atomically mark the set executed at the store clock; expect ledger_error incomplete, expired (an approval is no longer Allowed), already_executed, or none"
+	f.Semantics["ledger_execute"] = "atomically mark set (default: the last set opened) executed at the store clock; expect ledger_error incomplete, expired (an approval is no longer Allowed), already_executed, or none"
 	f.Semantics["ledger_execute_concurrent"] = "count concurrent executions of the set; expect executed, the number that succeeded"
 
 	agent := g.k("agent")
@@ -155,15 +162,20 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	for i := range actionPayload {
 		actionPayload[i] = 0x44
 	}
+	const approvalSession = "approval-session-01"
+	actionHash := func(payload []byte) []byte {
+		return operationContextHash("data:read", "records.export", "batch/7", "/v1/batches/7", payload)
+	}
 	setContext := func(payload []byte) []byte {
-		request := operationContextHash("data:read", "records.export", "batch/7", "/v1/batches/7", payload)
-		return sessionContext(g.k("verifier").ID, fixtureWorkspace, agent.ID, "approval-session-01", approvalSetID, request)
+		return sessionContext(g.k("verifier").ID, fixtureWorkspace, agent.ID, approvalSession, approvalSetID, actionHash(payload))
 	}
 	action := setContext(actionPayload)
 	otherPayload := make([]byte, 32)
 	for i := range otherPayload {
 		otherPayload[i] = 0x45
 	}
+	// swappedVerifier is the action's context derived for another verifier ID.
+	swappedVerifier := sessionContext(g.k("attacker").ID, fixtureWorkspace, agent.ID, approvalSession, approvalSetID, actionHash(actionPayload))
 	chainA, chainB := g.chain(chainSpec{}), g.chain(chainSpec{root: g.k("untrusted_root")})
 	for _, r := range []struct {
 		name      string
@@ -179,13 +191,27 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 		{"RBr", 0xa1, chainB, action, "untrusted_root"},
 		// RBm approves a different action under its own challenge.
 		{"RBm", 0xb2, chainB, setContext(otherPayload), "untrusted_root"},
+		// RAv approves the action under a context derived for another verifier.
+		{"RAv", 0xa3, chainA, swappedVerifier, "root"},
 	} {
 		v, bundle := g.profileRequest(profileRequestSpec{challenge: r.challenge, certs: r.certs, session: r.session, trustRoot: r.trust})
 		add(r.name, v, bundle)
 	}
-	set := &approvalSetJSON{ID: approvalSetID, AgentID: agent.ID, RequiredScope: "data:read", SessionContextB64: b64(action), Roots: [2]string{g.k("root").ID, g.k("untrusted_root").ID}}
+	newSet := func(id, verifier string, payload []byte) *approvalSetJSON {
+		request := actionHash(payload)
+		return &approvalSetJSON{ID: id, VerifierID: g.k(verifier).ID, WorkspaceID: fixtureWorkspace, SessionID: approvalSession, AgentKey: "agent",
+			RequiredScope: "data:read", RequestHashB64: b64(request), RootKeys: [2]string{"root", "untrusted_root"},
+			SessionContextB64: b64(sessionContext(g.k(verifier).ID, fixtureWorkspace, agent.ID, approvalSession, id, request))}
+	}
+	set := newSet(approvalSetID, "verifier", actionPayload)
 	sameRootSet := *set
-	sameRootSet.Roots = [2]string{g.k("root").ID, g.k("root").ID}
+	sameRootSet.RootKeys = [2]string{"root", "root"}
+	// secondSet is a different approval set for the same action.
+	secondSet := newSet("approval-set-02", "verifier", actionPayload)
+	// otherActionSet reuses the approval set ID with a different action.
+	otherActionSet := newSet(approvalSetID, "verifier", otherPayload)
+	// otherVerifierSet names a different verifier for the same action.
+	otherVerifierSet := newSet(approvalSetID, "attacker", actionPayload)
 
 	type ex = profileExpectJSON
 	type le = lifecycleExpectJSON
@@ -275,6 +301,16 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	execute := func(errClass string) profileStepJSON {
 		return profileStepJSON{Op: "ledger_execute", Expect: ex{LedgerError: errClass}}
 	}
+	recordIn := func(setID, request string, i int, complete bool, errClass string) profileStepJSON {
+		r := record(request, i, complete, errClass)
+		r.Set = setID
+		return r
+	}
+	executeIn := func(setID, errClass string) profileStepJSON {
+		e := execute(errClass)
+		e.Set = setID
+		return e
+	}
 	approve := func(request string, seq int64) []profileStepJSON {
 		return []profileStepJSON{verify(request, committedAllow), publish(request, seq), release(request, "reference", released(Now, seq))}
 	}
@@ -318,4 +354,18 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	dual("dual_root_expired_before_execution", "both approvals are recorded but the action is attempted at the challenge expiry; it is not executable",
 		one(open(set, "")), approve("RA", 1), approve("RB", 2),
 		one(record("RA", 0, false, ""), record("RB", 1, true, ""), setTime(Now+290), execute("expired")))
+	dual("dual_root_cross_set_reuse", "two approval sets for the same action: the released approvals recorded in the first set cannot be recorded in the second, whose derived context differs and which refuses any claim already counted elsewhere; only the first set executes",
+		one(open(set, ""), open(secondSet, "")), approve("RA", 1), approve("RB", 2),
+		one(recordIn(approvalSetID, "RA", 0, false, ""), recordIn(approvalSetID, "RB", 1, true, ""),
+			recordIn("approval-set-02", "RA", 0, false, "approval_reused"), recordIn("approval-set-02", "RB", 1, false, "approval_reused"),
+			executeIn("approval-set-02", "incomplete"), executeIn(approvalSetID, "")))
+	dual("dual_root_same_set_different_action", "a set with the same approval_set_id, verifier, session and agent but a different action request hash derives a different context: approvals released for the first action do not fill it",
+		one(open(otherActionSet, "")), approve("RA", 1), approve("RB", 2),
+		one(record("RA", 0, false, "action_mismatch"), record("RB", 1, false, "action_mismatch"), execute("incomplete")))
+	dual("dual_root_swapped_verifier", "a root A approval whose session context was derived for a different verifier ID is refused although the receipt's verifier is correct; the approval for the derived context fills the slot",
+		one(open(set, "")), approve("RAv", 1), approve("RA", 2),
+		one(record("RAv", 0, false, "action_mismatch"), record("RA", 0, false, ""), execute("incomplete")))
+	dual("dual_root_set_names_other_verifier", "a set naming a different verifier derives a different context and does not match the receipts' verifier: released approvals for this verifier do not fill it",
+		one(open(otherVerifierSet, "")), approve("RA", 1), approve("RB", 2),
+		one(record("RA", 0, false, "action_mismatch"), record("RB", 1, false, "action_mismatch"), execute("incomplete")))
 }

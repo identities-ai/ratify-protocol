@@ -1,6 +1,7 @@
 package ratify_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -39,13 +40,18 @@ type v2ProfileStep struct {
 	Snapshot    string   `json:"snapshot"`
 	Sequence    int64    `json:"sequence"`
 	Slot        *int     `json:"slot"`
+	Set         string   `json:"set"`
 	Count       int      `json:"count"`
 	ApprovalSet *struct {
 		ID                string    `json:"id"`
-		AgentID           string    `json:"agent_id"`
+		VerifierID        string    `json:"verifier_id"`
+		WorkspaceID       string    `json:"workspace_id"`
+		SessionID         string    `json:"session_id"`
+		AgentKey          string    `json:"agent_key"`
 		RequiredScope     string    `json:"required_scope"`
+		RequestHashB64    string    `json:"request_hash_b64"`
+		RootKeys          [2]string `json:"root_keys"`
 		SessionContextB64 string    `json:"session_context_b64"`
-		Roots             [2]string `json:"roots"`
 	} `json:"approval_set"`
 	Expect v2ProfileExpect `json:"expect"`
 }
@@ -80,7 +86,7 @@ func v2LedgerErrorClass(err error) string {
 	for class, target := range map[string]error{
 		"approval_set_invalid": v2reference.ErrApprovalSetInvalid, "not_released": v2reference.ErrApprovalNotReleased,
 		"action_mismatch": v2reference.ErrApprovalActionMismatch, "root_mismatch": v2reference.ErrApprovalRootMismatch,
-		"slot_filled": v2reference.ErrApprovalSlotFilled, "incomplete": v2reference.ErrApprovalIncomplete,
+		"slot_filled": v2reference.ErrApprovalSlotFilled, "approval_reused": v2reference.ErrApprovalReused, "incomplete": v2reference.ErrApprovalIncomplete,
 		"expired": v2reference.ErrApprovalExpired, "already_executed": v2reference.ErrApprovalAlreadyExecuted,
 	} {
 		if errors.Is(err, target) {
@@ -122,7 +128,7 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 	for _, sc := range f.ProfileScenarios {
 		profiles[sc.Profile]++
 	}
-	if profiles["single_device_offline"] < 9 || profiles["dual_root"] < 9 || len(profiles) != 2 {
+	if profiles["single_device_offline"] < 9 || profiles["dual_root"] < 13 || len(profiles) != 2 {
 		t.Fatalf("profile scenarios %v", profiles)
 	}
 	ctx := context.Background()
@@ -232,7 +238,16 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 					}
 				case "ledger_open":
 					s := step.ApprovalSet
-					err := ledger.Open(v2reference.ApprovalSetTestOnly{ApprovalSetID: s.ID, AgentID: s.AgentID, RequiredScope: s.RequiredScope, SessionContext: unb64(t, s.SessionContextB64), Roots: s.Roots})
+					// The known-answer context must equal an independent §2.4
+					// derivation; the ledger derives its own and never reads it.
+					derived, err := ratify.BuildSessionContextV2(ratify.SessionContextV2Inputs{VerifierID: s.VerifierID, WorkspaceID: s.WorkspaceID,
+						AgentID: fx.id[s.AgentKey], SessionID: s.SessionID, InvocationID: s.ID, RequestHash: unb64(t, s.RequestHashB64)})
+					if err != nil || !bytes.Equal(derived, unb64(t, s.SessionContextB64)) {
+						t.Fatalf("step %d ledger_open: known-answer session context differs from the §2.4 derivation (%v)", i, err)
+					}
+					err = ledger.Open(v2reference.ApprovalSetTestOnly{ApprovalSetID: s.ID, VerifierID: s.VerifierID, WorkspaceID: s.WorkspaceID, SessionID: s.SessionID,
+						AgentPublicKey: fx.pub[s.AgentKey], RequiredScope: s.RequiredScope, RequestHash: unb64(t, s.RequestHashB64),
+						Roots: [2]ratify.HybridPublicKey{fx.pub[s.RootKeys[0]], fx.pub[s.RootKeys[1]]}})
 					if got := v2LedgerErrorClass(err); got != want.LedgerError {
 						t.Fatalf("step %d ledger_open: %s, want %q", i, got, want.LedgerError)
 					}
@@ -240,7 +255,11 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 						setID = s.ID
 					}
 				case "ledger_record":
-					complete, err := ledger.RecordApproval(setID, *step.Slot, decisions[step.Request], unb64(t, f.Bundles[request.Bundle]))
+					target := setID
+					if step.Set != "" {
+						target = step.Set
+					}
+					complete, err := ledger.RecordApproval(target, *step.Slot, decisions[step.Request], unb64(t, f.Bundles[request.Bundle]))
 					if got := v2LedgerErrorClass(err); got != want.LedgerError || complete != want.LedgerComplete {
 						t.Fatalf("step %d ledger_record %s: complete %v %s, want %v %q", i, step.Request, complete, got, want.LedgerComplete, want.LedgerError)
 					}
@@ -264,7 +283,11 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 						t.Fatalf("step %d ledger_record_concurrent: complete %v (%v)", i, complete, err)
 					}
 				case "ledger_execute":
-					if got := v2LedgerErrorClass(ledger.Execute(ctx, setID, store)); got != want.LedgerError {
+					target := setID
+					if step.Set != "" {
+						target = step.Set
+					}
+					if got := v2LedgerErrorClass(ledger.Execute(ctx, target, store)); got != want.LedgerError {
 						t.Fatalf("step %d ledger_execute: %s, want %q", i, got, want.LedgerError)
 					}
 				case "ledger_execute_concurrent":

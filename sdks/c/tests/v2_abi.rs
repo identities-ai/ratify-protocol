@@ -117,7 +117,7 @@ fn v2_abi_version_query() {
 #[test]
 fn v2_abi_error_class_strings_are_distinct_and_stable() {
     let mut seen = BTreeSet::new();
-    for code in 1..=41 {
+    for code in 1..=49 {
         let s = class(code);
         assert_ne!(s, "unknown", "code {code} has no class spelling");
         assert!(seen.insert(s.clone()), "duplicate class spelling {s}");
@@ -128,7 +128,7 @@ fn v2_abi_error_class_strings_are_distinct_and_stable() {
     assert_eq!(class(RatifyV2Code::RatifyV2ErrNullPointer as i32), "null_pointer");
     assert_eq!(class(RatifyV2Code::RatifyV2ErrBadArgument as i32), "bad_argument");
     assert_eq!(class(RatifyV2Code::RatifyV2ErrInternal as i32), "internal");
-    assert_eq!(class(42), "unknown");
+    assert_eq!(class(50), "unknown");
     assert_eq!(class(-99), "unknown");
 }
 

@@ -22,7 +22,7 @@
 
 // Version of the `ratify_v2_*` C ABI. Bumped on any incompatible change to a
 // `ratify_v2_*` signature, struct, or code value.
-#define RATIFY_V2_ABI_VERSION 1
+#define RATIFY_V2_ABI_VERSION 2
 
 // Protocol major version implemented by the `ratify_v2_*` surface.
 #define RATIFY_V2_PROTOCOL_VERSION 2
@@ -30,6 +30,24 @@
 // Buffer size (including the trailing NUL) for a v2 key ID written by
 // `ratify_v2_key_id`: 64 lowercase hex characters + NUL.
 #define RATIFY_V2_KEY_ID_BUF_LEN 65
+
+// Raw Ed25519 public key length.
+#define RATIFY_V2_ED25519_PUBLIC_KEY_LEN 32
+
+// Raw ML-DSA-65 public key length (FIPS 204).
+#define RATIFY_V2_ML_DSA_65_PUBLIC_KEY_LEN 1952
+
+// Ed25519 signature length.
+#define RATIFY_V2_ED25519_SIGNATURE_LEN 64
+
+// ML-DSA-65 signature length (FIPS 204).
+#define RATIFY_V2_ML_DSA_65_SIGNATURE_LEN 3309
+
+// Length of a key seed accepted by `ratify_v2_keypair_from_seeds`.
+#define RATIFY_V2_SEED_LEN 32
+
+// Number of SPEC-v2 §2.7 failure classes (positive codes 1..=49).
+#define RATIFY_V2_ERROR_CLASS_COUNT 49
 
 // Return codes for all fallible Ratify C API functions.
 //
@@ -55,69 +73,120 @@ typedef enum RatifyStatus {
     RatifyErrEncoding = 6,
 } RatifyStatus;
 
-// Result codes for `ratify_v2_*` functions. Positive values are Protocol v2
-// failure classes; negative values are ABI errors. Values are stable within
-// one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a `default` case.
+// Result codes for `ratify_v2_*` functions and callback returns.
+//
+// Positive values are the SPEC-v2 §2.7 failure classes in table order.
+// Negative values are not Protocol failure classes: `-1..=-4` are ABI
+// conditions; `-10..=-17` are Part B store sentinels a callback returns
+// (and that a few store-facing functions report); `-20..=-25` are typed
+// signing refusals (SPEC-v2 §3.2). Values are stable within one
+// `RATIFY_V2_ABI_VERSION`; a C `switch` must include a `default` case.
 enum RatifyV2Code
 #ifdef __cplusplus
   : int32_t
 #endif // __cplusplus
  {
     RatifyV2Ok = 0,
-    RatifyV2Unclassified = 1,
-    RatifyV2Malformed = 2,
-    RatifyV2UnsupportedObjectType = 3,
-    RatifyV2KeyIdMismatch = 4,
-    RatifyV2DelegationDigestMismatch = 5,
-    RatifyV2ChainLinkageMismatch = 6,
-    RatifyV2DuplicateCertificateRef = 7,
-    RatifyV2InvalidSignature = 8,
-    RatifyV2InvalidRequiredScope = 9,
-    RatifyV2ConfigurationInvalid = 10,
-    RatifyV2ExpectedChallengeUnavailable = 11,
-    RatifyV2NamespaceMismatch = 12,
-    RatifyV2StaleReplayEpoch = 13,
-    RatifyV2VerifierIdMismatch = 14,
-    RatifyV2ChallengeMismatch = 15,
-    RatifyV2ChallengeNotFresh = 16,
-    RatifyV2ExpectedAgentMismatch = 17,
-    RatifyV2SessionContextMismatch = 18,
-    RatifyV2ReceiverAudienceRequired = 19,
-    RatifyV2ReceiverAudienceMismatch = 20,
-    RatifyV2ReceiverBindingRejected = 21,
-    RatifyV2ClaimReplay = 22,
+    RatifyV2Malformed = 1,
+    RatifyV2UnsupportedObjectType = 2,
+    RatifyV2KeyIdMismatch = 3,
+    RatifyV2DelegationDigestMismatch = 4,
+    RatifyV2ChainLinkageMismatch = 5,
+    RatifyV2DuplicateCertificateRef = 6,
+    RatifyV2InvalidSignature = 7,
+    RatifyV2InvalidRequiredScope = 8,
+    RatifyV2ConfigurationInvalid = 9,
+    RatifyV2ExpectedChallengeUnavailable = 10,
+    RatifyV2NamespaceMismatch = 11,
+    RatifyV2StaleReplayEpoch = 12,
+    RatifyV2VerifierIdMismatch = 13,
+    RatifyV2ChallengeMismatch = 14,
+    RatifyV2ChallengeNotFresh = 15,
+    RatifyV2ExpectedAgentMismatch = 16,
+    RatifyV2SessionContextMismatch = 17,
+    RatifyV2ReceiverAudienceRequired = 18,
+    RatifyV2ReceiverAudienceMismatch = 19,
+    RatifyV2ReceiverBindingRejected = 20,
+    RatifyV2ClaimReplay = 21,
+    RatifyV2StreamSequenceMismatch = 22,
     RatifyV2ClaimStoreUnavailable = 23,
-    RatifyV2StatusKeyBindingMismatch = 24,
-    RatifyV2ReceiptBundleMismatch = 25,
-    RatifyV2BundleHashMismatch = 26,
-    RatifyV2TransactionPartyMismatch = 27,
-    RatifyV2TransactionContextMismatch = 28,
-    RatifyV2TransactionSignatureSetInvalid = 29,
-    RatifyV2RotationStateMismatch = 30,
-    RatifyV2RotationKeyReused = 31,
-    RatifyV2RotationFutureDated = 32,
-    RatifyV2RotationFork = 33,
-    RatifyV2RotationFrozen = 34,
-    RatifyV2RotationRecoveryInvalid = 35,
-    RatifyV2LogStateMismatch = 36,
-    RatifyV2LogGap = 37,
-    RatifyV2LogOrphan = 38,
-    RatifyV2LogFork = 39,
-    RatifyV2LogFrozen = 40,
-    RatifyV2StatusObjectRejected = 41,
+    RatifyV2ReceiptAbandoned = 24,
+    RatifyV2EvaluationCancelled = 25,
+    RatifyV2ClockRegressed = 26,
+    RatifyV2AllowHorizonPassed = 27,
+    RatifyV2ClaimLeaseLive = 28,
+    RatifyV2ClaimLeaseLost = 29,
+    RatifyV2ClaimAlreadyTerminal = 30,
+    RatifyV2ClaimNotFound = 31,
+    RatifyV2StatusKeyBindingMismatch = 32,
+    RatifyV2StatusObjectRejected = 33,
+    RatifyV2ReceiptBundleMismatch = 34,
+    RatifyV2BundleHashMismatch = 35,
+    RatifyV2TransactionPartyMismatch = 36,
+    RatifyV2TransactionContextMismatch = 37,
+    RatifyV2TransactionSignatureSetInvalid = 38,
+    RatifyV2RotationStateMismatch = 39,
+    RatifyV2RotationKeyReused = 40,
+    RatifyV2RotationFutureDated = 41,
+    RatifyV2RotationFork = 42,
+    RatifyV2RotationFrozen = 43,
+    RatifyV2RotationRecoveryInvalid = 44,
+    RatifyV2LogStateMismatch = 45,
+    RatifyV2LogGap = 46,
+    RatifyV2LogOrphan = 47,
+    RatifyV2LogFork = 48,
+    RatifyV2LogFrozen = 49,
     // A required pointer argument was NULL.
     RatifyV2ErrNullPointer = -1,
-    // A caller-supplied argument (length, UTF-8, context JSON) was invalid.
+    // A caller-supplied argument (length, UTF-8, JSON shape, enum value) was
+    // invalid at the ABI layer.
     RatifyV2ErrBadArgument = -2,
-    // An internal error (caught panic). Should not occur.
+    // An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
+    // Cancellation. A callback returns it to cancel the operation (SPEC-v2
+    // §6.11); signing reports it when the signer cancelled.
+    RatifyV2ErrCancelled = -4,
+    // Store sentinel: an unclassified store, provider, or clock failure. The
+    // verifier assigns the class SPEC-v2 names for that step.
+    RatifyV2StoreUnavailable = -10,
+    // Store sentinel: the challenge was already claimed by a different proof.
+    RatifyV2StoreClaimProofConflict = -11,
+    // Store sentinel: a complete atomic rate batch had no capacity.
+    RatifyV2StoreRateLimitExceeded = -12,
+    // Store sentinel: a different release record exists for the claim.
+    RatifyV2StoreReleaseStateMismatch = -13,
+    // Store sentinel: no checkpoint acknowledgement exists.
+    RatifyV2StoreAcknowledgementNotFound = -14,
+    // Store sentinel: an issuance record already exists for that key.
+    RatifyV2StoreIssuanceConflict = -15,
+    // Store sentinel: no issuance record exists for that key.
+    RatifyV2StoreIssuanceNotFound = -16,
+    // Store sentinel: a security-journal compare-and-swap lost to another
+    // writer.
+    RatifyV2StoreJournalConflict = -17,
+    // Signing refusal: an issuer duty (SPEC-v2 §5.1, §5.4) refuses the object.
+    RatifyV2SignIssuerDuty = -20,
+    // Signing refusal: the signer's key is not the key bound to the role.
+    RatifyV2SignKeyBinding = -21,
+    // Signing refusal: the signer reported invalid key material.
+    RatifyV2SignInvalidSignerKey = -22,
+    // Signing refusal: the signer reported an unsupported mode.
+    RatifyV2SignUnsupportedMode = -23,
+    // Signing refusal: the signer failed or refused.
+    RatifyV2SignProvider = -24,
+    // Signing refusal: a returned signature did not verify; nothing was
+    // produced.
+    RatifyV2SignSignatureRejected = -25,
 };
 #ifndef __cplusplus
 typedef int32_t RatifyV2Code;
 #endif // __cplusplus
 
-// Object kinds accepted by `ratify_v2_verify_object`. Values are the SPEC-v2
-// signed object type codes (`kind_object_type_codes` in `objects.json`).
+// Object kinds used by `ratify_v2_verify_object`, `ratify_v2_object_*`, and
+// signing. Values 1..=8 are the SPEC-v2 signed object type codes
+// (`kind_object_type_codes` in `objects.json`); 0x0009 shares the rotation
+// statement. Values from 100 name decodable objects that carry no signature
+// code of their own.
 enum RatifyV2ObjectKind
 #ifdef __cplusplus
   : int32_t
@@ -131,6 +200,12 @@ enum RatifyV2ObjectKind
     RatifyV2KindWitnessEntry = 6,
     RatifyV2KindTransactionReceipt = 7,
     RatifyV2KindVerificationReceipt = 8,
+    // The sealed receipt outbox body (SPEC-v2 §7.7).
+    RatifyV2KindVerificationReceiptBody = 100,
+    // A status evidence batch (SPEC-v2 §6.5).
+    RatifyV2KindStatusEvidenceBatch = 101,
+    // A checkpoint acknowledgement (SPEC-v2 §7.8).
+    RatifyV2KindCheckpointAcknowledgement = 102,
 };
 #ifndef __cplusplus
 typedef int32_t RatifyV2ObjectKind;
@@ -159,6 +234,69 @@ typedef struct RatifyRevocationPush RatifyRevocationPush;
 typedef struct RatifySessionToken RatifySessionToken;
 
 typedef struct RatifyTransactionReceipt RatifyTransactionReceipt;
+
+// The opaque, non-actionable committed outcome: the handoff from a
+// committed verification to publication and `ratify_v2_release_decision`.
+// Only the library creates it; release it with `ratify_v2_committed_free`.
+typedef struct RatifyV2Committed RatifyV2Committed;
+
+// The control handle of one evaluator call. Poll
+// `ratify_v2_evaluator_call_expired` and return once it reports 1.
+typedef struct RatifyV2EvaluatorCall RatifyV2EvaluatorCall;
+
+// An opaque hybrid Ed25519 + ML-DSA-65 key pair. Create it with
+// `ratify_v2_keypair_from_seeds` or `ratify_v2_keypair_generate`; release it
+// with `ratify_v2_keypair_free`. It is used by one thread at a time; the
+// library reads it during a signing call and never retains it.
+typedef struct RatifyV2KeyPair RatifyV2KeyPair;
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: one single-device offline profile device (component, primary,
+// checkpoint, uplink).
+typedef struct RatifyV2RefDevice RatifyV2RefDevice;
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the reference challenge issuance store.
+typedef struct RatifyV2RefIssuance RatifyV2RefIssuance;
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the reference anchored `SecurityJournalV2` store.
+typedef struct RatifyV2RefJournal RatifyV2RefJournal;
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the dual-root application approval ledger.
+typedef struct RatifyV2RefLedger RatifyV2RefLedger;
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a copy of a device primary (a backup).
+typedef struct RatifyV2RefPrimary RatifyV2RefPrimary;
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the in-memory reference Part B store (claim store with stream
+// sequence and progress, authoritative clock, receipt outbox and publisher,
+// checkpoint). The handle must outlive every callback struct taken from it.
+typedef struct RatifyV2RefStore RatifyV2RefStore;
+#endif
+
+// The opaque released decision (SPEC-v2 §6.9): the only actionable value of
+// this ABI. `ratify_v2_release_decision` is its only constructor; every
+// accessor returns a copy. Gate a side effect only on
+// `ratify_v2_released_allowed`. Release it with `ratify_v2_released_free`.
+typedef struct RatifyV2Released RatifyV2Released;
+
+// The AcceptRotation journal of one authority and role. Release with
+// `ratify_v2_rotation_journal_free`.
+typedef struct RatifyV2RotationJournal RatifyV2RotationJournal;
+
+// One issuer's rollback-protected status reducer state (§5.4). An apply
+// replaces the state only when it succeeds. Use one handle per thread at a
+// time; release with `ratify_v2_status_state_free`.
+typedef struct RatifyV2StatusState RatifyV2StatusState;
 
 typedef struct RatifyVerifyResult RatifyVerifyResult;
 
@@ -319,6 +457,524 @@ typedef struct RatifyStreamedVerifyOptions {
     // succeeds, and build the snapshot from that tracked state.
     const struct RatifyStreamContext *stream;
 } RatifyStreamedVerifyOptions;
+
+// A library-allocated byte buffer owned by the caller. Release it with
+// `ratify_v2_buffer_free`. An empty buffer has `ptr == NULL` and `len == 0`.
+typedef struct RatifyV2Buffer {
+    uint8_t *ptr;
+    uintptr_t len;
+} RatifyV2Buffer;
+
+// A complete hybrid public key with the fixed SPEC-v2 component lengths.
+typedef struct RatifyV2PublicKey {
+    uint8_t ed25519[32];
+    uint8_t ml_dsa_65[1952];
+} RatifyV2PublicKey;
+
+// A borrowed byte range. `ptr` may be NULL only when `len` is 0.
+typedef struct RatifyV2Slice {
+    const uint8_t *ptr;
+    uintptr_t len;
+} RatifyV2Slice;
+
+// Reads an authoritative clock (integer Unix seconds). A reading below the
+// greatest reading already returned must fail with `RatifyV2ClockRegressed`.
+typedef int32_t (*RatifyV2NowFn)(void *user, int64_t *now_out);
+
+// One sealed `max_rate` counter of a claim.
+typedef struct RatifyV2RateReservation {
+    const char *issuer_id;
+    const char *cert_id;
+    int64_t window_s;
+    int64_t limit;
+} RatifyV2RateReservation;
+
+// The claim a verifier asks a claim store to create (SPEC-v2 §7.3). The
+// scalar fields are the ones a store's rules read; `record` is a
+// deterministic encoding of every immutable claim field: an exact retry has
+// byte-identical `record`, and any difference for the same `claim_id` is a
+// different proof (`RatifyV2StoreClaimProofConflict`). Persist `record`
+// unchanged; `load_interrupted` returns it.
+typedef struct RatifyV2ClaimView {
+    const char *claim_id;
+    const char *verifier_namespace;
+    int64_t replay_epoch;
+    const char *agent_id;
+    int64_t issued_at;
+    int64_t expires_at;
+    int64_t max_age_seconds;
+    int64_t clock_skew_seconds;
+    int32_t has_stream_id;
+    struct RatifyV2Slice stream_id;
+    int32_t has_stream_seq;
+    int64_t stream_seq;
+    const struct RatifyV2RateReservation *rate_batch;
+    uintptr_t rate_batch_len;
+    struct RatifyV2Slice record;
+} RatifyV2ClaimView;
+
+// A claim store's answer. `owner_token` (32 random bytes) is set only for
+// `RatifyV2DispositionCreated`; store only its one-way hash.
+typedef struct RatifyV2ClaimResult {
+    int32_t disposition;
+    int64_t claimed_at;
+    struct RatifyV2Slice owner_token;
+} RatifyV2ClaimResult;
+
+// Creates a claim atomically.
+typedef int32_t (*RatifyV2ClaimFn)(void *user,
+                                   const struct RatifyV2ClaimView *claim,
+                                   struct RatifyV2ClaimResult *out);
+
+// Commits a terminal result under the owner token and live lease, reading
+// T_final inside the compare-and-set. `*committed` is 1 when it commits, 0
+// for an identical repeat.
+typedef int32_t (*RatifyV2FinalizeFn)(void *user,
+                                      const char *claim_id,
+                                      struct RatifyV2Slice owner_token,
+                                      struct RatifyV2Slice terminal_result,
+                                      struct RatifyV2Slice receipt_body,
+                                      int64_t allow_valid_until,
+                                      int32_t *committed);
+
+// Persists an evaluation progress record under the owner token.
+typedef int32_t (*RatifyV2RecordProgressFn)(void *user,
+                                            const char *claim_id,
+                                            struct RatifyV2Slice owner_token,
+                                            struct RatifyV2Slice progress);
+
+// What a claim store returns to lease-expiry recovery: the stored claim
+// `record`, the authoritative claim time, and the last stored `progress`
+// record (or an empty slice when none was recorded).
+typedef struct RatifyV2InterruptedClaim {
+    struct RatifyV2Slice record;
+    int64_t claimed_at;
+    struct RatifyV2Slice progress;
+} RatifyV2InterruptedClaim;
+
+// Loads an interrupted claim (fails with `RatifyV2ClaimLeaseLive` while the
+// lease is live).
+typedef int32_t (*RatifyV2LoadInterruptedFn)(void *user,
+                                             const char *claim_id,
+                                             struct RatifyV2InterruptedClaim *out);
+
+// Commits only `indeterminate/evaluation_interrupted` after the lease
+// expired. `*committed` as for finalize.
+typedef int32_t (*RatifyV2RecoverFn)(void *user,
+                                     const char *claim_id,
+                                     struct RatifyV2Slice terminal_result,
+                                     struct RatifyV2Slice receipt_body,
+                                     int32_t *committed);
+
+// The claim store (SPEC-v2 §7.2, §7.3, §7.5) with its authoritative clock.
+// Set `rate_at_finalization` to 1 when `finalize` admits the sealed rate
+// batch atomically (§7.6); it may then return
+// `RatifyV2StoreRateLimitExceeded` after a definitive rollback.
+typedef struct RatifyV2ClaimStoreCallbacks {
+    void *user;
+    int32_t rate_at_finalization;
+    RatifyV2NowFn now;
+    RatifyV2ClaimFn claim;
+    RatifyV2FinalizeFn finalize;
+    RatifyV2RecordProgressFn record_progress;
+    RatifyV2LoadInterruptedFn load_interrupted;
+    RatifyV2RecoverFn recover;
+} RatifyV2ClaimStoreCallbacks;
+
+// Reserves a complete sealed rate batch. Return 0 (every counter held),
+// `RatifyV2StoreRateLimitExceeded` (definitive exhaustion), or another code
+// (unavailable; never authorizes).
+typedef int32_t (*RatifyV2ReserveFn)(void *user,
+                                     const char *claim_id,
+                                     struct RatifyV2Slice owner_token,
+                                     const char *bundle_hash,
+                                     const struct RatifyV2RateReservation *batch,
+                                     uintptr_t batch_len);
+
+// The `max_rate` reservation store (SPEC-v2 §7.6). With
+// `rate_at_finalization` set, admission happens in the claim store's
+// finalize instead and `reserve` is not called.
+typedef struct RatifyV2RateCallbacks {
+    void *user;
+    int32_t rate_at_finalization;
+    RatifyV2ReserveFn reserve;
+} RatifyV2RateCallbacks;
+
+// What the claim store returns to release (§7.3, §6.9).
+// `receipt_outbox_digest` is `ReceiptOutboxDigest` of the committed body
+// (see `ratify_v2_receipt_outbox_digest`) or "" when not terminal.
+typedef struct RatifyV2TerminalClaim {
+    int32_t terminal;
+    const char *receipt_outbox_digest;
+    int64_t challenge_expires_at;
+    int64_t allow_horizon;
+    int64_t finalized_at;
+    int32_t receipt_abandoned;
+    int32_t has_release;
+    const char *release_claim_id;
+    struct RatifyV2Slice release_entry_hash;
+    int64_t release_ack_timestamp;
+} RatifyV2TerminalClaim;
+
+typedef int32_t (*RatifyV2LoadTerminalFn)(void *user,
+                                          const char *claim_id,
+                                          struct RatifyV2TerminalClaim *out);
+
+// The durable release record of §6.9 step 9.
+typedef struct RatifyV2ReleaseRecord {
+    const char *claim_id;
+    struct RatifyV2Slice entry_hash;
+    int64_t ack_timestamp;
+} RatifyV2ReleaseRecord;
+
+// Records a release; an identical repeat is 0, a different existing record
+// is `RatifyV2StoreReleaseStateMismatch`.
+typedef int32_t (*RatifyV2RecordReleaseFn)(void *user, const struct RatifyV2ReleaseRecord *record);
+
+// The claim-store view release needs, with its authoritative clock.
+typedef struct RatifyV2ReleaseStoreCallbacks {
+    void *user;
+    RatifyV2NowFn now;
+    RatifyV2LoadTerminalFn load_terminal;
+    RatifyV2RecordReleaseFn record_release;
+} RatifyV2ReleaseStoreCallbacks;
+
+// A checkpoint acknowledgement (§7.8).
+typedef struct RatifyV2Acknowledgement {
+    const char *log_id;
+    int64_t sequence;
+    struct RatifyV2Slice entry_hash;
+    int64_t timestamp;
+} RatifyV2Acknowledgement;
+
+typedef int32_t (*RatifyV2AcknowledgeFn)(void *user,
+                                         const char *log_id,
+                                         int64_t sequence,
+                                         struct RatifyV2Slice previous_entry_hash,
+                                         struct RatifyV2Slice entry_hash,
+                                         struct RatifyV2Acknowledgement *out);
+
+// Returns an acknowledgement, `RatifyV2StoreAcknowledgementNotFound`, or
+// another code for unavailability.
+typedef int32_t (*RatifyV2GetAcknowledgementFn)(void *user,
+                                                const char *log_id,
+                                                int64_t sequence,
+                                                struct RatifyV2Acknowledgement *out);
+
+// The caller-configured independent checkpoint (§7.8).
+typedef struct RatifyV2CheckpointCallbacks {
+    void *user;
+    RatifyV2AcknowledgeFn acknowledge;
+    RatifyV2GetAcknowledgementFn get;
+} RatifyV2CheckpointCallbacks;
+
+// An authoritative clock (SPEC-v2 §7.2).
+typedef struct RatifyV2ClockCallbacks {
+    void *user;
+    RatifyV2NowFn now;
+} RatifyV2ClockCallbacks;
+
+// One anchored `SecurityJournalV2` state: its canonical snapshot bytes and
+// the independently anchored head (`generation`, `digest`).
+typedef struct RatifyV2JournalSnapshot {
+    struct RatifyV2Slice snapshot;
+    uint64_t generation;
+    const char *digest;
+} RatifyV2JournalSnapshot;
+
+typedef int32_t (*RatifyV2JournalLoadFn)(void *user, struct RatifyV2JournalSnapshot *out);
+
+// Atomically replaces the stored state with `next` only while the anchored
+// head equals the expected head; otherwise `RatifyV2StoreJournalConflict`.
+typedef int32_t (*RatifyV2JournalCasFn)(void *user,
+                                        uint64_t expected_generation,
+                                        const char *expected_digest,
+                                        const struct RatifyV2JournalSnapshot *next);
+
+// The rollback-protected, anchored security journal store (§6.6).
+typedef struct RatifyV2JournalStoreCallbacks {
+    void *user;
+    RatifyV2JournalLoadFn load;
+    RatifyV2JournalCasFn compare_and_swap;
+} RatifyV2JournalStoreCallbacks;
+
+// Persists a complete issuance record keyed by (namespace, replay epoch,
+// `ChallengeClaimDigest`); an existing key is `RatifyV2StoreIssuanceConflict`
+// and is never overwritten. `record` is the ExpectedChallenge JSON.
+typedef int32_t (*RatifyV2IssuancePersistFn)(void *user,
+                                             const char *verifier_namespace,
+                                             int64_t replay_epoch,
+                                             struct RatifyV2Slice claim_digest,
+                                             struct RatifyV2Slice record);
+
+// Loads a record into `*record` or returns `RatifyV2StoreIssuanceNotFound`.
+typedef int32_t (*RatifyV2IssuanceLoadFn)(void *user,
+                                          const char *verifier_namespace,
+                                          int64_t replay_epoch,
+                                          struct RatifyV2Slice claim_digest,
+                                          struct RatifyV2Slice *record);
+
+// The challenge issuance store (§7.3).
+typedef struct RatifyV2IssuanceStoreCallbacks {
+    void *user;
+    RatifyV2IssuancePersistFn persist;
+    RatifyV2IssuanceLoadFn load;
+} RatifyV2IssuanceStoreCallbacks;
+
+// Reports the signer's complete public key. Return 0, or a negative code
+// (`RatifyV2ErrCancelled` cancels signing).
+typedef int32_t (*RatifyV2SignerPublicKeyFn)(void *user, struct RatifyV2PublicKey *out);
+
+// What an external signer receives for one typed statement. Every byte is
+// computed by the library and valid only until the callback returns.
+// Ed25519 always signs `message`.
+typedef struct RatifyV2SignRequest {
+    // `RatifyV2SignerMode`.
+    int32_t mode;
+    // The 77-byte transcript `M`.
+    struct RatifyV2Slice message;
+    // The 22-byte ML-DSA context in direct mode; empty in external-μ mode.
+    struct RatifyV2Slice ml_dsa_context;
+    // The 64-byte μ in external-μ mode; empty in direct mode.
+    struct RatifyV2Slice ml_dsa_mu;
+    // The complete key the provider must sign under; a provider holding any
+    // other key must refuse.
+    const struct RatifyV2PublicKey *public_key;
+    // `key_id_v2` of `public_key`, NUL-terminated.
+    const char *key_id;
+} RatifyV2SignRequest;
+
+// A hybrid signature. An external signer sets each `*_len` to the number of
+// bytes it wrote (64 and 3309 for a well-formed signature); any other length
+// is a missing or malformed component and fails signing.
+typedef struct RatifyV2Signature {
+    uint8_t ed25519[64];
+    uintptr_t ed25519_len;
+    uint8_t ml_dsa_65[3309];
+    uintptr_t ml_dsa_65_len;
+} RatifyV2Signature;
+
+// Signs one request. Write both components and their lengths into `*out`
+// and return 0; return `RatifyV2ErrCancelled` to cancel, or any other
+// non-zero code to refuse. The library verifies the result before use.
+typedef int32_t (*RatifyV2SignerSignFn)(void *user,
+                                        const struct RatifyV2SignRequest *request,
+                                        struct RatifyV2Signature *out);
+
+// An external signer (HSM, KMS, remote service). `mode` is declared when the
+// signer is bound and never changes. The callbacks run on the calling thread
+// during the signing call and are never retained after it returns.
+typedef struct RatifyV2ExternalSigner {
+    void *user;
+    // `RatifyV2SignerMode`; any other value is refused before any callback.
+    int32_t mode;
+    RatifyV2SignerPublicKeyFn public_key;
+    RatifyV2SignerSignFn sign;
+} RatifyV2ExternalSigner;
+
+// The caller-authenticated revocation status policy (§2.5 bounds).
+typedef struct RatifyV2StatusPolicy {
+    int64_t max_list_lifetime_seconds;
+    int64_t max_status_age_seconds;
+    int64_t clock_skew_seconds;
+} RatifyV2StatusPolicy;
+
+// Everything an evaluator may read (a copy). `params_json` is the canonical
+// params object when `has_params`; `request_context_json` uses the request
+// `"context"` schema; `evaluation_time` is the authoritative claim time.
+typedef struct RatifyV2EvaluationInput {
+    const char *constraint_type;
+    int32_t has_params;
+    struct RatifyV2Slice params_json;
+    uintptr_t delegation_index;
+    uintptr_t constraint_index;
+    const char *issuer_id;
+    const char *cert_id;
+    struct RatifyV2Slice request_context_json;
+    int64_t evaluation_time;
+} RatifyV2EvaluationInput;
+
+// An evaluator verdict: `outcome` is a `RatifyV2EvaluatorOutcome`;
+// `valid_until` is an exclusive pass horizon (0 = none); `detail` is
+// diagnostic text (may be NULL).
+typedef struct RatifyV2EvaluationResult {
+    int32_t outcome;
+    int64_t valid_until;
+    const char *detail;
+} RatifyV2EvaluationResult;
+
+// A pure evaluator: no I/O, clock, or randomness. A non-zero return, an
+// invalid result, or a timeout is unverifiable.
+typedef int32_t (*RatifyV2EvaluateFn)(void *user,
+                                      const struct RatifyV2EvaluatorCall *call,
+                                      const struct RatifyV2EvaluationInput *input,
+                                      struct RatifyV2EvaluationResult *out);
+
+// One extension evaluator: the `{profile, type}` descriptor sealed into
+// claims and receipts, and its implementation. A custom evaluator runs on a
+// library worker thread so the registry timeout can be enforced; the ABI
+// call does not return until every evaluator call it started has returned,
+// so `user` is never used after the call. Poll
+// `ratify_v2_evaluator_call_expired` to return promptly after a timeout.
+typedef struct RatifyV2EvaluatorRegistration {
+    const char *constraint_type;
+    const char *profile;
+    int32_t implementation;
+    RatifyV2EvaluateFn evaluate;
+    void *user;
+} RatifyV2EvaluatorRegistration;
+
+// The caller-authenticated evaluator registry for one call: at most 32
+// registrations, one per type, `timeout_ms` in 1..=10000.
+typedef struct RatifyV2EvaluatorConfig {
+    uint32_t timeout_ms;
+    const struct RatifyV2EvaluatorRegistration *registrations;
+    uintptr_t count;
+} RatifyV2EvaluatorConfig;
+
+// One delegation certificate of a verified chain, root-most last.
+typedef struct RatifyV2CertView {
+    const char *cert_id;
+    const char *issuer_id;
+    const char *subject_id;
+    const struct RatifyV2PublicKey *issuer_public_key;
+    const struct RatifyV2PublicKey *subject_public_key;
+    struct RatifyV2Slice wire;
+} RatifyV2CertView;
+
+// Resolves trust for a verified chain. For `RatifyV2TrustTrusted` write the
+// complete configured root key into `*root_key`; the verifier requires it
+// to equal the chain's terminal issuer.
+typedef int32_t (*RatifyV2TrustFn)(void *user,
+                                   const struct RatifyV2CertView *chain,
+                                   uintptr_t chain_len,
+                                   int32_t *outcome,
+                                   struct RatifyV2PublicKey *root_key);
+
+// The caller-authenticated trust provider.
+typedef struct RatifyV2TrustCallbacks {
+    void *user;
+    RatifyV2TrustFn resolve;
+} RatifyV2TrustCallbacks;
+
+// An issuer-scoped certificate reference.
+typedef struct RatifyV2CertRef {
+    const char *issuer_id;
+    const char *cert_id;
+} RatifyV2CertRef;
+
+// What the verifier asks a status provider for (§6.5).
+typedef struct RatifyV2StatusRequest {
+    const char *issuer_id;
+    uint64_t status_key_epoch;
+    const char *status_key_id;
+    const struct RatifyV2CertRef *refs;
+    uintptr_t refs_len;
+} RatifyV2StatusRequest;
+
+// One signed status object as received (0x0003 list or 0x0005 push).
+typedef struct RatifyV2StatusObject {
+    uint16_t object_type;
+    struct RatifyV2Slice wire;
+} RatifyV2StatusObject;
+
+// A provider's bounded batch for one issuer (empty is valid).
+typedef struct RatifyV2StatusBatch {
+    const struct RatifyV2StatusObject *objects;
+    uintptr_t count;
+} RatifyV2StatusBatch;
+
+typedef int32_t (*RatifyV2StatusFetchFn)(void *user,
+                                         const struct RatifyV2StatusRequest *request,
+                                         struct RatifyV2StatusBatch *out);
+
+// The status evidence provider: signed objects only, never a status result.
+typedef struct RatifyV2StatusEvidenceCallbacks {
+    void *user;
+    RatifyV2StatusFetchFn fetch;
+} RatifyV2StatusEvidenceCallbacks;
+
+// One deferred receiver-audience constraint.
+typedef struct RatifyV2DeferredConstraint {
+    uintptr_t delegation_index;
+    uintptr_t constraint_index;
+    const char *issuer_id;
+    const char *cert_id;
+    const char *constraint_type;
+    struct RatifyV2Slice canonical_json;
+} RatifyV2DeferredConstraint;
+
+// One audience membership answer. Never copy these fields from a proof.
+typedef struct RatifyV2AudienceMembership {
+    uintptr_t delegation_index;
+    uintptr_t constraint_index;
+    const char *receiver_id;
+    const char *const *trust_domain_ids;
+    uintptr_t trust_domain_ids_len;
+    int64_t issued_at;
+    int64_t expires_at;
+    const char *evidence_digest;
+} RatifyV2AudienceMembership;
+
+// The memberships an audience provider returns.
+typedef struct RatifyV2AudienceResult {
+    const struct RatifyV2AudienceMembership *memberships;
+    uintptr_t count;
+} RatifyV2AudienceResult;
+
+typedef int32_t (*RatifyV2AudienceFn)(void *user,
+                                      const struct RatifyV2DeferredConstraint *deferred,
+                                      uintptr_t deferred_len,
+                                      const char *receiver_id,
+                                      struct RatifyV2AudienceResult *out);
+
+// The receiver-audience membership provider.
+typedef struct RatifyV2AudienceCallbacks {
+    void *user;
+    RatifyV2AudienceFn lookup;
+} RatifyV2AudienceCallbacks;
+
+// The application's pure pre-claim receiver-binding hook. `bundle` is the
+// canonical proof bundle; `expected_challenge` is the ExpectedChallenge JSON.
+// Return 0 to accept; anything else rejects (`receiver_binding_rejected`).
+typedef int32_t (*RatifyV2ReceiverBindingFn)(void *user,
+                                             struct RatifyV2Slice bundle,
+                                             struct RatifyV2Slice expected_challenge);
+
+typedef struct RatifyV2ReceiverBindingCallbacks {
+    void *user;
+    RatifyV2ReceiverBindingFn check;
+} RatifyV2ReceiverBindingCallbacks;
+
+// Every verifier dependency; a NULL member is absent (a missing claim store
+// fails before claim; other absences are unavailable, fail-closed).
+typedef struct RatifyV2VerifyCallbacks {
+    const struct RatifyV2ClaimStoreCallbacks *claim_store;
+    const struct RatifyV2TrustCallbacks *trust;
+    const struct RatifyV2StatusEvidenceCallbacks *status_evidence;
+    const struct RatifyV2JournalStoreCallbacks *status_journal;
+    const struct RatifyV2AudienceCallbacks *audience;
+    const struct RatifyV2RateCallbacks *rate;
+    const struct RatifyV2ReceiverBindingCallbacks *receiver_binding;
+} RatifyV2VerifyCallbacks;
+
+// The result of `ratify_v2_verify_proof_bundle`. It deliberately carries no
+// decision. `error_code` is the class of a preflight or evaluating outcome
+// (0 otherwise); `disposition` is a `RatifyV2Disposition` (0 for preflight).
+typedef struct RatifyV2VerifyOutcome {
+    int32_t stage;
+    int32_t error_code;
+    int32_t disposition;
+} RatifyV2VerifyOutcome;
+
+// Fills `len` bytes of `buf` with random bytes; non-zero fails.
+typedef int32_t (*RatifyV2RandomFn)(void *user, uint8_t *buf, uintptr_t len);
+
+// An alternative random source for challenge issuance.
+typedef struct RatifyV2RandomCallbacks {
+    void *user;
+    RatifyV2RandomFn fill;
+} RatifyV2RandomCallbacks;
 
 #ifdef __cplusplus
 extern "C" {
@@ -1385,9 +2041,306 @@ uint32_t ratify_v2_protocol_version(void);
 const char *ratify_v2_library_version(void);
 
 // Returns the stable spelling for a `ratify_v2_*` result code: "ok", a
-// Protocol v2 failure class (e.g. "invalid_signature"), "null_pointer",
-// "bad_argument", "internal", or "unknown". Statically allocated — do NOT free.
+// SPEC-v2 §2.7 failure class (e.g. "invalid_signature"), an ABI condition
+// ("null_pointer", "bad_argument", "internal", "cancelled"), a store
+// sentinel, a signing refusal, or "unknown". Statically allocated — do NOT
+// free.
 const char *ratify_v2_error_class_str(int32_t code);
+
+// The diagnostic message of the most recent `ratify_v2_*` call on the
+// calling thread ("" after a success). The pointer is owned by the library
+// and valid until the next `ratify_v2_*` call on this thread — do NOT free.
+const char *ratify_v2_last_error_message(void);
+
+// Release a buffer returned by the library. Safe to call with an empty
+// buffer. Each buffer must be freed exactly once.
+void ratify_v2_buffer_free(struct RatifyV2Buffer buffer);
+
+// Release a string returned by a `ratify_v2_*` function. NULL is a no-op.
+void ratify_v2_string_free(char *s);
+
+// 1 when the evaluator call's deadline has passed (return now), else 0.
+int32_t ratify_v2_evaluator_call_expired(const struct RatifyV2EvaluatorCall *call);
+
+// Strictly decode `wire` as `kind` (a `RatifyV2ObjectKind`), applying the
+// object's byte limit before parsing. When `canonical_out` is non-NULL the
+// canonical re-encoding is written there (it equals `wire` for every
+// conforming object). Signed objects 1..=8 are decoded with all their
+// structural checks; a transaction receipt also verifies its signatures.
+int32_t ratify_v2_object_decode(int32_t kind,
+                                const uint8_t *wire,
+                                uintptr_t wire_len,
+                                struct RatifyV2Buffer *canonical_out);
+
+// The exact signable projection (SPEC-v2 §5) of `wire` under signature code
+// `object_type_code` (0x0001..=0x0009): the certificate body, the challenge
+// presentation of a proof bundle, the status object body, the rotation
+// statement body (both 0x0004 and 0x0009), the witness entry, the shared
+// transaction statement, or the receipt body. The object is strictly
+// decoded first.
+int32_t ratify_v2_signable_bytes(uint32_t object_type_code,
+                                 const uint8_t *wire,
+                                 uintptr_t wire_len,
+                                 struct RatifyV2Buffer *out);
+
+// The 77-byte signing transcript `M` (SPEC-v2 §3.1) for `signable` under
+// `object_type_code`.
+int32_t ratify_v2_signing_message(uint32_t object_type_code,
+                                  const uint8_t *signable,
+                                  uintptr_t signable_len,
+                                  struct RatifyV2Buffer *out);
+
+// The 22-byte FIPS 204 ML-DSA-65 context of `object_type_code`
+// (`ratify-protocol/2/` + lowercase 4-hex code).
+int32_t ratify_v2_mldsa_context(uint32_t object_type_code, struct RatifyV2Buffer *out);
+
+// The 64-byte external μ an external-μ provider signs (SPEC-v2 §3.1):
+// `SHAKE256(SHAKE256(pk, 64) || 0x00 || len(ctx) || ctx || M, 64)` for the
+// registry context of `object_type_code` and the 77-byte transcript
+// `message`. Provided for adapter checks and conformance; signing computes
+// μ itself.
+int32_t ratify_v2_external_mu(const struct RatifyV2PublicKey *key,
+                              uint32_t object_type_code,
+                              const uint8_t *message,
+                              uintptr_t message_len,
+                              struct RatifyV2Buffer *out);
+
+// Verify both components of a hybrid signature over `signable` under
+// `object_type_code` and a complete public key with the ordinary verifier.
+// A code outside the registry is `unsupported_object_type`; a failing
+// component is `invalid_signature`.
+int32_t ratify_v2_verify_statement(uint32_t object_type_code,
+                                   const uint8_t *signable,
+                                   uintptr_t signable_len,
+                                   struct RatifyV2Slice signature_ed25519,
+                                   struct RatifyV2Slice signature_ml_dsa_65,
+                                   const struct RatifyV2PublicKey *key);
+
+// `delegation_digest` (48 bytes) recomputed over the delegations of a
+// strictly decoded proof bundle.
+int32_t ratify_v2_delegation_digest(const uint8_t *bundle,
+                                    uintptr_t bundle_len,
+                                    struct RatifyV2Buffer *out);
+
+// `BundleHashV2` (`"sha384:" + 96 hex`) of a strictly decoded proof bundle.
+// Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_bundle_hash(const uint8_t *bundle, uintptr_t bundle_len, char **out);
+
+// `ChallengeClaimDigest` (48 bytes) of exactly 32 challenge bytes.
+int32_t ratify_v2_challenge_claim_digest(const uint8_t *challenge,
+                                         uintptr_t challenge_len,
+                                         struct RatifyV2Buffer *out);
+
+// The stable claim ID (64 lowercase hex) for a UTF-8 verifier namespace
+// (length-delimited; may contain NUL), replay epoch (0..2^53-1), and 32
+// challenge bytes. Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_claim_id(const uint8_t *namespace_ptr,
+                           uintptr_t namespace_len,
+                           int64_t replay_epoch,
+                           const uint8_t *challenge,
+                           uintptr_t challenge_len,
+                           char **out);
+
+// The claim ID from a precomputed 48-byte `ChallengeClaimDigest`.
+int32_t ratify_v2_claim_id_from_digest(const uint8_t *namespace_ptr,
+                                       uintptr_t namespace_len,
+                                       int64_t replay_epoch,
+                                       const uint8_t *claim_digest,
+                                       uintptr_t claim_digest_len,
+                                       char **out);
+
+// `StatusEvidenceDigest` (48 bytes) of a strictly decoded revocation list
+// (`kind` 3) or revocation push (`kind` 5), over the complete signed object.
+int32_t ratify_v2_status_evidence_digest(int32_t kind,
+                                         const uint8_t *wire,
+                                         uintptr_t wire_len,
+                                         struct RatifyV2Buffer *out);
+
+// `StatementBodyDigest(code, body)` (48 bytes) over an exact canonical
+// signable body.
+int32_t ratify_v2_statement_body_digest(uint32_t object_type_code,
+                                        const uint8_t *body,
+                                        uintptr_t body_len,
+                                        struct RatifyV2Buffer *out);
+
+// `StatementBodyDigest` (48 bytes) of a strictly decoded signed object:
+// the chain digest of a rotation statement (`kind` 4), witness entry (6),
+// or verification receipt (8), and for the other signed kinds the digest
+// of their signable projection under their own code. It is independent of
+// signature bytes, so hedged re-signatures share it.
+int32_t ratify_v2_object_body_digest(int32_t kind,
+                                     const uint8_t *wire,
+                                     uintptr_t wire_len,
+                                     struct RatifyV2Buffer *out);
+
+// `RevokedSetDigest` (48 bytes) of a JSON array of revoked `cert_id`
+// strings: deduplicated, sorted by UTF-8 bytes, canonical JSON, SHA-384
+// under the `ratify-protocol-revoked-set-v2` tag.
+int32_t ratify_v2_revoked_set_digest(const uint8_t *cert_ids_json,
+                                     uintptr_t cert_ids_json_len,
+                                     struct RatifyV2Buffer *out);
+
+// `ReceiptOutboxDigest` (`"sha384:" + 96 hex`) of an exact sealed outbox
+// body. Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_receipt_outbox_digest(const uint8_t *body, uintptr_t body_len, char **out);
+
+// `SecurityJournalDigest` (`"sha384:" + 96 hex`) of a canonical
+// `SecurityJournalV2` snapshot. Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_security_journal_digest(const uint8_t *snapshot,
+                                          uintptr_t snapshot_len,
+                                          char **out);
+
+// The sealed receipt outbox body (SPEC-v2 §7.7) of a strictly decoded
+// signed verification receipt.
+int32_t ratify_v2_verification_receipt_body(const uint8_t *receipt,
+                                            uintptr_t receipt_len,
+                                            struct RatifyV2Buffer *out);
+
+// The 32-byte transaction context (SPEC-v2 §2.4) of a transaction ID, terms
+// schema URI, and exact canonical terms JSON. It needs no parties or
+// signatures, so it can be computed before any party signs.
+int32_t ratify_v2_transaction_context_hash(const char *transaction_id,
+                                           const char *terms_schema_uri,
+                                           const uint8_t *terms_canonical_json,
+                                           uintptr_t terms_canonical_json_len,
+                                           struct RatifyV2Buffer *out);
+
+// The 32-byte per-party request hash (SPEC-v2 §2.4) of a transaction
+// context and the party's required scope.
+int32_t ratify_v2_transaction_party_request_hash(const uint8_t *transaction_context,
+                                                 uintptr_t transaction_context_len,
+                                                 const char *required_scope,
+                                                 struct RatifyV2Buffer *out);
+
+// The 32-byte operation `request_hash` (SPEC-v2 §2.4) of
+// `{"required_scope", "operation", "resource_id", "requested_path",
+// "payload_digest_b64"}` (payload digest empty or exactly 32 bytes).
+int32_t ratify_v2_operation_context_hash(const uint8_t *operation_json,
+                                         uintptr_t operation_json_len,
+                                         struct RatifyV2Buffer *out);
+
+// The 32-byte `session_context` (SPEC-v2 §2.4) of `{"verifier_id",
+// "workspace_id", "agent_id", "session_id", "invocation_id",
+// "request_hash_b64"}`.
+int32_t ratify_v2_session_context(const uint8_t *inputs_json,
+                                  uintptr_t inputs_json_len,
+                                  struct RatifyV2Buffer *out);
+
+// Decode the managed Verify API text form of a payload digest (§7.12).
+// NULL `encoded` means absent. `*present` is 1 when a 32-byte digest was
+// decoded into `out`, 0 when the input encodes "no digest".
+int32_t ratify_v2_payload_digest_decode(const char *encoded,
+                                        struct RatifyV2Buffer *out,
+                                        int32_t *present);
+
+// The context policy digest of `{"profile", "require_bound",
+// "required_fields", "expected_session_context_b64"}` (the expected session
+// context is excluded from the digest). Free `*out` with
+// `ratify_v2_string_free`.
+int32_t ratify_v2_context_policy_digest(const uint8_t *policy_json,
+                                        uintptr_t policy_json_len,
+                                        char **out);
+
+// The extension evaluator profile digest (`"sha384:" + 96 hex`) of a
+// `{profile, type}` descriptor. Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_constraint_profile_digest(const char *profile,
+                                            const char *constraint_type,
+                                            char **out);
+
+// RatifyCanonicalJSON (Annex A) of a strictly decoded JSON value.
+int32_t ratify_v2_canonical_json(const uint8_t *data,
+                                 uintptr_t data_len,
+                                 struct RatifyV2Buffer *out);
+
+// Validate a JSON array of delegation scopes under the v2 scope rules.
+int32_t ratify_v2_validate_scopes(const uint8_t *scopes_json, uintptr_t scopes_json_len);
+
+// Validate one request `required_scope` (SPEC-v2 §2.4):
+// `invalid_required_scope` unless it is one canonical non-wildcard scope or
+// one exact `custom:` scope.
+int32_t ratify_v2_validate_required_scope(const char *scope);
+
+// Validate a request context JSON (the `"context"` member schema of the
+// verification request) against the extension-context bounds
+// (`configuration_invalid` when out of bounds).
+int32_t ratify_v2_validate_request_context(const uint8_t *context_json, uintptr_t context_json_len);
+
+// Run one of the two built-in standard evaluator profiles
+// (`com.ratifyprotocol.max_count/v1`, `com.ratifyprotocol.allowed_values/v1`)
+// on an input `{"type", "params": <any JSON>, "delegation_index",
+// "constraint_index", "issuer_id", "cert_id", "context": <request context>,
+// "evaluation_time"}`; an absent `params` member means no params object.
+// Writes the outcome (`RatifyV2EvaluatorOutcome`), the pass horizon (0 =
+// none), and the diagnostic detail (free with `ratify_v2_string_free`;
+// `detail_out` may be NULL).
+int32_t ratify_v2_evaluate_standard_profile(const char *profile,
+                                            const uint8_t *input_json,
+                                            uintptr_t input_json_len,
+                                            int32_t *outcome_out,
+                                            int64_t *valid_until_out,
+                                            char **detail_out);
+
+// Whether an authoritative time `now` is inside a claim's sealed challenge
+// bounds with exclusive deadlines (`issued_at <= now + skew`, `now <
+// expires_at`, `now < issued_at + max_age`). Returns 1 or 0; 0 on any
+// failure. For claim stores implementing the freshness recheck.
+int32_t ratify_v2_challenge_time_current(int64_t issued_at,
+                                         int64_t expires_at,
+                                         int64_t max_age_seconds,
+                                         int64_t clock_skew_seconds,
+                                         int64_t now);
+
+// The stream-sequence rule of SPEC-v2 §7.4 for a claim store: `has_last`
+// says whether the stream has an accepted sequence `last`; `seq` is the
+// presented sequence. Returns 0 to accept or `stream_sequence_mismatch` /
+// `malformed`.
+int32_t ratify_v2_check_stream_sequence(int32_t has_last, int64_t last, int64_t seq);
+
+// Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
+// with the README procedure: strict decode, `sdk == expected_sdk`, key
+// derivation from seeds, byte-identical re-encoding, every signature
+// transcript and signature, and the required kinds and coverage.
+int32_t ratify_v2_cross_sdk_fixture_verify(const uint8_t *fixture,
+                                           uintptr_t fixture_len,
+                                           const char *expected_sdk);
+
+// Derive a key pair from a 32-byte Ed25519 seed and a 32-byte ML-DSA-65
+// seed (FIPS 204 `KeyGen_internal(ξ)`), the derivation every SDK and the
+// `keys.json` fixtures use. Seeds are copied; the caller may wipe them after
+// the call. On success `*out` is a new handle.
+int32_t ratify_v2_keypair_from_seeds(const uint8_t *ed25519_seed,
+                                     const uint8_t *ml_dsa_65_seed,
+                                     struct RatifyV2KeyPair **out);
+
+// Generate a fresh key pair from the operating-system random source (or the
+// custom entropy source of a `custom-entropy` build). When
+// `ed25519_seed_out` / `ml_dsa_65_seed_out` are non-NULL, the 32-byte seeds
+// are written there so the caller can persist or export the key; pass NULL to
+// keep them inside the library.
+int32_t ratify_v2_keypair_generate(struct RatifyV2KeyPair **out,
+                                   uint8_t *ed25519_seed_out,
+                                   uint8_t *ml_dsa_65_seed_out);
+
+// Release a key pair. NULL is a no-op. The private key is dropped from
+// library memory.
+void ratify_v2_keypair_free(struct RatifyV2KeyPair *kp);
+
+// Write the complete public key of `kp` into `*out`.
+int32_t ratify_v2_keypair_public_key(const struct RatifyV2KeyPair *kp,
+                                     struct RatifyV2PublicKey *out);
+
+// Write the 64-character `key_id_v2` of `kp` plus NUL into `out`
+// (`out_len` >= `RATIFY_V2_KEY_ID_BUF_LEN`).
+int32_t ratify_v2_keypair_key_id(const struct RatifyV2KeyPair *kp, char *out, uintptr_t out_len);
+
+// Compute `key_id_v2` of a complete public key (SPEC-v2 §2.3) into `out`
+// (`out_len` >= 65).
+int32_t ratify_v2_public_key_id(const struct RatifyV2PublicKey *key, char *out, uintptr_t out_len);
+
+// Encode a public key as the wire JSON object
+// `{"ed25519":"<b64>","ml_dsa_65":"<b64>"}` (for request and context JSON).
+// Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_public_key_to_json(const struct RatifyV2PublicKey *key, char **out);
 
 // Derive the full 256-bit v2 key ID
 // (`hex(SHA-256("ratify-key-id-v2\0" || ed25519 || ml_dsa_65))`) and write it
@@ -1465,6 +2418,700 @@ int32_t ratify_v2_receipt_bundle_binding_check(const uint8_t *receipt_wire,
                                                const uint8_t *bundle_wire,
                                                uintptr_t bundle_wire_len,
                                                char **err_out);
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a new reference store at time `now` with evaluator leases of
+// `lease_seconds`, receipt log `log_id` (32 hex), signing receipts with
+// `verifier_key`.
+int32_t ratify_v2_ref_store_new(int64_t now,
+                                int64_t lease_seconds,
+                                const char *log_id,
+                                const struct RatifyV2KeyPair *verifier_key,
+                                struct RatifyV2RefStore **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a reference store handle. NULL is a no-op.
+void ratify_v2_ref_store_free(struct RatifyV2RefStore *s);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: an exact copy of the store state (a restore of a backup).
+int32_t ratify_v2_ref_store_clone(const struct RatifyV2RefStore *s, struct RatifyV2RefStore **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: store controls. `control` selects: 1 set time to `value`;
+// 2 set acknowledgement withheld (`value` != 0); 3 set signer failure
+// (`value` != 0).
+int32_t ratify_v2_ref_store_control(const struct RatifyV2RefStore *s,
+                                    int32_t control,
+                                    int64_t value);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the store's current clock value (without a reading).
+int32_t ratify_v2_ref_store_time(const struct RatifyV2RefStore *s, int64_t *out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: plant a release record for a claim (models a forged or stale
+// primary-storage record), or flip one byte of its sealed terminal result
+// (`corrupt` != 0).
+int32_t ratify_v2_ref_store_tamper(const struct RatifyV2RefStore *s,
+                                   const char *claim_id,
+                                   int32_t corrupt,
+                                   int64_t ack_timestamp);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: abandon every unpublished receipt and freeze the log; writes
+// the abandoned claim IDs as a JSON array.
+int32_t ratify_v2_ref_store_abandon(const struct RatifyV2RefStore *s, struct RatifyV2Buffer *out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the receipt publisher (§7.7): sign and append the committed
+// body of `claim_id`, or return the receipt already appended. On a store
+// refusal `*refusal_out` names it ("head_of_line_blocked",
+// "signer_unavailable", "log_frozen", or "other"; static) and the call
+// returns `RatifyV2StoreUnavailable`.
+int32_t ratify_v2_ref_store_publish(const struct RatifyV2RefStore *s,
+                                    const char *claim_id,
+                                    const uint8_t *body,
+                                    uintptr_t body_len,
+                                    struct RatifyV2Buffer *wire_out,
+                                    const char **refusal_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: callback structs serving this store. Any output pointer may be
+// NULL. With `rate_at_finalization` non-zero the store admits `max_rate`
+// at finalization (it then stays in that mode) and the claim-store and
+// rate callbacks report it.
+int32_t ratify_v2_ref_store_callbacks(const struct RatifyV2RefStore *s,
+                                      int32_t rate_at_finalization,
+                                      struct RatifyV2ClaimStoreCallbacks *claim_out,
+                                      struct RatifyV2RateCallbacks *rate_out,
+                                      struct RatifyV2ReleaseStoreCallbacks *release_out,
+                                      struct RatifyV2CheckpointCallbacks *checkpoint_out,
+                                      struct RatifyV2ClockCallbacks *clock_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a reference journal store anchored at genesis.
+int32_t ratify_v2_ref_journal_new(struct RatifyV2RefJournal **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a reference journal. NULL is a no-op.
+void ratify_v2_ref_journal_free(struct RatifyV2RefJournal *j);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the journal callbacks and the anchored head (any output may
+// be NULL; free the digest with `ratify_v2_string_free`).
+int32_t ratify_v2_ref_journal_callbacks(const struct RatifyV2RefJournal *j,
+                                        struct RatifyV2JournalStoreCallbacks *callbacks_out,
+                                        uint64_t *generation_out,
+                                        char **digest_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a new, empty reference issuance store.
+int32_t ratify_v2_ref_issuance_new(struct RatifyV2RefIssuance **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a reference issuance store. NULL is a no-op.
+void ratify_v2_ref_issuance_free(struct RatifyV2RefIssuance *s);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: callbacks, record count, and a persist fault for the next
+// persist (`fault`: 0 none, 1 fail before commit, 2 fail after commit; -1
+// leaves it unchanged). Any output may be NULL.
+int32_t ratify_v2_ref_issuance_control(const struct RatifyV2RefIssuance *s,
+                                       int32_t fault,
+                                       struct RatifyV2IssuanceStoreCallbacks *callbacks_out,
+                                       int64_t *records_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: provision a device whose primary wraps `store`, whose
+// component has a 32-byte seed and room for `capacity` acknowledgements,
+// and which serves `replay_epoch`. The store must withhold
+// self-acknowledgement.
+int32_t ratify_v2_ref_device_new(const struct RatifyV2RefStore *store,
+                                 const uint8_t *component_seed,
+                                 uintptr_t component_seed_len,
+                                 uint64_t capacity,
+                                 int64_t replay_epoch,
+                                 struct RatifyV2RefDevice **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a device. NULL is a no-op.
+void ratify_v2_ref_device_free(struct RatifyV2RefDevice *d);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a primary copy. NULL is a no-op.
+void ratify_v2_ref_primary_free(struct RatifyV2RefPrimary *p);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the device checkpoint and the primary's journal callbacks.
+int32_t ratify_v2_ref_device_callbacks(const struct RatifyV2RefDevice *d,
+                                       struct RatifyV2CheckpointCallbacks *checkpoint_out,
+                                       struct RatifyV2JournalStoreCallbacks *journal_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: device operations. `op`: 1 power loss before the component
+// commits; 2 power loss after it commits; 3 submit pending entries
+// (`*json_out` = acknowledged sequences); 4 resubmit `sequence`
+// (`*value_out` = acknowledgement time); 5 startup (`*name_out` = status);
+// 6 upload (`*json_out` = uploaded sequences). `*name_out` is the device
+// error name ("" when none) for ops 3 and 4. Static names — do NOT free.
+int32_t ratify_v2_ref_device_op(const struct RatifyV2RefDevice *d,
+                                int32_t op,
+                                int64_t sequence,
+                                struct RatifyV2Buffer *json_out,
+                                int64_t *value_out,
+                                const char **name_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: copy the device's complete primary state (a backup).
+int32_t ratify_v2_ref_device_snapshot(const struct RatifyV2RefDevice *d,
+                                      struct RatifyV2RefPrimary **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: restore a primary copy onto the device: the device keeps its
+// component and security clock time; `*store_out` is a new handle for the
+// restored primary store, which replaces the previous one.
+int32_t ratify_v2_ref_device_restore(const struct RatifyV2RefDevice *d,
+                                     const struct RatifyV2RefPrimary *snapshot,
+                                     struct RatifyV2RefStore **store_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: a new, empty ledger.
+int32_t ratify_v2_ref_ledger_new(struct RatifyV2RefLedger **out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: release a ledger. NULL is a no-op.
+void ratify_v2_ref_ledger_free(struct RatifyV2RefLedger *l);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: open an approval set `{"approval_set_id", "verifier_id",
+// "workspace_id", "session_id", "agent_public_key", "required_scope",
+// "request_hash_b64", "root_keys": [<key>, <key>]}`. `*error_out` is the
+// ledger error name ("" on success; static).
+int32_t ratify_v2_ref_ledger_open(const struct RatifyV2RefLedger *l,
+                                  const uint8_t *set_json,
+                                  uintptr_t set_json_len,
+                                  const char **error_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: record a released decision (NULL = none) and the exact proof
+// bundle it verified in `slot`; `*complete_out` is 1 when both slots are
+// filled.
+int32_t ratify_v2_ref_ledger_record(const struct RatifyV2RefLedger *l,
+                                    const char *set_id,
+                                    uint64_t slot,
+                                    const struct RatifyV2Released *decision,
+                                    const uint8_t *bundle,
+                                    uintptr_t bundle_len,
+                                    int32_t *complete_out,
+                                    const char **error_out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: execute an approval set at the receiver's authoritative clock.
+int32_t ratify_v2_ref_ledger_execute(const struct RatifyV2RefLedger *l,
+                                     const char *set_id,
+                                     const struct RatifyV2ClockCallbacks *clock,
+                                     const char **error_out);
+#endif
+
+// Sign a delegation certificate (code 0x0001) with the issuer key. `object`
+// is the certificate wire JSON; an absent `signature` is allowed. Issuer
+// duties (§5.1, §5.2) are checked before any signer method runs and refuse
+// with `RatifyV2SignIssuerDuty`. On success `*out` is the canonical signed
+// certificate.
+int32_t ratify_v2_sign_delegation_certificate(const uint8_t *object,
+                                              uintptr_t object_len,
+                                              const struct RatifyV2KeyPair *local,
+                                              const struct RatifyV2ExternalSigner *external,
+                                              struct RatifyV2Buffer *out);
+
+// Sign a proof bundle's challenge presentation (code 0x0002) with the agent
+// key. `delegation_digest` and `challenge_sig` may be absent; the digest is
+// recomputed. The embedded certificates must already be signed.
+int32_t ratify_v2_sign_proof_bundle(const uint8_t *object,
+                                    uintptr_t object_len,
+                                    const struct RatifyV2KeyPair *local,
+                                    const struct RatifyV2ExternalSigner *external,
+                                    struct RatifyV2Buffer *out);
+
+// Sign a revocation list (code 0x0003) with the status key bound to
+// `bound_issuer_id` by caller-authenticated configuration; the signer's key
+// must equal `bound_status_key`.
+int32_t ratify_v2_sign_revocation_list(const uint8_t *object,
+                                       uintptr_t object_len,
+                                       const char *bound_issuer_id,
+                                       const struct RatifyV2PublicKey *bound_status_key,
+                                       const struct RatifyV2KeyPair *local,
+                                       const struct RatifyV2ExternalSigner *external,
+                                       struct RatifyV2Buffer *out);
+
+// Sign a revocation push (code 0x0005); see
+// `ratify_v2_sign_revocation_list`.
+int32_t ratify_v2_sign_revocation_push(const uint8_t *object,
+                                       uintptr_t object_len,
+                                       const char *bound_issuer_id,
+                                       const struct RatifyV2PublicKey *bound_status_key,
+                                       const struct RatifyV2KeyPair *local,
+                                       const struct RatifyV2ExternalSigner *external,
+                                       struct RatifyV2Buffer *out);
+
+// Sign a key-rotation statement under both codes: 0x0004 with the current
+// (old) key and 0x0009 with the new key. Each signer slot takes exactly one
+// of a local key pair or an external signer.
+int32_t ratify_v2_sign_key_rotation_statement(const uint8_t *object,
+                                              uintptr_t object_len,
+                                              const struct RatifyV2KeyPair *old_local,
+                                              const struct RatifyV2ExternalSigner *old_external,
+                                              const struct RatifyV2KeyPair *new_local,
+                                              const struct RatifyV2ExternalSigner *new_external,
+                                              struct RatifyV2Buffer *out);
+
+// Sign a witness entry (code 0x0006) with the named witness key.
+int32_t ratify_v2_sign_witness_entry(const uint8_t *object,
+                                     uintptr_t object_len,
+                                     const struct RatifyV2KeyPair *local,
+                                     const struct RatifyV2ExternalSigner *external,
+                                     struct RatifyV2Buffer *out);
+
+// Sign a complete verification receipt (code 0x0008) with the verifier key.
+int32_t ratify_v2_sign_verification_receipt(const uint8_t *object,
+                                            uintptr_t object_len,
+                                            const struct RatifyV2KeyPair *local,
+                                            const struct RatifyV2ExternalSigner *external,
+                                            struct RatifyV2Buffer *out);
+
+// Bind a sealed receipt outbox body to the next position of a receipt log
+// (`head_json`, the receipt-log head schema of `ratify_v2_verify_object`) and
+// sign it with the verifier key: the receipt publisher's operation (§7.7).
+int32_t ratify_v2_sign_prepared_verification_receipt(const uint8_t *body,
+                                                     uintptr_t body_len,
+                                                     const uint8_t *head_json,
+                                                     uintptr_t head_json_len,
+                                                     const struct RatifyV2KeyPair *local,
+                                                     const struct RatifyV2ExternalSigner *external,
+                                                     struct RatifyV2Buffer *out);
+
+// Sign the shared transaction statement (code 0x0007) as party `party_id`
+// with that party's agent key. `object` is the transaction receipt JSON
+// whose `party_signatures` may be incomplete (each party signs separately).
+// On success `*out` is the same receipt with this party's signature added
+// (replacing any earlier one) in canonical form; once every party has
+// signed, it is the canonical receipt wire.
+int32_t ratify_v2_sign_transaction_receipt_party(const uint8_t *object,
+                                                 uintptr_t object_len,
+                                                 const char *party_id,
+                                                 const struct RatifyV2KeyPair *local,
+                                                 const struct RatifyV2ExternalSigner *external,
+                                                 struct RatifyV2Buffer *out);
+
+// A new, empty reducer state.
+int32_t ratify_v2_status_state_new(struct RatifyV2StatusState **out);
+
+// Release a reducer state. NULL is a no-op.
+void ratify_v2_status_state_free(struct RatifyV2StatusState *s);
+
+// Apply a signed revocation list (`kind` 3) or push (`kind` 5) for
+// `issuer_id` under the authenticated status key at `status_key_epoch`.
+int32_t ratify_v2_status_state_apply(const struct RatifyV2StatusState *state,
+                                     int32_t kind,
+                                     const uint8_t *wire,
+                                     uintptr_t wire_len,
+                                     const char *issuer_id,
+                                     uint64_t status_key_epoch,
+                                     const struct RatifyV2PublicKey *status_key,
+                                     const struct RatifyV2StatusPolicy *policy,
+                                     int64_t now);
+
+// Transition the issuer's status key to `next_epoch` / `next_status_key`.
+int32_t ratify_v2_status_state_transition_epoch(const struct RatifyV2StatusState *state,
+                                                const char *issuer_id,
+                                                uint64_t next_epoch,
+                                                const struct RatifyV2PublicKey *next_status_key);
+
+// The status of one certificate at `now`: JSON `{"status": "not_revoked" |
+// "revoked" | "indeterminate", "reason": "" | "unavailable" | "stale",
+// "evidence": [...], "fresh_until"}`.
+int32_t ratify_v2_status_state_query(const struct RatifyV2StatusState *state,
+                                     const char *issuer_id,
+                                     const char *cert_id,
+                                     uint64_t status_key_epoch,
+                                     const struct RatifyV2PublicKey *status_key,
+                                     const struct RatifyV2StatusPolicy *policy,
+                                     int64_t now,
+                                     struct RatifyV2Buffer *result_out);
+
+// A JSON view of the reducer state (`has_floor`, `floor`,
+// `accepted_cert_ids`, `deny_union_cert_ids`, `max_observed_sequence`,
+// `fork_sequence`, `reconciliation_required`,
+// `future_dated_object_observed`, and the status key fields).
+int32_t ratify_v2_status_state_json(const struct RatifyV2StatusState *state,
+                                    struct RatifyV2Buffer *out);
+
+// Permanently bind a key to a role (`"root"`, `"intermediate"`, `"agent"`,
+// `"verifier"`, `"status"`, ...) in the anchored journal.
+int32_t ratify_v2_journal_record_key_role(const struct RatifyV2JournalStoreCallbacks *journal_store,
+                                          const char *role,
+                                          const struct RatifyV2PublicKey *key);
+
+// Configure an issuer's status key at `epoch` in the anchored journal.
+int32_t ratify_v2_journal_configure_status_key(const struct RatifyV2JournalStoreCallbacks *journal_store,
+                                               const char *issuer_id,
+                                               uint64_t epoch,
+                                               const struct RatifyV2PublicKey *key);
+
+// Apply a signed revocation list (`kind` 3) or push (5) to the anchored
+// journal (load, reduce, compare-and-swap with one bounded retry).
+int32_t ratify_v2_journal_apply(const struct RatifyV2JournalStoreCallbacks *journal_store,
+                                int32_t kind,
+                                const uint8_t *wire,
+                                uintptr_t wire_len,
+                                const char *issuer_id,
+                                uint64_t status_key_epoch,
+                                const struct RatifyV2PublicKey *status_key,
+                                const struct RatifyV2StatusPolicy *policy,
+                                int64_t now);
+
+// The status of one certificate from the anchored journal (result JSON as
+// `ratify_v2_status_state_query`).
+int32_t ratify_v2_journal_status(const struct RatifyV2JournalStoreCallbacks *journal_store,
+                                 const char *issuer_id,
+                                 const char *cert_id,
+                                 uint64_t status_key_epoch,
+                                 const struct RatifyV2PublicKey *status_key,
+                                 const struct RatifyV2StatusPolicy *policy,
+                                 int64_t now,
+                                 struct RatifyV2Buffer *result_out);
+
+// The canonical genesis snapshot; `*generation_out` and `*digest_out` are
+// its head (free the digest with `ratify_v2_string_free`). A new anchored
+// journal store starts here.
+int32_t ratify_v2_journal_genesis(struct RatifyV2Buffer *snapshot_out,
+                                  uint64_t *generation_out,
+                                  char **digest_out);
+
+// Import a snapshot against an anchored head (every structural, digest, and
+// invariant check). On success, `*head_out` (when non-NULL) is the JSON
+// `{"version", "generation", "previous_digest", "digest"}`.
+int32_t ratify_v2_journal_import(const uint8_t *snapshot,
+                                 uintptr_t snapshot_len,
+                                 uint64_t generation,
+                                 const char *digest,
+                                 struct RatifyV2Buffer *head_out);
+
+// Migrate a version 1 journal record (Go JSON encoding) to the version 2
+// logical snapshot. Writes the snapshot and its head JSON.
+int32_t ratify_v2_journal_migrate(const uint8_t *legacy_record,
+                                  uintptr_t legacy_record_len,
+                                  struct RatifyV2Buffer *snapshot_out,
+                                  struct RatifyV2Buffer *head_out);
+
+// Re-encode a journal record in the version 1 JSON encoding; with
+// `clear_digest` non-zero the digest member is emptied first (the version 1
+// digest input).
+int32_t ratify_v2_journal_legacy_encode(const uint8_t *record,
+                                        uintptr_t record_len,
+                                        int32_t clear_digest,
+                                        struct RatifyV2Buffer *out);
+
+// One status publisher transition for the issuer whose complete key is
+// `issuer_key`. The publisher is constructed from the authenticated role
+// configuration in `journal_store` (a status key outside it is refused with
+// `configuration_invalid`) and signs with exactly one of `local` /
+// `external`. `state_json` is the publisher state JSON (`{"issuer_id",
+// "status_key_id", "sequence", "updated_at", "revoked"}`) returned by the
+// previous transition (ignored for genesis); `cert_ids_json` is a JSON
+// array (revoke only). Writes the signed list, the signed push (empty
+// unless revoking), and the next state; persist the state before
+// publishing the objects.
+int32_t ratify_v2_status_publish(int32_t op,
+                                 const struct RatifyV2JournalStoreCallbacks *journal_store,
+                                 const struct RatifyV2PublicKey *issuer_key,
+                                 const struct RatifyV2KeyPair *local,
+                                 const struct RatifyV2ExternalSigner *external,
+                                 int64_t lifetime_seconds,
+                                 const uint8_t *state_json,
+                                 uintptr_t state_json_len,
+                                 const uint8_t *cert_ids_json,
+                                 uintptr_t cert_ids_json_len,
+                                 int64_t at,
+                                 struct RatifyV2Buffer *list_out,
+                                 struct RatifyV2Buffer *push_out,
+                                 struct RatifyV2Buffer *state_out);
+
+// Start a rotation journal from a caller-authenticated genesis key.
+int32_t ratify_v2_rotation_journal_new(const char *authority_id,
+                                       int64_t recovery_epoch,
+                                       const char *role,
+                                       const struct RatifyV2PublicKey *genesis_key,
+                                       struct RatifyV2RotationJournal **out);
+
+// Release a rotation journal. NULL is a no-op.
+void ratify_v2_rotation_journal_free(struct RatifyV2RotationJournal *j);
+
+// Accept a rotation statement at `now`. The journal always takes the
+// returned state (a fork freezes it even though the call fails with
+// `rotation_fork`). `*result_out` is `RatifyV2LogResult` on success.
+int32_t ratify_v2_rotation_journal_accept(const struct RatifyV2RotationJournal *journal_handle,
+                                          const uint8_t *wire,
+                                          uintptr_t wire_len,
+                                          int64_t now,
+                                          int64_t future_skew_seconds,
+                                          int32_t *result_out);
+
+// Recover the authority to a new recovery epoch and genesis key.
+int32_t ratify_v2_rotation_journal_recover(const struct RatifyV2RotationJournal *journal_handle,
+                                           int64_t new_recovery_epoch,
+                                           const struct RatifyV2PublicKey *new_genesis_key);
+
+// The journal state JSON: `{"authority_id", "recovery_epoch", "role",
+// "sequence", "head_hash_b64", "current_key", "used_key_ids", "frozen",
+// "accepted_count"}`. Its rotation-state members are the
+// `"rotation_state"` schema of `ratify_v2_verify_object`.
+int32_t ratify_v2_rotation_journal_state(const struct RatifyV2RotationJournal *journal_handle,
+                                         struct RatifyV2Buffer *out);
+
+// Verify a witness entry against a caller-authenticated log head
+// (`head_json` as in `ratify_v2_verify_object`) and witness key. On success
+// `*result_out` is appended or replay and, when non-NULL, `*digest_out` is
+// the entry's StatementBodyDigest (the next `head_hash`). The caller
+// persists the new head after an append and freezes it after `log_fork`.
+int32_t ratify_v2_witness_entry_append(const uint8_t *wire,
+                                       uintptr_t wire_len,
+                                       const uint8_t *head_json,
+                                       uintptr_t head_json_len,
+                                       const struct RatifyV2PublicKey *witness_key,
+                                       int32_t *result_out,
+                                       struct RatifyV2Buffer *digest_out);
+
+// Verify a verification receipt against a caller-authenticated verifier
+// key and receipt-log head; outputs as `ratify_v2_witness_entry_append`.
+int32_t ratify_v2_verification_receipt_append(const uint8_t *wire,
+                                              uintptr_t wire_len,
+                                              const uint8_t *head_json,
+                                              uintptr_t head_json_len,
+                                              const struct RatifyV2PublicKey *verifier_key,
+                                              int32_t *result_out,
+                                              struct RatifyV2Buffer *digest_out);
+
+// Archival verification of a stored object (SPEC-v2 §6.10). It proves
+// signatures and structure only: the result is labelled
+// `freshness_unverified` and is never actionable.
+//
+// - `kind` 2 (proof bundle): always returns 0 and writes `{"actionable",
+//   "agent_id", "assessment", "bundle_hash", "error_class", "issuer_ids"}`
+//   (the language-neutral result; `error_class` is null on success).
+// - kinds 1, 4, 7: no key needed.
+// - kinds 3, 5: `issuer_id` and `key` (the status key).
+// - kinds 6, 8: `key` (the witness or verifier key).
+//
+// Other kinds write `{"object_type_code", "freshness", "actionable",
+// "digest", "signer_key_ids"}` and fail with the object's class.
+int32_t ratify_v2_archival_verify(int32_t kind,
+                                  const uint8_t *wire,
+                                  uintptr_t wire_len,
+                                  const char *issuer_id,
+                                  const struct RatifyV2PublicKey *key,
+                                  struct RatifyV2Buffer *result_out);
+
+// Run the live v2 decision path (SPEC-v2 §6) in the specified order.
+//
+// - `bundle`: the proof bundle wire bytes.
+// - `request_json`: `{"required_scope", "verifier_namespace",
+//   "replay_epoch", "now", "max_challenge_age_seconds",
+//   "future_skew_seconds", "tzdb_version", "status_keys": {"<issuer>":
+//   {"epoch", "public_key"}}, "status_policy": {...}, "expected_challenge":
+//   {...}|null, "context_policy": {...}|null, "context": {...}}`. `now` is
+//   used only for the pre-claim freshness check; every post-claim time
+//   comes from the claim store's clock. A null `context_policy` means none
+//   is configured, so the result can never be allow.
+// - `evaluators`: the extension evaluator registry, or NULL for none.
+// - `callbacks`: the providers and stores (`claim_store` is required).
+//
+// Returns 0 when the verification ran: `*outcome` then says where it
+// stopped, and the last-error message carries the diagnostic of a
+// preflight or evaluating outcome. A committed outcome is written to
+// `*committed_out` (NULL otherwise); it is not an authorization. When
+// `claim_record_out` is non-NULL the claim record (the
+// `RatifyV2ClaimView.record` encoding) is written there whenever a claim
+// exists. A malformed request or evaluator registry fails the call itself
+// (`bad_argument` or its class) without running the verifier. A callback
+// returning `RatifyV2ErrCancelled` after the claim yields
+// `evaluation_cancelled` and commits nothing.
+int32_t ratify_v2_verify_proof_bundle(const uint8_t *bundle,
+                                      uintptr_t bundle_len,
+                                      const uint8_t *request_json,
+                                      uintptr_t request_json_len,
+                                      const struct RatifyV2EvaluatorConfig *evaluators,
+                                      const struct RatifyV2VerifyCallbacks *callbacks,
+                                      struct RatifyV2VerifyOutcome *outcome,
+                                      struct RatifyV2Buffer *claim_record_out,
+                                      struct RatifyV2Committed **committed_out);
+
+// The claim stage alone: pre-claim checks (`request_json` as for
+// `ratify_v2_verify_proof_bundle`; a context policy is required) then the
+// atomic claim at `now`. The evaluator capability is never exposed, so a
+// created claim stays in progress until lease-expiry recovery. Returns 0
+// with `*disposition_out` and the claim ID, or the failure class.
+int32_t ratify_v2_claim_proof_bundle(const uint8_t *bundle,
+                                     uintptr_t bundle_len,
+                                     const uint8_t *request_json,
+                                     uintptr_t request_json_len,
+                                     const struct RatifyV2ClaimStoreCallbacks *claim_store,
+                                     int32_t *disposition_out,
+                                     char **claim_id_out);
+
+// Lease-expiry recovery (SPEC-v2 §7.5): load an interrupted claim after its
+// lease expired and commit the canonical `indeterminate /
+// evaluation_interrupted` result built from its recorded progress. On
+// success `*committed_out` is the committed outcome.
+int32_t ratify_v2_recover_interrupted_claim(const struct RatifyV2ClaimStoreCallbacks *claim_store,
+                                            const char *claim_id,
+                                            struct RatifyV2Committed **committed_out);
+
+// Release a committed outcome. NULL is a no-op.
+void ratify_v2_committed_free(struct RatifyV2Committed *c);
+
+// The claim ID of a committed outcome (free with `ratify_v2_string_free`).
+int32_t ratify_v2_committed_claim_id(const struct RatifyV2Committed *c, char **out);
+
+// A copy of the sealed receipt outbox body. It is evidence for publication,
+// not an authorization.
+int32_t ratify_v2_committed_receipt_body(const struct RatifyV2Committed *c,
+                                         struct RatifyV2Buffer *out);
+
+// `ReceiptOutboxDigest` of the committed body (free with
+// `ratify_v2_string_free`).
+int32_t ratify_v2_committed_receipt_body_digest(const struct RatifyV2Committed *c, char **out);
+
+// The sealed exclusive challenge deadline.
+int32_t ratify_v2_committed_challenge_expires_at(const struct RatifyV2Committed *c, int64_t *out);
+
+// The sealed exclusive allow horizon: `*has_horizon` is 1 only for an
+// allow; `*horizon` is 0 otherwise.
+int32_t ratify_v2_committed_allow_horizon(const struct RatifyV2Committed *c,
+                                          int32_t *has_horizon,
+                                          int64_t *horizon);
+
+// Run the release steps of SPEC-v2 §6.9 for a committed outcome.
+// `signed_receipt` is the publisher's signed receipt wire; pass a slice with
+// a NULL `ptr` when it has not been appended yet. `verifier_key` and
+// `log_id` are caller-authenticated configuration. Returns 0 with
+// `*status_out` (a `RatifyV2ReleaseStatus`) and `*reason_out` (empty only
+// when released; free with `ratify_v2_string_free`); `*released_out` is a
+// new released-decision handle exactly when the status is released.
+int32_t ratify_v2_release_decision(const struct RatifyV2Committed *committed,
+                                   struct RatifyV2Slice signed_receipt,
+                                   const struct RatifyV2PublicKey *verifier_key,
+                                   const char *log_id,
+                                   const struct RatifyV2ReleaseStoreCallbacks *release_store,
+                                   const struct RatifyV2CheckpointCallbacks *checkpoint,
+                                   int32_t *status_out,
+                                   char **reason_out,
+                                   struct RatifyV2Released **released_out);
+
+// The spelling of a `RatifyV2ReleaseStatus` ("released", "pending",
+// "withheld", "rejected", or "unknown"). Static — do NOT free.
+const char *ratify_v2_release_status_str(int32_t status);
+
+// Release a released decision. NULL is a no-op.
+void ratify_v2_released_free(struct RatifyV2Released *d);
+
+// A copy of a released decision's string field (free with
+// `ratify_v2_string_free`).
+int32_t ratify_v2_released_string(const struct RatifyV2Released *d, int32_t field, char **out);
+
+// A copy of the released granted scope as a JSON array of strings.
+int32_t ratify_v2_released_granted_scope(const struct RatifyV2Released *d,
+                                         struct RatifyV2Buffer *out);
+
+// A copy of the signed receipt wire verified during release.
+int32_t ratify_v2_released_receipt(const struct RatifyV2Released *d, struct RatifyV2Buffer *out);
+
+// The release time, the sealed challenge deadline, and the sealed allow
+// horizon (`*has_allow_horizon` is 1 only for an allow). Any output pointer
+// may be NULL.
+int32_t ratify_v2_released_times(const struct RatifyV2Released *d,
+                                 int64_t *release_time,
+                                 int64_t *challenge_expires_at,
+                                 int32_t *has_allow_horizon,
+                                 int64_t *allow_horizon);
+
+// Whether a released allow may be acted on now: 1 only when the released
+// decision is an allow and the receiver's authoritative clock reads before
+// both sealed exclusive deadlines. Any other case, a clock failure, a
+// regression, a NULL argument, a poisoned handle, or a panic is 0
+// (fail-closed). Call it immediately before the side effect.
+int32_t ratify_v2_released_allowed(const struct RatifyV2Released *d,
+                                   const struct RatifyV2ClockCallbacks *clock);
+
+// Issue a fresh challenge (SPEC-v2 §7.3): validate `request_json`
+// (`{"verifier_namespace", "replay_epoch", "verifier_id",
+// "lifetime_seconds", "expected_agent_id"?, "expected_agent_public_key"?,
+// "expected_receiver_id"?, "expected_session_context_b64"?}`), read the
+// authoritative clock, draw 32 random bytes (from `random` when non-NULL,
+// else the OS), persist the complete record, and only then return it as
+// ExpectedChallenge JSON.
+int32_t ratify_v2_issue_challenge(const uint8_t *request_json,
+                                  uintptr_t request_json_len,
+                                  const struct RatifyV2ClockCallbacks *clock,
+                                  const struct RatifyV2IssuanceStoreCallbacks *issuance_store,
+                                  const struct RatifyV2RandomCallbacks *random,
+                                  struct RatifyV2Buffer *expected_out);
+
+// Load the authenticated ExpectedChallenge for a presented 32-byte
+// challenge from the issuance store (as ExpectedChallenge JSON).
+int32_t ratify_v2_load_expected_challenge(const struct RatifyV2IssuanceStoreCallbacks *issuance_store,
+                                          const char *verifier_namespace,
+                                          int64_t replay_epoch,
+                                          const uint8_t *challenge,
+                                          uintptr_t challenge_len,
+                                          struct RatifyV2Buffer *expected_out);
+
+// Composed transaction-receipt verification (SPEC-v2 §5.7). `config_json`
+// is `{"status_keys": {...}, "status_policy": {...}}` (the verification
+// request schema). `trust`, `status_evidence`, and `status_journal` may be
+// NULL (unavailable). The result JSON is `{"transaction_id", "actionable":
+// false, "parties": [{"party_id", "agent_id", "required_scope",
+// "trust_assessment", "delegation_assessment", "delegation_expires_at",
+// "status_assessment", "scope_assessment", "freshness",
+// "status_evidence_digests": [...]}]}`; it is evidence, never an
+// authorization.
+int32_t ratify_v2_verify_transaction_receipt(const uint8_t *receipt,
+                                             uintptr_t receipt_len,
+                                             int64_t now,
+                                             int64_t future_skew_seconds,
+                                             const uint8_t *config_json,
+                                             uintptr_t config_json_len,
+                                             const struct RatifyV2TrustCallbacks *trust,
+                                             const struct RatifyV2StatusEvidenceCallbacks *status_evidence,
+                                             const struct RatifyV2JournalStoreCallbacks *status_journal,
+                                             struct RatifyV2Buffer *result_out);
 
 // Register a custom entropy callback for platforms without OS-level RNG.
 //

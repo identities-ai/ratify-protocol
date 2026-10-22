@@ -2900,7 +2900,7 @@ pub unsafe extern "C" fn ratify_operation_context_v2_hash(
                 Ok(Some(bytes)) => bytes,
                 Ok(None) => Vec::new(),
                 Err(error) => {
-                    set_err(err_out, &error);
+                    set_err(err_out, &error.to_string());
                     return RatifyStatus::RatifyErrBadArgument;
                 }
             };
@@ -2929,7 +2929,7 @@ pub unsafe extern "C" fn ratify_operation_context_v2_hash(
                     RatifyStatus::RatifyOk
                 }
                 Err(error) => {
-                    set_err(err_out, &error);
+                    set_err(err_out, &error.to_string());
                     RatifyStatus::RatifyErrBadArgument
                 }
             }
@@ -3006,7 +3006,7 @@ pub unsafe extern "C" fn ratify_session_context_v2_build(
                     RatifyStatus::RatifyOk
                 }
                 Err(error) => {
-                    set_err(err_out, &error);
+                    set_err(err_out, &error.to_string());
                     RatifyStatus::RatifyErrBadArgument
                 }
             }
@@ -3397,7 +3397,7 @@ pub unsafe extern "C" fn ratify_challenge_claim_digest_v2(
                 }
                 Err(error) => {
                     std::ptr::write_bytes(out_digest, 0, 48);
-                    set_err(err_out, &error);
+                    set_err(err_out, &error.to_string());
                     RatifyStatus::RatifyErrBadArgument
                 }
             }
@@ -3515,6 +3515,9 @@ unsafe fn claim_id_v2_ffi(
         }
     };
     let bytes = slice::from_raw_parts(input, input_len);
+    // Epochs above i64::MAX are outside 0..2^53-1 too; saturate so the
+    // library reports the out-of-range epoch rather than wrapping it.
+    let replay_epoch = i64::try_from(replay_epoch).unwrap_or(i64::MAX);
     let result = if from_digest {
         protocol_claim_id_from_digest_v2(namespace, replay_epoch, bytes)
     } else {
@@ -3528,7 +3531,7 @@ unsafe fn claim_id_v2_ffi(
         }
         Err(error) => {
             *out_id = 0;
-            set_err(err_out, &error);
+            set_err(err_out, &error.to_string());
             RatifyStatus::RatifyErrBadArgument
         }
     }

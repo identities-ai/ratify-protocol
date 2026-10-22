@@ -32,3 +32,6 @@ include = ["RatifyV2Code", "RatifyV2ObjectKind"]
 
 [parse]
 parse_deps = false
+
+[defines]
+"feature = test-reference" = "RATIFY_V2_TEST_REFERENCE"

@@ -14,7 +14,7 @@ WORK="${1:-$(mktemp -d "${TMPDIR:-/tmp}/ratify-v2-c-abi.XXXXXX")}"
 mkdir -p "$WORK/data"
 
 (cd "$SDK_DIR" && cargo build --release --quiet)
-LIB="$SDK_DIR/target/release/libratify_c.a"
+LIB="${CARGO_TARGET_DIR:-$SDK_DIR/target}/release/libratify_c.a"
 
 python3 -I - "$CORPUS" "$WORK/data" <<'PY'
 import base64, json, pathlib, sys

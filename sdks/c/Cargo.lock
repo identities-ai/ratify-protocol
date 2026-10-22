@@ -566,6 +566,7 @@ dependencies = [
  "ratify-protocol",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -584,6 +585,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sha3",
 ]
 
 [[package]]

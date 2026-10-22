@@ -81,6 +81,9 @@ path = "tests/panic_containment.rs"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+sha3 = "0.10"
 # Self dev-dependency: turns on the test-only panic hook for integration
 # tests. Under resolver 2 it does not leak into normal or release builds.
 ratify-c = { path = ".", features = ["panic-test-hook", "test-reference"] }

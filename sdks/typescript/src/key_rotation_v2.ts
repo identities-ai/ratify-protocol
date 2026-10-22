@@ -6,7 +6,9 @@
 import { sha384 } from "@noble/hashes/sha2";
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
-import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
+import { V2_MAX_TIMESTAMP_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
+import { MAX_KEY_ROTATION_STATEMENT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
+import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
   ErrKeyRotationForkV2,
   ErrKeyRotationFrozenV2,
@@ -45,7 +47,7 @@ import {
 } from "./protocol_v2_wire.js";
 import { validateWitnessSignableBodyV2 } from "./witness_v2.js";
 import { validateVerificationReceiptSignableV2 } from "./verification_receipt_v2.js";
-import { MAX_PROOF_BUNDLE_BYTES, type HybridPublicKey, type HybridSignature } from "./types.js";
+import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 const MAX_SAFE = MAX_SAFE_INTEGER_V2;
 
@@ -102,7 +104,7 @@ export function validateKeyRotationStatementV2(s: KeyRotationStatementV2, signat
       !Number.isInteger(s.recovery_epoch) || !Number.isInteger(s.sequence)) {
     throw new Error("wire v2: recovery_epoch and sequence must be positive safe integers");
   }
-  if (!isSafe(s.issued_at) || !isSafe(s.not_before)) throw new Error("wire v2: issued_at and not_before must be safe integers");
+  if (!validV2Timestamp(s.issued_at) || !validV2Timestamp(s.not_before)) throw new Error("wire v2: issued_at and not_before must be safe integers");
   if (!ROLES.has(s.role)) throw new Error("wire v2: rotation role is invalid");
   if (!(s.previous_statement_hash instanceof Uint8Array) || s.previous_statement_hash.length !== 48) {
     throw new Error("wire v2: previous_statement_hash must be 48 bytes");
@@ -248,7 +250,7 @@ export function keyRotationStatementV2Digest(s: KeyRotationStatementV2): Uint8Ar
 
 export function decodeKeyRotationStatementV2(data: Uint8Array): KeyRotationStatementV2 {
   return classified("malformed", () => {
-    if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: rotation statement exceeds the wire size limit");
+    checkV2WireSize(data, "rotation statement", "MAX_KEY_ROTATION_STATEMENT_BYTES_V2", MAX_KEY_ROTATION_STATEMENT_BYTES_V2);
     const root = checkWireJSONV2(data, ["previous_statement_hash"]);
     requireV2Fields(root, KEY_ROTATION_V2_FIELDS);
     const s = decodeRotationStruct(root, KEY_ROTATION_V2_FIELDS);
@@ -273,22 +275,52 @@ export async function signKeyRotationStatementV2(
   opts: V2SignOptions = {},
 ): Promise<KeyRotationStatementV2> {
   validateKeyRotationStatementV2(s, false);
+  let oldSigner: SignerV2;
+  let newSigner: SignerV2;
   try {
     await validateHybridKeyPairV2(oldKey);
+    oldSigner = await newLocalSignerV2(oldKey, { deterministic: opts.deterministic });
   } catch (err) {
     throw wrapError("old rotation key", err);
   }
   try {
     await validateHybridKeyPairV2(newKey);
+    newSigner = await newLocalSignerV2(newKey, { deterministic: opts.deterministic });
   } catch (err) {
     throw wrapError("new rotation key", err);
   }
-  if (!equalHybridPublicKeys(oldKey.publicKey, s.old_key) || !equalHybridPublicKeys(newKey.publicKey, s.new_key)) {
+  return signKeyRotationStatementV2WithSigners(s, oldSigner, newSigner);
+}
+
+/**
+ * signKeyRotationStatementV2 with external signers: oldSigner signs 0x0004
+ * under the statement old key and newSigner signs 0x0009 under the new key.
+ */
+export async function signKeyRotationStatementV2WithSigners(
+  s: KeyRotationStatementV2,
+  oldSigner: SignerV2,
+  newSigner: SignerV2,
+  opts: SignOptionsV2 = {},
+): Promise<KeyRotationStatementV2> {
+  validateKeyRotationStatementV2(s, false);
+  let oldPub: HybridPublicKey;
+  let newPub: HybridPublicKey;
+  try {
+    oldPub = await signerPublicKeyV2(oldSigner);
+  } catch (err) {
+    throw wrapError("old rotation key", err);
+  }
+  try {
+    newPub = await signerPublicKeyV2(newSigner);
+  } catch (err) {
+    throw wrapError("new rotation key", err);
+  }
+  if (!equalHybridPublicKeys(oldPub, s.old_key) || !equalHybridPublicKeys(newPub, s.new_key)) {
     throw new Error("rotation private keys do not match the statement keys");
   }
   const signable = keyRotationStatementV2SignBytes(s);
-  const old_signature = await signV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, oldKey, opts);
-  const new_signature = await signV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, newKey, opts);
+  const old_signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.keyRotationAuthorization, signable, oldSigner, oldPub, opts);
+  const new_signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, newSigner, newPub, opts);
   return {
     ...s,
     previous_statement_hash: Uint8Array.from(s.previous_statement_hash),

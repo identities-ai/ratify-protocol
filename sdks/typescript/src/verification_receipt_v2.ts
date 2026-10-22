@@ -4,7 +4,10 @@
 // verification_receipt_body_v2.go.
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
-import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
+import { validV2Timestamp } from "./clock_bounds_v2.js";
+import { validConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
+import { MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2, MAX_VERIFICATION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
+import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
@@ -39,7 +42,7 @@ import {
 } from "./protocol_v2_wire.js";
 import { isWildcardScopeV2, validateRequiredScopeV2, validateScopesV2 } from "./scope_v2.js";
 import { logPositionV2, validateLogHeadV2, type WitnessV2Head } from "./witness_v2.js";
-import { MAX_PROOF_BUNDLE_BYTES, type HybridPublicKey, type HybridSignature } from "./types.js";
+import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 const MAX_SAFE = MAX_SAFE_INTEGER_V2;
 const ZERO48 = new Uint8Array(48);
@@ -69,6 +72,11 @@ export interface VerificationReceiptV2 {
   trust_assessment: string;
   status_assessment: string;
   challenge_assessment: string;
+  /**
+   * Present exactly when the claim sealed at least one extension evaluator
+   * profile (SPEC-v2 §5.2, §5.8); absent (undefined or null) otherwise.
+   */
+  constraint_evaluators?: ConstraintEvaluatorRefV2[] | null;
   context_assessment: string;
   context_policy_digest: string | null;
   verified_at: number;
@@ -90,13 +98,13 @@ const RECEIPT_V2_FIELDS = [
   "context_policy_digest", "verified_at", "required_scope", "granted_scope", "status_evidence_digests",
   "previous_receipt_hash", "signature",
 ];
-const RECEIPT_WIRE_FIELDS = [...RECEIPT_V2_FIELDS, "agent_id", "human_id"];
+const RECEIPT_WIRE_FIELDS = [...RECEIPT_V2_FIELDS, "agent_id", "human_id", "constraint_evaluators"];
 const RECEIPT_BODY_REQUIRED = [
   "version", "verifier_id", "bundle_hash", "issuer_ids", "decision", "decision_reason", "identity_status",
   "trust_assessment", "status_assessment", "challenge_assessment", "context_assessment", "context_policy_digest",
   "verified_at", "required_scope", "granted_scope", "status_evidence_digests",
 ];
-const RECEIPT_BODY_FIELDS = [...RECEIPT_BODY_REQUIRED, "agent_id", "human_id"];
+const RECEIPT_BODY_FIELDS = [...RECEIPT_BODY_REQUIRED, "agent_id", "human_id", "constraint_evaluators"];
 const EVIDENCE_FIELDS = ["digest", "issuer_id", "object_type_code", "sequence", "status_key_id"];
 
 export function evidenceWireV2(values: readonly StatusEvidenceEntryV2[] | null): unknown {
@@ -111,6 +119,9 @@ function bodyObject(r: VerificationReceiptV2): Record<string, unknown> {
     agent_id: r.agent_id === "" ? undefined : r.agent_id,
     bundle_hash: r.bundle_hash,
     challenge_assessment: r.challenge_assessment,
+    constraint_evaluators: r.constraint_evaluators && r.constraint_evaluators.length > 0
+      ? r.constraint_evaluators.map((e) => ({ profile_digest: e.profile_digest, type: e.type }))
+      : undefined,
     context_assessment: r.context_assessment,
     context_policy_digest: r.context_policy_digest,
     decision: r.decision,
@@ -223,8 +234,7 @@ function containsAll(have: readonly string[], want: readonly string[]): boolean 
 
 export function validateVerificationReceiptV2(r: VerificationReceiptV2, signature: boolean): void {
   if (!r || r.version !== 2 || typeof r.log_id !== "string" || r.log_id.length !== 32 || !lowerHexString(r.log_id) ||
-      !(r.sequence > 0) || r.sequence > MAX_SAFE || !Number.isInteger(r.sequence) || !Number.isInteger(r.verified_at) ||
-      r.verified_at < -MAX_SAFE || r.verified_at > MAX_SAFE) {
+      !(r.sequence > 0) || r.sequence > MAX_SAFE || !Number.isInteger(r.sequence) || !validV2Timestamp(r.verified_at)) {
     throw new Error("wire v2: receipt version, log ID, sequence, or verified_at is invalid");
   }
   if (!validV2ID(r.verifier_id) || (r.agent_id !== "" && !validV2ID(r.agent_id))) {
@@ -264,6 +274,10 @@ export function validateVerificationReceiptV2(r: VerificationReceiptV2, signatur
   }
   if (r.context_policy_digest !== null && !validPrefixedDigestV2(r.context_policy_digest)) {
     throw new Error("wire v2: context_policy_digest is invalid");
+  }
+  const evaluators = r.constraint_evaluators ?? [];
+  if (!validConstraintEvaluatorRefsV2(evaluators) || (evaluators.length !== 0 && issuers.length === 0)) {
+    throw new Error("wire v2: constraint_evaluators must be valid extension types with sha384 profile digests, sorted and unique by type, and only for a delegated chain");
   }
   if (((ca === "not_evaluated" || ca === "unbound") && r.context_policy_digest !== null) ||
       ((ca === "bound" || ca === "not_required" || ca === "mismatch") && r.context_policy_digest === null)) {
@@ -372,12 +386,11 @@ function validateReceiptDecisionV2(r: VerificationReceiptV2): void {
       }
       return;
     case "evaluation_interrupted":
-      if (ta === "untrusted" || sa === "revoked" || sa === "stale" || ca === "unbound" || ca === "unverified" || ca === "mismatch" ||
-          (ta === "not_evaluated" && (sa !== "not_evaluated" || ca !== "not_evaluated")) ||
-          (ta === "unavailable" && (sa !== "not_evaluated" || ca !== "not_evaluated")) ||
-          (ta === "trusted" && sa !== "not_evaluated" && sa !== "unavailable" && sa !== "current") ||
-          (ca === "not_evaluated" && sa !== "not_evaluated") ||
-          ((sa === "unavailable" || sa === "current") && (ta !== "trusted" || (ca !== "bound" && ca !== "not_required")))) {
+      // Each dimension is independent (SPEC-v2 §6.7): trust keeps its last
+      // state; status and context exist only under a trusted root; context is
+      // recorded only when it completed as bound or not_required.
+      if ((ca !== "not_evaluated" && ca !== "bound" && ca !== "not_required") ||
+          (ta !== "trusted" && (sa !== "not_evaluated" || ca !== "not_evaluated"))) {
         throw new Error("wire v2: evaluation_interrupted assessment tuple is invalid");
       }
       return;
@@ -396,7 +409,7 @@ export function encodeVerificationReceiptV2(r: VerificationReceiptV2): Uint8Arra
   const o = signableObject(r);
   o.signature = keyWire(r.signature);
   const data = canonicalJSONV2(o);
-  if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: verification receipt exceeds the wire size limit");
+  checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2);
   return data;
 }
 
@@ -415,9 +428,19 @@ function decodeEvidence(n: JNode | undefined): StatusEvidenceEntryV2[] | null {
   });
 }
 
+function decodeEvaluators(n: JNode | undefined): ConstraintEvaluatorRefV2[] | undefined {
+  const arr = gArray(n, "constraint_evaluators");
+  if (arr === null) return n === undefined ? undefined : [];
+  return arr.map((x) => {
+    const f = gStruct(x, ["profile_digest", "type"], "constraint evaluator");
+    return { profile_digest: gString(f.get("profile_digest"), "profile_digest"), type: gString(f.get("type"), "type") };
+  });
+}
+
 function decodeReceiptStruct(root: JNode, allowed: readonly string[]): VerificationReceiptV2 {
   const f = gStruct(root, allowed, "verification receipt");
   const cpd = f.get("context_policy_digest");
+  const evaluators = decodeEvaluators(f.get("constraint_evaluators"));
   return {
     version: gInt(f.get("version"), "version"),
     log_id: gString(f.get("log_id"), "log_id"),
@@ -433,6 +456,7 @@ function decodeReceiptStruct(root: JNode, allowed: readonly string[]): Verificat
     trust_assessment: gString(f.get("trust_assessment"), "trust_assessment"),
     status_assessment: gString(f.get("status_assessment"), "status_assessment"),
     challenge_assessment: gString(f.get("challenge_assessment"), "challenge_assessment"),
+    ...(evaluators === undefined ? {} : { constraint_evaluators: evaluators }),
     context_assessment: gString(f.get("context_assessment"), "context_assessment"),
     context_policy_digest: cpd === undefined || cpd.k === "null" ? null : gString(cpd, "context_policy_digest"),
     verified_at: gInt(f.get("verified_at"), "verified_at"),
@@ -446,7 +470,7 @@ function decodeReceiptStruct(root: JNode, allowed: readonly string[]): Verificat
 
 export function decodeVerificationReceiptV2(data: Uint8Array): VerificationReceiptV2 {
   return classified("malformed", () => {
-    if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: verification receipt exceeds the wire size limit");
+    checkV2WireSize(data, "verification receipt", "MAX_VERIFICATION_RECEIPT_BYTES_V2", MAX_VERIFICATION_RECEIPT_BYTES_V2);
     const root = checkWireJSONV2(data, ["previous_receipt_hash"], ["bundle_hash"]);
     requireV2Fields(root, RECEIPT_V2_FIELDS, ["context_policy_digest"]);
     const r = decodeReceiptStruct(root, RECEIPT_WIRE_FIELDS);
@@ -481,8 +505,15 @@ export function validateVerificationReceiptSignableV2(data: Uint8Array): void {
 export async function signVerificationReceiptV2(r: VerificationReceiptV2, verifier: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<VerificationReceiptV2> {
   validateVerificationReceiptV2(r, false);
   await validateHybridKeyPairV2(verifier);
-  if (keyIDV2(verifier.publicKey) !== r.verifier_id) throw new Error("receipt verifier_id does not match signing key");
-  const signature = await signV2Statement(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), verifier, opts);
+  return signVerificationReceiptV2WithSigner(r, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+}
+
+/** signVerificationReceiptV2 through a signer whose key ID must equal verifier_id. */
+export async function signVerificationReceiptV2WithSigner(r: VerificationReceiptV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<VerificationReceiptV2> {
+  validateVerificationReceiptV2(r, false);
+  const verifierPublic = await signerPublicKeyV2(signer);
+  if (keyIDV2(verifierPublic) !== r.verifier_id) throw new Error("receipt verifier_id does not match signing key");
+  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.verificationReceipt, verificationReceiptV2SignBytes(r), signer, verifierPublic, opts);
   const result = { ...r, signature };
   encodeVerificationReceiptV2(result);
   return result;
@@ -583,7 +614,7 @@ function emptyReceiptEnvelope(): Pick<VerificationReceiptV2, "log_id" | "sequenc
 /** Rejects a malformed or noncanonical pre-signing body. */
 export function decodeVerificationReceiptBodyV2(data: Uint8Array): VerificationReceiptV2 {
   return classified("malformed", () => {
-    if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: verification receipt body exceeds the wire size limit");
+    checkV2WireSize(data, "verification receipt body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2);
     const root = checkWireJSONV2(data, [], ["bundle_hash"]);
     requireV2Fields(root, RECEIPT_BODY_REQUIRED, ["context_policy_digest"]);
     const decoded = decodeReceiptStruct(root, RECEIPT_BODY_FIELDS);
@@ -614,8 +645,14 @@ export function bindVerificationReceiptBodyV2(data: Uint8Array, head: ReceiptV2H
 
 /** Binds and signs an exact prepared body with a local verifier key. */
 export async function signPreparedVerificationReceiptV2(data: Uint8Array, head: ReceiptV2Head, verifier: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<VerificationReceiptV2> {
+  await validateHybridKeyPairV2(verifier);
+  return signPreparedVerificationReceiptV2WithSigner(data, head, await newLocalSignerV2(verifier, { deterministic: opts.deterministic }));
+}
+
+/** signPreparedVerificationReceiptV2 with an external verifier signer. */
+export async function signPreparedVerificationReceiptV2WithSigner(data: Uint8Array, head: ReceiptV2Head, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<VerificationReceiptV2> {
   const bound = bindVerificationReceiptBodyV2(data, head);
-  const signed = await signVerificationReceiptV2(bound, verifier, opts);
+  const signed = await signVerificationReceiptV2WithSigner(bound, signer, opts);
   let body: Uint8Array | null = null;
   try {
     body = verificationReceiptV2Body(signed);

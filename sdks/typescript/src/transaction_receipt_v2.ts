@@ -5,7 +5,9 @@
 import { sha256, sha384 } from "@noble/hashes/sha2";
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
-import { signV2StatementWithKeyPair as signV2Statement } from "./signer_v2.js";
+import { validV2Timestamp } from "./clock_bounds_v2.js";
+import { MAX_TRANSACTION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
+import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import { v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
   MAX_SAFE_INTEGER_V2,
@@ -145,7 +147,7 @@ export function validateCanonicalTransactionTermsV2(data: Uint8Array): void {
 }
 
 async function validateTransactionReceiptV2(r: TransactionReceiptV2, requireSignatures: boolean): Promise<void> {
-  if (!r || r.version !== 2 || !r.transaction_id || !Number.isInteger(r.created_at) || r.created_at < -MAX_SAFE || r.created_at > MAX_SAFE ||
+  if (!r || r.version !== 2 || !r.transaction_id || !validV2Timestamp(r.created_at) ||
       !r.terms_schema_uri || !(r.terms_canonical_json instanceof Uint8Array) || r.terms_canonical_json.length === 0 ||
       !r.parties || r.parties.length === 0) {
     throw new Error("wire v2: transaction receipt header or terms are invalid");
@@ -206,6 +208,10 @@ async function validateTransactionReceiptV2(r: TransactionReceiptV2, requireSign
       throw wrapError(`wire v2: party ${JSON.stringify(p.party_id)} proof bundle signature`, err);
     }
     const certs = bundle.delegations ?? [];
+    if (certs.length === 0) {
+      // SPEC-v2 §5.7: a transaction party must present delegated authority.
+      throw v2Errorf("transaction_party_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof bundle has no delegation certificates`);
+    }
     if (bundle.agent_id !== p.agent_id || !equalHybridPublicKeys(bundle.agent_pub_key, p.agent_pub_key) ||
         bundle.verifier_id !== p.verifier_id || certs.length === 0 || certs[0]!.subject_id !== p.agent_id) {
       throw v2Errorf("transaction_party_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof bundle identity does not match its signed party`);
@@ -282,7 +288,16 @@ export async function signTransactionReceiptPartyV2(r: TransactionReceiptV2, par
   const party = r.parties.find((p) => p.party_id === partyID);
   if (!party) throw new Error(`party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
   await validateHybridKeyPairV2(key);
-  if (!equalHybridPublicKeys(key.publicKey, party.agent_pub_key)) {
+  return signTransactionReceiptPartyV2WithSigner(r, partyID, await newLocalSignerV2(key, { deterministic: opts.deterministic }));
+}
+
+/** signTransactionReceiptPartyV2 through a signer whose key must equal the party agent key. */
+export async function signTransactionReceiptPartyV2WithSigner(r: TransactionReceiptV2, partyID: string, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<TransactionReceiptSignatureV2> {
+  if (!r) throw new Error("transaction receipt is required");
+  const party = r.parties.find((p) => p.party_id === partyID);
+  if (!party) throw new Error(`party ${JSON.stringify(partyID)} is not listed in the transaction receipt`);
+  const partyPublic = await signerPublicKeyV2(signer);
+  if (!equalHybridPublicKeys(partyPublic, party.agent_pub_key)) {
     throw new Error(`signing key does not match party ${JSON.stringify(partyID)} agent public key`);
   }
   try {
@@ -290,7 +305,7 @@ export async function signTransactionReceiptPartyV2(r: TransactionReceiptV2, par
   } catch (err) {
     throw wrapError("cannot sign invalid transaction receipt", err);
   }
-  const signature = await signV2Statement(V2_OBJECT_TYPE.transactionPartyStatement, transactionReceiptV2SignBytes(r), key, opts);
+  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.transactionPartyStatement, transactionReceiptV2SignBytes(r), signer, partyPublic, opts);
   return { party_id: partyID, signature };
 }
 
@@ -324,9 +339,7 @@ export async function encodeTransactionReceiptV2(r: TransactionReceiptV2): Promi
  */
 export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<TransactionReceiptV2> {
   try {
-    if (data.length > MAX_TRANSACTION_RECEIPT_BYTES) {
-      throw new Error(`wire v2: transaction receipt exceeds MAX_TRANSACTION_RECEIPT_BYTES (${MAX_TRANSACTION_RECEIPT_BYTES})`);
-    }
+    checkV2WireSize(data, "transaction receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", MAX_TRANSACTION_RECEIPT_BYTES_V2);
     const root = checkWireJSONV2(data, ["terms_canonical_json"]);
     if (root.k !== "obj") throw new Error("wire v2: transaction receipt must be a JSON object");
     requireV2Fields(root, RECEIPT_FIELDS);

@@ -20,6 +20,7 @@ This specification has two normative layers and one product profile.
 
 - **Part A, Protocol (§§2 to 6).** Wire encoding, canonical JSON, signing, digests, object verification, the verifier algorithm and its ordering, the status reducer and the `SecurityJournalV2` logical snapshot schema, key rotation, witness and receipt chains, and the verification rules a committed outcome must pass before release. Every SDK implements Part A identically and runs every shared Part A vector.
 - **Part B, Verifier deployment profile (§7.1 to §7.11).** The storage and publication contracts a live verifier depends on: the claim store and its authoritative clock, stream sequence, evaluator capability and recovery, `max_rate` reservation, receipt outbox and publication, the independent checkpoint interface and its acknowledgement, release preconditions, security-journal anchoring, and cancellation and recovery. Every SDK defines these interfaces with identical semantics, ships an in-memory reference implementation for tests only, and runs the shared Part B scenario vectors against it. A production deployment supplies durable implementations that satisfy the same contracts.
+- **Part B profiles (§7.13 to §7.15).** Named deployment profiles a deployment may claim: the single-device offline profile, the dual-root composition profile, and the Middleware Custody Profile. Each builds on Part A and Part B without changing them and has shared vectors (§8.6).
 - **Managed Verify profile (§7.12).** Requirements that apply only to the managed Verify service and its receivers: the security-state journal per replay domain, checkpoint failure domains and group acknowledgement, the receiver action-idempotency ledger, and Verify API representations. These are not SDK surface. A requirement stated for "managed Verify" anywhere in this document belongs to this profile.
 
 Annex A (`SPEC-v2-ANNEX-A.md`) is part of this specification. It holds exact copies of the v1 clauses that v2 incorporates: the restricted value model, the canonical JSON rules, and the scope vocabulary. Those copies, not later edits to `SPEC.md`, are normative for v2.
@@ -779,6 +780,63 @@ For managed Verify, checkpoint visibility takes precedence over replay classific
 
 A Verify preflight replay-epoch mismatch produces no Protocol receipt or callbacks and maps to HTTP 409 `stale_replay_epoch`, with no decision result.
 
+### 7.13 Single-device offline profile
+
+This profile lets one device, such as an edge sentinel or a vessel without connectivity, host the claim store, receipt log, and independent checkpoint of a live verifier and release decisions while disconnected. It changes no Part A rule and no Part B contract. A deployment claims it as "conforms to the Ratify Protocol v2 single-device offline profile".
+
+**Release invariant.** The invariant of §6.9 and §7.9 is unchanged: persist the claim and its terminal result with the sealed receipt outbox body, append the signed receipt, obtain the independent checkpoint acknowledgement, and only then expose a decision, return a response that acknowledges a claim or decision, invoke an external callback, or start a handler. Being offline never permits releasing first and acknowledging later.
+
+**Independent failure domain on one device.** A component on the same device qualifies as the independent checkpoint of §7.8 only if the primary (the verifier process, its storage, its operating system, and its update path) cannot roll back, rewrite, or forge the component's acknowledged sequence and complete-state digest, even after compromising its own process or storage. The component MUST:
+
+1. hold its own signing or MAC key, generated inside it or provisioned through an independent channel, which the primary cannot read, export, or use except by requesting an acknowledgement;
+2. persist, for every acknowledged sequence, the log ID, the sequence, the receipt entry hash, and the primary's complete-state digest after that entry, and accept only sequence `head + 1` whose previous entry hash and previous complete-state digest equal its head;
+3. advance monotonically: no command, firmware update, or restore lowers its head or replaces a record, and an attempt to restore it to an earlier state is detectable;
+4. return an authenticated acknowledgement only after the record is durable, return the original acknowledgement, including its timestamp, for an identical retry, and freeze on a different entry hash or state digest at an acknowledged sequence;
+5. never overwrite or wrap its storage; when full, it refuses further acknowledgements;
+6. timestamp acknowledgements from the device's configured security-clock source (§7.2) and refuse to acknowledge when that source reports a regression or is unavailable.
+
+An independently programmed secure element, or a TPM-backed component with authenticated non-volatile storage, can qualify only if it authenticates the sequence *and* the complete-state digest as above. A separate append-only medium can qualify if it has independent write control and rollback protection. The following never qualify: a second process, container, partition, or virtual machine on the same host; a backup, snapshot, or ordinary replica; a monotonic counter, including a TPM counter, that records no digest; and a log file, database transaction, or checksum chain on the primary's own storage.
+
+**Complete-state digest.** The digest acknowledged with sequence `n` covers every durable security record of the primary immediately after entry `n` is appended: claims and their sealed values, stream state, the replay epoch, terminal results, sealed receipt outbox bodies, and the receipt-log head, in a versioned canonical projection with the properties of the managed Verify `complete_state_projection` (§7.12). The anchored head of the `SecurityJournalV2` store (§7.10) MUST be anchored in the same component or in another component that meets this definition.
+
+**Startup and recovery.** Before serving any request the primary recomputes its complete-state digest at the component's head. If they are equal, it resumes and submits any later appended entries in log order. If the primary holds fewer entries than the component acknowledged (a rollback or lost state), if the digests differ, or if the component is frozen, the device stays `recovering`: it claims no challenge, releases no decision, and starts no handler until its separately pinned recovery authority advances the replay epoch and starts a new caller-authenticated receipt log under the recovery rules of §7.7. An unknown outcome of a submission, for example after power loss, is resolved by resubmitting the identical tuple; an acknowledgement that the component committed before power failed remains valid with its original timestamp.
+
+**Status before disconnection.** The device stages current signed status evidence (§5.4) into its anchored `SecurityJournalV2` before it disconnects. While offline the status provider supplies nothing new, and evaluation uses only the staged, anchored state; an unsigned or cached status result is never accepted (§6.5).
+
+**Deadlines.** The device stops allowing at the first applicable deadline: challenge expiry or maximum age, certificate `expires_at`, the status `next_update` or maximum status age, the allow horizon, exhausted component storage, or a clock regression or failure. Each produces an existing result: `challenge_not_fresh` before claim; `indeterminate / status_stale` or `status_unavailable`; `claim_store_unavailable` or `clock_regressed`; and release `pending`, `withheld / challenge_expired`, `withheld / allow_horizon_passed`, or `withheld / clock_regressed`. The profile defines no new class or reason. A device clock without network time follows the drift rule of §9.7.
+
+**Outbox upload.** After reconnection the device uploads signed receipts from its component-acknowledged prefix, in log order, once each. Upload is an outbox operation, not a deferred release: it never releases a decision, never changes a release record, and never makes a `pending` or `withheld` result actionable. A decision that was not released before its deadlines stays unreleased; its receipt is uploaded as historical evidence. Entries beyond the acknowledged prefix are not uploaded.
+
+**Residual risk.** A compromise of the shared host defeats both the primary and the component unless the component's key and its update controls are genuinely independent of the host. The profile does not defend against an attacker who controls the component's firmware update authority.
+
+The Go reference models the component as `v2reference.DeviceComponentTestOnly` with `DeviceCheckpointTestOnly` and `DeviceUplinkTestOnly`, for tests only. The shared scripts are the `single_device_offline` entries of `profile_scenarios` in `testvectors/v2/lifecycle-scenarios.json`: power loss before and after acknowledgement, primary rollback, digest mismatch, full component storage, staged status going stale, clock regression, and offline recovery with upload.
+
+### 7.14 Dual-root composition profile
+
+Some actions require approval from two independent roots, for example two organizations, or an organization and a separately pinned human principal. A single verification has one trusted root (§6.1), and a second bundle presented on the same challenge is `claim_replay` (§7.3). This profile composes two independent verifications instead. A deployment claims it as "conforms to the Ratify Protocol v2 dual-root composition profile".
+
+1. **Approval set.** Before issuing any challenge, the application durably records an authenticated approval set: a unique `approval_set_id`; the complete agent public key and its key ID; the required scope; the action's `request_hash` (§2.4); the verifier ID; and two distinct pinned roots A and B, each identified by its complete public key. A set that names the same root key twice is invalid.
+2. **Challenges.** The application issues two distinct expected challenges, one per root. Both bind the same expected agent key and verifier ID and the same expected `session_context`, computed by §2.4 with `invocation_id = approval_set_id` and the action's `request_hash`. Each challenge is persisted before it is exposed (§7.3).
+3. **Verification.** Verification A uses trust configuration that pins only root A; verification B pins only root B. Each verification independently reaches a *released* `allow` through `ReleaseV2Decision` (§6.9) and has its own Protocol receipt. Per-verification error classes and reasons are unchanged.
+4. **Ledger.** An application ledger records a released decision for a root's slot only when the decision is a released `allow`; the receipt's `bundle_hash` equals `BundleHashV2` of the exact bundle that was verified; that bundle's `session_context`, agent, and the receipt's required scope equal the set's; and the chain's terminal root key equals the slot's pinned root. The ledger marks the action executable only when both slots hold matching released decisions. Execution is one atomic ledger transition that checks, at the receiver's authoritative time, that both released decisions still pass their action check (§6.9: before each challenge expiry and allow horizon), and marks the set executed exactly once.
+5. **No double counting.** One root never counts twice: not through a second chain or intermediate that reaches the same root key, and not through the same released decision offered for both slots. A committed but unreleased outcome never fills a slot.
+
+The composite result is application state. It is not a Protocol receipt, MUST NOT be presented as one, and does not change either verification's receipt. Because the approval set and the action are inside each session context, a released approval from one root cannot authorize a different action on its own or count toward another approval set. The profile adds no wire field, error class, or reason.
+
+The Go reference ledger is `v2reference.ApprovalLedgerTestOnly`, for tests only. The shared scripts are the `dual_root` entries of `profile_scenarios` in `testvectors/v2/lifecycle-scenarios.json`: both roots released, either root missing, a duplicate root, a replayed challenge, a mismatched action, a committed but unreleased approval, concurrent completion, and expiry before execution.
+
+### 7.15 Middleware Custody Profile
+
+Some deployments hold agent keys in a platform middleware layer, such as an agent-hosting platform, relay, or gateway, that signs presentations for the agents it runs. The party that signs a presentation is then also the party that routes it, so a faulty or malicious middleware can attach a correctly signed proof to the wrong tenant, session, invocation, action, or receiver. A deployment that signs presentations under middleware custody MUST conform to this profile and claims it as "conforms to the Ratify Protocol v2 Middleware Custody Profile".
+
+- **Every presentation is session-bound.** `session_context` is non-null on every proof bundle the middleware signs, and on every presentation format a later version defines. Verifiers in the deployment configure a context policy that requires a bound context with all six fields of §2.4; the managed Verify policy `ratify.verify.session-context/v1` (§6.12) is one such policy. An unbound presentation from a middleware-custody principal is rejected.
+- **Derivation.** `request_hash` is computed from the exact operation context (§2.4) of the action being authorized: required scope, operation, resource ID, requested path, and payload digest where one exists. Binding the session without the operation would let the middleware attach a valid proof to the wrong action inside the right session. `session_context` is then computed from the authenticated `verifier_id` (from caller-authenticated verifier-key configuration, never from the API caller), the workspace or tenant ID, the agent ID, the session ID, the invocation ID, and that `request_hash`.
+- **Expected value.** The challenge issuer computes the expected `session_context` from authenticated request state, not from values the middleware supplies, and stores it with the challenge (§7.3). Preflight compares the proof's value with it before claim. A mismatch is `session_context_mismatch`: nothing is consumed, no provider runs, and no receipt is created (§6.2, §6.12).
+- **Receipts without preimages.** The receipt binds the presented context through `bundle_hash`, which covers the bundle's `session_context`, and through `context_policy_digest`. Receipts and audit records MUST NOT carry the preimages (tenant, session, and invocation identifiers, paths, or payload digests) unless a separate authorization permits it.
+- **Explicit non-claim.** The profile limits rebinding of a signed proof to another tenant, session, invocation, action, or receiver. It does **not** protect against custody compromise: middleware that holds an agent key can sign a new proof for a malicious action, and a verifier accepts that proof if the authenticated request state matches it. The mitigations are custody controls (§9.3), short delegation lifetimes, revocation, and application policy for sensitive scopes. A deployment MUST NOT describe this profile as protection against compromise of the custodian.
+
+Deployments in which the agent runtime holds its own key MAY use the same constructions and are not bound by these requirements; a verifier cannot observe key custody, so the profile binds the deployment, not the wire format. The shared vectors are the `custody_profile_swapped_*` cases in `testvectors/v2/verifier-ordering.json`: a correctly signed proof whose session context binds a different tenant, session, invocation, receiver, agent, scope, operation, resource, path, or payload fails before claim with no callback.
+
 # Conformance
 
 ## 8. Conformance and release gates
@@ -817,3 +875,113 @@ Failure precedence is deterministic. Pre-consumption rejection follows the pre-c
 ### 8.5 Prerelease scope
 
 A `2.0.0-alpha.N` prerelease is not a claim of v2 conformance as defined above. Its release notes and the compatibility ledger (`docs/V2_REFERENCE_COMPATIBILITY.md`) MUST state, for each SDK, which `testvectors/v2` files its test suite runs and whether that includes the stateful verifier vectors, and every SDK's suite MUST pass on exactly the files stated. An SDK MUST NOT be described as a v2 verifier for a vector class it does not run. At `2.0.0-alpha.1`, Go, TypeScript, Python, and Rust run every file in `testvectors/v2`, including the verifier ordering, status, log, and rotation sequences, through a full `VerifyProofBundleV2` implementation. The C ABI runs `keys.json`, `objects.json`, `object-negatives.json`, `key-rotation-signature.json`, and the delegation-signature, operation/session-context, and challenge-claim vectors; it verifies key IDs, strict decoding, and object signatures and does not provide a stateful verifier. The remaining conformance requirements in this section are open. The beta requires the C ABI to run every file, including the stateful vectors (§8.1).
+
+### 8.6 Profile claims
+
+A deployment may claim a Part B profile (§7.13 to §7.15) only when it meets every requirement of that profile; an SDK may claim to support one only when its tests run the profile's shared vectors. The Middleware Custody Profile vectors are ordinary `verifier-ordering.json` cases and are required of every SDK. The `profile_scenarios` member of `lifecycle-scenarios.json` is required of an SDK that ships reference components for the single-device offline or dual-root profile. The reference components are test-only models; a production claim needs a component that meets the definition of §7.13 or a ledger that meets §7.14 and passes the same scripts.
+
+# Security considerations
+
+## 9. Security considerations
+
+This section is guidance for implementers and deployments. It restates the v1 threat model and deployment guidance for v2. Requirements stated elsewhere in this specification remain normative; statements here that use MUST describe deployment duties that this specification relies on.
+
+### 9.1 Threat model
+
+| # | Adversary | Attack | v2 defense | Residual risk |
+|---|-----------|--------|------------|---------------|
+| T1 | Network eavesdropper | Capture a proof bundle and replay it | Every live challenge is issued and stored by the verifier (§7.3) and claimed atomically once per replay domain; a different proof for a claimed challenge is `claim_replay`. Session binding (§2.4) prevents use at another verifier, and stream sequence (§7.4) prevents reuse within a stream. | Metadata is visible; use TLS. Archival verification (§6.10) has no freshness and never authorizes a live action. |
+| T2 | Quantum adversary | Break Ed25519 on archived signatures | Fixed hybrid suite: Ed25519 and ML-DSA-65 (FIPS 204) must both verify (§2.2). | A simultaneous break of both algorithms breaks the protocol. |
+| T3 | Scope escalation by an intermediate | Issue a wider sub-delegation | Effective scope is the intersection of every certificate's expanded scope (Annex A §A.4). Every non-root issuer needs `identity:delegate` from its parent (§5.1). Sensitive scopes never ride wildcards. | None. |
+| T4 | Classical forger | Forge a signature | Both hybrid components verify with canonical encodings (§2.2). | None. |
+| T5 | Tampering | Change a signed field | The signing transcript covers every signed field with a typed code (§3.1). | None. |
+| T6 | Stolen agent key | Present proofs as the agent | Signed status under a separate status key (§5.4, §6.5), mandatory status freshness for `allow`, an allow horizon bounded by status freshness (§6.8), and short delegation lifetimes. | Exposure lasts from compromise until the revocation is published, delivered, and applied to the anchored journal (§9.6). |
+| T7 | Stolen root or issuer key | Issue rogue delegations or a rotation to a key it controls | Rotation proves continuity only (§5.5); a fork freezes the authority; recovery increments `recovery_epoch` under the caller's offline root control plane (§9.4). | A compromised current key can rotate to an attacker key; detection depends on witness anchoring and out-of-band recovery. |
+| T8 | Malicious verifier | Forward another verifier's challenge to the agent | `verifier_id` is the first field of the session context and must equal the authenticated verifier configuration and the expected challenge (§2.4); expected-agent binding (§6.12). | Forwarding an intact challenge to its bound agent remains possible (§9.2). |
+| T9 | Custodial or middleware operator | Sign with keys it holds, or rebind a valid proof | Custody controls (§9.3); the Middleware Custody Profile (§7.15) prevents rebinding a signed proof to another tenant, action, or receiver. | The custodian can sign new proofs; the profile does not prevent that. |
+| T10 | Side-channel observer | Extract a signing key | Hedged ML-DSA signing by default; typed signers and external signers that sign only registered codes (§3.2); no SDK signs caller-selected bytes (§1.3). | An external-μ provider is a generic signing oracle (§3.1); restrict who can reach it and enforce types in the trusted adapter. |
+| T11 | Clock manipulation | Accept expired evidence | After claim, every time check uses the claim store's authoritative clock; deadlines are exclusive and skew never extends one; a regression fails closed (§2.5, §7.2). | A compromised authoritative clock defeats temporal checks (§9.7). |
+| T12 | Key substitution | Present a chain rooted in an attacker key labeled as a known principal | Trust comes only from caller-authenticated configuration (§6.1); IDs are lookup indexes and the complete key must match; ambiguous candidates fail closed (§2.3, §6.1). | Verification is only as strong as the trust bootstrap (§9.5). |
+| T13 | Rollback of the claim store or journal | Restore old state to replay a consumed challenge or forget a revocation | An independent checkpoint acknowledges every release (§7.8, §7.9); the journal head is independently anchored (§7.10); lost state requires a replay-epoch increase and a new receipt log (§7.7, §7.12, §7.13). | Undetected if the checkpoint shares the primary's failure domain. |
+| T14 | Checkpoint colluding with the verifier | Acknowledge forked or rewritten logs | The checkpoint must be in an independent failure domain (§7.8, §7.13); receipts are hash-chained and signed, so auditors who compare logs detect a fork. | If both are compromised together, the release invariant gives no protection until an audit. |
+| T15 | Ambiguous trust records | Supply two records for one ID so a resolver picks the wrong one | Resolution fails closed on zero or multiple matches (§2.3, §6.1). | None at the protocol layer. |
+| T16 | Status-key compromise or role confusion | Publish a "not revoked" list for an issuer | Status keys are separate from issuer and root keys and bound per epoch in the anchored journal; a list signed under the wrong role is rejected (§6.5). | A compromised status key can hide revocations for its issuer until its epoch is replaced; keep list lifetimes short. |
+
+**Out of scope (not defended by the protocol):**
+
+| Adversary | Why out of scope | Mitigation |
+|-----------|-----------------|------------|
+| Private key theft at endpoints | Key storage is a deployment concern | Hardware-backed keys, self-custody, short lifetimes |
+| Social engineering of principals | Human factors | Organizational procedures, multi-factor approval of delegation |
+| Compromise of an agent platform | The platform holds agent keys | Short delegation lifetimes, revocation, scope constraints, the Middleware Custody Profile against rebinding |
+| Metadata leaks | Proofs prove authority, not confidentiality | TLS on transport |
+| Side effects at the receiver | A Protocol receipt does not prove or deduplicate an effect | A receiver action-idempotency ledger (§7.12) |
+
+### 9.2 Challenge forwarding
+
+A malicious verifier V_mal can forward a challenge issued by V_leg to an agent, so the agent signs V_leg's challenge believing it authenticates to V_mal. In v2 the defense is the session binding: the session context starts with `verifier_id`, and V_leg recomputes it from its own authenticated verifier configuration and compares it with the authenticated expected challenge before claim (§2.4). An agent that computes the session context for V_mal produces a context V_leg rejects. Expected-agent binding (§6.12) also prevents any other key from consuming a challenge issued for a particular agent. The residual case is forwarding an intact challenge to its bound agent when no expected receiver or human approval is configured; the protocol does not claim to prevent an agent from signing for an unintended but validly challenged receiver.
+
+### 9.3 Key custody
+
+The protocol is independent of where keys are held (§3.2). Four deployment modes are common:
+
+| Mode | Where the key lives | Trust assumption |
+|------|--------------------|------------------|
+| Self-custody | The principal's device, secure enclave, or hardware token | Only the principal can sign |
+| Custodial | Server-side, envelope-encrypted | The operator's infrastructure is not compromised and the operator does not sign without authorization |
+| Delegated custody | An enterprise identity provider holds the organization root | The identity provider is the trust anchor for the identities it manages |
+| Middleware custody | An agent platform, relay, or gateway signs presentations for agents it runs | As custodial, plus the Middleware Custody Profile (§7.15) for every presentation |
+
+Custodial and middleware deployments MUST use envelope encryption (a per-key data key wrapped by a hardware-backed key-encryption key), MUST NOT persist plaintext private keys to disk, logs, or responses, MUST zero key material after each signing operation where the runtime allows, and MUST NOT tell users that keys never leave their device when the operator holds them. Signing goes through typed signers or a typed external signer (§3.2); an external signer that accepts arbitrary messages is not a typed signer.
+
+Moving from custodial to self-custody uses a v2 key rotation statement (§5.5) from the custodial key to a key generated on the principal's device. The rotation proves continuity within v2 only; a v1 key never authorizes a v2 key (§1.1). Agent keys SHOULD be held in process memory where the runtime supports it and rotated on restart.
+
+### 9.4 Root compromise and recovery
+
+A rotation statement proves continuity, not legitimacy (§5.5): a stolen current key can sign a valid rotation to a key the attacker controls, and the protocol cannot distinguish it from a legitimate rotation. Two valid statements at one sequence are a fork, and a fork freezes the authority until recovery.
+
+Recovery is authorized by the caller's independently authenticated offline root control plane, not by the compromised key. Deployments SHOULD hold that rotation and recovery authority separately from the operational root key, for example offline and under multi-party approval. A recovery increments `recovery_epoch`, anchors a new genesis key, and preserves the complete used-key history; resetting a sequence without a new epoch is prohibited. Accepting a rotation or recovery does not revoke existing delegations: publish signed status revoking the affected certificates under the issuer's status key, and update verifier trust configuration explicitly. Short delegation lifetimes bound the window, and witness anchoring (§5.6) lets auditors detect conflicting rotations after the fact.
+
+### 9.5 Trust anchors and bootstrap
+
+Every guarantee depends on the verifier holding the correct complete public key for the root of the chain (T12). A v2 verifier takes roots only from caller-authenticated trust configuration (§6.1) and never from a key that arrives with the proof. The v1 bootstrap modes map onto that configuration:
+
+| Mode | How the key enters trust configuration | Trust assumption |
+|------|----------------------------------------|------------------|
+| Pinned keys | Configured out of band at onboarding | The onboarding channel |
+| Enterprise identity-provider root | One pinned organization root key; members chain from it | The identity provider |
+| Registry lookup | Deployment code resolves a registry record to a complete key and `authority_id` before verification; zero or several candidates fail closed | The registry operator |
+| Self-published with continuity | The first key is pinned once; later keys are accepted only by replaying rotation statements (§5.5) from that pinned genesis | The publication channel, once |
+| Witness-backed | Key publications and rotations are checked against witness logs (§5.6) for conflicts | At least one honest witness |
+
+These modes compose. A discovery URL or a TLS connection alone is never a trust anchor. v2.0 defines no registry or HTTP discovery binding; one is planned for 2.1. Deployments SHOULD document which modes they use.
+
+### 9.6 Revocation freshness
+
+An `allow` requires current signed status for every certificate (§6.4), and the configured bounds `max_status_age_seconds` and `max_list_lifetime_seconds` (§2.5) decide how old that status may be. Size them to the consequence of the action: seconds, through pushes or a frequently refreshed list, for payments, physical actuation, and `identity:delegate`; minutes for ordinary interactive use; hours only where the action is low-consequence or short delegation lifetimes bound the exposure. The exposure to a revocation is the time to publish it, deliver it, and apply it to the anchored journal; a valid but older snapshot cannot reveal a revocation that has not been delivered. A gap in pushes yields `indeterminate`, never `not_revoked` (§5.4). Each deployment SHOULD state its maximum exposure.
+
+### 9.7 Clock discipline
+
+Post-claim time checks use the claim store's authoritative clock, and the checkpoint timestamps from the same source (§7.2). Networked verifiers SHOULD synchronize that source with authenticated time (NTS or equivalent) and keep total error well under the challenge maximum age; ±30 seconds is a reasonable budget. Offline and edge devices SHOULD use a hardware real-time clock with a known drift bound and subtract the worst-case accumulated drift from `max_challenge_age_seconds` and `future_skew_seconds`: a device that may be 60 seconds wrong should accept challenges no older than 240 seconds. Deadlines are exclusive and skew never extends one (§2.5); issuers that need slack build it into `issued_at` rather than relying on verifier tolerance. A clock that moves backward fails closed (§7.2).
+
+### 9.8 What constraints attest
+
+The signed certificate proves what the principal authorized; evaluation proves the decision was consistent with the request context the verifier supplied. Nothing in the protocol proves that context was true: requested amounts, receiver identities, and resource paths are asserted by the caller and its adapters. Constraints protect the principal against agent overreach at an honest verifier; they do not protect against a dishonest verifier, which can supply satisfying context. Where context must be proven, its source needs its own attestation (signed sensor data, platform attestation, or a co-signing service), outside this protocol.
+
+A `resource_path` constraint (§5.2) is lexical authorization over a logical resource ID and path, compared byte for byte with no Unicode normalization or percent-decoding. It is not filesystem confinement. An adapter that maps logical paths onto a real filesystem MUST enforce confinement itself, under a stated attacker model: a refusal reached before the write commits leaves no externally persistent effect, and execution causes no effect outside the confinement boundary. Resolve descriptor-relative from a trusted root, refuse symlinked components, and clean up only through held descriptors. Apply every decoding and normalization step, including any Unicode normalization the deployment uses, identically before issuance and before constructing `requested_path`, and never transform the verified path afterwards. Atomicity after an authorized write begins is a separate contract: either replace atomically or state that partial writes are possible. Report the cryptographic guarantee and the confinement guarantee separately.
+
+### 9.9 Physical-world deployments
+
+The physical, robot, drone, vehicle, infrastructure, and actuation scopes are canonical in v2 (Annex A §A.4), so embodied agents can be granted them. v2.0 registers no geofence, position, altitude, speed, or activation constraint: the v1 `geo_*` and `max_speed_mps` types are not defined in v2, and an unregistered constraint type fails closed as `constraint_unknown` (§5.2). A v2.0 delegation therefore cannot express "only inside this zone" or "no faster than this speed". Such constraints are deferred to 2.1, where they need integer coordinates and units, antimeridian and pole handling, conservative boundary rules, and measurement provenance. Until then, a deployment that needs them keeps the v1 protocol for those claims or enforces the bounds in application policy outside the proof, and MUST NOT describe a v2 proof as enforcing a geofence. An asserted GPS coordinate is not attestation.
+
+### 9.10 Public response indistinguishability
+
+Public verification and challenge endpoints MUST NOT let a caller distinguish an unknown, expired, already used, or wrongly bound challenge, or an issuance failure from a claim failure: they return one generic response, and the specific class is recorded only internally. Otherwise the endpoint becomes an oracle for challenge state. An exact retry of a claimed proof receives only what §7.3 and §7.9 allow. The protocol does not address timing differences; implementations SHOULD avoid gross timing differences between these cases.
+
+### 9.11 `human_id` is not proof of a person
+
+v2 has no enrollment object. `human_id` in a receipt is authenticated association metadata supplied by the deployment; it is not a cryptographic proof that a person exists, is present, or approved anything. Security semantics are carried by complete keys, `authority_id`, and caller-authenticated trust configuration. A deployment MUST NOT present `human_id` as proof of a person's identity or approval.
+
+### 9.12 Self-issued challenges and application policy
+
+A challenge the presenter chooses, or one with no authenticated `ExpectedChallenge`, is not live v2 verification: such a proof can only be checked as archival (§6.10), is labeled `freshness_unverified`, and never authorizes a live action. Application policy runs after `ReleaseV2Decision` and may only narrow the result: it cannot turn a committed outcome into a released one, rewrite a Protocol receipt, or label a cached product decision a Protocol `allow`. A cached policy result is an application cache and must bind at least the policy version, `request_hash`, agent, scope, and expiry.

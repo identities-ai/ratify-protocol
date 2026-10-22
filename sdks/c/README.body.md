@@ -394,8 +394,10 @@ No function signs caller-selected bytes, codes, contexts, or prehash modes.
 Each signing function takes a typed object (its wire JSON; absent signature
 members are allowed) and exactly one signer: a library key pair or a
 `RatifyV2ExternalSigner` (an HSM or KMS behind two callbacks, in direct or
-external-μ mode). Issuer duties are checked before any signer callback runs,
-and every returned signature is verified before an object is produced.
+external-μ mode). A key-rotation statement takes two signers of the same
+kind: two key pairs or two external signers. Issuer duties are checked before
+any signer callback runs, and every returned signature is verified before an
+object is produced. `ratify_v2_keypair_free` wipes the private key.
 
 **Result codes.** Every fallible function returns an `int32_t`: `0` on
 success; a positive code naming exactly one of the 49 SPEC-v2 §2.7 classes,
@@ -419,7 +421,8 @@ the caller and are released only through the matching function:
 `ratify_v2_buffer_free` for a `RatifyV2Buffer`, `ratify_v2_string_free` for a
 `char *`, and `ratify_v2_<handle>_free` for a handle. The library never frees
 caller or callback memory. Structured inputs (requests, heads, policies) are
-JSON with the schemas documented in `ratify.h`; unknown members are rejected.
+JSON with the schemas documented in `ratify.h`; unknown members and repeated
+member names (at any nesting level) are rejected.
 
 **Callbacks.** Every provider and store is a struct of function pointers with
 an opaque `user` pointer: claim store and authoritative clock, trust provider
@@ -459,9 +462,12 @@ any failure returns 0.
 
 **Thread safety.** Functions that take no handle are safe to call
 concurrently. A handle is used by one thread at a time; serialize concurrent
-use of one handle yourself. Store callbacks provide the atomicity Part B
-requires (for example a claim store must make the claim atomic across
-threads and processes).
+use of one handle yourself. The status reducer handle
+(`ratify_v2_status_state_*`) also serializes its own updates: each apply or
+epoch transition reads, applies, and replaces the state under one lock, so
+concurrent updates never overwrite each other. Store callbacks provide the
+atomicity Part B requires (for example a claim store must make the claim
+atomic across threads and processes).
 
 **Panics.** Every export catches a panic and returns the internal-failure
 value (see below). A handle in use when a panic is caught is poisoned: every

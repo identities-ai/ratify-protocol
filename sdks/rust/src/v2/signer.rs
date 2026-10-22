@@ -5,8 +5,16 @@
 //! providers) `mu`; a provider never receives an object, a type code, or a
 //! caller-selected message. Every returned signature is verified under the
 //! bound key before use. No function in this crate signs caller-selected
-//! bytes, codes, or contexts.
+//! bytes, codes, or contexts: an in-process private key signs only through
+//! the typed signing functions, which take the key directly, and the local
+//! signer behind them is not exported.
+//!
+//! ```compile_fail
+//! // The in-process signer is crate-private; only typed signing is public.
+//! use ratify_protocol::v2::LocalSignerV2;
+//! ```
 
+use std::borrow::Cow;
 use std::fmt;
 
 use sha3::digest::{ExtendableOutput, Update, XofReader};
@@ -67,28 +75,44 @@ pub trait SignerV2: Send + Sync {
     fn sign_v2(&self, ctx: &V2Context, request: &SignRequestV2) -> V2SignResult<HybridSignature>;
 }
 
-/// A direct-mode [`SignerV2`] backed by an in-process hybrid private key.
-/// ML-DSA-65 signatures are hedged. The Ed25519 component may be the 32-byte
-/// seed or the 64-byte seed-and-public form whose public half matches.
-#[derive(Clone)]
-pub struct LocalSignerV2 {
-    private_key: HybridPrivateKey,
+/// A direct-mode signer backed by an in-process hybrid private key, used only
+/// inside the crate by the typed signing functions. It is deliberately not
+/// exported: its [`SignerV2::sign_v2`] would otherwise sign any 77-byte
+/// message a caller assembled. ML-DSA-65 signatures are hedged. The Ed25519
+/// component may be the 32-byte seed or the 64-byte seed-and-public form
+/// whose public half matches.
+pub(crate) struct LocalSignerV2<'a> {
+    // Borrowed for one typed signing call; owned (and wiped on drop) only
+    // when a long-lived component such as the status publisher holds it.
+    private_key: Cow<'a, HybridPrivateKey>,
     public_key: HybridPublicKey,
 }
 
-impl LocalSignerV2 {
+impl<'a> LocalSignerV2<'a> {
     /// Validate the private key and derive its complete public key.
-    pub fn new(private_key: &HybridPrivateKey) -> V2SignResult<Self> {
-        let public_key = super::crypto::public_key_v2(private_key)
+    pub(crate) fn new(private_key: &'a HybridPrivateKey) -> V2SignResult<Self> {
+        Self::from_cow(Cow::Borrowed(private_key))
+    }
+
+    fn from_cow(private_key: Cow<'a, HybridPrivateKey>) -> V2SignResult<Self> {
+        let public_key = super::crypto::public_key_v2(&private_key)
             .map_err(|e| V2SignError::InvalidSignerKey(e.message))?;
         Ok(LocalSignerV2 {
-            private_key: private_key.clone(),
+            private_key,
             public_key,
         })
     }
 }
 
-impl fmt::Debug for LocalSignerV2 {
+impl LocalSignerV2<'static> {
+    /// A signer that owns its copy of the key, for components that outlive
+    /// one signing call.
+    pub(crate) fn owned(private_key: &HybridPrivateKey) -> V2SignResult<Self> {
+        Self::from_cow(Cow::Owned(private_key.clone()))
+    }
+}
+
+impl fmt::Debug for LocalSignerV2<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LocalSignerV2")
             .field("key_id", &key_id_v2(&self.public_key).ok())
@@ -96,7 +120,7 @@ impl fmt::Debug for LocalSignerV2 {
     }
 }
 
-impl SignerV2 for LocalSignerV2 {
+impl SignerV2 for LocalSignerV2<'_> {
     fn public_key_v2(&self) -> HybridPublicKey {
         self.public_key.clone()
     }
@@ -199,27 +223,6 @@ pub(crate) fn sign_v2_statement_with_signer(
     verify_v2_statement(object_type, signable, &signature, public_key)
         .map_err(V2SignError::SignatureRejected)?;
     Ok(signature)
-}
-
-/// Sign under a local private key through the same path as an external
-/// signer, including verification of the produced signature.
-// No typed signer currently routes through it; kept as the local-key
-// counterpart of sign_v2_statement_with_signer.
-#[allow(dead_code)]
-pub(crate) fn sign_v2_statement_local(
-    object_type: V2ObjectType,
-    signable: &[u8],
-    private_key: &HybridPrivateKey,
-) -> V2SignResult<HybridSignature> {
-    let signer = LocalSignerV2::new(private_key)?;
-    let public_key = signer.public_key.clone();
-    sign_v2_statement_with_signer(
-        &V2Context::background(),
-        object_type,
-        signable,
-        &signer,
-        &public_key,
-    )
 }
 
 #[cfg(test)]
@@ -327,16 +330,29 @@ mod tests {
     }
 
     #[test]
+    fn private_key_debug_prints_only_the_public_half() {
+        let (private_key, public_key) = keys();
+        let shown = format!("{private_key:?} {:?}", LocalSignerV2::new(&private_key).expect("signer"));
+        assert!(shown.contains(&hex::encode(&public_key.ed25519)), "{shown}");
+        // Neither secret component appears in any common encoding.
+        for secret in [private_key.ed25519(), &private_key.ml_dsa_65()[..32]] {
+            assert!(!shown.contains(&hex::encode(secret)), "{shown}");
+            assert!(!shown.contains(&format!("{:?}", &secret[..8]).trim_end_matches(']').to_string()), "{shown}");
+        }
+    }
+
+    #[test]
     fn local_signer_accepts_seed_and_seed_public_forms() {
         let (private_key, public_key) = keys();
-        let mut long = private_key.clone();
-        long.ed25519.extend_from_slice(&public_key.ed25519);
+        let ml = private_key.ml_dsa_65().to_vec();
+        let mut ed = private_key.ed25519().to_vec();
+        ed.extend_from_slice(&public_key.ed25519);
+        let long = HybridPrivateKey::from_components(ed.clone(), ml.clone());
         assert_eq!(LocalSignerV2::new(&long).expect("64-byte").public_key_v2(), public_key);
-        let mut bad = long.clone();
-        bad.ed25519[40] ^= 1;
+        ed[40] ^= 1;
+        let bad = HybridPrivateKey::from_components(ed.clone(), ml.clone());
         assert!(LocalSignerV2::new(&bad).is_err());
-        let mut short = private_key;
-        short.ed25519.truncate(31);
+        let short = HybridPrivateKey::from_components(ed[..31].to_vec(), ml);
         assert!(LocalSignerV2::new(&short).is_err());
     }
 }

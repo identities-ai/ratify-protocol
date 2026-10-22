@@ -12,7 +12,7 @@ use std::os::raw::{c_char, c_void};
 use std::sync::Mutex;
 
 use ratify_protocol::v2::*;
-use ratify_protocol::{base64_std_decode, HybridPublicKey, HybridSignature};
+use ratify_protocol::{base64_std_decode, HybridPrivateKey, HybridPublicKey, HybridSignature};
 use serde_json::{json, Map, Value};
 
 use super::keys::RatifyV2KeyPair;
@@ -186,20 +186,15 @@ impl SignerV2 for CSigner {
     }
 }
 
-/// One selected signer: a library key pair or an external signer.
-pub(crate) enum Built {
-    Local(LocalSignerV2),
+/// One selected signer: a library key pair or an external signer. A library
+/// key signs only through the SDK's typed local signing functions; the SDK
+/// exposes no signer that accepts a prepared request for an in-process key.
+pub(crate) enum Built<'a> {
+    Local(&'a HybridPrivateKey),
     External(CSigner),
 }
 
-impl Built {
-    pub(crate) fn signer(&self) -> &dyn SignerV2 {
-        match self {
-            Built::Local(s) => s,
-            Built::External(s) => s,
-        }
-    }
-
+impl Built<'_> {
     pub(crate) fn cancelled(&self) -> bool {
         match self {
             Built::Local(_) => false,
@@ -210,14 +205,14 @@ impl Built {
 
 /// Select the signer of one slot: exactly one of `local` and `external` must
 /// be non-NULL. External signers share `cancel`.
-pub(crate) unsafe fn build(
+pub(crate) unsafe fn build<'a>(
     local: *const RatifyV2KeyPair,
     external: *const RatifyV2ExternalSigner,
     name: &str,
     cancel: &V2CancelHandle,
-) -> AbiResult<Built> {
+) -> AbiResult<Built<'a>> {
     match (local.as_ref(), external.as_ref()) {
-        (Some(kp), None) => Ok(Built::Local(LocalSignerV2::new(&kp.private)?)),
+        (Some(kp), None) => Ok(Built::Local(&kp.private)),
         (None, Some(ext)) => {
             let mode = match ext.mode {
                 1 => SignerModeV2::Direct,
@@ -256,28 +251,46 @@ pub(crate) fn finish<R>(result: V2SignResult<R>, built: &[&Built]) -> AbiResult<
     }
 }
 
-/// Run `f` with the one signer the caller selected.
+/// Sign with the one signer the caller selected: `local` runs the typed
+/// local-key function, `external` the typed external-signer function.
 pub(crate) unsafe fn with_signer<R>(
     local: *const RatifyV2KeyPair,
     external: *const RatifyV2ExternalSigner,
     name: &str,
-    f: impl FnOnce(&V2Context, &dyn SignerV2) -> V2SignResult<R>,
+    local_fn: impl FnOnce(&HybridPrivateKey) -> V2SignResult<R>,
+    external_fn: impl FnOnce(&V2Context, &dyn SignerV2) -> V2SignResult<R>,
 ) -> AbiResult<R> {
     let (ctx, cancel) = V2Context::background().with_cancel();
     let built = build(local, external, name, &cancel)?;
-    finish(f(&ctx, built.signer()), &[&built])
+    let result = match &built {
+        Built::Local(key) => local_fn(key),
+        Built::External(signer) => external_fn(&ctx, signer),
+    };
+    finish(result, &[&built])
 }
 
-/// Run `f` with two signers (rotation: old key, new key).
+/// Sign with two signers (rotation: old key, new key). Both slots must be the
+/// same kind: two library key pairs or two external signers.
 unsafe fn with_two_signers<R>(
     first: (*const RatifyV2KeyPair, *const RatifyV2ExternalSigner),
     second: (*const RatifyV2KeyPair, *const RatifyV2ExternalSigner),
-    f: impl FnOnce(&V2Context, &dyn SignerV2, &dyn SignerV2) -> V2SignResult<R>,
+    local_fn: impl FnOnce(&HybridPrivateKey, &HybridPrivateKey) -> V2SignResult<R>,
+    external_fn: impl FnOnce(&V2Context, &dyn SignerV2, &dyn SignerV2) -> V2SignResult<R>,
 ) -> AbiResult<R> {
     let (ctx, cancel) = V2Context::background().with_cancel();
     let a = build(first.0, first.1, "old", &cancel)?;
     let b = build(second.0, second.1, "new", &cancel)?;
-    finish(f(&ctx, a.signer(), b.signer()), &[&a, &b])
+    let result = match (&a, &b) {
+        (Built::Local(old), Built::Local(new)) => local_fn(old, new),
+        (Built::External(old), Built::External(new)) => external_fn(&ctx, old, new),
+        _ => {
+            return Err(Failure::new(
+                RatifyV2Code::RatifyV2ConfigurationInvalid,
+                "rotation signers must both be local key pairs or both external signers",
+            ))
+        }
+    };
+    finish(result, &[&a, &b])
 }
 
 fn placeholder_sig() -> Value {
@@ -337,9 +350,13 @@ pub unsafe extern "C" fn ratify_v2_sign_delegation_certificate(
                 &["signature"],
                 &[],
             )?)?;
-            let signed = with_signer(local, external, "issuer", |ctx, s| {
-                sign_delegation_cert_v2_with_signer(ctx, &cert, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "issuer",
+                |k| sign_delegation_cert_v2(&cert, k),
+                |ctx, s| sign_delegation_cert_v2_with_signer(ctx, &cert, s),
+            )?;
             write_buffer(out, encode_delegation_cert_v2(&signed)?)
         },
     )
@@ -368,9 +385,13 @@ pub unsafe extern "C" fn ratify_v2_sign_proof_bundle(
                 &[("delegation_digest", json!(b64(&[0u8; 48])))],
             )?;
             let bundle = decode_proof_bundle_v2(&wire)?;
-            let signed = with_signer(local, external, "agent", |ctx, s| {
-                sign_proof_bundle_v2_with_signer(ctx, &bundle, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "agent",
+                |k| sign_proof_bundle_v2(&bundle, k),
+                |ctx, s| sign_proof_bundle_v2_with_signer(ctx, &bundle, s),
+            )?;
             write_buffer(out, encode_proof_bundle_v2(&signed)?)
         },
     )
@@ -402,9 +423,13 @@ pub unsafe extern "C" fn ratify_v2_sign_revocation_list(
             )?)?;
             let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
             let key = key_arg(bound_status_key, "bound_status_key")?;
-            let signed = with_signer(local, external, "status", |ctx, s| {
-                sign_revocation_list_v2_with_signer(ctx, &list, issuer, &key, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "status",
+                |k| sign_revocation_list_v2(&list, issuer, &key, k),
+                |ctx, s| sign_revocation_list_v2_with_signer(ctx, &list, issuer, &key, s),
+            )?;
             write_buffer(out, encode_revocation_list_v2(&signed)?)
         },
     )
@@ -435,9 +460,13 @@ pub unsafe extern "C" fn ratify_v2_sign_revocation_push(
             )?)?;
             let issuer = cstr(bound_issuer_id, "bound_issuer_id")?;
             let key = key_arg(bound_status_key, "bound_status_key")?;
-            let signed = with_signer(local, external, "status", |ctx, s| {
-                sign_revocation_push_v2_with_signer(ctx, &push, issuer, &key, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "status",
+                |k| sign_revocation_push_v2(&push, issuer, &key, k),
+                |ctx, s| sign_revocation_push_v2_with_signer(ctx, &push, issuer, &key, s),
+            )?;
             write_buffer(out, encode_revocation_push_v2(&signed)?)
         },
     )
@@ -445,7 +474,8 @@ pub unsafe extern "C" fn ratify_v2_sign_revocation_push(
 
 /// Sign a key-rotation statement under both codes: 0x0004 with the current
 /// (old) key and 0x0009 with the new key. Each signer slot takes exactly one
-/// of a local key pair or an external signer.
+/// of a local key pair or an external signer, and both slots must be the same
+/// kind; a local/external mix is `RatifyV2ConfigurationInvalid`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_sign_key_rotation_statement(
     object: *const u8,
@@ -470,6 +500,7 @@ pub unsafe extern "C" fn ratify_v2_sign_key_rotation_statement(
             let signed = with_two_signers(
                 (old_local, old_external),
                 (new_local, new_external),
+                |a, b| sign_key_rotation_statement_v2(&stmt, a, b),
                 |ctx, a, b| sign_key_rotation_statement_v2_with_signers(ctx, &stmt, a, b),
             )?;
             write_buffer(out, encode_key_rotation_statement_v2(&signed)?)
@@ -493,9 +524,13 @@ pub unsafe extern "C" fn ratify_v2_sign_witness_entry(
         || {
             let entry =
                 decode_witness_entry_v2(&signing_input(object, object_len, &["signature"], &[])?)?;
-            let signed = with_signer(local, external, "witness", |ctx, s| {
-                sign_witness_entry_v2_with_signer(ctx, &entry, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "witness",
+                |k| sign_witness_entry_v2(&entry, k),
+                |ctx, s| sign_witness_entry_v2_with_signer(ctx, &entry, s),
+            )?;
             write_buffer(out, encode_witness_entry_v2(&signed)?)
         },
     )
@@ -521,9 +556,13 @@ pub unsafe extern "C" fn ratify_v2_sign_verification_receipt(
                 &["signature"],
                 &[],
             )?)?;
-            let signed = with_signer(local, external, "verifier", |ctx, s| {
-                sign_verification_receipt_v2_with_signer(ctx, &r, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "verifier",
+                |k| sign_verification_receipt_v2(&r, k),
+                |ctx, s| sign_verification_receipt_v2_with_signer(ctx, &r, s),
+            )?;
             write_buffer(out, encode_verification_receipt_v2(&signed)?)
         },
     )
@@ -549,9 +588,13 @@ pub unsafe extern "C" fn ratify_v2_sign_prepared_verification_receipt(
         || {
             let body = bytes(body, body_len, "body")?;
             let head = receipt_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
-            let signed = with_signer(local, external, "verifier", |ctx, s| {
-                sign_prepared_verification_receipt_v2_with_signer(ctx, body, &head, s)
-            })?;
+            let signed = with_signer(
+                local,
+                external,
+                "verifier",
+                |k| sign_prepared_verification_receipt_v2(body, &head, k),
+                |ctx, s| sign_prepared_verification_receipt_v2_with_signer(ctx, body, &head, s),
+            )?;
             write_buffer(out, encode_verification_receipt_v2(&signed)?)
         },
     )
@@ -661,9 +704,13 @@ pub unsafe extern "C" fn ratify_v2_sign_transaction_receipt_party(
             let mut v = json_bytes(object, object_len, "object")?;
             let r = transaction_template(&v)?;
             let party = cstr(party_id, "party_id")?;
-            let sig = with_signer(local, external, "party", |ctx, s| {
-                sign_transaction_receipt_party_v2_with_signer(ctx, &r, party, s)
-            })?;
+            let sig = with_signer(
+                local,
+                external,
+                "party",
+                |k| sign_transaction_receipt_party_v2(&r, party, k),
+                |ctx, s| sign_transaction_receipt_party_v2_with_signer(ctx, &r, party, s),
+            )?;
             let m = v
                 .as_object_mut()
                 .ok_or_else(|| bad_arg("object must be a JSON object"))?;
@@ -688,15 +735,4 @@ pub unsafe extern "C" fn ratify_v2_sign_transaction_receipt_party(
             write_buffer(out, canonical_json_v2(&to_bytes(&v))?)
         },
     )
-}
-
-impl Built {
-    /// The signer as a shared trait object (for APIs that hold a signer for
-    /// the duration of one call).
-    pub(crate) fn into_arc(self) -> std::sync::Arc<dyn SignerV2> {
-        match self {
-            Built::Local(s) => std::sync::Arc::new(s),
-            Built::External(s) => std::sync::Arc::new(s),
-        }
-    }
 }

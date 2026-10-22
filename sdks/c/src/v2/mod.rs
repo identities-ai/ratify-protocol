@@ -887,20 +887,98 @@ pub(crate) unsafe fn bytes<'a>(ptr: *const u8, len: usize, name: &str) -> AbiRes
     Ok(std::slice::from_raw_parts(ptr, len))
 }
 
-/// A strictly parsed JSON argument (bytes, not NUL-terminated).
+/// Parse structured ABI JSON, refusing an object with a repeated member name
+/// at any nesting level. A plain `serde_json::Value` keeps only the last of
+/// two equal names, so two readers of the same bytes could disagree about
+/// which value the caller supplied; every structured ABI input goes through
+/// this parser instead.
+pub(crate) fn strict_json(data: &[u8]) -> serde_json::Result<serde_json::Value> {
+    use serde::Deserialize;
+    let mut de = serde_json::Deserializer::from_slice(data);
+    let v = strict::StrictValue::deserialize(&mut de)?;
+    de.end()?;
+    Ok(v.0)
+}
+
+mod strict {
+    use std::fmt;
+
+    use serde::de::{Deserialize, Deserializer, Error, MapAccess, SeqAccess, Visitor};
+    use serde_json::{Map, Number, Value};
+
+    pub(super) struct StrictValue(pub(super) Value);
+
+    impl<'de> Deserialize<'de> for StrictValue {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            d.deserialize_any(StrictVisitor).map(StrictValue)
+        }
+    }
+
+    struct StrictVisitor;
+
+    impl<'de> Visitor<'de> for StrictVisitor {
+        type Value = Value;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a JSON value")
+        }
+        fn visit_bool<E>(self, v: bool) -> Result<Value, E> {
+            Ok(Value::Bool(v))
+        }
+        fn visit_i64<E>(self, v: i64) -> Result<Value, E> {
+            Ok(Value::Number(v.into()))
+        }
+        fn visit_u64<E>(self, v: u64) -> Result<Value, E> {
+            Ok(Value::Number(v.into()))
+        }
+        fn visit_f64<E>(self, v: f64) -> Result<Value, E> {
+            Ok(Number::from_f64(v).map_or(Value::Null, Value::Number))
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Value, E> {
+            Ok(Value::String(v.to_owned()))
+        }
+        fn visit_string<E>(self, v: String) -> Result<Value, E> {
+            Ok(Value::String(v))
+        }
+        fn visit_unit<E>(self) -> Result<Value, E> {
+            Ok(Value::Null)
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
+            let mut out = Vec::new();
+            while let Some(StrictValue(v)) = seq.next_element()? {
+                out.push(v);
+            }
+            Ok(Value::Array(out))
+        }
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+            let mut out = Map::new();
+            while let Some(key) = map.next_key::<String>()? {
+                let StrictValue(v) = map.next_value()?;
+                if out.contains_key(&key) {
+                    return Err(A::Error::custom(format!("duplicate member {key:?}")));
+                }
+                out.insert(key, v);
+            }
+            Ok(Value::Object(out))
+        }
+    }
+}
+
+/// A strictly parsed JSON argument (bytes, not NUL-terminated): duplicate
+/// member names are refused at every nesting level.
 pub(crate) unsafe fn json_bytes(
     ptr: *const u8,
     len: usize,
     name: &str,
 ) -> AbiResult<serde_json::Value> {
     let data = bytes(ptr, len, name)?;
-    serde_json::from_slice(data).map_err(|e| bad_arg(format!("{name}: {e}")))
+    strict_json(data).map_err(|e| bad_arg(format!("{name}: {e}")))
 }
 
-/// A NUL-terminated JSON argument.
+/// A NUL-terminated JSON argument, parsed like [`json_bytes`].
 pub(crate) unsafe fn json_cstr(ptr: *const c_char, name: &str) -> AbiResult<serde_json::Value> {
     let s = cstr(ptr, name)?;
-    serde_json::from_str(s).map_err(|e| bad_arg(format!("{name}: {e}")))
+    strict_json(s.as_bytes()).map_err(|e| bad_arg(format!("{name}: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -982,4 +1060,34 @@ pub unsafe extern "C" fn ratify_v2_string_free(s: *mut c_char) {
             }
         },
     )
+}
+
+#[cfg(test)]
+mod strict_json_tests {
+    use super::strict_json;
+
+    #[test]
+    fn duplicates_are_refused_at_every_depth() {
+        for text in [
+            r#"{"a":1,"a":1}"#,
+            r#"{"a":{"b":1,"b":2}}"#,
+            r#"[{"x":[{"y":{"z":1,"z":1}}]}]"#,
+        ] {
+            let e = strict_json(text.as_bytes()).expect_err(text);
+            assert!(e.to_string().contains("duplicate member"), "{text}: {e}");
+        }
+    }
+
+    #[test]
+    fn valid_input_parses_like_serde_json() {
+        for text in [
+            r#"{"a":[1,-2,3.5,"s",true,null,{"a":{}}],"b":{"a":1},"c":18446744073709551615}"#,
+            r#"[{"x":1},{"x":2}]"#,
+            r#""text""#,
+        ] {
+            let want: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert_eq!(strict_json(text.as_bytes()).unwrap(), want, "{text}");
+        }
+        assert!(strict_json(br#"{"a":1} x"#).is_err(), "trailing data");
+    }
 }

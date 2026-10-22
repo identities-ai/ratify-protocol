@@ -1,6 +1,7 @@
 //! issuer-duties.json and evaluator-profiles.json.
 
 mod v2_common;
+mod v2_provider_common;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -9,11 +10,12 @@ use ratify_protocol::v2::*;
 use ratify_protocol::{HybridPublicKey, HybridSignature};
 use serde_json::Value;
 use v2_common::*;
+use v2_provider_common::ProviderSigner;
 
-/// Wraps a local signer and counts every method call, so a vector can
+/// Wraps a provider signer and counts every method call, so a vector can
 /// require that no signer method ran before a refusal.
 struct CountingSigner {
-    inner: LocalSignerV2,
+    inner: ProviderSigner,
     calls: AtomicUsize,
 }
 
@@ -41,7 +43,7 @@ fn v2_issuer_duties() {
         let name = s(&v["name"]);
         let cert = decode_delegation_cert_v2(&b64(&v["unsigned_certificate_b64"])).expect("unsigned certificate decodes");
         let signer = CountingSigner {
-            inner: LocalSignerV2::new(&fx.private(&s(&v["issuer"]))).expect("signer"),
+            inner: ProviderSigner::new(&fx.private(&s(&v["issuer"]))),
             calls: AtomicUsize::new(0),
         };
         let signed = sign_delegation_cert_v2_with_signer(&V2Context::background(), &cert, &signer);

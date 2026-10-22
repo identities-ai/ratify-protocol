@@ -11,6 +11,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use ratify_c::*;
+use serde_json::json;
 use v2c_common::*;
 
 const THREADS: usize = 8;
@@ -171,5 +172,121 @@ impl Fixture {
             &hex::decode(s(&k["ed25519_seed_hex"])).unwrap(),
             &hex::decode(s(&k["ml_dsa_65_seed_hex"])).unwrap(),
         )
+    }
+}
+
+/// One reducer handle shared by racing threads.
+struct SharedState(*mut RatifyV2StatusState);
+
+unsafe impl Send for SharedState {}
+unsafe impl Sync for SharedState {}
+
+/// Concurrent applies on one status handle must never lose an update. A
+/// lost update could drop a revocation from the deny union and let a later
+/// query answer `not_revoked` for a certificate whose revocation was
+/// accepted; every apply therefore reads, applies, and replaces the state
+/// under one lock.
+#[test]
+fn v2c_concurrent_status_applies_never_lose_a_revocation() {
+    const PUSHES: i64 = 48;
+    const ROUNDS: usize = 6;
+    const NOW: i64 = 1_800_000_000;
+    let (kp, _, _) = Kp::generate();
+    let key = kp.public();
+    let issuer = "f1f0d864b26519693951ba784d29ae70c09bea932842e0667dccd41ba8b8ba71";
+    let issuer_c = cs(issuer);
+    let policy = RatifyV2StatusPolicy {
+        max_list_lifetime_seconds: 3600,
+        max_status_age_seconds: 600,
+        clock_skew_seconds: 5,
+    };
+    let list = json_bytes(&json!({
+        "version": 2, "issuer_id": issuer, "sequence": 1,
+        "updated_at": NOW - 60, "next_update": NOW + 1800,
+        "revoked": [{"cert_id": "genesis"}],
+    }));
+    let list = buf(|o| unsafe {
+        ratify_v2_sign_revocation_list(
+            list.as_ptr(), list.len(), issuer_c.as_ptr(), &key, kp.0, ptr::null(), o,
+        )
+    })
+    .expect("sign list");
+    // One push per sequence, each revoking its own certificate.
+    let pushes: Vec<(String, Vec<u8>)> = (2..2 + PUSHES)
+        .map(|seq| {
+            let cert = format!("revoked-{seq}");
+            let push = json_bytes(&json!({
+                "version": 2, "issuer_id": issuer, "sequence": seq,
+                "pushed_at": NOW - 30, "revoked": [{"cert_id": cert}],
+            }));
+            let wire = buf(|o| unsafe {
+                ratify_v2_sign_revocation_push(
+                    push.as_ptr(), push.len(), issuer_c.as_ptr(), &key, kp.0, ptr::null(), o,
+                )
+            })
+            .expect("sign push");
+            (cert, wire)
+        })
+        .collect();
+    let pushes = Arc::new(pushes);
+
+    for round in 0..ROUNDS {
+        let mut h = ptr::null_mut();
+        check(unsafe { ratify_v2_status_state_new(&mut h) }).unwrap();
+        let shared = Arc::new(SharedState(h));
+        check(unsafe {
+            ratify_v2_status_state_apply(
+                h, 3, list.as_ptr(), list.len(), issuer_c.as_ptr(), 1, &key, &policy, NOW,
+            )
+        })
+        .expect("apply genesis");
+        let applied: Vec<String> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..THREADS)
+                .map(|t| {
+                    let (shared, pushes, key) = (Arc::clone(&shared), Arc::clone(&pushes), key);
+                    scope.spawn(move || {
+                        let issuer_c = cs(issuer);
+                        let mut accepted = Vec::new();
+                        // Each thread applies an interleaved share, in
+                        // descending order on odd threads.
+                        let mut mine: Vec<_> =
+                            pushes.iter().skip(t).step_by(THREADS).collect();
+                        if t % 2 == 1 {
+                            mine.reverse();
+                        }
+                        for (cert, wire) in mine {
+                            let code = unsafe {
+                                ratify_v2_status_state_apply(
+                                    shared.0, 5, wire.as_ptr(), wire.len(),
+                                    issuer_c.as_ptr(), 1, &key, &policy, NOW,
+                                )
+                            };
+                            if code == 0 {
+                                accepted.push(cert.clone());
+                            }
+                        }
+                        accepted
+                    })
+                })
+                .collect();
+            handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+        });
+        assert_eq!(applied.len(), PUSHES as usize, "round {round}: every push applies");
+        let st = parse(&buf(|o| unsafe { ratify_v2_status_state_json(h, o) }).unwrap());
+        let deny: Vec<String> = arr(&st["deny_union_cert_ids"]).iter().map(s).collect();
+        for cert in applied.iter().chain(std::iter::once(&"genesis".to_string())) {
+            assert!(deny.contains(cert), "round {round}: revocation of {cert} was lost: {deny:?}");
+            let cert_c = cs(cert);
+            let r = parse(
+                &buf(|o| unsafe {
+                    ratify_v2_status_state_query(
+                        h, issuer_c.as_ptr(), cert_c.as_ptr(), 1, &key, &policy, NOW, o,
+                    )
+                })
+                .expect("query"),
+            );
+            assert_ne!(s(&r["status"]), "not_revoked", "round {round}: {cert}");
+        }
+        unsafe { ratify_v2_status_state_free(h) };
     }
 }

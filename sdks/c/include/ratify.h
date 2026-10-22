@@ -395,8 +395,9 @@ typedef struct RatifyV2EvaluatorCall RatifyV2EvaluatorCall;
 
 // An opaque hybrid Ed25519 + ML-DSA-65 key pair. Create it with
 // `ratify_v2_keypair_from_seeds` or `ratify_v2_keypair_generate`; release it
-// with `ratify_v2_keypair_free`. It is used by one thread at a time; the
-// library reads it during a signing call and never retains it.
+// with `ratify_v2_keypair_free`, which wipes the private key. It is used by
+// one thread at a time; the library reads it during a signing call and never
+// retains or copies it.
 typedef struct RatifyV2KeyPair RatifyV2KeyPair;
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
@@ -443,8 +444,10 @@ typedef struct RatifyV2Released RatifyV2Released;
 typedef struct RatifyV2RotationJournal RatifyV2RotationJournal;
 
 // One issuer's rollback-protected status reducer state (§5.4). An apply
-// replaces the state only when it succeeds. Use one handle per thread at a
-// time; release with `ratify_v2_status_state_free`.
+// replaces the state only when it succeeds. Applies and epoch transitions
+// are serialized on the handle: each reads, applies, and replaces the state
+// under one lock, so concurrent updates never overwrite each other. Release
+// with `ratify_v2_status_state_free`.
 typedef struct RatifyV2StatusState RatifyV2StatusState;
 
 typedef struct RatifyVerifyResult RatifyVerifyResult;
@@ -2473,8 +2476,8 @@ int32_t ratify_v2_keypair_generate(struct RatifyV2KeyPair **out,
                                    uint8_t *ed25519_seed_out,
                                    uint8_t *ml_dsa_65_seed_out);
 
-// Release a key pair. NULL is a no-op. The private key is dropped from
-// library memory.
+// Release a key pair. NULL is a no-op. The private key is wiped and dropped
+// from library memory.
 void ratify_v2_keypair_free(struct RatifyV2KeyPair *kp);
 
 // Write the complete public key of `kp` into `*out`.
@@ -2849,7 +2852,8 @@ int32_t ratify_v2_sign_revocation_push(const uint8_t *object,
 
 // Sign a key-rotation statement under both codes: 0x0004 with the current
 // (old) key and 0x0009 with the new key. Each signer slot takes exactly one
-// of a local key pair or an external signer.
+// of a local key pair or an external signer, and both slots must be the same
+// kind; a local/external mix is `RatifyV2ConfigurationInvalid`.
 int32_t ratify_v2_sign_key_rotation_statement(const uint8_t *object,
                                               uintptr_t object_len,
                                               const struct RatifyV2KeyPair *old_local,
@@ -3008,8 +3012,10 @@ int32_t ratify_v2_journal_legacy_encode(const uint8_t *record,
 // One status publisher transition for the issuer whose complete key is
 // `issuer_key`. The publisher is constructed from the authenticated role
 // configuration in `journal_store` (a status key outside it is refused with
-// `configuration_invalid`) and signs with exactly one of `local` /
-// `external`. `state_json` is the publisher state JSON (`{"issuer_id",
+// `configuration_invalid`) and signs with exactly one of `local` (the
+// status key pair held by the library, signed only through the typed
+// revocation signers) or `external`; both apply the same refusals.
+// `state_json` is the publisher state JSON (`{"issuer_id",
 // "status_key_id", "sequence", "updated_at", "revoked"}`) returned by the
 // previous transition (ignored for genesis); `cert_ids_json` is a JSON
 // array (revoke only). Writes the signed list, the signed push (empty

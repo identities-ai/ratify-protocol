@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 
 use ratify_protocol::v2::{key_id_v2, V2ErrorClass};
 use ratify_protocol::{hybrid_keypair_from_seeds, HybridPrivateKey, HybridPublicKey};
+use zeroize::Zeroizing;
 
 use super::marshal::{public_key_json, to_bytes};
 use super::{
@@ -15,8 +16,9 @@ use super::{
 
 /// An opaque hybrid Ed25519 + ML-DSA-65 key pair. Create it with
 /// `ratify_v2_keypair_from_seeds` or `ratify_v2_keypair_generate`; release it
-/// with `ratify_v2_keypair_free`. It is used by one thread at a time; the
-/// library reads it during a signing call and never retains it.
+/// with `ratify_v2_keypair_free`, which wipes the private key. It is used by
+/// one thread at a time; the library reads it during a signing call and never
+/// retains or copies it.
 pub struct RatifyV2KeyPair {
     pub(crate) poisoned: AtomicBool,
     pub(crate) private: HybridPrivateKey,
@@ -39,13 +41,14 @@ impl RatifyV2KeyPair {
     }
 }
 
-fn seed(ptr: *const u8, name: &str) -> AbiResult<[u8; 32]> {
+/// A copy of a caller seed, wiped when it goes out of scope.
+fn seed(ptr: *const u8, name: &str) -> AbiResult<Zeroizing<[u8; 32]>> {
     // SAFETY: the caller supplies 32 readable bytes (documented).
     if ptr.is_null() {
         return Err(null_arg(name));
     }
     let b = unsafe { bytes(ptr, 32, name)? };
-    let mut s = [0u8; 32];
+    let mut s = Zeroizing::new([0u8; 32]);
     s.copy_from_slice(b);
     Ok(s)
 }
@@ -67,10 +70,9 @@ pub unsafe extern "C" fn ratify_v2_keypair_from_seeds(
             if out.is_null() {
                 return Err(null_arg("out"));
             }
-            let kp = RatifyV2KeyPair::from_seeds(
-                &seed(ed25519_seed, "ed25519_seed")?,
-                &seed(ml_dsa_65_seed, "ml_dsa_65_seed")?,
-            )?;
+            let ed = seed(ed25519_seed, "ed25519_seed")?;
+            let ml = seed(ml_dsa_65_seed, "ml_dsa_65_seed")?;
+            let kp = RatifyV2KeyPair::from_seeds(&ed, &ml)?;
             *out = Box::into_raw(Box::new(kp));
             Ok(())
         },
@@ -99,10 +101,11 @@ pub unsafe extern "C" fn ratify_v2_keypair_generate(
             if out.is_null() {
                 return Err(null_arg("out"));
             }
-            let mut ed = [0u8; 32];
-            let mut ml = [0u8; 32];
-            getrandom::getrandom(&mut ed)
-                .and_then(|_| getrandom::getrandom(&mut ml))
+            // Generated seeds are wiped on every exit path.
+            let mut ed = Zeroizing::new([0u8; 32]);
+            let mut ml = Zeroizing::new([0u8; 32]);
+            getrandom::getrandom(ed.as_mut())
+                .and_then(|_| getrandom::getrandom(ml.as_mut()))
                 .map_err(|e| {
                     Failure::new(
                         RatifyV2Code::RatifyV2ErrInternal,
@@ -122,8 +125,8 @@ pub unsafe extern "C" fn ratify_v2_keypair_generate(
     )
 }
 
-/// Release a key pair. NULL is a no-op. The private key is dropped from
-/// library memory.
+/// Release a key pair. NULL is a no-op. The private key is wiped and dropped
+/// from library memory.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_keypair_free(kp: *mut RatifyV2KeyPair) {
     crate::guard::ffi_guard(

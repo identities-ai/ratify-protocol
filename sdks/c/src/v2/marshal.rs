@@ -584,7 +584,7 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
 
 pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     let v: Value =
-        serde_json::from_slice(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
+        super::strict_json(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
     let o = Obj::new(
         &v,
         "claim record",
@@ -681,7 +681,7 @@ pub(crate) fn progress_json(p: &V2EvaluationProgress) -> Vec<u8> {
 
 pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress> {
     let v: Value =
-        serde_json::from_slice(data).map_err(|e| bad_arg(format!("progress record: {e}")))?;
+        super::strict_json(data).map_err(|e| bad_arg(format!("progress record: {e}")))?;
     let o = Obj::new(
         &v,
         "progress record",

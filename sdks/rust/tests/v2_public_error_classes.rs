@@ -51,10 +51,7 @@ fn empty_sig() -> HybridSignature {
 }
 
 fn empty_private() -> HybridPrivateKey {
-    let (_, mut private) = generate_hybrid_keypair();
-    private.ed25519 = vec![];
-    private.ml_dsa_65 = vec![];
-    private
+    HybridPrivateKey::from_components(vec![], vec![])
 }
 
 fn zero_cert() -> DelegationCertV2 {
@@ -326,14 +323,9 @@ fn v2_public_api_errors_are_classified() {
     let (status_public, status_private) = generate_hybrid_keypair();
     record_security_key_role_v2(&ctx, &journal, "issuer", &public).unwrap();
     configure_status_key_epoch_v2(&ctx, &journal, &key_id, 1, &status_public).unwrap();
-    let publisher = new_v2_status_publisher(
-        &ctx,
-        &journal,
-        &public,
-        Arc::new(LocalSignerV2::new(&status_private).unwrap()),
-        3600,
-    )
-    .expect("publisher");
+    let publisher =
+        new_v2_status_publisher_with_key(&ctx, &journal, &public, &status_private, 3600)
+            .expect("publisher");
 
     let store = Store::new(1_800_000_000, 30, "0123456789abcdef0123456789abcdef", &private).unwrap();
     let (bundle, preflight, req, token) = claimed_token(&store);
@@ -450,7 +442,11 @@ fn v2_public_api_errors_are_classified() {
             }])),
         ),
         // Signing.
-        ("NewLocalSignerV2", Some(ConfigurationInvalid), sign_class(LocalSignerV2::new(&empty_private()))),
+        (
+            "NewV2StatusPublisherWithKey",
+            Some(ConfigurationInvalid),
+            class(new_v2_status_publisher_with_key(&ctx, &journal, &public, &empty_private(), 3600)),
+        ),
         ("SignDelegationCertV2", Some(Malformed), sign_class(sign_delegation_cert_v2(&zero_cert(), &private))),
         (
             "SignDelegationCertV2WithSigner failing signer",

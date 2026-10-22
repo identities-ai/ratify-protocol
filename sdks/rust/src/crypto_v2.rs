@@ -63,15 +63,13 @@ pub(crate) fn sign_delegation_v2(
 ) -> Result<HybridSignature, String> {
     let message = signature_message(DELEGATION_CODE, signable_bytes);
     let ed_seed: [u8; 32] = private_key
-        .ed25519
-        .as_slice()
+        .ed25519()
         .try_into()
         .map_err(|_| "v2 Ed25519 seed must be 32 bytes".to_string())?;
     let ed_signature = SigningKey::from_bytes(&ed_seed).sign(&message);
 
     let ml_sk_bytes: [u8; ml_dsa_65::SK_LEN] = private_key
-        .ml_dsa_65
-        .as_slice()
+        .ml_dsa_65()
         .try_into()
         .map_err(|_| "v2 ML-DSA-65 secret key has wrong length".to_string())?;
     let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(ml_sk_bytes)

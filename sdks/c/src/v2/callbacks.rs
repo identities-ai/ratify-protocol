@@ -1645,7 +1645,7 @@ impl V2ChallengeIssuanceStore for CIssuance {
         }
         // SAFETY: output pointer valid until copied.
         let data = unsafe { slice_vec(out) };
-        let v: serde_json::Value = serde_json::from_slice(&data)
+        let v: serde_json::Value = super::strict_json(&data)
             .map_err(|e| V2StoreError::Unavailable(format!("issuance record is not JSON: {e}")))?;
         expected_challenge(&v)
             .map_err(|f| V2StoreError::Unavailable(format!("issuance record: {}", f.message)))

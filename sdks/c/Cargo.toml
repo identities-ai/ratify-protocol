@@ -46,9 +46,11 @@ test-reference = []
 
 [dependencies]
 ratify-protocol = { path = "../rust", version = "2.0.0-alpha.1" }
+serde = "1"
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }
 sha2 = "0.10"
+zeroize = "1.8"
 
 [build-dependencies]
 cbindgen = "0.27"

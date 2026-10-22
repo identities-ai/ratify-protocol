@@ -44,8 +44,8 @@ class WrongEntryCheckpoint implements V2ReceiptCheckpoint {
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 28);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 140);
+  assert.equal(file.scenarios.length, 32);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 162);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -62,7 +62,13 @@ for (const sc of file.scenarios as Any[]) {
     const claimStore = (): ClaimStoreV2 => (sc.rate_at_finalization ? store.withRateAtFinalization() : store);
     const recoverStep = async (i: number, request: string, want: Any) => {
       try {
-        const outcome = await recoverInterruptedClaimV2(store, claimIDs.get(request)!);
+        let claimID = claimIDs.get(request);
+        if (claimID === undefined) {
+          // Never claimed: the request's own claim ID (claim_not_found).
+          const e = file.requests[request].expected_challenge;
+          claimID = protocolClaimIDV2(e.verifier_namespace, e.replay_epoch, unb64(e.value_b64));
+        }
+        const outcome = await recoverInterruptedClaimV2(store, claimID);
         assert.equal(want.error_class ?? "", "", `step ${i} recover succeeded, want ${want.error_class}`);
         checkCommitted(i, outcome, want);
         committed.set(request, outcome);
@@ -70,6 +76,47 @@ for (const sc of file.scenarios as Any[]) {
         if (!want.error_class) throw err;
         assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} recover class (${(err as Error).message})`);
       }
+    };
+    // runVerify runs one verify step; with mode "" it is safe for concurrent
+    // use (verify_concurrent).
+    const runVerify = async (i: number, name: string, mode: string, at: number, want: Any) => {
+      const request = file.requests[name];
+      const inputs = { ...request, now: store.now(), configured_replay_epoch: epochOverride !== 0 ? epochOverride : request.configured_replay_epoch };
+      const { req, cb } = await buildVerifyRequest(inputs, unb64(file.bundles_b64[request.bundle]), zeroCounts());
+      const cs = claimStore();
+      const callbacks = { ...cb, claimStore: cs };
+      if (sc.rate_at_finalization) callbacks.rate = cs as never;
+      const claimID = protocolClaimIDV2(req.verifierNamespace, req.replayEpoch, req.expected!.value);
+      claimIDs.set(name, claimID);
+      requestOf.set(claimID, name);
+      const controller = new AbortController();
+      if (mode === "cancel_before_claim") controller.abort();
+      else if (mode) {
+        const provider = callbacks.statusEvidence!;
+        let fired = false;
+        callbacks.statusEvidence = async (r, signal) => {
+          if (!fired) {
+            fired = true;
+            switch (mode) {
+              case "cancel_during_status":
+                controller.abort();
+                throw signal?.reason ?? new Error("cancelled");
+              case "recover_during_status":
+                store.setTime(at);
+                await recoverStep(i, name, want.recovered);
+                break;
+              case "expire_lease_during_status":
+              case "regress_clock_during_status":
+                store.setTime(at);
+                break;
+              default:
+                throw new Error(`unknown verify mode ${mode}`);
+            }
+          }
+          return provider(r, signal);
+        };
+      }
+      return verifyProofBundleV2(req, callbacks, { signal: controller.signal });
     };
     for (let i = 0; i < sc.steps.length; i++) {
       const step = sc.steps[i];
@@ -84,28 +131,7 @@ for (const sc of file.scenarios as Any[]) {
           store.setAcknowledgementWithheld(step.withheld);
           break;
         case "verify": {
-          const inputs = { ...request, now, configured_replay_epoch: epochOverride !== 0 ? epochOverride : request.configured_replay_epoch };
-          const { req, cb } = await buildVerifyRequest(inputs, unb64(file.bundles_b64[request.bundle]), zeroCounts());
-          const cs = claimStore();
-          const callbacks = { ...cb, claimStore: cs };
-          if (sc.rate_at_finalization) callbacks.rate = cs as never;
-          const claimID = protocolClaimIDV2(req.verifierNamespace, req.replayEpoch, req.expected!.value);
-          claimIDs.set(step.request, claimID);
-          requestOf.set(claimID, step.request);
-          if (step.mode) {
-            const provider = callbacks.statusEvidence!;
-            let fired = false;
-            callbacks.statusEvidence = async (r, signal) => {
-              if (!fired) {
-                fired = true;
-                store.setTime(step.time);
-                if (step.mode === "recover_during_status") await recoverStep(i, step.request, want.recovered);
-                else if (step.mode !== "expire_lease_during_status" && step.mode !== "regress_clock_during_status") throw new Error(`unknown verify mode ${step.mode}`);
-              }
-              return provider(r, signal);
-            };
-          }
-          const outcome = await verifyProofBundleV2(req, callbacks);
+          const outcome = await runVerify(i, step.request, step.mode ?? "", step.time ?? 0, want);
           assert.equal(outcome.stage, want.stage, `step ${i} verify ${step.request} stage (${outcome.errorClass}: ${outcome.error?.message})`);
           assert.equal(outcome.errorClass, want.error_class ?? "", `step ${i} verify class (${outcome.error?.message})`);
           if (want.disposition) assert.equal(outcome.disposition, want.disposition, `step ${i} disposition`);
@@ -113,6 +139,15 @@ for (const sc of file.scenarios as Any[]) {
             checkCommitted(i, outcome.committed!, want);
             committed.set(step.request, outcome.committed!);
           }
+          break;
+        }
+        case "verify_concurrent": {
+          const results = await Promise.all((step.requests as string[]).map((name) => runVerify(i, name, "", 0, want)));
+          const got = results.map((outcome, k) => {
+            if (outcome.stage === "committed") committed.set(step.requests[k], outcome.committed!);
+            return outcome.stage === "preflight" || outcome.stage === "evaluating" ? `${outcome.stage}/${outcome.errorClass}` : outcome.stage;
+          });
+          assert.deepEqual(got.sort(), want.outcomes, `step ${i} verify_concurrent ${step.requests}`);
           break;
         }
         case "claim_only": {

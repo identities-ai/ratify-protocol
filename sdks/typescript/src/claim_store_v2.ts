@@ -256,6 +256,11 @@ export async function claimProofBundleV2(
       throw v2Classify("malformed", wrapError("v2 signed rate batch", err));
     }
     claim.requiresRate = claim.rateBatch.length !== 0;
+    // SPEC-v2 §6.11: cancellation before the claim consumes nothing, so a
+    // caller that has already cancelled never reaches the store.
+    if (signal?.aborted) {
+      throw v2Classify("evaluation_cancelled", wrapError("v2 claim cancelled before the store was called", signal.reason ?? new Error("cancelled")));
+    }
     const result = await store.claimV2(cloneV2ChallengeClaim(claim), signal);
     switch (result?.disposition) {
       case "created": {

@@ -287,11 +287,19 @@ func (s *v2ModalJournalStore) CompareAndSwap(ctx context.Context, head ratify.Se
 // each preload object applied at its time.
 func v2BuildStatusJournal(t *testing.T, in v2OrderingInputs) *v2reference.JournalStore {
 	t.Helper()
-	ctx := context.Background()
 	store, err := v2reference.NewJournalStore()
 	if err != nil {
 		t.Fatal(err)
 	}
+	v2PopulateStatusJournal(t, store, in)
+	return store
+}
+
+// v2PopulateStatusJournal configures in's status keys and applies its
+// journal preload to store.
+func v2PopulateStatusJournal(t *testing.T, store ratify.SecurityJournalStoreV2, in v2OrderingInputs) {
+	t.Helper()
+	ctx := context.Background()
 	issuers := make([]string, 0, len(in.StatusKeys))
 	for issuer := range in.StatusKeys {
 		issuers = append(issuers, issuer)
@@ -325,7 +333,6 @@ func v2BuildStatusJournal(t *testing.T, in v2OrderingInputs) *v2reference.Journa
 			}
 		}
 	}
-	return store
 }
 
 // v2BuildVerifyRequest builds the request and callbacks shared by the

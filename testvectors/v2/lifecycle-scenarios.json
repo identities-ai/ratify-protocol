@@ -7,25 +7,26 @@
     "corrupt_state": "alter one byte of the request's sealed terminal result in the primary store",
     "device_power_loss": "arm a power loss for the next submission only: before_commit records nothing; after_commit records the acknowledgement durably but loses the response",
     "device_resubmit": "retry the exact tuple for sequence; expect ack_time (the original acknowledgement time on an identical retry) or device_error",
-    "device_startup": "the primary compares its complete-state digest at the component head with the acknowledged digest before serving; expect device_status ready, primary_behind (fewer appended entries than acknowledged: rollback or lost state), state_digest_mismatch, or checkpoint_frozen",
-    "device_submit": "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed",
+    "device_startup": "before serving, check in order: a frozen component (checkpoint_frozen); fewer appended receipt-log entries than the component acknowledged (primary_behind: rollback or lost state); a recomputed complete-state digest that differs from the anchored one (state_digest_mismatch, including a rollback that kept the receipt-log prefix); otherwise ready",
+    "device_submit": "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head or its state is not the anchored state), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed",
     "ledger_execute": "atomically mark set (default: the last set opened) executed at the store clock; expect ledger_error incomplete, expired (an approval is no longer Allowed), already_executed, or none",
     "ledger_execute_concurrent": "count concurrent executions of the set; expect executed, the number that succeeded",
     "ledger_open": "open approval_set: agent_key and root_keys name keys.json fixture keys whose complete public keys the set pins (roots in slot order); request_hash_b64 is the action's operation-context hash. The ledger derives the expected session context from verifier_id, workspace_id, the agent key ID, session_id, invocation_id = id, and request_hash (§2.4); session_context_b64 is that derivation as a known answer and is never a ledger input. Expect ledger_error approval_set_invalid when the set is malformed or names one root key twice",
     "ledger_record": "record the request's released decision (from its last release step; none if that release was not released) and its exact bundle in slot of set (default: the last set opened). Checks in order: not_released (not a released allow); action_mismatch (receipt bundle_hash differs from the bundle); approval_reused (the claim is already recorded in another approval set); action_mismatch (receipt or bundle verifier, receipt or bundle agent ID, bundle agent key, receipt required scope, or bundle session_context differs from the set and its derived context); root_mismatch (the chain's terminal issuer key is not the slot's pinned root key, or the receipt's issuer_ids omit it); slot_filled. Expect ledger_complete or that ledger_error",
     "ledger_record_concurrent": "record requests[i] in slot i concurrently; expect ledger_complete for the final state",
     "profile dual_root": "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set",
-    "profile single_device_offline": "the store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that records, per receipt-log entry, the entry hash and the primary's complete-state digest, signs every acknowledgement with its own key, and reads the same security clock as the store",
+    "profile single_device_offline": "the primary is the reference store plus an anchored SecurityJournalV2 store, a challenge issuance store, and device.replay_epoch; its complete-state digest is SHA-384 over the versioned canonical projection of SPEC-v2 §7.13. The store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that is provisioned with the primary's initial digest, anchors the primary's new complete-state digest before every durable security-state change takes effect (a change whose previous digest differs from the anchored one is refused and undone, so a verify fails before claim with claim_store_unavailable), records per receipt-log entry the entry hash and the anchored digest, signs every acknowledgement with its own key, and reads the same security clock as the store. rate_at_finalization makes the store admit max_rate inside finalization, as in scenarios",
     "profile_scenarios": "SPEC-v2 §7.13 and §7.14 profile scripts. Each starts from a fresh reference store (as for scenarios) and adds the test-only component its profile names. Steps use the lifecycle ops (set_time, set_ack_withheld, verify, publish, release) plus the profile ops below; release checkpoint device = the device component, reference = the store checkpoint",
     "publish": "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
     "rate_at_finalization": "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
     "recover": "RecoverInterruptedClaim for the request's claim ID: the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
     "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
-    "restore": "mode snapshot = replace the primary with the named copy (a rollback); the component and the clock are unchanged",
+    "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
     "set_ack_withheld": "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
     "set_time": "set the authoritative clock (it may move backward to exercise clock regression)",
-    "snapshot": "copy the complete primary store state under snapshot",
+    "snapshot": "copy the complete primary state (store, journal, issuance records) under snapshot",
+    "stage_status": "stage the request's status keys (configured in ascending issuer order) and journal preload into the primary's anchored SecurityJournalV2 store, as before disconnection; each journal transition is anchored",
     "upload": "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release",
     "verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
     "verify": "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
@@ -4245,7 +4246,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4311,7 +4313,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4391,7 +4394,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4456,12 +4460,13 @@
     },
     {
       "name": "device_primary_rollback",
-      "description": "the primary is restored to a state before an acknowledged entry: startup reports primary_behind; a different entry the rolled-back primary commits at the acknowledged sequence is refused as a fork, the component freezes, and its release is rejected because the acknowledgement names the original entry",
+      "description": "the primary is restored to a state before an acknowledged entry: startup reports primary_behind, and the rolled-back primary cannot claim a challenge because its state does not extend the anchored state",
       "profile": "single_device_offline",
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4522,51 +4527,31 @@
           "op": "verify",
           "request": "D2",
           "expect": {
-            "stage": "committed",
-            "decision": "allow",
-            "decision_reason": "authorized",
-            "allow_horizon": 1800003600
-          }
-        },
-        {
-          "op": "publish",
-          "request": "D2",
-          "mode": "ok",
-          "expect": {
-            "receipt_sequence": 1
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
           }
         },
         {
           "op": "device_submit",
-          "expect": {
-            "device_error": "frozen"
-          }
-        },
-        {
-          "op": "release",
-          "request": "D2",
-          "checkpoint": "device",
-          "expect": {
-            "release_status": "rejected",
-            "release_reason": "acknowledgement_mismatch"
-          }
+          "expect": {}
         },
         {
           "op": "device_startup",
           "expect": {
-            "device_status": "checkpoint_frozen"
+            "device_status": "primary_behind"
           }
         }
       ]
     },
     {
       "name": "device_state_digest_mismatch",
-      "description": "the primary's sealed state changes after acknowledgement: startup reports state_digest_mismatch and the next entry cannot extend the component head, so its release stays pending",
+      "description": "the primary's sealed state changes outside an anchored change after acknowledgement: startup reports state_digest_mismatch and the primary cannot claim another challenge",
       "profile": "single_device_offline",
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4610,6 +4595,33 @@
           "op": "verify",
           "request": "D2",
           "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_rollback_loses_consumed_challenge",
+      "description": "with the receipt log unchanged, a restore loses a later consumed challenge: the claim was anchored when it was made, so startup reports state_digest_mismatch and the challenge cannot be claimed again",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "D1",
+          "expect": {
             "stage": "committed",
             "decision": "allow",
             "decision_reason": "authorized",
@@ -4618,25 +4630,231 @@
         },
         {
           "op": "publish",
-          "request": "D2",
+          "request": "D1",
           "mode": "ok",
           "expect": {
-            "receipt_sequence": 2
+            "receipt_sequence": 1
           }
         },
         {
           "op": "device_submit",
           "expect": {
-            "device_error": "state_mismatch"
+            "acknowledged": [
+              1
+            ]
           }
         },
         {
           "op": "release",
-          "request": "D2",
+          "request": "D1",
           "checkpoint": "device",
           "expect": {
-            "release_status": "pending",
-            "release_reason": "acknowledgement_unavailable"
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "restore",
+          "mode": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_rollback_loses_stream_advance",
+      "description": "with the receipt log unchanged, a restore loses a stream advance from sequence 1 to 2: startup reports state_digest_mismatch and the lost sequence cannot be claimed again",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "S1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "S1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "S2",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "restore",
+          "mode": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "S2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device_rollback_loses_journal_state",
+      "description": "with the receipt log and claims unchanged, a restore rolls back status evidence staged into the anchored journal: startup reports state_digest_mismatch",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "D1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "D1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "stage_status",
+          "request": "DS",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "restore",
+          "mode": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
           }
         }
       ]
@@ -4648,7 +4866,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 1
+        "capacity": 1,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4725,7 +4944,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4815,7 +5035,8 @@
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {
@@ -4915,13 +5136,95 @@
       ]
     },
     {
+      "name": "device_rollback_loses_rate_state",
+      "description": "with max_rate admitted at finalization and the receipt log unchanged, a restore loses an admitted rate commit and its claim: startup reports state_digest_mismatch and the lost request cannot be admitted again",
+      "profile": "single_device_offline",
+      "start_time": 1800000000,
+      "rate_at_finalization": true,
+      "device": {
+        "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+        "capacity": 8,
+        "replay_epoch": 3
+      },
+      "steps": [
+        {
+          "op": "verify",
+          "request": "R1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "R1",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "R2",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "ready"
+          }
+        },
+        {
+          "op": "restore",
+          "mode": "snapshot",
+          "snapshot": "acknowledged",
+          "expect": {}
+        },
+        {
+          "op": "device_startup",
+          "expect": {
+            "device_status": "state_digest_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "R2",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "claim_store_unavailable"
+          }
+        }
+      ]
+    },
+    {
       "name": "device_offline_recovery_upload",
       "description": "while the uplink is down the device releases locally; the uplink later sends only the acknowledged prefix, each receipt once; a receipt acknowledged after its challenge expired is uploaded as evidence but stays withheld, because upload is an outbox operation and not a deferred release",
       "profile": "single_device_offline",
       "start_time": 1800000000,
       "device": {
         "component_seed_b64": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
-        "capacity": 8
+        "capacity": 8,
+        "replay_epoch": 3
       },
       "steps": [
         {

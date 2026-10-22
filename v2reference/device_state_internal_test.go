@@ -1,0 +1,173 @@
+package v2reference
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"testing"
+
+	ratify "github.com/identities-ai/ratify-protocol/v2"
+)
+
+func newTestDevice(t *testing.T) (*DevicePrimaryTestOnly, *DeviceComponentTestOnly, *DeviceCheckpointTestOnly) {
+	t.Helper()
+	_, priv, err := ratify.GenerateHybridKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(1_000, 30, "dddddddddddddddddddddddddddddd01", priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.SetAcknowledgementWithheld(true)
+	primary, err := NewDevicePrimaryTestOnly(store, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	component, err := NewDeviceComponentTestOnly(bytes.Repeat([]byte{7}, 32), 4, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := NewDeviceCheckpointTestOnly(primary, component, component.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := device.Provision(); err != nil {
+		t.Fatal(err)
+	}
+	return primary, component, device
+}
+
+func testChallengeRecord(b byte) ratify.ExpectedChallengeV2 {
+	return ratify.ExpectedChallengeV2{Value: bytes.Repeat([]byte{b}, 32), IssuedAt: 990, ExpiresAt: 1_290, VerifierNamespace: "device-ns", ReplayEpoch: 3}
+}
+
+// Every member of the complete-state projection changes the digest on its
+// own, so a rollback of any one durable record is detectable even when the
+// receipt log and every other record are unchanged (SPEC-v2 §7.13).
+func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
+	ctx := context.Background()
+	primary, _, _ := newTestDevice(t)
+	if _, err := primary.Store.ClaimV2(ctx, ratify.V2ChallengeClaim{ClaimID: "claim-1", Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300}); err != nil {
+		t.Fatal(err)
+	}
+	base, err := primary.CompleteStateDigestTestOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*DevicePrimaryTestOnly){
+		"claim state":     func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].state = stateTerminal },
+		"claim lease":     func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].leaseExpiresAt++ },
+		"claim progress":  func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].progress.TrustAssessment = "trusted" },
+		"claim abandoned": func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].abandoned = true },
+		"claim removed":   func(p *DevicePrimaryTestOnly) { delete(p.Store.claims, "claim-1") },
+		"stream sequence": func(p *DevicePrimaryTestOnly) { p.Store.streams["stream"] = 2 },
+		"rate counter":    func(p *DevicePrimaryTestOnly) { p.Store.rateCommits[rateKey{"issuer", "cert", 60}] = []int64{1_000} },
+		"outbox entry": func(p *DevicePrimaryTestOnly) {
+			p.Store.outbox = append(p.Store.outbox, outboxEntry{claimID: "claim-1", body: []byte("{}")})
+		},
+		"log frozen":   func(p *DevicePrimaryTestOnly) { p.Store.logFrozen = true },
+		"replay epoch": func(p *DevicePrimaryTestOnly) { p.replayEpoch++ },
+		"issuance record": func(p *DevicePrimaryTestOnly) {
+			if err := p.Issuance.inner.PersistV2Challenge(ctx, testChallengeRecord(9)); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"security journal": func(p *DevicePrimaryTestOnly) {
+			pub, _, _ := ratify.GenerateHybridKeypair()
+			if _, err := ratify.RecordSecurityKeyRoleV2(ctx, p.Journal.inner, "verifier", pub); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		mutated := primary.Clone()
+		mutate(mutated)
+		digest, err := mutated.CompleteStateDigestTestOnly()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if bytes.Equal(digest, base) {
+			t.Errorf("changing the %s does not change the complete-state digest", name)
+		}
+	}
+	// Excluded by design: clock readings and checkpoint acknowledgements.
+	mutated := primary.Clone()
+	mutated.Store.highWater += 100
+	if digest, _ := mutated.CompleteStateDigestTestOnly(); !bytes.Equal(digest, base) {
+		t.Error("a clock reading changed the complete-state digest")
+	}
+}
+
+// Journal and issuance changes are anchored like claim-store changes: a
+// restore that loses either is detected at startup, and a restored primary
+// cannot make a new change.
+func TestDeviceJournalAndIssuanceRollbackDetected(t *testing.T) {
+	ctx := context.Background()
+	for name, change := range map[string]func(*DevicePrimaryTestOnly) error{
+		"journal": func(p *DevicePrimaryTestOnly) error {
+			pub, _, _ := ratify.GenerateHybridKeypair()
+			_, err := ratify.RecordSecurityKeyRoleV2(ctx, p.Journal, "verifier", pub)
+			return err
+		},
+		"issuance": func(p *DevicePrimaryTestOnly) error {
+			return p.Issuance.PersistV2Challenge(ctx, testChallengeRecord(1))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			primary, component, device := newTestDevice(t)
+			snapshot := primary.Clone()
+			if err := change(primary); err != nil {
+				t.Fatal(err)
+			}
+			if got := device.Startup(); got != DeviceReady {
+				t.Fatalf("after an anchored change: %s", got)
+			}
+			restored := snapshot.Clone()
+			restoredDevice, err := NewDeviceCheckpointTestOnly(restored, component, component.PublicKey())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := restoredDevice.Startup(); got != DeviceStateDigestMismatch {
+				t.Fatalf("after a rollback: %s", got)
+			}
+			before, _ := restored.CompleteStateDigestTestOnly()
+			err = change(restored)
+			if ratify.V2ErrorClassOf(err) != ratify.V2ErrClaimStoreUnavailable {
+				t.Fatalf("a rolled-back primary made a change: %v", err)
+			}
+			if after, _ := restored.CompleteStateDigestTestOnly(); !bytes.Equal(before, after) {
+				t.Fatal("a refused change was not undone")
+			}
+		})
+	}
+}
+
+// A different entry at an acknowledged sequence freezes the component; a
+// frozen component anchors nothing more.
+func TestDeviceComponentFreezesOnFork(t *testing.T) {
+	ctx := context.Background()
+	primary, component, device := newTestDevice(t)
+	state, err := primary.anchoredDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, other := bytes.Repeat([]byte{1}, 48), bytes.Repeat([]byte{2}, 48)
+	if _, err := component.Commit(ctx, primary.Store.logID, 1, make([]byte, 48), entry, state); err != nil {
+		t.Fatal(err)
+	}
+	if ack, err := component.Commit(ctx, primary.Store.logID, 1, make([]byte, 48), entry, state); err != nil || ack.Sequence != 1 {
+		t.Fatalf("identical retry: %+v %v", ack, err)
+	}
+	if _, err := component.Commit(ctx, primary.Store.logID, 1, make([]byte, 48), other, state); !errors.Is(err, ErrDeviceFrozen) {
+		t.Fatalf("fork: %v", err)
+	}
+	if err := component.AnchorState(state, state); !errors.Is(err, ErrDeviceFrozen) {
+		t.Fatalf("anchor after freeze: %v", err)
+	}
+	if got := device.Startup(); got != DeviceCheckpointFrozen {
+		t.Fatalf("startup: %s", got)
+	}
+	if err := component.ProvisionState(state); err == nil {
+		t.Fatal("a provisioned component was provisioned again")
+	}
+}

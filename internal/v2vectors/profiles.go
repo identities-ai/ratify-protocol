@@ -56,15 +56,17 @@ type profileStepJSON struct {
 type deviceConfigJSON struct {
 	ComponentSeedB64 string `json:"component_seed_b64"`
 	Capacity         int    `json:"capacity"`
+	ReplayEpoch      int64  `json:"replay_epoch"`
 }
 
 type profileScenarioJSON struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Profile     string            `json:"profile"`
-	StartTime   int64             `json:"start_time"`
-	Device      *deviceConfigJSON `json:"device,omitempty"`
-	Steps       []profileStepJSON `json:"steps"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Profile            string            `json:"profile"`
+	StartTime          int64             `json:"start_time"`
+	RateAtFinalization bool              `json:"rate_at_finalization,omitempty"`
+	Device             *deviceConfigJSON `json:"device,omitempty"`
+	Steps              []profileStepJSON `json:"steps"`
 }
 
 // profileRequestSpec describes one profile request. Zero values select the
@@ -116,13 +118,14 @@ func (g *gen) profileRequest(p profileRequestSpec) (orderingVector, []byte) {
 
 func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVector, []byte)) {
 	f.Semantics["profile_scenarios"] = "SPEC-v2 §7.13 and §7.14 profile scripts. Each starts from a fresh reference store (as for scenarios) and adds the test-only component its profile names. Steps use the lifecycle ops (set_time, set_ack_withheld, verify, publish, release) plus the profile ops below; release checkpoint device = the device component, reference = the store checkpoint"
-	f.Semantics["profile single_device_offline"] = "the store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that records, per receipt-log entry, the entry hash and the primary's complete-state digest, signs every acknowledgement with its own key, and reads the same security clock as the store"
-	f.Semantics["device_submit"] = "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed"
+	f.Semantics["profile single_device_offline"] = "the primary is the reference store plus an anchored SecurityJournalV2 store, a challenge issuance store, and device.replay_epoch; its complete-state digest is SHA-384 over the versioned canonical projection of SPEC-v2 §7.13. The store never acknowledges its own entries; the checkpoint is an independent monotonic authenticated component on the same device (seed and capacity from device) that is provisioned with the primary's initial digest, anchors the primary's new complete-state digest before every durable security-state change takes effect (a change whose previous digest differs from the anchored one is refused and undone, so a verify fails before claim with claim_store_unavailable), records per receipt-log entry the entry hash and the anchored digest, signs every acknowledgement with its own key, and reads the same security clock as the store. rate_at_finalization makes the store admit max_rate inside finalization, as in scenarios"
+	f.Semantics["device_submit"] = "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head or its state is not the anchored state), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed"
 	f.Semantics["device_resubmit"] = "retry the exact tuple for sequence; expect ack_time (the original acknowledgement time on an identical retry) or device_error"
 	f.Semantics["device_power_loss"] = "arm a power loss for the next submission only: before_commit records nothing; after_commit records the acknowledgement durably but loses the response"
-	f.Semantics["device_startup"] = "the primary compares its complete-state digest at the component head with the acknowledged digest before serving; expect device_status ready, primary_behind (fewer appended entries than acknowledged: rollback or lost state), state_digest_mismatch, or checkpoint_frozen"
-	f.Semantics["snapshot"] = "copy the complete primary store state under snapshot"
-	f.Semantics["restore"] = "mode snapshot = replace the primary with the named copy (a rollback); the component and the clock are unchanged"
+	f.Semantics["device_startup"] = "before serving, check in order: a frozen component (checkpoint_frozen); fewer appended receipt-log entries than the component acknowledged (primary_behind: rollback or lost state); a recomputed complete-state digest that differs from the anchored one (state_digest_mismatch, including a rollback that kept the receipt-log prefix); otherwise ready"
+	f.Semantics["snapshot"] = "copy the complete primary state (store, journal, issuance records) under snapshot"
+	f.Semantics["restore"] = "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged"
+	f.Semantics["stage_status"] = "stage the request's status keys (configured in ascending issuer order) and journal preload into the primary's anchored SecurityJournalV2 store, as before disconnection; each journal transition is anchored"
 	f.Semantics["corrupt_state"] = "alter one byte of the request's sealed terminal result in the primary store"
 	f.Semantics["upload"] = "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release"
 	f.Semantics["profile dual_root"] = "one verifier and receipt log; each request pins exactly one trusted root. An application approval ledger records released decisions per approval set"
@@ -243,7 +246,7 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 	upload := func(seqs ...int64) profileStepJSON { return profileStepJSON{Op: "upload", Expect: ex{Uploaded: seqs}} }
 	device := func(name, desc string, capacity int, steps ...profileStepJSON) {
 		f.ProfileScenarios = append(f.ProfileScenarios, profileScenarioJSON{Name: name, Description: desc, Profile: "single_device_offline", StartTime: Now,
-			Device: &deviceConfigJSON{ComponentSeedB64: b64(g.k("witness").EdSeed[:]), Capacity: capacity}, Steps: steps})
+			Device: &deviceConfigJSON{ComponentSeedB64: b64(g.k("witness").EdSeed[:]), Capacity: capacity, ReplayEpoch: fixtureReplayEpoch}, Steps: steps})
 	}
 
 	device("device_release_requires_component_ack", "a committed and appended allow stays pending until the on-device component acknowledges it; the acknowledgement releases it and the uplink sends the receipt", 8,
@@ -257,19 +260,36 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 		verify("D1", committedAllow), publish("D1", 1), powerLoss("after_commit"), submit("power_loss"),
 		setTime(Now+20), startup("ready"), release("D1", "device", released(Now, 1)),
 		profileStepJSON{Op: "device_resubmit", Sequence: 1, Expect: ex{AckTime: Now}})
-	device("device_primary_rollback", "the primary is restored to a state before an acknowledged entry: startup reports primary_behind; a different entry the rolled-back primary commits at the acknowledged sequence is refused as a fork, the component freezes, and its release is rejected because the acknowledgement names the original entry", 8,
-		profileStepJSON{Op: "snapshot", Snapshot: "before"},
+	claimRefused := ex{lifecycleExpectJSON: le{Stage: "preflight", ErrorClass: "claim_store_unavailable"}}
+	snapshot := func(name string) profileStepJSON { return profileStepJSON{Op: "snapshot", Snapshot: name} }
+	restore := func(name string) profileStepJSON {
+		return profileStepJSON{Op: "restore", Mode: "snapshot", Snapshot: name}
+	}
+	device("device_primary_rollback", "the primary is restored to a state before an acknowledged entry: startup reports primary_behind, and the rolled-back primary cannot claim a challenge because its state does not extend the anchored state", 8,
+		snapshot("before"),
 		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
-		profileStepJSON{Op: "restore", Mode: "snapshot", Snapshot: "before"},
+		restore("before"),
 		startup("primary_behind"),
-		verify("D2", committedAllow), publish("D2", 1), submit("frozen"),
-		release("D2", "device", releaseState("rejected", "acknowledgement_mismatch")),
-		startup("checkpoint_frozen"))
-	device("device_state_digest_mismatch", "the primary's sealed state changes after acknowledgement: startup reports state_digest_mismatch and the next entry cannot extend the component head, so its release stays pending", 8,
+		verify("D2", claimRefused), submit(""), startup("primary_behind"))
+	device("device_state_digest_mismatch", "the primary's sealed state changes outside an anchored change after acknowledgement: startup reports state_digest_mismatch and the primary cannot claim another challenge", 8,
 		verify("D1", committedAllow), publish("D1", 1), submit("", 1),
 		step("corrupt_state", "D1", ex{}), startup("state_digest_mismatch"),
-		verify("D2", committedAllow), publish("D2", 2), submit("state_mismatch"),
-		release("D2", "device", releaseState("pending", "acknowledgement_unavailable")))
+		verify("D2", claimRefused), startup("state_digest_mismatch"))
+	device("device_rollback_loses_consumed_challenge", "with the receipt log unchanged, a restore loses a later consumed challenge: the claim was anchored when it was made, so startup reports state_digest_mismatch and the challenge cannot be claimed again", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
+		snapshot("acknowledged"), verify("D2", committedAllow), startup("ready"),
+		restore("acknowledged"), startup("state_digest_mismatch"),
+		verify("D2", claimRefused), startup("state_digest_mismatch"))
+	device("device_rollback_loses_stream_advance", "with the receipt log unchanged, a restore loses a stream advance from sequence 1 to 2: startup reports state_digest_mismatch and the lost sequence cannot be claimed again", 8,
+		verify("S1", committedAllow), publish("S1", 1), submit("", 1),
+		snapshot("acknowledged"), verify("S2", committedAllow), startup("ready"),
+		restore("acknowledged"), startup("state_digest_mismatch"),
+		verify("S2", claimRefused))
+	device("device_rollback_loses_journal_state", "with the receipt log and claims unchanged, a restore rolls back status evidence staged into the anchored journal: startup reports state_digest_mismatch", 8,
+		verify("D1", committedAllow), publish("D1", 1), submit("", 1),
+		snapshot("acknowledged"), step("stage_status", "DS", ex{}), startup("ready"),
+		restore("acknowledged"), startup("state_digest_mismatch"),
+		verify("D2", claimRefused))
 	device("device_checkpoint_storage_full", "a component with room for one acknowledgement refuses the second entry without overwriting the first: the second release stays pending and the first still releases", 1,
 		verify("D1", committedAllow), verify("D2", committedAllow), publish("D1", 1), publish("D2", 2), submit("storage_full", 1),
 		release("D2", "device", releaseState("pending", "acknowledgement_unavailable")), release("D1", "device", released(Now, 1)))
@@ -285,6 +305,14 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 		verify("D2", ex{lifecycleExpectJSON: le{Stage: "preflight", ErrorClass: "claim_store_unavailable"}}),
 		setTime(Now+10), submit("", 1), setTime(Now+9), release("D1", "device", releaseState("withheld", "clock_regressed")),
 		setTime(Now+11), release("D1", "device", released(Now+10, 1)))
+	f.ProfileScenarios = append(f.ProfileScenarios, profileScenarioJSON{Name: "device_rollback_loses_rate_state",
+		Description: "with max_rate admitted at finalization and the receipt log unchanged, a restore loses an admitted rate commit and its claim: startup reports state_digest_mismatch and the lost request cannot be admitted again",
+		Profile:     "single_device_offline", StartTime: Now, RateAtFinalization: true,
+		Device: &deviceConfigJSON{ComponentSeedB64: b64(g.k("witness").EdSeed[:]), Capacity: 8, ReplayEpoch: fixtureReplayEpoch},
+		Steps: []profileStepJSON{verify("R1", committedAllow), publish("R1", 1), submit("", 1),
+			snapshot("acknowledged"), verify("R2", committedAllow), startup("ready"),
+			restore("acknowledged"), startup("state_digest_mismatch"),
+			verify("R2", claimRefused)}})
 	device("device_offline_recovery_upload", "while the uplink is down the device releases locally; the uplink later sends only the acknowledged prefix, each receipt once; a receipt acknowledged after its challenge expired is uploaded as evidence but stays withheld, because upload is an outbox operation and not a deferred release", 8,
 		verify("D1", committedAllow), publish("D1", 1), submit("", 1), release("D1", "device", released(Now, 1)),
 		verify("D2", committedAllow), publish("D2", 2), upload(1),

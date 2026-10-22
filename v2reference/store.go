@@ -103,6 +103,10 @@ type Store struct {
 	rateAtFinalization bool
 	rateCommits        map[rateKey][]int64
 	ownerTokenRand     func([]byte) error
+	// anchor, when set by a single-device offline profile primary, anchors
+	// every durable security-state change before it takes effect (SPEC-v2
+	// §7.13). It is never copied by Clone.
+	anchor func(previous, next storeStateTestOnly) error
 }
 
 // NewStore returns a reference store whose authoritative clock starts at now,
@@ -128,6 +132,10 @@ func NewStore(now, leaseSeconds int64, logID string, verifierKey ratify.HybridPr
 func (s *Store) Clone() *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.cloneLocked()
+}
+
+func (s *Store) cloneLocked() *Store {
 	out := &Store{
 		now: s.now, highWater: s.highWater, leaseSeconds: s.leaseSeconds, claims: map[string]*claimRecord{}, streams: maps.Clone(s.streams),
 		verifierKey: s.verifierKey, verifierID: s.verifierID, logID: s.logID, ackWithheld: s.ackWithheld, logFrozen: s.logFrozen,
@@ -158,6 +166,32 @@ func (s *Store) Clone() *Store {
 		out.rateCommits[key] = slices.Clone(times)
 	}
 	return out
+}
+
+// changeLocked applies mutate as one durable security-state change. Without
+// an anchor it only applies it. With one, it digests the state before and
+// after, and anchors the new state before the change can take effect; if
+// anchoring fails, the change is undone and claim_store_unavailable is
+// returned. Clock readings are not durable security state and are kept.
+func (s *Store) changeLocked(mutate func()) error {
+	if s.anchor == nil {
+		mutate()
+		return nil
+	}
+	before := s.cloneLocked()
+	previous, err := s.stateDigestsLocked()
+	if err == nil {
+		mutate()
+		var next storeStateTestOnly
+		if next, err = s.stateDigestsLocked(); err == nil {
+			err = s.anchor(previous, next)
+		}
+	}
+	if err != nil {
+		s.claims, s.streams, s.outbox, s.rateCommits, s.logFrozen = before.claims, before.streams, before.outbox, before.rateCommits, before.logFrozen
+		return &ratify.V2Error{Class: ratify.V2ErrClaimStoreUnavailable, Err: fmt.Errorf("v2reference: durable state change was not anchored: %w", err)}
+	}
+	return nil
 }
 
 // SetTime sets the authoritative clock. Tests may move it backward to
@@ -300,11 +334,15 @@ func (s *Store) ClaimV2(_ context.Context, claim ratify.V2ChallengeClaim) (ratif
 	if err := s.ownerTokenRand(owner); err != nil {
 		return ratify.V2ClaimResult{}, err
 	}
-	if key != "" {
-		s.streams[key] = *claim.StreamSeq
+	if err := s.changeLocked(func() {
+		if key != "" {
+			s.streams[key] = *claim.StreamSeq
+		}
+		s.claims[claim.ClaimID] = &claimRecord{claim: cloneClaim(claim), ownerDigest: sha256.Sum256(owner), leaseExpiresAt: now + s.leaseSeconds, state: stateEvaluating,
+			claimedAt: now, progress: ratify.InitialV2EvaluationProgress(), outboxIndex: -1}
+	}); err != nil {
+		return ratify.V2ClaimResult{}, err
 	}
-	s.claims[claim.ClaimID] = &claimRecord{claim: cloneClaim(claim), ownerDigest: sha256.Sum256(owner), leaseExpiresAt: now + s.leaseSeconds, state: stateEvaluating,
-		claimedAt: now, progress: ratify.InitialV2EvaluationProgress(), outboxIndex: -1}
 	return ratify.V2ClaimResult{Disposition: ratify.V2ClaimCreated, ClaimedAt: now, OwnerToken: owner}, nil
 }
 
@@ -365,7 +403,8 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 	if allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.ExpiresAt) {
 		return false, &ratify.V2Error{Class: ratify.V2ErrAllowHorizonPassed, Err: fmt.Errorf("v2reference: allow is at or beyond its horizon")}
 	}
-	if allowValidUntil > 0 && s.rateAtFinalization && len(record.claim.RateBatch) != 0 {
+	admitRate := allowValidUntil > 0 && s.rateAtFinalization && len(record.claim.RateBatch) != 0
+	if admitRate {
 		for _, item := range record.claim.RateBatch {
 			key := rateKey{item.IssuerID, item.CertID, item.WindowS}
 			active := int64(0)
@@ -378,12 +417,18 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 				return false, ratify.ErrV2RateLimitExceeded
 			}
 		}
-		for _, item := range record.claim.RateBatch {
-			key := rateKey{item.IssuerID, item.CertID, item.WindowS}
-			s.rateCommits[key] = append(s.rateCommits[key], finalAt)
-		}
 	}
-	s.commitTerminalLocked(record, terminalResult, receiptBody, allowValidUntil, finalAt)
+	if err := s.changeLocked(func() {
+		if admitRate {
+			for _, item := range record.claim.RateBatch {
+				key := rateKey{item.IssuerID, item.CertID, item.WindowS}
+				s.rateCommits[key] = append(s.rateCommits[key], finalAt)
+			}
+		}
+		s.commitTerminalLocked(record, terminalResult, receiptBody, allowValidUntil, finalAt)
+	}); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -399,8 +444,7 @@ func (s *Store) RecordV2EvaluationProgress(_ context.Context, claimID string, ow
 	if err := ratify.ValidateV2EvaluationProgress(progress); err != nil {
 		return &ratify.V2Error{Class: ratify.V2ErrMalformed, Err: err}
 	}
-	record.progress = cloneProgress(progress)
-	return nil
+	return s.changeLocked(func() { record.progress = cloneProgress(progress) })
 }
 
 // LoadV2InterruptedClaim implements ratify.ClaimStoreV2. It refuses while
@@ -472,7 +516,9 @@ func (s *Store) RecoverInterruptedV2Claim(_ context.Context, claimID string, ter
 	if json.Unmarshal(terminalResult, &fields) != nil || fields["decision"] != "indeterminate" || fields["decision_reason"] != "evaluation_interrupted" {
 		return false, fmt.Errorf("v2reference: recovery may commit only indeterminate/evaluation_interrupted")
 	}
-	s.commitTerminalLocked(record, terminalResult, receiptBody, 0, now)
+	if err := s.changeLocked(func() { s.commitTerminalLocked(record, terminalResult, receiptBody, 0, now) }); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -560,7 +606,9 @@ func (s *Store) PublishV2Receipt(_ context.Context, claimID string, receiptBody 
 	if err != nil {
 		return nil, err
 	}
-	s.outbox[index].wire, s.outbox[index].digest = wire, digest
+	if err := s.changeLocked(func() { s.outbox[index].wire, s.outbox[index].digest = wire, digest }); err != nil {
+		return nil, err
+	}
 	if !s.ackWithheld {
 		s.acknowledgePendingLocked()
 	}
@@ -615,13 +663,17 @@ func (s *Store) GetV2Acknowledgement(_ context.Context, logID string, sequence i
 func (s *Store) AbandonPendingReceipts() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.logFrozen = true
 	abandoned := []string{}
-	for _, entry := range s.outbox {
-		if entry.wire == nil {
-			s.claims[entry.claimID].abandoned = true
-			abandoned = append(abandoned, entry.claimID)
+	if s.changeLocked(func() {
+		s.logFrozen = true
+		for _, entry := range s.outbox {
+			if entry.wire == nil {
+				s.claims[entry.claimID].abandoned = true
+				abandoned = append(abandoned, entry.claimID)
+			}
 		}
+	}) != nil {
+		return []string{}
 	}
 	return abandoned
 }

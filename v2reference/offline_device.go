@@ -4,18 +4,21 @@ package v2reference
 //
 // DeviceComponentTestOnly models the independent component the profile
 // requires on one device: an independently programmed secure element or
-// TPM-backed module with its own key that persistently records, for every
-// receipt-log entry, the entry hash and the primary's complete-state digest,
-// advances monotonically, and signs each acknowledgement. Nothing here is
-// durable or independent; it exists so the shared profile scenarios can
-// exercise power loss, primary rollback, digest mismatch, full storage,
+// TPM-backed module with its own key. It holds the anchored complete-state
+// digest of the primary (DevicePrimaryTestOnly), which the primary advances
+// before every durable security-state change takes effect, and it
+// persistently records, for every receipt-log entry, the entry hash and the
+// complete-state digest it acknowledged, advances monotonically, and signs
+// each acknowledgement. Nothing here is durable or independent; it exists
+// so the shared profile scenarios can exercise power loss, primary rollback
+// with and without a changed receipt prefix, digest mismatch, full storage,
 // clock regression, and offline recovery against exact semantics.
 
 import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -32,9 +35,10 @@ var (
 	// ErrDeviceStorageFull is returned when the component has no space for
 	// another acknowledgement. It never overwrites or wraps.
 	ErrDeviceStorageFull = errors.New("v2reference: device checkpoint storage is full")
-	// ErrDeviceStateMismatch is returned when a submission does not extend
-	// the component's head: the previous entry hash or the previous
-	// complete-state digest differs, or the sequence is not the next one.
+	// ErrDeviceStateMismatch is returned when a state anchor or submission
+	// does not extend the component's head: the previous complete-state
+	// digest differs from the anchored one, the previous entry hash differs,
+	// or the sequence is not the next one.
 	ErrDeviceStateMismatch = errors.New("v2reference: submission does not extend the device checkpoint head")
 	// ErrDeviceFrozen is returned after a different entry was submitted at an
 	// acknowledged sequence; the component then acknowledges nothing further.
@@ -97,8 +101,10 @@ type DeviceComponentTestOnly struct {
 	clock    ratify.V2AuthoritativeClock
 	capacity int
 	records  []DeviceAcknowledgementTestOnly
-	frozen   bool
-	fault    DevicePowerLoss
+	// state is the anchored complete-state digest; nil until provisioned.
+	state  []byte
+	frozen bool
+	fault  DevicePowerLoss
 }
 
 // NewDeviceComponentTestOnly returns a component with its own signing key
@@ -122,24 +128,55 @@ func (c *DeviceComponentTestOnly) SetPowerLoss(f DevicePowerLoss) {
 	c.fault = f
 }
 
-// Head returns the acknowledged sequence and complete-state digest (zero and
-// 32 zero bytes before the first acknowledgement), and whether it is frozen.
+// Head returns the acknowledged sequence (0 before the first
+// acknowledgement), the anchored complete-state digest (nil before
+// provisioning), and whether the component is frozen.
 func (c *DeviceComponentTestOnly) Head() (int64, []byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.records) == 0 {
-		return 0, make([]byte, 32), c.frozen
-	}
-	last := c.records[len(c.records)-1]
-	return last.Sequence, bytes.Clone(last.StateDigest), c.frozen
+	return int64(len(c.records)), bytes.Clone(c.state), c.frozen
 }
 
-// Commit records the next entry. It accepts only sequence head+1 whose
-// previous entry hash and previous state digest equal the head's; an
-// identical retry of an acknowledged sequence returns the original record,
-// and a different entry or state at an acknowledged sequence freezes the
-// component.
-func (c *DeviceComponentTestOnly) Commit(ctx context.Context, logID string, sequence int64, previousEntryHash, entryHash, previousState, state []byte) (DeviceAcknowledgementTestOnly, error) {
+// ProvisionState anchors the primary's initial complete-state digest. It is
+// accepted once, before any other anchor or acknowledgement.
+func (c *DeviceComponentTestOnly) ProvisionState(digest []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state != nil || len(c.records) != 0 || len(digest) != sha512.Size384 {
+		return fmt.Errorf("v2reference: device component is already provisioned or the digest is not 48 bytes")
+	}
+	c.state = bytes.Clone(digest)
+	return nil
+}
+
+// AnchorState advances the anchored complete-state digest from previous to
+// next. previous must equal the anchored digest: a primary whose state was
+// rolled back, restored, or altered cannot extend it. The register only
+// moves forward through this call; nothing lowers or restores it.
+func (c *DeviceComponentTestOnly) AnchorState(previous, next []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.frozen {
+		return ErrDeviceFrozen
+	}
+	if c.state == nil || !bytes.Equal(c.state, previous) || len(next) != sha512.Size384 {
+		return ErrDeviceStateMismatch
+	}
+	c.state = bytes.Clone(next)
+	return nil
+}
+
+// Commit records the next receipt-log entry. It accepts only sequence
+// head+1 whose previous entry hash equals the head's and whose state digest
+// equals the anchored complete-state digest, so the acknowledged entry is
+// part of the anchored state. An identical retry (same log ID and entry
+// hash) of an acknowledged sequence returns the original record, and a
+// different entry at an acknowledged sequence freezes the component.
+func (c *DeviceComponentTestOnly) Commit(ctx context.Context, logID string, sequence int64, previousEntryHash, entryHash, state []byte) (DeviceAcknowledgementTestOnly, error) {
+	// The security clock is read before the component lock: the primary's
+	// clock source may itself take the store lock, which is held while the
+	// store anchors state here.
+	now, clockErr := c.clock.AuthoritativeTimeV2(ctx)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.frozen {
@@ -147,20 +184,20 @@ func (c *DeviceComponentTestOnly) Commit(ctx context.Context, logID string, sequ
 	}
 	if sequence >= 1 && sequence <= int64(len(c.records)) {
 		existing := c.records[sequence-1]
-		if existing.LogID == logID && bytes.Equal(existing.EntryHash, entryHash) && bytes.Equal(existing.StateDigest, state) {
+		if existing.LogID == logID && bytes.Equal(existing.EntryHash, entryHash) {
 			return cloneDeviceAck(existing), nil
 		}
 		c.frozen = true
 		return DeviceAcknowledgementTestOnly{}, ErrDeviceFrozen
 	}
-	headEntry, headState := make([]byte, 48), make([]byte, 32)
+	headEntry := make([]byte, 48)
 	if n := len(c.records); n > 0 {
-		headEntry, headState = c.records[n-1].EntryHash, c.records[n-1].StateDigest
+		headEntry = c.records[n-1].EntryHash
 		if c.records[n-1].LogID != logID {
 			return DeviceAcknowledgementTestOnly{}, ErrDeviceStateMismatch
 		}
 	}
-	if sequence != int64(len(c.records))+1 || !bytes.Equal(headEntry, previousEntryHash) || !bytes.Equal(headState, previousState) {
+	if sequence != int64(len(c.records))+1 || !bytes.Equal(headEntry, previousEntryHash) || c.state == nil || !bytes.Equal(c.state, state) {
 		return DeviceAcknowledgementTestOnly{}, ErrDeviceStateMismatch
 	}
 	if len(c.records) >= c.capacity {
@@ -171,9 +208,8 @@ func (c *DeviceComponentTestOnly) Commit(ctx context.Context, logID string, sequ
 	if fault == DevicePowerLossBeforeCommit {
 		return DeviceAcknowledgementTestOnly{}, ErrDevicePowerLoss
 	}
-	now, err := c.clock.AuthoritativeTimeV2(ctx)
-	if err != nil {
-		return DeviceAcknowledgementTestOnly{}, err
+	if clockErr != nil {
+		return DeviceAcknowledgementTestOnly{}, clockErr
 	}
 	ack := DeviceAcknowledgementTestOnly{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), StateDigest: bytes.Clone(state), Timestamp: now}
 	ack.Signature = ed25519.Sign(c.key, deviceAckMessage(ack))
@@ -192,42 +228,6 @@ func (c *DeviceComponentTestOnly) Get(logID string, sequence int64) (DeviceAckno
 		return DeviceAcknowledgementTestOnly{}, ratify.ErrV2AcknowledgementNotFound
 	}
 	return cloneDeviceAck(c.records[sequence-1]), nil
-}
-
-// DeviceStateDigestTestOnly returns the primary's complete-state digest after
-// receipt-log entry sequence (32 zero bytes for sequence 0). Each step binds
-// the claim ID, the sealed terminal result, the sealed outbox body, and the
-// signed entry hash, so a primary restored to an earlier or altered state
-// cannot reproduce the digest the component acknowledged. A production
-// primary digests every durable security record (SPEC-v2 §7.13).
-func (s *Store) DeviceStateDigestTestOnly(sequence int64) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.deviceStateDigestLocked(sequence)
-}
-
-func (s *Store) deviceStateDigestLocked(sequence int64) ([]byte, error) {
-	state := make([]byte, 32)
-	if sequence < 0 || sequence > int64(len(s.outbox)) {
-		return nil, fmt.Errorf("v2reference: no receipt-log entry %d", sequence)
-	}
-	for i := int64(0); i < sequence; i++ {
-		entry := s.outbox[i]
-		if entry.wire == nil {
-			return nil, fmt.Errorf("v2reference: receipt-log entry %d is not appended", i+1)
-		}
-		record := s.claims[entry.claimID]
-		terminal, body := sha256.Sum256(record.terminal), sha256.Sum256(record.receiptBody)
-		h := sha256.New()
-		h.Write(append([]byte("ratify-test-device-state-v2"), 0))
-		h.Write(state)
-		h.Write(lpBytes([]byte(entry.claimID)))
-		h.Write(terminal[:])
-		h.Write(body[:])
-		h.Write(lpBytes(entry.digest))
-		state = h.Sum(nil)
-	}
-	return state, nil
 }
 
 // CorruptSealedStateTestOnly flips one byte of a committed claim's sealed
@@ -263,7 +263,9 @@ const (
 	// component acknowledged (rollback or lost state). The device stays
 	// recovering until its recovery authority advances the replay epoch.
 	DevicePrimaryBehind DeviceStartupStatus = "primary_behind"
-	// DeviceStateDigestMismatch: same length, different complete state.
+	// DeviceStateDigestMismatch: the primary's complete-state digest differs
+	// from the anchored one, including a rollback that kept the receipt-log
+	// prefix but lost or altered any other durable security record.
 	DeviceStateDigestMismatch DeviceStartupStatus = "state_digest_mismatch"
 	// DeviceCheckpointFrozen: the component saw a conflicting entry.
 	DeviceCheckpointFrozen DeviceStartupStatus = "checkpoint_frozen"
@@ -273,16 +275,37 @@ const (
 // implements ratify.V2ReceiptCheckpoint: every acknowledgement it returns
 // carries a component signature verified under the pinned key.
 type DeviceCheckpointTestOnly struct {
+	device    *DevicePrimaryTestOnly
 	primary   *Store
 	component *DeviceComponentTestOnly
 	pinned    ed25519.PublicKey
 }
 
-// NewDeviceCheckpointTestOnly binds a primary store to a component whose key
-// the primary pinned at provisioning. The primary must not self-acknowledge
-// (SetAcknowledgementWithheld(true)).
-func NewDeviceCheckpointTestOnly(primary *Store, component *DeviceComponentTestOnly, pinned ed25519.PublicKey) *DeviceCheckpointTestOnly {
-	return &DeviceCheckpointTestOnly{primary: primary, component: component, pinned: bytes.Clone(pinned)}
+// NewDeviceCheckpointTestOnly binds a device primary to a component whose
+// key the primary pinned at provisioning: from now on every durable change
+// of the primary is anchored in the component before it takes effect. The
+// primary's store must not self-acknowledge (SetAcknowledgementWithheld(true)).
+// A fresh device then calls Provision once; a primary restored from a copy
+// is bound again without provisioning, and its first change or startup
+// shows whether it matches the anchored state.
+func NewDeviceCheckpointTestOnly(primary *DevicePrimaryTestOnly, component *DeviceComponentTestOnly, pinned ed25519.PublicKey) (*DeviceCheckpointTestOnly, error) {
+	if primary == nil || component == nil {
+		return nil, fmt.Errorf("v2reference: device checkpoint needs a primary and a component")
+	}
+	if err := primary.bind(component); err != nil {
+		return nil, err
+	}
+	return &DeviceCheckpointTestOnly{device: primary, primary: primary.Store, component: component, pinned: bytes.Clone(pinned)}, nil
+}
+
+// Provision anchors the primary's current complete-state digest as the
+// component's initial state.
+func (d *DeviceCheckpointTestOnly) Provision() error {
+	digest, err := d.device.CompleteStateDigestTestOnly()
+	if err != nil {
+		return err
+	}
+	return d.component.ProvisionState(digest)
 }
 
 func (d *DeviceCheckpointTestOnly) toAck(a DeviceAcknowledgementTestOnly) (ratify.V2CheckpointAcknowledgement, error) {
@@ -292,21 +315,17 @@ func (d *DeviceCheckpointTestOnly) toAck(a DeviceAcknowledgementTestOnly) (ratif
 	return ratify.V2CheckpointAcknowledgement{LogID: a.LogID, Sequence: a.Sequence, EntryHash: bytes.Clone(a.EntryHash), Timestamp: a.Timestamp}, nil
 }
 
-// AcknowledgeV2Receipt submits the primary's appended entry with its
-// previous and current complete-state digests.
+// AcknowledgeV2Receipt submits the primary's appended entry with the
+// primary's anchored complete-state digest, which already covers the append.
 func (d *DeviceCheckpointTestOnly) AcknowledgeV2Receipt(ctx context.Context, logID string, sequence int64, previousEntryHash, entryHash []byte) (ratify.V2CheckpointAcknowledgement, error) {
 	if appended, ok := d.primary.appendedEntry(sequence); !ok || !bytes.Equal(appended, entryHash) {
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
-	previousState, err := d.primary.DeviceStateDigestTestOnly(sequence - 1)
+	state, err := d.device.anchoredDigest()
 	if err != nil {
 		return ratify.V2CheckpointAcknowledgement{}, err
 	}
-	state, err := d.primary.DeviceStateDigestTestOnly(sequence)
-	if err != nil {
-		return ratify.V2CheckpointAcknowledgement{}, err
-	}
-	ack, err := d.component.Commit(ctx, logID, sequence, previousEntryHash, entryHash, previousState, state)
+	ack, err := d.component.Commit(ctx, logID, sequence, previousEntryHash, entryHash, state)
 	if err != nil {
 		return ratify.V2CheckpointAcknowledgement{}, err
 	}
@@ -361,17 +380,19 @@ func (d *DeviceCheckpointTestOnly) Resubmit(ctx context.Context, sequence int64)
 }
 
 // Startup compares the primary with the component head before the device
-// serves any request.
+// serves any request: frozen component, then fewer appended entries than
+// acknowledged, then the recomputed complete-state digest against the
+// anchored one.
 func (d *DeviceCheckpointTestOnly) Startup() DeviceStartupStatus {
-	head, headState, frozen := d.component.Head()
+	head, anchored, frozen := d.component.Head()
 	if frozen {
 		return DeviceCheckpointFrozen
 	}
-	state, err := d.primary.DeviceStateDigestTestOnly(head)
-	if err != nil {
+	if int64(d.primary.LogLength()) < head {
 		return DevicePrimaryBehind
 	}
-	if !bytes.Equal(state, headState) {
+	state, err := d.device.CompleteStateDigestTestOnly()
+	if err != nil || !bytes.Equal(state, anchored) {
 		return DeviceStateDigestMismatch
 	}
 	return DeviceReady

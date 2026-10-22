@@ -112,13 +112,15 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 		Bundles          map[string]string             `json:"bundles_b64"`
 		Requests         map[string]v2LifecycleRequest `json:"requests"`
 		ProfileScenarios []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Profile     string `json:"profile"`
-			StartTime   int64  `json:"start_time"`
-			Device      *struct {
+			Name               string `json:"name"`
+			Description        string `json:"description"`
+			Profile            string `json:"profile"`
+			StartTime          int64  `json:"start_time"`
+			RateAtFinalization bool   `json:"rate_at_finalization"`
+			Device             *struct {
 				ComponentSeedB64 string `json:"component_seed_b64"`
 				Capacity         int    `json:"capacity"`
+				ReplayEpoch      int64  `json:"replay_epoch"`
 			} `json:"device"`
 			Steps []v2ProfileStep `json:"steps"`
 		} `json:"profile_scenarios"`
@@ -128,7 +130,7 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 	for _, sc := range f.ProfileScenarios {
 		profiles[sc.Profile]++
 	}
-	if profiles["single_device_offline"] < 9 || profiles["dual_root"] < 13 || len(profiles) != 2 {
+	if profiles["single_device_offline"] < 13 || profiles["dual_root"] < 13 || len(profiles) != 2 {
 		t.Fatalf("profile scenarios %v", profiles)
 	}
 	ctx := context.Background()
@@ -138,6 +140,7 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var primary *v2reference.DevicePrimaryTestOnly
 			var device *v2reference.DeviceCheckpointTestOnly
 			var component *v2reference.DeviceComponentTestOnly
 			var uplink *v2reference.DeviceUplinkTestOnly
@@ -147,7 +150,15 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				device = v2reference.NewDeviceCheckpointTestOnly(store, component, component.PublicKey())
+				if primary, err = v2reference.NewDevicePrimaryTestOnly(store, sc.Device.ReplayEpoch); err != nil {
+					t.Fatal(err)
+				}
+				if device, err = v2reference.NewDeviceCheckpointTestOnly(primary, component, component.PublicKey()); err != nil {
+					t.Fatal(err)
+				}
+				if err := device.Provision(); err != nil {
+					t.Fatal(err)
+				}
 				uplink = v2reference.NewDeviceUplinkTestOnly(device)
 			}
 			ledger := v2reference.NewApprovalLedgerTestOnly()
@@ -155,7 +166,7 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 			committed := map[string]*ratify.CommittedV2Outcome{}
 			receipts := map[string][]byte{}
 			decisions := map[string]*ratify.V2ReleasedDecision{}
-			snapshots := map[string]*v2reference.Store{}
+			snapshots := map[string]*v2reference.DevicePrimaryTestOnly{}
 			for i, step := range sc.Steps {
 				want := step.Expect
 				request := f.Requests[step.Request]
@@ -169,6 +180,10 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 					inputs.Now = store.Now()
 					req, cb, _ := v2BuildVerifyRequest(t, inputs, unb64(t, f.Bundles[request.Bundle]), &v2Counts{})
 					cb.ClaimStore = store
+					if sc.RateAtFinalization {
+						rateStore := store.WithRateAtFinalization()
+						cb.ClaimStore, cb.Rate = rateStore, rateStore
+					}
 					outcome, _ := ratify.VerifyProofBundleV2(ctx, req, cb)
 					if string(outcome.Stage) != want.Stage || string(outcome.ErrorClass) != want.ErrorClass {
 						t.Fatalf("step %d verify %s: stage %s class %s (%v), want %+v", i, step.Request, outcome.Stage, outcome.ErrorClass, outcome.Error, want.v2LifecycleExpect)
@@ -223,13 +238,20 @@ func TestV2ConformanceProfileScenarios(t *testing.T) {
 						t.Fatalf("step %d device_startup: %s, want %s", i, got, want.DeviceStatus)
 					}
 				case "snapshot":
-					snapshots[step.Snapshot] = store.Clone()
+					snapshots[step.Snapshot] = primary.Clone()
 				case "restore":
 					now := store.Now()
-					store = snapshots[step.Snapshot].Clone()
+					primary = snapshots[step.Snapshot].Clone()
+					store = primary.Store
 					store.SetTime(now)
-					device = v2reference.NewDeviceCheckpointTestOnly(store, component, component.PublicKey())
+					if device, err = v2reference.NewDeviceCheckpointTestOnly(primary, component, component.PublicKey()); err != nil {
+						t.Fatal(err)
+					}
 					uplink = v2reference.NewDeviceUplinkTestOnly(device)
+				case "stage_status":
+					// Stage the request's status keys and evidence into the
+					// device's anchored journal (SPEC-v2 §7.13).
+					v2PopulateStatusJournal(t, primary.Journal, request.v2OrderingInputs)
 				case "corrupt_state":
 					store.CorruptSealedStateTestOnly(committed[step.Request].ClaimID())
 				case "upload":

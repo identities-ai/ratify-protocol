@@ -24,7 +24,7 @@ import { keyIDV2 } from "../crypto_v2.js";
 import type { HybridKeyPairV2 } from "../crypto_v2.js";
 import { ErrV2ClaimProofConflict, ErrV2RateLimitExceeded, V2Error, V2SentinelError } from "../errors_v2.js";
 import { cloneV2EvaluationProgress, initialV2EvaluationProgress, validateV2EvaluationProgress, type V2EvaluationProgress, type V2InterruptedClaim } from "../evaluation_progress_v2.js";
-import { bytesEqual, canonicalJSONV2, compareStrings, hexOf, parseJSONV2 } from "../json_v2.js";
+import { base64Encode, bytesEqual, canonicalJSONV2, compareBytes, compareStrings, hexOf, parseJSONV2 } from "../json_v2.js";
 import {
   ErrV2AcknowledgementNotFound,
   ErrV2ReleaseStateMismatch,
@@ -121,12 +121,28 @@ export function claimBytesTestOnly(c: V2ChallengeClaim): Uint8Array {
   });
 }
 
-function streamKey(c: V2ChallengeClaim): string {
-  const ns = new TextEncoder().encode(c.namespace).length;
-  return `${ns}:${c.namespace}|${c.agentID.length}:${c.agentID}|${c.streamID === null ? "" : hexOf(c.streamID)}`;
+/**
+ * Durable stream state, keyed by (namespace, agent_id, stream_id) (SPEC-v2
+ * §7.4); streamID holds the raw stream ID bytes.
+ */
+export interface StreamStateTestOnly {
+  namespace: string;
+  agentID: string;
+  streamID: Uint8Array;
+  lastSequence: number;
 }
 
-const rateKeyOf = (issuerID: string, certID: string, windowS: number) => JSON.stringify([issuerID, certID, windowS]);
+/** An injective map key for the structured stream key. */
+export function streamKeyTestOnly(namespace: string, agentID: string, streamID: Uint8Array): string {
+  return JSON.stringify([namespace, agentID, hexOf(streamID)]);
+}
+
+/** The structured key of a claim's stream (Go streamKeyV2). */
+function streamKey(c: V2ChallengeClaim): string {
+  return streamKeyTestOnly(c.namespace, c.agentID, c.streamID ?? new Uint8Array(0));
+}
+
+export const rateKeyOf = (issuerID: string, certID: string, windowS: number) => JSON.stringify([issuerID, certID, windowS]);
 
 /** Options for a reference store. */
 export interface StoreOptionsTestOnly {
@@ -147,7 +163,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
   highWater: number;
   readonly leaseSeconds: number;
   claims = new Map<string, ClaimRecord>();
-  streams = new Map<string, number>();
+  streams = new Map<string, StreamStateTestOnly>();
   readonly verifierKey: HybridKeyPairV2;
   readonly verifierID: string;
   readonly logID: string;
@@ -190,7 +206,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       ...r, claim: cloneClaim(r.claim), terminal: Uint8Array.from(r.terminal), receiptBody: Uint8Array.from(r.receiptBody),
       progress: cloneV2EvaluationProgress(r.progress), release: r.release ? { ...r.release, entryHash: Uint8Array.from(r.release.entryHash) } : null,
     }]));
-    out.streams = new Map(this.streams);
+    out.streams = new Map([...this.streams].map(([k, v]) => [k, { ...v, streamID: Uint8Array.from(v.streamID) }]));
     out.outbox = this.outbox.map((e) => ({
       claimID: e.claimID, body: Uint8Array.from(e.body), wire: e.wire ? Uint8Array.from(e.wire) : null, digest: Uint8Array.from(e.digest),
       ack: e.ack ? { ...e.ack, entryHash: Uint8Array.from(e.ack.entryHash) } : null,
@@ -294,12 +310,14 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
           throw storeError("malformed", "v2reference: stream_id and stream_seq must appear together");
         }
         key = streamKey(claim);
-        const last = this.streams.get(key);
+        const last = this.streams.get(key)?.lastSequence;
         checkV2StreamSequence(last !== undefined, last ?? 0, claim.streamSeq);
       }
       const owner = this.options.ownerTokenSource ? Uint8Array.from(this.options.ownerTokenSource()) : globalThis.crypto.getRandomValues(new Uint8Array(32));
       this.change(() => {
-        if (key !== "") this.streams.set(key, claim.streamSeq!);
+        if (key !== "") {
+          this.streams.set(key, { namespace: claim.namespace, agentID: claim.agentID, streamID: Uint8Array.from(claim.streamID!), lastSequence: claim.streamSeq! });
+        }
         this.claims.set(claim.claimID, {
           claim: cloneClaim(claim), ownerDigest: sha256(owner), leaseExpiresAt: now + this.leaseSeconds, state: "evaluating",
           terminal: new Uint8Array(0), receiptBody: new Uint8Array(0), allowHorizon: 0, claimedAt: now, finalizedAt: 0, release: null,
@@ -557,36 +575,82 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     return new RateAtFinalizationStoreTestOnly(this);
   }
 
-  /** Member digests of every durable security record (claims, streams, rates, receipt log). */
-  stateDigests(): StoreStateTestOnly {
-    const hexDigest = (v: unknown) => hexOf(sha384Of(canonicalJSONV2(v)));
-    const opt = (b: Uint8Array) => (b.length === 0 ? "" : hexOf(sha384Of(b)));
-    const claims = [...this.claims.keys()].sort(compareStrings).map((id) => {
-      const r = this.claims.get(id)!;
-      const p = r.progress;
-      return {
-        abandoned: r.abandoned, allow_horizon: r.allowHorizon, claim_id: id, claim_sha384: hexOf(sha384Of(claimBytesTestOnly(r.claim))),
-        claimed_at: r.claimedAt, finalized_at: r.finalizedAt, lease_expires_at: r.leaseExpiresAt, outbox_index: r.outboxIndex,
-        owner_digest: hexOf(r.ownerDigest),
-        progress_sha384: hexDigest({ c: p.contextAssessment, d: p.contextPolicyDigest, e: p.statusEvidence, s: p.statusAssessment, t: p.trustAssessment }),
-        receipt_body_sha384: opt(r.receiptBody),
-        release_sha384: r.release ? hexDigest({ a: r.release.ackTimestamp, c: r.release.claimID, h: r.release.entryHash }) : "",
-        state: r.state, terminal_sha384: opt(r.terminal),
-      };
-    });
-    const streams = [...this.streams].map(([stream, last]) => ({ last_seq: last, stream })).sort((a, b) => compareStrings(a.stream, b.stream));
-    const rates = [...this.rateCommits.values()].map((v) => ({ cert_id: v.certID, commits: [...v.times], issuer_id: v.issuerID, window_s: v.windowS }))
-      .sort((a, b) => compareStrings(a.issuer_id, b.issuer_id) || compareStrings(a.cert_id, b.cert_id) || a.window_s - b.window_s);
+  /**
+   * The RatifyCanonicalJSON of the claims, streams, rate_counters, and
+   * receipt_log members in the normative record encodings of SPEC-v2 §7.13:
+   * every claim in every state with its sealed values and release record,
+   * every stream sequence, every rate counter, and the receipt log with its
+   * outbox. Checkpoint acknowledgements and clock readings are excluded.
+   */
+  storeMembers(): { claims: Uint8Array; streams: Uint8Array; rateCounters: Uint8Array; receiptLog: Uint8Array } {
+    const claims = [...this.claims.keys()].sort(compareStrings).map((id) => claimProjection(id, this.claims.get(id)!));
+    const streams = [...this.streams.values()]
+      .sort((a, b) => compareStrings(a.namespace, b.namespace) || compareStrings(a.agentID, b.agentID) || compareBytes(a.streamID, b.streamID))
+      .map((v) => ({ agent_id: v.agentID, last_sequence: v.lastSequence, namespace: v.namespace, stream_id: base64Encode(v.streamID) }));
+    const rates = [...this.rateCommits.values()]
+      .sort((a, b) => compareStrings(a.issuerID, b.issuerID) || compareStrings(a.certID, b.certID) || a.windowS - b.windowS)
+      .map((v) => ({ cert_id: v.certID, commits: [...v.times], issuer_id: v.issuerID, window_s: v.windowS }));
     const log = {
-      entries: this.outbox.map((e, i) => ({ body_sha384: opt(e.body), claim_id: e.claimID, entry_hash: hexOf(e.digest), sequence: i + 1 })),
+      entries: this.outbox.map((e, i) => ({ body_sha384: sha384Hex(e.body), claim_id: e.claimID, entry_hash: bytesOrNull(e.digest), sequence: i + 1 })),
       frozen: this.logFrozen, log_id: this.logID,
     };
-    return { claims: hexDigest(claims), streams: hexDigest(streams), rateCounters: hexDigest(rates), receiptLog: hexDigest(log) };
+    return { claims: canonicalJSONV2(claims), streams: canonicalJSONV2(streams), rateCounters: canonicalJSONV2(rates), receiptLog: canonicalJSONV2(log) };
+  }
+
+  /** Member digests of every durable security record (claims, streams, rates, receipt log). */
+  stateDigests(): StoreStateTestOnly {
+    const m = this.storeMembers();
+    return { claims: sha384Hex(m.claims), streams: sha384Hex(m.streams), rateCounters: sha384Hex(m.rateCounters), receiptLog: sha384Hex(m.receiptLog) };
   }
 }
 
 import { sha384 } from "@noble/hashes/sha2";
-const sha384Of = (b: Uint8Array) => sha384(b);
+
+/** Lowercase hex SHA-384, without a label. */
+export const sha384Hex = (b: Uint8Array): string => hexOf(sha384(b));
+
+// Projection values follow the normative record encodings of SPEC-v2 §7.13.
+
+/** Padded base64 of a stored byte string, or null when the store holds none. */
+export const bytesOrNull = (b: Uint8Array | null | undefined): string | null => (b && b.length > 0 ? base64Encode(b) : null);
+
+/** Lowercase hex SHA-384 of exact stored bytes, or null when the store holds none. */
+const sha384OrNull = (b: Uint8Array): string | null => (b.length > 0 ? sha384Hex(b) : null);
+
+function sealedClaimProjection(c: V2ChallengeClaim): Record<string, unknown> {
+  return {
+    agent_id: c.agentID, bundle_hash: c.bundleHash, challenge_digest: c.challengeDigest, claim_id: c.claimID,
+    clock_skew_seconds: c.clockSkewSeconds,
+    constraint_evaluators: c.constraintEvaluators.map((e) => ({ profile_digest: e.profile_digest, type: e.type })),
+    context_policy_digest: c.contextPolicyDigest === "" ? null : c.contextPolicyDigest,
+    expires_at: c.expiresAt, issued_at: c.issuedAt, issuer_ids: [...c.issuerIDs], max_age_seconds: c.maxAgeSeconds,
+    namespace: c.namespace, proof_digest: c.proofDigest,
+    rate_batch: c.rateBatch.map((r) => ({ cert_id: r.certID, issuer_id: r.issuerID, limit: r.limit, window_s: r.windowS })),
+    replay_epoch: c.replayEpoch, required_scope: c.requiredScope, requires_rate: c.requiresRate,
+    stream_id: bytesOrNull(c.streamID), stream_seq: c.streamSeq, verifier_id: c.verifierID,
+  };
+}
+
+function progressProjection(p: V2EvaluationProgress): Record<string, unknown> {
+  return {
+    context_assessment: p.contextAssessment, context_policy_digest: p.contextPolicyDigest, status_assessment: p.statusAssessment,
+    status_evidence_digests: p.statusEvidence.map((e) => ({
+      digest: e.digest, issuer_id: e.issuer_id, object_type_code: e.object_type_code, sequence: e.sequence, status_key_id: e.status_key_id,
+    })),
+    trust_assessment: p.trustAssessment,
+  };
+}
+
+function claimProjection(id: string, r: ClaimRecord): Record<string, unknown> {
+  return {
+    abandoned: r.abandoned, allow_horizon: r.allowHorizon, claim: sealedClaimProjection(r.claim), claim_id: id,
+    claimed_at: r.claimedAt, finalized_at: r.finalizedAt, lease_expires_at: r.leaseExpiresAt,
+    log_sequence: r.outboxIndex >= 0 ? r.outboxIndex + 1 : null, owner_digest: base64Encode(r.ownerDigest),
+    progress: progressProjection(r.progress), receipt_body_sha384: sha384OrNull(r.receiptBody),
+    release: r.release ? { ack_timestamp: r.release.ackTimestamp, claim_id: r.release.claimID, entry_hash: base64Encode(r.release.entryHash) } : null,
+    state: r.state, terminal_sha384: sha384OrNull(r.terminal),
+  };
+}
 
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;

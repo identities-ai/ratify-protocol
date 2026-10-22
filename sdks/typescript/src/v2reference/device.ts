@@ -7,9 +7,8 @@
 // epoch). Its complete-state digest is a labelled SHA-384 over a versioned
 // canonical projection. Once bound to a component, every durable change is
 // anchored in the component before it takes effect; a refused change is
-// undone. The byte encoding of a record within a member is
-// implementation-defined (only this device compares it); the member set,
-// ordering, version and label follow the specification.
+// undone. Every record uses the normative encoding of §7.13, so the digest is
+// reproducible across implementations (testvectors/v2/device-state.json).
 
 import { getPublicKeyAsync, signAsync, verifyAsync } from "@noble/ed25519";
 import { sha384 } from "@noble/hashes/sha2";
@@ -19,12 +18,12 @@ import type { V2CheckpointAcknowledgement } from "../checkpoint_ack_v2.js";
 import type { V2AuthoritativeClock } from "../claim_store_v2.js";
 import { type V2ChallengeIssuanceStore } from "../challenge_issuance_v2.js";
 import { V2Error, V2SentinelError, v2ErrorClassOf } from "../errors_v2.js";
-import { bytesEqual, canonicalJSONV2, compareStrings, concatBytes, hexOf, uint64BE, utf8 } from "../json_v2.js";
+import { base64Encode, bytesEqual, canonicalJSONV2, compareBytes, compareStrings, concatBytes, uint64BE, utf8 } from "../json_v2.js";
 import type { SecurityJournalHeadV2, SecurityJournalLoadV2, SecurityJournalStoreV2, SecurityJournalV2 } from "../security_journal_v2.js";
 import type { ExpectedChallengeV2 } from "../verify_v2_preflight.js";
 import { ChallengeIssuanceStoreTestOnly } from "./challenges.js";
 import { JournalStoreTestOnly } from "./journal.js";
-import { MutexTestOnly, StoreTestOnly, type StoreStateTestOnly } from "./store.js";
+import { MutexTestOnly, StoreTestOnly, bytesOrNull, sha384Hex, type StoreStateTestOnly } from "./store.js";
 
 export const ErrDevicePowerLossTestOnly = new V2SentinelError("v2reference: power lost during the device checkpoint submission");
 export const ErrDeviceStorageFullTestOnly = new V2SentinelError("v2reference: device checkpoint storage is full");
@@ -37,7 +36,6 @@ export type DeviceStartupStatusTestOnly = "ready" | "primary_behind" | "state_di
 const DEVICE_STATE_LABEL = "ratify/device-complete-state/v2";
 const DEVICE_STATE_VERSION = 1;
 
-const sha384Hex = (b: Uint8Array) => hexOf(sha384(b));
 
 /** One signed acknowledgement of the device component. */
 export interface DeviceAcknowledgementTestOnly {
@@ -179,16 +177,28 @@ export class DevicePrimaryTestOnly {
 
   /** The complete-state digest for the given store members and current journal and issuance records. */
   compose(store: StoreStateTestOnly): Uint8Array {
+    return completeStateDigestTestOnly(this.projection(store, sha384Hex(this.issuanceMember())));
+  }
+
+  /**
+   * The RatifyCanonicalJSON of the issuance_records member, sorted by
+   * (verifier_namespace, replay_epoch, value) (SPEC-v2 §7.13).
+   */
+  issuanceMember(): Uint8Array {
+    const records = [...this.issuance.inner.records.values()].sort((a, b) =>
+      compareStrings(a.verifierNamespace, b.verifierNamespace) || a.replayEpoch - b.replayEpoch || compareBytes(a.value, b.value));
+    return canonicalJSONV2(records.map(issuanceProjection));
+  }
+
+  /** The RatifyCanonicalJSON of the version 1 projection object. */
+  projection(store: StoreStateTestOnly, issuanceDigest: string): Uint8Array {
     const journal = this.journal.inner.snapshotStateTestOnly();
-    const records = [...this.issuance.inner.records].map(([key, record]) => ({ key, record_sha384: sha384Hex(issuanceRecordBytes(record)) }))
-      .sort((a, b) => compareStrings(a.key, b.key));
-    const body = canonicalJSONV2({
-      claims: store.claims, issuance_records: sha384Hex(canonicalJSONV2(records)), log_id: this.store.logID,
+    return canonicalJSONV2({
+      claims: store.claims, issuance_records: issuanceDigest, log_id: this.store.logID,
       rate_counters: store.rateCounters, receipt_log: store.receiptLog, replay_epoch: this.replayEpoch,
       security_journal: { generation: journal.head.generation, snapshot_sha384: sha384Hex(journal.snapshot) },
       streams: store.streams, version: DEVICE_STATE_VERSION,
     });
-    return sha384(concatBytes(utf8(DEVICE_STATE_LABEL), new Uint8Array([0]), body));
   }
 
   /** Recomputes the complete-state digest from current records. */
@@ -227,12 +237,27 @@ export class DevicePrimaryTestOnly {
   }
 }
 
-function issuanceRecordBytes(r: ExpectedChallengeV2): Uint8Array {
-  return canonicalJSONV2({
-    expected_agent_id: r.expectedAgentID ?? "", expected_agent_public_key: r.expectedAgentPublicKey ? { ed25519: r.expectedAgentPublicKey.ed25519, ml_dsa_65: r.expectedAgentPublicKey.ml_dsa_65 } : null,
-    expected_receiver_id: r.expectedReceiverID ?? "", expected_session_context: r.expectedSessionContext ?? null,
-    expires_at: r.expiresAt, issued_at: r.issuedAt, replay_epoch: r.replayEpoch, value: r.value, verifier_id: r.verifierID, verifier_namespace: r.verifierNamespace,
-  });
+/** The labelled SHA-384 of the projection bytes. */
+export function completeStateDigestTestOnly(projection: Uint8Array): Uint8Array {
+  return sha384(concatBytes(utf8(DEVICE_STATE_LABEL), new Uint8Array([0]), projection));
+}
+
+function issuanceProjection(r: ExpectedChallengeV2): Record<string, unknown> {
+  const key = r.expectedAgentPublicKey;
+  const policy = r.contextPolicy;
+  return {
+    context_policy: policy
+      ? {
+        expected_session_context: bytesOrNull(policy.expectedSessionContext), profile: policy.profile, require_bound: policy.requireBound,
+        required_fields: [...policy.requiredFields], version: 1,
+      }
+      : null,
+    expected_agent_id: r.expectedAgentID ?? "",
+    expected_agent_pub_key: key ? { ed25519: base64Encode(key.ed25519), ml_dsa_65: base64Encode(key.ml_dsa_65) } : null,
+    expected_receiver_id: r.expectedReceiverID ?? "", expected_session_context: bytesOrNull(r.expectedSessionContext),
+    expires_at: r.expiresAt, issued_at: r.issuedAt, replay_epoch: r.replayEpoch, value: base64Encode(r.value),
+    verifier_id: r.verifierID, verifier_namespace: r.verifierNamespace,
+  };
 }
 
 /** The primary's anchored SecurityJournalV2 store. */

@@ -21,6 +21,8 @@ func (g *gen) bundleNegatives(n *negBuilder) {
 		n.add(name, kind, mutation, g.resign(o, agent), v, class)
 	}
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("challenge_at_after_max_timestamp", "challenge_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["challenge_at"] = num(maxTimestampV2 + 1) })
+	m("challenge_at_negative", "challenge_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["challenge_at"] = num(-1) })
 	m("verifier_id_changed", "verifier_id set to another valid v2 key ID", "invalid_signature", func(o map[string]any) { o["verifier_id"] = attacker.ID })
 	m("verifier_id_v1_128_bit", "verifier_id is a 128-bit v1 ID", "malformed", func(o map[string]any) { o["verifier_id"] = ratify.DeriveID(g.k("verifier").Pub) })
 	m("agent_id_other_key", "agent_id set to another key's ID", "key_id_mismatch", func(o map[string]any) { o["agent_id"] = attacker.ID })
@@ -102,6 +104,10 @@ func (g *gen) statusNegatives(n *negBuilder) {
 		n.add(name, kind, mutation, mutate(list, f), v, class)
 	}
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("updated_at_after_max_timestamp", "updated_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["updated_at"] = num(maxTimestampV2 + 1) })
+	m("updated_at_negative", "updated_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["updated_at"] = num(-1) })
+	m("next_update_after_max_timestamp", "next_update = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["next_update"] = num(maxTimestampV2 + 1) })
+	m("next_update_negative", "next_update = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["next_update"] = num(-1) })
 	m("issuer_id_other", "issuer_id names a different issuer", "status_key_binding_mismatch", func(o map[string]any) { o["issuer_id"] = inter.ID })
 	m("issuer_id_v1_128_bit", "issuer_id is a 128-bit v1 ID", "malformed", func(o map[string]any) { o["issuer_id"] = ratify.DeriveID(root.Pub) })
 	m("updated_at_changed", "updated_at+1", "invalid_signature", func(o map[string]any) { o["updated_at"] = addNum(o["updated_at"], 1) })
@@ -129,6 +135,8 @@ func (g *gen) statusNegatives(n *negBuilder) {
 		n.add(name, kind, mutation, mutate(push, f), v, class)
 	}
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("pushed_at_after_max_timestamp", "pushed_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["pushed_at"] = num(maxTimestampV2 + 1) })
+	m("pushed_at_negative", "pushed_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["pushed_at"] = num(-1) })
 	m("issuer_id_other", "issuer_id names a different issuer", "status_key_binding_mismatch", func(o map[string]any) { o["issuer_id"] = inter.ID })
 	m("pushed_at_changed", "pushed_at+1", "invalid_signature", func(o map[string]any) { o["pushed_at"] = addNum(o["pushed_at"], 1) })
 	m("sequence_changed", "sequence+1", "invalid_signature", func(o map[string]any) { o["sequence"] = addNum(o["sequence"], 1) })
@@ -160,6 +168,10 @@ func (g *gen) rotationNegatives(n *negBuilder) {
 	}
 	add := func(name, mutation, class string, wire []byte) { n.add(name, kind, mutation, wire, v, class) }
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("issued_at_after_max_timestamp", "issued_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["issued_at"] = num(maxTimestampV2 + 1) })
+	m("issued_at_negative", "issued_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["issued_at"] = num(-1) })
+	m("not_before_after_max_timestamp", "not_before = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["not_before"] = num(maxTimestampV2 + 1) })
+	m("not_before_negative", "not_before = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["not_before"] = num(-1) })
 	m("authority_uppercase", "authority_id uppercased", "malformed", func(o map[string]any) { o["authority_id"] = strings.ToUpper(rotationAuthority) })
 	m("role_unknown", "role=admin", "malformed", func(o map[string]any) { o["role"] = "admin" })
 	m("recovery_epoch_zero", "recovery_epoch 0", "malformed", func(o map[string]any) { o["recovery_epoch"] = num(0) })
@@ -208,6 +220,8 @@ func (g *gen) witnessNegatives(n *negBuilder) {
 		n.add(name, kind, mutation, mutate(base, f), v, class)
 	}
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("timestamp_after_max_timestamp", "timestamp = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["timestamp"] = num(maxTimestampV2 + 1) })
+	m("timestamp_negative", "timestamp = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["timestamp"] = num(-1) })
 	m("cross_log_replay", "log_id of another log (signature valid for that log)", "log_state_mismatch", func(o map[string]any) { o["log_id"] = witnessLogB })
 	m("log_id_31_chars", "log_id has 31 characters", "malformed", func(o map[string]any) { o["log_id"] = witnessLogA[:31] })
 	m("genesis_nonzero_prev", "sequence 1 with a non-zero prev_hash", "malformed", func(o map[string]any) { o["prev_hash"] = b64(append([]byte{1}, make([]byte, 47)...)) })
@@ -233,6 +247,8 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	}
 	party := func(o map[string]any, i int) map[string]any { return obj(arr(o["parties"])[i]) }
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("created_at_after_max_timestamp", "created_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["created_at"] = num(maxTimestampV2 + 1) })
+	m("created_at_negative", "created_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["created_at"] = num(-1) })
 	m("transaction_id_changed", "transaction_id changed; bundles bind the old transaction context", "transaction_context_mismatch", func(o map[string]any) { o["transaction_id"] = "tx-0002" })
 	m("terms_changed", "terms_canonical_json amount changed", "transaction_context_mismatch", func(o map[string]any) {
 		o["terms_canonical_json"] = b64([]byte(`{"amount":101,"currency":"USD","item":"widget"}`))
@@ -284,6 +300,8 @@ func (g *gen) receiptNegatives(n *negBuilder) {
 		n.add(name, kind, mutation, mutate(base, f), v, class)
 	}
 	m("version_1", "version=1", "malformed", func(o map[string]any) { o["version"] = num(1) })
+	m("verified_at_after_max_timestamp", "verified_at = 253402300800, one past the v2 timestamp bound", "malformed", func(o map[string]any) { o["verified_at"] = num(maxTimestampV2 + 1) })
+	m("verified_at_negative", "verified_at = -1, below the v2 timestamp bound", "malformed", func(o map[string]any) { o["verified_at"] = num(-1) })
 	m("log_id_other", "log_id of another log", "log_state_mismatch", func(o map[string]any) { o["log_id"] = "dddddddddddddddddddddddddddddd02" })
 	m("verifier_id_other", "verifier_id names another key", "log_state_mismatch", func(o map[string]any) { o["verifier_id"] = attacker.ID })
 	m("genesis_nonzero_previous", "sequence 1 with a non-zero previous_receipt_hash", "malformed", func(o map[string]any) { o["previous_receipt_hash"] = b64(append([]byte{1}, make([]byte, 47)...)) })

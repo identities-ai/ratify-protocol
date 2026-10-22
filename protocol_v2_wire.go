@@ -342,7 +342,7 @@ func validateRevokedCertsV2(refs []RevokedCertV2) error {
 }
 
 func validateRevocationListV2(list *RevocationListV2) error {
-	if list == nil || list.Version != 2 || !validV2ID(list.IssuerID) || list.Sequence <= 0 || list.Sequence > maxSafeInteger || list.UpdatedAt < -maxSafeInteger || list.UpdatedAt > maxSafeInteger || list.NextUpdate < -maxSafeInteger || list.NextUpdate > maxSafeInteger || list.NextUpdate <= list.UpdatedAt {
+	if list == nil || list.Version != 2 || !validV2ID(list.IssuerID) || list.Sequence <= 0 || list.Sequence > maxSafeInteger || !validV2Timestamp(list.UpdatedAt) || !validV2Timestamp(list.NextUpdate) || list.NextUpdate <= list.UpdatedAt {
 		return fmt.Errorf("v2 revocation list has invalid version, issuer, sequence, or time bounds")
 	}
 	if len(list.Revoked) > MaxRevocationListRefsV2 {
@@ -352,7 +352,7 @@ func validateRevocationListV2(list *RevocationListV2) error {
 }
 
 func validateRevocationPushV2(push *RevocationPushV2) error {
-	if push == nil || push.Version != 2 || !validV2ID(push.IssuerID) || push.Sequence <= 0 || push.Sequence > maxSafeInteger || push.PushedAt < -maxSafeInteger || push.PushedAt > maxSafeInteger {
+	if push == nil || push.Version != 2 || !validV2ID(push.IssuerID) || push.Sequence <= 0 || push.Sequence > maxSafeInteger || !validV2Timestamp(push.PushedAt) {
 		return fmt.Errorf("v2 revocation push has invalid version, issuer, sequence, or timestamp")
 	}
 	if len(push.Revoked) > MaxRevocationPushRefsV2 {
@@ -661,6 +661,9 @@ func DecodeProofBundleV2(data []byte) (_ *ProofBundleV2, err error) {
 	if len(bundle.Challenge) != 32 {
 		return nil, fmt.Errorf("wire v2: challenge must be 32 bytes")
 	}
+	if !validV2Timestamp(bundle.ChallengeAt) {
+		return nil, fmt.Errorf("wire v2: challenge_at is outside 0..%d", V2MaxTimestampSeconds)
+	}
 	if len(bundle.DelegationDigest) != sha512.Size384 {
 		return nil, fmt.Errorf("wire v2: delegation_digest must be 48 bytes")
 	}
@@ -763,7 +766,7 @@ func validateDelegationCertV2(c *DelegationCertV2) error {
 	if c.Version != 2 {
 		return fmt.Errorf("version must be 2")
 	}
-	if c.IssuedAt < -maxSafeInteger || c.IssuedAt > maxSafeInteger || c.ExpiresAt < -maxSafeInteger || c.ExpiresAt > maxSafeInteger {
+	if !validV2Timestamp(c.IssuedAt) || !validV2Timestamp(c.ExpiresAt) {
 		return fmt.Errorf("issued_at and expires_at must be safe integers")
 	}
 	if c.CertID == "" || len(c.CertID) > MaxIdentifierLengthBytes {

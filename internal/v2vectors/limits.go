@@ -95,7 +95,7 @@ func BuildLimitBytes(c LimitConstruction) ([]byte, error) {
 func (g *gen) limitsFile() any {
 	f := limitsFile{
 		Version:     2,
-		Description: "Byte-boundary and count-boundary vectors for the SPEC-v2 per-object limits. A byte limit bounds the complete encoded object as received, including signatures and any insignificant whitespace, and is checked before parsing. Build each input from construction, confirm length and sha256_hex, then decode it with the strict decoder for kind. expected=accept: decoding succeeds. expected=reject: decoding fails with expected_error_class. size_gate records whether the input passes the pre-parse byte gate: an input at a limit always passes it (it may still be rejected later, for example because a canonical-only object cannot carry padding); an input one byte over always fails it.",
+		Description: "Byte-boundary, count-boundary and timestamp-domain vectors for the SPEC-v2 per-object limits (§2.5, §2.6). A byte limit bounds the complete encoded object as received, including signatures and any insignificant whitespace, and is checked before parsing. Build each input from construction, confirm length and sha256_hex, then decode it with the strict decoder for kind. expected=accept: decoding succeeds. expected=reject: decoding fails with expected_error_class. size_gate records whether the input passes the pre-parse byte gate: an input at a limit always passes it (it may still be rejected later, for example because a canonical-only object cannot carry padding); an input one byte over always fails it.",
 		Limits: map[string]int{
 			"MAX_DELEGATION_CERT_BYTES_V2":           ratify.MaxDelegationCertBytesV2,
 			"MAX_PROOF_BUNDLE_BYTES_V2":              ratify.MaxProofBundleBytesV2,
@@ -109,6 +109,7 @@ func (g *gen) limitsFile() any {
 			"MAX_VERIFICATION_RECEIPT_BYTES_V2":      ratify.MaxVerificationReceiptBytesV2,
 			"MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2": ratify.MaxVerificationReceiptBodyBytesV2,
 			"MAX_TRANSACTION_RECEIPT_BYTES_V2":       ratify.MaxTransactionReceiptBytesV2,
+			"MAX_TIMESTAMP_SECONDS_V2":               int(ratify.V2MaxTimestampSeconds),
 		},
 		Procedure: map[string]string{
 			"delegation_certificate":    "strict v2 certificate decode",
@@ -201,6 +202,18 @@ func (g *gen) limitsFile() any {
 	bytesPair("verification_receipt_body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", ratify.MaxVerificationReceiptBodyBytesV2, must(ratify.VerificationReceiptV2Body(body)), "reject", canonicalOnly)
 
 	bytesPair("transaction_receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", ratify.MaxTransactionReceiptBytesV2, g.txFixture().wire, "reject", canonicalOnly)
+
+	// Timestamp domain (SPEC-v2 §2.5): a signed object whose timestamp is
+	// exactly 9999-12-31T23:59:59Z decodes; one second later is malformed at
+	// decode. The delegation lifetime bound is a post-claim check, so the
+	// at-limit certificate decodes even though its lifetime exceeds it.
+	maxTS := int(ratify.V2MaxTimestampSeconds)
+	_, certMaxTS, _ := g.cert(certSpec{issuer: root, subject: inter, certID: "cert-root", scope: []string{"data:read"}, issuedAt: Now - 3600, expiresAt: ratify.V2MaxTimestampSeconds})
+	add("expires_at_at_limit", "delegation_certificate", "MAX_TIMESTAMP_SECONDS_V2", maxTS, LimitConstruction{Method: "inline", WireB64: b64(certMaxTS)}, "accept", "pass", "expires_at = 253402300799, signed")
+	add("expires_at_over_limit", "delegation_certificate", "MAX_TIMESTAMP_SECONDS_V2", maxTS, LimitConstruction{Method: "inline", WireB64: b64(mutate(certMaxTS, func(o map[string]any) { o["expires_at"] = num(ratify.V2MaxTimestampSeconds + 1) }))}, "reject", "pass", "expires_at = 253402300800")
+	_, listMaxTS, _ := g.list(g.k("status_root"), root.ID, 7, Now-60, ratify.V2MaxTimestampSeconds, "cert-a")
+	add("next_update_at_limit", "revocation_list", "MAX_TIMESTAMP_SECONDS_V2", maxTS, LimitConstruction{Method: "inline", WireB64: b64(listMaxTS)}, "accept", "pass", "next_update = 253402300799, signed")
+	add("next_update_over_limit", "revocation_list", "MAX_TIMESTAMP_SECONDS_V2", maxTS, LimitConstruction{Method: "inline", WireB64: b64(mutate(listMaxTS, func(o map[string]any) { o["next_update"] = num(ratify.V2MaxTimestampSeconds + 1) }))}, "reject", "pass", "next_update = 253402300800")
 	return f
 }
 

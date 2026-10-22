@@ -99,7 +99,7 @@ func validateWitnessEntryV2(entry *WitnessEntryV2, signature bool) error {
 	if len(entry.LogID) != 32 || !lowerHexString(entry.LogID) {
 		return fmt.Errorf("wire v2: log_id must be 32 lowercase hexadecimal characters")
 	}
-	if entry.Sequence <= 0 || entry.Sequence > maxSafeInteger || entry.Timestamp < -maxSafeInteger || entry.Timestamp > maxSafeInteger {
+	if entry.Sequence <= 0 || entry.Sequence > maxSafeInteger || !validV2Timestamp(entry.Timestamp) {
 		return fmt.Errorf("wire v2: sequence and timestamp must be safe integers")
 	}
 	if len(entry.PrevHash) != 48 {

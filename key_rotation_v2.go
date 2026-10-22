@@ -91,7 +91,7 @@ func validateKeyRotationStatementV2(stmt *KeyRotationStatementV2, signatures boo
 	if stmt.RecoveryEpoch <= 0 || stmt.RecoveryEpoch > maxSafeInteger || stmt.Sequence <= 0 || stmt.Sequence > maxSafeInteger {
 		return fmt.Errorf("wire v2: recovery_epoch and sequence must be positive safe integers")
 	}
-	if stmt.IssuedAt < -maxSafeInteger || stmt.IssuedAt > maxSafeInteger || stmt.NotBefore < -maxSafeInteger || stmt.NotBefore > maxSafeInteger {
+	if !validV2Timestamp(stmt.IssuedAt) || !validV2Timestamp(stmt.NotBefore) {
 		return fmt.Errorf("wire v2: issued_at and not_before must be safe integers")
 	}
 	switch stmt.Role {

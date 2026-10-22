@@ -39,7 +39,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
 ];
 
 /// The cross-SDK fixtures `v2_cross_sdk_fixtures` must verify.
-const CROSS_SDK_FIXTURES: &[&str] = &["go.json", "python.json", "rust.json", "typescript.json"];
+const CROSS_SDK_FIXTURES: &[&str] = &["c.json", "go.json", "python.json", "rust.json", "typescript.json"];
 
 fn manifest() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

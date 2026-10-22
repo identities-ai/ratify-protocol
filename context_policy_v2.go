@@ -71,6 +71,18 @@ func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []stri
 	return &V2ContextPolicy{profile: profile, requireBound: requireBound, requiredFields: fields, expectedSessionContext: bytes.Clone(expectedSessionContext), digest: digest, valid: true}, nil
 }
 
+// Fields returns copies of the validated policy content: the profile, whether
+// a bound context is required, the required fields in configured order, and
+// the expected session context (nil when unbound). A durable issuance store
+// uses them to persist the policy and to project it into the single-device
+// offline complete-state digest (SPEC-v2 §7.13).
+func (p *V2ContextPolicy) Fields() (profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) {
+	if p == nil {
+		return "", false, nil, nil
+	}
+	return p.profile, p.requireBound, append([]string{}, p.requiredFields...), bytes.Clone(p.expectedSessionContext)
+}
+
 type v2ContextPolicyWire struct {
 	Profile        string   `json:"profile"`
 	RequireBound   bool     `json:"require_bound"`

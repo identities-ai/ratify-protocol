@@ -135,6 +135,7 @@ passing it. Changes to `testvectors/v2`:
 | `challenge-issuance.json` | New: 9 challenge issuance helper scenarios (33 steps) |
 | `status-publisher.json` | New: 13 signed-status publisher scenarios (39 steps) with journal ingestion and role-configuration refusals |
 | `evaluator-profiles.json` | New: 70 standard evaluator profile cases (34 `max_count/v1`, 36 `allowed_values/v1`) and 13 request-context bound cases |
+| `device-state.json` | New: 5 single-device offline complete-state projection known answers (SPEC-v2 §7.13). The record encoding inside each projection member is now normative instead of implementation-defined, so an SDK that implements the profile must replace its own record encoding with the §7.13 encoding and reproduce these bytes |
 
 SDK test files that read these vector files, and therefore fail until ported:
 

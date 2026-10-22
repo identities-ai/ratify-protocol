@@ -35,7 +35,8 @@ type V2ContextPolicyAssessment struct {
 
 // NewV2ContextPolicy validates and fingerprints a policy. expectedSessionContext
 // is per-invocation authenticated state and is excluded from the policy digest.
-func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) (*V2ContextPolicy, error) {
+func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) (_ *V2ContextPolicy, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if profile == "" || !utf8.ValidString(profile) {
 		return nil, fmt.Errorf("v2 context policy profile must be non-empty valid UTF-8")
 	}
@@ -68,6 +69,18 @@ func NewV2ContextPolicy(profile string, requireBound bool, requiredFields []stri
 	sum := sha512.Sum384(encoded)
 	digest := "sha384:" + hex.EncodeToString(sum[:])
 	return &V2ContextPolicy{profile: profile, requireBound: requireBound, requiredFields: fields, expectedSessionContext: bytes.Clone(expectedSessionContext), digest: digest, valid: true}, nil
+}
+
+// Fields returns copies of the validated policy content: the profile, whether
+// a bound context is required, the required fields in configured order, and
+// the expected session context (nil when unbound). A durable issuance store
+// uses them to persist the policy and to project it into the single-device
+// offline complete-state digest (SPEC-v2 §7.13).
+func (p *V2ContextPolicy) Fields() (profile string, requireBound bool, requiredFields []string, expectedSessionContext []byte) {
+	if p == nil {
+		return "", false, nil, nil
+	}
+	return p.profile, p.requireBound, append([]string{}, p.requiredFields...), bytes.Clone(p.expectedSessionContext)
 }
 
 type v2ContextPolicyWire struct {

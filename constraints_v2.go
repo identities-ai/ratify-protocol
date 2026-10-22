@@ -100,7 +100,8 @@ type ConstraintContextV2 struct {
 
 // MarshalJSON emits exactly the registered members for c.Type, with keys in
 // RatifyCanonicalJSON order and without HTML escaping.
-func (c ConstraintV2) MarshalJSON() ([]byte, error) {
+func (c ConstraintV2) MarshalJSON() (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	m := map[string]any{"type": string(c.Type)}
 	switch c.Type {
 	case ConstraintTimeWindow:
@@ -136,7 +137,8 @@ func (c ConstraintV2) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON strictly decodes one v2 constraint against the closed registry.
-func (c *ConstraintV2) UnmarshalJSON(data []byte) error {
+func (c *ConstraintV2) UnmarshalJSON(data []byte) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateV2ConstraintFields(data); err != nil {
 		return err
 	}

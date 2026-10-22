@@ -163,10 +163,11 @@ func keyRotationSignableBytesV2(stmt *KeyRotationStatementV2) ([]byte, error) {
 // rotation, witness, or verification-receipt object. The caller supplies the
 // object-specific projection with signature fields excluded. Each supported
 // object body is schema-validated before its digest is computed.
-func StatementBodyDigestV2(objectType uint16, signableBody []byte) ([]byte, error) {
+func StatementBodyDigestV2(objectType uint16, signableBody []byte) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	code := v2ObjectType(objectType)
 	if code != v2KeyRotationAuthorization && code != v2WitnessEntry && code != v2VerificationReceipt {
-		return nil, fmt.Errorf("object type 0x%04x does not use StatementBodyDigestV2", objectType)
+		return nil, v2Errorf(V2ErrUnsupportedObjectType, "object type 0x%04x does not use StatementBodyDigestV2", objectType)
 	}
 	var wireErr error
 	if code == v2VerificationReceipt {
@@ -224,7 +225,7 @@ func validateKeyRotationSignableBodyV2(body []byte) error {
 		return fmt.Errorf("rotation signable body: %w", err)
 	}
 	var signable keyRotationSignableV2
-	if err := strictUnmarshal(body, &signable); err != nil {
+	if err := strictUnmarshalV2(body, &signable); err != nil {
 		return fmt.Errorf("rotation signable body: %w", err)
 	}
 	canonical, err := CanonicalJSON(signable)
@@ -247,7 +248,8 @@ func validateKeyRotationSignableBodyV2(body []byte) error {
 // KeyRotationStatementV2Digest returns StatementBodyDigestV2(0x0004, body).
 // Both signatures are excluded so randomized signature bytes cannot fork the
 // rotation chain.
-func KeyRotationStatementV2Digest(stmt *KeyRotationStatementV2) ([]byte, error) {
+func KeyRotationStatementV2Digest(stmt *KeyRotationStatementV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	body, err := keyRotationSignableBytesV2(stmt)
 	if err != nil {
 		return nil, err
@@ -268,7 +270,7 @@ func DecodeKeyRotationStatementV2(data []byte) (_ *KeyRotationStatementV2, err e
 		return nil, err
 	}
 	var stmt KeyRotationStatementV2
-	if err := strictUnmarshal(data, &stmt); err != nil {
+	if err := strictUnmarshalV2(data, &stmt); err != nil {
 		return nil, err
 	}
 	if err := validateKeyRotationStatementV2(&stmt, true); err != nil {
@@ -278,7 +280,8 @@ func DecodeKeyRotationStatementV2(data []byte) (_ *KeyRotationStatementV2, err e
 }
 
 // EncodeKeyRotationStatementV2 returns the strict v2 wire representation.
-func EncodeKeyRotationStatementV2(stmt *KeyRotationStatementV2) ([]byte, error) {
+func EncodeKeyRotationStatementV2(stmt *KeyRotationStatementV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateKeyRotationStatementV2(stmt, true); err != nil {
 		return nil, err
 	}
@@ -301,7 +304,8 @@ func SignKeyRotationStatementV2(stmt *KeyRotationStatementV2, oldKey, newKey Hyb
 // SignKeyRotationStatementV2WithSigners is SignKeyRotationStatementV2 with
 // external signers: oldSigner signs 0x0004 under the statement old key and
 // newSigner signs 0x0009 under the statement new key.
-func SignKeyRotationStatementV2WithSigners(ctx context.Context, stmt *KeyRotationStatementV2, oldSigner, newSigner SignerV2) (*KeyRotationStatementV2, error) {
+func SignKeyRotationStatementV2WithSigners(ctx context.Context, stmt *KeyRotationStatementV2, oldSigner, newSigner SignerV2) (_ *KeyRotationStatementV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateKeyRotationStatementV2(stmt, false); err != nil {
 		return nil, err
 	}
@@ -314,7 +318,7 @@ func SignKeyRotationStatementV2WithSigners(ctx context.Context, stmt *KeyRotatio
 		return nil, fmt.Errorf("new rotation key: %w", err)
 	}
 	if !equalHybridPublicKeys(oldPub, stmt.OldKey) || !equalHybridPublicKeys(newPub, stmt.NewKey) {
-		return nil, fmt.Errorf("rotation private keys do not match the statement keys")
+		return nil, v2Errorf(V2ErrKeyIDMismatch, "rotation private keys do not match the statement keys")
 	}
 	signable, err := keyRotationSignableBytesV2(stmt)
 	if err != nil {
@@ -341,7 +345,8 @@ func SignKeyRotationStatementV2WithSigners(ctx context.Context, stmt *KeyRotatio
 // against caller-authenticated state. A nil result is not acceptance: callers
 // must atomically persist the new head and used-key history, and handle
 // idempotency, forks, rollback, and recovery in a durable journal.
-func VerifyKeyRotationStatementV2(stmt *KeyRotationStatementV2, state KeyRotationV2State, nowUnix, futureSkew int64) error {
+func VerifyKeyRotationStatementV2(stmt *KeyRotationStatementV2, state KeyRotationV2State, nowUnix, futureSkew int64) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateKeyRotationStatementV2(stmt, true); err != nil {
 		return v2Classify(V2ErrMalformed, err)
 	}

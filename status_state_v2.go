@@ -54,7 +54,7 @@ type StatusEvidenceEntryV2 struct {
 // configuration transition. It preserves issuer-wide denials and prior
 // authenticated evidence, while making old accepted state unusable.
 func TransitionRevocationStatusEpochV2(state RevocationStatusStateV2, issuerID string, nextEpoch uint64, nextStatusKey HybridPublicKey) (_ RevocationStatusStateV2, err error) {
-	defer func() { err = v2Classify(V2ErrConfigurationInvalid, err) }()
+	defer func() { err = v2Classify(V2ErrStatusObjectRejected, err) }()
 	if issuerID == "" || nextEpoch == 0 || nextEpoch > uint64(maxSafeInteger) {
 		return state, fmt.Errorf("status-key epoch transition has invalid issuer or epoch")
 	}
@@ -99,7 +99,8 @@ func TransitionRevocationStatusEpochV2(state RevocationStatusStateV2, issuerID s
 
 // RevocationStatusForCertV2 derives a fail-closed answer and its deterministic
 // authenticated evidence from one issuer's rollback-protected reducer state.
-func RevocationStatusForCertV2(state RevocationStatusStateV2, issuerID, certID string, statusKeyEpoch uint64, statusKey HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (RevocationStatusResultV2, error) {
+func RevocationStatusForCertV2(state RevocationStatusStateV2, issuerID, certID string, statusKeyEpoch uint64, statusKey HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (_ RevocationStatusResultV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	unavailable := RevocationStatusResultV2{Status: "indeterminate", Reason: "unavailable", Evidence: []StatusEvidenceEntryV2{}}
 	if err := validateRevocationStatusPolicyV2(policy); err != nil {
 		return unavailable, err

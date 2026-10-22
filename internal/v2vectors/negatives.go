@@ -60,6 +60,7 @@ func (g *gen) objectNegativesFile() any {
 	g.witnessNegatives(n)
 	g.transactionNegatives(n)
 	g.receiptNegatives(n)
+	g.shapeNegatives(n)
 	return negativesFile{
 		Version:     2,
 		Description: "Single-fault negative vectors. Every vector MUST be rejected with expected_error_class. Mutations of signed fields that keep the object structurally valid MUST fail as invalid_signature; mutations that break structure, key-ID derivation, or caller-authenticated state fail with the structural class. Precedence: strict decode and field format (malformed) before key-ID derivation (key_id_mismatch) before delegation digest, duplicate CertificateRef and chain linkage before any signature check.",

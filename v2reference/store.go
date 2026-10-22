@@ -92,7 +92,7 @@ type Store struct {
 	highWater          int64
 	leaseSeconds       int64
 	claims             map[string]*claimRecord // keyed by claim ID
-	streams            map[string]int64
+	streams            map[streamKeyV2]int64
 	verifierKey        ratify.HybridPrivateKey
 	verifierID         string
 	logID              string
@@ -121,7 +121,7 @@ func NewStore(now, leaseSeconds int64, logID string, verifierKey ratify.HybridPr
 		return nil, fmt.Errorf("v2reference: lease must be positive and log ID 32 hex characters")
 	}
 	return &Store{
-		now: now, highWater: now, leaseSeconds: leaseSeconds, claims: map[string]*claimRecord{}, streams: map[string]int64{},
+		now: now, highWater: now, leaseSeconds: leaseSeconds, claims: map[string]*claimRecord{}, streams: map[streamKeyV2]int64{},
 		verifierKey: verifierKey, verifierID: id, logID: logID, rateCommits: map[rateKey][]int64{},
 		ownerTokenRand: func(b []byte) error { _, err := rand.Read(b); return err },
 	}, nil
@@ -274,8 +274,14 @@ func (s *Store) AuthoritativeTimeV2(context.Context) (int64, error) {
 	return s.readClockLocked()
 }
 
-func streamKey(claim ratify.V2ChallengeClaim) string {
-	return fmt.Sprintf("%d:%s|%d:%s|%x", len(claim.Namespace), claim.Namespace, len(claim.AgentID), claim.AgentID, claim.StreamID)
+// streamKeyV2 is the durable stream-state key (namespace, agent_id,
+// stream_id) of SPEC-v2 §7.4; streamID holds the raw stream ID bytes.
+type streamKeyV2 struct {
+	namespace, agentID, streamID string
+}
+
+func streamKey(claim ratify.V2ChallengeClaim) streamKeyV2 {
+	return streamKeyV2{namespace: claim.Namespace, agentID: claim.AgentID, streamID: string(claim.StreamID)}
 }
 
 func sameImmutableClaim(a, b ratify.V2ChallengeClaim) bool {
@@ -319,12 +325,13 @@ func (s *Store) ClaimV2(_ context.Context, claim ratify.V2ChallengeClaim) (ratif
 	if !ratify.ChallengeClaimTimeCurrentV2(claim, now) {
 		return ratify.V2ClaimResult{}, &ratify.V2Error{Class: ratify.V2ErrChallengeNotFresh, Err: fmt.Errorf("v2reference: challenge is not current at the store clock")}
 	}
-	var key string
+	var key streamKeyV2
+	bound := false
 	if claim.StreamID != nil || claim.StreamSeq != nil {
 		if claim.StreamID == nil || claim.StreamSeq == nil {
 			return ratify.V2ClaimResult{}, &ratify.V2Error{Class: ratify.V2ErrMalformed, Err: fmt.Errorf("v2reference: stream_id and stream_seq must appear together")}
 		}
-		key = streamKey(claim)
+		key, bound = streamKey(claim), true
 		last, hasLast := s.streams[key]
 		if err := ratify.CheckV2StreamSequence(hasLast, last, *claim.StreamSeq); err != nil {
 			return ratify.V2ClaimResult{}, err
@@ -335,7 +342,7 @@ func (s *Store) ClaimV2(_ context.Context, claim ratify.V2ChallengeClaim) (ratif
 		return ratify.V2ClaimResult{}, err
 	}
 	if err := s.changeLocked(func() {
-		if key != "" {
+		if bound {
 			s.streams[key] = *claim.StreamSeq
 		}
 		s.claims[claim.ClaimID] = &claimRecord{claim: cloneClaim(claim), ownerDigest: sha256.Sum256(owner), leaseExpiresAt: now + s.leaseSeconds, state: stateEvaluating,

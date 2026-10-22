@@ -2,7 +2,8 @@
 // These functions intentionally use v2 domain tags and leave the v1 API unchanged.
 
 import { sha256 } from "@noble/hashes/sha2";
-import { vocabulary } from "./scope.js";
+import { validateRequiredScopeV2 } from "./scope_v2.js";
+import { classified } from "./errors_v2.js";
 
 const OPERATION_CONTEXT_V2_DOMAIN_TAG = "ratify/operation-context/v2";
 const SESSION_CONTEXT_V2_DOMAIN_TAG = "ratify/session-context/v2";
@@ -62,20 +63,22 @@ function concat(chunks: Uint8Array[]): Uint8Array {
 }
 
 export function operationContextV2Bytes(ctx: OperationContextV2): Uint8Array {
-  if (!vocabulary().includes(ctx.required_scope ?? "")) {
-    throw new Error("required scope must be one registered canonical scope");
-  }
-  const digest = ctx.payload_digest ?? new Uint8Array(0);
-  if (digest.length !== 0 && digest.length !== 32) {
-    throw new Error(`payload digest must be empty or 32 bytes, got ${digest.length}`);
-  }
-  const chunks: Uint8Array[] = [new TextEncoder().encode(OPERATION_CONTEXT_V2_DOMAIN_TAG)];
-  appendLengthPrefixed(chunks, encodeText("required scope", ctx.required_scope));
-  appendLengthPrefixed(chunks, encodeText("operation", ctx.operation));
-  appendLengthPrefixed(chunks, encodeText("resource id", ctx.resource_id));
-  appendLengthPrefixed(chunks, encodeText("requested path", ctx.requested_path));
-  appendLengthPrefixed(chunks, digest);
-  return concat(chunks);
+  return classified("configuration_invalid", () => {
+    if (validateRequiredScopeV2(ctx.required_scope ?? "") !== null) {
+      throw new Error("required scope must be one canonical scope or one exact custom: scope");
+    }
+    const digest = ctx.payload_digest ?? new Uint8Array(0);
+    if (digest.length !== 0 && digest.length !== 32) {
+      throw new Error(`payload digest must be empty or 32 bytes, got ${digest.length}`);
+    }
+    const chunks: Uint8Array[] = [new TextEncoder().encode(OPERATION_CONTEXT_V2_DOMAIN_TAG)];
+    appendLengthPrefixed(chunks, encodeText("required scope", ctx.required_scope));
+    appendLengthPrefixed(chunks, encodeText("operation", ctx.operation));
+    appendLengthPrefixed(chunks, encodeText("resource id", ctx.resource_id));
+    appendLengthPrefixed(chunks, encodeText("requested path", ctx.requested_path));
+    appendLengthPrefixed(chunks, digest);
+    return concat(chunks);
+  });
 }
 
 export function operationContextV2Hash(ctx: OperationContextV2): Uint8Array {
@@ -83,26 +86,28 @@ export function operationContextV2Hash(ctx: OperationContextV2): Uint8Array {
 }
 
 export function sessionContextV2Bytes(inputs: SessionContextV2Inputs): Uint8Array {
-  if (!KEY_ID_PATTERN.test(inputs.verifier_id)) {
-    throw new Error("verifier ID must be 64 lowercase hexadecimal characters");
-  }
-  if (!WORKSPACE_ID_PATTERN.test(inputs.workspace_id)) {
-    throw new Error("workspace ID must be a canonical lowercase UUID");
-  }
-  if (!KEY_ID_PATTERN.test(inputs.agent_id)) {
-    throw new Error("agent ID must be 64 lowercase hexadecimal characters");
-  }
-  if (inputs.request_hash.length !== 32) {
-    throw new Error(`request hash must be 32 bytes, got ${inputs.request_hash.length}`);
-  }
-  const chunks: Uint8Array[] = [new TextEncoder().encode(SESSION_CONTEXT_V2_DOMAIN_TAG)];
-  appendLengthPrefixed(chunks, encodeText("verifier ID", inputs.verifier_id));
-  appendLengthPrefixed(chunks, encodeText("workspace ID", inputs.workspace_id));
-  appendLengthPrefixed(chunks, encodeText("agent ID", inputs.agent_id));
-  appendLengthPrefixed(chunks, encodeText("session ID", inputs.session_id));
-  appendLengthPrefixed(chunks, encodeText("invocation ID", inputs.invocation_id));
-  appendLengthPrefixed(chunks, inputs.request_hash);
-  return concat(chunks);
+  return classified("configuration_invalid", () => {
+    if (!KEY_ID_PATTERN.test(inputs.verifier_id)) {
+      throw new Error("verifier ID must be 64 lowercase hexadecimal characters");
+    }
+    if (!WORKSPACE_ID_PATTERN.test(inputs.workspace_id)) {
+      throw new Error("workspace ID must be a canonical lowercase UUID");
+    }
+    if (!KEY_ID_PATTERN.test(inputs.agent_id)) {
+      throw new Error("agent ID must be 64 lowercase hexadecimal characters");
+    }
+    if (inputs.request_hash.length !== 32) {
+      throw new Error(`request hash must be 32 bytes, got ${inputs.request_hash.length}`);
+    }
+    const chunks: Uint8Array[] = [new TextEncoder().encode(SESSION_CONTEXT_V2_DOMAIN_TAG)];
+    appendLengthPrefixed(chunks, encodeText("verifier ID", inputs.verifier_id));
+    appendLengthPrefixed(chunks, encodeText("workspace ID", inputs.workspace_id));
+    appendLengthPrefixed(chunks, encodeText("agent ID", inputs.agent_id));
+    appendLengthPrefixed(chunks, encodeText("session ID", inputs.session_id));
+    appendLengthPrefixed(chunks, encodeText("invocation ID", inputs.invocation_id));
+    appendLengthPrefixed(chunks, inputs.request_hash);
+    return concat(chunks);
+  });
 }
 
 export function buildSessionContextV2(inputs: SessionContextV2Inputs): Uint8Array {

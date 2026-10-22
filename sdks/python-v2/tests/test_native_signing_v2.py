@@ -1,10 +1,10 @@
 """Signing goes only through ratify-protocol-native-v2, and fails closed without it.
 
-Pure-Python signing was removed because it is not constant-time. These tests
-pin the properties that decision rests on: no signer works without the native
-extension, every native signature is checked by the ordinary pure-Python
-verifier before it is returned, production signing is hedged, and the native
-signer refuses a message/context pair that names different object types.
+These tests pin the properties that decision rests on: no signer works
+without the native extension, every native signature is checked by the
+ordinary pure-Python verifier before it is returned, production signing is
+hedged, no public function signs caller-selected bytes, and the native
+backend refuses a message/context pair that names different object types.
 """
 from __future__ import annotations
 
@@ -18,22 +18,21 @@ from pathlib import Path
 import pytest
 
 import ratify_protocol_v2
-from ratify_protocol_v2 import _native, signing_v2
+from ratify_protocol_v2 import _native, crypto_v2, signing_v2
 from ratify_protocol_v2 import key_rotation_v2 as kr
 from ratify_protocol_v2 import protocol_v2 as pv2
 from ratify_protocol_v2 import transaction_receipt_v2 as txv2
 from ratify_protocol_v2 import verification_receipt_v2 as vrv2
 from ratify_protocol_v2 import witness_v2 as wv2
-from ratify_protocol_v2.crypto_v2 import sign_delegation_v2
 from ratify_protocol_v2.signing_v2 import (
-    _sign_v2_statement,
+    V2SigningError,
     keypair_from_seeds_v2,
     mldsa_context_v2,
+    new_local_signer_v2,
     public_key_of,
     signing_message_v2,
-    verify_v2_statement,
 )
-from ratify_protocol_v2.types import HybridPrivateKey, HybridSignature
+from ratify_protocol_v2.types import HybridPrivateKey
 
 import test_v2_conformance as conf
 
@@ -47,7 +46,7 @@ def _typed_signers(o: dict):
     for the result) for one objects.json entry."""
     wire, v, kind = conf.b64(o["wire_b64"]), o["verify"], o["kind"]
     signer = o["signatures"][0]["signer"]
-    key = lambda name: conf.private_key(name)  # noqa: E731
+    key = conf.private_key
     if kind == "delegation_certificate":
         obj = pv2.decode_delegation_cert_v2(wire)
         return (lambda: pv2.sign_delegation_cert_v2(obj, key(signer)),
@@ -118,8 +117,8 @@ def test_signing_and_keygen_fail_closed_without_native(monkeypatch):
     junk = HybridPrivateKey(ed25519=bytes(32), ml_dsa_65=bytes(4032))
     for call in (lambda: keypair_from_seeds_v2(seed, seed),
                  lambda: public_key_of(junk),
-                 lambda: sign_delegation_v2(b"x", junk),
-                 lambda: _sign_v2_statement(1, b"x", junk)):
+                 lambda: new_local_signer_v2(junk),
+                 lambda: signing_v2.generate_keypair_v2()):
         with pytest.raises(ImportError, match="ratify-protocol-native-v2") as info:
             call()
         assert "no pure-Python signing fallback" in str(info.value)
@@ -134,12 +133,13 @@ import sys
 sys.modules["ratify_protocol_native_v2"] = None  # simulate an absent extension
 import base64, json
 import ratify_protocol_v2 as r
+from ratify_protocol_v2.crypto_v2 import verify_delegation_signature_v2
 assert r.NATIVE_AVAILABLE is False
 v = json.load(open({str(conf.V2_DIR / "delegation-signature.json")!r}))
 d = lambda s: base64.b64decode(s)
 pub = r.HybridPublicKey(d(v["issuer_public_key"]["ed25519"]), d(v["issuer_public_key"]["ml_dsa_65"]))
 sig = r.HybridSignature(d(v["signature"]["ed25519"]), d(v["signature"]["ml_dsa_65"]))
-assert r.verify_delegation_signature_v2(d(v["signable_bytes"]), sig, pub)
+assert verify_delegation_signature_v2(d(v["signable_bytes"]), sig, pub)
 try:
     r.keypair_from_seeds_v2(bytes(32), bytes(32))
 except ImportError as e:
@@ -157,16 +157,26 @@ else:
 
 
 def test_no_raw_sign_export():
-    assert not hasattr(signing_v2, "sign_v2_statement")
-    assert not hasattr(ratify_protocol_v2, "sign_v2_statement")
-    assert not any(n.startswith("sign_v2") for n in ratify_protocol_v2.__all__)
+    """SPEC-v2 §1.3, §3.2: no public function signs caller-selected bytes,
+    object codes, contexts, or prehash modes."""
+    for module in (signing_v2, crypto_v2, ratify_protocol_v2):
+        for name in dir(module):
+            if name.startswith("_"):
+                continue
+            assert name not in ("sign_v2_statement", "sign_v2_statement_with_signer", "sign_delegation_v2",
+                                "sign_bytes", "sign_message"), name
+    assert not any(n.startswith("sign_v2") for n in getattr(ratify_protocol_v2, "__all__", ()))
 
 
 @pytest.mark.parametrize("fn", [
-    sign_delegation_v2, pv2.sign_delegation_cert_v2, pv2.sign_proof_bundle_v2, pv2.sign_revocation_list_v2,
+    pv2.sign_delegation_cert_v2, pv2.sign_proof_bundle_v2, pv2.sign_revocation_list_v2,
     pv2.sign_revocation_push_v2, kr.sign_key_rotation_statement_v2, wv2.sign_witness_entry_v2,
     txv2.sign_transaction_receipt_party_v2, vrv2.sign_verification_receipt_v2,
-    vrv2.sign_prepared_verification_receipt_v2,
+    vrv2.sign_prepared_verification_receipt_v2, pv2.sign_delegation_cert_v2_with_signer,
+    pv2.sign_proof_bundle_v2_with_signer, pv2.sign_revocation_list_v2_with_signer,
+    pv2.sign_revocation_push_v2_with_signer, kr.sign_key_rotation_statement_v2_with_signers,
+    wv2.sign_witness_entry_v2_with_signer, txv2.sign_transaction_receipt_party_v2_with_signer,
+    vrv2.sign_verification_receipt_v2_with_signer, vrv2.sign_prepared_verification_receipt_v2_with_signer,
 ], ids=lambda f: f.__name__)
 def test_typed_signers_have_no_deterministic_parameter(fn):
     assert "deterministic" not in inspect.signature(fn).parameters
@@ -185,16 +195,15 @@ def test_typed_signer_hedged_output_verifies(name):
 
 
 @requires_native
-@pytest.mark.parametrize("code", range(1, 10))
-def test_hedged_signatures_differ_and_verify(code):
-    priv = conf.private_key("root")
-    pub = public_key_of(priv)
-    signable = b"hedged signing check"
-    a, b = _sign_v2_statement(code, signable, priv), _sign_v2_statement(code, signable, priv)
-    assert a.ed25519 == b.ed25519, "Ed25519 is deterministic"
-    assert a.ml_dsa_65 != b.ml_dsa_65, "ML-DSA-65 must be hedged by default"
-    for s in (a, b):
-        verify_v2_statement(code, signable, s, pub)
+def test_hedged_signatures_differ_and_verify():
+    o = OBJECTS["witness_entry_genesis"]
+    sign, verify = _typed_signers(o)
+    a, b = sign(), sign()
+    assert a.signature.ed25519 == b.signature.ed25519, "Ed25519 is deterministic"
+    assert a.signature.ml_dsa_65 != b.signature.ml_dsa_65, "ML-DSA-65 must be hedged by default"
+    verify(a)
+    verify(b)
+    assert wv2.witness_entry_v2_digest(a) == wv2.witness_entry_v2_digest(b)
 
 
 @requires_native
@@ -215,8 +224,9 @@ def test_signature_is_verified_before_it_is_returned(monkeypatch):
             return ed, bytes([ml[0] ^ 1]) + ml[1:]
 
     monkeypatch.setattr(_native, "signing_key", lambda e, m: Corrupting(real(e, m)))
-    with pytest.raises(RuntimeError, match="failed verification"):
-        sign_delegation_v2(b"x", conf.private_key("root"))
+    sign, _ = _typed_signers(OBJECTS["delegation_root_to_intermediate"])
+    with pytest.raises(V2SigningError, match="does not verify"):
+        sign()
 
 
 # --- native transcript checks -----------------------------------------------
@@ -249,16 +259,16 @@ def test_native_key_rejects_bad_private_key_lengths():
     with pytest.raises(ValueError):
         ext.HybridSigningKey.from_private_bytes(bytes(32), bytes(4031))
     assert repr(ext.HybridSigningKey.from_seeds(bytes(32), bytes(32))) == "<HybridSigningKey>"
+    with pytest.raises(V2SigningError):
+        new_local_signer_v2(HybridPrivateKey(bytes(31), bytes(4032)))
 
 
 @requires_native
 def test_deterministic_mode_is_scoped_to_the_context_manager():
     from ratify_protocol_v2._testing import deterministic_test_vector_signing
 
-    priv = conf.private_key("root")
+    sign, _ = _typed_signers(OBJECTS["witness_entry_genesis"])
     with deterministic_test_vector_signing():
-        a = _sign_v2_statement(1, b"y", priv)
-        b = _sign_v2_statement(1, b"y", priv)
-    assert a == b
-    assert _sign_v2_statement(1, b"y", priv) != a
-    assert isinstance(a, HybridSignature)
+        a, b = sign(), sign()
+    assert a.signature == b.signature
+    assert sign().signature != a.signature

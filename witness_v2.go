@@ -77,7 +77,7 @@ func validateWitnessSignableBodyV2(body []byte) error {
 		return fmt.Errorf("witness signable body: %w", err)
 	}
 	var signable witnessEntrySignableV2
-	if err := strictUnmarshal(body, &signable); err != nil {
+	if err := strictUnmarshalV2(body, &signable); err != nil {
 		return fmt.Errorf("witness signable body: %w", err)
 	}
 	canonical, err := CanonicalJSON(signable)
@@ -138,7 +138,8 @@ func witnessEntrySignableBytesV2(entry *WitnessEntryV2) ([]byte, error) {
 }
 
 // WitnessEntryV2Digest returns StatementBodyDigestV2(0x0006, signable body).
-func WitnessEntryV2Digest(entry *WitnessEntryV2) ([]byte, error) {
+func WitnessEntryV2Digest(entry *WitnessEntryV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	body, err := witnessEntrySignableBytesV2(entry)
 	if err != nil {
 		return nil, err
@@ -147,7 +148,8 @@ func WitnessEntryV2Digest(entry *WitnessEntryV2) ([]byte, error) {
 }
 
 // EncodeWitnessEntryV2 returns the canonical v2 wire representation.
-func EncodeWitnessEntryV2(entry *WitnessEntryV2) ([]byte, error) {
+func EncodeWitnessEntryV2(entry *WitnessEntryV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateWitnessEntryV2(entry, true); err != nil {
 		return nil, err
 	}
@@ -178,7 +180,7 @@ func DecodeWitnessEntryV2(data []byte) (_ *WitnessEntryV2, err error) {
 		return nil, err
 	}
 	var entry WitnessEntryV2
-	if err := strictUnmarshal(data, &entry); err != nil {
+	if err := strictUnmarshalV2(data, &entry); err != nil {
 		return nil, err
 	}
 	if err := validateWitnessEntryV2(&entry, true); err != nil {
@@ -198,7 +200,8 @@ func SignWitnessEntryV2(entry *WitnessEntryV2, witnessPrivate HybridPrivateKey) 
 
 // SignWitnessEntryV2WithSigner is SignWitnessEntryV2 with an external signer
 // whose key ID must equal witness_id.
-func SignWitnessEntryV2WithSigner(ctx context.Context, entry *WitnessEntryV2, signer SignerV2) (*WitnessEntryV2, error) {
+func SignWitnessEntryV2WithSigner(ctx context.Context, entry *WitnessEntryV2, signer SignerV2) (_ *WitnessEntryV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateWitnessEntryV2(entry, false); err != nil {
 		return nil, err
 	}
@@ -208,7 +211,7 @@ func SignWitnessEntryV2WithSigner(ctx context.Context, entry *WitnessEntryV2, si
 	}
 	witnessID, err := keyIDV2(witnessPublic)
 	if err != nil || witnessID != entry.WitnessID {
-		return nil, fmt.Errorf("witness_id does not match signing key")
+		return nil, v2Errorf(V2ErrKeyIDMismatch, "witness_id does not match signing key")
 	}
 	body, err := witnessEntrySignableBytesV2(entry)
 	if err != nil {
@@ -236,7 +239,8 @@ func SignWitnessEntryV2WithSigner(ctx context.Context, entry *WitnessEntryV2, si
 // The result is Replay for an exact accepted entry and Appended for the next
 // valid entry. Verification itself never mutates caller state. Validation of
 // the caller-supplied history is O(number of accepted entries).
-func VerifyWitnessEntryV2(entry *WitnessEntryV2, head WitnessV2Head, witnessPublic HybridPublicKey) (WitnessEntryV2Result, error) {
+func VerifyWitnessEntryV2(entry *WitnessEntryV2, head WitnessV2Head, witnessPublic HybridPublicKey) (_ WitnessEntryV2Result, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateWitnessEntryV2(entry, true); err != nil {
 		return 0, v2Classify(V2ErrMalformed, err)
 	}

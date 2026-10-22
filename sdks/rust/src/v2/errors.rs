@@ -231,6 +231,29 @@ impl fmt::Display for V2SignError {
 
 impl std::error::Error for V2SignError {}
 
+impl V2SignError {
+    /// The SPEC-v2 §2.7 class of this signing failure; every public v2 error
+    /// carries exactly one. An invalid object keeps the class of its wrapped
+    /// error; an issuer-duty refusal is `malformed`; a signer whose key is not
+    /// the key the object names is `key_id_mismatch`; a missing, invalid, or
+    /// failing signer is `configuration_invalid`; cancellation is
+    /// `evaluation_cancelled`; and a returned signature that does not verify is
+    /// `invalid_signature`. Operations whose refusal has another class (for
+    /// example a status-key binding) return it as [`V2SignError::InvalidObject`].
+    pub fn class(&self) -> V2ErrorClass {
+        match self {
+            V2SignError::InvalidObject(e) => e.class,
+            V2SignError::IssuerDuty(_) => V2ErrorClass::Malformed,
+            V2SignError::KeyBinding(_) => V2ErrorClass::KeyIdMismatch,
+            V2SignError::InvalidSignerKey(_) | V2SignError::UnsupportedMode | V2SignError::Provider(_) => {
+                V2ErrorClass::ConfigurationInvalid
+            }
+            V2SignError::Cancelled => V2ErrorClass::EvaluationCancelled,
+            V2SignError::SignatureRejected(_) => V2ErrorClass::InvalidSignature,
+        }
+    }
+}
+
 impl From<V2Error> for V2SignError {
     fn from(e: V2Error) -> Self {
         V2SignError::InvalidObject(e)

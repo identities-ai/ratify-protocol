@@ -50,7 +50,7 @@ function evidenceKey(e: StatusEvidenceEntryV2): string {
   return JSON.stringify([e.issuer_id, e.status_key_id, e.sequence, e.object_type_code, e.digest]);
 }
 
-function validateV2StatusRoleBindings(roles: V2StatusRoleBindings, checks: readonly V2CertificateStatusCheck[]): void {
+function validateV2StatusRoleBindings(roles: V2StatusRoleBindings, checks: readonly V2CertificateStatusCheck[], allowUnboundIssuers: boolean): void {
   if (!roles || !roles.statusKeyIssuers || !roles.currentStatusKeyIDs || !roles.reservedKeyIDs) {
     throw new Error("v2 status aggregation requires authenticated status-key role bindings");
   }
@@ -59,6 +59,8 @@ function validateV2StatusRoleBindings(roles: V2StatusRoleBindings, checks: reado
     if (roles.reservedKeyIDs.has(keyID)) throw new Error("status key collides with a reserved non-status key role");
   }
   for (const issuerID of new Set(checks.map((c) => c.issuerID))) {
+    const bound = roles.currentStatusKeyIDs.has(issuerID);
+    if (!bound && allowUnboundIssuers) continue;
     const keyID = roles.currentStatusKeyIDs.get(issuerID) ?? "";
     if ((roles.statusKeyIssuers.get(keyID) ?? "") !== issuerID) throw new Error("issuer lacks an authenticated current status-key binding");
   }
@@ -95,19 +97,35 @@ function validCurrentStatusEvidenceV2(evidence: readonly StatusEvidenceEntryV2[]
 }
 
 /**
- * Requires exactly one reducer result per requested CertificateRef, in order.
- * Authenticated evidence is deduplicated and sorted; malformed rows are
- * excluded and make their result unavailable.
+ * Internal (SPEC-v2 §6.5): requires exactly one reducer result per requested
+ * CertificateRef, in order. Revocation takes precedence over unavailable,
+ * which takes precedence over stale. Not part of the public v2 API.
+ */
+export function aggregateCertificateStatusResultsV2(
+  checks: readonly V2CertificateStatusCheck[],
+  results: readonly RevocationStatusResultV2[],
+  roles: V2StatusRoleBindings,
+): V2StatusAssessment {
+  return aggregateCertificateStatusV2(checks, results, roles, false);
+}
+
+/**
+ * The shared aggregator. allowUnboundIssuers is used only by the live
+ * verifier, which derives results from its own journal and reports an issuer
+ * without authenticated status configuration as unavailable instead of
+ * aborting. Authenticated evidence is deduplicated and sorted; malformed rows
+ * are excluded and make their result unavailable.
  */
 export function aggregateCertificateStatusV2(
   checks: readonly V2CertificateStatusCheck[],
   results: readonly RevocationStatusResultV2[],
   roles: V2StatusRoleBindings,
+  allowUnboundIssuers = false,
 ): V2StatusAssessment {
   if (checks.length === 0 || checks.length !== results.length) {
     throw new Error("v2 status aggregation requires one result for every non-empty certificate list");
   }
-  validateV2StatusRoleBindings(roles, checks);
+  validateV2StatusRoleBindings(roles, checks, allowUnboundIssuers);
   const assessment: V2StatusAssessment = { assessment: "current", reason: "", evidence: [], freshUntil: 0 };
   const seen = new Set<string>();
   const digestBindings = new Map<string, StatusEvidenceEntryV2>();

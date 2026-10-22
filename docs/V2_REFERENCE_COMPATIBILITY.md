@@ -89,6 +89,27 @@ closure of the internal adversarial review. Embedded v2 target builds remain
 untested. External independent review is a `2.0.0` gate (SPEC-v2 §8.2), not a
 beta gate. v2.0.0-alpha.1 is therefore not a v2 conformance claim.
 
+## Cross-SDK fixture matrix (SPEC-v2 §8.1)
+
+Each SDK writes `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys and
+hedged ML-DSA-65 signatures, and every SDK verifies every fixture present
+with its `objects.json` positive procedure. The format and procedure are in
+[`testvectors/v2/README.md`](../testvectors/v2/README.md#cross-sdk). Rows
+are the producing SDK and columns the verifying SDK. A cell is filled only
+when that verifier's suite runs that fixture and passes.
+
+| Producer (row), verifier (column) | Go | TypeScript | Python v2 | Rust | C ABI |
+|---|---|---|---|---|---|
+| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass (`TestV2CrossSDKFixtures`) | Not run | Not run | Not run | Not run |
+| TypeScript | No fixture | No fixture | No fixture | No fixture | No fixture |
+| Python v2 | No fixture | No fixture | No fixture | No fixture | No fixture |
+| Rust | No fixture | No fixture | No fixture | No fixture | No fixture |
+| C ABI | No fixture | No fixture | No fixture | No fixture | No fixture |
+
+Only Go to Go is covered. The §8.1 gate requires every cell. The TypeScript
+runner's unconsumed-entry check lists directory entries, so it also reports
+`cross-sdk` until that port consumes the directory.
+
 ## Corpus changes pending SDK ports (beta reconciliation)
 
 The Go reference and SPEC-v2 were reconciled for `2.0.0-beta.1` after alpha.1.
@@ -98,15 +119,15 @@ passing it. Changes to `testvectors/v2`:
 
 | File | Change since alpha.1 |
 |---|---|
-| `object-negatives.json` | 224 → 281 negatives: the closed v2 constraint registry, every wire timestamp outside 0..253402300799, `custom:*` and bare-prefix required scopes in receipts, and the optional receipt member `constraint_evaluators` |
-| `verifier-ordering.json` | 81 → 194 cases (57 pre-claim, 2 replay, 133 committed, 2 evaluating), including 10 Middleware Custody Profile cases; new input fields (`tzdb_version`, amount and currency request context, `extension_counts` and `extension_values`, `constraint_evaluators`, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` and `evaluator` callback counts; exact `custom:` required scopes; committed outcomes are not decisions |
+| `object-negatives.json` | 224 → 399 negatives: the closed v2 constraint registry, every wire timestamp outside 0..253402300799, `custom:*` and bare-prefix required scopes in receipts, the optional receipt member `constraint_evaluators`, and 118 `strict_shape/` decode negatives (empty objects, `null` in arrays and non-nullable members, byte strings as number arrays, member-name case and Unicode case-folding variants) |
+| `verifier-ordering.json` | 81 → 200 cases (57 pre-claim, 2 replay, 139 committed, 2 evaluating), including 10 Middleware Custody Profile cases and 6 `time_window` offset-change boundary cases; new input fields (`tzdb_version`, amount and currency request context, `extension_counts` and `extension_values`, `constraint_evaluators`, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` and `evaluator` callback counts; exact `custom:` required scopes; committed outcomes are not decisions |
 | `operation-session-context.json` | `invalid_required_scopes` replaces `custom:invoice:read`, now a valid exact required scope, with the bare prefix `custom:` |
-| `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
+| `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines; a rejected status-key epoch transition (reuse of a retired key) is `status_object_rejected`, no longer `configuration_invalid` (SPEC-v2 §2.7) |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
 | `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
-| `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, import negatives |
+| `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, 11 import negatives (including unsafe integers, a member-name case variant, and a `null` array element) |
 | `lifecycle-scenarios.json` | New: 28 Part B scripts (140 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |
 | `transaction-verification.json` | New: 12 composed transaction verification cases |
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
@@ -114,6 +135,7 @@ passing it. Changes to `testvectors/v2`:
 | `challenge-issuance.json` | New: 9 challenge issuance helper scenarios (33 steps) |
 | `status-publisher.json` | New: 13 signed-status publisher scenarios (39 steps) with journal ingestion and role-configuration refusals |
 | `evaluator-profiles.json` | New: 70 standard evaluator profile cases (34 `max_count/v1`, 36 `allowed_values/v1`) and 13 request-context bound cases |
+| `device-state.json` | New: 5 single-device offline complete-state projection known answers (SPEC-v2 §7.13). The record encoding inside each projection member is now normative instead of implementation-defined, so an SDK that implements the profile must replace its own record encoding with the §7.13 encoding and reproduce these bytes |
 
 SDK test files that read these vector files, and therefore fail until ported:
 

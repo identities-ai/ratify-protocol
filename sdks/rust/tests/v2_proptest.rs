@@ -39,49 +39,10 @@ fn decoder(kind: &str) -> Decoder {
     DECODERS.iter().find(|(k, _)| *k == kind).map(|(_, d)| *d).unwrap()
 }
 
-/// KNOWN GAPS (reported, not fixed here; the Go reference decoders behave
-/// the same). Two non-canonical spellings decode, and re-encode differently:
-///
-/// 1. a proof bundle `agent_pub_key` that omits a component (for example
-///    `{}`): the component decodes as empty and re-encodes as `""`;
-/// 2. `null` inside a delegation certificate `scope` array (also inside
-///    bundles): it decodes as `""` and re-encodes as `""`.
-///
-/// `known_gap` is true only when re-encoding equals the input with exactly
-/// these spellings normalized, so any other divergence still fails. The
-/// `known_gap_*` tests pin each one with a fixed reproducer.
-fn known_gap(data: &[u8], reencoded: &[u8]) -> bool {
-    fn normalize(v: &mut Value) {
-        match v {
-            Value::Object(o) => {
-                if let Some(Value::Array(scope)) = o.get_mut("scope") {
-                    for s in scope.iter_mut().filter(|s| s.is_null()) {
-                        *s = Value::String(String::new());
-                    }
-                }
-                if let Some(Value::Object(key)) = o.get_mut("agent_pub_key") {
-                    for c in ["ed25519", "ml_dsa_65"] {
-                        key.entry(c).or_insert_with(|| Value::String(String::new()));
-                    }
-                }
-                o.values_mut().for_each(normalize);
-            }
-            Value::Array(a) => a.iter_mut().for_each(normalize),
-            _ => {}
-        }
-    }
-    let Ok(mut v) = serde_json::from_slice::<Value>(data) else { return false };
-    normalize(&mut v);
-    canonical_json_v2(&serde_json::to_vec(&v).unwrap()).is_ok_and(|n| n == reencoded)
-}
-
 /// The strict-decoder property for one decoder and input.
 fn check_wire(kind: &str, data: &[u8]) -> Result<(), TestCaseError> {
     if let Some(reencoded) = decoder(kind)(data) {
         let reencoded = reencoded.map_err(|e| TestCaseError::fail(format!("{kind}: decoded object does not encode: {e}")))?;
-        if reencoded != data && known_gap(data, &reencoded) {
-            return Ok(());
-        }
         prop_assert!(
             reencoded == data,
             "{} accepted bytes that re-encode differently:\n input: {}\n  again: {}",
@@ -297,29 +258,20 @@ fn seed_with(kind: &str, field: &str, value: Value) -> Vec<u8> {
     canonical_json_v2(&serde_json::to_vec(&doc).unwrap()).unwrap()
 }
 
-/// Pins known gap 1 of [`known_gap`]: the objects.json proof bundle with
-/// `agent_pub_key` replaced by `{}` decodes although it is not the canonical
-/// encoding of what was decoded; the signature check still rejects it. When
-/// the decoder is tightened (in Go and here), this test fails and the gap
-/// must be removed from `known_gap`.
+/// SPEC-v2 §2.1 strict decoding: a proof bundle whose `agent_pub_key` is
+/// `{}` (a required hybrid key with missing members) is malformed.
 #[test]
-fn known_gap_proof_bundle_agent_key_components() {
+fn proof_bundle_empty_agent_key_is_malformed() {
     let data = seed_with("proof_bundle", "agent_pub_key", serde_json::json!({}));
-    let decoded = decode_proof_bundle_v2(&data).expect("known gap: the decoder accepts an empty agent_pub_key");
-    assert_ne!(encode_proof_bundle_v2(&decoded).unwrap(), data, "known gap closed: update known_gap");
-    assert!(known_gap(&data, &encode_proof_bundle_v2(&decoded).unwrap()));
-    assert!(verify_proof_bundle_v2_signatures(&decoded).is_err(), "the empty agent key must still be rejected");
+    let e = decode_proof_bundle_v2(&data).expect_err("{} agent_pub_key must be rejected");
+    assert_eq!(e.class, V2ErrorClass::Malformed);
 }
 
-/// Pins known gap 2 of [`known_gap`]: the objects.json root certificate with
-/// `scope` replaced by `[null]` decodes and re-encodes as `[""]`; its
-/// signature (over the original scope) no longer verifies.
+/// SPEC-v2 §2.1 strict decoding: `null` as a delegation `scope` element is
+/// malformed rather than decoding as `""`.
 #[test]
-fn known_gap_delegation_scope_null() {
+fn delegation_scope_null_element_is_malformed() {
     let data = seed_with("delegation_certificate", "scope", serde_json::json!([null]));
-    let decoded = decode_delegation_cert_v2(&data).expect("known gap: the decoder accepts null in scope");
-    assert_eq!(decoded.scope, vec![String::new()]);
-    assert_ne!(encode_delegation_cert_v2(&decoded).unwrap(), data, "known gap closed: update known_gap");
-    assert!(known_gap(&data, &encode_delegation_cert_v2(&decoded).unwrap()));
-    assert!(verify_delegation_cert_v2_signature(&decoded).is_err());
+    let e = decode_delegation_cert_v2(&data).expect_err("null scope element must be rejected");
+    assert_eq!(e.class, V2ErrorClass::Malformed);
 }

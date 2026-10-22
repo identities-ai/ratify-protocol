@@ -71,8 +71,10 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 		"release record": func(p *DevicePrimaryTestOnly) {
 			p.Store.claims["claim-1"].release = &ratify.V2ReleaseRecord{ClaimID: "claim-1", EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000}
 		},
-		"stream sequence": func(p *DevicePrimaryTestOnly) { p.Store.streams["stream"] = 2 },
-		"rate counter":    func(p *DevicePrimaryTestOnly) { p.Store.rateCommits[rateKey{"issuer", "cert", 60}] = []int64{1_000} },
+		"stream sequence": func(p *DevicePrimaryTestOnly) {
+			p.Store.streams[streamKeyV2{namespace: "device-ns", agentID: "agent", streamID: "stream"}] = 2
+		},
+		"rate counter": func(p *DevicePrimaryTestOnly) { p.Store.rateCommits[rateKey{"issuer", "cert", 60}] = []int64{1_000} },
 		"outbox entry": func(p *DevicePrimaryTestOnly) {
 			p.Store.outbox = append(p.Store.outbox, outboxEntry{claimID: "claim-1", body: []byte("{}")})
 		},
@@ -237,5 +239,30 @@ func TestDeviceAcknowledgementRacingClaimsNeverMismatches(t *testing.T) {
 	}
 	if got := device.Startup(); got != DeviceReady {
 		t.Fatalf("startup after the race: %s", got)
+	}
+}
+
+// An issuance record's context policy is part of the projection: two records
+// that differ only in their policy have different digests (SPEC-v2 §7.13).
+func TestDeviceStateCoversIssuanceContextPolicy(t *testing.T) {
+	digestWith := func(profile string) []byte {
+		primary, _, _ := newTestDevice(t)
+		record := testChallengeRecord(5)
+		policy, err := ratify.NewV2ContextPolicy(profile, false, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record.ContextPolicy = policy
+		if err := primary.Issuance.PersistV2Challenge(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+		digest, err := primary.CompleteStateDigestTestOnly()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return digest
+	}
+	if bytes.Equal(digestWith("example.a/v1"), digestWith("example.b/v1")) {
+		t.Fatal("changing an issuance record's context policy does not change the complete-state digest")
 	}
 }

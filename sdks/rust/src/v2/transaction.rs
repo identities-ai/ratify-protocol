@@ -5,7 +5,7 @@ use super::context::V2Context;
 use super::crypto::{
     equal_keys, key_id_v2, lp, sha256, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
-use super::errors::{V2SignError, V2SignResult};
+use super::errors::{V2Error, V2SignError, V2SignResult};
 use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_TRANSACTION_RECEIPT_BYTES_V2};
 use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
@@ -380,8 +380,9 @@ pub fn sign_transaction_receipt_party_v2_with_signer(
     signer: &dyn SignerV2,
 ) -> V2SignResult<TransactionReceiptSignatureV2> {
     let Some(party) = r.parties.iter().find(|p| p.party_id == party_id) else {
-        return Err(V2SignError::KeyBinding(format!(
-            "party {party_id:?} is not listed in the transaction receipt"
+        return Err(V2SignError::InvalidObject(V2Error::new(
+            V2ErrorClass::TransactionPartyMismatch,
+            format!("party {party_id:?} is not listed in the transaction receipt"),
         )));
     };
     let party_public = signer_public_key_v2(signer)?;
@@ -489,6 +490,7 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
         for n in o.array("parties")? {
             let p = obj(n)?;
             p.only(PARTY)?;
+            p.require(PARTY, &[])?;
             raw_bundles.push(p.get("proof_bundle").map(|b| &data[b.start..b.end]).unwrap_or(&[]));
             parties.push(TransactionReceiptPartyV2 {
                 party_id: p.str("party_id")?,
@@ -508,6 +510,7 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
         for n in o.array("party_signatures")? {
             let s = obj(n)?;
             s.only(&["party_id", "signature"])?;
+            s.require(&["party_id", "signature"], &[])?;
             party_signatures.push(TransactionReceiptSignatureV2 {
                 party_id: s.str("party_id")?,
                 signature: s.sig("signature")?,
@@ -523,8 +526,8 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             party_signatures,
         };
         for (p, raw) in r.parties.iter_mut().zip(raw_bundles) {
-            if raw.is_empty() {
-                return plain("wire v2: party proof_bundle is required");
+            if !raw.starts_with(b"{") {
+                return plain("wire v2: party proof_bundle must be a JSON object");
             }
             if p.proof_bundle_hash != bundle_hash_of_bytes(raw) {
                 return err(

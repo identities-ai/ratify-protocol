@@ -28,6 +28,14 @@ type keysFile struct {
 	InvalidKeyIDs []invalidKeyID `json:"invalid_v2_key_ids"`
 }
 
+func keyEntryFor(k *Key) keyEntry {
+	v1 := sha256.Sum256(append(append([]byte{}, k.Pub.Ed25519...), k.Pub.MLDSA65...))
+	return keyEntry{
+		Name: k.Name, Ed25519SeedHex: hex.EncodeToString(k.EdSeed[:]), MLDSA65SeedHex: hex.EncodeToString(k.MLSeed[:]),
+		PublicKey: pubJSON(k.Pub), KeyIDV2: k.ID, V1KeyID128: hex.EncodeToString(v1[:16]),
+	}
+}
+
 func (g *gen) keysFile() any {
 	f := keysFile{
 		Version:       2,
@@ -35,12 +43,7 @@ func (g *gen) keysFile() any {
 		KeyIDPreimage: "ratify-key-id-v2 || 0x00 || ed25519(32) || ml_dsa_65(1952)",
 	}
 	for _, name := range g.order {
-		k := g.k(name)
-		v1 := sha256.Sum256(append(append([]byte{}, k.Pub.Ed25519...), k.Pub.MLDSA65...))
-		f.Keys = append(f.Keys, keyEntry{
-			Name: name, Ed25519SeedHex: hex.EncodeToString(k.EdSeed[:]), MLDSA65SeedHex: hex.EncodeToString(k.MLSeed[:]),
-			PublicKey: pubJSON(k.Pub), KeyIDV2: k.ID, V1KeyID128: hex.EncodeToString(v1[:16]),
-		})
+		f.Keys = append(f.Keys, keyEntryFor(g.k(name)))
 	}
 	agent := g.k("agent")
 	v1 := sha256.Sum256(append(append([]byte{}, agent.Pub.Ed25519...), agent.Pub.MLDSA65...))

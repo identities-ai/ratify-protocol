@@ -193,18 +193,19 @@ type V2RateAtFinalizationStore interface {
 // checks immediately before invoking the atomic claim store. Callers must run
 // PreflightProofBundleV2 first. No trust, status, or
 // policy callback runs before this function succeeds.
-func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBundleV2, preflight *V2PreflightResult, configuredNamespace string, configuredReplayEpoch, nowUnix int64) (V2ChallengeClaim, V2ClaimDisposition, *V2EvaluationToken, error) {
+func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBundleV2, preflight *V2PreflightResult, configuredNamespace string, configuredReplayEpoch, nowUnix int64) (_ V2ChallengeClaim, _ V2ClaimDisposition, _ *V2EvaluationToken, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrClaimStoreUnavailable, resultErr) }()
 	var zero V2ChallengeClaim
 	if store == nil || ctx == nil {
-		return zero, "", nil, fmt.Errorf("v2 claim store and context are required")
+		return zero, "", nil, v2Errorf(V2ErrConfigurationInvalid, "v2 claim store and context are required")
 	}
 	if preflight == nil || preflight.state == nil || preflight.state.ContextPolicy == nil && !preflight.state.NoContextPolicy {
-		return zero, "", nil, fmt.Errorf("v2 successful preflight state is required before claim")
+		return zero, "", nil, v2Errorf(V2ErrConfigurationInvalid, "v2 successful preflight state is required before claim")
 	}
 	sealed := cloneExpectedChallengeStateV2(preflight.state)
 	bundleHash, err := BundleHashV2(bundle)
 	if err != nil || bundleHash != sealed.BundleHash {
-		return zero, "", nil, fmt.Errorf("v2 proof bundle differs from successful preflight")
+		return zero, "", nil, v2Errorf(V2ErrConfigurationInvalid, "v2 proof bundle differs from successful preflight")
 	}
 	expected := ExpectedChallengeV2{Value: sealed.Value, IssuedAt: sealed.IssuedAt, ExpiresAt: sealed.ExpiresAt,
 		VerifierNamespace: sealed.VerifierNamespace, ReplayEpoch: sealed.ReplayEpoch, VerifierID: sealed.VerifierID,
@@ -299,38 +300,39 @@ func cloneV2ChallengeClaim(claim V2ChallengeClaim) V2ChallengeClaim {
 // A barrier store's exact rate-capacity exhaustion error is the sole exception:
 // it proves rollback, changes the token to constraint_denied, and requires a
 // new deny result and receipt; an earlier authorized assessment is then stale.
-func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *V2EvaluationToken, terminalResult, receiptBody []byte) (bool, error) {
+func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *V2EvaluationToken, terminalResult, receiptBody []byte) (_ bool, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrClaimStoreUnavailable, resultErr) }()
 	if ctx == nil || store == nil || token == nil || token.state == nil || len(token.state.ownerToken) != 32 || token.state.claimID == "" {
-		return false, fmt.Errorf("v2 claim store and valid evaluator capability are required")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 claim store and valid evaluator capability are required")
 	}
 	terminalResult = bytes.Clone(terminalResult)
 	receiptBody = bytes.Clone(receiptBody)
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return false, v2Classify(V2ErrEvaluationCancelled, err)
 	}
 	token.state.finalizationMu.Lock()
 	defer token.state.finalizationMu.Unlock()
 	if !token.state.evaluationComplete.Load() {
-		return false, fmt.Errorf("v2 proof evaluation has not completed")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 proof evaluation has not completed")
 	}
 	decision, ok := terminalDecisionForV2Evaluation(token.state.evaluationStatus, token.state.evaluationReason)
 	if !ok {
-		return false, fmt.Errorf("v2 proof evaluation has not reached a terminal local result")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 proof evaluation has not reached a terminal local result")
 	}
 	if !terminalPayloadMatchesV2(terminalResult, receiptBody, decision, token.state.evaluationReason) {
-		return false, fmt.Errorf("v2 terminal result does not match the completed local evaluation")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result does not match the completed local evaluation")
 	}
 	if decision == "allow" && token.state.allowValidUntil <= 0 || decision != "allow" && token.state.allowValidUntil != 0 {
-		return false, fmt.Errorf("v2 terminal result lacks a valid allow freshness horizon")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result lacks a valid allow freshness horizon")
 	}
 	if token.state.rateAtFinalization {
 		if _, ok := store.(V2RateAtFinalizationStore); !ok {
-			return false, fmt.Errorf("v2 rate-at-finalization requires an atomic rate store")
+			return false, v2Errorf(V2ErrConfigurationInvalid, "v2 rate-at-finalization requires an atomic rate store")
 		}
 	}
 	payloadDigest := v2FinalizationPayloadDigest(terminalResult, receiptBody)
 	if token.state.finalizationStarted && token.state.finalizationDigest != payloadDigest {
-		return false, fmt.Errorf("v2 evaluator capability cannot change its terminal result or receipt body")
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 evaluator capability cannot change its terminal result or receipt body")
 	}
 	token.state.finalizationStarted = true
 	token.state.finalizationDigest = payloadDigest

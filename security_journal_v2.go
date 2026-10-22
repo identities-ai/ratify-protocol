@@ -166,7 +166,8 @@ func loadAnchoredSecurityJournalV2(ctx context.Context, store SecurityJournalSto
 
 // RecordSecurityKeyRoleV2 durably adds a non-status key role after the caller
 // has authenticated the trust-configuration event that admits that key.
-func RecordSecurityKeyRoleV2(ctx context.Context, store SecurityJournalStoreV2, role string, pub HybridPublicKey) (SecurityJournalV2, error) {
+func RecordSecurityKeyRoleV2(ctx context.Context, store SecurityJournalStoreV2, role string, pub HybridPublicKey) (_ SecurityJournalV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	if role == "status" {
 		return SecurityJournalV2{}, fmt.Errorf("status keys must be recorded with their issuer and epoch")
 	}
@@ -178,7 +179,8 @@ func RecordSecurityKeyRoleV2(ctx context.Context, store SecurityJournalStoreV2, 
 // ConfigureStatusKeyEpochV2 persists an authenticated status-key binding. A
 // first binding starts at epoch 1; later bindings must advance exactly one
 // epoch and preserve prior-epoch denials and authenticated evidence.
-func ConfigureStatusKeyEpochV2(ctx context.Context, store SecurityJournalStoreV2, issuerID string, epoch uint64, pub HybridPublicKey) (SecurityJournalV2, error) {
+func ConfigureStatusKeyEpochV2(ctx context.Context, store SecurityJournalStoreV2, issuerID string, epoch uint64, pub HybridPublicKey) (_ SecurityJournalV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	return updateSecurityJournalV2(ctx, store, func(journal *SecurityJournalV2) error {
 		if err := RegisterStatusKeyEpochV2(journal, issuerID, epoch, pub); err != nil {
 			return err
@@ -211,7 +213,8 @@ func ConfigureStatusKeyEpochV2(ctx context.Context, store SecurityJournalStoreV2
 
 // ApplyRevocationListToJournalV2 authenticates, reduces, and atomically
 // persists a full status snapshot under the configured issuer key epoch.
-func ApplyRevocationListToJournalV2(ctx context.Context, store SecurityJournalStoreV2, list *RevocationListV2, issuerID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (SecurityJournalV2, error) {
+func ApplyRevocationListToJournalV2(ctx context.Context, store SecurityJournalStoreV2, list *RevocationListV2, issuerID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (_ SecurityJournalV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	return updateSecurityJournalV2(ctx, store, func(journal *SecurityJournalV2) error {
 		if err := requireJournalStatusKeyV2(journal, issuerID, epoch, pub); err != nil {
 			return err
@@ -227,7 +230,8 @@ func ApplyRevocationListToJournalV2(ctx context.Context, store SecurityJournalSt
 
 // ApplyRevocationPushToJournalV2 authenticates, reduces, and atomically
 // persists one push under the configured issuer key epoch.
-func ApplyRevocationPushToJournalV2(ctx context.Context, store SecurityJournalStoreV2, push *RevocationPushV2, issuerID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (SecurityJournalV2, error) {
+func ApplyRevocationPushToJournalV2(ctx context.Context, store SecurityJournalStoreV2, push *RevocationPushV2, issuerID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (_ SecurityJournalV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	return updateSecurityJournalV2(ctx, store, func(journal *SecurityJournalV2) error {
 		if err := requireJournalStatusKeyV2(journal, issuerID, epoch, pub); err != nil {
 			return err
@@ -243,7 +247,8 @@ func ApplyRevocationPushToJournalV2(ctx context.Context, store SecurityJournalSt
 
 // RevocationStatusFromJournalV2 reads an anchored state and returns a
 // fail-closed status decision for one issuer-scoped certificate reference.
-func RevocationStatusFromJournalV2(ctx context.Context, store SecurityJournalStoreV2, issuerID, certID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (RevocationStatusResultV2, error) {
+func RevocationStatusFromJournalV2(ctx context.Context, store SecurityJournalStoreV2, issuerID, certID string, epoch uint64, pub HybridPublicKey, policy RevocationStatusPolicyV2, now int64) (_ RevocationStatusResultV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	if store == nil {
 		return RevocationStatusResultV2{}, fmt.Errorf("security journal store is required")
 	}
@@ -284,7 +289,8 @@ func requireJournalStatusKeyV2(journal *SecurityJournalV2, issuerID string, epoc
 }
 
 // ValidateSecurityJournalV2 validates record integrity and internal indexes.
-func ValidateSecurityJournalV2(journal SecurityJournalV2) error {
+func ValidateSecurityJournalV2(journal SecurityJournalV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if (journal.Version != securityJournalVersionV2 && journal.Version != securityJournalLegacyVersion) || journal.StatusByIssuer == nil || journal.KeyRoleHistory == nil || journal.StatusKeyHistory == nil {
 		return fmt.Errorf("security journal has unsupported or incomplete shape")
 	}
@@ -365,7 +371,8 @@ func ValidateSecurityJournalV2(journal SecurityJournalV2) error {
 // append-only key histories. Status-state evolution itself is performed by
 // ApplyRevocationListV2, ApplyRevocationPushV2, and
 // TransitionRevocationStatusEpochV2 before this validation.
-func ValidateSecurityJournalTransitionV2(current, next SecurityJournalV2) error {
+func ValidateSecurityJournalTransitionV2(current, next SecurityJournalV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	if err := ValidateSecurityJournalV2(current); err != nil {
 		return fmt.Errorf("invalid current journal: %w", err)
 	}
@@ -661,7 +668,8 @@ func hasAcceptedSnapshotAfterV2(state RevocationStatusStateV2, epoch uint64, min
 
 // RegisterKeyRoleV2 records a permanent global role assignment. Repeating the
 // identical assignment is idempotent; any key-ID or component reuse is denied.
-func RegisterKeyRoleV2(journal *SecurityJournalV2, role string, pub HybridPublicKey) error {
+func RegisterKeyRoleV2(journal *SecurityJournalV2, role string, pub HybridPublicKey) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	if journal == nil || !validSecurityKeyRoleV2(role) || role == "status" {
 		return fmt.Errorf("security key role is invalid")
 	}
@@ -688,7 +696,8 @@ func registerKeyRoleV2(journal *SecurityJournalV2, role string, pub HybridPublic
 
 // RegisterStatusKeyEpochV2 records caller-authenticated status-key history and
 // the corresponding permanent global status role before status objects apply.
-func RegisterStatusKeyEpochV2(journal *SecurityJournalV2, issuerID string, epoch uint64, pub HybridPublicKey) error {
+func RegisterStatusKeyEpochV2(journal *SecurityJournalV2, issuerID string, epoch uint64, pub HybridPublicKey) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrStatusObjectRejected, resultErr) }()
 	if journal == nil || issuerID == "" || epoch == 0 || epoch > uint64(maxSafeInteger) {
 		return fmt.Errorf("status-key binding has invalid issuer or epoch")
 	}

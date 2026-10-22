@@ -218,7 +218,8 @@ func (d *V2ReleasedDecision) ReceiptWire() []byte {
 // Receipt returns a freshly decoded copy of the signed receipt that was
 // verified during release. Changing the returned value does not change the
 // released decision.
-func (d *V2ReleasedDecision) Receipt() (*VerificationReceiptV2, error) {
+func (d *V2ReleasedDecision) Receipt() (_ *VerificationReceiptV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if d == nil || len(d.receiptWire) == 0 {
 		return nil, fmt.Errorf("v2 released decision carries no receipt")
 	}

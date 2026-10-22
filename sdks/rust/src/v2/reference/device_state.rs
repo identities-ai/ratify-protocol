@@ -10,25 +10,25 @@
 //! every durable change in any of these stores is anchored in the component
 //! before it takes effect; a change the component refuses is undone.
 //!
-//! SPEC-v2 §7.13 leaves the byte encoding of a record within a member
-//! implementation-defined (only the device and its own component compare the
-//! digest). Go digests its records with `json.Marshal`; this port digests
-//! the derived `Debug` rendering, which carries every field of the record.
+//! Every record is projected in the normative record encoding of SPEC-v2
+//! §7.13, so the digest is reproducible across implementations and
+//! upgrades; `testvectors/v2/device-state.json` pins it byte for byte.
 
-use std::fmt::Debug;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use serde_json::json;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha384};
 
 use super::challenges::TestOnlyChallengeIssuanceStore;
 use super::journal::JournalStore;
 use super::offline_device::DeviceComponentTestOnly;
-use super::store::{ClaimState, Store, StoreAnchor, StoreState};
+use super::store::{ClaimRecord, ClaimState, Store, StoreAnchor, StoreState};
 use crate::v2::challenge_issuance::V2ChallengeIssuanceStore;
-use crate::v2::claim_store::V2StoreError;
+use crate::v2::claim_store::{V2ChallengeClaim, V2StoreError};
 use crate::v2::context::V2Context;
 use crate::v2::errors::{V2Error, V2ErrorClass, V2Result};
+use crate::v2::evaluation_progress::V2EvaluationProgress;
 use crate::v2::journal::{
     SecurityJournalHeadV2, SecurityJournalStoreErrorV2, SecurityJournalStoreV2, SecurityJournalV2,
 };
@@ -54,92 +54,234 @@ fn sha384_hex(b: &[u8]) -> String {
     hex::encode(Sha384::digest(b))
 }
 
-fn canonical(v: &serde_json::Value) -> V2Result<Vec<u8>> {
+fn canonical(v: &Value) -> V2Result<Vec<u8>> {
     let body = serde_json::to_vec(v).map_err(|e| V2Error::plain(format!("v2reference: projection: {e}")))?;
     canonical_json_v2(&body)
 }
 
-/// Lowercase hex SHA-384 of the RatifyCanonicalJSON of `v`.
-fn member_digest(v: &serde_json::Value) -> V2Result<String> {
-    Ok(sha384_hex(&canonical(v)?))
-}
-
-/// Digest of one record in its implementation-defined encoding.
-fn record_digest(v: &impl Debug) -> String {
-    sha384_hex(format!("{v:?}").as_bytes())
-}
-
-fn optional_digest(b: &[u8]) -> String {
+/// Padded base64 of a held byte string, or `null` when none is held.
+fn bytes_or_null(b: &[u8]) -> Value {
     if b.is_empty() {
-        String::new()
+        Value::Null
     } else {
-        sha384_hex(b)
+        Value::String(STANDARD.encode(b))
     }
 }
 
-/// Go `stateDigestsLocked`: digests every durable security record of the
-/// store: claims in every state (evaluating, terminal, interrupted,
-/// abandoned) with their sealed values and release records, stream
-/// sequences, rate counters, and the receipt log with its outbox. Checkpoint
-/// acknowledgements and clock readings are excluded.
-pub(crate) fn store_state_digests(s: &StoreState) -> V2Result<StoreDigests> {
-    // BTreeMap iteration yields every member in primary-key order.
-    let claims: Vec<serde_json::Value> = s
-        .claims
+/// Unlabelled lowercase hex SHA-384 of exact stored bytes, or `null` when
+/// none are stored.
+fn sha384_or_null(b: &[u8]) -> Value {
+    if b.is_empty() {
+        Value::Null
+    } else {
+        Value::String(sha384_hex(b))
+    }
+}
+
+/// The sealed claim object of §7.13.
+fn sealed_claim_projection(c: &V2ChallengeClaim) -> Value {
+    let evaluators: Vec<Value> = c
+        .constraint_evaluators
         .iter()
-        .map(|(id, r)| {
-            let state = match r.state {
-                ClaimState::Evaluating => "evaluating",
-                ClaimState::Terminal => "terminal",
-            };
+        .map(|e| json!({"profile_digest": e.profile_digest, "type": e.kind}))
+        .collect();
+    let rate_batch: Vec<Value> = c
+        .rate_batch
+        .iter()
+        .map(|r| json!({"cert_id": r.cert_id, "issuer_id": r.issuer_id, "limit": r.limit, "window_s": r.window_s}))
+        .collect();
+    let policy = if c.context_policy_digest.is_empty() {
+        Value::Null
+    } else {
+        Value::String(c.context_policy_digest.clone())
+    };
+    json!({
+        "agent_id": c.agent_id,
+        "bundle_hash": c.bundle_hash,
+        "challenge_digest": c.challenge_digest,
+        "claim_id": c.claim_id,
+        "clock_skew_seconds": c.clock_skew_seconds,
+        "constraint_evaluators": evaluators,
+        "context_policy_digest": policy,
+        "expires_at": c.expires_at,
+        "issued_at": c.issued_at,
+        "issuer_ids": c.issuer_ids,
+        "max_age_seconds": c.max_age_seconds,
+        "namespace": c.namespace,
+        "proof_digest": c.proof_digest,
+        "rate_batch": rate_batch,
+        "replay_epoch": c.replay_epoch,
+        "required_scope": c.required_scope,
+        "requires_rate": c.requires_rate,
+        "stream_id": bytes_or_null(c.stream_id.as_deref().unwrap_or_default()),
+        "stream_seq": c.stream_seq,
+        "verifier_id": c.verifier_id,
+    })
+}
+
+/// The evaluation progress object of §7.5 with its five members.
+fn progress_projection(p: &V2EvaluationProgress) -> Value {
+    let evidence: Vec<Value> = p
+        .status_evidence
+        .iter()
+        .map(|e| {
             json!({
-                "abandoned": r.abandoned,
-                "allow_horizon": r.allow_horizon,
-                "claim_id": id,
-                "claim_sha384": record_digest(&r.claim),
-                "claimed_at": r.claimed_at,
-                "finalized_at": r.finalized_at,
-                "lease_expires_at": r.lease_expires_at,
-                // Go records index 0 until the terminal commit assigns one.
-                "outbox_index": r.outbox_index.unwrap_or(0),
-                "owner_digest": hex::encode(r.owner_digest),
-                "progress_sha384": record_digest(&r.progress),
-                "receipt_body_sha384": optional_digest(&r.receipt_body),
-                "release_sha384": r.release.as_ref().map(record_digest).unwrap_or_default(),
-                "state": state,
-                "terminal_sha384": optional_digest(&r.terminal),
+                "digest": e.digest,
+                "issuer_id": e.issuer_id,
+                "object_type_code": e.object_type,
+                "sequence": e.sequence,
+                "status_key_id": e.status_key_id,
             })
         })
         .collect();
-    let streams: Vec<serde_json::Value> =
-        s.streams.iter().map(|(key, seq)| json!({"last_seq": seq, "stream": key})).collect();
-    let rates: Vec<serde_json::Value> = s
+    json!({
+        "context_assessment": p.context_assessment,
+        "context_policy_digest": p.context_policy_digest,
+        "status_assessment": p.status_assessment,
+        "status_evidence_digests": evidence,
+        "trust_assessment": p.trust_assessment,
+    })
+}
+
+fn claim_projection(id: &str, r: &ClaimRecord) -> Value {
+    let release = r.release.as_ref().map(|rel| {
+        json!({"ack_timestamp": rel.ack_timestamp, "claim_id": rel.claim_id, "entry_hash": STANDARD.encode(&rel.entry_hash)})
+    });
+    let state = match r.state {
+        ClaimState::Evaluating => "evaluating",
+        ClaimState::Terminal => "terminal",
+    };
+    json!({
+        "abandoned": r.abandoned,
+        "allow_horizon": r.allow_horizon,
+        "claim": sealed_claim_projection(&r.claim),
+        "claim_id": id,
+        "claimed_at": r.claimed_at,
+        "finalized_at": r.finalized_at,
+        "lease_expires_at": r.lease_expires_at,
+        "log_sequence": r.outbox_index.map(|i| i as i64 + 1),
+        "owner_digest": STANDARD.encode(r.owner_digest),
+        "progress": progress_projection(&r.progress),
+        "receipt_body_sha384": sha384_or_null(&r.receipt_body),
+        "release": release,
+        "state": state,
+        "terminal_sha384": sha384_or_null(&r.terminal),
+    })
+}
+
+fn issuance_projection(e: &ExpectedChallengeV2) -> Value {
+    let agent_key = e.expected_agent_public_key.as_ref().map(|k| {
+        json!({"ed25519": STANDARD.encode(&k.ed25519), "ml_dsa_65": STANDARD.encode(&k.ml_dsa_65)})
+    });
+    let policy = e.context_policy.as_ref().map(|p| {
+        json!({
+            "expected_session_context": bytes_or_null(&p.expected_session_context()),
+            "profile": p.profile(),
+            "require_bound": p.require_bound(),
+            "required_fields": p.required_fields(),
+            "version": 1,
+        })
+    });
+    json!({
+        "context_policy": policy,
+        "expected_agent_id": e.expected_agent_id,
+        "expected_agent_pub_key": agent_key,
+        "expected_receiver_id": e.expected_receiver_id,
+        "expected_session_context": bytes_or_null(e.expected_session_context.as_deref().unwrap_or_default()),
+        "expires_at": e.expires_at,
+        "issued_at": e.issued_at,
+        "replay_epoch": e.replay_epoch,
+        "value": STANDARD.encode(&e.value),
+        "verifier_id": e.verifier_id,
+        "verifier_namespace": e.verifier_namespace,
+    })
+}
+
+/// The RatifyCanonicalJSON of the store's projection members.
+pub(crate) struct StoreMembers {
+    pub(crate) claims: Vec<u8>,
+    pub(crate) streams: Vec<u8>,
+    pub(crate) rate_counters: Vec<u8>,
+    pub(crate) receipt_log: Vec<u8>,
+}
+
+/// Go `storeMembersLocked`: every claim in every state (evaluating,
+/// terminal, interrupted, abandoned) with its sealed values and release
+/// record, every stream sequence, every rate counter, and the receipt log
+/// with its outbox, in the §7.13 record encodings. Checkpoint
+/// acknowledgements and clock readings are excluded.
+pub(crate) fn store_members(s: &StoreState) -> V2Result<StoreMembers> {
+    // BTreeMap iteration yields each collection in its §7.13 sort order:
+    // strings compare by UTF-8 bytes, byte strings by unsigned bytes.
+    let claims: Vec<Value> = s.claims.iter().map(|(id, r)| claim_projection(id, r)).collect();
+    let streams: Vec<Value> = s
+        .streams
+        .iter()
+        .map(|((namespace, agent_id, stream_id), seq)| {
+            json!({"agent_id": agent_id, "last_sequence": seq, "namespace": namespace, "stream_id": STANDARD.encode(stream_id)})
+        })
+        .collect();
+    let rates: Vec<Value> = s
         .rate_commits
         .iter()
         .map(|((issuer, cert, window), commits)| {
             json!({"cert_id": cert, "commits": commits, "issuer_id": issuer, "window_s": window})
         })
         .collect();
-    let entries: Vec<serde_json::Value> = s
+    let entries: Vec<Value> = s
         .outbox
         .iter()
         .enumerate()
         .map(|(i, e)| {
             json!({
-                "body_sha384": optional_digest(&e.body),
+                "body_sha384": sha384_hex(&e.body),
                 "claim_id": e.claim_id,
-                "entry_hash": hex::encode(&e.digest),
+                "entry_hash": bytes_or_null(&e.digest),
                 "sequence": i + 1,
             })
         })
         .collect();
-    let log = json!({"entries": entries, "frozen": s.log_frozen, "log_id": s.log_id});
-    Ok(StoreDigests {
-        claims: member_digest(&serde_json::Value::Array(claims))?,
-        streams: member_digest(&serde_json::Value::Array(streams))?,
-        rate_counters: member_digest(&serde_json::Value::Array(rates))?,
-        receipt_log: member_digest(&log)?,
+    Ok(StoreMembers {
+        claims: canonical(&Value::Array(claims))?,
+        streams: canonical(&Value::Array(streams))?,
+        rate_counters: canonical(&Value::Array(rates))?,
+        receipt_log: canonical(&json!({"entries": entries, "frozen": s.log_frozen, "log_id": s.log_id}))?,
     })
+}
+
+/// Go `stateDigestsLocked`: the digests of the store members.
+pub(crate) fn store_state_digests(s: &StoreState) -> V2Result<StoreDigests> {
+    let m = store_members(s)?;
+    Ok(StoreDigests {
+        claims: sha384_hex(&m.claims),
+        streams: sha384_hex(&m.streams),
+        rate_counters: sha384_hex(&m.rate_counters),
+        receipt_log: sha384_hex(&m.receipt_log),
+    })
+}
+
+/// Go `issuanceMemberLocked`: the RatifyCanonicalJSON of the
+/// `issuance_records` member, sorted by (verifier_namespace, replay_epoch,
+/// value).
+fn issuance_member(issuance: &TestOnlyChallengeIssuanceStore) -> V2Result<Vec<u8>> {
+    let mut records: Vec<ExpectedChallengeV2> = issuance.records().into_values().collect();
+    records.sort_by(|a, b| {
+        a.verifier_namespace
+            .as_bytes()
+            .cmp(b.verifier_namespace.as_bytes())
+            .then(a.replay_epoch.cmp(&b.replay_epoch))
+            .then(a.value.cmp(&b.value))
+    });
+    canonical(&Value::Array(records.iter().map(issuance_projection).collect()))
+}
+
+/// Go `completeStateDigest`: the labelled SHA-384 of the projection bytes.
+fn complete_state_digest(projection: &[u8]) -> Vec<u8> {
+    let mut h = Sha384::new();
+    h.update(DEVICE_STATE_LABEL.as_bytes());
+    h.update([0u8]);
+    h.update(projection);
+    h.finalize().to_vec()
 }
 
 /// The anchor lock's state: the bound component and the store member
@@ -167,19 +309,13 @@ impl PrimaryShared {
         self.anchor.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Go `composeLocked`: the complete-state digest for the given store
-    /// member digests and the current journal and issuance records.
-    pub(crate) fn compose(&self, store: &StoreDigests) -> V2Result<Vec<u8>> {
+    /// Go `projectionLocked`: the RatifyCanonicalJSON of the version 1
+    /// projection object.
+    fn projection(&self, store: &StoreDigests, issuance_digest: &str) -> V2Result<Vec<u8>> {
         let (head, snapshot) = self.journal.anchored();
-        let records: Vec<serde_json::Value> = self
-            .issuance
-            .records()
-            .iter()
-            .map(|(key, record)| json!({"key": key, "record_sha384": record_digest(record)}))
-            .collect();
-        let body = canonical(&json!({
+        canonical(&json!({
             "claims": store.claims,
-            "issuance_records": member_digest(&serde_json::Value::Array(records))?,
+            "issuance_records": issuance_digest,
             "log_id": self.log_id,
             "rate_counters": store.rate_counters,
             "receipt_log": store.receipt_log,
@@ -187,12 +323,14 @@ impl PrimaryShared {
             "security_journal": {"generation": head.generation, "snapshot_sha384": sha384_hex(&snapshot)},
             "streams": store.streams,
             "version": DEVICE_STATE_VERSION,
-        }))?;
-        let mut h = Sha384::new();
-        h.update(DEVICE_STATE_LABEL.as_bytes());
-        h.update([0u8]);
-        h.update(&body);
-        Ok(h.finalize().to_vec())
+        }))
+    }
+
+    /// Go `composeLocked`: the complete-state digest for the given store
+    /// member digests and the current journal and issuance records.
+    pub(crate) fn compose(&self, store: &StoreDigests) -> V2Result<Vec<u8>> {
+        let issuance = issuance_member(&self.issuance)?;
+        Ok(complete_state_digest(&self.projection(store, &sha384_hex(&issuance))?))
     }
 
     /// Go `CompleteStateDigestTestOnly`: recompute the digest from the
@@ -350,6 +488,295 @@ impl DevicePrimaryTestOnly {
     pub fn complete_state_digest_test_only(&self) -> V2Result<Vec<u8>> {
         self.shared.complete_state_digest(&self.store)
     }
+
+    /// The §7.13 projection of the primary's current records: the canonical
+    /// bytes of every member, the projection object, and the complete-state
+    /// digest.
+    pub fn projection_test_only(&self) -> V2Result<DeviceStateProjectionTestOnly> {
+        let members = store_members(&self.store.lock())?;
+        let issuance_records = issuance_member(&self.shared.issuance)?;
+        let digests = StoreDigests {
+            claims: sha384_hex(&members.claims),
+            streams: sha384_hex(&members.streams),
+            rate_counters: sha384_hex(&members.rate_counters),
+            receipt_log: sha384_hex(&members.receipt_log),
+        };
+        let projection = self.shared.projection(&digests, &sha384_hex(&issuance_records))?;
+        Ok(DeviceStateProjectionTestOnly {
+            claims: members.claims,
+            streams: members.streams,
+            rate_counters: members.rate_counters,
+            receipt_log: members.receipt_log,
+            issuance_records,
+            complete_state_digest: complete_state_digest(&projection),
+            projection,
+        })
+    }
+
+    /// A primary holding exactly the records of one `state` object of
+    /// `testvectors/v2/device-state.json` (the §7.13 record encodings, with
+    /// sealed bytes as `terminal_b64`, `receipt_body_b64`, `body_b64`, and
+    /// `snapshot_b64`).
+    pub fn from_records_test_only(state_json: &[u8]) -> V2Result<Self> {
+        load_records(state_json).map_err(|e| e.classify(V2ErrorClass::Malformed))
+    }
+}
+
+/// The canonical bytes of every §7.13 projection member, the projection
+/// object, and the complete-state digest of a primary. TEST ONLY.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceStateProjectionTestOnly {
+    pub claims: Vec<u8>,
+    pub streams: Vec<u8>,
+    pub rate_counters: Vec<u8>,
+    pub receipt_log: Vec<u8>,
+    pub issuance_records: Vec<u8>,
+    pub projection: Vec<u8>,
+    pub complete_state_digest: Vec<u8>,
+}
+
+fn field<'a>(v: &'a Value, key: &str) -> V2Result<&'a Value> {
+    v.get(key).ok_or_else(|| V2Error::plain(format!("v2reference: device state: missing {key:?}")))
+}
+
+fn text(v: &Value, key: &str) -> V2Result<String> {
+    field(v, key)?
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| V2Error::plain(format!("v2reference: device state: {key:?} is not a string")))
+}
+
+fn int(v: &Value, key: &str) -> V2Result<i64> {
+    field(v, key)?
+        .as_i64()
+        .ok_or_else(|| V2Error::plain(format!("v2reference: device state: {key:?} is not an integer")))
+}
+
+fn flag(v: &Value, key: &str) -> V2Result<bool> {
+    field(v, key)?
+        .as_bool()
+        .ok_or_else(|| V2Error::plain(format!("v2reference: device state: {key:?} is not a boolean")))
+}
+
+fn items<'a>(v: &'a Value, key: &str) -> V2Result<&'a Vec<Value>> {
+    field(v, key)?
+        .as_array()
+        .ok_or_else(|| V2Error::plain(format!("v2reference: device state: {key:?} is not an array")))
+}
+
+fn texts(v: &Value, key: &str) -> V2Result<Vec<String>> {
+    items(v, key)?
+        .iter()
+        .map(|x| x.as_str().map(str::to_string).ok_or_else(|| V2Error::plain("v2reference: device state: expected strings")))
+        .collect()
+}
+
+/// Base64 bytes, or empty for `null`.
+fn opt_bytes(v: &Value, key: &str) -> V2Result<Option<Vec<u8>>> {
+    match field(v, key)? {
+        Value::Null => Ok(None),
+        Value::String(s) => STANDARD
+            .decode(s)
+            .map(Some)
+            .map_err(|_| V2Error::plain(format!("v2reference: device state: {key:?} is not base64"))),
+        _ => Err(V2Error::plain(format!("v2reference: device state: {key:?} is not base64 or null"))),
+    }
+}
+
+fn bytes(v: &Value, key: &str) -> V2Result<Vec<u8>> {
+    Ok(opt_bytes(v, key)?.unwrap_or_default())
+}
+
+fn load_records(state_json: &[u8]) -> V2Result<DevicePrimaryTestOnly> {
+    use crate::v2::claim_store::V2ChallengeClaim;
+    use crate::v2::context_policy::V2ContextPolicy;
+    use crate::v2::evaluator::ConstraintEvaluatorRefV2;
+    use crate::v2::rate_reservation::V2RateReservation;
+    use crate::v2::receipt::StatusEvidenceEntryV2;
+    use crate::v2::release::V2ReleaseRecord;
+    use super::store::OutboxEntry;
+
+    let st: Value = serde_json::from_slice(state_json)
+        .map_err(|e| V2Error::plain(format!("v2reference: device state is not JSON: {e}")))?;
+    let (_, private) = crate::crypto::generate_hybrid_keypair();
+    let store = Store::new(1_800_000_000, 30, &text(&st, "log_id")?, &private)?;
+    {
+        let mut s = store.lock();
+        for c in items(&st, "claims")? {
+            let sc = field(c, "claim")?;
+            let mut evaluators = Vec::new();
+            for e in items(sc, "constraint_evaluators")? {
+                evaluators.push(ConstraintEvaluatorRefV2 { kind: text(e, "type")?, profile_digest: text(e, "profile_digest")? });
+            }
+            let mut rate_batch = Vec::new();
+            for r in items(sc, "rate_batch")? {
+                rate_batch.push(V2RateReservation {
+                    issuer_id: text(r, "issuer_id")?,
+                    cert_id: text(r, "cert_id")?,
+                    window_s: int(r, "window_s")?,
+                    limit: int(r, "limit")?,
+                });
+            }
+            let claim = V2ChallengeClaim {
+                claim_id: text(sc, "claim_id")?,
+                namespace: text(sc, "namespace")?,
+                replay_epoch: int(sc, "replay_epoch")?,
+                challenge_digest: text(sc, "challenge_digest")?,
+                proof_digest: text(sc, "proof_digest")?,
+                bundle_hash: text(sc, "bundle_hash")?,
+                issuer_ids: texts(sc, "issuer_ids")?,
+                required_scope: text(sc, "required_scope")?,
+                context_policy_digest: field(sc, "context_policy_digest")?.as_str().unwrap_or_default().to_string(),
+                verifier_id: text(sc, "verifier_id")?,
+                agent_id: text(sc, "agent_id")?,
+                requires_rate: flag(sc, "requires_rate")?,
+                rate_batch,
+                issued_at: int(sc, "issued_at")?,
+                expires_at: int(sc, "expires_at")?,
+                max_age_seconds: int(sc, "max_age_seconds")?,
+                clock_skew_seconds: int(sc, "clock_skew_seconds")?,
+                stream_id: opt_bytes(sc, "stream_id")?,
+                stream_seq: field(sc, "stream_seq")?.as_i64(),
+                constraint_evaluators: evaluators,
+            };
+            let p = field(c, "progress")?;
+            let mut evidence = Vec::new();
+            for e in items(p, "status_evidence_digests")? {
+                evidence.push(StatusEvidenceEntryV2 {
+                    issuer_id: text(e, "issuer_id")?,
+                    status_key_id: text(e, "status_key_id")?,
+                    sequence: int(e, "sequence")?,
+                    object_type: u16::try_from(int(e, "object_type_code")?)
+                        .map_err(|_| V2Error::plain("v2reference: device state: object type code out of range"))?,
+                    digest: text(e, "digest")?,
+                });
+            }
+            let progress = V2EvaluationProgress {
+                trust_assessment: text(p, "trust_assessment")?,
+                status_assessment: text(p, "status_assessment")?,
+                context_assessment: text(p, "context_assessment")?,
+                context_policy_digest: field(p, "context_policy_digest")?.as_str().map(str::to_string),
+                status_evidence: evidence,
+            };
+            let release = match field(c, "release")? {
+                Value::Null => None,
+                r => Some(V2ReleaseRecord {
+                    claim_id: text(r, "claim_id")?,
+                    entry_hash: bytes(r, "entry_hash")?,
+                    ack_timestamp: int(r, "ack_timestamp")?,
+                }),
+            };
+            let owner = bytes(c, "owner_digest")?;
+            let owner_digest: [u8; 32] = owner
+                .try_into()
+                .map_err(|_| V2Error::plain("v2reference: device state: owner_digest is not 32 bytes"))?;
+            let outbox_index = match field(c, "log_sequence")?.as_i64() {
+                Some(n) if n >= 1 => Some((n - 1) as usize),
+                Some(_) => return Err(V2Error::plain("v2reference: device state: log_sequence starts at 1")),
+                None => None,
+            };
+            let state = match text(c, "state")?.as_str() {
+                "evaluating" => ClaimState::Evaluating,
+                "terminal" => ClaimState::Terminal,
+                other => return Err(V2Error::plain(format!("v2reference: device state: unknown claim state {other:?}"))),
+            };
+            s.claims.insert(
+                text(c, "claim_id")?,
+                ClaimRecord {
+                    claim,
+                    owner_digest,
+                    lease_expires_at: int(c, "lease_expires_at")?,
+                    state,
+                    terminal: bytes(c, "terminal_b64")?,
+                    receipt_body: bytes(c, "receipt_body_b64")?,
+                    allow_horizon: int(c, "allow_horizon")?,
+                    claimed_at: int(c, "claimed_at")?,
+                    finalized_at: int(c, "finalized_at")?,
+                    release,
+                    progress,
+                    abandoned: flag(c, "abandoned")?,
+                    outbox_index,
+                },
+            );
+        }
+        for x in items(&st, "streams")? {
+            s.streams.insert(
+                (text(x, "namespace")?, text(x, "agent_id")?, bytes(x, "stream_id")?),
+                int(x, "last_sequence")?,
+            );
+        }
+        for r in items(&st, "rate_counters")? {
+            let commits = items(r, "commits")?
+                .iter()
+                .map(|n| n.as_i64().ok_or_else(|| V2Error::plain("v2reference: device state: commit is not an integer")))
+                .collect::<V2Result<Vec<i64>>>()?;
+            s.rate_commits.insert((text(r, "issuer_id")?, text(r, "cert_id")?, int(r, "window_s")?), commits);
+        }
+        let log = field(&st, "receipt_log")?;
+        for e in items(log, "entries")? {
+            s.outbox.push(OutboxEntry {
+                claim_id: text(e, "claim_id")?,
+                body: bytes(e, "body_b64")?,
+                wire: None,
+                digest: bytes(e, "entry_hash")?,
+                ack: None,
+            });
+        }
+        s.log_frozen = flag(log, "frozen")?;
+    }
+    let journal_state = field(&st, "security_journal")?;
+    let generation = u64::try_from(int(journal_state, "generation")?)
+        .map_err(|_| V2Error::plain("v2reference: device state: negative journal generation"))?;
+    let snapshot = bytes(journal_state, "snapshot_b64")?;
+    let head = SecurityJournalHeadV2 {
+        generation,
+        digest: crate::v2::journal_snapshot::security_journal_snapshot_digest_v2(&snapshot),
+    };
+    let issuance = TestOnlyChallengeIssuanceStore::new();
+    let mut records = std::collections::BTreeMap::new();
+    for r in items(&st, "issuance_records")? {
+        let context_policy = match field(r, "context_policy")? {
+            Value::Null => None,
+            p => Some(V2ContextPolicy::new(
+                &text(p, "profile")?,
+                flag(p, "require_bound")?,
+                &texts(p, "required_fields")?,
+                &bytes(p, "expected_session_context")?,
+            )?),
+        };
+        let expected_agent_public_key = match field(r, "expected_agent_pub_key")? {
+            Value::Null => None,
+            k => Some(crate::types::HybridPublicKey { ed25519: bytes(k, "ed25519")?, ml_dsa_65: bytes(k, "ml_dsa_65")? }),
+        };
+        let record = ExpectedChallengeV2 {
+            value: bytes(r, "value")?,
+            issued_at: int(r, "issued_at")?,
+            expires_at: int(r, "expires_at")?,
+            verifier_namespace: text(r, "verifier_namespace")?,
+            replay_epoch: int(r, "replay_epoch")?,
+            verifier_id: text(r, "verifier_id")?,
+            expected_agent_id: text(r, "expected_agent_id")?,
+            expected_agent_public_key,
+            expected_receiver_id: text(r, "expected_receiver_id")?,
+            expected_session_context: opt_bytes(r, "expected_session_context")?,
+            context_policy,
+        };
+        let digest = crate::v2::operation_context::challenge_claim_digest_v2(&record.value)?;
+        records.insert(
+            super::challenges::issuance_key(&record.verifier_namespace, record.replay_epoch, &digest),
+            record,
+        );
+    }
+    issuance.set_records(records);
+    let store = Arc::new(store);
+    let log_id = store.lock().log_id.clone();
+    Ok(DevicePrimaryTestOnly::assemble(
+        store,
+        int(&st, "replay_epoch")?,
+        log_id,
+        JournalStore::from_anchored(head, snapshot),
+        issuance,
+    ))
 }
 
 /// The primary's anchored `SecurityJournalV2` store (Go
@@ -512,7 +939,7 @@ mod tests {
             ("claim removed", with_store(&primary, |s| drop(s.claims.remove("claim-1")))),
             ("release record", with_store(&primary, |s| claim_1(s).release = Some(release_record(1, 1_000)))),
             ("stream sequence", with_store(&primary, |s| {
-                s.streams.insert("stream".into(), 2);
+                s.streams.insert(("ns".into(), "agent".into(), vec![7; 32]), 2);
             })),
             (
                 "rate counter",

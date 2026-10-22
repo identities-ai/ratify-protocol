@@ -73,7 +73,7 @@ Agent A ─── connection setup ───── Agent B
 - **Identity binding:** A's claim *"I'm Alice's agent"* is verifiable by Bob's side with no OAuth flow, no platform-level trust, no shared vendor.
 - **Scope authority:** Alice's cert says what A is allowed to do; if Alice granted `meeting:*` but this interaction requires `meeting:record`, B rejects A's request.
 - **Liveness:** The challenge signatures prove A's (and B's) private keys are live right now. A stolen but revoked cert cannot be used here — revocation check fails.
-- **Mutual authentication:** Each side gets the same guarantees about the other. Neither side can impersonate their counterparty even over a compromised channel (the transport is uplifted by the hybrid signatures regardless of TLS state).
+- **Mutual verification:** Each side independently verifies the other's delegated authority and live key possession for a challenge that side issued. On its own this does not bind the two presentations into one conversation, and it does not stop a party from relaying a challenge it received to someone else. Bind each presentation to the shared session (the session context in Protocol v2) and run the exchange over an authenticated, encrypted channel. A dedicated mutual-presentation profile for Protocol v2 is planned for v2.1.
 
 ### When to use
 

@@ -134,7 +134,8 @@ func transactionReceiptV2SignableBytes(receipt *TransactionReceiptV2) ([]byte, e
 
 // TransactionReceiptV2SignBytes returns the exact object-type 0x0007 bytes
 // signed by each party. Proof bundles and the signature list are excluded.
-func TransactionReceiptV2SignBytes(receipt *TransactionReceiptV2) ([]byte, error) {
+func TransactionReceiptV2SignBytes(receipt *TransactionReceiptV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	return transactionReceiptV2SignableBytes(receipt)
 }
 
@@ -147,20 +148,21 @@ func SignTransactionReceiptPartyV2(receipt *TransactionReceiptV2, partyID string
 
 // SignTransactionReceiptPartyV2WithSigner is SignTransactionReceiptPartyV2
 // with an external signer whose complete key must equal the party agent key.
-func SignTransactionReceiptPartyV2WithSigner(ctx context.Context, receipt *TransactionReceiptV2, partyID string, signer SignerV2) (TransactionReceiptSignatureV2, error) {
+func SignTransactionReceiptPartyV2WithSigner(ctx context.Context, receipt *TransactionReceiptV2, partyID string, signer SignerV2) (_ TransactionReceiptSignatureV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if receipt == nil {
 		return TransactionReceiptSignatureV2{}, fmt.Errorf("transaction receipt is required")
 	}
 	partyIndex := slices.IndexFunc(receipt.Parties, func(p TransactionReceiptPartyV2) bool { return p.PartyID == partyID })
 	if partyIndex < 0 {
-		return TransactionReceiptSignatureV2{}, fmt.Errorf("party %q is not listed in the transaction receipt", partyID)
+		return TransactionReceiptSignatureV2{}, v2Errorf(V2ErrTransactionPartyMismatch, "party %q is not listed in the transaction receipt", partyID)
 	}
 	partyPublic, err := signerPublicKeyV2(signer)
 	if err != nil {
 		return TransactionReceiptSignatureV2{}, err
 	}
 	if !equalHybridPublicKeys(partyPublic, receipt.Parties[partyIndex].AgentPubKey) {
-		return TransactionReceiptSignatureV2{}, fmt.Errorf("signing key does not match party %q agent public key", partyID)
+		return TransactionReceiptSignatureV2{}, v2Errorf(V2ErrKeyIDMismatch, "signing key does not match party %q agent public key", partyID)
 	}
 	if err := validateTransactionReceiptV2(receipt, false); err != nil {
 		return TransactionReceiptSignatureV2{}, fmt.Errorf("cannot sign invalid transaction receipt: %w", err)
@@ -179,7 +181,8 @@ func SignTransactionReceiptPartyV2WithSigner(ctx context.Context, receipt *Trans
 // VerifyTransactionReceiptV2Signatures checks the typed party signatures,
 // bundle hashes, party-key bindings, and transaction-derived session context.
 // It does not resolve trust roots or evaluate current revocation status.
-func VerifyTransactionReceiptV2Signatures(receipt *TransactionReceiptV2) error {
+func VerifyTransactionReceiptV2Signatures(receipt *TransactionReceiptV2) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateTransactionReceiptV2(receipt, true); err != nil {
 		return v2Classify(V2ErrMalformed, err)
 	}
@@ -462,7 +465,8 @@ func validateRatifyJSONValueV2(value any) error {
 
 // EncodeTransactionReceiptV2 emits canonical v2 wire JSON after validating all
 // party signatures and embedded proof signatures.
-func EncodeTransactionReceiptV2(receipt *TransactionReceiptV2) ([]byte, error) {
+func EncodeTransactionReceiptV2(receipt *TransactionReceiptV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
 		return nil, err
 	}
@@ -549,6 +553,9 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, fmt.Errorf("wire v2: trailing transaction receipt JSON")
 	}
+	if err := requireV2RoundTrip(data, &wire); err != nil {
+		return nil, err
+	}
 	receipt := &TransactionReceiptV2{
 		Version: wire.Version, TransactionID: wire.TransactionID, CreatedAt: wire.CreatedAt,
 		TermsSchemaURI: wire.TermsSchemaURI, TermsCanonicalJSON: wire.TermsCanonicalJSON,
@@ -556,8 +563,8 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		PartySignatures: make([]TransactionReceiptSignatureV2, len(wire.PartySignatures)),
 	}
 	for i, party := range wire.Parties {
-		if len(party.ProofBundle) == 0 {
-			return nil, fmt.Errorf("wire v2: party %d proof_bundle is required", i)
+		if len(party.ProofBundle) == 0 || party.ProofBundle[0] != '{' {
+			return nil, fmt.Errorf("wire v2: party %d proof_bundle must be a JSON object", i)
 		}
 		hash := sha512.New384()
 		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))

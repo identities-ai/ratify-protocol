@@ -146,7 +146,8 @@ type ConstraintEvaluatorRegistryV2 struct {
 // once; every descriptor must name its registration's type and a valid
 // versioned profile identifier; timeout must be positive and at most
 // MaxConstraintEvaluatorTimeoutV2. A violation is configuration_invalid.
-func NewConstraintEvaluatorRegistryV2(timeout time.Duration, registrations ...ConstraintEvaluatorRegistrationV2) (*ConstraintEvaluatorRegistryV2, error) {
+func NewConstraintEvaluatorRegistryV2(timeout time.Duration, registrations ...ConstraintEvaluatorRegistrationV2) (_ *ConstraintEvaluatorRegistryV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if timeout <= 0 || timeout > MaxConstraintEvaluatorTimeoutV2 {
 		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 constraint evaluator timeout must be in (0, %s]", MaxConstraintEvaluatorTimeoutV2)
 	}
@@ -189,7 +190,8 @@ func (r *ConstraintEvaluatorRegistryV2) Refs() []ConstraintEvaluatorRefV2 {
 // ConstraintProfileDigestV2 returns "sha384:" and the lowercase hexadecimal
 // SHA-384(ASCII("ratify-protocol-constraint-profile-v2") || 0x00 ||
 // RatifyCanonicalJSON({"profile":profile,"type":type})).
-func ConstraintProfileDigestV2(d ConstraintProfileDescriptorV2) (string, error) {
+func ConstraintProfileDigestV2(d ConstraintProfileDescriptorV2) (_ string, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if !validExtensionTypeV2(string(d.Type)) {
 		return "", fmt.Errorf("v2 constraint profile type %q is not a registrable extension type", d.Type)
 	}

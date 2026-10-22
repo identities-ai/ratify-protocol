@@ -137,6 +137,13 @@ func (g *gen) statusFixtures() map[string]statusFixture {
 	return out
 }
 
+// zoneStatusFixture is a current status list for issuerID updated one minute
+// before now and valid for one hour, for scenarios evaluated away from Now.
+func (g *gen) zoneStatusFixture(keyName, issuerID string, now int64) statusFixture {
+	_, wire, _ := g.list(g.k(keyName), issuerID, 1, now-60, now+3600)
+	return statusFixture{wire, codeList, issuerID, keyName, 1, statusEvidenceDigest(codeList, wire)}
+}
+
 // EvidenceJSON is the language-neutral StatusEvidenceEntry of SPEC-v2 §5.8.
 type EvidenceJSON struct {
 	IssuerID       string `json:"issuer_id"`

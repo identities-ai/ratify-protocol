@@ -47,7 +47,8 @@ func signedV2RateReservationBatch(bundle *ProofBundleV2) ([]V2RateReservation, e
 
 // BuildV2RateReservationBatch derives a deterministic atomic reservation
 // request from signed max_rate constraints retained in the claimed proof.
-func BuildV2RateReservationBatch(deferred []V2DeferredConstraint) ([]V2RateReservation, error) {
+func BuildV2RateReservationBatch(deferred []V2DeferredConstraint) (_ []V2RateReservation, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	type counterKey struct {
 		issuerID string
 		certID   string

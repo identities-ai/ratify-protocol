@@ -48,7 +48,8 @@ func receiptBodyFieldsV2(r *VerificationReceiptV2) verificationReceiptBodyV2 {
 // VerificationReceiptV2Body returns the canonical content that must be
 // prepared before terminal commit. It excludes log position, previous hash,
 // and signature; the caller must bind the body to its authenticated claim.
-func VerificationReceiptV2Body(receipt *VerificationReceiptV2) ([]byte, error) {
+func VerificationReceiptV2Body(receipt *VerificationReceiptV2) (_ []byte, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if receipt == nil {
 		return nil, fmt.Errorf("wire v2: receipt body is nil")
 	}
@@ -89,7 +90,7 @@ func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err
 		return nil, err
 	}
 	var body verificationReceiptBodyV2
-	if err := strictUnmarshal(data, &body); err != nil {
+	if err := strictUnmarshalV2(data, &body); err != nil {
 		return nil, err
 	}
 	receipt := &VerificationReceiptV2{
@@ -117,7 +118,8 @@ func DecodeVerificationReceiptBodyV2(data []byte) (_ *VerificationReceiptV2, err
 // caller-authenticated receipt log to an immutable prepared body. It does not
 // sign or append the receipt; the caller must use the same authenticated head
 // when atomically publishing the signed result.
-func BindVerificationReceiptBodyV2(data []byte, head ReceiptV2Head) (*VerificationReceiptV2, error) {
+func BindVerificationReceiptBodyV2(data []byte, head ReceiptV2Head) (_ *VerificationReceiptV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateReceiptV2Head(head); err != nil {
 		return nil, err
 	}
@@ -149,7 +151,8 @@ func SignPreparedVerificationReceiptV2(data []byte, head ReceiptV2Head, private 
 
 // SignPreparedVerificationReceiptV2WithSigner is
 // SignPreparedVerificationReceiptV2 with an external verifier signer.
-func SignPreparedVerificationReceiptV2WithSigner(ctx context.Context, data []byte, head ReceiptV2Head, signer SignerV2) (*VerificationReceiptV2, error) {
+func SignPreparedVerificationReceiptV2WithSigner(ctx context.Context, data []byte, head ReceiptV2Head, signer SignerV2) (_ *VerificationReceiptV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	bound, err := BindVerificationReceiptBodyV2(data, head)
 	if err != nil {
 		return nil, err

@@ -14,11 +14,13 @@ package v2reference
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -43,167 +45,163 @@ func sha384Hex(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// memberDigest is lowercase hex SHA-384 of the canonical JSON of v.
-func memberDigest(v any) (string, error) {
-	body, err := ratify.CanonicalJSON(v)
-	if err != nil {
-		return "", err
-	}
-	return sha384Hex(body), nil
-}
+// Projection values follow the normative record encodings of SPEC-v2 §7.13.
+// Objects are maps, so RatifyCanonicalJSON orders their members by UTF-8
+// byte order; every collection is sorted explicitly before encoding.
+type object = map[string]any
 
-// recordDigest digests a record whose Go encoding is deterministic but whose
-// members are not in canonical key order; it is embedded as one string.
-func recordDigest(v any) (string, error) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	return sha384Hex(body), nil
-}
-
-func optionalDigest(b []byte) string {
+// bytesOrNull is padded base64 of a stored byte string, or null when the
+// store holds none.
+func bytesOrNull(b []byte) any {
 	if len(b) == 0 {
-		return ""
+		return nil
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// sha384OrNull is lowercase hex SHA-384 of exact stored bytes, or null when
+// the store holds none.
+func sha384OrNull(b []byte) any {
+	if len(b) == 0 {
+		return nil
 	}
 	return sha384Hex(b)
 }
 
-// Projection records. Struct members are declared in canonical key order.
-type claimProjection struct {
-	Abandoned         bool   `json:"abandoned"`
-	AllowHorizon      int64  `json:"allow_horizon"`
-	ClaimID           string `json:"claim_id"`
-	ClaimSHA384       string `json:"claim_sha384"`
-	ClaimedAt         int64  `json:"claimed_at"`
-	FinalizedAt       int64  `json:"finalized_at"`
-	LeaseExpiresAt    int64  `json:"lease_expires_at"`
-	OutboxIndex       int    `json:"outbox_index"`
-	OwnerDigest       string `json:"owner_digest"`
-	ProgressSHA384    string `json:"progress_sha384"`
-	ReceiptBodySHA384 string `json:"receipt_body_sha384"`
-	ReleaseSHA384     string `json:"release_sha384"`
-	State             string `json:"state"`
-	TerminalSHA384    string `json:"terminal_sha384"`
+func stringOrNull(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
-type streamProjection struct {
-	LastSeq int64  `json:"last_seq"`
-	Stream  string `json:"stream"`
+func sealedClaimProjection(c ratify.V2ChallengeClaim) object {
+	evaluators := make([]any, 0, len(c.ConstraintEvaluators))
+	for _, e := range c.ConstraintEvaluators {
+		evaluators = append(evaluators, object{"profile_digest": e.ProfileDigest, "type": string(e.Type)})
+	}
+	rateBatch := make([]any, 0, len(c.RateBatch))
+	for _, r := range c.RateBatch {
+		rateBatch = append(rateBatch, object{"cert_id": r.CertID, "issuer_id": r.IssuerID, "limit": r.Limit, "window_s": r.WindowS})
+	}
+	var streamSeq any
+	if c.StreamSeq != nil {
+		streamSeq = *c.StreamSeq
+	}
+	return object{
+		"agent_id": c.AgentID, "bundle_hash": c.BundleHash, "challenge_digest": c.ChallengeDigest, "claim_id": c.ClaimID,
+		"clock_skew_seconds": c.ClockSkewSeconds, "constraint_evaluators": evaluators, "context_policy_digest": stringOrNull(c.ContextPolicyDigest),
+		"expires_at": c.ExpiresAt, "issued_at": c.IssuedAt, "issuer_ids": append([]string{}, c.IssuerIDs...), "max_age_seconds": c.MaxAgeSeconds,
+		"namespace": c.Namespace, "proof_digest": c.ProofDigest, "rate_batch": rateBatch, "replay_epoch": c.ReplayEpoch,
+		"required_scope": c.RequiredScope, "requires_rate": c.RequiresRate, "stream_id": bytesOrNull(c.StreamID), "stream_seq": streamSeq,
+		"verifier_id": c.VerifierID,
+	}
 }
 
-type rateProjection struct {
-	CertID   string  `json:"cert_id"`
-	Commits  []int64 `json:"commits"`
-	IssuerID string  `json:"issuer_id"`
-	WindowS  int64   `json:"window_s"`
+func progressProjection(p ratify.V2EvaluationProgress) object {
+	evidence := make([]any, 0, len(p.StatusEvidence))
+	for _, e := range p.StatusEvidence {
+		evidence = append(evidence, object{"digest": e.Digest, "issuer_id": e.IssuerID, "object_type_code": int64(e.ObjectType), "sequence": e.Sequence, "status_key_id": e.StatusKeyID})
+	}
+	var policyDigest any
+	if p.ContextPolicyDigest != nil {
+		policyDigest = *p.ContextPolicyDigest
+	}
+	return object{
+		"context_assessment": p.ContextAssessment, "context_policy_digest": policyDigest, "status_assessment": p.StatusAssessment,
+		"status_evidence_digests": evidence, "trust_assessment": p.TrustAssessment,
+	}
 }
 
-type receiptEntryProjection struct {
-	BodySHA384 string `json:"body_sha384"`
-	ClaimID    string `json:"claim_id"`
-	EntryHash  string `json:"entry_hash"`
-	Sequence   int    `json:"sequence"`
+func claimProjection(id string, r *claimRecord) object {
+	var release, logSequence any
+	if r.release != nil {
+		release = object{"ack_timestamp": r.release.AckTimestamp, "claim_id": r.release.ClaimID, "entry_hash": base64.StdEncoding.EncodeToString(r.release.EntryHash)}
+	}
+	if r.outboxIndex >= 0 {
+		logSequence = int64(r.outboxIndex) + 1
+	}
+	return object{
+		"abandoned": r.abandoned, "allow_horizon": r.allowHorizon, "claim": sealedClaimProjection(r.claim), "claim_id": id,
+		"claimed_at": r.claimedAt, "finalized_at": r.finalizedAt, "lease_expires_at": r.leaseExpiresAt, "log_sequence": logSequence,
+		"owner_digest": base64.StdEncoding.EncodeToString(r.ownerDigest[:]), "progress": progressProjection(r.progress),
+		"receipt_body_sha384": sha384OrNull(r.receiptBody), "release": release, "state": string(r.state), "terminal_sha384": sha384OrNull(r.terminal),
+	}
 }
 
-type receiptLogProjection struct {
-	Entries []receiptEntryProjection `json:"entries"`
-	Frozen  bool                     `json:"frozen"`
-	LogID   string                   `json:"log_id"`
+func issuanceProjection(e ratify.ExpectedChallengeV2) object {
+	var agentKey, policy any
+	if e.ExpectedAgentPublicKey != nil {
+		agentKey = object{"ed25519": base64.StdEncoding.EncodeToString(e.ExpectedAgentPublicKey.Ed25519), "ml_dsa_65": base64.StdEncoding.EncodeToString(e.ExpectedAgentPublicKey.MLDSA65)}
+	}
+	if e.ContextPolicy != nil {
+		profile, requireBound, fields, context := e.ContextPolicy.Fields()
+		policy = object{"expected_session_context": bytesOrNull(context), "profile": profile, "require_bound": requireBound, "required_fields": fields, "version": int64(1)}
+	}
+	return object{
+		"context_policy": policy, "expected_agent_id": e.ExpectedAgentID, "expected_agent_pub_key": agentKey, "expected_receiver_id": e.ExpectedReceiverID,
+		"expected_session_context": bytesOrNull(e.ExpectedSessionContext), "expires_at": e.ExpiresAt, "issued_at": e.IssuedAt,
+		"replay_epoch": e.ReplayEpoch, "value": base64.StdEncoding.EncodeToString(e.Value), "verifier_id": e.VerifierID,
+		"verifier_namespace": e.VerifierNamespace,
+	}
 }
 
-type issuanceProjection struct {
-	Key          string `json:"key"`
-	RecordSHA384 string `json:"record_sha384"`
-}
-
-type journalProjection struct {
-	Generation     uint64 `json:"generation"`
-	SnapshotSHA384 string `json:"snapshot_sha384"`
-}
-
-type deviceStateProjection struct {
-	Claims          string            `json:"claims"`
-	IssuanceRecords string            `json:"issuance_records"`
-	LogID           string            `json:"log_id"`
-	RateCounters    string            `json:"rate_counters"`
-	ReceiptLog      string            `json:"receipt_log"`
-	ReplayEpoch     int64             `json:"replay_epoch"`
-	SecurityJournal journalProjection `json:"security_journal"`
-	Streams         string            `json:"streams"`
-	Version         int               `json:"version"`
-}
-
-// stateDigestsLocked digests every durable security record of the store:
-// claims in every state (evaluating, terminal, interrupted, abandoned) with
-// their sealed values and release records, stream sequences, rate counters,
-// and the receipt log with its outbox. Checkpoint acknowledgements and clock
-// readings are excluded.
-func (s *Store) stateDigestsLocked() (storeStateTestOnly, error) {
-	var out storeStateTestOnly
+// storeMembersLocked returns the RatifyCanonicalJSON of the claims, streams,
+// rate_counters, and receipt_log members: every claim in every state
+// (evaluating, terminal, interrupted, abandoned) with its sealed values and
+// release record, every stream sequence, every rate counter, and the receipt
+// log with its outbox. Checkpoint acknowledgements and clock readings are
+// excluded.
+func (s *Store) storeMembersLocked() (claims, streams, rateCounters, receiptLog []byte, err error) {
 	ids := make([]string, 0, len(s.claims))
 	for id := range s.claims {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	claims := make([]claimProjection, 0, len(ids))
+	claimRecords := make([]any, 0, len(ids))
 	for _, id := range ids {
-		r := s.claims[id]
-		claimDigest, err := recordDigest(r.claim)
-		if err != nil {
-			return out, err
-		}
-		progressDigest, err := recordDigest(r.progress)
-		if err != nil {
-			return out, err
-		}
-		releaseDigest := ""
-		if r.release != nil {
-			if releaseDigest, err = recordDigest(r.release); err != nil {
-				return out, err
-			}
-		}
-		claims = append(claims, claimProjection{
-			Abandoned: r.abandoned, AllowHorizon: r.allowHorizon, ClaimID: id, ClaimSHA384: claimDigest, ClaimedAt: r.claimedAt,
-			FinalizedAt: r.finalizedAt, LeaseExpiresAt: r.leaseExpiresAt, OutboxIndex: r.outboxIndex, OwnerDigest: hex.EncodeToString(r.ownerDigest[:]),
-			ProgressSHA384: progressDigest, ReceiptBodySHA384: optionalDigest(r.receiptBody), ReleaseSHA384: releaseDigest, State: string(r.state), TerminalSHA384: optionalDigest(r.terminal),
-		})
+		claimRecords = append(claimRecords, claimProjection(id, s.claims[id]))
 	}
-	streams := make([]streamProjection, 0, len(s.streams))
-	for key, seq := range s.streams {
-		streams = append(streams, streamProjection{LastSeq: seq, Stream: key})
-	}
-	sort.Slice(streams, func(i, j int) bool { return streams[i].Stream < streams[j].Stream })
-	rates := make([]rateProjection, 0, len(s.rateCommits))
-	for key, commits := range s.rateCommits {
-		rates = append(rates, rateProjection{CertID: key.certID, Commits: slices.Clone(commits), IssuerID: key.issuerID, WindowS: key.windowS})
-	}
-	sort.Slice(rates, func(i, j int) bool {
-		a, b := rates[i], rates[j]
-		if c := strings.Compare(a.IssuerID, b.IssuerID); c != 0 {
-			return c < 0
-		}
-		if c := strings.Compare(a.CertID, b.CertID); c != 0 {
-			return c < 0
-		}
-		return a.WindowS < b.WindowS
+	keys := slices.Collect(maps.Keys(s.streams))
+	slices.SortFunc(keys, func(a, b streamKeyV2) int {
+		return cmp.Or(strings.Compare(a.namespace, b.namespace), strings.Compare(a.agentID, b.agentID), strings.Compare(a.streamID, b.streamID))
 	})
-	log := receiptLogProjection{Entries: make([]receiptEntryProjection, 0, len(s.outbox)), Frozen: s.logFrozen, LogID: s.logID}
+	streamRecords := make([]any, 0, len(keys))
+	for _, key := range keys {
+		streamRecords = append(streamRecords, object{"agent_id": key.agentID, "last_sequence": s.streams[key], "namespace": key.namespace, "stream_id": base64.StdEncoding.EncodeToString([]byte(key.streamID))})
+	}
+	rateKeys := slices.Collect(maps.Keys(s.rateCommits))
+	slices.SortFunc(rateKeys, func(a, b rateKey) int {
+		return cmp.Or(strings.Compare(a.issuerID, b.issuerID), strings.Compare(a.certID, b.certID), cmp.Compare(a.windowS, b.windowS))
+	})
+	rateRecords := make([]any, 0, len(rateKeys))
+	for _, key := range rateKeys {
+		rateRecords = append(rateRecords, object{"cert_id": key.certID, "commits": append([]int64{}, s.rateCommits[key]...), "issuer_id": key.issuerID, "window_s": key.windowS})
+	}
+	entries := make([]any, 0, len(s.outbox))
 	for i, entry := range s.outbox {
-		log.Entries = append(log.Entries, receiptEntryProjection{BodySHA384: optionalDigest(entry.body), ClaimID: entry.claimID, EntryHash: hex.EncodeToString(entry.digest), Sequence: i + 1})
+		entries = append(entries, object{"body_sha384": sha384Hex(entry.body), "claim_id": entry.claimID, "entry_hash": bytesOrNull(entry.digest), "sequence": int64(i) + 1})
 	}
-	var err error
-	if out.claims, err = memberDigest(claims); err != nil {
-		return out, err
+	if claims, err = ratify.CanonicalJSON(claimRecords); err != nil {
+		return
 	}
-	if out.streams, err = memberDigest(streams); err != nil {
-		return out, err
+	if streams, err = ratify.CanonicalJSON(streamRecords); err != nil {
+		return
 	}
-	if out.rateCounters, err = memberDigest(rates); err != nil {
-		return out, err
+	if rateCounters, err = ratify.CanonicalJSON(rateRecords); err != nil {
+		return
 	}
-	out.receiptLog, err = memberDigest(log)
-	return out, err
+	receiptLog, err = ratify.CanonicalJSON(object{"entries": entries, "frozen": s.logFrozen, "log_id": s.logID})
+	return
+}
+
+// stateDigestsLocked digests the store members of the projection.
+func (s *Store) stateDigestsLocked() (storeStateTestOnly, error) {
+	claims, streams, rateCounters, receiptLog, err := s.storeMembersLocked()
+	if err != nil {
+		return storeStateTestOnly{}, err
+	}
+	return storeStateTestOnly{claims: sha384Hex(claims), streams: sha384Hex(streams), rateCounters: sha384Hex(rateCounters), receiptLog: sha384Hex(receiptLog)}, nil
 }
 
 func (s *Store) stateDigests() (storeStateTestOnly, error) {
@@ -297,39 +295,56 @@ func (p *DevicePrimaryTestOnly) anchorStore(previous, next storeStateTestOnly) e
 // composeLocked returns the complete-state digest for the given store
 // member digests and the current journal and issuance records.
 func (p *DevicePrimaryTestOnly) composeLocked(store storeStateTestOnly) ([]byte, error) {
-	journal := p.Journal.inner
-	journal.mu.Lock()
-	journalMember := journalProjection{Generation: journal.head.Generation, SnapshotSHA384: sha384Hex(journal.snapshot)}
-	journal.mu.Unlock()
+	issuance, err := p.issuanceMemberLocked()
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.projectionLocked(store, sha384Hex(issuance))
+	if err != nil {
+		return nil, err
+	}
+	return completeStateDigest(body), nil
+}
+
+// issuanceMemberLocked returns the RatifyCanonicalJSON of the
+// issuance_records member, sorted by (verifier_namespace, replay_epoch,
+// value).
+func (p *DevicePrimaryTestOnly) issuanceMemberLocked() ([]byte, error) {
 	issuance := p.Issuance.inner
 	issuance.mu.Lock()
-	records := make([]issuanceProjection, 0, len(issuance.records))
-	for key, record := range issuance.records {
-		digest, err := recordDigest(record)
-		if err != nil {
-			issuance.mu.Unlock()
-			return nil, err
-		}
-		records = append(records, issuanceProjection{Key: key, RecordSHA384: digest})
-	}
+	records := slices.Collect(maps.Values(issuance.records))
 	issuance.mu.Unlock()
-	sort.Slice(records, func(i, j int) bool { return records[i].Key < records[j].Key })
-	issuanceMember, err := memberDigest(records)
-	if err != nil {
-		return nil, err
-	}
-	body, err := ratify.CanonicalJSON(deviceStateProjection{
-		Claims: store.claims, IssuanceRecords: issuanceMember, LogID: p.Store.logID, RateCounters: store.rateCounters, ReceiptLog: store.receiptLog,
-		ReplayEpoch: p.replayEpoch, SecurityJournal: journalMember, Streams: store.streams, Version: deviceStateVersion,
+	slices.SortFunc(records, func(a, b ratify.ExpectedChallengeV2) int {
+		return cmp.Or(strings.Compare(a.VerifierNamespace, b.VerifierNamespace), cmp.Compare(a.ReplayEpoch, b.ReplayEpoch), bytes.Compare(a.Value, b.Value))
 	})
-	if err != nil {
-		return nil, err
+	projected := make([]any, 0, len(records))
+	for _, record := range records {
+		projected = append(projected, issuanceProjection(record))
 	}
+	return ratify.CanonicalJSON(projected)
+}
+
+// projectionLocked returns the RatifyCanonicalJSON of the version 1
+// projection object.
+func (p *DevicePrimaryTestOnly) projectionLocked(store storeStateTestOnly, issuanceDigest string) ([]byte, error) {
+	journal := p.Journal.inner
+	journal.mu.Lock()
+	journalMember := object{"generation": journal.head.Generation, "snapshot_sha384": sha384Hex(journal.snapshot)}
+	journal.mu.Unlock()
+	return ratify.CanonicalJSON(object{
+		"claims": store.claims, "issuance_records": issuanceDigest, "log_id": p.Store.logID, "rate_counters": store.rateCounters,
+		"receipt_log": store.receiptLog, "replay_epoch": p.replayEpoch, "security_journal": journalMember, "streams": store.streams,
+		"version": int64(deviceStateVersion),
+	})
+}
+
+// completeStateDigest is the labelled SHA-384 of the projection bytes.
+func completeStateDigest(projection []byte) []byte {
 	h := sha512.New384()
 	h.Write([]byte(deviceStateLabel))
 	h.Write([]byte{0})
-	h.Write(body)
-	return h.Sum(nil), nil
+	h.Write(projection)
+	return h.Sum(nil)
 }
 
 // CompleteStateDigestTestOnly recomputes the complete-state digest from the

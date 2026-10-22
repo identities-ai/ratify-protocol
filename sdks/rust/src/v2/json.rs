@@ -314,7 +314,40 @@ impl<'a> Parser<'a> {
 pub(crate) fn parse_wire(data: &[u8], top_byte: &[&str], top_text: &[&str]) -> V2Result<JNode> {
     let root = parse_json(data)?;
     check_byte_fields(&root, 0, top_byte, top_text)?;
+    reject_unexpected_null(&root)?;
     Ok(root)
+}
+
+/// The only v2 schema members whose value may be `null` (SPEC-v2 §2.1).
+const NULLABLE_MEMBERS: &[&str] = &[
+    "session_context",
+    "stream_id",
+    "stream_seq",
+    "context_policy_digest",
+    "floor",
+    "accepted_snapshot",
+    "preceding_checkpoint",
+];
+
+/// SPEC-v2 §2.1 strict decoding: `null` is malformed as an array element and
+/// as the value of any member the schema does not declare nullable, at every
+/// nesting level. Values inside a `params` object follow the general value
+/// model, where `null` is a value.
+pub(crate) fn reject_unexpected_null(node: &JNode) -> V2Result<()> {
+    match &node.v {
+        JV::Null => plain("wire v2: null is not permitted here"),
+        JV::Obj(fields) => {
+            for (k, v) in fields {
+                if k == "params" || (v.is_null() && NULLABLE_MEMBERS.contains(&k.as_str())) {
+                    continue;
+                }
+                reject_unexpected_null(v)?;
+            }
+            Ok(())
+        }
+        JV::Arr(items) => items.iter().try_for_each(reject_unexpected_null),
+        _ => Ok(()),
+    }
 }
 
 /// Parse strict JSON without byte-field checks.
@@ -475,17 +508,8 @@ impl<'a> Obj<'a> {
         match self.present(key) {
             None => Ok(Vec::new()),
             Some(v) => match &v.v {
-                // Go decodes a null element of []string as "".
-                JV::Arr(items) => items
-                    .iter()
-                    .map(|i| {
-                        if i.is_null() {
-                            Ok(String::new())
-                        } else {
-                            as_str(i)
-                        }
-                    })
-                    .collect(),
+                // A null element is malformed (SPEC-v2 §2.1).
+                JV::Arr(items) => items.iter().map(as_str).collect(),
                 _ => plain(format!("wire: {key} must be an array of strings")),
             },
         }
@@ -517,6 +541,9 @@ impl<'a> Obj<'a> {
             Some(v) => {
                 let o = obj(v)?;
                 o.only(&["ed25519", "ml_dsa_65"])?;
+                // A hybrid key or signature needs both members: `{}` or a
+                // null component is malformed (SPEC-v2 §2.1).
+                o.require(&["ed25519", "ml_dsa_65"], &[])?;
                 Ok((o.bytes("ed25519")?, o.bytes("ml_dsa_65")?))
             }
         }

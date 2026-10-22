@@ -1,5 +1,6 @@
 // Protocol v2 replay identifiers are separate from v1 challenge-store keys.
 import { sha256, sha384 } from "@noble/hashes/sha2";
+import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
 
 const encoder = new TextEncoder();
 const claimDigestTag = encoder.encode("ratify-protocol-challenge-claim-v2\0");
@@ -22,10 +23,12 @@ function uint64BE(value: bigint): Uint8Array {
 }
 
 export function challengeClaimDigestV2(challenge: Uint8Array): Uint8Array {
-  if (!(challenge instanceof Uint8Array) || challenge.length !== 32) {
-    throw new Error("v2 challenge claim requires exactly 32 challenge bytes");
-  }
-  return sha384(concat(claimDigestTag, challenge));
+  return classified("malformed", () => {
+    if (!(challenge instanceof Uint8Array) || challenge.length !== 32) {
+      throw new Error("v2 challenge claim requires exactly 32 challenge bytes");
+    }
+    return sha384(concat(claimDigestTag, challenge));
+  });
 }
 
 function validateNamespaceEpoch(verifierNamespace: string, replayEpoch: number): void {
@@ -39,22 +42,32 @@ function validateNamespaceEpoch(verifierNamespace: string, replayEpoch: number):
 }
 
 export function protocolClaimIDV2(verifierNamespace: string, replayEpoch: number, challenge: Uint8Array): string {
-  validateNamespaceEpoch(verifierNamespace, replayEpoch);
-  return protocolClaimIDFromDigestV2(verifierNamespace, replayEpoch, challengeClaimDigestV2(challenge));
+  return classified("configuration_invalid", () => {
+    validateNamespaceEpoch(verifierNamespace, replayEpoch);
+    let digest: Uint8Array;
+    try {
+      digest = challengeClaimDigestV2(challenge);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    return protocolClaimIDFromDigestV2(verifierNamespace, replayEpoch, digest);
+  });
 }
 
 export function protocolClaimIDFromDigestV2(verifierNamespace: string, replayEpoch: number, claimDigest: Uint8Array): string {
-  validateNamespaceEpoch(verifierNamespace, replayEpoch);
-  if (!(claimDigest instanceof Uint8Array) || claimDigest.length !== 48) {
-    throw new Error("v2 challenge claim digest must be exactly 48 bytes");
-  }
-  const namespace = encoder.encode(verifierNamespace);
-  const digest = sha256(concat(
-    claimIDTag,
-    uint64BE(BigInt(namespace.length)),
-    namespace,
-    uint64BE(BigInt(replayEpoch)),
-    claimDigest,
-  ));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return classified("configuration_invalid", () => {
+    validateNamespaceEpoch(verifierNamespace, replayEpoch);
+    if (!(claimDigest instanceof Uint8Array) || claimDigest.length !== 48) {
+      throw v2Errorf("malformed", "v2 challenge claim digest must be exactly 48 bytes");
+    }
+    const namespace = encoder.encode(verifierNamespace);
+    const digest = sha256(concat(
+      claimIDTag,
+      uint64BE(BigInt(namespace.length)),
+      namespace,
+      uint64BE(BigInt(replayEpoch)),
+      claimDigest,
+    ));
+    return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  });
 }

@@ -50,7 +50,7 @@ func DecodeV2CheckpointAcknowledgement(data []byte) (_ V2CheckpointAcknowledgeme
 		return V2CheckpointAcknowledgement{}, err
 	}
 	var wire checkpointAcknowledgementWireV2
-	if err := strictUnmarshal(data, &wire); err != nil {
+	if err := strictUnmarshalV2(data, &wire); err != nil {
 		return V2CheckpointAcknowledgement{}, err
 	}
 	hash, err := base64.StdEncoding.Strict().DecodeString(wire.EntryHash)

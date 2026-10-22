@@ -333,7 +333,7 @@ func (g *gen) statusFile() any {
 	b.query("c9", T, nil, "indeterminate", "unavailable", "N1")
 	b.list("N2", 2, "c1", "c2").apply("N2", T, st(true, 2, 2, 0, false, []string{"c1", "c2"}, []string{"c1", "c2"}))
 	b.query("c9", T, nil, "not_revoked", "", "N2")
-	b.transition("status_root", 3, nil, "configuration_invalid")
+	b.transition("status_root", 3, nil, "status_object_rejected")
 	add(b)
 	return f
 }

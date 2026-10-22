@@ -42,7 +42,36 @@ export type V2ErrorClass =
   | "log_orphan"
   | "log_fork"
   | "log_frozen"
-  | "status_object_rejected";
+  | "status_object_rejected"
+  | "stream_sequence_mismatch"
+  | "clock_regressed"
+  | "evaluation_cancelled"
+  | "claim_lease_live"
+  | "claim_lease_lost"
+  | "claim_already_terminal"
+  | "claim_not_found"
+  | "receipt_abandoned"
+  | "allow_horizon_passed";
+
+/**
+ * The closed SPEC-v2 §2.7 error-class list (49 classes). "unclassified" is
+ * not a class: it marks an error this package did not classify.
+ */
+export const V2_ERROR_CLASSES: readonly Exclude<V2ErrorClass, "unclassified">[] = Object.freeze([
+  "malformed", "unsupported_object_type", "key_id_mismatch", "delegation_digest_mismatch",
+  "chain_linkage_mismatch", "duplicate_certificate_ref", "invalid_signature", "invalid_required_scope",
+  "configuration_invalid", "expected_challenge_unavailable", "namespace_mismatch", "stale_replay_epoch",
+  "verifier_id_mismatch", "challenge_mismatch", "challenge_not_fresh", "expected_agent_mismatch",
+  "session_context_mismatch", "receiver_audience_required", "receiver_audience_mismatch",
+  "receiver_binding_rejected", "claim_replay", "stream_sequence_mismatch", "claim_store_unavailable",
+  "receipt_abandoned", "evaluation_cancelled", "clock_regressed", "allow_horizon_passed",
+  "claim_lease_live", "claim_lease_lost", "claim_already_terminal", "claim_not_found",
+  "status_key_binding_mismatch", "status_object_rejected", "receipt_bundle_mismatch",
+  "bundle_hash_mismatch", "transaction_party_mismatch", "transaction_context_mismatch",
+  "transaction_signature_set_invalid", "rotation_state_mismatch", "rotation_key_reused",
+  "rotation_future_dated", "rotation_fork", "rotation_frozen", "rotation_recovery_invalid",
+  "log_state_mismatch", "log_gap", "log_orphan", "log_fork", "log_frozen",
+]);
 
 /** An error carrying a conformance class. The wrapped cause stays reachable. */
 export class V2Error extends Error {
@@ -102,7 +131,7 @@ export function v2Errorf(v2Class: V2ErrorClass, message: string, cause?: unknown
 
 /** Go v2Classify: keep an existing class, otherwise attach this one. */
 export function v2Classify(v2Class: V2ErrorClass, err: unknown): Error {
-  if (findV2Error(err)) return err as Error;
+  if (v2ErrorClassOf(err) !== "unclassified") return err as Error;
   const message = err instanceof Error ? err.message : String(err);
   return new V2Error(v2Class, message, err);
 }
@@ -126,6 +155,15 @@ export function v2ErrorClassOf(err: unknown): V2ErrorClass | "" {
 export function classified<T>(v2Class: V2ErrorClass, fn: () => T): T {
   try {
     return fn();
+  } catch (err) {
+    throw v2Classify(v2Class, err);
+  }
+}
+
+/** Async classified: classifies a rejection with v2Class unless it already has a class. */
+export async function classifiedAsync<T>(v2Class: V2ErrorClass, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
   } catch (err) {
     throw v2Classify(v2Class, err);
   }

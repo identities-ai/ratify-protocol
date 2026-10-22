@@ -17,14 +17,12 @@ from ratify_protocol_v2 import (
     delegation_signature_message_v2,
     derive_key_id_v2,
     keypair_from_seeds_v2,
-    sign_delegation_v2,
     verify_delegation_signature_v2,
 )
 import ratify_protocol_v2
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2._version import NATIVE_VERSION, __version__
 
-from ratify_protocol_v2._testing import deterministic_test_vector_signing
 
 requires_native = pytest.mark.skipif(not _native.AVAILABLE, reason="ratify-protocol-native-v2 not installed")
 
@@ -113,18 +111,21 @@ def test_v2_signature_vector_and_component_mutations():
 
 
 @requires_native
-def test_native_delegation_signing_reproduces_shared_vector():
+def test_native_backend_reproduces_shared_vector():
+    """The native backend signs the SDK-computed M and context exactly as the
+    vector pins; it is the SDK's backend, not part of its public API."""
     v = vector()
     signable, public = decode(v["signable_bytes"]), public_key(v)
     seeds = v["issuer_seeds"]
     derived_public, private = keypair_from_seeds_v2(decode(seeds["ed25519"]), decode(seeds["ml_dsa_65"]))
     assert derived_public == public
-    with deterministic_test_vector_signing():
-        generated = sign_delegation_v2(signable, private)
-    assert generated == signature(v)
-    hedged = sign_delegation_v2(signable, private)
-    assert hedged.ed25519 == generated.ed25519 and hedged.ml_dsa_65 != generated.ml_dsa_65
-    assert verify_delegation_signature_v2(signable, hedged, public)
+    key = _native.signing_key(private.ed25519, private.ml_dsa_65)
+    message, context = delegation_signature_message_v2(signable), decode(v["mldsa_context"])
+    ed, ml = key.sign(message, context, deterministic_for_test_vectors=True)
+    assert HybridSignature(bytes(ed), bytes(ml)) == signature(v)
+    hed, hml = key.sign(message, context)
+    assert hed == ed and hml != ml
+    assert verify_delegation_signature_v2(signable, HybridSignature(bytes(hed), bytes(hml)), public)
 
 
 def test_native_version_is_lockstep_with_sdk_version():

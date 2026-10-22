@@ -158,6 +158,7 @@ type v2EvaluationProgress struct {
 // Stage=evaluating.
 func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCallbacks) (V2VerifyOutcome, error) {
 	preflightFailure := func(err error) (V2VerifyOutcome, error) {
+		err = v2Classify(V2ErrConfigurationInvalid, err)
 		return V2VerifyOutcome{Stage: V2StagePreflight, Error: err, ErrorClass: V2ErrorClassOf(err)}, nil
 	}
 	if ctx == nil || cb.ClaimStore == nil {
@@ -187,7 +188,10 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 	if disposition != V2ClaimCreated {
 		return V2VerifyOutcome{Stage: V2StageReplay, Disposition: disposition, Claim: claim}, nil
 	}
+	// Every evaluating error reaching here is a claim-store, progress-write,
+	// or finalization failure unless it already carries a class.
 	evaluating := func(err error) (V2VerifyOutcome, error) {
+		err = v2Classify(V2ErrClaimStoreUnavailable, err)
 		return V2VerifyOutcome{Stage: V2StageEvaluating, Claim: claim, Disposition: disposition, Error: err, ErrorClass: V2ErrorClassOf(err)}, err
 	}
 	cancelled := func(err error) (V2VerifyOutcome, error) {

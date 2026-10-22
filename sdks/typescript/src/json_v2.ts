@@ -299,7 +299,11 @@ class Parser {
       while (digit(b[this.i])) this.i++;
     }
     const raw = String.fromCharCode(...b.subarray(s, this.i));
-    // Only a value equal to negative zero is rejected; -0.5 is a valid float.
+    // Protocol v2 carries no floating point anywhere on the wire: every
+    // number token must be an integer spelling (1.0 and 1e3 included).
+    if (this.opts.strictV2 && /[.eE]/.test(raw)) {
+      throw new Error(`wire: number ${raw} is not an integer; v2 forbids floating point`);
+    }
     if (this.opts.strictV2 && raw.startsWith("-") && Number(raw) === 0) {
       throw new Error("wire: negative zero is not a canonical number");
     }
@@ -512,6 +516,34 @@ export function checkV2Nulls(n: JNode): void {
     }
   } else if (n.k === "arr") {
     for (const v of n.a) checkV2Nulls(v);
+  }
+}
+
+/**
+ * The only v2 schema members whose value may be null (SPEC-v2 §2.1). Values
+ * inside a "params" object follow the general value model, where null is a
+ * value.
+ */
+const V2_NULLABLE_MEMBERS = new Set([
+  "session_context", "stream_id", "stream_seq", "context_policy_digest",
+  "floor", "accepted_snapshot", "preceding_checkpoint",
+]);
+
+/**
+ * Go rejectV2UnexpectedNull: null as an array element, or as the value of any
+ * member the schema does not declare nullable, is malformed at every nesting
+ * level. A null byte string or array would otherwise decode to the same value
+ * as an empty one.
+ */
+export function rejectV2UnexpectedNull(n: JNode, path = "$"): void {
+  if (n.k === "null") throw new Error(`wire v2: ${path} must not be null`);
+  if (n.k === "obj") {
+    for (const [key, v] of n.m) {
+      if (key === "params" || (v.k === "null" && V2_NULLABLE_MEMBERS.has(key))) continue;
+      rejectV2UnexpectedNull(v, `${path}.${key}`);
+    }
+  } else if (n.k === "arr") {
+    n.a.forEach((v, i) => rejectV2UnexpectedNull(v, `${path}[${i}]`));
   }
 }
 

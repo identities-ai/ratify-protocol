@@ -58,6 +58,7 @@ type objectVector struct {
 	Kind        string            `json:"kind"`
 	Description string            `json:"description"`
 	WireB64     string            `json:"wire_b64"`
+	BundleB64   string            `json:"bundle_b64,omitempty"`
 	Verify      verifyContext     `json:"verify"`
 	Signatures  []sigVector       `json:"signatures"`
 	Digests     map[string]string `json:"digests"`

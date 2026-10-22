@@ -100,8 +100,7 @@ func v2Classify(class V2ErrorClass, err error) error {
 	if err == nil {
 		return nil
 	}
-	var classified *V2Error
-	if errors.As(err, &classified) {
+	if V2ErrorClassOf(err) != V2ErrUnclassified {
 		return err
 	}
 	return &V2Error{Class: class, Err: err}

@@ -56,6 +56,37 @@ class V2ErrorClass:
     LOG_FROZEN = "log_frozen"
     STATUS_OBJECT_REJECTED = "status_object_rejected"
 
+    # Part B stream sequence (SPEC-v2 §7.4): gap, duplicate and reorder all
+    # fail before claim with this one class.
+    STREAM_SEQUENCE_MISMATCH = "stream_sequence_mismatch"
+
+    # An authoritative clock reading below the store's high-water mark or
+    # below T_claim (SPEC-v2 §7.2).
+    CLOCK_REGRESSED = "clock_regressed"
+    # The caller's context ended after the claim; nothing was committed and
+    # the claim remains recoverable.
+    EVALUATION_CANCELLED = "evaluation_cancelled"
+
+    # Part B claim lifecycle.
+    CLAIM_LEASE_LIVE = "claim_lease_live"
+    CLAIM_LEASE_LOST = "claim_lease_lost"
+    CLAIM_ALREADY_TERMINAL = "claim_already_terminal"
+    CLAIM_NOT_FOUND = "claim_not_found"
+    # An exact retry of a claim whose receipt was abandoned (SPEC-v2 §7.7).
+    RECEIPT_ABANDONED = "receipt_abandoned"
+
+    # An allow reached finalization at or after its allow horizon or the
+    # challenge expiry; nothing was committed (SPEC-v2 §7.2, §7.5).
+    ALLOW_HORIZON_PASSED = "allow_horizon_passed"
+
+
+# The closed list of SPEC-v2 §2.7 (49 classes). ``unclassified`` is not a
+# Protocol class: it marks an error this package failed to classify.
+ALL_ERROR_CLASSES: frozenset = frozenset(
+    value for name, value in vars(V2ErrorClass).items()
+    if not name.startswith("_") and isinstance(value, str) and value != V2ErrorClass.UNCLASSIFIED
+)
+
 
 class V2Error(Exception):
     """A diagnostic error carrying a conformance class.
@@ -104,17 +135,6 @@ class KeyRotationForkError(V2Error):
 class KeyRotationFrozenError(V2Error):
     def __init__(self, message: str = "key rotation authority is frozen"):
         super().__init__(V2ErrorClass.ROTATION_FROZEN, message)
-
-
-class RateLimitExceededError(Exception):
-    """ErrV2RateLimitExceeded: a complete atomic batch had no capacity.
-
-    Unclassified by design, as in Go: it is a store outcome, not a failure
-    class, and the verifier maps it to ``constraint_denied``.
-    """
-
-    def __init__(self, message: str = "v2 signed rate limit has no remaining capacity"):
-        super().__init__(message)
 
 
 def v2_error(error_class: str, message: str) -> V2Error:

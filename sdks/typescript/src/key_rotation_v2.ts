@@ -5,11 +5,15 @@
 
 import { sha384 } from "@noble/hashes/sha2";
 
-import { V2_OBJECT_TYPE, signV2Statement, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_MAX_TIMESTAMP_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
+import { MAX_KEY_ROTATION_STATEMENT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
+import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
+  classified,
+  classifiedAsync,
   ErrKeyRotationForkV2,
   ErrKeyRotationFrozenV2,
-  classified,
   v2Classify,
   v2Errorf,
   wrapError,
@@ -25,6 +29,7 @@ import {
   gInt,
   gString,
   gStruct,
+  rejectV2UnexpectedNull,
   requireV2Fields,
   uint16BE,
   utf8,
@@ -44,7 +49,7 @@ import {
 } from "./protocol_v2_wire.js";
 import { validateWitnessSignableBodyV2 } from "./witness_v2.js";
 import { validateVerificationReceiptSignableV2 } from "./verification_receipt_v2.js";
-import { MAX_PROOF_BUNDLE_BYTES, type HybridPublicKey, type HybridSignature } from "./types.js";
+import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 const MAX_SAFE = MAX_SAFE_INTEGER_V2;
 
@@ -101,7 +106,7 @@ export function validateKeyRotationStatementV2(s: KeyRotationStatementV2, signat
       !Number.isInteger(s.recovery_epoch) || !Number.isInteger(s.sequence)) {
     throw new Error("wire v2: recovery_epoch and sequence must be positive safe integers");
   }
-  if (!isSafe(s.issued_at) || !isSafe(s.not_before)) throw new Error("wire v2: issued_at and not_before must be safe integers");
+  if (!validV2Timestamp(s.issued_at) || !validV2Timestamp(s.not_before)) throw new Error("wire v2: issued_at and not_before must be safe integers");
   if (!ROLES.has(s.role)) throw new Error("wire v2: rotation role is invalid");
   if (!(s.previous_statement_hash instanceof Uint8Array) || s.previous_statement_hash.length !== 48) {
     throw new Error("wire v2: previous_statement_hash must be 48 bytes");
@@ -167,36 +172,38 @@ export function keyRotationStatementV2SignBytes(s: KeyRotationStatementV2): Uint
  * body after validating it against its schema.
  */
 export function statementBodyDigestV2(objectType: number, body: Uint8Array): Uint8Array {
-  const code = objectType;
-  if (code !== V2_OBJECT_TYPE.keyRotationAuthorization && code !== V2_OBJECT_TYPE.witnessEntry && code !== V2_OBJECT_TYPE.verificationReceipt) {
-    throw new Error(`object type 0x${code.toString(16).padStart(4, "0")} does not use StatementBodyDigestV2`);
-  }
-  let root: JNode;
-  try {
-    root = code === V2_OBJECT_TYPE.verificationReceipt
-      ? checkWireJSONV2(body, ["previous_receipt_hash"], ["bundle_hash"])
-      : checkWireJSONV2(body, ["previous_statement_hash", "delegation_digest", "previous_receipt_hash"]);
-  } catch (err) {
-    throw wrapError("signable body", err);
-  }
-  const value = gAny(root);
-  if (code !== V2_OBJECT_TYPE.keyRotationAuthorization) {
-    if (root.k !== "obj") throw new Error("signable body: expected a JSON object");
-    for (const f of ["signature", "old_signature", "new_signature"]) {
-      if (root.m.has(f)) throw new Error(`signable body must exclude ${JSON.stringify(f)}`);
+  return classified("malformed", () => {
+    const code = objectType;
+    if (code !== V2_OBJECT_TYPE.keyRotationAuthorization && code !== V2_OBJECT_TYPE.witnessEntry && code !== V2_OBJECT_TYPE.verificationReceipt) {
+      throw v2Errorf("unsupported_object_type", `object type 0x${code.toString(16).padStart(4, "0")} does not use StatementBodyDigestV2`);
     }
-  }
-  let canonical: Uint8Array | null = null;
-  try {
-    canonical = canonicalJSONV2(value);
-  } catch {
-    canonical = null;
-  }
-  if (canonical === null || !bytesEqual(canonical, body)) throw new Error("signable body must use RatifyCanonicalJSON");
-  if (code === V2_OBJECT_TYPE.keyRotationAuthorization) validateKeyRotationSignableBodyV2(root, body);
-  else if (code === V2_OBJECT_TYPE.witnessEntry) validateWitnessSignableBodyV2(root, body);
-  else validateVerificationReceiptSignableV2(body);
-  return sha384(concatBytes(utf8("ratify-protocol-statement-body-v2\0"), uint16BE(code), body));
+    let root: JNode;
+    try {
+      root = code === V2_OBJECT_TYPE.verificationReceipt
+        ? checkWireJSONV2(body, ["previous_receipt_hash"], ["bundle_hash"])
+        : checkWireJSONV2(body, ["previous_statement_hash", "delegation_digest", "previous_receipt_hash"]);
+    } catch (err) {
+      throw wrapError("signable body", err);
+    }
+    const value = gAny(root);
+    if (code !== V2_OBJECT_TYPE.keyRotationAuthorization) {
+      if (root.k !== "obj") throw new Error("signable body: expected a JSON object");
+      for (const f of ["signature", "old_signature", "new_signature"]) {
+        if (root.m.has(f)) throw new Error(`signable body must exclude ${JSON.stringify(f)}`);
+      }
+    }
+    let canonical: Uint8Array | null = null;
+    try {
+      canonical = canonicalJSONV2(value);
+    } catch {
+      canonical = null;
+    }
+    if (canonical === null || !bytesEqual(canonical, body)) throw new Error("signable body must use RatifyCanonicalJSON");
+    if (code === V2_OBJECT_TYPE.keyRotationAuthorization) validateKeyRotationSignableBodyV2(root, body);
+    else if (code === V2_OBJECT_TYPE.witnessEntry) validateWitnessSignableBodyV2(root, body);
+    else validateVerificationReceiptSignableV2(body);
+    return sha384(concatBytes(utf8("ratify-protocol-statement-body-v2\0"), uint16BE(code), body));
+  });
 }
 
 function decodeRotationStruct(root: JNode, allowed: readonly string[]): KeyRotationStatementV2 {
@@ -223,6 +230,7 @@ function validateKeyRotationSignableBodyV2(root: JNode, body: Uint8Array): void 
   let s: KeyRotationStatementV2;
   try {
     requireV2Fields(root, KEY_ROTATION_SIGNABLE_FIELDS);
+    rejectV2UnexpectedNull(root);
     s = decodeRotationStruct(root, KEY_ROTATION_SIGNABLE_FIELDS);
   } catch (err) {
     throw wrapError("rotation signable body", err);
@@ -242,14 +250,17 @@ function validateKeyRotationSignableBodyV2(root: JNode, body: Uint8Array): void 
 }
 
 export function keyRotationStatementV2Digest(s: KeyRotationStatementV2): Uint8Array {
-  return statementBodyDigestV2(V2_OBJECT_TYPE.keyRotationAuthorization, keyRotationStatementV2SignBytes(s));
+  return classified("malformed", () => {
+    return statementBodyDigestV2(V2_OBJECT_TYPE.keyRotationAuthorization, keyRotationStatementV2SignBytes(s));
+  });
 }
 
 export function decodeKeyRotationStatementV2(data: Uint8Array): KeyRotationStatementV2 {
   return classified("malformed", () => {
-    if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: rotation statement exceeds the wire size limit");
+    checkV2WireSize(data, "rotation statement", "MAX_KEY_ROTATION_STATEMENT_BYTES_V2", MAX_KEY_ROTATION_STATEMENT_BYTES_V2);
     const root = checkWireJSONV2(data, ["previous_statement_hash"]);
     requireV2Fields(root, KEY_ROTATION_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
     const s = decodeRotationStruct(root, KEY_ROTATION_V2_FIELDS);
     validateKeyRotationStatementV2(s, true);
     return s;
@@ -257,11 +268,13 @@ export function decodeKeyRotationStatementV2(data: Uint8Array): KeyRotationState
 }
 
 export function encodeKeyRotationStatementV2(s: KeyRotationStatementV2): Uint8Array {
-  validateKeyRotationStatementV2(s, true);
-  const o = rotationSignableObject(s);
-  o.old_signature = keyWire(s.old_signature);
-  o.new_signature = keyWire(s.new_signature);
-  return canonicalJSONV2(o);
+  return classified("malformed", () => {
+    validateKeyRotationStatementV2(s, true);
+    const o = rotationSignableObject(s);
+    o.old_signature = keyWire(s.old_signature);
+    o.new_signature = keyWire(s.new_signature);
+    return canonicalJSONV2(o);
+  });
 }
 
 /** Signs with the old key (0x0004) and the new key (0x0009) over the same body. */
@@ -271,31 +284,65 @@ export async function signKeyRotationStatementV2(
   newKey: HybridKeyPairV2,
   opts: V2SignOptions = {},
 ): Promise<KeyRotationStatementV2> {
-  validateKeyRotationStatementV2(s, false);
-  try {
-    await validateHybridKeyPairV2(oldKey);
-  } catch (err) {
-    throw wrapError("old rotation key", err);
-  }
-  try {
-    await validateHybridKeyPairV2(newKey);
-  } catch (err) {
-    throw wrapError("new rotation key", err);
-  }
-  if (!equalHybridPublicKeys(oldKey.publicKey, s.old_key) || !equalHybridPublicKeys(newKey.publicKey, s.new_key)) {
-    throw new Error("rotation private keys do not match the statement keys");
-  }
-  const signable = keyRotationStatementV2SignBytes(s);
-  const old_signature = await signV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, oldKey, opts);
-  const new_signature = await signV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, newKey, opts);
-  return {
-    ...s,
-    previous_statement_hash: Uint8Array.from(s.previous_statement_hash),
-    old_key: cloneHybridPublicKey(s.old_key),
-    new_key: cloneHybridPublicKey(s.new_key),
-    old_signature,
-    new_signature,
-  };
+  return classifiedAsync("malformed", async () => {
+    validateKeyRotationStatementV2(s, false);
+    let oldSigner: SignerV2;
+    let newSigner: SignerV2;
+    try {
+      await validateHybridKeyPairV2(oldKey);
+      oldSigner = await newLocalSignerV2(oldKey, { deterministic: opts.deterministic });
+    } catch (err) {
+      throw wrapError("old rotation key", err);
+    }
+    try {
+      await validateHybridKeyPairV2(newKey);
+      newSigner = await newLocalSignerV2(newKey, { deterministic: opts.deterministic });
+    } catch (err) {
+      throw wrapError("new rotation key", err);
+    }
+    return signKeyRotationStatementV2WithSigners(s, oldSigner, newSigner);
+  });
+}
+
+/**
+ * signKeyRotationStatementV2 with external signers: oldSigner signs 0x0004
+ * under the statement old key and newSigner signs 0x0009 under the new key.
+ */
+export async function signKeyRotationStatementV2WithSigners(
+  s: KeyRotationStatementV2,
+  oldSigner: SignerV2,
+  newSigner: SignerV2,
+  opts: SignOptionsV2 = {},
+): Promise<KeyRotationStatementV2> {
+  return classifiedAsync("malformed", async () => {
+    validateKeyRotationStatementV2(s, false);
+    let oldPub: HybridPublicKey;
+    let newPub: HybridPublicKey;
+    try {
+      oldPub = await signerPublicKeyV2(oldSigner);
+    } catch (err) {
+      throw wrapError("old rotation key", err);
+    }
+    try {
+      newPub = await signerPublicKeyV2(newSigner);
+    } catch (err) {
+      throw wrapError("new rotation key", err);
+    }
+    if (!equalHybridPublicKeys(oldPub, s.old_key) || !equalHybridPublicKeys(newPub, s.new_key)) {
+      throw v2Errorf("key_id_mismatch", "rotation private keys do not match the statement keys");
+    }
+    const signable = keyRotationStatementV2SignBytes(s);
+    const old_signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.keyRotationAuthorization, signable, oldSigner, oldPub, opts);
+    const new_signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, newSigner, newPub, opts);
+    return {
+      ...s,
+      previous_statement_hash: Uint8Array.from(s.previous_statement_hash),
+      old_key: cloneHybridPublicKey(s.old_key),
+      new_key: cloneHybridPublicKey(s.new_key),
+      old_signature,
+      new_signature,
+    };
+  });
 }
 
 /**
@@ -303,61 +350,63 @@ export async function signKeyRotationStatementV2(
  * is not acceptance: the caller persists the new head atomically.
  */
 export async function verifyKeyRotationStatementV2(s: KeyRotationStatementV2, state: KeyRotationV2State, nowUnix: number, futureSkew: number): Promise<void> {
-  try {
-    validateKeyRotationStatementV2(s, true);
-  } catch (err) {
-    throw v2Classify("malformed", err);
-  }
-  let currentID: string;
-  try {
-    currentID = keyIDV2(state.currentKey);
-  } catch (err) {
-    throw v2Errorf("configuration_invalid", `caller state current key: ${(err as Error).message}`, err);
-  }
-  if (!(state.sequence >= 0) || state.sequence >= MAX_SAFE || !(state.recoveryEpoch > 0) || state.recoveryEpoch > MAX_SAFE ||
-      !(state.headHash instanceof Uint8Array) || state.headHash.length !== 48) {
-    throw v2Errorf("configuration_invalid", "caller rotation state is invalid");
-  }
-  if (state.sequence === 0 && !bytesEqual(state.headHash, ZERO48)) {
-    throw v2Errorf("configuration_invalid", "caller genesis state must have a zero head hash");
-  }
-  if (state.sequence > 0 && bytesEqual(state.headHash, ZERO48)) {
-    throw v2Errorf("configuration_invalid", "caller non-genesis state must have a linked head hash");
-  }
-  if (!state.usedKeyIDs || state.usedKeyIDs.length === 0) {
-    throw v2Errorf("configuration_invalid", "caller state must include retained used key IDs");
-  }
-  const used = new Set<string>();
-  for (const id of state.usedKeyIDs) {
-    if (!validV2ID(id)) throw v2Errorf("configuration_invalid", "caller state contains an invalid used key ID");
-    if (used.has(id)) throw v2Errorf("configuration_invalid", "caller state contains duplicate used key IDs");
-    used.add(id);
-  }
-  if (!used.has(currentID)) throw v2Errorf("configuration_invalid", "caller used-key history does not contain the current key");
-  if (used.has(s.new_key_id)) throw v2Errorf("rotation_key_reused", "rotation replacement key was already used by this authority");
-  if (futureSkew < 0 || nowUnix < -MAX_SAFE || nowUnix > MAX_SAFE || futureSkew > MAX_SAFE) {
-    throw v2Errorf("configuration_invalid", "rotation verification clock inputs are outside safe bounds");
-  }
-  if (nowUnix > MAX_SAFE - futureSkew) futureSkew = MAX_SAFE - nowUnix;
-  if (!equalHybridPublicKeys(s.old_key, state.currentKey) || s.authority_id !== state.authorityID ||
-      s.recovery_epoch !== state.recoveryEpoch || s.role !== state.role || s.sequence !== state.sequence + 1 ||
-      !bytesEqual(s.previous_statement_hash, state.headHash)) {
-    throw v2Errorf("rotation_state_mismatch", "rotation statement does not extend the caller-authenticated authority state");
-  }
-  if (s.issued_at > nowUnix + futureSkew || s.not_before > nowUnix + futureSkew) {
-    throw v2Errorf("rotation_future_dated", "rotation statement is future-dated");
-  }
-  const signable = keyRotationStatementV2SignBytes(s);
-  try {
-    await verifyV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, s.old_signature, state.currentKey);
-  } catch (err) {
-    throw wrapError("old-key rotation authorization", err);
-  }
-  try {
-    await verifyV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, s.new_signature, s.new_key);
-  } catch (err) {
-    throw wrapError("new-key proof of possession", err);
-  }
+  return classifiedAsync("malformed", async () => {
+    try {
+      validateKeyRotationStatementV2(s, true);
+    } catch (err) {
+      throw v2Classify("malformed", err);
+    }
+    let currentID: string;
+    try {
+      currentID = keyIDV2(state.currentKey);
+    } catch (err) {
+      throw v2Errorf("configuration_invalid", `caller state current key: ${(err as Error).message}`, err);
+    }
+    if (!(state.sequence >= 0) || state.sequence >= MAX_SAFE || !(state.recoveryEpoch > 0) || state.recoveryEpoch > MAX_SAFE ||
+        !(state.headHash instanceof Uint8Array) || state.headHash.length !== 48) {
+      throw v2Errorf("configuration_invalid", "caller rotation state is invalid");
+    }
+    if (state.sequence === 0 && !bytesEqual(state.headHash, ZERO48)) {
+      throw v2Errorf("configuration_invalid", "caller genesis state must have a zero head hash");
+    }
+    if (state.sequence > 0 && bytesEqual(state.headHash, ZERO48)) {
+      throw v2Errorf("configuration_invalid", "caller non-genesis state must have a linked head hash");
+    }
+    if (!state.usedKeyIDs || state.usedKeyIDs.length === 0) {
+      throw v2Errorf("configuration_invalid", "caller state must include retained used key IDs");
+    }
+    const used = new Set<string>();
+    for (const id of state.usedKeyIDs) {
+      if (!validV2ID(id)) throw v2Errorf("configuration_invalid", "caller state contains an invalid used key ID");
+      if (used.has(id)) throw v2Errorf("configuration_invalid", "caller state contains duplicate used key IDs");
+      used.add(id);
+    }
+    if (!used.has(currentID)) throw v2Errorf("configuration_invalid", "caller used-key history does not contain the current key");
+    if (used.has(s.new_key_id)) throw v2Errorf("rotation_key_reused", "rotation replacement key was already used by this authority");
+    if (futureSkew < 0 || nowUnix < -MAX_SAFE || nowUnix > MAX_SAFE || futureSkew > MAX_SAFE) {
+      throw v2Errorf("configuration_invalid", "rotation verification clock inputs are outside safe bounds");
+    }
+    if (nowUnix > MAX_SAFE - futureSkew) futureSkew = MAX_SAFE - nowUnix;
+    if (!equalHybridPublicKeys(s.old_key, state.currentKey) || s.authority_id !== state.authorityID ||
+        s.recovery_epoch !== state.recoveryEpoch || s.role !== state.role || s.sequence !== state.sequence + 1 ||
+        !bytesEqual(s.previous_statement_hash, state.headHash)) {
+      throw v2Errorf("rotation_state_mismatch", "rotation statement does not extend the caller-authenticated authority state");
+    }
+    if (s.issued_at > nowUnix + futureSkew || s.not_before > nowUnix + futureSkew) {
+      throw v2Errorf("rotation_future_dated", "rotation statement is future-dated");
+    }
+    const signable = keyRotationStatementV2SignBytes(s);
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, s.old_signature, state.currentKey);
+    } catch (err) {
+      throw wrapError("old-key rotation authorization", err);
+    }
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, s.new_signature, s.new_key);
+    } catch (err) {
+      throw wrapError("new-key proof of possession", err);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -377,25 +426,27 @@ export interface KeyRotationV2Journal {
 }
 
 export function newKeyRotationV2Journal(authorityID: string, recoveryEpoch: number, role: string, genesisKey: HybridPublicKey): KeyRotationV2Journal {
-  let genesisID: string;
-  try {
-    genesisID = keyIDV2(genesisKey);
-  } catch (err) {
-    throw v2Errorf("configuration_invalid", `rotation genesis key: ${(err as Error).message}`, err);
-  }
-  if (typeof authorityID !== "string" || authorityID.length !== 32 || !lowerHexString(authorityID) ||
-      !(recoveryEpoch > 0) || recoveryEpoch > MAX_SAFE || !Number.isInteger(recoveryEpoch)) {
-    throw v2Errorf("configuration_invalid", "rotation authority or recovery epoch is invalid");
-  }
-  if (!ROLES.has(role)) throw v2Errorf("configuration_invalid", "rotation role is invalid");
-  return {
-    state: {
-      authorityID, recoveryEpoch, role, sequence: 0, headHash: new Uint8Array(48),
-      currentKey: cloneHybridPublicKey(genesisKey), usedKeyIDs: [genesisID],
-    },
-    accepted: [],
-    frozen: false,
-  };
+  return classified("configuration_invalid", () => {
+    let genesisID: string;
+    try {
+      genesisID = keyIDV2(genesisKey);
+    } catch (err) {
+      throw v2Errorf("configuration_invalid", `rotation genesis key: ${(err as Error).message}`, err);
+    }
+    if (typeof authorityID !== "string" || authorityID.length !== 32 || !lowerHexString(authorityID) ||
+        !(recoveryEpoch > 0) || recoveryEpoch > MAX_SAFE || !Number.isInteger(recoveryEpoch)) {
+      throw v2Errorf("configuration_invalid", "rotation authority or recovery epoch is invalid");
+    }
+    if (!ROLES.has(role)) throw v2Errorf("configuration_invalid", "rotation role is invalid");
+    return {
+      state: {
+        authorityID, recoveryEpoch, role, sequence: 0, headHash: new Uint8Array(48),
+        currentKey: cloneHybridPublicKey(genesisKey), usedKeyIDs: [genesisID],
+      },
+      accepted: [],
+      frozen: false,
+    };
+  });
 }
 
 function cloneJournal(j: KeyRotationV2Journal): KeyRotationV2Journal {
@@ -430,7 +481,7 @@ export async function acceptKeyRotationStatementV2(
   nowUnix: number,
   futureSkew: number,
 ): Promise<KeyRotationV2AcceptOutcome> {
-  const fail = (error: Error, j = journal): KeyRotationV2AcceptOutcome => ({ journal: j, error });
+  const fail = (error: Error, j = journal): KeyRotationV2AcceptOutcome => ({ journal: j, error: v2Classify("rotation_state_mismatch", error) });
   try {
     validateKeyRotationStatementV2(s, true);
   } catch (err) {
@@ -504,25 +555,27 @@ export async function acceptKeyRotationStatementV2(
  * used-key history is preserved.
  */
 export function recoverKeyRotationV2(journal: KeyRotationV2Journal, newRecoveryEpoch: number, newGenesisKey: HybridPublicKey): KeyRotationV2Journal {
-  let newID: string;
-  try {
-    newID = keyIDV2(newGenesisKey);
-  } catch (err) {
-    throw v2Errorf("rotation_recovery_invalid", `recovery genesis key: ${(err as Error).message}`, err);
-  }
-  if (!(newRecoveryEpoch > journal.state.recoveryEpoch) || newRecoveryEpoch > MAX_SAFE) {
-    throw v2Errorf("rotation_recovery_invalid", "rotation recovery must increase the recovery epoch");
-  }
-  if (journal.state.usedKeyIDs.includes(newID)) {
-    throw v2Errorf("rotation_recovery_invalid", "rotation recovery cannot anchor a previously used key");
-  }
-  const next = cloneJournal(journal);
-  next.state.recoveryEpoch = newRecoveryEpoch;
-  next.state.sequence = 0;
-  next.state.headHash = new Uint8Array(48);
-  next.state.currentKey = cloneHybridPublicKey(newGenesisKey);
-  next.state.usedKeyIDs.push(newID);
-  next.accepted = [];
-  next.frozen = false;
-  return next;
+  return classified("rotation_recovery_invalid", () => {
+    let newID: string;
+    try {
+      newID = keyIDV2(newGenesisKey);
+    } catch (err) {
+      throw v2Errorf("rotation_recovery_invalid", `recovery genesis key: ${(err as Error).message}`, err);
+    }
+    if (!(newRecoveryEpoch > journal.state.recoveryEpoch) || newRecoveryEpoch > MAX_SAFE) {
+      throw v2Errorf("rotation_recovery_invalid", "rotation recovery must increase the recovery epoch");
+    }
+    if (journal.state.usedKeyIDs.includes(newID)) {
+      throw v2Errorf("rotation_recovery_invalid", "rotation recovery cannot anchor a previously used key");
+    }
+    const next = cloneJournal(journal);
+    next.state.recoveryEpoch = newRecoveryEpoch;
+    next.state.sequence = 0;
+    next.state.headHash = new Uint8Array(48);
+    next.state.currentKey = cloneHybridPublicKey(newGenesisKey);
+    next.state.usedKeyIDs.push(newID);
+    next.accepted = [];
+    next.frozen = false;
+    return next;
+  });
 }

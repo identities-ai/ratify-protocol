@@ -14,7 +14,8 @@ import (
 // lowercase_hex(SHA-256("ratify-key-id-v2" || 0x00 || ed25519 || ml_dsa_65)).
 // It fails with the malformed class unless both components have their exact
 // lengths.
-func KeyIDV2(pub HybridPublicKey) (string, error) {
+func KeyIDV2(pub HybridPublicKey) (_ string, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	id, err := keyIDV2(pub)
 	return id, v2Classify(V2ErrMalformed, err)
 }
@@ -82,7 +83,8 @@ type localSignerV2 struct{ priv HybridPrivateKey }
 
 // NewLocalSignerV2 returns a direct-mode SignerV2 backed by an in-process
 // hybrid private key. ML-DSA-65 signatures are hedged.
-func NewLocalSignerV2(priv HybridPrivateKey) (SignerV2, error) {
+func NewLocalSignerV2(priv HybridPrivateKey) (_ SignerV2, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := validateV2PrivateKey(priv); err != nil {
 		return nil, err
 	}
@@ -93,9 +95,10 @@ func (s localSignerV2) PublicKeyV2() HybridPublicKey { return s.priv.Public() }
 
 func (s localSignerV2) ModeV2() SignerModeV2 { return SignerModeDirectV2 }
 
-func (s localSignerV2) SignV2(ctx context.Context, req SignRequestV2) (HybridSignature, error) {
+func (s localSignerV2) SignV2(ctx context.Context, req SignRequestV2) (_ HybridSignature, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := ctx.Err(); err != nil {
-		return HybridSignature{}, err
+		return HybridSignature{}, v2Classify(V2ErrEvaluationCancelled, err)
 	}
 	if req.Mode != SignerModeDirectV2 || len(req.Message) != v2SigningMessageSize || len(req.MLDSAContext) == 0 {
 		return HybridSignature{}, fmt.Errorf("local v2 signer supports only direct-mode requests")
@@ -116,7 +119,7 @@ const v2SigningMessageSize = 77
 // must have exact component lengths.
 func signerPublicKeyV2(signer SignerV2) (HybridPublicKey, error) {
 	if signer == nil {
-		return HybridPublicKey{}, fmt.Errorf("v2 signer is required")
+		return HybridPublicKey{}, v2Errorf(V2ErrConfigurationInvalid, "v2 signer is required")
 	}
 	if local, ok := signer.(localSignerV2); ok {
 		if err := validateV2PrivateKey(local.priv); err != nil {
@@ -126,7 +129,7 @@ func signerPublicKeyV2(signer SignerV2) (HybridPublicKey, error) {
 	}
 	pub := signer.PublicKeyV2()
 	if _, err := keyIDV2(pub); err != nil {
-		return HybridPublicKey{}, fmt.Errorf("v2 signer public key: %w", err)
+		return HybridPublicKey{}, v2Errorf(V2ErrConfigurationInvalid, "v2 signer public key: %v", err)
 	}
 	return HybridPublicKey{Ed25519: bytes.Clone(pub.Ed25519), MLDSA65: bytes.Clone(pub.MLDSA65)}, nil
 }
@@ -146,10 +149,10 @@ func externalMuV2(mlPub, mlContext, message []byte) []byte {
 // verifies the returned signature under pub before returning it.
 func signV2StatementWithSigner(ctx context.Context, objectType v2ObjectType, signable []byte, signer SignerV2, pub HybridPublicKey) (HybridSignature, error) {
 	if ctx == nil {
-		return HybridSignature{}, fmt.Errorf("v2 signing requires a context")
+		return HybridSignature{}, v2Errorf(V2ErrConfigurationInvalid, "v2 signing requires a context")
 	}
 	if err := ctx.Err(); err != nil {
-		return HybridSignature{}, err
+		return HybridSignature{}, v2Classify(V2ErrEvaluationCancelled, err)
 	}
 	message, err := v2SigningMessage(objectType, signable)
 	if err != nil {
@@ -174,18 +177,18 @@ func signV2StatementWithSigner(ctx context.Context, objectType v2ObjectType, sig
 	case SignerModeExternalMuV2:
 		req.MLDSAMu = externalMuV2(pub.MLDSA65, mlContext, message)
 	default:
-		return HybridSignature{}, fmt.Errorf("v2 signer reports an unsupported mode %d", req.Mode)
+		return HybridSignature{}, v2Errorf(V2ErrConfigurationInvalid, "v2 signer reports an unsupported mode %d", req.Mode)
 	}
 	signature, err := signer.SignV2(ctx, req)
 	if err != nil {
-		return HybridSignature{}, fmt.Errorf("v2 signer: %w", err)
+		return HybridSignature{}, v2Classify(V2ErrConfigurationInvalid, fmt.Errorf("v2 signer: %w", err))
 	}
 	if err := ctx.Err(); err != nil {
-		return HybridSignature{}, err
+		return HybridSignature{}, v2Classify(V2ErrEvaluationCancelled, err)
 	}
 	signature = HybridSignature{Ed25519: bytes.Clone(signature.Ed25519), MLDSA65: bytes.Clone(signature.MLDSA65)}
 	if err := verifyV2Statement(objectType, signable, signature, pub); err != nil {
-		return HybridSignature{}, fmt.Errorf("v2 signer returned a signature that does not verify: %w", err)
+		return HybridSignature{}, v2Errorf(V2ErrInvalidSignature, "v2 signer returned a signature that does not verify: %v", err)
 	}
 	return signature, nil
 }

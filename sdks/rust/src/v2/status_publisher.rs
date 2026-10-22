@@ -11,11 +11,13 @@
 //! two different bodies at one sequence.
 //!
 //! Errors: construction failures are `configuration_invalid` (as in Go).
-//! Signing operations return [`V2SignError`]: a state that does not belong to
-//! this issuer and status key is [`V2SignError::KeyBinding`]; every other
-//! refusal (malformed state, non-advancing time, invalid or repeated
-//! revocation IDs, exhausted sequence or time domain) is
-//! [`V2SignError::IssuerDuty`]; signer failures keep their own variant.
+//! Signing operations return [`V2SignError`]. A publisher refusal (a state
+//! that does not belong to this issuer and status key, a malformed state,
+//! non-advancing time, invalid or repeated revocation IDs, exhausted sequence
+//! or time domain) is [`V2SignError::InvalidObject`] carrying
+//! `configuration_invalid`, as Go classifies it; signer failures and status
+//! object refusals keep their own variant and class
+//! ([`V2SignError::class`]).
 
 use std::sync::Arc;
 
@@ -174,7 +176,7 @@ pub fn new_v2_status_publisher(
 }
 
 fn duty(message: impl Into<String>) -> V2SignError {
-    V2SignError::IssuerDuty(message.into())
+    V2SignError::InvalidObject(V2Error::new(V2ErrorClass::ConfigurationInvalid, message))
 }
 
 impl V2StatusPublisher {
@@ -282,8 +284,8 @@ impl V2StatusPublisher {
 
     fn check_state(&self, state: &V2StatusPublisherState, at: i64) -> V2SignResult<()> {
         if state.issuer_id != self.issuer_id || state.status_key_id != self.status_key_id {
-            return Err(V2SignError::KeyBinding(
-                "v2 status publisher state does not belong to this issuer and status key".into(),
+            return Err(duty(
+                "v2 status publisher state does not belong to this issuer and status key",
             ));
         }
         let sorted_unique = state.revoked.windows(2).all(|w| w[0] < w[1]);

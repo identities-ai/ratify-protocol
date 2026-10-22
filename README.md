@@ -374,6 +374,8 @@ An agent *cannot* grant more rights than it itself was given. Spec: [`SPEC.md`](
 
 ## Beyond one-shot verify — continuous and multi-party interactions
 
+> **Protocol line:** this section describes Protocol v1 ([SPEC.md](SPEC.md)). Protocol v2 ([SPEC-v2.md](SPEC-v2.md)) has its own session and stream binding, signed status, and receipts. Two v1 capabilities have no v2 equivalent yet and remain v1-only until v2.1: the SessionToken fast path and the geographic and speed constraints. See [docs/PROTOCOL_V2_MIGRATION.md](docs/PROTOCOL_V2_MIGRATION.md).
+
 Everything above describes a single delegate → present → verify round trip. Real deployments — a voice agent on a 20-minute call, two agents settling a transaction, an auditor reconstructing what happened — need more. All of the following is **shipped, normative, and covered by the canonical fixture set in every SDK**:
 
 | Feature | What it solves | Spec |

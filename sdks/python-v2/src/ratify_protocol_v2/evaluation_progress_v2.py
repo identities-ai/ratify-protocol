@@ -8,7 +8,7 @@ from typing import Optional
 from . import context_v2
 from ._v2json import canonical
 from .clock_bounds_v2 import valid_v2_timestamp
-from .errors_v2 import V2Error, V2ErrorClass, classify, error_class_of
+from .errors_v2 import V2Error, V2ErrorClass, classify, error_class_of, classified
 from .types_v2 import StatusEvidenceEntryV2, clone_constraint_evaluator_refs_v2, valid_prefixed_digest_v2
 from .verification_receipt_v2 import VerificationReceiptV2, verification_receipt_v2_body
 
@@ -57,6 +57,7 @@ def clone_v2_evaluation_progress(p: V2EvaluationProgress) -> V2EvaluationProgres
                                 status_evidence=list(p.status_evidence or []))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def validate_v2_evaluation_progress(p: V2EvaluationProgress) -> None:
     """Go ``ValidateV2EvaluationProgress`` (raises ValueError)."""
     if not isinstance(p, V2EvaluationProgress):
@@ -82,6 +83,7 @@ _INTERRUPTED_TERMINAL = {"decision": "indeterminate", "decision_reason": "evalua
                          "identity_status": "authorization_unverified"}
 
 
+@classified(V2ErrorClass.MALFORMED)
 def v2_evaluation_interrupted_result(claim, verified_at: int, progress: V2EvaluationProgress) -> tuple[bytes, bytes]:
     """Go ``V2EvaluationInterruptedResult``: the canonical terminal result and
     receipt outbox body for indeterminate/evaluation_interrupted."""
@@ -110,6 +112,7 @@ def v2_evaluation_interrupted_result(claim, verified_at: int, progress: V2Evalua
     return canonical(_INTERRUPTED_TERMINAL), body
 
 
+@classified(V2ErrorClass.CLAIM_STORE_UNAVAILABLE)
 def recover_interrupted_claim_v2(ctx: context_v2.Context, store, claim_id: str):
     """Go ``RecoverInterruptedClaimV2``: lease-expiry recovery. Returns the
     committed (non-actionable) outcome; an identical repeat returns the same."""

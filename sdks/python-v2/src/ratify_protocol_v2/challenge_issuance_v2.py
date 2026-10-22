@@ -15,7 +15,7 @@ from typing import Callable, Optional
 from . import context_v2
 from .challenge_claim_v2 import challenge_claim_digest_v2
 from .clock_bounds_v2 import checked_add_v2, valid_v2_timestamp
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified, V2ValueError
 from .limits_v2 import MAX_IDENTIFIER_LENGTH_BYTES
 from .release_v2 import _read_v2_authoritative_time
 from .signing_v2 import key_id_v2
@@ -83,8 +83,11 @@ class V2ChallengeIssuer:
     store: Optional[V2ChallengeIssuanceStore] = None
     random: Optional[Callable[[int], bytes]] = None
 
+    @classified(V2ErrorClass.CLAIM_STORE_UNAVAILABLE)
     def issue_challenge_v2(self, ctx: context_v2.Context, req: V2ChallengeIssueRequest) -> ExpectedChallengeV2:
-        """Go ``IssueChallengeV2``."""
+        """Go ``IssueChallengeV2``. A clock or issuance-store failure is
+        ``claim_store_unavailable``; a failing random source and the third
+        consecutive key conflict are ``configuration_invalid`` (SPEC-v2 §7.3)."""
         if not isinstance(ctx, context_v2.Context) or self.clock is None or self.store is None:
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
                           "v2 challenge issuer requires a context, authoritative clock and issuance store")
@@ -95,9 +98,14 @@ class V2ChallengeIssuer:
         if not ok or not valid_v2_timestamp(expires_at):
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 challenge expiry leaves the timestamp domain")
         for _ in range(MAX_V2_ISSUANCE_ATTEMPTS):
-            value = random(32)
+            try:
+                value = random(32)
+            except Exception as exc:  # noqa: BLE001 - a failing random source is caller configuration
+                raise classify(V2ErrorClass.CONFIGURATION_INVALID,
+                               ValueError(f"v2 challenge issuance: random source: {exc}")) from exc
             if not isinstance(value, (bytes, bytearray)) or len(value) != 32:
-                raise ValueError("v2 challenge issuance: random source returned the wrong length")
+                raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID,
+                                   "v2 challenge issuance: random source returned the wrong length")
             record = ExpectedChallengeV2(
                 value=bytes(value), issued_at=issued_at, expires_at=expires_at,
                 verifier_namespace=req.verifier_namespace, replay_epoch=req.replay_epoch, verifier_id=req.verifier_id,
@@ -113,10 +121,12 @@ class V2ChallengeIssuer:
                 raise RuntimeError("v2 challenge issuance: the record was not durably persisted, "
                                    f"so the challenge is not exposed: {exc}") from exc
             return clone_expected_challenge_v2(record)
-        raise RuntimeError(f"v2 challenge issuance: {MAX_V2_ISSUANCE_ATTEMPTS} consecutive key conflicts; "
-                           "the random source is not trustworthy")
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
+                      f"v2 challenge issuance: {MAX_V2_ISSUANCE_ATTEMPTS} consecutive key conflicts; "
+                      "the random source is not trustworthy")
 
 
+@classified(V2ErrorClass.EXPECTED_CHALLENGE_MISSING)
 def load_expected_challenge_v2(ctx: context_v2.Context, store: V2ChallengeIssuanceStore, namespace: str,
                                replay_epoch: int, challenge: bytes) -> ExpectedChallengeV2:
     """Go ``LoadExpectedChallengeV2``: a missing record is

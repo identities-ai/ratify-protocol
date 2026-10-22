@@ -13,7 +13,7 @@ from hashlib import sha384
 from typing import Callable, Optional
 
 from ._v2json import canonical
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classified, classify
 from .types import HybridPublicKey
 from .types_v2 import MAX_SAFE_INTEGER, StatusEvidenceEntryV2, is_int, valid_v2_id
 
@@ -484,7 +484,7 @@ def transition_revocation_status_epoch_v2(
 ) -> RevocationStatusStateV2:
     """Apply an already-authenticated trust configuration transition. It
     preserves issuer-wide denials and prior authenticated evidence while
-    making old accepted state unusable. Failures are configuration_invalid."""
+    making old accepted state unusable. Failures are status_object_rejected (SPEC-v2 §2.7)."""
     from .security_journal_v2 import validate_accepted_status_state_v2
 
     def run():
@@ -523,9 +523,10 @@ def transition_revocation_status_epoch_v2(
         nxt.future_dated_object_observed = False
         return nxt
 
-    return _classified(V2ErrorClass.CONFIGURATION_INVALID, run)
+    return _classified(V2ErrorClass.STATUS_OBJECT_REJECTED, run)
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def revocation_status_for_cert_v2(
     state: RevocationStatusStateV2, issuer_id: str, cert_id: str, status_key_epoch: int,
     status_key: HybridPublicKey, policy: RevocationStatusPolicyV2, now: int,

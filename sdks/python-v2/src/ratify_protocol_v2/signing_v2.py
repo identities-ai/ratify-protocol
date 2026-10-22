@@ -31,7 +31,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from . import _ed25519_strict, _mldsa65, _native
 from .context_v2 import Context, require_context
-from .errors_v2 import V2Error, V2ErrorClass
+from .errors_v2 import V2Error, V2ErrorClass, classified, classify
 from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 
 DELEGATION_CERTIFICATE = 0x0001
@@ -49,9 +49,13 @@ _KEY_ID_PREFIX = b"ratify-key-id-v2\x00"
 V2_SIGNING_MESSAGE_SIZE = 77
 
 
-class V2SigningError(ValueError):
-    """A typed signer refused or failed. Signing failures are signing errors,
-    not verification error classes (SPEC-v2 §3.2)."""
+class V2SigningError(V2Error, ValueError):
+    """A typed signer refused or failed. ``error_class`` names the SPEC-v2
+    §2.7 class when the failure fixes one; otherwise the public signing
+    function that raises it assigns the class of its row."""
+
+    def __init__(self, message: str, error_class: str = V2ErrorClass.UNCLASSIFIED):
+        V2Error.__init__(self, error_class, message)
 
 
 def valid_object_type(code: object) -> bool:
@@ -221,6 +225,7 @@ class _LocalSignerV2:
     def mode_v2(self) -> SignerModeV2:
         return SignerModeV2.DIRECT
 
+    @classified(V2ErrorClass.CONFIGURATION_INVALID)
     def sign_v2(self, ctx: Context, req: SignRequestV2) -> HybridSignature:
         err = require_context(ctx).err()
         if err is not None:
@@ -237,6 +242,7 @@ class _LocalSignerV2:
         return "<LocalSignerV2>"
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def new_local_signer_v2(private_key: HybridPrivateKey) -> SignerV2:
     """Go ``NewLocalSignerV2``: a direct-mode signer for an in-process hybrid
     private key. The key is loaded into the native extension (ImportError
@@ -266,14 +272,14 @@ def _as_signer(signer_or_key) -> SignerV2:
 def signer_public_key_v2(signer: SignerV2) -> HybridPublicKey:
     """Go ``signerPublicKeyV2``: the complete key a signer signs under."""
     if signer is None:
-        raise V2SigningError("v2 signer is required")
+        raise V2SigningError("v2 signer is required", V2ErrorClass.CONFIGURATION_INVALID)
     if isinstance(signer, _LocalSignerV2):
         return signer.public_key_v2()
     pub = signer.public_key_v2()
     try:
         key_id_v2(pub)
     except ValueError as exc:
-        raise V2SigningError(f"v2 signer public key: {exc}") from exc
+        raise V2SigningError(f"v2 signer public key: {exc}", V2ErrorClass.CONFIGURATION_INVALID) from exc
     return clone_public_key(pub)
 
 
@@ -284,7 +290,7 @@ def _sign_v2_statement_with_signer(
     signer, and verify the returned signature under ``pub`` before returning
     it. Internal: only the typed signers call it."""
     if not isinstance(ctx, Context):
-        raise V2SigningError("v2 signing requires a context")
+        raise V2SigningError("v2 signing requires a context", V2ErrorClass.CONFIGURATION_INVALID)
     err = ctx.err()
     if err is not None:
         raise err
@@ -294,7 +300,7 @@ def _sign_v2_statement_with_signer(
     try:
         mode = SignerModeV2(signer.mode_v2())
     except ValueError as exc:
-        raise V2SigningError("v2 signer reports an unsupported mode") from exc
+        raise V2SigningError("v2 signer reports an unsupported mode", V2ErrorClass.CONFIGURATION_INVALID) from exc
     if mode == SignerModeV2.DIRECT:
         req = SignRequestV2(mode, message, ml_context, None, clone_public_key(pub), key_id)
     else:
@@ -306,21 +312,22 @@ def _sign_v2_statement_with_signer(
         raise
     except Exception as exc:  # noqa: BLE001 - provider errors fail signing
         if isinstance(exc, (V2SigningError,)) or exc is ctx.err():
+            classify(V2ErrorClass.CONFIGURATION_INVALID, exc)
             raise
-        raise V2SigningError(f"v2 signer: {exc}") from exc
+        raise V2SigningError(f"v2 signer: {exc}", V2ErrorClass.CONFIGURATION_INVALID) from exc
     err = ctx.err()
     if err is not None:
         raise err
     if not isinstance(signature, HybridSignature):
-        raise V2SigningError("v2 signer returned no hybrid signature")
+        raise V2SigningError("v2 signer returned no hybrid signature", V2ErrorClass.INVALID_SIGNATURE)
     try:
         signature = HybridSignature(ed25519=_bytes(signature.ed25519), ml_dsa_65=_bytes(signature.ml_dsa_65))
     except ValueError as exc:
-        raise V2SigningError(f"v2 signer returned a malformed signature: {exc}") from exc
+        raise V2SigningError(f"v2 signer returned a malformed signature: {exc}", V2ErrorClass.INVALID_SIGNATURE) from exc
     try:
         verify_v2_statement(code, signable, signature, pub)
     except V2Error as exc:
-        raise V2SigningError(f"v2 signer returned a signature that does not verify: {exc}") from exc
+        raise V2SigningError(f"v2 signer returned a signature that does not verify: {exc}", V2ErrorClass.INVALID_SIGNATURE) from exc
     return signature
 
 

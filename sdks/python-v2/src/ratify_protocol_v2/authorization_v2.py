@@ -27,7 +27,7 @@ from .context_policy_v2 import (
     evaluate_proof_bundle_v2_context_policy,
     same_v2_context_policy,
 )
-from .errors_v2 import V2Error
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .limits_v2 import MAX_DELEGATION_CHAIN_DEPTH  # noqa: F401 - re-exported bound
 from .protocol_v2 import ProofBundleV2, bundle_hash_v2, verify_proof_bundle_v2_signatures
 from .scope import intersect_scopes, validate_required_scope_v2, validate_scopes_v2
@@ -366,8 +366,9 @@ def _days_from_civil(year: int, month: int, day: int) -> int:
 
 def _local_time_window_valid_until_v2(bundle: ProofBundleV2, tzdb_version: str, now_unix: int) -> int:
     """Go ``localTimeWindowValidUntilV2``: bound an allow at the end of each
-    currently accepted local minute or the next zone transition."""
-    from .constraints_v2 import parse_hhmm_v2, local_time_v2 as v2_local_time_v2
+    currently accepted local minute or the next UTC offset change."""
+    from . import _tzdb_v2
+    from .constraints_v2 import load_v2_time_zone, parse_hhmm_v2, local_time_v2 as v2_local_time_v2
 
     horizon = 0
     for cert in bundle.delegations:
@@ -375,6 +376,7 @@ def _local_time_window_valid_until_v2(bundle: ProofBundleV2, tzdb_version: str, 
             if constraint.type != CONSTRAINT_TIME_WINDOW:
                 continue
             local = v2_local_time_v2(tzdb_version, constraint.tz, now_unix)
+            zone = load_v2_time_zone(tzdb_version, constraint.tz)
             start = parse_hhmm_v2(constraint.start)
             end = parse_hhmm_v2(constraint.end)
             minute = local.hour * 60 + local.minute
@@ -382,8 +384,9 @@ def _local_time_window_valid_until_v2(bundle: ProofBundleV2, tzdb_version: str, 
                 raise ValueError("time window is no longer current")
             day_offset = 1 if start > end and minute >= start else 0
             until = (_days_from_civil(local.year, local.month, local.day) + day_offset) * 86400 + (end + 1) * 60 - local.utc_offset_seconds
-            if local.zone_end is not None and local.zone_end < until:
-                until = local.zone_end
+            change = _tzdb_v2.next_utc_offset_change(zone, now_unix, V2_MAX_TIMESTAMP_SECONDS)
+            if change is not None and change < until:
+                until = change
             if not until > now_unix:
                 raise ValueError("time window has no valid terminal horizon")
             # A horizon past the timestamp domain is clamped to its upper bound.
@@ -456,6 +459,7 @@ def _resolve_claim_proof_bundle_v2_after_status(token: V2EvaluationToken, aggreg
         return assessment
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def resolve_claim_proof_bundle_v2_after_audience(token: V2EvaluationToken, memberships: Optional[list]) -> V2LocalAuthorizationAssessment:
     """Go ``ResolveClaimProofBundleV2AfterAudience``: membership freshness is
     evaluated at the authoritative claim time sealed in the token."""
@@ -513,6 +517,7 @@ def resolve_claim_proof_bundle_v2_after_audience(token: V2EvaluationToken, membe
         return assessment
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def resolve_claim_proof_bundle_v2_after_rate(ctx: context_v2.Context, store: Optional[V2RateReservationStore],
                                              token: V2EvaluationToken) -> V2LocalAuthorizationAssessment:
     """Go ``ResolveClaimProofBundleV2AfterRate``: the final external stage."""

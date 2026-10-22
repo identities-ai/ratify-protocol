@@ -26,6 +26,7 @@ from typing import Any, Optional
 
 from . import _tzdb_v2
 from .clock_bounds_v2 import V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS, V2_MAX_RATE_WINDOW_SECONDS
+from .errors_v2 import V2ErrorClass, classified
 from .limits_v2 import MAX_IDENTIFIER_LENGTH_BYTES
 from .resource_path import normalize_resource_path, resource_path_matches, validate_params_value
 from .types_v2 import MAX_SAFE_INTEGER, is_int
@@ -93,6 +94,7 @@ class ConstraintV2:
     # ratify.receiver_audience and unregistered types
     params: Optional[dict] = None
 
+    @classified(V2ErrorClass.MALFORMED)
     def to_canonical_dict(self) -> dict:
         """Go ``ConstraintV2.MarshalJSON``; raises ``ValueError`` when the
         result is not a valid v2 constraint."""
@@ -311,6 +313,7 @@ def validate_v2_constraint_fields(fields: Any) -> None:
             validate_params_value(params, 0)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def constraint_v2_from_fields(fields: Any) -> ConstraintV2:
     """Go ``ConstraintV2.UnmarshalJSON``: validate, then decode."""
     validate_v2_constraint_fields(fields)

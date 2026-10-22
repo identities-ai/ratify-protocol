@@ -8,7 +8,7 @@ from typing import Optional
 
 from . import _v2json
 from ._v2json import MAX_SAFE_INTEGER, canonical
-from .errors_v2 import V2Error, V2ErrorClass
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .protocol_v2 import (
     ProofBundleV2,
     _run,
@@ -454,11 +454,13 @@ def validate_verification_receipt_v2(r: VerificationReceiptV2, signature: bool) 
 # Codec
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verification_receipt_v2_digest(r: VerificationReceiptV2) -> bytes:
     validate_verification_receipt_v2(r, False)
     return statement_body_digest_v2(VERIFICATION_RECEIPT, receipt_v2_signable_bytes(r))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_verification_receipt_v2(r: VerificationReceiptV2) -> bytes:
     validate_verification_receipt_v2(r, True)
     data = canonical({**_signable_dict(r), "signature": key_dict(r.signature)})
@@ -496,11 +498,13 @@ def validate_verification_receipt_signable_v2(data: bytes) -> None:
         raise ValueError("signable body must use RatifyCanonicalJSON")
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_verification_receipt_v2(r: VerificationReceiptV2, verifier_private: HybridPrivateKey) -> VerificationReceiptV2:
     """Go ``SignVerificationReceiptV2``."""
     return sign_verification_receipt_v2_with_signer(background(), r, _as_signer(verifier_private))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_verification_receipt_v2_with_signer(ctx: Context, r: VerificationReceiptV2,
                                              signer: SignerV2) -> VerificationReceiptV2:
     """Go ``SignVerificationReceiptV2WithSigner``: the signer's key ID must
@@ -508,7 +512,7 @@ def sign_verification_receipt_v2_with_signer(ctx: Context, r: VerificationReceip
     validate_verification_receipt_v2(r, False)
     verifier_public = signer_public_key_v2(signer)
     if key_id_v2(verifier_public) != r.verifier_id:
-        raise V2SigningError("receipt verifier_id does not match signing key")
+        raise V2SigningError("receipt verifier_id does not match signing key", V2ErrorClass.KEY_ID_MISMATCH)
     body = receipt_v2_signable_bytes(r)
     signature = _sign_v2_statement_with_signer(ctx, VERIFICATION_RECEIPT, body, signer, verifier_public)
     result = replace(r, signature=signature)
@@ -522,6 +526,7 @@ def validate_receipt_v2_head(head: ReceiptV2Head) -> None:
     _validate_log_head(head.log_id, head.sequence, head.head_hash, head.accepted_digests, "receipt")
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_verification_receipt_v2(r: VerificationReceiptV2, verifier_public: HybridPublicKey,
                                    head: ReceiptV2Head) -> WitnessEntryV2Result:
     _run(V2ErrorClass.MALFORMED, lambda: validate_verification_receipt_v2(r, True))
@@ -539,6 +544,7 @@ def verify_verification_receipt_v2(r: VerificationReceiptV2, verifier_public: Hy
                                head.accepted_digests, head.frozen, head.log_id)
 
 
+@classified(V2ErrorClass.RECEIPT_BUNDLE_MISMATCH)
 def check_verification_receipt_v2_bundle_binding(r: VerificationReceiptV2, bundle: ProofBundleV2) -> None:
     _run(V2ErrorClass.MALFORMED, lambda: validate_verification_receipt_v2(r, False))
     _run(V2ErrorClass.MALFORMED, lambda: encode_proof_bundle_v2(bundle))
@@ -562,6 +568,7 @@ def check_verification_receipt_v2_bundle_binding(r: VerificationReceiptV2, bundl
 # Prepared outbox bodies
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verification_receipt_v2_body(r: VerificationReceiptV2) -> bytes:
     """The canonical content prepared before terminal commit (no log position,
     previous hash, or signature)."""
@@ -598,6 +605,7 @@ def decode_verification_receipt_body_v2(data: bytes) -> VerificationReceiptV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def bind_verification_receipt_body_v2(data: bytes, head: ReceiptV2Head) -> VerificationReceiptV2:
     validate_receipt_v2_head(head)
     if head.frozen or head.sequence == MAX_SAFE_INTEGER:
@@ -612,11 +620,13 @@ def bind_verification_receipt_body_v2(data: bytes, head: ReceiptV2Head) -> Verif
     return receipt
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_prepared_verification_receipt_v2(data: bytes, head: ReceiptV2Head, private: HybridPrivateKey) -> VerificationReceiptV2:
     """Go ``SignPreparedVerificationReceiptV2``."""
     return sign_prepared_verification_receipt_v2_with_signer(background(), data, head, _as_signer(private))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_prepared_verification_receipt_v2_with_signer(ctx: Context, data: bytes, head: ReceiptV2Head,
                                                       signer: SignerV2) -> VerificationReceiptV2:
     """Go ``SignPreparedVerificationReceiptV2WithSigner``: bind an exact

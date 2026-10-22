@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from hashlib import sha256, sha384
 
+from .errors_v2 import V2ErrorClass, V2ValueError, classified
+
 _MAX_SAFE_INTEGER = 2**53 - 1
 _CLAIM_DIGEST_TAG = b"ratify-protocol-challenge-claim-v2\x00"
 _CLAIM_ID_TAG = b"ratify-protocol-claim-id-v2\x00"
 
 
+@classified(V2ErrorClass.MALFORMED)
 def challenge_claim_digest_v2(challenge: bytes) -> bytes:
     """Hash one decoded 32-byte challenge independently of the proof bundle."""
     if not isinstance(challenge, bytes) or len(challenge) != 32:
@@ -27,17 +30,19 @@ def _namespace_epoch(verifier_namespace: str, replay_epoch: int) -> bytes:
     return namespace
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def protocol_claim_id_v2(verifier_namespace: str, replay_epoch: int, challenge: bytes) -> str:
     """Derive the stable claim ID from namespace, epoch, and challenge bytes."""
     namespace = _namespace_epoch(verifier_namespace, replay_epoch)
     return _claim_id_from_digest(namespace, replay_epoch, challenge_claim_digest_v2(challenge))
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def protocol_claim_id_from_digest_v2(verifier_namespace: str, replay_epoch: int, claim_digest: bytes) -> str:
     """Derive the same ID from a precomputed 48-byte challenge claim digest."""
     namespace = _namespace_epoch(verifier_namespace, replay_epoch)
     if not isinstance(claim_digest, bytes) or len(claim_digest) != 48:
-        raise ValueError("v2 challenge claim digest must be exactly 48 bytes")
+        raise V2ValueError(V2ErrorClass.MALFORMED, "v2 challenge claim digest must be exactly 48 bytes")
     return _claim_id_from_digest(namespace, replay_epoch, claim_digest)
 
 

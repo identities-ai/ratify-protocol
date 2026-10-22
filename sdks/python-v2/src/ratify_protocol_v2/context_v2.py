@@ -15,9 +15,15 @@ import threading
 import time
 from typing import Optional
 
+from .errors_v2 import V2Error, V2ErrorClass
 
-class ContextError(Exception):
-    """Base class of the two context termination errors."""
+
+class ContextError(V2Error):
+    """Base class of the two context termination errors. A cancelled or
+    expired operation is ``evaluation_cancelled`` (SPEC-v2 §2.7)."""
+
+    def __init__(self, message: str):
+        super().__init__(V2ErrorClass.EVALUATION_CANCELLED, message)
 
 
 class Cancelled(ContextError):

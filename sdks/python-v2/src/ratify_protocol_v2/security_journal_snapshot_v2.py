@@ -26,7 +26,7 @@ from hashlib import sha384
 from . import _v2json
 from . import security_journal_v2 as sj
 from . import status_state_v2 as ss
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified
 from .security_journal_v2 import (
     SECURITY_JOURNAL_LEGACY_VERSION,
     SECURITY_JOURNAL_VERSION_V2,
@@ -161,6 +161,7 @@ def security_journal_digest_v2(journal: SecurityJournalV2) -> str:
     raise ValueError(f"security journal version {journal.version} is unsupported")
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def export_security_journal_snapshot_v2(journal: SecurityJournalV2) -> bytes:
     """Validate a version 2 journal and return its canonical snapshot bytes."""
     if not isinstance(journal, SecurityJournalV2) or journal.version != SECURITY_JOURNAL_VERSION_V2:
@@ -355,6 +356,7 @@ def _import(snapshot: bytes, head: SecurityJournalHeadV2) -> SecurityJournalV2:
     return journal
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def migrate_security_journal_v2(legacy: SecurityJournalV2) -> SecurityJournalV2:
     """Convert a valid version 1 record into its version 2 successor: the
     same logical content at generation+1, previous_digest set to the legacy

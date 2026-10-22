@@ -11,7 +11,7 @@ import binascii
 
 from . import _v2json
 from .clock_bounds_v2 import valid_v2_timestamp
-from .errors_v2 import V2Error, V2ErrorClass
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .limits_v2 import MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2, check_v2_wire_size
 from .protocol_v2 import _run, check_keys, get_int, get_str, require_fields
 from .types_v2 import MAX_SAFE_INTEGER, V2CheckpointAcknowledgement, lower_hex_string
@@ -31,6 +31,7 @@ def validate_v2_checkpoint_acknowledgement(ack: V2CheckpointAcknowledgement) -> 
         raise ValueError("wire v2: checkpoint acknowledgement log_id, sequence, entry_hash, or timestamp is invalid")
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_v2_checkpoint_acknowledgement(ack: V2CheckpointAcknowledgement) -> bytes:
     """Go ``EncodeV2CheckpointAcknowledgement``: the canonical wire form."""
     _run(V2ErrorClass.MALFORMED, lambda: validate_v2_checkpoint_acknowledgement(ack))

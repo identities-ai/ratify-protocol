@@ -27,7 +27,7 @@ from .constraints_v2 import (
     constraint_v2_from_fields,
 )
 from .context_v2 import Context, background
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, V2ValueError, classified, classify
 from .limits_v2 import (
     MAX_CONSTRAINTS_PER_CERT,
     MAX_DELEGATION_CERT_BYTES_V2,
@@ -72,7 +72,8 @@ def _run(class_: str, fn: Callable[[], Any]) -> Any:
     """Run ``fn`` and classify any unclassified failure with ``class_``."""
     try:
         return fn()
-    except V2Error:
+    except V2Error as exc:
+        classify(class_, exc)
         raise
     except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError, UnicodeError) as exc:
         raise classify(class_, exc) from exc
@@ -88,7 +89,82 @@ def require_fields(obj: Any, names, nullable=()) -> dict:
             raise ValueError(f'wire v2: required field "{name}" is missing')
         if obj[name] is None and name not in nullable:
             raise ValueError(f'wire v2: required field "{name}" must not be null')
+    check_v2_schema_key_case(obj)
+    reject_v2_unexpected_null(obj)
     return obj
+
+
+# Every member name of a v2 schema. A member name that differs from one of
+# these only by case (ASCII or Unicode simple case folding) is malformed at
+# any nesting level outside constraint ``params`` (Go ``v2SchemaFieldNames``).
+V2_SCHEMA_FIELD_NAMES = frozenset((
+    "version cert_id issuer_id issuer_pub_key subject_id subject_pub_key scope constraints signature ed25519 "
+    "ml_dsa_65 issued_at expires_at verifier_id agent_id agent_pub_key delegations delegation_digest challenge "
+    "challenge_at challenge_sig session_context stream_id stream_seq type params count currency end lat lon "
+    "max_alt_m max_amount max_amount_micros max_lat max_lon max_mps min_alt_m min_lat min_lon path_prefix points "
+    "radius_m resource_id start tz window_s exact_receiver_ids trust_domain_ids max_membership_age_seconds "
+    "next_update sequence pushed_at revoked authority_id recovery_epoch role previous_statement_hash old_key "
+    "new_key old_key_id new_key_id not_before old_signature new_signature log_id bundle_hash issuer_ids decision "
+    "decision_reason identity_status trust_assessment status_assessment challenge_assessment context_assessment "
+    "context_policy_digest verified_at required_scope granted_scope status_evidence_digests previous_receipt_hash "
+    "human_id status_key_id object_type_code digest transaction_id created_at terms_schema_uri "
+    "terms_canonical_json parties party_id proof_bundle_hash proof_bundle party_signatures invocation_id "
+    "workspace_id session_id").split())
+
+# The only v2 schema members whose value may be null (SPEC-v2 §2.1). Every
+# other null, including every array element, is malformed.
+V2_NULLABLE_MEMBERS = frozenset((
+    "session_context", "stream_id", "stream_seq", "context_policy_digest",
+    "floor", "accepted_snapshot", "preceding_checkpoint",
+))
+
+# Go strings.EqualFold folds these non-ASCII letters onto ASCII ones.
+_SIMPLE_FOLD_TO_ASCII = {"\u017f": "s", "\u212a": "k"}
+
+
+def _equal_fold_ascii_name(key: str, name: str) -> bool:
+    """Go ``strings.EqualFold(key, name)`` for an ASCII lowercase ``name``."""
+    if len(key) != len(name):
+        return False
+    for a, b in zip(key, name):
+        if a == b:
+            continue
+        if ("A" <= a <= "Z" and chr(ord(a) + 32) == b) or _SIMPLE_FOLD_TO_ASCII.get(a) == b:
+            continue
+        return False
+    return True
+
+
+def check_v2_schema_key_case(value: Any) -> None:
+    """Go ``checkV2SchemaKeyCase``: reject a member name that equals a v2
+    schema name under case folding but differs from it in any byte."""
+    if isinstance(value, dict):
+        for key, member in value.items():
+            if key not in V2_SCHEMA_FIELD_NAMES:
+                for name in V2_SCHEMA_FIELD_NAMES:
+                    if _equal_fold_ascii_name(key, name):
+                        raise ValueError(f'wire v2: field "{key}" has incorrect case; use "{name}"')
+            if key != "params":
+                check_v2_schema_key_case(member)
+    elif isinstance(value, list):
+        for item in value:
+            check_v2_schema_key_case(item)
+
+
+def reject_v2_unexpected_null(value: Any, path: str = "$") -> None:
+    """Go ``rejectV2UnexpectedNull``: null only as the value of a member in
+    :data:`V2_NULLABLE_MEMBERS`; values inside ``params`` follow the general
+    value model and are not checked here."""
+    if value is None:
+        raise ValueError(f"wire v2: {path} must not be null")
+    if isinstance(value, dict):
+        for key, member in value.items():
+            if key == "params" or (member is None and key in V2_NULLABLE_MEMBERS):
+                continue
+            reject_v2_unexpected_null(member, f"{path}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            reject_v2_unexpected_null(item, f"{path}[{i}]")
 
 
 def check_keys(obj: dict, allowed, where: str = "object") -> None:
@@ -154,6 +230,8 @@ def decode_public_key(value: Any, key: str = "public key") -> HybridPublicKey:
     if not isinstance(value, dict):
         raise ValueError(f"wire v2: {key} must be an object")
     check_keys(value, ("ed25519", "ml_dsa_65"), key)
+    if "ed25519" not in value or "ml_dsa_65" not in value:
+        raise ValueError(f"wire v2: {key} must have both ed25519 and ml_dsa_65 members")
     return HybridPublicKey(ed25519=get_bytes(value, "ed25519") or b"", ml_dsa_65=get_bytes(value, "ml_dsa_65") or b"")
 
 
@@ -320,6 +398,7 @@ def decode_delegation_cert_v2(data: bytes) -> DelegationCertV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_delegation_cert_v2(c: DelegationCertV2) -> bytes:
     def run() -> bytes:
         validate_delegation_cert_v2(c)
@@ -331,6 +410,7 @@ def encode_delegation_cert_v2(c: DelegationCertV2) -> bytes:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_delegation_cert_v2_signature(cert: DelegationCertV2) -> None:
     """Go ``VerifyDelegationCertV2Signature``: structure, key-ID bindings,
     and the issuer signature under code 0x0001. Does not establish trust."""
@@ -376,6 +456,7 @@ def validate_delegation_issuance_v2(cert: DelegationCertV2) -> None:
         prefixes.append(c.path_prefix)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_delegation_cert_v2(cert: DelegationCertV2, issuer_key: HybridPrivateKey) -> DelegationCertV2:
     """Go ``SignDelegationCertV2``: a signed copy of ``cert`` under the
     issuer's private key (native extension)."""
@@ -394,6 +475,7 @@ def _check_issuer_duties(cert: DelegationCertV2) -> None:
     validate_delegation_issuance_v2(cert)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_delegation_cert_v2_with_signer(ctx: Context, cert: DelegationCertV2, signer: SignerV2) -> DelegationCertV2:
     """Go ``SignDelegationCertV2WithSigner``. The issuer duties are checked
     before any signer method runs, so a refused certificate never reaches the
@@ -404,7 +486,7 @@ def sign_delegation_cert_v2_with_signer(ctx: Context, cert: DelegationCertV2, si
     issuer_pub = signer_public_key_v2(signer)
     issuer_id = key_id_v2(issuer_pub)
     if cert.issuer_id != issuer_id or not equal_public_keys(cert.issuer_pub_key, issuer_pub):
-        raise V2SigningError("v2 issuer key does not match certificate issuer")
+        raise V2SigningError("v2 issuer key does not match certificate issuer", V2ErrorClass.KEY_ID_MISMATCH)
     prepared = decode_delegation_cert_v2(encode_delegation_cert_v2(replace(cert, signature=placeholder_signature_v2())))
     signable = cert_signable_bytes_v2(prepared)
     prepared.signature = _sign_v2_statement_with_signer(ctx, DELEGATION_CERTIFICATE, signable, signer, issuer_pub)
@@ -516,6 +598,7 @@ def _bundle_canonical_dict(b: ProofBundleV2) -> dict:
     }
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_proof_bundle_v2(b: ProofBundleV2) -> bytes:
     if b is None:
         raise V2Error(V2ErrorClass.MALFORMED, "v2 proof bundle is nil")
@@ -553,6 +636,7 @@ def delegation_digest_v2(certs: list[DelegationCertV2]) -> bytes:
     return sha384(b"ratify-protocol-delegations-v2\x00" + canonical(ordered)).digest()
 
 
+@classified(V2ErrorClass.MALFORMED)
 def bundle_hash_v2(bundle: ProofBundleV2) -> str:
     """BundleHashV2: ``sha384:`` hex over the complete canonical signed bundle."""
     encoded = encode_proof_bundle_v2(bundle)
@@ -612,6 +696,7 @@ def verify_proof_bundle_v2_signatures_only(b: ProofBundleV2) -> None:
     verify_v2_statement(CHALLENGE_PRESENTATION, signable, b.challenge_sig, b.agent_pub_key)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_proof_bundle_v2_signatures(b: ProofBundleV2) -> None:
     """Go ``VerifyProofBundleV2Signatures``: every structural check first,
     then each certificate signature and the challenge signature. Does not
@@ -620,12 +705,14 @@ def verify_proof_bundle_v2_signatures(b: ProofBundleV2) -> None:
     verify_proof_bundle_v2_signatures_only(b)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_proof_bundle_v2(bundle: ProofBundleV2, agent_key: HybridPrivateKey) -> ProofBundleV2:
     """Go ``SignProofBundleV2``: compute the delegation digest and sign the
     challenge presentation with the agent key."""
     return sign_proof_bundle_v2_with_signer(background(), bundle, _as_signer(agent_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_proof_bundle_v2_with_signer(ctx: Context, bundle: ProofBundleV2, signer: SignerV2) -> ProofBundleV2:
     """Go ``SignProofBundleV2WithSigner``."""
     if bundle is None:
@@ -784,6 +871,7 @@ def decode_revocation_push_v2(data: bytes) -> RevocationPushV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_revocation_list_v2(lst: RevocationListV2) -> bytes:
     def run() -> bytes:
         validate_revocation_list_v2(lst)
@@ -799,6 +887,7 @@ def encode_revocation_list_v2(lst: RevocationListV2) -> bytes:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_revocation_push_v2(push: RevocationPushV2) -> bytes:
     def run() -> bytes:
         validate_revocation_push_v2(push)
@@ -813,6 +902,7 @@ def encode_revocation_push_v2(push: RevocationPushV2) -> bytes:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_revocation_list_v2_signature(lst: RevocationListV2, trusted_issuer_id: str, status_key: HybridPublicKey) -> None:
     """Status signatures are checked only against the caller-authenticated
     status key bound to this issuer; the object never supplies its own key."""
@@ -824,6 +914,7 @@ def verify_revocation_list_v2_signature(lst: RevocationListV2, trusted_issuer_id
     verify_v2_statement(REVOCATION_LIST, signable, lst.signature, status_key)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_revocation_push_v2_signature(push: RevocationPushV2, trusted_issuer_id: str, status_key: HybridPublicKey) -> None:
     _run(V2ErrorClass.MALFORMED, lambda: validate_revocation_push_v2(push))
     if trusted_issuer_id != push.issuer_id:
@@ -845,10 +936,12 @@ def _sign_status(ctx: Context, kind: str, obj, bound_issuer_id: str, bound_statu
             revocation_push_signable_bytes_v2, REVOCATION_PUSH, verify_revocation_push_v2_signature)
     validate(obj)
     if not bound_issuer_id or obj.issuer_id != bound_issuer_id:
-        raise V2SigningError(f"revocation-{kind} issuer does not match caller-authenticated status-key binding")
+        raise V2SigningError(f"revocation-{kind} issuer does not match caller-authenticated status-key binding",
+                             V2ErrorClass.STATUS_KEY_BINDING_MISMATCH)
     derived = signer_public_key_v2(signer)
     if not isinstance(bound_status_key, HybridPublicKey) or not equal_public_keys(bound_status_key, derived):
-        raise V2SigningError("status private key does not match caller-authenticated issuer status-key binding")
+        raise V2SigningError("status private key does not match caller-authenticated issuer status-key binding",
+                             V2ErrorClass.STATUS_KEY_BINDING_MISMATCH)
     prepared = decode(encode(replace(obj, signature=placeholder_signature_v2())))
     prepared.signature = _sign_v2_statement_with_signer(ctx, code, signable_of(prepared), signer, derived)
     signed = decode(encode(prepared))
@@ -856,26 +949,31 @@ def _sign_status(ctx: Context, kind: str, obj, bound_issuer_id: str, bound_statu
     return signed
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_revocation_list_v2(lst: RevocationListV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
                             status_key: HybridPrivateKey) -> RevocationListV2:
     return _sign_status(background(), "list", lst, bound_issuer_id, bound_status_key, _as_signer(status_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_revocation_list_v2_with_signer(ctx: Context, lst: RevocationListV2, bound_issuer_id: str,
                                         bound_status_key: HybridPublicKey, signer: SignerV2) -> RevocationListV2:
     return _sign_status(ctx, "list", lst, bound_issuer_id, bound_status_key, signer)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_revocation_push_v2(push: RevocationPushV2, bound_issuer_id: str, bound_status_key: HybridPublicKey,
                             status_key: HybridPrivateKey) -> RevocationPushV2:
     return _sign_status(background(), "push", push, bound_issuer_id, bound_status_key, _as_signer(status_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_revocation_push_v2_with_signer(ctx: Context, push: RevocationPushV2, bound_issuer_id: str,
                                         bound_status_key: HybridPublicKey, signer: SignerV2) -> RevocationPushV2:
     return _sign_status(ctx, "push", push, bound_issuer_id, bound_status_key, signer)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def status_evidence_digest(object_type: int, obj: Any) -> bytes:
     """Go ``StatusEvidenceDigest``: SHA-384 over the complete canonical signed
     status object. It is a reference to evidence, not proof of validity."""
@@ -888,5 +986,5 @@ def status_evidence_digest(object_type: int, obj: Any) -> bytes:
             raise ValueError("status evidence type 0x0005 requires RevocationPushV2")
         encoded = encode_revocation_push_v2(obj)
     else:
-        raise ValueError(f"unsupported status evidence object type: {object_type!r}")
+        raise V2ValueError(V2ErrorClass.UNSUPPORTED_OBJECT_TYPE, f"unsupported status evidence object type: {object_type!r}")
     return sha384(b"ratify-protocol-status-evidence-v2\x00" + object_type.to_bytes(2, "big") + encoded).digest()

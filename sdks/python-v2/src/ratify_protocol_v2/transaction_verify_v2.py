@@ -13,7 +13,7 @@ from typing import Callable, Optional
 from . import context_v2
 from .authorization_v2 import SCOPE_IDENTITY_DELEGATE, V2CertificateStatusCheck
 from .clock_bounds_v2 import checked_add_v2, valid_v2_timestamp
-from .errors_v2 import V2Error, V2ErrorClass
+from .errors_v2 import V2Error, V2ErrorClass, classified
 from .scope import intersect_scopes, validate_scopes_v2
 from .signing_v2 import key_id_v2
 from .types_v2 import is_int
@@ -94,6 +94,7 @@ class TransactionReceiptVerificationV2:
                 "parties": [p.to_json_dict() for p in self.parties]}
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def verify_transaction_receipt_v2(ctx: context_v2.Context, req: TransactionVerifyRequestV2,
                                   sources: TransactionVerifySourcesV2) -> TransactionReceiptVerificationV2:
     """Go ``VerifyTransactionReceiptV2``. Any receipt failure raises its error

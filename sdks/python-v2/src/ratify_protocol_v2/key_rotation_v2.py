@@ -12,6 +12,7 @@ from .errors_v2 import (
     KeyRotationFrozenError,
     V2Error,
     V2ErrorClass,
+    classified,
 )
 from .protocol_v2 import (
     _run,
@@ -168,6 +169,7 @@ def validate_key_rotation_signable_body_v2(body: bytes) -> None:
     validate_key_rotation_statement_v2(stmt, False)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def key_rotation_statement_v2_digest(stmt: KeyRotationStatementV2) -> bytes:
     """StatementBodyDigestV2(0x0004, body); both signatures are excluded."""
     return statement_body_digest_v2(KEY_ROTATION_AUTHORIZATION, key_rotation_signable_bytes_v2(stmt))
@@ -186,6 +188,7 @@ def decode_key_rotation_statement_v2(data: bytes) -> KeyRotationStatementV2:
     return _run(V2ErrorClass.MALFORMED, run)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_key_rotation_statement_v2(stmt: KeyRotationStatementV2) -> bytes:
     validate_key_rotation_statement_v2(stmt, True)
     return canonical({
@@ -195,6 +198,7 @@ def encode_key_rotation_statement_v2(stmt: KeyRotationStatementV2) -> bytes:
     })
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: HybridPrivateKey,
                                    new_key: HybridPrivateKey) -> KeyRotationStatementV2:
     """Go ``SignKeyRotationStatementV2``: the old key signs 0x0004 and the new
@@ -203,6 +207,7 @@ def sign_key_rotation_statement_v2(stmt: KeyRotationStatementV2, old_key: Hybrid
     return sign_key_rotation_statement_v2_with_signers(background(), stmt, _as_signer(old_key), _as_signer(new_key))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def sign_key_rotation_statement_v2_with_signers(ctx: Context, stmt: KeyRotationStatementV2, old_signer: SignerV2,
                                                 new_signer: SignerV2) -> KeyRotationStatementV2:
     """Go ``SignKeyRotationStatementV2WithSigners``."""
@@ -216,7 +221,7 @@ def sign_key_rotation_statement_v2_with_signers(ctx: Context, stmt: KeyRotationS
     except V2SigningError as exc:
         raise V2SigningError(f"new rotation key: {exc}") from exc
     if not equal_public_keys(old_pub, stmt.old_key) or not equal_public_keys(new_pub, stmt.new_key):
-        raise V2SigningError("rotation private keys do not match the statement keys")
+        raise V2SigningError("rotation private keys do not match the statement keys", V2ErrorClass.KEY_ID_MISMATCH)
     signable = key_rotation_signable_bytes_v2(stmt)
     old_signature = _sign_v2_statement_with_signer(ctx, KEY_ROTATION_AUTHORIZATION, signable, old_signer, old_pub)
     new_signature = _sign_v2_statement_with_signer(ctx, KEY_ROTATION_PROOF_OF_POSSESSION, signable, new_signer, new_pub)
@@ -225,6 +230,7 @@ def sign_key_rotation_statement_v2_with_signers(ctx: Context, stmt: KeyRotationS
                    old_signature=old_signature, new_signature=new_signature)
 
 
+@classified(V2ErrorClass.MALFORMED)
 def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRotationV2State, now_unix: int,
                                      future_skew: int) -> None:
     """Signatures and linkage against caller-authenticated state; does not accept."""
@@ -274,6 +280,7 @@ def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRot
     verify_v2_statement(KEY_ROTATION_PROOF_OF_POSSESSION, signable, stmt.new_signature, stmt.new_key)
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def new_key_rotation_v2_journal(authority_id: str, recovery_epoch: int, role: str, genesis_key: HybridPublicKey) -> KeyRotationV2Journal:
     cfg = V2ErrorClass.CONFIGURATION_INVALID
     try:
@@ -290,6 +297,7 @@ def new_key_rotation_v2_journal(authority_id: str, recovery_epoch: int, role: st
     ))
 
 
+@classified(V2ErrorClass.ROTATION_STATE_MISMATCH)
 def accept_key_rotation_statement_v2(stmt: KeyRotationStatementV2, journal: KeyRotationV2Journal, now_unix: int,
                                      future_skew: int) -> tuple[KeyRotationV2Journal, WitnessEntryV2Result]:
     """AcceptRotation (SPEC-v2 §5.4). Returns (journal, APPENDED|REPLAY).
@@ -335,6 +343,7 @@ def accept_key_rotation_statement_v2(stmt: KeyRotationStatementV2, journal: KeyR
     return nxt, WitnessEntryV2Result.APPENDED
 
 
+@classified(V2ErrorClass.ROTATION_RECOVERY_INVALID)
 def recover_key_rotation_v2(journal: KeyRotationV2Journal, new_recovery_epoch: int,
                             new_genesis_key: HybridPublicKey) -> KeyRotationV2Journal:
     invalid = V2ErrorClass.ROTATION_RECOVERY_INVALID

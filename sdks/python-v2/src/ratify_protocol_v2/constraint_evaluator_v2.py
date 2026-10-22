@@ -23,7 +23,7 @@ from typing import Any, Callable, Optional
 
 from . import _v2json
 from .context_v2 import Context, background, with_timeout
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified
 from .types_v2 import (
     MAX_CONSTRAINT_EVALUATORS_V2,
     MAX_EXTENSION_TYPE_BYTES_V2,
@@ -165,6 +165,7 @@ class ConstraintEvaluatorRegistryV2:
         return sorted((entry.ref for entry in self._entries.values()), key=lambda r: r.type.encode("utf-8"))
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def constraint_profile_digest_v2(d: ConstraintProfileDescriptorV2) -> str:
     """``"sha384:"`` and the lowercase hex SHA-384 of
     ``"ratify-protocol-constraint-profile-v2" || 0x00 ||
@@ -179,6 +180,7 @@ def constraint_profile_digest_v2(d: ConstraintProfileDescriptorV2) -> str:
     return "sha384:" + sha384(_PROFILE_DIGEST_LABEL_V2 + b"\x00" + body).hexdigest()
 
 
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
 def new_constraint_evaluator_registry_v2(
     timeout: float, *registrations: ConstraintEvaluatorRegistrationV2
 ) -> ConstraintEvaluatorRegistryV2:

@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import _v2json
-from .errors_v2 import V2Error, V2ErrorClass, classify
+from .errors_v2 import V2Error, V2ErrorClass, classify, classified
 from .limits_v2 import MAX_STATUS_EVIDENCE_BATCH_BYTES_V2, MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2, check_v2_wire_size
 from .protocol_v2 import (
     decode_revocation_list_v2,
@@ -50,6 +50,7 @@ class V2StatusEvidenceBatch:
         object.__setattr__(self, "objects", tuple(self.objects))
 
 
+@classified(V2ErrorClass.MALFORMED)
 def encode_v2_status_evidence_batch(batch: V2StatusEvidenceBatch) -> bytes:
     """Go ``EncodeV2StatusEvidenceBatch``: the canonical encoding. Every
     object must decode strictly under its code."""

@@ -12,7 +12,7 @@ As agents cross this "transaction horizon," two structural problems emerge:
 1. **The Claim-of-Authorization Gap:** When an agent says, "I am Alice's agent," the receiving party (the verifier) has no cryptographic way to verify that claim. Today, trust reduces to "the AI says so."
 2. **Agent-to-Agent Dominance:** As multi-agent systems proliferate, the trust layer must work entirely without a human present at the moment of the transaction.
 
-Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long* — across voice, video, API, and Physical AI.
+Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long*, across voice, video, API, and Physical AI.
 
 ---
 
@@ -24,12 +24,12 @@ Ratify operates through three simple, symmetric verbs:
 A principal (human or another agent) signs a **DelegationCert**. This certificate binds the principal's identity to the agent's identity and specifies a set of **Scopes** (allowed actions), **Constraints** (conditions like "only for amount < $100"), and an expiration date.
 
 ### PRESENT: The agent proves its authorization.
-When the agent wants to perform an action, it collects its delegation certs and signs a fresh **Challenge** from the verifier using its own private key. This collection—the delegation chain plus the fresh signature—is a **ProofBundle**.
+When the agent wants to perform an action, it collects its delegation certs and signs a fresh **Challenge** from the verifier using its own private key. This collection (the delegation chain plus the fresh signature) is a **ProofBundle**.
 
 ### VERIFY: The third party checks the proof.
 The verifier runs the Ratify verifier algorithm on the ProofBundle. If the signatures match, the timestamps are valid, the scopes cover the requested action, and the liveness check (the challenge) passes, the verifier returns a deterministic **YES**.
 
-One distinction worth internalizing: that YES is stateless cryptographic verification, which is not by itself replay-safe task acceptance — within the challenge freshness window, a captured bundle would verify again. A verifier that issues its own challenges makes each one single-use with a challenge store (SPEC §10; every SDK ships one), so a bundle is *accepted* at most once. A verifier that lets clients self-issue challenges keeps only the freshness bound and needs request-level deduplication on top.
+One distinction worth internalizing: that YES is stateless cryptographic verification, which is not by itself replay-safe task acceptance. Within the challenge freshness window, a captured bundle would verify again. A verifier that issues its own challenges makes each one single-use with a challenge store (SPEC §10; every SDK ships one), so a bundle is *accepted* at most once. A verifier that lets clients self-issue challenges keeps only the freshness bound and needs request-level deduplication on top.
 
 ---
 
@@ -77,15 +77,15 @@ Two properties make it safe to hand down a sub-delegation chain. The `resource_i
 
 ## 6. SDK Provider Interfaces
 
-The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal — every conformant SDK implements it identically, and the same 79 fixtures regenerate byte-identical across languages.
+The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal: every conformant SDK implements it identically, and the same 79 fixtures regenerate byte-identical across languages.
 
 But three of the verifier's responsibilities are inherently operational, and a single static spec cannot pin them down:
 
-1. **Revocation freshness** — a CRL file polled once an hour is fine for a low-throughput verifier; a high-throughput payment endpoint needs sub-second push propagation.
-2. **Policy evaluation** — quotas, geo-tagged kill switches, runtime overrides. These are stateful and verifier-local; they don't belong in a signed cert.
-3. **Audit retention** — a developer's local log file is enough for staging; SOC2/ISO compliance requires a signed, append-only ledger.
+1. **Revocation freshness.** A CRL file polled once an hour is fine for a low-throughput verifier; a high-throughput payment endpoint needs sub-second push propagation.
+2. **Policy evaluation.** Quotas, geo-tagged kill switches, runtime overrides. These are stateful and verifier-local; they don't belong in a signed cert.
+3. **Audit retention.** A developer's local log file is enough for staging; SOC2/ISO compliance requires a signed, append-only ledger.
 
-The SDKs expose three pluggable hooks for these — `RevocationProvider`, `PolicyProvider`, `AuditProvider` — defined in SPEC §17. Each SDK ships with a no-op default; commercial verifiers (such as Ratify Verify) supply higher-performance, stateful implementations against the same interface. Bundles verified against one provider stack and bundles verified against another are byte-identical: the wire format does not change.
+The SDKs expose three pluggable hooks for these, defined in SPEC §17: `RevocationProvider`, `PolicyProvider`, and `AuditProvider`. Each SDK ships with a no-op default; commercial verifiers (such as Ratify Verify) supply higher-performance, stateful implementations against the same interface. Bundles verified against one provider stack and bundles verified against another are byte-identical: the wire format does not change.
 
 This is the build-vs-buy boundary, in one diagram:
 
@@ -110,18 +110,18 @@ an exact opaque string and fails closed when no evaluator is registered. The
 naming rule prevents collisions; it does not add network lookup or make Ratify
 a runtime dependency.
 
-A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
+A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface (latency, compliance posture, integration ergonomics), not in cryptography.
 
 ### Open references and managed surface adapters
 
 Open, executable profiles under [`references/`](../references/README.md) show how
 Ratify composes with specific agent frameworks, transports, and runtimes. They
 are interoperability references: inspectable patterns, deterministic gates,
-and evidence—not hosted services or production support commitments.
+and evidence, not hosted services or production support commitments.
 
 The protocol contract stops at the `ProofBundle` wire format and verifier
-semantics. Production last-mile adapters—such as supported Zoom, Twilio, or API
-gateway deployments—plus managed trust configuration, revocation, policy,
+semantics. Production last-mile adapters (such as supported Zoom, Twilio, or API
+gateway deployments), plus managed trust configuration, revocation, policy,
 audit, observability, and availability belong to Ratify Verify's commercial
 surface. Ratify Verify does not introduce a proprietary proof format, and the
 specification does not prevent anyone from building or operating an adapter.

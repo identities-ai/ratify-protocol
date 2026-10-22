@@ -10,7 +10,7 @@ This roadmap covers two protocol lines. **Protocol v1** ([`SPEC.md`](../SPEC.md)
 
 ## Shipped (Protocol v1)
 
-All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.4; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++ — see [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.4; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++. See [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
 
 ### Continuous real-time interactions
 
@@ -18,7 +18,7 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 |---------|------|---------------|----------|
 | **Session binding** | §5.8, §6.4.2 | A 32-byte `session_context` in the challenge signable binds a bundle to one verifier. Prevents stolen bundles from being replayed at a different endpoint. | 2 |
 | **Stream sequence numbers** | §5.8, §6.4.2 | `stream_id` + `stream_seq` in the challenge signable detect replay, reorder, and omission within a multi-turn conversation. | 6 |
-| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature — no chain re-verification: one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; see docs/BENCHMARKS.md). | 5 |
+| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature, with no chain re-verification: one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; see docs/BENCHMARKS.md). | 5 |
 | **Push-based revocation** | §5.11, §6.4.5 | Signed `RevocationPush` delta payload lets issuers push revocations to subscribed verifiers in real time. `ForceRevocationCheck` option forces a fresh check on high-stakes endpoints. | 1 |
 | **Challenge forwarding defense** | §15.1 | Session binding (above) defeats the attack where a malicious verifier V2 relays V1's challenge to an agent. The agent signs with V2's context; V1 rejects the mismatch. | 1 |
 
@@ -122,7 +122,7 @@ An earlier draft proposed a boolean `requires_disclosure` constraint (default `t
 - **Cryptographic tamper-evidence** per object. Every `DelegationCert`, `ProofBundle`, and `RevocationList` is signed; byte-level modification is detected.
 - **54 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
 - **First-class constraints** (geo, time-window, speed, amount, rate) evaluated at verify time against caller-supplied context. Geo and speed are v1-only until Protocol 2.1.
-- **Three key-custody modes** — self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
+- **Three key-custody modes:** self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
 
 ---
 
@@ -138,7 +138,7 @@ The `AGENT_TO_AGENT.md` doc covers mutual presentation patterns for API-layer in
 
 Current protocol handles this via mutual presentation (Pattern 1 in `AGENT_TO_AGENT.md`), but the meetings adapter needs to surface this clearly in the policy and dashboard layer: "Agent A (authorized by Alice at CorpX) spoke with Agent B (authorized by Bob at CorpY). Neither human was present."
 
-This is not a protocol gap — the chain verification handles it. It is a scope and audit surfacing decision. Recording here so the meetings adapter dashboard design accounts for agent-to-agent sessions explicitly.
+This is not a protocol gap; the chain verification handles it. It is a scope and audit surfacing decision. Recording here so the meetings adapter dashboard design accounts for agent-to-agent sessions explicitly.
 
 ---
 

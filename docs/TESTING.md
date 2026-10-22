@@ -13,7 +13,7 @@ Four testing levels, from fastest to most realistic:
 
 ---
 
-## Level 1 — Conformance suites
+## Level 1: Conformance suites
 
 Exercises the protocol primitives in each SDK against the 79 canonical test vectors.
 
@@ -41,7 +41,7 @@ cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test a
 
 ---
 
-## Level 2 — Narrative demos
+## Level 2: Narrative demos
 
 Walks through Alice → cert → agent → bundle → verifier with printed output at every step, then four attack scenarios rejected.
 
@@ -64,7 +64,7 @@ cd demos/rust && cargo run && cd ../..
 
 ---
 
-## Level 3 — Bash-only end-to-end
+## Level 3: Bash-only end-to-end
 
 Uses the `ratify` CLI for every step. No code, no server.
 
@@ -124,7 +124,7 @@ HOME=$PWD /tmp/rat/ratify verify --bundle tampered-bundle.json --scope files:wri
 
 ---
 
-## Level 4 — HTTP wire protocol
+## Level 4: HTTP wire protocol
 
 A minimal reference HTTP verifier plus the CLI agent. Exercises the real wire protocol, not just library calls.
 
@@ -138,7 +138,7 @@ go run ./cmd/ratify-verifier -addr :8080
 #   POST /v1/ratify/verify
 ```
 
-### In another shell — client flow
+### In another shell: client flow
 
 ```bash
 # Build the CLI and create workspace
@@ -175,10 +175,10 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 
 **Try attacks over HTTP:**
 
-- Reuse the bundle — the server's challenge store is single-use, so replay fails with `unknown_challenge: challenge was not issued by this verifier or has already been used`.
-- Send a bundle signed against a different challenge — fails with `unknown_challenge`.
-- Wait 5 minutes then replay — fails with `stale_challenge`.
-- Tamper the cert before bundling — fails with `bad_signature`.
+- Reuse the bundle. The server's challenge store is single-use, so replay fails with `unknown_challenge: challenge was not issued by this verifier or has already been used`.
+- Send a bundle signed against a different challenge. It fails with `unknown_challenge`.
+- Wait 5 minutes then replay. It fails with `stale_challenge`.
+- Tamper the cert before bundling. It fails with `bad_signature`.
 
 ---
 
@@ -194,7 +194,7 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 ## What levels 1-4 do NOT prove
 
 - **Deployment / scale.** No production load testing yet. Allocated for `TEST_PLAN.md` §8 with k6/vegeta; gated on first production deployment.
-- **Adversarial security audit.** External audit (Trail of Bits / NCC / Cure53) scheduled before v1.0.0 stable — see `RELEASES.md`.
+- **Adversarial security audit.** External audit (Trail of Bits / NCC / Cure53) scheduled before v1.0.0 stable; see `RELEASES.md`.
 - **Interop with third-party agent platforms.** Third-party platform integrations are gated on design partner engagement; meanwhile, cross-language interop across our five SDKs is a reasonable proxy.
 - **Long-term session / streaming properties.** Session binding, sequence numbers, and the session cert cache are shipped v1.1 capabilities (see `ROADMAP.md`, Shipped); production-scale streaming behavior over long-lived sessions is exercised in pilots, not here.
 
@@ -217,6 +217,6 @@ If all five are green, your change doesn't drift the protocol. That's the contra
 For broader changes (new canonical rules, new field), also run:
 
 ```bash
-# Determinism — regen must produce byte-identical fixtures (or you intended a protocol change).
+# Determinism: regen must produce byte-identical fixtures (or you intended a protocol change).
 go run ./cmd/ratify-testvectors -out /tmp/regen && diff -rq testvectors/v1/ /tmp/regen/
 ```

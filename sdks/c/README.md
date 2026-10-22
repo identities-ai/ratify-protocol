@@ -32,14 +32,14 @@ For Protocol v1, beyond the one-shot delegate → present → verify round trip,
 | A Go service or CLI | [Go SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/go) |
 | A Node.js or browser app | [TypeScript SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/typescript) |
 | A Python script, ML pipeline, data tool | [Python SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python) |
-| A Rust service or high-performance binary | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) — use directly, no FFI overhead |
+| A Rust service or high-performance binary | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust): use directly, no FFI overhead |
 | **C or C++ code** | **This SDK** |
 | **RTOS firmware with a std shim** (FreeRTOS, Zephyr) | **This SDK** (requires std/heap; see Embedded deployment guide) |
 | **A language that FFIs to C** (Swift, Zig, Julia, Lua, etc.) | **This SDK** |
 | **Air-gapped Linux or RTOS device** | **This SDK** (static library `libratify_c.a`, verifies offline) |
 | **Bare-metal / no-OS firmware** (no heap, no std) | [Rust SDK](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/rust) with `no_std` + `alloc` (the C SDK requires std/heap) |
 
-The C SDK wraps the Rust SDK via a C ABI. If you're writing Rust, use the Rust SDK directly — the C SDK adds an FFI boundary with no benefit in a Rust context.
+The C SDK wraps the Rust SDK via a C ABI. If you're writing Rust, use the Rust SDK directly. The C SDK adds an FFI boundary with no benefit in a Rust context.
 
 ---
 
@@ -52,7 +52,7 @@ operations: generating challenge bytes (`ratify_challenge_generate`) and generat
 cert IDs (`ratify_delegation_issue`). Without unpredictable entropy, challenges can be
 replayed and certs can collide.
 
-On standard OS targets (Linux, macOS, Windows, Raspberry Pi) entropy is automatic — the
+On standard OS targets (Linux, macOS, Windows, Raspberry Pi) entropy is automatic: the
 OS provides `/dev/urandom` or an equivalent. On embedded targets, you may need to wire
 in the hardware TRNG (True Random Number Generator) manually.
 
@@ -107,8 +107,8 @@ certs with weak randomness is worse than not running at all. See [Panic behavior
 
 ### Note on std requirement
 
-The C SDK currently requires Rust's standard library (`std`) because `serde_json` — used
-by the Ratify Protocol for JSON wire format — does not support `no_std`. This means the
+The C SDK currently requires Rust's standard library (`std`) because `serde_json`, which
+the Ratify Protocol uses for its JSON wire format, does not support `no_std`. This means the
 library cannot link into bare-metal firmware with no heap at all. Targets supported:
 
 | Target | Works? | Notes |
@@ -144,10 +144,10 @@ RTOS targets are not covered by CI. Before relying on one, stand up the custom t
 cargo build --release
 
 # Outputs:
-#   target/release/libratify_c.a    — static library (embed in firmware)
-#   target/release/libratify_c.so   — shared library (Linux)
-#   target/release/libratify_c.dylib — shared library (macOS)
-#   include/ratify.h                — C/C++ header (auto-generated, committed)
+#   target/release/libratify_c.a    : static library (embed in firmware)
+#   target/release/libratify_c.so   : shared library (Linux)
+#   target/release/libratify_c.dylib: shared library (macOS)
+#   include/ratify.h                : C/C++ header (auto-generated, committed)
 ```
 
 **Cross-compile with `cross`:**
@@ -317,7 +317,7 @@ char *bundle_json = ratify_proof_bundle_to_json(bundle, &err);
 ### Verification (Protocol v1), simple path
 
 ```c
-// Verifier side: just scope + clock — the common embedded path
+// Verifier side: just scope + clock (the common embedded path)
 RatifyVerifyResult *result = NULL;
 ratify_verify_bundle(bundle_json, "physical:enter", 0, &result, &err);
 
@@ -364,7 +364,7 @@ ratify_verify_bundle_opts(bundle_json, &opts, &result, &err);
 
 ### Advanced surface (v1.1)
 
-The core paths above cover one-shot verification. The full v1.1 surface is exported through the same header — every symbol is documented in `include/ratify.h`:
+The core paths above cover one-shot verification. The full v1.1 surface is exported through the same header, and every symbol is documented in `include/ratify.h`:
 
 | Family | Symbols | What it does |
 |---|---|---|
@@ -636,9 +636,9 @@ rebuild with `panic = "abort"`, any panic terminates the process instead.
 
 | Return | Meaning |
 |---|---|
-| `1` | Cert is revoked — bundle rejected |
-| `0` | Cert is not revoked — verification continues |
-| `-1` | Lookup failed — fail-closed (bundle rejected with `identity_status=invalid`) |
+| `1` | Cert is revoked; bundle rejected |
+| `0` | Cert is not revoked; verification continues |
+| `-1` | Lookup failed; fail-closed (bundle rejected with `identity_status=invalid`) |
 
 ---
 
@@ -727,6 +727,6 @@ cc examples/verify_bundle.c -I include -L target/release \
 
 ## License
 
-Apache-2.0 — see [LICENSE](https://github.com/identities-ai/ratify-protocol/blob/main/LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/identities-ai/ratify-protocol/blob/main/LICENSE).
 
 Ratify Protocol™ is a trademark of Identities AI, Inc. Patent pending.

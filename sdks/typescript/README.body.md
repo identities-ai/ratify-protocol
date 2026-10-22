@@ -113,7 +113,7 @@ The user generates and holds their own keypair. No third party can sign on their
 ```ts
 import { generateHumanRoot, issueDelegation } from "@identities-ai/ratify-protocol";
 
-// User generates keypair on their own device — private key never leaves
+// User generates keypair on their own device; private key never leaves
 const { root, privateKey } = await generateHumanRoot();
 
 // User signs delegations locally
@@ -211,9 +211,9 @@ const presented = decodeSessionToken(tokenJSON);
 
 ### Strict decoding
 
-Decoders fail closed. A document is rejected — with an error naming the offending field — if it carries malformed UTF-8 or a byte-order mark; malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an integer outside the IEEE-754 safe-integer range [-(2^53-1), 2^53-1] (SPEC §6.2); an empty delegation chain; unpaired stream fields; duplicated JSON object keys (at any nesting depth, with string escapes decoded before comparison); or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure.
+Decoders fail closed. A document is rejected, with an error naming the offending field, if it carries malformed UTF-8 or a byte-order mark; malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an integer outside the IEEE-754 safe-integer range [-(2^53-1), 2^53-1] (SPEC §6.2); an empty delegation chain; unpaired stream fields; duplicated JSON object keys (at any nesting depth, with string escapes decoded before comparison); or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure.
 
-The strictness applies to the signed structures themselves — `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine — decode `proof_bundle` strictly with `decodeProofBundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
+The strictness applies to the signed structures themselves: `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine. Decode `proof_bundle` strictly with `decodeProofBundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
 
 ### Vocabulary discovery
 
@@ -231,7 +231,7 @@ scopeWildcards(); // wildcard shorthand -> non-sensitive member scopes
 ```ts
 import {
   SCOPE_MEETING_ATTEND,     // "meeting:attend"
-  SCOPE_FILES_WRITE,         // sensitive — never rides a wildcard
+  SCOPE_FILES_WRITE,         // sensitive: never rides a wildcard
   expandScopes,
   intersectScopes,
   isSensitive,
@@ -278,9 +278,9 @@ A single failure means TypeScript and the Go reference have drifted.
 
 ## Security posture
 
-- **Ed25519** via [@noble/ed25519](https://github.com/paulmillr/noble-ed25519) — audited, zero native deps, universal.
-- **ML-DSA-65** via [@noble/post-quantum](https://github.com/paulmillr/noble-post-quantum) — NIST FIPS 204, post-quantum lattice signature.
-- **SHA-256** via [@noble/hashes](https://github.com/paulmillr/noble-hashes) — same author, same posture.
+- **Ed25519** via [@noble/ed25519](https://github.com/paulmillr/noble-ed25519): audited, zero native deps, universal.
+- **ML-DSA-65** via [@noble/post-quantum](https://github.com/paulmillr/noble-post-quantum): NIST FIPS 204, post-quantum lattice signature.
+- **SHA-256** via [@noble/hashes](https://github.com/paulmillr/noble-hashes): same author, same posture.
 - **WebCrypto** for secure random (32-byte challenges).
 
 No network code in this package. HTTP concerns (challenge issuance, revocation list fetching, API auth) live one layer up.

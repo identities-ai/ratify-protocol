@@ -24,8 +24,8 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **Python (v2)** | `ratify-protocol-v2` (PyPI name reserved for v2, not yet published) | `sdks/python-v2/` | ✅ full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; v2 key, object, and object-negative vectors only (no stateful v2 verifier) |
-| Swift | — | planned (mobile wallet) | — |
-| Java / Kotlin | — | planned (Android / JVM) | — |
+| Swift | n/a | planned (mobile wallet) | n/a |
+| Java / Kotlin | n/a | planned (Android / JVM) | n/a |
 
 This tree carries two release lines. The v2 line (`2.0.0-alpha.1`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and the separate Python
@@ -36,13 +36,13 @@ published yet; the latest published release is `v1.0.0-alpha.20`. Per-SDK v2
 vector coverage is recorded in
 [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md).
 
-### C / C++ SDK — shipped in v1.0.0-alpha.8
+### C / C++ SDK (shipped in v1.0.0-alpha.8)
 
 The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). It ships as:
 
-- `libratify_c.a` — static library for firmware and embedded Linux
-- `libratify_c.so` / `libratify_c.dylib` — shared library for Linux / macOS
-- `include/ratify.h` — committed header; usable without the Rust toolchain
+- `libratify_c.a`: static library for firmware and embedded Linux
+- `libratify_c.so` / `libratify_c.dylib`: shared library for Linux / macOS
+- `include/ratify.h`: committed header; usable without the Rust toolchain
 
 **Supported targets:**
 
@@ -60,7 +60,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 
 **Conformance:** All 79 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus the API test suite (44 tests), 33 advanced-surface tests, and 7 input-bound boundary tests. The C SDK proves conformance through this shared 79-fixture set; the cross-SDK byte-equivalence corpus (`testvectors/v1/cross_sdk_vectors.json`, checked hub-and-spoke against the Go reference) is consumed by Go, TypeScript, Python, and Rust, not by C.
 
-**FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
+**FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration: Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
 ## 3. Priority order for future language ports
 
@@ -80,7 +80,7 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 ## 4. The conformance contract
 
-**Every Ratify SDK, in every language, MUST pass all fixtures at `testvectors/v1/` byte-for-byte.** That is the contract. Without it, an SDK may appear to work locally but silently diverge from the reference — producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
+**Every Ratify SDK, in every language, MUST pass all fixtures at `testvectors/v1/` byte-for-byte.** That is the contract. Without it, an SDK may appear to work locally but silently diverge from the reference, producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
 
 ### What conformance means, concretely
 
@@ -89,7 +89,7 @@ For every fixture in `testvectors/v1/*.json`:
 **Kind = `verify`:**
 - The SDK's canonical signing bytes (its `delegationSignBytes` equivalent) MUST produce hex output matching `expected.delegation_sign_bytes_hex[i]` for every cert in the chain.
 - The SDK's challenge signing bytes helper MUST match `expected.challenge_sign_bytes_hex`.
-- The SDK's `verifyBundle` equivalent, when called with the bundle and the `verify_options`, MUST produce a `VerifyResult` semantically equivalent to `expected.verify_result` (with `granted_scope` compared as a set, not as an ordered list — though in practice implementations SHOULD emit it lex-sorted).
+- The SDK's `verifyBundle` equivalent, when called with the bundle and the `verify_options`, MUST produce a `VerifyResult` semantically equivalent to `expected.verify_result` (with `granted_scope` compared as a set, not as an ordered list, although in practice implementations SHOULD emit it lex-sorted).
 - Error-path messages SHOULD match the Go reference format for cross-language tooling compatibility (e.g. `"bad_signature: cert 0: Ed25519 signature invalid"`).
 
 **Kind = `scope`:**

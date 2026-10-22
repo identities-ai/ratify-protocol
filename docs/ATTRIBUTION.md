@@ -1,9 +1,9 @@
 # Attribution & Badge Program
 
-Ratify Protocol is open source — Apache 2.0 for code, CC-BY-4.0 for the spec.
+Ratify Protocol is open source: Apache 2.0 for code, CC-BY-4.0 for the spec.
 Use it commercially, build on it, modify it. No permission needed.
 
-When you ship a product built on Ratify Protocol, we ask — but don't require —
+When you ship a product built on Ratify Protocol, we ask, but don't require,
 that you say so. The reason: your users' trust in "verified" rests on a
 cryptographic protocol, not your marketing. Making that visible lets them check
 it independently. It's the same reason apps display "Messages secured with the

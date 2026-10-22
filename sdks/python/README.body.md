@@ -69,7 +69,7 @@ from ratify_protocol import (
 )
 import time
 
-# 1. DELEGATE — Alice creates her root and authorizes an agent.
+# 1. DELEGATE: Alice creates her root and authorizes an agent.
 root, root_priv = generate_human_root()
 agent, agent_priv = generate_agent("Alice's Assistant", "voice_agent")
 
@@ -84,7 +84,7 @@ cert = DelegationCert(
 )
 issue_delegation(cert, root_priv)
 
-# 2. PRESENT — agent builds a proof bundle on demand.
+# 2. PRESENT: agent builds a proof bundle on demand.
 challenge = generate_challenge()
 challenge_at = int(time.time())
 bundle = ProofBundle(
@@ -96,7 +96,7 @@ bundle = ProofBundle(
     challenge_sig=sign_challenge(challenge, challenge_at, agent_priv),
 )
 
-# 3. VERIFY — any third party checks the bundle.
+# 3. VERIFY: any third party checks the bundle.
 result = verify_bundle(bundle, VerifyOptions(required_scope=SCOPE_MEETING_ATTEND))
 if result.valid:
     print(f"✅ Authorized agent {result.agent_id} for {result.human_id}, scope={result.granted_scope}")
@@ -115,7 +115,7 @@ The user generates and holds their own keypair. No third party can sign on their
 ```python
 from ratify_protocol import generate_human_root, issue_delegation
 
-# User generates keypair on their own device — private key never leaves
+# User generates keypair on their own device; private key never leaves
 root, private_key = generate_human_root()
 
 # User signs delegations locally
@@ -205,9 +205,9 @@ presented = decode_session_token(token_json)
 
 ### Strict decoding
 
-Decoders fail closed. A document is rejected — with a `ValueError` naming the offending field — if it carries malformed UTF-8 or a byte-order mark; malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an integer outside the IEEE-754 safe-integer range [-(2^53-1), 2^53-1] (SPEC §6.2); an empty delegation chain; unpaired stream fields; duplicated JSON object keys (at any nesting depth, with string escapes decoded before comparison); or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure.
+Decoders fail closed. A document is rejected, with a `ValueError` naming the offending field, if it carries malformed UTF-8 or a byte-order mark; malformed or non-canonical base64; a wrong byte length for a key, signature, challenge, or 32-byte binding field; a missing or mistyped required field; an integer outside the IEEE-754 safe-integer range [-(2^53-1), 2^53-1] (SPEC §6.2); an empty delegation chain; unpaired stream fields; duplicated JSON object keys (at any nesting depth, with string escapes decoded before comparison); or an unknown field in a signed structure. Anything a conformant implementation would not have produced is treated as malformed at the transport boundary instead of surfacing later as a confusing verification failure.
 
-The strictness applies to the signed structures themselves — `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine — decode `proof_bundle` strictly with `decode_proof_bundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
+The strictness applies to the signed structures themselves: `ProofBundle`, `DelegationCert`, `SessionToken` reject unknown fields because every byte of them is protocol surface. Your application's transport envelope is a different thing: it may carry whatever integration metadata you need, as long as that metadata stays outside the signed structure. For example, `{"proof_bundle": {...}, "app_metadata": {...}}` is fine. Decode `proof_bundle` strictly with `decode_proof_bundle` and treat the rest of the envelope as your own; a `request_id` inside the bundle itself would (correctly) be rejected.
 
 ### Vocabulary discovery
 
@@ -225,7 +225,7 @@ scope_wildcards()  # wildcard shorthand -> non-sensitive member scopes
 ```python
 from ratify_protocol import (
     SCOPE_MEETING_ATTEND,     # "meeting:attend"
-    SCOPE_FILES_WRITE,         # sensitive — never rides a wildcard
+    SCOPE_FILES_WRITE,         # sensitive: never rides a wildcard
     expand_scopes,
     intersect_scopes,
     is_sensitive,
@@ -270,9 +270,9 @@ The suite loads every fixture from the [canonical test vectors](https://github.c
 
 This SDK uses `pqcrypto` which wraps PQClean's ML-DSA-65 implementation. Two things to be aware of:
 
-**Randomized signing.** `pqcrypto`'s default signing mode is randomized (two signings of the same message produce different bytes). This does NOT affect interop: signatures produced here verify correctly in Go, TypeScript, Rust, and C/C++ implementations, and vice versa. The canonical signable bytes (what gets fed into the signature function) are what must match across languages — those do match byte-for-byte.
+**Randomized signing.** `pqcrypto`'s default signing mode is randomized (two signings of the same message produce different bytes). This does NOT affect interop: signatures produced here verify correctly in Go, TypeScript, Rust, and C/C++ implementations, and vice versa. The canonical signable bytes (what gets fed into the signature function) are what must match across languages, and those do match byte-for-byte.
 
-**Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API — `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only — it verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
+**Non-deterministic keygen from seeds.** `pqcrypto` does not expose seed-based ML-DSA-65 key generation through its public API: `crypto_sign_keypair` reads from the OS RNG internally. This means `hybrid_keypair_from_seeds()` is NOT truly deterministic on the ML-DSA side in Python. The practical consequence: **Python cannot regenerate the canonical test fixtures** (the Go reference does that). Python's conformance contract is verification-only. It verifies Go-generated fixtures byte-for-byte but does not regenerate them. This is a known limitation of the `pqcrypto` library, not a protocol limitation.
 
 ## v1 API added in alpha.16
 

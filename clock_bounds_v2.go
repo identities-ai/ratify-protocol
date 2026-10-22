@@ -1,6 +1,6 @@
 package ratify
 
-// Protocol v2 configuration and clock bounds (SPEC-v2 §6, amendment A5).
+// Protocol v2 configuration and clock bounds (SPEC-v2 §2.5).
 // Every time value is an integer number of seconds since the Unix epoch.
 // Every deadline is exclusive: a value is current only while now < deadline.
 // Configuration outside these bounds is rejected before any challenge claim

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "description": "Issuer status reducer sequences (SPEC-v2 §5.3). Each scenario starts from empty state for issuer_id. Steps run in order against one reducer; a rejected step leaves state unchanged. expect_state asserts only the listed fields; accepted_set and deny_union are sorted certificate IDs. Query evidence uses the deterministic per-reference selection rules of SPEC-v2 §6.",
+  "description": "Issuer status reducer sequences (SPEC-v2 §5.4). Each scenario starts from empty state for issuer_id. Steps run in order against one reducer; a rejected step leaves state unchanged. expect_state asserts only the listed fields; accepted_set and deny_union are sorted certificate IDs. Query evidence uses the deterministic per-reference selection rules of SPEC-v2 §6.5.",
   "operations": {
     "apply_list": "verify the list under status_key bound to issuer_id at status_key_epoch, then apply it at time now",
     "apply_push": "verify the push under status_key bound to issuer_id at status_key_epoch, then apply it at time now",

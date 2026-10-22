@@ -1,6 +1,6 @@
 package ratify
 
-// Stream sequence (SPEC-v2 §7.4, Part B; amendments A8/D8). Every rejection
+// Stream sequence (SPEC-v2 §7.4). Every rejection
 // has the class stream_sequence_mismatch; the message distinguishes gap,
 // duplicate and reorder for diagnostics only.
 //

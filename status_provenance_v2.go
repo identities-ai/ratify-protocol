@@ -9,7 +9,7 @@ import (
 	"sort"
 )
 
-// Authenticated status at the verifier boundary (SPEC-v2 §6.5, A4).
+// Authenticated status at the verifier boundary (SPEC-v2 §6.5).
 //
 // The status provider never supplies a StatusResult. For each distinct issuer
 // in the verified chain, in ascending byte order of issuer ID, the verifier:
@@ -299,7 +299,7 @@ func callV2JournalSafely(f func() error) (err error) {
 	return f()
 }
 
-// checkV2StatusRoleSeparation enforces SPEC-v2 §5.3 permanent role
+// checkV2StatusRoleSeparation enforces SPEC-v2 §5.4 and §6.5 permanent role
 // separation before an issuer's results are used: the configured status key
 // must be the issuer's current journal epoch binding; its global role history
 // entry must be exactly the status role; and neither its complete key ID nor

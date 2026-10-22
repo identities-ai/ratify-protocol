@@ -519,7 +519,7 @@ func ApplyRevocationPushV2(state RevocationStatusStateV2, push *RevocationPushV2
 
 func validateRevocationStatusPolicyV2(policy RevocationStatusPolicyV2) error {
 	// Zero lifetime or age means "not configured" (status is then never
-	// current); configured values are bounded by SPEC-v2 §6 (A5).
+	// current); configured values are bounded by SPEC-v2 §2.5.
 	if policy.MaxListLifetimeSeconds < 0 || policy.MaxStatusAgeSeconds < 0 || policy.ClockSkewSeconds < 0 ||
 		policy.MaxListLifetimeSeconds > V2MaxStatusLifetimeSeconds || policy.MaxStatusAgeSeconds > V2MaxStatusLifetimeSeconds || policy.ClockSkewSeconds > V2MaxFutureSkewSeconds {
 		return fmt.Errorf("revocation status policy contains invalid time bounds")

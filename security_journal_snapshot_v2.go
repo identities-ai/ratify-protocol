@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-// SecurityJournalV2 logical snapshot (SPEC-v2 §6.6, amendment A3).
+// SecurityJournalV2 logical snapshot (SPEC-v2 §6.6).
 //
 // The snapshot is the portable, canonical projection of a SecurityJournalV2.
 // Its bytes are RatifyCanonicalJSON of the object below and its digest is

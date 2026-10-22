@@ -31,7 +31,7 @@ type HeadJSON struct {
 	Frozen          bool              `json:"frozen"`
 }
 
-// RotationStateJSON is caller-authenticated rotation state (SPEC-v2 §5.4).
+// RotationStateJSON is caller-authenticated rotation state (SPEC-v2 §5.5).
 type RotationStateJSON struct {
 	AuthorityID   string   `json:"authority_id"`
 	RecoveryEpoch int64    `json:"recovery_epoch"`

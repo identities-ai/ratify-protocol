@@ -71,7 +71,7 @@ type V2VerifyCallbacks struct {
 
 // V2VerifyRequest is one live verification. ContextPolicy nil means the
 // verifier explicitly configured no context policy; the terminal result can
-// then never be allow (SPEC-v2 §6 table). StatusKeys and StatusPolicy come
+// then never be allow (SPEC-v2 §6.7). StatusKeys and StatusPolicy come
 // from caller-authenticated configuration.
 //
 // Now is the caller's clock and is used only for the pre-claim freshness

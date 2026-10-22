@@ -3,6 +3,9 @@ package ratify
 import (
 	"errors"
 	"fmt"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +50,55 @@ func TestV2ErrorClassOfPreservesMessagesAndWrapping(t *testing.T) {
 	}
 	if V2ErrorClassOf(nil) != "" {
 		t.Fatal("nil error must have no class")
+	}
+}
+
+// SPEC-v2 §2.7 is the closed, shared error-class list. The classes declared
+// in errors_v2.go (other than the local "unclassified" sentinel) must equal
+// the classes named in the first column of that table, and the stated count.
+func TestV2ErrorClassesMatchSpecTable(t *testing.T) {
+	spec, err := os.ReadFile("SPEC-v2.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(spec)
+	start := strings.Index(text, "### 2.7 Error classes")
+	end := strings.Index(text, "## 3. Typed signing contract")
+	if start < 0 || end < start {
+		t.Fatal("SPEC-v2.md has no §2.7 error-class table")
+	}
+	section := text[start:end]
+	fromSpec := map[string]bool{}
+	for _, line := range strings.Split(section, "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+		first := strings.Split(line, "|")[1]
+		for _, m := range regexp.MustCompile("`([a-z_0-9]+)`").FindAllStringSubmatch(first, -1) {
+			fromSpec[m[1]] = true
+		}
+	}
+	source, err := os.ReadFile("errors_v2.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromCode := map[string]bool{}
+	for _, m := range regexp.MustCompile(`V2ErrorClass = "([a-z_0-9]+)"`).FindAllStringSubmatch(string(source), -1) {
+		if m[1] != string(V2ErrUnclassified) {
+			fromCode[m[1]] = true
+		}
+	}
+	for class := range fromCode {
+		if !fromSpec[class] {
+			t.Errorf("class %q is declared in errors_v2.go but missing from SPEC-v2 §2.7", class)
+		}
+	}
+	for class := range fromSpec {
+		if !fromCode[class] {
+			t.Errorf("class %q is in SPEC-v2 §2.7 but not declared in errors_v2.go", class)
+		}
+	}
+	if want := fmt.Sprintf("The list has %d classes.", len(fromCode)); !strings.Contains(section, want) {
+		t.Errorf("SPEC-v2 §2.7 does not state %q", want)
 	}
 }

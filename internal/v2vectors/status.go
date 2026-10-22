@@ -10,7 +10,7 @@ type statusPolicyJSON struct {
 	ClockSkewSeconds       int64 `json:"clock_skew_seconds"`
 }
 
-// statusStateJSON lists only the asserted SPEC-v2 §5.3 state fields; an
+// statusStateJSON lists only the asserted SPEC-v2 §5.4 state fields; an
 // absent field is not asserted at that step.
 type statusStateJSON struct {
 	HasFloor                  *bool     `json:"has_floor,omitempty"`
@@ -165,7 +165,7 @@ func st(hasFloor bool, floor, maxObs, fork int64, recon bool, accepted, deny []s
 func (g *gen) statusFile() any {
 	f := statusFile{
 		Version:     2,
-		Description: "Issuer status reducer sequences (SPEC-v2 §5.3). Each scenario starts from empty state for issuer_id. Steps run in order against one reducer; a rejected step leaves state unchanged. expect_state asserts only the listed fields; accepted_set and deny_union are sorted certificate IDs. Query evidence uses the deterministic per-reference selection rules of SPEC-v2 §6.",
+		Description: "Issuer status reducer sequences (SPEC-v2 §5.4). Each scenario starts from empty state for issuer_id. Steps run in order against one reducer; a rejected step leaves state unchanged. expect_state asserts only the listed fields; accepted_set and deny_union are sorted certificate IDs. Query evidence uses the deterministic per-reference selection rules of SPEC-v2 §6.5.",
 		Operations: map[string]string{
 			"apply_list":       "verify the list under status_key bound to issuer_id at status_key_epoch, then apply it at time now",
 			"apply_push":       "verify the push under status_key bound to issuer_id at status_key_epoch, then apply it at time now",

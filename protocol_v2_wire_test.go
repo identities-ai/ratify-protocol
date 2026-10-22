@@ -296,7 +296,7 @@ func TestV2AuthenticatedChallengePreflight(t *testing.T) {
 	}
 	maxAgeBoundary := expected
 	maxAgeBoundary.ExpiresAt = 30
-	// The maximum-age deadline is exclusive (SPEC-v2 A5): one second before
+	// The maximum-age deadline is exclusive (SPEC-v2 §2.5): one second before
 	// issued_at+max_age is current, the deadline itself is not.
 	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 19, 10, 0); err != nil {
 		t.Fatalf("challenge one second before the maximum-age deadline rejected: %v", err)

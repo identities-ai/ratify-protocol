@@ -33,7 +33,7 @@ type KeyRotationV2Journal struct {
 	Frozen   bool
 }
 
-// NewKeyRotationV2Journal creates the SPEC-v2 §5.4 initial state from a
+// NewKeyRotationV2Journal creates the SPEC-v2 §5.5 initial state from a
 // caller-authenticated genesis key and recovery epoch.
 func NewKeyRotationV2Journal(authorityID string, recoveryEpoch int64, role string, genesisKey HybridPublicKey) (KeyRotationV2Journal, error) {
 	genesisID, err := keyIDV2(genesisKey)
@@ -55,7 +55,7 @@ func NewKeyRotationV2Journal(authorityID string, recoveryEpoch int64, role strin
 	}}, nil
 }
 
-// AcceptKeyRotationStatementV2 implements AcceptRotation from SPEC-v2 §5.4.
+// AcceptKeyRotationStatementV2 implements AcceptRotation from SPEC-v2 §5.5.
 // It returns Appended with the advanced journal, Replay with the unchanged
 // journal for a statement whose body digest equals the accepted digest at its
 // sequence (new signature bytes over that body are the same statement), or an

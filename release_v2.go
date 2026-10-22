@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-// Committed versus released (SPEC-v2 §6.9, §7.9; amendment A1).
+// Committed versus released (SPEC-v2 §6.9, §7.9).
 //
 // VerifyProofBundleV2 commits a terminal Protocol result and returns an
 // opaque CommittedV2Outcome holding the handoff tuple {claim_id,
@@ -187,8 +187,7 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if ctx == nil || committed == nil || committed.claimID == "" || len(committed.receiptBody) == 0 || config.ClaimStore == nil || config.Checkpoint == nil {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
-	verifierID, err := keyIDV2(config.VerifierPublicKey)
-	if err != nil || verifierID != committed.verifierID || len(config.LogID) != 32 || !lowerHexString(config.LogID) {
+	if len(config.LogID) != 32 || !lowerHexString(config.LogID) {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
 	// 1. Committed state.
@@ -199,11 +198,13 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if record.ReceiptAbandoned {
 		return releaseResultV2(V2ReleaseWithheld, "receipt_abandoned")
 	}
+	verifierID, err := keyIDV2(config.VerifierPublicKey)
 	if !record.Terminal || record.ReceiptOutboxDigest != committed.ReceiptBodyDigest() ||
-		record.ChallengeExpiresAt != committed.challengeExpiresAt || record.AllowHorizon != committed.allowHorizon {
+		record.ChallengeExpiresAt != committed.challengeExpiresAt || record.AllowHorizon != committed.allowHorizon ||
+		err != nil || verifierID != committed.verifierID {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
-	// 3. Receipt.
+	// 2. Receipt.
 	if len(signedReceipt) == 0 {
 		return releaseResultV2(V2ReleasePending, "receipt_not_appended")
 	}
@@ -211,7 +212,7 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if err != nil || receipt.VerifierID != committed.verifierID {
 		return releaseResultV2(V2ReleaseRejected, "receipt_invalid")
 	}
-	// 4. Body binding.
+	// 3. Body binding.
 	body, err := VerificationReceiptV2Body(receipt)
 	if err != nil || !bytes.Equal(body, committed.receiptBody) {
 		return releaseResultV2(V2ReleaseRejected, "receipt_body_mismatch")
@@ -222,7 +223,7 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	}
 	var ack V2CheckpointAcknowledgement
 	if record.Release != nil {
-		// 2. Prior release: the same receipt entry, then the clock and deadlines.
+		// 4. Prior release: the same receipt entry, then the clock and deadlines.
 		if record.Release.ClaimID != committed.claimID || !bytes.Equal(record.Release.EntryHash, entryHash) {
 			return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 		}

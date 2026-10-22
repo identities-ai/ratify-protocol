@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Protocol v2 closed constraint registry (SPEC-v2 §5.1).
+// Protocol v2 closed constraint registry (SPEC-v2 §5.2).
 //
 // v2 defines its own constraint schemas. It does not import v1 shapes by
 // reference, and no v2 constraint field carries a floating-point number.

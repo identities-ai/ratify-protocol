@@ -17,7 +17,7 @@ import (
 //
 // There is no caller-supplied evaluation time: every time-sensitive check
 // uses the claim store's authoritative claim time sealed in ClaimToken
-// (SPEC-v2 §6.2, A5). FutureSkewSeconds must equal the value sealed at claim.
+// (SPEC-v2 §2.5, §6.2). FutureSkewSeconds must equal the value sealed at claim.
 type V2LocalAuthorizationOptions struct {
 	FutureSkewSeconds int64
 	RequiredScope     string
@@ -288,7 +288,7 @@ func resolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, aggregate fu
 		assessment.Detail = "one or more delegation certificate statuses are stale"
 	case "current":
 		if assessment.LocalPolicyFailure != nil && combinableWithAudienceV2(assessment.LocalPolicyFailure, assessment.Deferred) {
-			// SPEC-v2 §5.1/§6.2: a proven audience violation on another link
+			// SPEC-v2 §5.2, §6.4: a proven audience violation on another link
 			// outranks a local unknown or unverifiable constraint, so the
 			// audience stage still runs. Rate reservation never follows.
 			audienceOnly := assessment.Deferred[:0]
@@ -330,7 +330,7 @@ func resolveClaimProofBundleV2AfterStatus(token *V2EvaluationToken, aggregate fu
 // complete membership results only after every certificate status is current.
 // The application adapter, not Protocol, authenticates these results.
 // Membership freshness is evaluated at the authoritative claim time sealed in
-// the token, never at a caller-supplied time (SPEC-v2 A5).
+// the token, never at a caller-supplied time (SPEC-v2 §7.2).
 func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, memberships []V2AudienceMembership) (V2LocalAuthorizationAssessment, error) {
 	if token == nil || token.state == nil {
 		return V2LocalAuthorizationAssessment{}, fmt.Errorf("v2 claim evaluator capability is required")
@@ -357,7 +357,7 @@ func ResolveClaimProofBundleV2AfterAudience(token *V2EvaluationToken, membership
 	assessment.AudienceFreshUntil = result.FreshUntil
 	if local := assessment.LocalPolicyFailure; local != nil {
 		// Aggregate independently of link order: denied, then unknown, then
-		// unverifiable (SPEC-v2 §5.1).
+		// unverifiable (SPEC-v2 §5.2).
 		if result.Status == "passed" || constraintPrecedenceV2(local.Status) > constraintPrecedenceV2(result.Status) {
 			assessment.Status, assessment.Reason, assessment.Detail = local.Status, local.Reason, local.Detail
 		} else {

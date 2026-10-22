@@ -34,7 +34,7 @@ func TestEvaluateReceiverAudienceV2IntersectsLinksAndUsesMinimumAge(t *testing.T
 	digestA := "sha384:" + strings.Repeat("a", 96)
 	digestB := "sha384:" + strings.Repeat("b", 96)
 	memberships := []V2AudienceMembership{
-		// Exclusive age deadline (SPEC-v2 A5): issued 71 with minimum age 30 is
+		// Exclusive age deadline (SPEC-v2 §2.5): issued 71 with minimum age 30 is
 		// current at 100 (100 < 101); issued 70 reaches the deadline exactly.
 		{ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-a"}, IssuedAt: 71, ExpiresAt: 200, EvidenceDigest: digestA},
 		{DelegationIndex: 1, ReceiverID: "receiver-1", TrustDomainIDs: []string{"domain-b"}, IssuedAt: 80, ExpiresAt: 200, EvidenceDigest: digestB},

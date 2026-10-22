@@ -22,7 +22,7 @@ const (
 
 var verifyPolicyFields = []string{"verifier_id", "workspace_id", "agent_id", "session_id", "invocation_id", "request_hash"}
 
-// lp is SPEC-v2 §2.2 length prefixing.
+// lp is SPEC-v2 §2.4 length prefixing.
 func lp(b []byte) []byte {
 	return append(binary.BigEndian.AppendUint64(nil, uint64(len(b))), b...)
 }
@@ -131,7 +131,7 @@ func (g *gen) statusFixtures() map[string]statusFixture {
 	return out
 }
 
-// EvidenceJSON is the language-neutral StatusEvidenceEntry of SPEC-v2 §5.6.
+// EvidenceJSON is the language-neutral StatusEvidenceEntry of SPEC-v2 §5.8.
 type EvidenceJSON struct {
 	IssuerID       string `json:"issuer_id"`
 	StatusKeyID    string `json:"status_key_id"`

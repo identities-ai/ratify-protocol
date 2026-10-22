@@ -132,7 +132,7 @@ func (g *gen) certNegatives(n *negBuilder) {
 	m("audience_domains_without_age", "receiver_audience names domains without max_membership_age_seconds", "malformed", func(o map[string]any) {
 		o["constraints"] = []any{map[string]any{"type": "ratify.receiver_audience", "params": map[string]any{"exact_receiver_ids": []any{}, "trust_domain_ids": []any{"d"}}}}
 	})
-	// Closed v2 constraint registry (SPEC-v2 §5.1): explicit schemas, no
+	// Closed v2 constraint registry (SPEC-v2 §5.2): explicit schemas, no
 	// floating point, v1-only member names are malformed.
 	constraint := func(name, mutation string, c map[string]any) {
 		m(name, mutation, "malformed", func(o map[string]any) { o["constraints"] = []any{c} })

@@ -189,7 +189,7 @@ func TestRevocationStatusReducerSnapshotPushSameSequenceIsOrderIndependent(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Observations are kept in canonical snapshot order (SPEC-v2 A3), so the
+	// Observations are kept in canonical snapshot order (SPEC-v2 §6.6), so the
 	// push is located by identity rather than by position.
 	pushAccepted := false
 	for _, observation := range state.Observations {

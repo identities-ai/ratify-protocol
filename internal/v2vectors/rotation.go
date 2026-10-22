@@ -35,7 +35,7 @@ type rotationFile struct {
 func (g *gen) rotationFile() any {
 	f := rotationFile{
 		Version:     2,
-		Description: "Key-rotation continuity sequences (SPEC-v2 §5.4 AcceptRotation). Initial state: sequence 0, 48 zero head bytes, current key = genesis_key, used key IDs = {genesis_key}, not frozen. After every step the harness asserts sequence, current key, recovery epoch, and frozen flag.",
+		Description: "Key-rotation continuity sequences (SPEC-v2 §5.5 AcceptRotation). Initial state: sequence 0, 48 zero head bytes, current key = genesis_key, used key IDs = {genesis_key}, not frozen. After every step the harness asserts sequence, current key, recovery epoch, and frozen flag.",
 		Operations: map[string]string{
 			"accept":  "AcceptRotation(statement, state, now): appended advances the head; replay is an accepted body digest at its sequence (new signature bytes over that body are the same statement); rotation_fork freezes the authority and the frozen state is persisted; any other error leaves state unchanged",
 			"recover": "root-authorized recovery from the caller's control plane: increment recovery_epoch, anchor a new genesis to an unused key, retain the full used-key history, clear frozen",

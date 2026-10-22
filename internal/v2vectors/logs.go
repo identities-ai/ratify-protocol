@@ -28,7 +28,7 @@ type logFile struct {
 func (g *gen) logFile() any {
 	f := logFile{
 		Version:     2,
-		Description: "Witness-log and verification-receipt-log sequences (SPEC-v2 §5.5, §5.6). The harness keeps caller-authenticated head state starting at the genesis head for initial_log_id (sequence 0, 48 zero bytes, no accepted digests). Each verify step checks the entry with the step key against the current head.",
+		Description: "Witness-log and verification-receipt-log sequences (SPEC-v2 §5.6, §5.8). The harness keeps caller-authenticated head state starting at the genesis head for initial_log_id (sequence 0, 48 zero bytes, no accepted digests). Each verify step checks the entry with the step key against the current head.",
 		HeadRules: map[string]string{
 			"appended": "advance: sequence+1, head hash = StatementBodyDigest(code, entry body), record the digest at that sequence",
 			"replay":   "exact accepted body digest at an accepted sequence; head unchanged",

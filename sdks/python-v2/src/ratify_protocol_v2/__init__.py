@@ -37,6 +37,7 @@ from .signing_v2 import (
     SignerModeV2,
     SignerV2,
     SignRequestV2,
+    generate_keypair_v2,
     keypair_from_seeds_v2,
     key_id_v2,
     key_id_v2_classified,
@@ -51,7 +52,7 @@ NATIVE_AVAILABLE = _native.AVAILABLE
 __all__ = [
     "__version__", "NATIVE_AVAILABLE",
     "HybridPrivateKey", "HybridPublicKey", "HybridSignature",
-    "keypair_from_seeds_v2", "key_id_v2", "key_id_v2_classified",
+    "generate_keypair_v2", "keypair_from_seeds_v2", "key_id_v2", "key_id_v2_classified",
     "SignerModeV2", "SignerV2", "SignRequestV2",
     "Context", "background", "with_cancel", "with_timeout",
     "ALL_ERROR_CLASSES", "V2Error", "V2ErrorClass", "error_class_of",

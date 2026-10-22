@@ -181,3 +181,16 @@ def test_import_accepts_matching_native_version(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "True"
+
+
+@requires_native
+def test_package_root_generates_random_keypairs():
+    """The package root offers random key generation next to the seeded form,
+    as the Go, TypeScript, Rust, and C v2 surfaces do, so a caller never
+    reaches into a submodule or reuses a fixed seed to get a key."""
+    a_pub, a_priv = ratify_protocol_v2.generate_keypair_v2()
+    b_pub, _ = ratify_protocol_v2.generate_keypair_v2()
+    assert "generate_keypair_v2" in ratify_protocol_v2.__all__
+    assert len(a_pub.ed25519) == 32 and len(a_pub.ml_dsa_65) == 1952
+    assert derive_key_id_v2(a_pub) != derive_key_id_v2(b_pub)
+    assert keypair_from_seeds_v2(a_priv.ed25519, bytes(32))[0].ed25519 == a_pub.ed25519

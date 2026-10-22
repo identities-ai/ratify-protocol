@@ -1,8 +1,9 @@
-import { Point, getPublicKeyAsync as getEd25519PublicKeyAsync, signAsync as signEd25519Async, verifyAsync as verifyEd25519Async } from "@noble/ed25519";
+import { Point, getPublicKeyAsync as getEd25519PublicKeyAsync, verifyAsync as verifyEd25519Async } from "@noble/ed25519";
 import { sha256, sha384 } from "@noble/hashes/sha2";
 import { shake256 } from "@noble/hashes/sha3";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
+import { v2Errorf } from "./errors_v2.js";
 import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 const KEY_ID_V2_DOMAIN = new TextEncoder().encode("ratify-key-id-v2\0");
@@ -170,21 +171,27 @@ export interface V2SignOptions {
   deterministic?: boolean;
 }
 
-/** Signs one typed v2 statement with both components over the same M. */
-export async function signV2Statement(
-  code: number,
-  signable: Uint8Array,
-  pair: HybridKeyPairV2,
-  opts: V2SignOptions = {},
-): Promise<HybridSignature> {
-  await validateHybridKeyPairV2(pair);
-  const message = v2SigningMessage(code, signable);
-  const context = v2MLDSAContext(code);
-  const ed25519 = await signEd25519Async(message, pair.privateKey.ed25519);
-  const ml_dsa_65 = ml_dsa65.sign(message, pair.privateKey.ml_dsa_65, opts.deterministic
-    ? { context, extraEntropy: false }
-    : { context });
-  return { ed25519, ml_dsa_65 };
+/** Go keyIDV2: an unclassified error on a wrong component length. */
+export function keyIDV2(pub: HybridPublicKey): string {
+  if (!pub || !(pub.ed25519 instanceof Uint8Array) || pub.ed25519.length !== 32) {
+    throw new Error(`Ed25519 public key wrong length: ${pub?.ed25519?.length ?? 0}`);
+  }
+  if (!(pub.ml_dsa_65 instanceof Uint8Array) || pub.ml_dsa_65.length !== 1952) {
+    throw new Error(`ML-DSA-65 public key wrong length: ${pub.ml_dsa_65?.length ?? 0}`);
+  }
+  return deriveKeyIDV2(pub);
+}
+
+/**
+ * Classified v2 verification (Go verifyV2Statement): an unregistered code is
+ * unsupported_object_type and every other failure is invalid_signature.
+ */
+export async function verifyV2Statement(code: number, signable: Uint8Array, sig: HybridSignature, pub: HybridPublicKey): Promise<void> {
+  if (!validV2ObjectType(code)) {
+    throw v2Errorf("unsupported_object_type", `unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
+  }
+  const reason = await verifyV2StatementReason(code, signable, sig, pub);
+  if (reason !== null) throw v2Errorf("invalid_signature", reason);
 }
 
 /**

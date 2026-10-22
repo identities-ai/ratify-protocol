@@ -91,7 +91,7 @@ export function resourcePathMatches(
 
 // Reports whether two valid prefixes are comparable under the prefix relation
 // (one at or below the other). An absent prefix ("") orders as "/".
-function resourcePathsNested(a: string, b: string): boolean {
+export function resourcePathsNested(a: string, b: string): boolean {
   const aa = a === "" ? "/" : a;
   const bb = b === "" ? "/" : b;
   return resourcePathMatches(aa, bb) || resourcePathMatches(bb, aa);

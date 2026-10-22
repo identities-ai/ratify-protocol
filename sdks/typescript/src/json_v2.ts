@@ -299,7 +299,11 @@ class Parser {
       while (digit(b[this.i])) this.i++;
     }
     const raw = String.fromCharCode(...b.subarray(s, this.i));
-    // Only a value equal to negative zero is rejected; -0.5 is a valid float.
+    // Protocol v2 carries no floating point anywhere on the wire: every
+    // number token must be an integer spelling (1.0 and 1e3 included).
+    if (this.opts.strictV2 && /[.eE]/.test(raw)) {
+      throw new Error(`wire: number ${raw} is not an integer; v2 forbids floating point`);
+    }
     if (this.opts.strictV2 && raw.startsWith("-") && Number(raw) === 0) {
       throw new Error("wire: negative zero is not a canonical number");
     }

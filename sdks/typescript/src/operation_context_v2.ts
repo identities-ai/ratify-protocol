@@ -2,7 +2,7 @@
 // These functions intentionally use v2 domain tags and leave the v1 API unchanged.
 
 import { sha256 } from "@noble/hashes/sha2";
-import { vocabulary } from "./scope.js";
+import { validateRequiredScopeV2 } from "./scope_v2.js";
 
 const OPERATION_CONTEXT_V2_DOMAIN_TAG = "ratify/operation-context/v2";
 const SESSION_CONTEXT_V2_DOMAIN_TAG = "ratify/session-context/v2";
@@ -62,8 +62,8 @@ function concat(chunks: Uint8Array[]): Uint8Array {
 }
 
 export function operationContextV2Bytes(ctx: OperationContextV2): Uint8Array {
-  if (!vocabulary().includes(ctx.required_scope ?? "")) {
-    throw new Error("required scope must be one registered canonical scope");
+  if (validateRequiredScopeV2(ctx.required_scope ?? "") !== null) {
+    throw new Error("required scope must be one canonical scope or one exact custom: scope");
   }
   const digest = ctx.payload_digest ?? new Uint8Array(0);
   if (digest.length !== 0 && digest.length !== 32) {

@@ -8,7 +8,8 @@ import { sha384 } from "@noble/hashes/sha2";
 
 import { V2_OBJECT_TYPE } from "./crypto_v2.js";
 import { v2Classify } from "./errors_v2.js";
-import { MAX_SAFE_INTEGER_V2, bytesEqual, compareBytes, compareStrings, goMarshal, hexOf, isWellFormedString } from "./json_v2.js";
+import { V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_STATUS_LIFETIME_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
+import { MAX_SAFE_INTEGER_V2, bytesEqual, canonicalJSONV2, compareBytes, compareStrings, concatBytes, hexOf, isWellFormedString, utf8 } from "./json_v2.js";
 import {
   cloneRevocationListV2,
   keyIDV2,
@@ -103,29 +104,32 @@ export function containsAllStringSetV2(have: readonly string[], want: readonly s
   return want.every((w) => set.has(w));
 }
 
-function equalStringSetsV2(a: readonly string[], b: readonly string[]): boolean {
+export function equalStringSetsV2(a: readonly string[], b: readonly string[]): boolean {
   return sortedUniqueStringsV2(a).length === sortedUniqueStringsV2(b).length && containsAllStringSetV2(a, b);
 }
 
 const containsNovelRevocationV2 = (values: readonly string[], accepted: readonly string[]) => !containsAllStringSetV2(accepted, values);
 
-function revokedCertIDsV2(refs: readonly RevokedCertV2[] | null): string[] {
+export function revokedCertIDsV2(refs: readonly RevokedCertV2[] | null): string[] {
   return (refs ?? []).map((r) => r.cert_id);
 }
 
-function revokedSetDigestV2(revoked: readonly RevokedCertV2[] | null): Uint8Array {
-  // Go json.Marshal([]string): HTML escaping on.
-  return sha384(goMarshal(revokedCertIDsV2(revoked)));
+/**
+ * RevokedSetDigest (SPEC-v2 §4): SHA-384("ratify-protocol-revoked-set-v2" ||
+ * 0x00 || RatifyCanonicalJSON(sorted, deduplicated cert_ids)).
+ */
+export function revokedSetDigestV2(revoked: readonly RevokedCertV2[] | null): Uint8Array {
+  return sha384(concatBytes(utf8("ratify-protocol-revoked-set-v2\0"), canonicalJSONV2(sortedUniqueStringsV2(revokedCertIDsV2(revoked)))));
 }
 
-function cloneObservation(o: RevocationObservationV2): RevocationObservationV2 {
+export function cloneObservation(o: RevocationObservationV2): RevocationObservationV2 {
   return {
     ...o, evidenceDigest: Uint8Array.from(o.evidenceDigest), bodyDigest: Uint8Array.from(o.bodyDigest),
     revokedSetDigest: Uint8Array.from(o.revokedSetDigest), revokedCertIDs: [...o.revokedCertIDs],
   };
 }
 
-function cloneState(state: RevocationStatusStateV2): RevocationStatusStateV2 {
+export function cloneRevocationStatusStateV2(state: RevocationStatusStateV2): RevocationStatusStateV2 {
   return {
     ...state,
     retiredStatusKeyIDs: [...state.retiredStatusKeyIDs],
@@ -142,20 +146,25 @@ const timestampBeyondSkewV2 = (timestamp: number, now: number, skew: number) => 
 function revocationListFreshV2(list: RevocationListV2, policy: RevocationStatusPolicyV2, now: number): boolean {
   if (policy.maxListLifetimeSeconds === 0 || policy.maxStatusAgeSeconds === 0 ||
       list.next_update - list.updated_at > policy.maxListLifetimeSeconds ||
-      timestampBeyondSkewV2(list.updated_at, now, policy.clockSkewSeconds) || now > list.next_update) {
+      timestampBeyondSkewV2(list.updated_at, now, policy.clockSkewSeconds) || now >= list.next_update) {
+    // Exclusive deadline: a list is fresh only while now < next_update.
     return false;
   }
-  return now <= list.updated_at || now - list.updated_at <= policy.maxStatusAgeSeconds;
+  // Exclusive age deadline: fresh only while now < updated_at + max_status_age.
+  return now < list.updated_at || now - list.updated_at < policy.maxStatusAgeSeconds;
 }
 
-function validateRevocationStatusPolicyV2(p: RevocationStatusPolicyV2): void {
-  const bad = (n: number) => !Number.isInteger(n) || n < 0 || n > MAX_SAFE;
-  if (!p || bad(p.maxListLifetimeSeconds) || bad(p.maxStatusAgeSeconds) || bad(p.clockSkewSeconds)) {
+export function validateRevocationStatusPolicyV2(p: RevocationStatusPolicyV2): void {
+  // Zero lifetime or age means "not configured" (status is then never
+  // current); configured values are bounded by SPEC-v2 §2.5.
+  const bad = (n: number, max: number) => !Number.isInteger(n) || n < 0 || n > max;
+  if (!p || bad(p.maxListLifetimeSeconds, V2_MAX_STATUS_LIFETIME_SECONDS) || bad(p.maxStatusAgeSeconds, V2_MAX_STATUS_LIFETIME_SECONDS) ||
+      bad(p.clockSkewSeconds, V2_MAX_FUTURE_SKEW_SECONDS)) {
     throw new Error("revocation status policy contains invalid time bounds");
   }
 }
 
-function validateStatusStateBindingV2(state: RevocationStatusStateV2, issuerID: string, epoch: number): void {
+export function validateStatusStateBindingV2(state: RevocationStatusStateV2, issuerID: string, epoch: number): void {
   if (state.issuerID !== "" && state.issuerID !== issuerID) throw new Error("revocation status state belongs to a different issuer");
   if (state.issuerID !== "" && state.statusKeyEpoch !== epoch) throw new Error("revocation status state belongs to a different status-key epoch");
   if (state.floor < 0 || state.maxObservedSequence < 0 || state.forkSequence < 0) throw new Error("revocation status state has negative sequence state");
@@ -181,7 +190,7 @@ function validateStatusStateBindingV2(state: RevocationStatusStateV2, issuerID: 
   for (const k of state.retiredStatusKeyIDs) if (!validV2ID(k)) throw new Error("revocation status state has an invalid retired status-key ID");
 }
 
-function hasAcceptedStatusObservationV2(obs: readonly RevocationObservationV2[], epoch: number, objectType: number, sequence: number, digest: Uint8Array): boolean {
+export function hasAcceptedStatusObservationV2(obs: readonly RevocationObservationV2[], epoch: number, objectType: number, sequence: number, digest: Uint8Array): boolean {
   return obs.some((o) => o.statusKeyEpoch === epoch && o.objectType === objectType && o.sequence === sequence &&
     bytesEqual(o.evidenceDigest, digest) && o.accepted && !o.fork && !o.futureDated);
 }
@@ -236,7 +245,7 @@ export function validateAcceptedStatusStateV2(state: RevocationStatusStateV2): v
   if (!equalStringSetsV2(accepted, state.acceptedCertIDs)) throw new Error("accepted certificate set does not follow the accepted snapshot and pushes");
 }
 
-function mustRetainStatusObservationV2(state: RevocationStatusStateV2, o: RevocationObservationV2): boolean {
+export function mustRetainStatusObservationV2(state: RevocationStatusStateV2, o: RevocationObservationV2): boolean {
   if (o.statusKeyEpoch !== state.statusKeyEpoch) return false;
   if (state.acceptedSnapshot !== null && o.objectType === PUSH && o.accepted && o.sequence > state.acceptedSnapshot.sequence && o.sequence <= state.floor) {
     return true;
@@ -244,7 +253,7 @@ function mustRetainStatusObservationV2(state: RevocationStatusStateV2, o: Revoca
   return state.reconciliationRequired && (o.sequence > state.floor || o.fork || o.gap || o.futureDated);
 }
 
-function semanticKey(o: RevocationObservationV2): string {
+export function securityObservationSemanticKeyV2(o: RevocationObservationV2): string {
   const digest = o.objectType === LIST ? o.revokedSetDigest : o.bodyDigest;
   return `${o.statusKeyEpoch}:${o.objectType}:${o.sequence}:${hexOf(digest)}:future=${o.futureDated}:fork=${o.fork}`;
 }
@@ -276,7 +285,7 @@ export function compactRevocationStatusObservationsV2(state: RevocationStatusSta
       }
     }
     if (!fullRecord) o.revokedCertIDs = newWitnesses;
-    const key = semanticKey(o);
+    const key = securityObservationSemanticKeyV2(o);
     const index = semanticSeen.get(key);
     if (index !== undefined) {
       const prior = retained[index]!;
@@ -305,7 +314,19 @@ export function compactRevocationStatusObservationsV2(state: RevocationStatusSta
       }
     }
   }
-  return { ...state, observations: retained };
+  return canonicalizeRevocationStatusStateV2({ ...state, observations: retained });
+}
+
+/** Go canonicalizeRevocationStatusStateV2: every set in snapshot order. */
+export function canonicalizeRevocationStatusStateV2(state: RevocationStatusStateV2): RevocationStatusStateV2 {
+  return {
+    ...state,
+    retiredStatusKeyIDs: sortedUniqueStringsV2(state.retiredStatusKeyIDs),
+    acceptedCertIDs: sortedUniqueStringsV2(state.acceptedCertIDs),
+    precedingAcceptedCertIDs: sortedUniqueStringsV2(state.precedingAcceptedCertIDs),
+    denyUnionCertIDs: sortedUniqueStringsV2(state.denyUnionCertIDs),
+    observations: state.observations.map((o) => ({ ...o, revokedCertIDs: sortedUniqueStringsV2(o.revokedCertIDs) })),
+  };
 }
 
 function initializeState(state: RevocationStatusStateV2, issuerID: string, epoch: number): void {
@@ -411,7 +432,7 @@ function heartbeatPreferredV2(incoming: RevocationListV2, incomingDigest: Uint8A
 
 function checkApplyInputs(policy: RevocationStatusPolicyV2, now: number, epoch: number, kind: string): void {
   validateRevocationStatusPolicyV2(policy);
-  if (!Number.isInteger(now) || now < 0 || now > MAX_SAFE || !Number.isInteger(epoch) || epoch === 0 || epoch < 0 || epoch > MAX_SAFE) {
+  if (!validV2Timestamp(now) || !Number.isInteger(epoch) || epoch === 0 || epoch < 0 || epoch > MAX_SAFE) {
     throw new Error(`revocation ${kind} application has invalid time or status-key epoch`);
   }
 }
@@ -447,7 +468,7 @@ export function applyRevocationListV2(
     const digest = statusEvidenceDigestV2(LIST, list);
     const bodyDigest = sha384(revocationListV2SignBytes(list));
     const setDigest = revokedSetDigestV2(list.revoked);
-    const next = cloneState(state);
+    const next = cloneRevocationStatusStateV2(state);
     initializeState(next, boundIssuerID, statusKeyEpoch);
     const statusKeyID = keyIDV2(statusKey);
     if (next.statusKeyID !== "" && next.statusKeyID !== statusKeyID) {
@@ -600,7 +621,7 @@ export function applyRevocationPushV2(
     const digest = statusEvidenceDigestV2(PUSH, push);
     const bodyDigest = sha384(revocationPushV2SignBytes(push));
     const setDigest = revokedSetDigestV2(push.revoked);
-    const next = cloneState(state);
+    const next = cloneRevocationStatusStateV2(state);
     initializeState(next, boundIssuerID, statusKeyEpoch);
     const statusKeyID = keyIDV2(statusKey);
     if (next.statusKeyID !== "" && next.statusKeyID !== statusKeyID) {
@@ -691,7 +712,7 @@ export function transitionRevocationStatusEpochV2(state: RevocationStatusStateV2
     if (statusKeyID === state.statusKeyID || state.retiredStatusKeyIDs.includes(statusKeyID)) {
       throw new Error("status-key epoch transition cannot reuse a current or retired status key");
     }
-    const next = cloneState(state);
+    const next = cloneRevocationStatusStateV2(state);
     next.retiredStatusKeyIDs = sortedUniqueStringsV2([...next.retiredStatusKeyIDs, state.statusKeyID]);
     next.statusKeyEpoch = nextEpoch;
     next.statusKeyID = statusKeyID;
@@ -786,7 +807,7 @@ export async function revocationStatusForCertV2(
   validateRevocationStatusPolicyV2(policy);
   validateStatusStateBindingV2(state, issuerID, statusKeyEpoch);
   validateAcceptedStatusStateV2(state);
-  if (certID === "" || !Number.isInteger(now) || now < 0 || now > MAX_SAFE) throw new Error("status query has invalid certificate ID or time");
+  if (certID === "" || !validV2Timestamp(now)) throw new Error("status query has invalid certificate ID or time");
   const statusKeyID = keyIDV2(statusKey);
   if (state.issuerID !== issuerID || state.statusKeyEpoch !== statusKeyEpoch || state.statusKeyID !== statusKeyID) {
     throw new Error("status query does not match the configured issuer status-key binding");

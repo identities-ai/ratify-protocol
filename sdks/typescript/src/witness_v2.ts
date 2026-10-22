@@ -1,7 +1,10 @@
 // Protocol v2 witness entry (0x0006) and caller-head log verification.
 // Port of witness_v2.go.
 
-import { V2_OBJECT_TYPE, signV2Statement, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
+import { validV2Timestamp } from "./clock_bounds_v2.js";
+import { MAX_WITNESS_ENTRY_BYTES_V2, MAX_WITNESS_ENTRY_DATA_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
+import { newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
   ErrWitnessLogFork,
   ErrWitnessLogFrozen,
@@ -34,7 +37,7 @@ import {
   validateHybridSignatureV2,
   verifyV2Statement,
 } from "./protocol_v2_wire.js";
-import { MAX_PROOF_BUNDLE_BYTES, type HybridPublicKey, type HybridSignature } from "./types.js";
+import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 const MAX_SAFE = MAX_SAFE_INTEGER_V2;
 const ZERO48 = new Uint8Array(48);
@@ -71,15 +74,16 @@ export function validateWitnessEntryV2(e: WitnessEntryV2, signature: boolean): v
   if (typeof e.log_id !== "string" || e.log_id.length !== 32 || !lowerHexString(e.log_id)) {
     throw new Error("wire v2: log_id must be 32 lowercase hexadecimal characters");
   }
-  if (!(e.sequence > 0) || e.sequence > MAX_SAFE || !Number.isInteger(e.sequence) || !Number.isInteger(e.timestamp) ||
-      e.timestamp < -MAX_SAFE || e.timestamp > MAX_SAFE) {
+  if (!(e.sequence > 0) || e.sequence > MAX_SAFE || !Number.isInteger(e.sequence) || !validV2Timestamp(e.timestamp)) {
     throw new Error("wire v2: sequence and timestamp must be safe integers");
   }
   if (!(e.prev_hash instanceof Uint8Array) || e.prev_hash.length !== 48) throw new Error("wire v2: prev_hash must be 48 bytes");
   if (e.entry_data === null || !(e.entry_data instanceof Uint8Array)) {
     throw new Error("wire v2: entry_data must be a base64 byte string, not null");
   }
-  if (e.entry_data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: entry_data exceeds the witness wire size limit");
+  if (e.entry_data.length > MAX_WITNESS_ENTRY_DATA_BYTES_V2) {
+    throw new Error(`wire v2: entry_data exceeds MAX_WITNESS_ENTRY_DATA_BYTES_V2 (${MAX_WITNESS_ENTRY_DATA_BYTES_V2} bytes)`);
+  }
   if (e.sequence === 1 && !bytesEqual(e.prev_hash, ZERO48)) throw new Error("wire v2: genesis witness entry must use a zero prev_hash");
   if (e.sequence > 1 && bytesEqual(e.prev_hash, ZERO48)) throw new Error("wire v2: non-genesis witness entry must link to a prior entry");
   if (!validV2ID(e.witness_id)) throw new Error("wire v2: witness_id must be a 64-character lowercase hexadecimal v2 key ID");
@@ -139,13 +143,13 @@ export function encodeWitnessEntryV2(e: WitnessEntryV2): Uint8Array {
   const o = witnessSignableObject(e);
   o.signature = keyWire(e.signature);
   const wire = canonicalJSONV2(o);
-  if (wire.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: witness entry exceeds the wire size limit");
+  checkV2WireSize(wire, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
   return wire;
 }
 
 export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
   return classified("malformed", () => {
-    if (data.length > MAX_PROOF_BUNDLE_BYTES) throw new Error("wire v2: witness entry exceeds the wire size limit");
+    checkV2WireSize(data, "witness entry", "MAX_WITNESS_ENTRY_BYTES_V2", MAX_WITNESS_ENTRY_BYTES_V2);
     const root = checkWireJSONV2(data);
     requireV2Fields(root, WITNESS_ENTRY_V2_FIELDS);
     const e = decodeWitnessStruct(root, WITNESS_ENTRY_V2_FIELDS);
@@ -164,8 +168,15 @@ export function decodeWitnessEntryV2(data: Uint8Array): WitnessEntryV2 {
 export async function signWitnessEntryV2(e: WitnessEntryV2, witness: HybridKeyPairV2, opts: V2SignOptions = {}): Promise<WitnessEntryV2> {
   validateWitnessEntryV2(e, false);
   await validateHybridKeyPairV2(witness);
-  if (keyIDV2(witness.publicKey) !== e.witness_id) throw new Error("witness_id does not match signing key");
-  const signature = await signV2Statement(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), witness, opts);
+  return signWitnessEntryV2WithSigner(e, await newLocalSignerV2(witness, { deterministic: opts.deterministic }));
+}
+
+/** signWitnessEntryV2 through a signer whose key ID must equal witness_id. */
+export async function signWitnessEntryV2WithSigner(e: WitnessEntryV2, signer: SignerV2, opts: SignOptionsV2 = {}): Promise<WitnessEntryV2> {
+  validateWitnessEntryV2(e, false);
+  const witnessPublic = await signerPublicKeyV2(signer);
+  if (keyIDV2(witnessPublic) !== e.witness_id) throw new Error("witness_id does not match signing key");
+  const signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.witnessEntry, witnessEntryV2SignBytes(e), signer, witnessPublic, opts);
   const result: WitnessEntryV2 = {
     ...e, prev_hash: Uint8Array.from(e.prev_hash), entry_data: Uint8Array.from(e.entry_data ?? []), signature,
   };

@@ -204,7 +204,7 @@ def _calls():
         ("protocol_claim_id_from_digest_v2", C.MALFORMED,
          lambda: cc.protocol_claim_id_from_digest_v2("ns", 0, b"short")),
         ("decode_payload_digest", C.MALFORMED, lambda: oc.decode_payload_digest("!")),
-        ("operation_context_v2_bytes", None, lambda: oc.operation_context_v2_bytes("")),
+        ("operation_context_v2_bytes", C.INVALID_REQUIRED_SCOPE, lambda: oc.operation_context_v2_bytes("")),
         ("session_context_v2_bytes", C.CONFIGURATION_INVALID,
          lambda: oc.session_context_v2_bytes("", "", "", "", "", b"")),
         ("build_v2_rate_reservation_batch", C.MALFORMED,
@@ -263,7 +263,7 @@ def _calls():
          lambda: vr.check_verification_receipt_v2_bundle_binding(vr.VerificationReceiptV2(), _empty_bundle())),
 
         # Key rotation journal.
-        ("new_key_rotation_v2_journal", None, lambda: kr.new_key_rotation_v2_journal("", -1, "", BAD_KEY)),
+        ("new_key_rotation_v2_journal", C.CONFIGURATION_INVALID, lambda: kr.new_key_rotation_v2_journal("", -1, "", BAD_KEY)),
         ("accept_key_rotation_statement_v2", None,
          lambda: kr.accept_key_rotation_statement_v2(
              _empty_rotation(),

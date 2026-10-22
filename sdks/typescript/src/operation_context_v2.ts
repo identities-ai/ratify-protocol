@@ -3,7 +3,7 @@
 
 import { sha256 } from "@noble/hashes/sha2";
 import { validateRequiredScopeV2 } from "./scope_v2.js";
-import { classified } from "./errors_v2.js";
+import { classified, v2Errorf } from "./errors_v2.js";
 
 const OPERATION_CONTEXT_V2_DOMAIN_TAG = "ratify/operation-context/v2";
 const SESSION_CONTEXT_V2_DOMAIN_TAG = "ratify/session-context/v2";
@@ -65,7 +65,7 @@ function concat(chunks: Uint8Array[]): Uint8Array {
 export function operationContextV2Bytes(ctx: OperationContextV2): Uint8Array {
   return classified("configuration_invalid", () => {
     if (validateRequiredScopeV2(ctx.required_scope ?? "") !== null) {
-      throw new Error("required scope must be one canonical scope or one exact custom: scope");
+      throw v2Errorf("invalid_required_scope", "required scope must be one canonical scope or one exact custom: scope");
     }
     const digest = ctx.payload_digest ?? new Uint8Array(0);
     if (digest.length !== 0 && digest.length !== 32) {

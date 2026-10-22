@@ -4,7 +4,7 @@ from __future__ import annotations
 from hashlib import sha256
 import re
 
-from .errors_v2 import V2ErrorClass, classified
+from .errors_v2 import V2ErrorClass, V2ValueError, classified
 from .scope import validate_required_scope_v2
 
 _OPERATION_TAG = b"ratify/operation-context/v2"
@@ -40,7 +40,10 @@ def operation_context_v2_bytes(
     payload_digest: bytes | None = None,
 ) -> bytes:
     """Build the length-prefixed operation-context preimage from SPEC-v2 §2.2."""
-    validate_required_scope_v2(required_scope)
+    try:
+        validate_required_scope_v2(required_scope)
+    except ValueError as exc:
+        raise V2ValueError(V2ErrorClass.INVALID_REQUIRED_SCOPE, f"required scope: {exc}") from exc
     digest = b"" if payload_digest is None else payload_digest
     if not isinstance(digest, bytes):
         raise TypeError("payload digest must be bytes or None")

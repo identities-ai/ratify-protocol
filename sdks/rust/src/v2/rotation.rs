@@ -465,7 +465,11 @@ pub fn new_key_rotation_v2_journal(
     role: &str,
     genesis_key: &HybridPublicKey,
 ) -> V2Result<KeyRotationV2Journal> {
-    let genesis_id = key_id_v2(genesis_key).classify(V2ErrorClass::ConfigurationInvalid)?;
+    // Go wraps the key-ID failure as configuration_invalid: the genesis key
+    // is caller configuration, not a decoded object.
+    let genesis_id = key_id_v2(genesis_key).map_err(|e| {
+        V2Error::new(V2ErrorClass::ConfigurationInvalid, format!("rotation genesis key: {}", e.message))
+    })?;
     if authority_id.len() != 32
         || !lower_hex(authority_id)
         || recovery_epoch <= 0

@@ -137,7 +137,7 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		{"ProtocolClaimIDV2 challenge", V2ErrMalformed, func() error { return first(ProtocolClaimIDV2("ns", 0, []byte("short"))) }},
 		{"ProtocolClaimIDFromDigestV2", V2ErrMalformed, func() error { return first(ProtocolClaimIDFromDigestV2("ns", 0, []byte("short"))) }},
 		{"DecodePayloadDigest", V2ErrMalformed, func() error { s := "!"; return first(DecodePayloadDigest(&s)) }},
-		{"BuildOperationContextV2", "", func() error { return first(BuildOperationContextV2(OperationContextV2Inputs{})) }},
+		{"BuildOperationContextV2", V2ErrInvalidRequiredScope, func() error { return first(BuildOperationContextV2(OperationContextV2Inputs{})) }},
 		{"BuildSessionContextV2", V2ErrConfigurationInvalid, func() error { return first(BuildSessionContextV2(SessionContextV2Inputs{})) }},
 		{"BuildV2RateReservationBatch", V2ErrMalformed, func() error {
 			return first(BuildV2RateReservationBatch([]V2DeferredConstraint{{Type: ConstraintMaxRate, CanonicalJSON: garbage}}))
@@ -187,7 +187,7 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		}},
 
 		// Key rotation journal.
-		{"NewKeyRotationV2Journal", "", func() error { return first(NewKeyRotationV2Journal("", -1, "", badKey)) }},
+		{"NewKeyRotationV2Journal", V2ErrConfigurationInvalid, func() error { return first(NewKeyRotationV2Journal("", -1, "", badKey)) }},
 		{"AcceptKeyRotationStatementV2", "", func() error {
 			_, _, err := AcceptKeyRotationStatementV2(&KeyRotationStatementV2{}, KeyRotationV2Journal{}, 0, 0)
 			return err

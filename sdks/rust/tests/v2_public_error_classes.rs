@@ -434,7 +434,7 @@ fn v2_public_api_errors_are_classified() {
         ("ProtocolClaimIDV2 challenge", Some(Malformed), class(protocol_claim_id_v2("ns", 0, b"short"))),
         ("ProtocolClaimIDFromDigestV2", Some(Malformed), class(protocol_claim_id_from_digest_v2("ns", 0, b"short"))),
         ("DecodePayloadDigest", Some(Malformed), class(decode_payload_digest_v2(Some("!")))),
-        ("BuildOperationContextV2", None, class(operation_context_v2_bytes(&OperationContextV2::default()))),
+        ("BuildOperationContextV2", Some(InvalidRequiredScope), class(operation_context_v2_bytes(&OperationContextV2::default()))),
         (
             "BuildSessionContextV2",
             Some(ConfigurationInvalid),
@@ -568,7 +568,7 @@ fn v2_public_api_errors_are_classified() {
             class(check_verification_receipt_v2_bundle_binding(&zero_receipt(), &zero_bundle())),
         ),
         // Key rotation journal.
-        ("NewKeyRotationV2Journal", None, class(new_key_rotation_v2_journal("", -1, "", &bad_key))),
+        ("NewKeyRotationV2Journal", Some(ConfigurationInvalid), class(new_key_rotation_v2_journal("", -1, "", &bad_key))),
         (
             "AcceptKeyRotationStatementV2",
             None,

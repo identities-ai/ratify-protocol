@@ -273,7 +273,7 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     { name: "protocolClaimIDV2 namespace", want: "configuration_invalid", run: () => protocolClaimIDV2("", 0, new Uint8Array(32)) },
     { name: "protocolClaimIDV2 challenge", want: "malformed", run: () => protocolClaimIDV2("ns", 0, enc("short")) },
     { name: "protocolClaimIDFromDigestV2", want: "malformed", run: () => protocolClaimIDFromDigestV2("ns", 0, enc("short")) },
-    { name: "operationContextV2Hash", want: "", run: () => operationContextV2Hash({ required_scope: "" }) },
+    { name: "operationContextV2Hash", want: "invalid_required_scope", run: () => operationContextV2Hash({ required_scope: "" }) },
     {
       name: "buildSessionContextV2", want: "configuration_invalid",
       run: () => buildSessionContextV2({ verifier_id: "", workspace_id: "", agent_id: "", session_id: "", invocation_id: "", request_hash: empty() }),
@@ -316,7 +316,7 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     { name: "checkVerificationReceiptV2BundleBinding", want: "", run: () => checkVerificationReceiptV2BundleBinding(zeroReceipt(), zeroBundle()) },
 
     // Key rotation journal.
-    { name: "newKeyRotationV2Journal", want: "", run: () => newKeyRotationV2Journal("", -1, "", badKey) },
+    { name: "newKeyRotationV2Journal", want: "configuration_invalid", run: () => newKeyRotationV2Journal("", -1, "", badKey) },
     {
       name: "acceptKeyRotationStatementV2", want: "",
       run: async () => {

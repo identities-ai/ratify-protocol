@@ -65,7 +65,7 @@ type SessionContextV2Inputs struct {
 func BuildOperationContextV2(in OperationContextV2Inputs) (_ []byte, resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
 	if err := ValidateRequiredScopeV2(in.RequiredScope); err != nil {
-		return nil, fmt.Errorf("required scope: %w", err)
+		return nil, v2Errorf(V2ErrInvalidRequiredScope, "required scope: %w", err)
 	}
 	if !validProtocolV2Text(in.RequiredScope, in.Operation, in.ResourceID, in.RequestedPath) {
 		return nil, fmt.Errorf("text inputs must be valid UTF-8")

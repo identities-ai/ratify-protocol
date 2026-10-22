@@ -298,3 +298,28 @@ fn v2_conformance_verifier_ordering() {
     let custody = vectors.iter().filter(|v| s(&v["name"]).starts_with("custody_profile_")).count();
     assert_eq!(custody, 10, "Middleware Custody Profile cases");
 }
+
+/// Every vector that registers extension evaluators gives the same outcome
+/// when the registry invokes them on the calling thread, including the
+/// error, panic, timeout, and invalid-output faults.
+#[test]
+fn v2_conformance_verifier_ordering_calling_thread_evaluators() {
+    EVALUATOR_INVOCATION.with(|m| m.set(ConstraintEvaluatorInvocationV2::CallingThread));
+    let f = load_v2_vector("verifier-ordering.json");
+    let bundles = f["bundles_b64"].as_object().expect("bundles_b64");
+    let mut ran = 0usize;
+    let mut failures = Vec::new();
+    for v in arr(&f["vectors"]) {
+        if arr(&v["constraint_evaluators"]).is_empty() {
+            continue;
+        }
+        ran += 1;
+        let name = s(&v["name"]);
+        let result = run_vector(&v, unb64(&bundles[&s(&v["bundle"])]));
+        if !result.is_empty() {
+            failures.push(format!("{name}:\n  {}", result.join("\n  ")));
+        }
+    }
+    assert!(ran > 0, "no vector registers an evaluator");
+    assert!(failures.is_empty(), "{} of {ran} vectors failed:\n{}", failures.len(), failures.join("\n"));
+}

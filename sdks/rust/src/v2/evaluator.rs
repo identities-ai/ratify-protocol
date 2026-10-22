@@ -14,7 +14,7 @@ use std::fmt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::constraints::{
     params_map_cj, v2_integer_field, v2_string_field, ConstraintContextV2, ConstraintV2,
@@ -109,9 +109,12 @@ impl fmt::Display for ConstraintEvaluatorError {
 impl std::error::Error for ConstraintEvaluatorError {}
 
 /// A pure evaluator function: no I/O, clock, or randomness. An error, a
-/// panic, a timeout, or an invalid result is unverifiable. The verifier stops
+/// panic, a timeout, or an invalid result is unverifiable. In the default
+/// [`ConstraintEvaluatorInvocationV2::WorkerThread`] mode the verifier stops
 /// waiting at the registry timeout; an implementation must also return once
-/// the context is done, or its thread outlives the call.
+/// the context is done, or its thread outlives the call. In
+/// [`ConstraintEvaluatorInvocationV2::CallingThread`] mode it runs to
+/// completion on the verifying thread and a late answer is a timeout.
 pub type ConstraintEvaluatorFnV2 = Arc<
     dyn Fn(&V2Context, &ConstraintEvaluationInputV2) -> Result<ConstraintEvaluationResultV2, ConstraintEvaluatorError>
         + Send
@@ -133,10 +136,32 @@ impl fmt::Debug for ConstraintEvaluatorRegistrationV2 {
     }
 }
 
+/// Where a registry invokes its extension evaluators. Both modes give the
+/// same outcome for the same answer: an error, a panic, an invalid result, or
+/// an answer at or after the registry timeout is `constraint_unverifiable`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConstraintEvaluatorInvocationV2 {
+    /// The default: each evaluation runs on a new worker thread and the
+    /// verifier stops waiting at the timeout, so a slow evaluator cannot
+    /// delay verification past it. A late evaluator's thread keeps running
+    /// until it returns; its answer is discarded.
+    #[default]
+    WorkerThread,
+    /// Each evaluation runs synchronously on the calling thread (for hosts
+    /// whose callbacks must run on that thread, such as a C ABI under SPEC-v2
+    /// §1.3). The timeout is enforced by elapsed time: the call is not
+    /// interrupted, so a slow evaluator delays verification until it
+    /// returns, and an answer at or after the deadline is discarded as a
+    /// timeout. The evaluator's context is done at the deadline, so an
+    /// evaluator that polls it can return early.
+    CallingThread,
+}
+
 #[derive(Clone)]
 pub(crate) struct RegisteredEvaluator {
     pub(crate) reference: ConstraintEvaluatorRefV2,
     pub(crate) evaluate: ConstraintEvaluatorFnV2,
+    pub(crate) invocation: ConstraintEvaluatorInvocationV2,
 }
 
 /// Caller-authenticated verifier configuration, immutable once built; only
@@ -144,6 +169,7 @@ pub(crate) struct RegisteredEvaluator {
 #[derive(Clone)]
 pub struct ConstraintEvaluatorRegistryV2 {
     timeout: Duration,
+    invocation: ConstraintEvaluatorInvocationV2,
     entries: BTreeMap<String, RegisteredEvaluator>,
 }
 
@@ -151,6 +177,7 @@ impl fmt::Debug for ConstraintEvaluatorRegistryV2 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConstraintEvaluatorRegistryV2")
             .field("timeout", &self.timeout)
+            .field("invocation", &self.invocation)
             .field("refs", &self.refs())
             .finish()
     }
@@ -193,10 +220,31 @@ impl ConstraintEvaluatorRegistryV2 {
                 RegisteredEvaluator {
                     reference: ConstraintEvaluatorRefV2 { kind, profile_digest: digest },
                     evaluate: registration.evaluate,
+                    invocation: ConstraintEvaluatorInvocationV2::WorkerThread,
                 },
             );
         }
-        Ok(ConstraintEvaluatorRegistryV2 { timeout, entries })
+        Ok(ConstraintEvaluatorRegistryV2 { timeout, invocation: ConstraintEvaluatorInvocationV2::WorkerThread, entries })
+    }
+
+    /// [`ConstraintEvaluatorRegistryV2::new`] with an explicit invocation
+    /// mode. The mode is not part of any profile digest or receipt.
+    pub fn new_with_invocation(
+        timeout: Duration,
+        registrations: Vec<ConstraintEvaluatorRegistrationV2>,
+        invocation: ConstraintEvaluatorInvocationV2,
+    ) -> V2Result<Self> {
+        let mut registry = Self::new(timeout, registrations)?;
+        registry.invocation = invocation;
+        for entry in registry.entries.values_mut() {
+            entry.invocation = invocation;
+        }
+        Ok(registry)
+    }
+
+    /// Where this registry invokes its evaluators.
+    pub fn invocation(&self) -> ConstraintEvaluatorInvocationV2 {
+        self.invocation
     }
 
     /// The registered `{type, profile_digest}` pairs sorted by type.
@@ -387,10 +435,57 @@ pub(crate) fn run_constraint_evaluator_v2(
     input: ConstraintEvaluationInputV2,
 ) -> Result<i64, ConstraintFailure> {
     let (ctx, cancel) = V2Context::background().with_timeout(timeout);
-    let (tx, rx) = mpsc::channel();
-    let evaluate = entry.evaluate.clone();
     let kind = input.kind.clone();
     let evaluation_time = input.evaluation_time;
+    let answer = match entry.invocation {
+        ConstraintEvaluatorInvocationV2::WorkerThread => evaluate_on_worker(entry, &ctx, timeout, input),
+        ConstraintEvaluatorInvocationV2::CallingThread => {
+            let started = Instant::now();
+            let answer = catch_unwind(AssertUnwindSafe(|| (entry.evaluate)(&ctx, &input)));
+            // An answer at or after the deadline is a timeout, as in Go.
+            if started.elapsed() >= timeout || ctx.is_done() {
+                Answer::TimedOut
+            } else {
+                answer.map_or(Answer::Panicked, Answer::Returned)
+            }
+        }
+    };
+    cancel.cancel();
+    let result = match answer {
+        Answer::TimedOut => {
+            return Err(ConstraintFailure::Unverifiable(format!(
+                "{kind} evaluator did not answer within {timeout:?}"
+            )))
+        }
+        Answer::NotStarted => {
+            return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator could not be started")))
+        }
+        Answer::Panicked => return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator panicked"))),
+        Answer::Returned(Err(e)) => {
+            return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator failed: {e}")))
+        }
+        Answer::Returned(Ok(result)) => result,
+    };
+    map_evaluator_result(&kind, evaluation_time, result)
+}
+
+enum Answer {
+    Returned(Result<ConstraintEvaluationResultV2, ConstraintEvaluatorError>),
+    Panicked,
+    TimedOut,
+    NotStarted,
+}
+
+/// The worker-thread mode: run the evaluator on a new thread and stop
+/// waiting at the timeout.
+fn evaluate_on_worker(
+    entry: &RegisteredEvaluator,
+    ctx: &V2Context,
+    timeout: Duration,
+    input: ConstraintEvaluationInputV2,
+) -> Answer {
+    let (tx, rx) = mpsc::channel();
+    let evaluate = entry.evaluate.clone();
     let thread_ctx = ctx.clone();
     let spawned = std::thread::Builder::new()
         .name("ratify-v2-evaluator".into())
@@ -399,29 +494,28 @@ pub(crate) fn run_constraint_evaluator_v2(
             let _ = tx.send(answer.map_err(|_| ()));
         });
     if spawned.is_err() {
-        return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator could not be started")));
+        return Answer::NotStarted;
     }
     let answer = rx.recv_timeout(timeout);
     // Go selects on the answer and on the evaluation context's deadline: an
     // answer that arrives only once the deadline has passed (for example an
     // evaluator that returns because its context ended) is a timeout.
-    let deadline_passed = ctx.is_done();
-    cancel.cancel();
-    let result = match answer {
-        _ if deadline_passed => {
-            return Err(ConstraintFailure::Unverifiable(format!(
-                "{kind} evaluator did not answer within {timeout:?}"
-            )))
-        }
-        Err(_) => {
-            return Err(ConstraintFailure::Unverifiable(format!(
-                "{kind} evaluator did not answer within {timeout:?}"
-            )))
-        }
-        Ok(Err(())) => return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator panicked"))),
-        Ok(Ok(Err(e))) => return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator failed: {e}"))),
-        Ok(Ok(Ok(result))) => result,
-    };
+    if ctx.is_done() {
+        return Answer::TimedOut;
+    }
+    match answer {
+        Err(_) => Answer::TimedOut,
+        Ok(Err(())) => Answer::Panicked,
+        Ok(Ok(returned)) => Answer::Returned(returned),
+    }
+}
+
+/// Map a returned evaluator result: `Ok(horizon)` (0 = none) or a failure.
+fn map_evaluator_result(
+    kind: &str,
+    evaluation_time: i64,
+    result: ConstraintEvaluationResultV2,
+) -> Result<i64, ConstraintFailure> {
     match result.outcome {
         ConstraintOutcomeV2::Pass => {
             if result.valid_until == 0 {
@@ -623,6 +717,7 @@ mod tests {
         let reg = |f: ConstraintEvaluatorFnV2| RegisteredEvaluator {
             reference: ConstraintEvaluatorRefV2 { kind: "a.b.c".into(), profile_digest: String::new() },
             evaluate: f,
+            invocation: ConstraintEvaluatorInvocationV2::WorkerThread,
         };
         let input = ConstraintEvaluationInputV2 {
             kind: "a.b.c".into(),
@@ -653,5 +748,58 @@ mod tests {
         assert!(run_constraint_evaluator_v2(&at_claim, Duration::from_secs(1), input.clone()).is_err());
         let invalid = reg(Arc::new(|_, _| Ok(outcome(ConstraintOutcomeV2::Invalid, ""))));
         assert!(run_constraint_evaluator_v2(&invalid, Duration::from_secs(1), input).is_err());
+    }
+
+    #[test]
+    fn calling_thread_evaluators_run_on_the_caller_and_time_out_by_elapsed_time() {
+        let reg = |f: ConstraintEvaluatorFnV2| RegisteredEvaluator {
+            reference: ConstraintEvaluatorRefV2 { kind: "a.b.c".into(), profile_digest: String::new() },
+            evaluate: f,
+            invocation: ConstraintEvaluatorInvocationV2::CallingThread,
+        };
+        let input = ConstraintEvaluationInputV2 {
+            kind: "a.b.c".into(),
+            params_json: None,
+            delegation_index: 0,
+            constraint_index: 0,
+            issuer_id: String::new(),
+            cert_id: String::new(),
+            context: ConstraintContextV2::default(),
+            evaluation_time: 100,
+        };
+        let caller = std::thread::current().id();
+        let same_thread = reg(Arc::new(move |_, _| {
+            assert_eq!(std::thread::current().id(), caller, "evaluator left the calling thread");
+            Ok(ConstraintEvaluationResultV2 { outcome: ConstraintOutcomeV2::Pass, valid_until: 200, detail: String::new() })
+        }));
+        assert_eq!(run_constraint_evaluator_v2(&same_thread, Duration::from_secs(1), input.clone()), Ok(200));
+        // A late answer is discarded even though the call ran to completion.
+        let slow = reg(Arc::new(|_, _| {
+            std::thread::sleep(Duration::from_millis(60));
+            Ok(outcome(ConstraintOutcomeV2::Pass, ""))
+        }));
+        assert!(matches!(
+            run_constraint_evaluator_v2(&slow, Duration::from_millis(20), input.clone()),
+            Err(ConstraintFailure::Unverifiable(_))
+        ));
+        let panics = reg(Arc::new(|_, _| panic!("boom")));
+        assert!(matches!(
+            run_constraint_evaluator_v2(&panics, Duration::from_secs(1), input.clone()),
+            Err(ConstraintFailure::Unverifiable(_))
+        ));
+        let failing = reg(Arc::new(|_, _| Err(ConstraintEvaluatorError("no".into()))));
+        assert!(run_constraint_evaluator_v2(&failing, Duration::from_secs(1), input).is_err());
+        let registry = ConstraintEvaluatorRegistryV2::new_with_invocation(
+            Duration::from_secs(1),
+            vec![standard_max_count_evaluator_v2()],
+            ConstraintEvaluatorInvocationV2::CallingThread,
+        )
+        .unwrap();
+        assert_eq!(registry.invocation(), ConstraintEvaluatorInvocationV2::CallingThread);
+        assert!(registry.entries.values().all(|e| e.invocation == ConstraintEvaluatorInvocationV2::CallingThread));
+        assert_eq!(
+            ConstraintEvaluatorRegistryV2::new(Duration::from_secs(1), vec![]).unwrap().invocation(),
+            ConstraintEvaluatorInvocationV2::WorkerThread
+        );
     }
 }

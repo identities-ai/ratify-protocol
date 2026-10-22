@@ -1549,3 +1549,47 @@ fn v2c_archival_status_and_log_objects_use_caller_keys() {
         "key_id_mismatch"
     );
 }
+
+/// A rotation statement is signed by two local key pairs or two external
+/// signers. The library exposes no signer that accepts a prepared request for
+/// a library key, so a mixed pair is refused before any callback runs.
+#[test]
+fn v2c_rotation_refuses_mixed_local_and_external_signers() {
+    let (old, _, _) = Kp::generate();
+    let (new, _, _) = Kp::generate();
+    let stmt = json_bytes(&json!({
+        "version": 2,
+        "authority_id": "0123456789abcdef0123456789abcdef",
+        "recovery_epoch": 1,
+        "role": "issuer",
+        "sequence": 1,
+        "previous_statement_hash": enc(&[0u8; 48]),
+        "old_key": key_json(&old.public()),
+        "new_key": key_json(&new.public()),
+        "old_key_id": old.id(),
+        "new_key_id": new.id(),
+        "issued_at": 1_799_999_400,
+        "not_before": 1_799_999_400,
+    }));
+    let external = RatifyV2ExternalSigner {
+        user: ptr::null_mut(),
+        mode: RatifyV2SignerMode::RatifyV2SignerDirect as i32,
+        public_key: None,
+        sign: None,
+    };
+    let sign = |a: *const RatifyV2KeyPair,
+                ae: *const RatifyV2ExternalSigner,
+                b: *const RatifyV2KeyPair,
+                be: *const RatifyV2ExternalSigner| {
+        buf(|o| unsafe {
+            ratify_v2_sign_key_rotation_statement(stmt.as_ptr(), stmt.len(), a, ae, b, be, o)
+        })
+    };
+    sign(old.0, ptr::null(), new.0, ptr::null()).expect("two local key pairs");
+    for r in [
+        sign(old.0, ptr::null(), ptr::null(), &external),
+        sign(ptr::null(), &external, new.0, ptr::null()),
+    ] {
+        assert_eq!(class_of(&r), "configuration_invalid", "{:?}", r.err().map(|f| f.message));
+    }
+}

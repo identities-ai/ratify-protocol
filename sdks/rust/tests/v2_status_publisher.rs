@@ -1,6 +1,7 @@
 //! testvectors/v2/status-publisher.json, mirroring Go
 //! `TestV2ConformanceStatusPublisher` (v2_conformance_status_publisher_test.go).
 
+mod v2_provider_common;
 mod v2_status_common;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -11,16 +12,17 @@ use ratify_protocol::v2::{
     apply_revocation_list_to_journal_v2, apply_revocation_push_to_journal_v2,
     configure_status_key_epoch_v2, new_v2_status_publisher, record_security_key_role_v2,
     revocation_status_from_journal_v2, verify_revocation_list_v2_signature,
-    verify_revocation_push_v2_signature, LocalSignerV2, RevokedCertV2, SignRequestV2, SignerModeV2,
+    verify_revocation_push_v2_signature, RevokedCertV2, SignRequestV2, SignerModeV2,
     SignerV2, V2Context, V2ErrorClass, V2SignResult, V2StatusPublication, V2StatusPublisherState,
 };
 use ratify_protocol::{HybridPublicKey, HybridSignature};
 use serde_json::Value;
+use v2_provider_common::ProviderSigner;
 use v2_status_common::{i, load_v2_keys, load_v2_vector, policy, readme_line, s};
 
 /// Go `v2CountingSigner`: counts every signer method call.
 struct CountingSigner {
-    inner: LocalSignerV2,
+    inner: ProviderSigner,
     calls: Arc<AtomicUsize>,
 }
 
@@ -94,7 +96,7 @@ fn v2_conformance_status_publisher() {
             .expect("status private key");
         let calls = Arc::new(AtomicUsize::new(0));
         let signer = Arc::new(CountingSigner {
-            inner: LocalSignerV2::new(private).expect("local signer"),
+            inner: ProviderSigner::new(private),
             calls: calls.clone(),
         });
         let publisher = new_v2_status_publisher(

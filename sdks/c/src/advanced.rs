@@ -27,6 +27,7 @@
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_uchar};
 use std::slice;
+use zeroize::Zeroizing;
 
 // The deprecated positional streamed verifier stays exported through the C
 // ABI for compatibility; its wrapper below documents the deprecation.
@@ -3825,13 +3826,16 @@ pub unsafe extern "C" fn ratify_agent_from_seeds(
 }
 
 /// Validate and copy a pair of 32-byte seeds out of caller memory.
+/// A copied 32-byte seed, wiped when it goes out of scope.
+type Seed = Zeroizing<[u8; 32]>;
+
 unsafe fn seed_pair(
     ed_seed: *const c_uchar,
     ed_seed_len: usize,
     ml_seed: *const c_uchar,
     ml_seed_len: usize,
     err_out: *mut *mut c_char,
-) -> Option<([u8; 32], [u8; 32])> {
+) -> Option<(Seed, Seed)> {
     if ed_seed.is_null() || ml_seed.is_null() {
         set_err(err_out, "seed pointer is null");
         return None;
@@ -3840,8 +3844,9 @@ unsafe fn seed_pair(
         set_err(err_out, "both seeds must be exactly 32 bytes");
         return None;
     }
-    let mut ed = [0u8; 32];
-    let mut ml = [0u8; 32];
+    // Seed copies are key material: wiped when they go out of scope.
+    let mut ed = Zeroizing::new([0u8; 32]);
+    let mut ml = Zeroizing::new([0u8; 32]);
     ed.copy_from_slice(slice::from_raw_parts(ed_seed, 32));
     ml.copy_from_slice(slice::from_raw_parts(ml_seed, 32));
     Some((ed, ml))
@@ -4074,11 +4079,12 @@ pub unsafe extern "C" fn ratify_generate_hybrid_keypair(
             }
             // Draw the seeds, then derive deterministically from them, so the returned
             // seeds always reproduce the returned public key.
-            let mut ed = [0u8; 32];
-            let mut ml = [0u8; 32];
+            // Seed copies are key material: wiped when they go out of scope.
+            let mut ed = Zeroizing::new([0u8; 32]);
+            let mut ml = Zeroizing::new([0u8; 32]);
             let (a, b) = (
-                ratify_protocol::generate_challenge(),
-                ratify_protocol::generate_challenge(),
+                Zeroizing::new(ratify_protocol::generate_challenge()),
+                Zeroizing::new(ratify_protocol::generate_challenge()),
             );
             if a.len() != 32 || b.len() != 32 {
                 set_err(err_out, "entropy source returned an unexpected length");

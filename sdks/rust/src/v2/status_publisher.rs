@@ -31,13 +31,13 @@ use super::limits::{
     checked_add_v2, valid_v2_timestamp, MAX_REVOCATION_LIST_REFS_V2, MAX_REVOCATION_PUSH_REFS_V2,
     V2_MAX_STATUS_LIFETIME_SECONDS,
 };
-use super::signer::{signer_public_key_v2, SignerV2};
+use super::signer::{signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::wire::{
     placeholder_signature, sign_revocation_list_v2_with_signer,
     sign_revocation_push_v2_with_signer, RevocationListV2, RevocationPushV2, RevokedCertV2,
     MAX_SAFE,
 };
-use crate::types::{HybridPublicKey, MAX_IDENTIFIER_LENGTH_BYTES};
+use crate::types::{HybridPrivateKey, HybridPublicKey, MAX_IDENTIFIER_LENGTH_BYTES};
 
 /// The publisher's durable state.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -85,8 +85,8 @@ fn config_invalid(e: V2Error) -> V2Error {
     e.classify(V2ErrorClass::ConfigurationInvalid)
 }
 
-/// Bind an issuer's complete key to a separate status signer, using the
-/// deployment's authenticated role configuration: the anchored
+/// Bind an issuer's complete key to a separate status key held in process,
+/// using the deployment's authenticated role configuration: the anchored
 /// `SecurityJournalV2` in `roles`, whose key-role history records every
 /// non-status key the deployment knows and whose status-key history binds the
 /// issuer to its current status key (SPEC-v2 §5.4, §6.6). It refuses
@@ -98,6 +98,21 @@ fn config_invalid(e: V2Error) -> V2Error {
 /// `lifetime_seconds` sets `next_update - updated_at` for every full list and
 /// is 1..86400; it must not exceed the relying verifiers' configured maximum
 /// list lifetime.
+pub fn new_v2_status_publisher_with_private_key(
+    ctx: &V2Context,
+    roles: &dyn SecurityJournalStoreV2,
+    issuer_key: &HybridPublicKey,
+    status_private_key: &HybridPrivateKey,
+    lifetime_seconds: i64,
+) -> V2Result<V2StatusPublisher> {
+    let signer = LocalSignerV2::owned(status_private_key)
+        .map_err(|e| V2Error::new(V2ErrorClass::ConfigurationInvalid, e.to_string()))?;
+    new_v2_status_publisher(ctx, roles, issuer_key, Arc::new(signer), lifetime_seconds)
+}
+
+/// [`new_v2_status_publisher_with_private_key`] with an external status
+/// signer (HSM, KMS, remote service). Every signature it returns is verified
+/// under its public key before use.
 pub fn new_v2_status_publisher(
     ctx: &V2Context,
     roles: &dyn SecurityJournalStoreV2,

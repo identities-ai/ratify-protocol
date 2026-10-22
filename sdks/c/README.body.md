@@ -394,8 +394,10 @@ No function signs caller-selected bytes, codes, contexts, or prehash modes.
 Each signing function takes a typed object (its wire JSON; absent signature
 members are allowed) and exactly one signer: a library key pair or a
 `RatifyV2ExternalSigner` (an HSM or KMS behind two callbacks, in direct or
-external-μ mode). Issuer duties are checked before any signer callback runs,
-and every returned signature is verified before an object is produced.
+external-μ mode). A key-rotation statement takes two signers of the same
+kind: two key pairs or two external signers. Issuer duties are checked before
+any signer callback runs, and every returned signature is verified before an
+object is produced. `ratify_v2_keypair_free` wipes the private key.
 
 **Result codes.** Every fallible function returns an `int32_t`: `0` on
 success; a positive code naming exactly one of the 49 SPEC-v2 §2.7 classes,

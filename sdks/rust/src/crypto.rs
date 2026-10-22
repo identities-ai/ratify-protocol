@@ -52,23 +52,21 @@ pub fn derive_id(pub_key: &HybridPublicKey) -> String {
 /// Fresh hybrid keypair from OS randomness. Two independent seeds.
 pub fn generate_hybrid_keypair() -> (HybridPublicKey, HybridPrivateKey) {
     use rand_core::OsRng;
-    let mut seed = [0u8; 32];
+    let mut seed = zeroize::Zeroizing::new([0u8; 32]);
     use rand_core::RngCore;
-    OsRng.fill_bytes(&mut seed);
+    OsRng.fill_bytes(seed.as_mut());
     let ed_sk = SigningKey::from_bytes(&seed);
     let ed_pk = ed_sk.verifying_key();
 
     let (ml_pk, ml_sk) = ml_dsa_65::try_keygen().expect("ML-DSA-65 keygen");
+    let ml_sk_bytes = zeroize::Zeroizing::new(ml_sk.into_bytes());
 
     (
         HybridPublicKey {
             ed25519: ed_pk.to_bytes().to_vec(),
             ml_dsa_65: ml_pk.into_bytes().to_vec(),
         },
-        HybridPrivateKey {
-            ed25519: seed.to_vec(),
-            ml_dsa_65: ml_sk.into_bytes().to_vec(),
-        },
+        HybridPrivateKey::from_components(seed.to_vec(), ml_sk_bytes.to_vec()),
     )
 }
 
@@ -97,15 +95,14 @@ pub fn hybrid_keypair_from_seeds(
     let (ml_pk, ml_sk) =
         ml_dsa_65::try_keygen_with_rng(&mut rng).expect("ML-DSA-65 keygen from seed");
 
+    let ml_sk_bytes = zeroize::Zeroizing::new(ml_sk.into_bytes());
+
     (
         HybridPublicKey {
             ed25519: ed_pk.to_bytes().to_vec(),
             ml_dsa_65: ml_pk.into_bytes().to_vec(),
         },
-        HybridPrivateKey {
-            ed25519: ed_seed.to_vec(),
-            ml_dsa_65: ml_sk.into_bytes().to_vec(),
-        },
+        HybridPrivateKey::from_components(ed_seed.to_vec(), ml_sk_bytes.to_vec()),
     )
 }
 
@@ -123,6 +120,13 @@ struct SeedOnceRng {
 impl SeedOnceRng {
     fn new(seed: &[u8; 32]) -> Self {
         Self { seed: *seed, used: false }
+    }
+}
+
+impl Drop for SeedOnceRng {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.seed.zeroize();
     }
 }
 
@@ -326,14 +330,14 @@ pub fn key_rotation_sign_bytes(stmt: &KeyRotationStatement) -> Vec<u8> {
 
 /// Produce a hybrid signature. Both components over identical `msg`.
 pub fn sign_both(msg: &[u8], priv_key: &HybridPrivateKey) -> HybridSignature {
-    let mut ed_seed = [0u8; 32];
-    ed_seed.copy_from_slice(&priv_key.ed25519[..32]);
+    let mut ed_seed = zeroize::Zeroizing::new([0u8; 32]);
+    ed_seed.copy_from_slice(&priv_key.ed25519()[..32]);
     let ed_sk = SigningKey::from_bytes(&ed_seed);
     let ed_sig = ed_sk.sign(msg);
 
-    let mut ml_sk_bytes = [0u8; ml_dsa_65::SK_LEN];
-    ml_sk_bytes.copy_from_slice(&priv_key.ml_dsa_65);
-    let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(ml_sk_bytes)
+    let mut ml_sk_bytes = zeroize::Zeroizing::new([0u8; ml_dsa_65::SK_LEN]);
+    ml_sk_bytes.copy_from_slice(priv_key.ml_dsa_65());
+    let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(*ml_sk_bytes)
         .expect("ML-DSA-65 secret key malformed");
     let ml_sig = ml_sk.try_sign(msg, &[]).expect("ML-DSA-65 sign");
 

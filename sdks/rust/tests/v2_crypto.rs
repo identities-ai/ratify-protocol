@@ -128,7 +128,7 @@ fn v2_rejects_wrong_or_empty_mldsa_context() {
     let public = fixture_public(&v);
     let signature = fixture_signature(&v);
     let (_, private) = fixture_keys(&v);
-    let ml_sk_bytes: [u8; ml_dsa_65::SK_LEN] = private.ml_dsa_65.as_slice().try_into().unwrap();
+    let ml_sk_bytes: [u8; ml_dsa_65::SK_LEN] = private.ml_dsa_65().try_into().unwrap();
     let ml_sk = ml_dsa_65::PrivateKey::try_from_bytes(ml_sk_bytes).unwrap();
     let message = delegation_signature_message_v2(&signable);
 

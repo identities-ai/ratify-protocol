@@ -16,7 +16,7 @@ use super::marshal::{
     archival_json, receipt_head, rotation_journal_json, status_result_json, status_state_json,
     to_bytes, witness_head, Obj,
 };
-use super::sign::{build, finish, RatifyV2ExternalSigner};
+use super::sign::{build, finish, Built, RatifyV2ExternalSigner};
 use super::{
     bad_arg, bytes, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h,
     write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
@@ -606,9 +606,22 @@ pub unsafe extern "C" fn ratify_v2_status_publish(
                 return Err(bad_arg(format!("publish op {op} is not defined")));
             }
             let (_sctx, cancel) = V2Context::background().with_cancel();
-            let built = build(local, external, "status", &cancel)?;
-            let signer = built.into_arc();
-            let publisher = new_v2_status_publisher(&ctx, &j, &issuer, signer, lifetime_seconds)?;
+            let publisher = match build(local, external, "status", &cancel)? {
+                Built::Local(key) => new_v2_status_publisher_with_private_key(
+                    &ctx,
+                    &j,
+                    &issuer,
+                    key,
+                    lifetime_seconds,
+                )?,
+                Built::External(signer) => new_v2_status_publisher(
+                    &ctx,
+                    &j,
+                    &issuer,
+                    std::sync::Arc::new(signer),
+                    lifetime_seconds,
+                )?,
+            };
             let result = match op {
                 1 => publisher.genesis(&ctx, at),
                 2 => publisher.heartbeat(&ctx, &state, at),

@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256, Sha384};
 use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use crate::crypto_v2::{validate_ed_public_key, validate_ed_signature};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
+use zeroize::Zeroizing;
 
 /// The closed v2 signed-object registry (SPEC-v2 §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -83,15 +84,16 @@ pub fn v2_mldsa_context(object_type: V2ObjectType) -> Vec<u8> {
     format!("ratify-protocol/2/{:04x}", object_type.code()).into_bytes()
 }
 
-pub(crate) fn ed_seed(private_key: &HybridPrivateKey) -> V2Result<[u8; 32]> {
+pub(crate) fn ed_seed(private_key: &HybridPrivateKey) -> V2Result<Zeroizing<[u8; 32]>> {
     // The Rust SDK stores the 32-byte seed; a 64-byte seed||public form is
     // also accepted when its public half matches the seed (Go layout).
-    let seed: [u8; 32] = match private_key.ed25519.get(..32).map(<[u8; 32]>::try_from) {
-        Some(Ok(seed)) if matches!(private_key.ed25519.len(), 32 | 64) => seed,
+    let ed = private_key.ed25519();
+    let seed = match ed.get(..32).map(<[u8; 32]>::try_from) {
+        Some(Ok(seed)) if matches!(ed.len(), 32 | 64) => Zeroizing::new(seed),
         _ => return plain("incomplete hybrid private key"),
     };
-    if private_key.ed25519.len() == 64
-        && SigningKey::from_bytes(&seed).verifying_key().to_bytes()[..] != private_key.ed25519[32..]
+    if ed.len() == 64
+        && SigningKey::from_bytes(&seed).verifying_key().to_bytes()[..] != ed[32..]
     {
         return plain("Ed25519 private key seed and public component do not match");
     }
@@ -99,12 +101,13 @@ pub(crate) fn ed_seed(private_key: &HybridPrivateKey) -> V2Result<[u8; 32]> {
 }
 
 pub(crate) fn ml_secret(private_key: &HybridPrivateKey) -> V2Result<ml_dsa_65::PrivateKey> {
-    let bytes: [u8; ml_dsa_65::SK_LEN] = private_key
-        .ml_dsa_65
-        .as_slice()
-        .try_into()
-        .map_err(|_| V2Error::plain("incomplete hybrid private key"))?;
-    ml_dsa_65::PrivateKey::try_from_bytes(bytes)
+    let bytes: Zeroizing<[u8; ml_dsa_65::SK_LEN]> = Zeroizing::new(
+        private_key
+            .ml_dsa_65()
+            .try_into()
+            .map_err(|_| V2Error::plain("incomplete hybrid private key"))?,
+    );
+    ml_dsa_65::PrivateKey::try_from_bytes(*bytes)
         .map_err(|_| V2Error::plain("ML-DSA-65 secret key malformed"))
 }
 

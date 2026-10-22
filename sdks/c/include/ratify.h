@@ -395,8 +395,9 @@ typedef struct RatifyV2EvaluatorCall RatifyV2EvaluatorCall;
 
 // An opaque hybrid Ed25519 + ML-DSA-65 key pair. Create it with
 // `ratify_v2_keypair_from_seeds` or `ratify_v2_keypair_generate`; release it
-// with `ratify_v2_keypair_free`. It is used by one thread at a time; the
-// library reads it during a signing call and never retains it.
+// with `ratify_v2_keypair_free`, which wipes the private key. It is used by
+// one thread at a time; the library reads it during a signing call and never
+// retains or copies it.
 typedef struct RatifyV2KeyPair RatifyV2KeyPair;
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
@@ -2473,8 +2474,8 @@ int32_t ratify_v2_keypair_generate(struct RatifyV2KeyPair **out,
                                    uint8_t *ed25519_seed_out,
                                    uint8_t *ml_dsa_65_seed_out);
 
-// Release a key pair. NULL is a no-op. The private key is dropped from
-// library memory.
+// Release a key pair. NULL is a no-op. The private key is wiped and dropped
+// from library memory.
 void ratify_v2_keypair_free(struct RatifyV2KeyPair *kp);
 
 // Write the complete public key of `kp` into `*out`.
@@ -2849,7 +2850,8 @@ int32_t ratify_v2_sign_revocation_push(const uint8_t *object,
 
 // Sign a key-rotation statement under both codes: 0x0004 with the current
 // (old) key and 0x0009 with the new key. Each signer slot takes exactly one
-// of a local key pair or an external signer.
+// of a local key pair or an external signer, and both slots must be the same
+// kind; a local/external mix is `RatifyV2ConfigurationInvalid`.
 int32_t ratify_v2_sign_key_rotation_statement(const uint8_t *object,
                                               uintptr_t object_len,
                                               const struct RatifyV2KeyPair *old_local,

@@ -658,3 +658,77 @@ func FuzzDecodeKeyRotationStatementV2NeverPanics(f *testing.F) {
 		}
 	})
 }
+
+// Revocation list and push bodies are the status observations' signed intent
+// (SPEC-v2 §4). The public helper must accept exactly the signable bytes the
+// reducer derives from a decoded object, and nothing else, so two SDKs that
+// compare these digests never disagree about which bodies are the same.
+func TestStatementBodyDigestV2RevocationBodies(t *testing.T) {
+	issuer := strings.Repeat("ab", 32)
+	list := &RevocationListV2{Version: 2, IssuerID: issuer, UpdatedAt: 100, NextUpdate: 200, Sequence: 2, Revoked: []RevokedCertV2{{CertID: "c1"}, {CertID: "c2"}}}
+	push := &RevocationPushV2{Version: 2, IssuerID: issuer, Sequence: 3, PushedAt: 150, Revoked: []RevokedCertV2{{CertID: "c3"}}}
+	listBody, err := revocationListSignableBytesV2(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pushBody, err := revocationPushSignableBytesV2(push)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		code      uint16
+		body      []byte
+		otherBody []byte
+	}{{0x0003, listBody, pushBody}, {0x0005, pushBody, listBody}} {
+		got, err := StatementBodyDigestV2(test.code, test.body)
+		if err != nil {
+			t.Fatalf("0x%04x: %v", test.code, err)
+		}
+		independent := sha512.New384()
+		independent.Write([]byte("ratify-protocol-statement-body-v2\x00"))
+		independent.Write(binary.BigEndian.AppendUint16(nil, test.code))
+		independent.Write(test.body)
+		if !bytes.Equal(got, independent.Sum(nil)) {
+			t.Fatalf("0x%04x digest does not match the labelled transcript", test.code)
+		}
+		if _, err := StatementBodyDigestV2(test.code, test.otherBody); V2ErrorClassOf(err) != V2ErrMalformed {
+			t.Fatalf("0x%04x accepted the other status object's body: %v", test.code, err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(test.body, &fields); err != nil {
+			t.Fatal(err)
+		}
+		fields["signature"] = map[string]any{"ed25519": "", "ml_dsa_65": ""}
+		withSignature, err := CanonicalJSON(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		delete(fields, "signature")
+		fields["extra"] = 1
+		withExtra, err := CanonicalJSON(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		delete(fields, "extra")
+		fields["revoked"] = nil
+		withNullRevoked, err := CanonicalJSON(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, body := range map[string][]byte{
+			"signature field":   withSignature,
+			"unknown field":     withExtra,
+			"noncanonical JSON": append(bytes.Clone(test.body), ' '),
+			"null revoked":      withNullRevoked,
+		} {
+			if digest, err := StatementBodyDigestV2(test.code, body); err == nil || digest != nil || V2ErrorClassOf(err) != V2ErrMalformed {
+				t.Fatalf("0x%04x %s: digest %x, error %v", test.code, name, digest, err)
+			}
+		}
+	}
+	for _, code := range []uint16{0x0000, 0x0001, 0x0002, 0x0007, 0x0009, 0x000a, 0xffff} {
+		if digest, err := StatementBodyDigestV2(code, listBody); digest != nil || V2ErrorClassOf(err) != V2ErrUnsupportedObjectType {
+			t.Fatalf("0x%04x: digest %x, error %v; want unsupported_object_type", code, digest, err)
+		}
+	}
+}

@@ -504,6 +504,52 @@ func revocationPushSignableBytesV2(push *RevocationPushV2) ([]byte, error) {
 	return CanonicalJSON(revocationPushSignableV2{push.IssuerID, push.PushedAt, push.Revoked, push.Sequence, push.Version})
 }
 
+// validateRevocationListSignableBodyV2 accepts exactly the bytes that
+// revocationListSignableBytesV2 produces for a valid list.
+func validateRevocationListSignableBodyV2(body []byte) error {
+	if err := requireV2Fields(body, []string{"issuer_id", "next_update", "revoked", "sequence", "updated_at", "version"}); err != nil {
+		return fmt.Errorf("revocation list signable body: %w", err)
+	}
+	var signable revocationListSignableV2
+	if err := strictUnmarshalV2(body, &signable); err != nil {
+		return fmt.Errorf("revocation list signable body: %w", err)
+	}
+	canonical, err := revocationListSignableBytesV2(&RevocationListV2{
+		Version: signable.Version, IssuerID: signable.IssuerID, UpdatedAt: signable.UpdatedAt,
+		NextUpdate: signable.NextUpdate, Sequence: signable.Sequence, Revoked: signable.Revoked,
+	})
+	if err != nil {
+		return fmt.Errorf("revocation list signable body: %w", err)
+	}
+	if !bytes.Equal(body, canonical) {
+		return fmt.Errorf("revocation list signable body must use RatifyCanonicalJSON")
+	}
+	return nil
+}
+
+// validateRevocationPushSignableBodyV2 accepts exactly the bytes that
+// revocationPushSignableBytesV2 produces for a valid push.
+func validateRevocationPushSignableBodyV2(body []byte) error {
+	if err := requireV2Fields(body, []string{"issuer_id", "pushed_at", "revoked", "sequence", "version"}); err != nil {
+		return fmt.Errorf("revocation push signable body: %w", err)
+	}
+	var signable revocationPushSignableV2
+	if err := strictUnmarshalV2(body, &signable); err != nil {
+		return fmt.Errorf("revocation push signable body: %w", err)
+	}
+	canonical, err := revocationPushSignableBytesV2(&RevocationPushV2{
+		Version: signable.Version, IssuerID: signable.IssuerID, Sequence: signable.Sequence,
+		PushedAt: signable.PushedAt, Revoked: signable.Revoked,
+	})
+	if err != nil {
+		return fmt.Errorf("revocation push signable body: %w", err)
+	}
+	if !bytes.Equal(body, canonical) {
+		return fmt.Errorf("revocation push signable body must use RatifyCanonicalJSON")
+	}
+	return nil
+}
+
 func EncodeRevocationListV2(list *RevocationListV2) (_ []byte, resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	if err := validateRevocationListV2(list); err != nil {

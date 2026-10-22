@@ -129,7 +129,7 @@ Every v2 failure that is not a terminal Protocol result or a release result has 
 | Class | Raised when |
 | --- | --- |
 | `malformed` | Any decode, shape, bound, size-gate, count, timestamp-domain, or canonical-encoding failure (§2.1, §2.5, §2.6, §5), including an invalid status evidence batch, checkpoint acknowledgement, journal snapshot, or evaluation progress record |
-| `unsupported_object_type` | A digest or statement function is asked for an object type code outside the registry of §4 |
+| `unsupported_object_type` | A digest or statement function is asked for an object type code it is not defined for, including any code outside the registry of §4 |
 | `key_id_mismatch` | A key ID differs from the ID recomputed from its complete key (§2.3, §6.2 step 4), including a signer whose key is not the key the signed object names (§3.2) |
 | `delegation_digest_mismatch` | `delegation_digest` differs from the recomputed digest (§5.3) |
 | `chain_linkage_mismatch` | A chain link or the leaf subject does not match (§6.2 step 4) |
@@ -215,7 +215,7 @@ The signing API takes an explicit typed object and returns its signature; it doe
 
 The stable claim ID is `lowercase_hex(SHA-256(ASCII("ratify-protocol-claim-id-v2") || 0x00 || lp(UTF8(verifier_namespace)) || uint64_be(replay_epoch) || ChallengeClaimDigest(challenge)))`, a 64-character lowercase hexadecimal string independent of proof digest.
 
-`StatementBodyDigest(code, body) = SHA-384(ASCII("ratify-protocol-statement-body-v2") || 0x00 || uint16_be(code) || RatifyCanonicalJSON(body))` compares a signed intent independent of randomized signature bytes. It is defined for every registered code. Rotation, witness, and verification-receipt chains use this digest as their predecessor hash, and status observations use it as their body digest (§6.6), so randomized signature bytes cannot create false forks.
+`StatementBodyDigest(code, body) = SHA-384(ASCII("ratify-protocol-statement-body-v2") || 0x00 || uint16_be(code) || RatifyCanonicalJSON(body))` compares a signed intent independent of randomized signature bytes. It is defined exactly for codes `0x0003` (revocation list), `0x0004` (key-rotation statement), `0x0005` (revocation push), `0x0006` (witness entry), and `0x0008` (verification receipt), where `body` is that object's signable projection: every field except its signature fields, in its strict wire encoding. An implementation MUST reject a body that is not exactly that canonical projection as `malformed`, and MUST return `unsupported_object_type` with no digest for any other code, registered or not. Rotation, witness, and verification-receipt chains use this digest as their predecessor hash, and status observations use it as their body digest (§6.6), so randomized signature bytes cannot create false forks.
 
 `StatusEvidenceDigest(code, object) = SHA-384(ASCII("ratify-protocol-status-evidence-v2") || 0x00 || uint16_be(code) || RatifyCanonicalJSON(object))` hashes the complete canonical signed revocation object, including its signature. It is a reference to exact status evidence, not proof that a verifier independently evaluated freshness or policy.
 

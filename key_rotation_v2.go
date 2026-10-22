@@ -160,17 +160,23 @@ func keyRotationSignableBytesV2(stmt *KeyRotationStatementV2) ([]byte, error) {
 }
 
 // StatementBodyDigestV2 hashes the canonical signable projection for a v2
-// rotation, witness, or verification-receipt object. The caller supplies the
-// object-specific projection with signature fields excluded. Each supported
-// object body is schema-validated before its digest is computed.
+// revocation list (0x0003), rotation (0x0004), revocation push (0x0005),
+// witness entry (0x0006), or verification receipt (0x0008). The caller
+// supplies the object-specific projection with signature fields excluded.
+// Each supported object body is schema-validated before its digest is
+// computed; any other code is unsupported_object_type.
 func StatementBodyDigestV2(objectType uint16, signableBody []byte) (_ []byte, resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrMalformed, resultErr) }()
 	code := v2ObjectType(objectType)
-	if code != v2KeyRotationAuthorization && code != v2WitnessEntry && code != v2VerificationReceipt {
+	switch code {
+	case v2RevocationList, v2KeyRotationAuthorization, v2RevocationPush, v2WitnessEntry, v2VerificationReceipt:
+	default:
 		return nil, v2Errorf(V2ErrUnsupportedObjectType, "object type 0x%04x does not use StatementBodyDigestV2", objectType)
 	}
 	var wireErr error
-	if code == v2VerificationReceipt {
+	if code == v2RevocationList || code == v2RevocationPush {
+		wireErr = checkWireJSONV2(signableBody)
+	} else if code == v2VerificationReceipt {
 		wireErr = checkWireJSONV2WithTextTopLevel(signableBody, map[string]bool{"previous_receipt_hash": true}, map[string]bool{"bundle_hash": true})
 	} else {
 		wireErr = checkWireJSONV2(signableBody, "previous_statement_hash", "delegation_digest", "previous_receipt_hash")
@@ -197,15 +203,24 @@ func StatementBodyDigestV2(objectType uint16, signableBody []byte) (_ []byte, re
 	if err != nil || !bytes.Equal(signableBody, canonical) {
 		return nil, fmt.Errorf("signable body must use RatifyCanonicalJSON")
 	}
-	if code == v2KeyRotationAuthorization {
+	switch code {
+	case v2RevocationList:
+		if err := validateRevocationListSignableBodyV2(signableBody); err != nil {
+			return nil, err
+		}
+	case v2RevocationPush:
+		if err := validateRevocationPushSignableBodyV2(signableBody); err != nil {
+			return nil, err
+		}
+	case v2KeyRotationAuthorization:
 		if err := validateKeyRotationSignableBodyV2(signableBody); err != nil {
 			return nil, err
 		}
-	} else if code == v2WitnessEntry {
+	case v2WitnessEntry:
 		if err := validateWitnessSignableBodyV2(signableBody); err != nil {
 			return nil, err
 		}
-	} else if code == v2VerificationReceipt {
+	case v2VerificationReceipt:
 		if err := validateVerificationReceiptSignableV2(signableBody); err != nil {
 			return nil, err
 		}

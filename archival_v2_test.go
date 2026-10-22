@@ -2,6 +2,7 @@ package ratify
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -73,4 +74,17 @@ func hexV2Test(b []byte) string {
 		out = append(out, digits[c>>4], digits[c&15])
 	}
 	return string(out)
+}
+
+// SPEC-v2 §6.10: the archival proof result's language-neutral members, with
+// a null error_class on success.
+func TestArchivalProofBundleResultV2JSON(t *testing.T) {
+	ok, err := json.Marshal(ArchivalProofBundleResultV2{Assessment: FreshnessUnverifiedV2, BundleHash: "sha384:x", AgentID: "a", IssuerIDs: []string{"i"}})
+	if err != nil || string(ok) != `{"actionable":false,"agent_id":"a","assessment":"freshness_unverified","bundle_hash":"sha384:x","error_class":null,"issuer_ids":["i"]}` {
+		t.Fatalf("%s %v", ok, err)
+	}
+	failed, err := json.Marshal(ArchivalProofBundleResultV2{Assessment: FreshnessUnverifiedV2, ErrorClass: V2ErrInvalidSignature})
+	if err != nil || !strings.Contains(string(failed), `"error_class":"invalid_signature"`) || !strings.Contains(string(failed), `"issuer_ids":[]`) {
+		t.Fatalf("%s %v", failed, err)
+	}
 }

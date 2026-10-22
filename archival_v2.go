@@ -16,21 +16,21 @@ const FreshnessUnverifiedV2 = "freshness_unverified"
 // log position or rotation state was evaluated.
 type ArchivalVerificationV2 struct {
 	// ObjectType is the SPEC-v2 object code of the verified object.
-	ObjectType uint16
+	ObjectType uint16 `json:"object_type_code"`
 	// Freshness is always FreshnessUnverifiedV2.
-	Freshness string
+	Freshness string `json:"freshness"`
 	// Actionable is always false.
-	Actionable bool
+	Actionable bool `json:"actionable"`
 	// Digest identifies the verified content as "sha384:" + 96 hex: the
 	// bundle hash for a proof bundle, StatementBodyDigestV2 for rotation,
 	// witness and verification-receipt statements, and the status evidence
 	// digest for revocation lists and pushes. (Proof bundles use
 	// VerifyArchivalProofBundleV2.) It is empty for certificates
 	// and transaction receipts, which have no registered object digest.
-	Digest string
+	Digest string `json:"digest"`
 	// SignerKeyIDs lists the v2 key IDs whose signatures were verified, in
 	// object order.
-	SignerKeyIDs []string
+	SignerKeyIDs []string `json:"signer_key_ids"`
 }
 
 func archivalResultV2(code v2ObjectType, digest []byte, signers ...string) ArchivalVerificationV2 {
@@ -47,15 +47,37 @@ func archivalResultV2(code v2ObjectType, digest []byte, signers ...string) Archi
 // no decision field and is never actionable: no challenge was consumed and
 // no provider was invoked. ErrorClass is empty when every check passed.
 type ArchivalProofBundleResultV2 struct {
-	Assessment string
-	Actionable bool
-	BundleHash string
-	AgentID    string
-	IssuerIDs  []string
-	ErrorClass V2ErrorClass
+	Assessment string       `json:"assessment"`
+	Actionable bool         `json:"actionable"`
+	BundleHash string       `json:"bundle_hash"`
+	AgentID    string       `json:"agent_id"`
+	IssuerIDs  []string     `json:"issuer_ids"`
+	ErrorClass V2ErrorClass `json:"error_class"`
 	// Err carries the diagnostic for ErrorClass; it is not part of the
 	// language-neutral result.
-	Err error
+	Err error `json:"-"`
+}
+
+// MarshalJSON writes the SPEC-v2 §6.10 members, with error_class null when
+// every check passed.
+func (r ArchivalProofBundleResultV2) MarshalJSON() ([]byte, error) {
+	var class *V2ErrorClass
+	if r.ErrorClass != "" {
+		c := r.ErrorClass
+		class = &c
+	}
+	issuers := r.IssuerIDs
+	if issuers == nil {
+		issuers = []string{}
+	}
+	return CanonicalJSON(struct {
+		Actionable bool          `json:"actionable"`
+		AgentID    string        `json:"agent_id"`
+		Assessment string        `json:"assessment"`
+		BundleHash string        `json:"bundle_hash"`
+		ErrorClass *V2ErrorClass `json:"error_class"`
+		IssuerIDs  []string      `json:"issuer_ids"`
+	}{r.Actionable, r.AgentID, r.Assessment, r.BundleHash, class, issuers})
 }
 
 // VerifyArchivalProofBundleV2 performs only the signature-and-structure

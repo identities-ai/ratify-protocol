@@ -181,19 +181,19 @@ follows; the last column names what is still missing.
 | Byte and count limits | §2.6 | `limits.json` | |
 | Numeric bounds, exclusive deadlines, clock regression | §2.5, §7.2 | `limits.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `lifecycle-scenarios.json` | Checked-arithmetic overflow vectors beyond the timestamp domain |
 | Constraint registry and evaluation | §5.2 | `objects.json`, `object-negatives.json`, `verifier-ordering.json` | |
-| Extension evaluator profiles | §5.2, §5.8 | `evaluator-profiles.json`, `verifier-ordering.json`, `object-negatives.json` | A positive signed receipt carrying `constraint_evaluators` in `objects.json`; a second SDK passing `evaluator-profiles.json` |
+| Extension evaluator profiles | §5.2, §5.8 | `evaluator-profiles.json`, `verifier-ordering.json`, `object-negatives.json` | A positive signed receipt carrying `constraint_evaluators` in `objects.json` |
 | Issuer duties, challenge issuance, status publisher | §5.1, §5.4, §7.3 | `issuer-duties.json`, `challenge-issuance.json`, `status-publisher.json` | |
 | `SecurityJournalV2` snapshots, transitions, migration | §6.6 | `security-journal.json` | Invariant-failure vectors |
 | Status provenance | §6.5 | `verifier-ordering.json`, `limits.json` | |
-| Provider failures, cancellation, interrupted assessments | §6.7, §6.11 | `verifier-ordering.json`, `lifecycle-scenarios.json` | Cancellation is a Go test, not a shared vector |
+| Provider failures, cancellation, interrupted assessments | §6.7, §6.11 | `verifier-ordering.json`, `lifecycle-scenarios.json` | Cancellation is tested in each SDK's own suite, not as a shared vector |
 | Trust resolution | §6.1 | `verifier-ordering.json` (provider outcomes) | A shared registry resolver producing ambiguity |
-| Stream sequence | §7.4 | `lifecycle-scenarios.json` | Concurrency runs as Go tests on the reference store |
-| Part B profiles | §7.13 to §7.15, §8.6 | `lifecycle-scenarios.json` (`profile_scenarios`), `device-state.json`, `verifier-ordering.json` (`custody_profile_*`) | Profile scripts and the complete-state projection known answers run only in Go |
+| Stream sequence | §7.4 | `lifecycle-scenarios.json` | Concurrency runs as each SDK's own tests against its reference store, not as a shared vector |
+| Part B profiles | §7.13 to §7.15, §8.6 | `lifecycle-scenarios.json` (`profile_scenarios`), `device-state.json`, `verifier-ordering.json` (`custody_profile_*`) | |
 | Claim lifecycle and release | §6.9, §7.3 to §7.9 | `lifecycle-scenarios.json` | Outbox retention past challenge expiry; receiver action idempotency (managed Verify only) |
 | Composed transaction verification | §5.7 | `transaction-verification.json`, `object-negatives.json` | |
-| Archival results | §6.10 | `object-negatives.json` (proof bundle), Go unit tests | Per-object shared vectors |
-| External signer | §3.2 | `objects.json` (`tr`, `mu`), `hedged-signatures.json`, Go unit tests | Key-binding and invalid-component shared vectors |
-| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, verified by Go | Fixtures from TypeScript, Python, Rust, and C, and every SDK verifying every other's fixture |
+| Archival results | §6.10 | `object-negatives.json` (proof bundle), per-SDK unit tests | Per-object shared vectors |
+| External signer | §3.2 | `objects.json` (`tr`, `mu`), `hedged-signatures.json`, per-SDK unit tests | Key-binding and invalid-component shared vectors |
+| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, `typescript.json`, `python.json`, `rust.json`, and `c.json`, each verified by all five SDKs | |
 
 Error classes are the closed list of SPEC-v2 §2.7, declared in `errors_v2.go` (`V2ErrorClass`). Precedence for a
 single object is: strict decode and field format (`malformed`), then key-ID
@@ -235,8 +235,11 @@ of this pass; "After" is the reference with this corpus.
 ### Not covered by this corpus
 
 - The items in the "Still missing" column above.
-- Fuzzed decode and concurrency tests outside Go. Per-SDK coverage of this
-  corpus is recorded in
+- Fuzzed decode and concurrency. Each SDK runs its own: Go fuzz targets
+  (`scripts/fuzz-v2.sh`), TypeScript `decoders_fuzz.test.ts`, Python
+  Hypothesis tests, and Rust proptest and `cargo fuzz` targets; the C ABI has
+  no fuzz harness of its own and wraps the Rust decoders. Per-SDK coverage of
+  this corpus is recorded in
   [`docs/V2_REFERENCE_COMPATIBILITY.md`](../../docs/V2_REFERENCE_COMPATIBILITY.md).
 
 This is still not a v2 conformance badge. `2.0.0-beta.1` requires every SDK to

@@ -25,12 +25,12 @@ rewritten as a v2 result.
 
 | Surface | Current artifact | V2 work and required evidence | Status |
 |---|---|---|---|
-| Go SDK | `sdks/go` (repository root, module `/v2`) | Reference implementation; run shared vectors, strict parser negatives, crypto vectors, Go tests, race tests, decoder fuzzing | Full v2 reference verifier. Strict decode and canonical encode of every v2 object, hybrid signatures, `VerifyProofBundleV2` live verifier, revocation status reducer, witness and receipt logs, key rotation journal, and transaction receipts. `v2_conformance_test.go` runs every file in `testvectors/v2`, and `internal/v2vectors` fails if a committed vector differs from the generator. `go vet ./...` and `go test ./...` pass; decoder fuzz targets run as seed tests. Not independently reviewed. |
-| TypeScript SDK | `sdks/typescript` (`2.0.0-alpha.1`) | Same; package/version strategy must allow explicit v1 and v2 use; run vectors and TS tests | Full v2 verifier including `verifyProofBundleV2`. `npm test` (779 tests, 0 skipped) runs every file in `testvectors/v2`; see the coverage table below. v2 prereleases use the `v2-alpha` npm dist-tag. No fuzzed decode or concurrent-state tests yet. Not published. |
-| Python SDK | `sdks/python` (v1), `sdks/python-v2` (v2) | Version the v2 API separately from published alpha.20; run shared vectors, malformed-input tests, full suite, and native-required CI. | The v1 package (`ratify-protocol`, `1.0.0a21` in this tree) carries no v2 API. The v2 API lives in the separate `ratify-protocol-v2` distribution, `2.0.0a1`, import package `ratify_protocol_v2`, and includes `verify_proof_bundle_v2`. Its suite (438 tests in pure-Python mode) runs every file in `testvectors/v2`, and CI repeats it with the native extra required. Locally built v1 and v2 packages install and import side by side. No fuzzed decode or concurrent-state tests yet. Not published. |
-| Python native SDK | `sdks/python-native` (v1), `sdks/python-native-v2` (v2) | Build and test the exact matching wheel; check package-version lockstep and ensure stale wheels fail clearly. | Native support is deterministic key generation only, on both lines; there is no native v2 signing or verification bridge. The v1 extension (`ratify-protocol-native`, `1.0.0-alpha.21`) builds against the published v1 crate pinned exactly at `1.0.0-alpha.20`, not the v2 source tree. The v2 extension (`ratify-protocol-native-v2`, `2.0.0-alpha.1`) is version-locked to `ratify-protocol-v2`, which refuses to import a mismatched extension. Both wheels build and pass their native-required Python suites locally. Not published. |
-| Rust SDK | `sdks/rust` (`2.0.0-alpha.1`) | Same; run vectors, parser negatives, cargo tests | Full v2 verifier including `verify_proof_bundle_v2`. `cargo test` passes; `tests/v2_conformance.rs` runs every file in `testvectors/v2` and asserts per-file minimum counts. No fuzzed decode or concurrent-state tests yet. Not published. |
-| C SDK | `sdks/c` (`2.0.0-alpha.1`) | Same; validate constrained/edge build, memory and parser bounds, vectors, hardware-independent tests | Object-level v2 only. The `ratify_v2_*` ABI derives and checks v2 key IDs and strictly decodes and verifies the signatures of every v2 object; `cargo test --test v2_abi` runs `keys.json`, `objects.json`, `object-negatives.json`, and `key-rotation-signature.json`, and `scripts/test-v2-c-abi.sh` runs keys, objects, and negatives from a compiled C program (18 key IDs, 10 positive and 224 negative objects, 0 failures). Operation/session context, challenge-claim, and delegation-signature helpers match their vectors. There is no C stateful live verifier, status reducer, or log and rotation state machine, so the verifier ordering, status, log, and rotation sequence vectors do not run. Embedded target builds for v2 are not yet tested. Not published. |
+| Go SDK | `sdks/go` (repository root, module `/v2`) | Reference implementation; run shared vectors, strict parser negatives, crypto vectors, Go tests, race tests, decoder fuzzing | Full v2 reference verifier. Strict decode and canonical encode of every v2 object, hybrid signatures, `VerifyProofBundleV2` live verifier, revocation status reducer, witness and receipt logs, key rotation journal, and transaction receipts. `v2_conformance_test.go` runs every file in `testvectors/v2`, and `internal/v2vectors` fails if a committed vector differs from the generator. `go vet ./...` and `go test ./...` pass (2402 tests and subtests, 0 skipped), `go test -race` passes on the root, `internal`, and `v2reference` packages, and `scripts/fuzz-v2.sh` runs every v2 decoder fuzz target (20 targets, 30 seconds each). Not independently reviewed. |
+| TypeScript SDK | `sdks/typescript` (`2.0.0-alpha.1`) | Same; package/version strategy must allow explicit v1 and v2 use; run vectors and TS tests | Full v2 verifier including `verifyProofBundleV2`. `npm test` (1612 tests, 0 skipped) runs every file in `testvectors/v2` and fails on any corpus entry no runner consumes (`test/v2/corpus_files.test.ts`). It includes randomized decoder tests (`test/v2/decoders_fuzz.test.ts`) and concurrency and issuer-collision tests against the reference store. v2 prereleases use the `v2-alpha` npm dist-tag. Not published. |
+| Python SDK | `sdks/python` (v1), `sdks/python-v2` (v2) | Version the v2 API separately from published alpha.20; run shared vectors, malformed-input tests, full suite, and native-required CI. | The v1 package (`ratify-protocol`, `1.0.0a21` in this tree) carries no v2 API. The v2 API lives in the separate `ratify-protocol-v2` distribution, `2.0.0a1`, import package `ratify_protocol_v2`, and includes `verify_proof_bundle_v2`. With the native extension required (`RATIFY_REQUIRE_NATIVE=1`) its suite passes 1418 tests, 0 skipped, over every file in `testvectors/v2` (`tests/test_corpus_files.py` fails on an unconsumed entry), including Hypothesis decoder and evaluation tests and concurrency tests against the reference store. Without the extension the verify path still runs: 1101 passed and 201 skipped, the skips being the tests that sign. Locally built v1 and v2 packages install and import side by side. Not published. |
+| Python native SDK | `sdks/python-native` (v1), `sdks/python-native-v2` (v2) | Build and test the exact matching wheel; check package-version lockstep and ensure stale wheels fail clearly. | The v2 extension (`ratify-protocol-native-v2`, `2.0.0-alpha.1`) is a required dependency of `ratify-protocol-v2` and performs every v2 private-key operation: key generation and Ed25519 + ML-DSA-65 signing. There is no pure-Python signing path; verification stays in pure Python. It is version-locked to `ratify-protocol-v2`, which refuses to import a mismatched extension. The v1 extension (`ratify-protocol-native`, `1.0.0-alpha.21`) provides deterministic key generation only and builds against the published v1 crate pinned exactly at `1.0.0-alpha.20`, not the v2 source tree. Not published. |
+| Rust SDK | `sdks/rust` (`2.0.0-alpha.1`) | Same; run vectors, parser negatives, cargo tests | Full v2 verifier including `verify_proof_bundle_v2`. `cargo test` (205 tests, 0 failed, 0 ignored) runs every file in `testvectors/v2`: `tests/v2_conformance.rs` asserts per-file minimum counts and `tests/v2_corpus_inventory.rs` fails on an unconsumed entry. It includes proptest decoder properties and concurrency tests against the reference store, and `fuzz/` holds `cargo fuzz` decoder targets. `cargo clippy --all-targets -- -D warnings` is clean. Not published. |
+| C SDK | `sdks/c` (`2.0.0-alpha.1`) | Same; validate constrained/edge build, memory and parser bounds, vectors, hardware-independent tests | Full v2 C ABI at parity with the Rust SDK it wraps. `cargo test` (161 tests, 0 failed, 0 ignored) drives every file in `testvectors/v2` through `ratify_v2_*` exports only (`tests/v2c_inventory.rs` fails on an unconsumed entry), and every fallible export must return a SPEC-v2 §2.7 class (`tests/v2c_public_error_classes.rs`). `scripts/test-v2-c-abi.sh` compiles a plain C program against `include/ratify.h` and runs keys, objects, negatives, hedged signatures, limits, every verifier-ordering vector with C-implemented providers, a release lifecycle with a C-implemented store, and every cross-SDK fixture (929 checks, 0 failures), also clean with `SANITIZE=1`. The same program cross-compiled for armv7 passed on a Raspberry Pi 2 Model B running Linux: 929 checks, 0 failures. Other embedded targets are untested. Not published. |
 | Google ADK | `references/google-adk` | Upgrade integration and pinned dependencies; preserve ADK-specific multi-agent, ceiling, delegation, and scale cases; run reference gate on v2 | Alpha.20 v1 evidence; v2 pending |
 | LangChain | `references/langchain` | Upgrade its exact SDK pin; preserve MCP boundary and independent receiver verification; run documented gate | Alpha.19 v1 evidence; v2 pending |
 | GitHub Copilot | `references/github-copilot` | Upgrade TypeScript SDK, action profile, plugin/runtime and tests; check registry entry and published Lab page | Alpha.19 v1 evidence; v2 pending |
@@ -48,46 +48,59 @@ rewritten as a v2 result.
 | Protocol demos | `demos/*`, including bounded-tool-call and NVIDIA | V2 examples plus preserved explicitly pinned v1 examples; run every demo gate and verify command documentation | Not started |
 | Registry and discovery | `references/registry/*`, `references/README.md`, root README | Versioned profiles, executable gate, exact tested package versions, review state and working links | Not started |
 
-## Protocol v2 vector coverage at 2.0.0-alpha.1
+## Protocol v2 vector coverage on this branch
 
-Each cell names the test that consumes the file and how many vectors it runs.
-"Yes" without a count means the whole file is checked by one test. Python
-native has no verifier of its own; it reruns the Python v2 suite with the
-native extra required.
+"Yes" means that SDK's suite runs the whole entry and passes on this branch.
+`derive-external-mu.py` is a helper that recomputes the external signer bytes
+pinned in `objects.json`, not a vector file. Each port has an inventory test
+that fails if `testvectors/v2` holds an entry no runner consumes: TypeScript
+`test/v2/corpus_files.test.ts`, Python `tests/test_corpus_files.py`, Rust
+`tests/v2_corpus_inventory.rs`, and C `tests/v2c_inventory.rs`; the Go
+reference generates the corpus, and `internal/v2vectors` fails if a committed
+vector differs from its generator. Python native
+has no verifier of its own; the Python v2 suite runs with it required. The C
+ABI column counts only runners that call `ratify_v2_*` exports.
 
-| `testvectors/v2` file | Go reference | TypeScript | Python v2 | Rust | C ABI |
+| `testvectors/v2` entry | Go reference | TypeScript | Python v2 | Rust | C ABI |
 |---|---|---|---|---|---|
-| `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | 18 + 6 | Yes | 18 + 6 (Rust-driven); 18 (compiled C) |
-| `objects.json` (10 objects, 14 signatures) | Yes | 10 | 10 | 10 | Verify only: 10 (Rust-driven and compiled C) |
-| `object-negatives.json` (224) | Yes | 224 | 224 | 224 | 224 (Rust-driven and compiled C) |
-| `verifier-ordering.json` (81: 32 pre-claim, 2 replay, 47 terminal) | Yes | 81 | 81 | 81 | Not run |
-| `status-sequences.json` (20 scenarios, 39 queries) | Yes | 20 | 20 | 20 | Not run |
-| `log-sequences.json` (witness and receipt logs) | Yes | 2 | 2 | 2 | Not run |
-| `rotation-sequences.json` | Yes | 1 | 1 | 1 | Not run |
-| `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | 2 | Yes | Verify only: 2 |
-| `delegation-signature.json` | Yes | Yes | Yes | Yes | Key ID and signature primitive |
-| `operation-session-context.json` | Yes | Yes | Yes | Yes | Yes |
-| `challenge-claim.json` | Yes | Yes | Yes | Yes | Yes |
+| `annex-a.json` (Annex A clauses, canonical JSON, strict decode, scopes) | Yes | Yes | Yes | Yes | Yes |
+| `challenge-claim.json` (claim ID inputs) | Yes | Yes | Yes | Yes | Yes |
+| `challenge-issuance.json` (9 scenarios) | Yes | Yes | Yes | Yes | Yes |
+| `cross-sdk/` (5 fixtures, one per SDK) | Yes | Yes | Yes | Yes | Yes |
+| `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes |
+| `device-state.json` (5 complete-state projections) | Yes | Yes | Yes | Yes | Yes |
+| `evaluator-profiles.json` (70 profile cases, 13 context bounds) | Yes | Yes | Yes | Yes | Yes |
+| `hedged-signatures.json` (10 objects) | Yes | Yes | Yes | Yes | Yes |
+| `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
+| `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (28 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
+| `limits.json` (32 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
+| `object-negatives.json` (399 negatives) | Yes | Yes | Yes | Yes | Yes |
+| `objects.json` (10 objects) | Yes | Yes | Yes | Yes | Yes |
+| `operation-session-context.json` (context known answers) | Yes | Yes | Yes | Yes | Yes |
+| `rotation-sequences.json` (1 scenario) | Yes | Yes | Yes | Yes | Yes |
+| `security-journal.json` (2 scenarios, 8 migrations, 11 import negatives) | Yes | Yes | Yes | Yes | Yes |
+| `status-publisher.json` (13 scenarios) | Yes | Yes | Yes | Yes | Yes |
+| `status-sequences.json` (22 scenarios) | Yes | Yes | Yes | Yes | Yes |
+| `transaction-verification.json` (12 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `verifier-ordering.json` (200 cases) | Yes | Yes | Yes | Yes | Yes |
 
-Go, TypeScript, Python v2, and Rust run the full stateful verifier
-(`VerifyProofBundleV2` and its equivalents) against the ordering vectors,
-including stage, error class, terminal tuple, exact receipt body, allow
-horizon, rate batch, and callback counts. The C ABI verifies key IDs, strict
-object decoding, and object signatures only. Each TypeScript, Python, and Rust
-runner also fails if `testvectors/v2` contains a file it does not consume.
+Go, TypeScript, Python v2, Rust, and the C ABI all run the full stateful
+verifier against the ordering vectors, including stage, error class, terminal
+tuple, exact receipt body, allow horizon, rate batch, and callback counts. Each
+SDK's public error class table mirrors Go `TestV2PublicAPIErrorsAreClassified`
+(`errors_v2_public_test.go`), and every row an SDK calls with Go's input
+returns Go's SPEC-v2 §2.7 class.
 
-What this alpha does not yet prove, against the `2.0.0-beta.1` gates in
-SPEC-v2 §8.1: fuzzed decode tests outside Go; concurrency and issuer-collision
-tests against the reference stores in every SDK; the vector files marked
-required for beta in `testvectors/v2/README.md` (limits, numeric bounds,
-constraints, security journal, status provenance, provider failures, trust
-resolution, stream sequence, claim lifecycle, release, transaction
-verification, archival, and external signer); fixtures generated by every SDK
-and verified by every other; a C stateful verifier with its suite run on armv7
-Linux hardware; Python signing through the native backend only; and a recorded
-closure of the internal adversarial review. Embedded v2 target builds remain
-untested. External independent review is a `2.0.0` gate (SPEC-v2 §8.2), not a
-beta gate. v2.0.0-alpha.1 is therefore not a v2 conformance claim.
+What this branch does not yet prove, against the `2.0.0-beta.1` gates in
+SPEC-v2 §8.1: the items in the "Still missing" column of
+[`testvectors/v2/README.md`](../testvectors/v2/README.md#required-for-200-beta1)
+and a recorded closure of the internal adversarial review. Embedded v2 targets
+other than armv7 Linux remain untested. External independent review and a
+soak are `2.0.0` gates (SPEC-v2 §8.2), not beta gates. This is therefore not a
+v2 conformance claim.
 
 ## Cross-SDK fixture matrix (SPEC-v2 §8.1)
 
@@ -100,22 +113,22 @@ when that verifier's suite runs that fixture and passes.
 
 | Producer (row), verifier (column) | Go | TypeScript | Python v2 | Rust | C ABI |
 |---|---|---|---|---|---|
-| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass (`TestV2CrossSDKFixtures`) | Not run | Not run | Not run | Not run |
-| TypeScript | No fixture | No fixture | No fixture | No fixture | No fixture |
-| Python v2 | No fixture | No fixture | No fixture | No fixture | No fixture |
-| Rust | No fixture | No fixture | No fixture | No fixture | No fixture |
-| C ABI | No fixture | No fixture | No fixture | No fixture | No fixture |
+| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass | Pass | Pass | Pass | Pass |
+| TypeScript (`typescript.json`, `npm run generate:cross-sdk`) | Pass | Pass | Pass | Pass | Pass |
+| Python v2 (`python.json`, `python tests/gen_cross_sdk_fixture.py`) | Pass | Pass | Pass | Pass | Pass |
+| Rust (`rust.json`, `cargo run --example v2_cross_sdk_fixture`) | Pass | Pass | Pass | Pass | Pass |
+| C ABI (`c.json`, `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk`) | Pass | Pass | Pass | Pass | Pass |
 
-Only Go to Go is covered. The §8.1 gate requires every cell. The TypeScript
-runner's unconsumed-entry check lists directory entries, so it also reports
-`cross-sdk` until that port consumes the directory.
+The verifying tests are Go `TestV2CrossSDKFixtures` (`cross_sdk_v2_test.go`),
+TypeScript `test/v2/cross_sdk_v2.test.ts`, Python `tests/test_cross_sdk_v2.py`,
+Rust `tests/v2_cross_sdk.rs`, and C `tests/v2c_cross_sdk.rs` together with the
+compiled C program of `scripts/test-v2-c-abi.sh`. All 25 cells pass.
 
-## Corpus changes pending SDK ports (beta reconciliation)
+## Corpus changes since alpha.1 (beta reconciliation)
 
 The Go reference and SPEC-v2 were reconciled for `2.0.0-beta.1` after alpha.1.
-Only the Go reference runs the resulting corpus; the other SDK suites fail
-against it until they are ported, and no SDK other than Go may be described as
-passing it. Changes to `testvectors/v2`:
+All five SDKs have since been ported and pass the resulting corpus. Changes to
+`testvectors/v2`:
 
 | File | Change since alpha.1 |
 |---|---|
@@ -136,18 +149,6 @@ passing it. Changes to `testvectors/v2`:
 | `status-publisher.json` | New: 13 signed-status publisher scenarios (39 steps) with journal ingestion and role-configuration refusals |
 | `evaluator-profiles.json` | New: 70 standard evaluator profile cases (34 `max_count/v1`, 36 `allowed_values/v1`) and 13 request-context bound cases |
 | `device-state.json` | New: 5 single-device offline complete-state projection known answers (SPEC-v2 §7.13). The record encoding inside each projection member is now normative instead of implementation-defined, so an SDK that implements the profile must replace its own record encoding with the §7.13 encoding and reproduce these bytes |
-
-SDK test files that read these vector files, and therefore fail until ported:
-
-| SDK | Test file | Changed files it reads |
-|---|---|---|
-| TypeScript | `sdks/typescript/test/conformance_v2.test.ts` | `objects.json`, `object-negatives.json`, `verifier-ordering.json`, `status-sequences.json`, `log-sequences.json`, `rotation-sequences.json`; also fails on the eight new files it does not consume |
-| Python v2 | `sdks/python-v2/tests/test_v2_conformance.py` | Same files as TypeScript, and the same unconsumed-file check |
-| Python v2 | `sdks/python-v2/tests/test_mldsa65_pure.py` | `objects.json`, `object-negatives.json` |
-| Rust | `sdks/rust/tests/v2_conformance.rs` | Same files as TypeScript, with per-file minimum counts, and the same unconsumed-file check |
-| Rust | `sdks/rust/tests/v2_roundtrip.rs` | `objects.json` |
-| C ABI | `sdks/c/tests/v2_abi.rs`, `sdks/c/scripts/test-v2-c-abi.sh` | `objects.json`, `object-negatives.json` (the new timestamp and registry negatives) |
-| C ABI | `sdks/c/src/v2.rs` | `objects.json` (test module) |
 
 Go reference state on this branch: `go test ./...` runs every file in
 `testvectors/v2`; the decoder fuzz targets (`scripts/fuzz-v2.sh`) cover every

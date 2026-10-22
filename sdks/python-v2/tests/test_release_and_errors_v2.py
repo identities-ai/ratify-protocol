@@ -15,7 +15,7 @@ from hypothesis import strategies as st
 from corpus import V2_DIR, b64, load
 from v2_harness import BACKGROUND, Counts, FixedClock, ScriptedClaimStore, build_verify_request, keys
 
-from ratify_protocol_v2 import release_v2
+from ratify_protocol_v2 import _native, release_v2
 from ratify_protocol_v2.claim_store_v2 import V2EvaluationToken, terminal_payload_matches_v2
 from ratify_protocol_v2.errors_v2 import ALL_ERROR_CLASSES, V2ErrorClass
 from ratify_protocol_v2.protocol_v2 import RevocationListV2, sign_revocation_list_v2
@@ -84,6 +84,7 @@ def test_release_requires_a_typed_committed_outcome():
         assert release_v2_decision(BACKGROUND, bogus, b"wire", config).status == "rejected"
 
 
+@pytest.mark.skipif(not _native.AVAILABLE, reason="signing the status lists needs ratify-protocol-native-v2")
 def test_status_is_issuer_scoped_for_colliding_cert_ids():
     """Two issuers using the same cert_id: a revocation by one issuer never
     affects the other's certificate (issuer collision)."""

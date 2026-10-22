@@ -24,7 +24,7 @@ Every object is signed through a typed signer (`sign_delegation_cert_v2`,
 `sign_proof_bundle_v2`, `sign_revocation_list_v2`, `sign_revocation_push_v2`,
 `sign_key_rotation_statement_v2`, `sign_witness_entry_v2`,
 `sign_transaction_receipt_party_v2`, `sign_verification_receipt_v2`), each
-with a `*_with_signer(ctx, ..., signer)` variant that accepts an external
+with a `*_with_signer(ctx, ..., signer)` variant (`sign_key_rotation_statement_v2_with_signers` for the two rotation keys) that accepts an external
 signer (`SignerV2`) in direct mode (it receives the 77-byte message `M` and
 the registered ML-DSA context) or external-μ mode (it receives only `mu`).
 The SDK checks the signer's complete public key against the object before

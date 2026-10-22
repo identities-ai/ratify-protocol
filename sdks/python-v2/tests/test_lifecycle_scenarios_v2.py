@@ -44,6 +44,10 @@ from ratify_protocol_v2.verification_receipt_v2 import (
 )
 from ratify_protocol_v2.verify_v2 import V2_STAGE_COMMITTED, V2_STAGE_EVALUATING, V2_STAGE_REPLAY, verify_proof_bundle_v2
 
+from ratify_protocol_v2 import _native  # noqa: E402
+
+pytestmark = pytest.mark.skipif(not _native.AVAILABLE, reason="the reference store signs receipts; signing needs ratify-protocol-native-v2")
+
 FILE = load("lifecycle-scenarios.json")
 SCENARIOS = FILE["scenarios"]
 PROFILE_SCENARIOS = FILE["profile_scenarios"]

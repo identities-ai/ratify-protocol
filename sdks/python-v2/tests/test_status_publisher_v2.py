@@ -20,6 +20,10 @@ from ratify_protocol_v2.signing_v2 import key_id_v2, keypair_from_seeds_v2, new_
 from ratify_protocol_v2.status_state_v2 import RevocationStatusPolicyV2, revoked_cert_ids_v2
 from ratify_protocol_v2.v2reference.journal import JournalStore
 
+from ratify_protocol_v2 import _native  # noqa: E402
+
+pytestmark = pytest.mark.skipif(not _native.AVAILABLE, reason="the status publisher signs; signing needs ratify-protocol-native-v2")
+
 VECTORS = load("status-publisher.json")
 KEYS = {k["name"]: k for k in load("keys.json")["keys"]}
 CTX = context_v2.background()

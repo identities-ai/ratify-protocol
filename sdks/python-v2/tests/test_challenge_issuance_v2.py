@@ -27,6 +27,10 @@ from ratify_protocol_v2.v2reference.challenges import (
 from ratify_protocol_v2.v2reference.store import Store
 from ratify_protocol_v2.verify_v2_preflight import preflight_proof_bundle_v2
 
+from ratify_protocol_v2 import _native  # noqa: E402
+
+pytestmark = pytest.mark.skipif(not _native.AVAILABLE, reason="the reference store signs receipts; signing needs ratify-protocol-native-v2")
+
 FILE = load("challenge-issuance.json")
 SCENARIOS = FILE["scenarios"]
 NAMESPACE = "verify-test"

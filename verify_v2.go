@@ -545,22 +545,3 @@ func finalizeV2Safely(ctx context.Context, store ClaimStoreV2, token *V2Evaluati
 	}()
 	return FinalizeClaimProofBundleV2(ctx, store, token, terminal, body)
 }
-
-func readV2AuthoritativeTime(ctx context.Context, clock V2AuthoritativeClock) (now int64, err error) {
-	if clock == nil {
-		return 0, v2Errorf(V2ErrClockUnavailable, "v2 authoritative clock is not configured")
-	}
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			now, err = 0, v2Errorf(V2ErrClockUnavailable, "v2 authoritative clock panicked: %v", recovered)
-		}
-	}()
-	now, err = clock.AuthoritativeTimeV2(ctx)
-	if err != nil {
-		return 0, v2Classify(V2ErrClockUnavailable, err)
-	}
-	if !validV2Timestamp(now) {
-		return 0, v2Errorf(V2ErrClockUnavailable, "v2 authoritative clock returned %d outside 0..%d", now, V2MaxTimestampSeconds)
-	}
-	return now, nil
-}

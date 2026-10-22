@@ -61,9 +61,9 @@ const (
 	// fail before claim with this one class.
 	V2ErrStreamSequenceMismatch V2ErrorClass = "stream_sequence_mismatch"
 
-	// Clock reads at finalization and release.
-	V2ErrClockUnavailable V2ErrorClass = "clock_unavailable"
-	V2ErrClockRegressed   V2ErrorClass = "clock_regressed"
+	// V2ErrClockRegressed: an authoritative clock reading below the
+	// store's high-water mark or below T_claim (SPEC-v2 §7.2).
+	V2ErrClockRegressed V2ErrorClass = "clock_regressed"
 	// V2ErrEvaluationCancelled: the caller's context ended after the claim;
 	// nothing was committed and the claim remains recoverable.
 	V2ErrEvaluationCancelled V2ErrorClass = "evaluation_cancelled"

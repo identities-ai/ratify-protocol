@@ -331,3 +331,22 @@ func getV2AcknowledgementSafely(ctx context.Context, checkpoint V2ReceiptCheckpo
 	}()
 	return checkpoint.GetV2Acknowledgement(ctx, logID, sequence)
 }
+
+// readV2AuthoritativeTime is release's T_release reading. A store-reported
+// clock_regressed error keeps its class; any other failure, panic, or a
+// reading outside the timestamp domain is an unavailable clock.
+func readV2AuthoritativeTime(ctx context.Context, clock V2AuthoritativeClock) (now int64, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			now, err = 0, fmt.Errorf("v2 authoritative clock panicked: %v", recovered)
+		}
+	}()
+	now, err = clock.AuthoritativeTimeV2(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if !validV2Timestamp(now) {
+		return 0, fmt.Errorf("v2 authoritative clock returned %d outside 0..%d", now, V2MaxTimestampSeconds)
+	}
+	return now, nil
+}

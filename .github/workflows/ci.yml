@@ -36,6 +36,11 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
+      # The v2 example programs print fixed text; every SDK must match
+      # examples/v2/expected exactly.
+      - name: v2 examples (output matches examples/v2/expected)
+        run: examples/v2/go/test.sh
+
   testvector-determinism:
     name: Test vectors regenerate byte-identical
     runs-on: ubuntu-latest
@@ -93,7 +98,9 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
-          cache-dependency-path: sdks/typescript/package-lock.json
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            examples/v2/typescript/package-lock.json
 
       - name: install
         run: npm install --no-audit --no-fund
@@ -103,6 +110,10 @@ jobs:
 
       - name: full test suite (101 tests — conformance + cross-SDK + levers + providers)
         run: npm test
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        run: examples/v2/typescript/test.sh
 
   python:
     name: Python SDK
@@ -186,6 +197,12 @@ jobs:
         env:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        env:
+          RATIFY_V2_PYTHON: python
+        run: examples/v2/python/test.sh
 
   # The optional native extra's wheels are built on five platforms at release
   # time. That matrix would otherwise run for the first time during a release,
@@ -289,7 +306,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: sdks/rust
+          workspaces: |
+            sdks/rust
+            examples/v2/rust
 
       - name: build
         run: cargo build --all-targets
@@ -303,6 +322,10 @@ jobs:
 
       - name: full test suite (79 fixtures)
         run: cargo test
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        run: examples/v2/rust/test.sh
 
   c-sdk:
     name: C/C++ SDK
@@ -350,6 +373,37 @@ jobs:
       # the ratify_v2_* ABI is exercised from C, not only from Rust.
       - name: v2 C ABI smoke test (system C compiler)
         run: ./scripts/test-v2-c-abi.sh
+
+  # The C v2 examples link the test-only reference stores. The external
+  # signer example implements its signing provider with OpenSSL libcrypto,
+  # which needs ML-DSA-65 support (OpenSSL 3.5 or later). Ubuntu runners
+  # ship OpenSSL 3.0, so this job runs on macOS with Homebrew's openssl@3.
+  c-examples:
+    name: C v2 examples
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/c
+
+      - name: OpenSSL 3.5 or later
+        run: |
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          prefix="$(brew --prefix openssl@3)"
+          "$prefix/bin/openssl" version
+          echo "OPENSSL_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+      - name: v2 examples (output matches examples/v2/expected)
+        run: examples/v2/c/test.sh
+
+      - name: v2 examples under AddressSanitizer and UBSan
+        env:
+          SANITIZE: '1'
+        run: examples/v2/c/test.sh
 
   dco:
     name: DCO sign-off

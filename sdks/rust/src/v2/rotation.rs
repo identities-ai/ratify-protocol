@@ -173,9 +173,10 @@ pub fn key_rotation_statement_v2_signable_bytes(s: &KeyRotationStatementV2) -> V
 /// signable body, which is schema-validated first.
 pub fn statement_body_digest_v2(object_type: u16, signable_body: &[u8]) -> V2Result<Vec<u8>> {
     if ![0x0004, 0x0006, 0x0008].contains(&object_type) {
-        return plain(format!(
-            "object type 0x{object_type:04x} does not use StatementBodyDigestV2"
-        ));
+        return err(
+            V2ErrorClass::UnsupportedObjectType,
+            format!("object type 0x{object_type:04x} does not use StatementBodyDigestV2"),
+        );
     }
     let root = if object_type == 0x0008 {
         parse_wire(signable_body, &["previous_receipt_hash"], &["bundle_hash"])

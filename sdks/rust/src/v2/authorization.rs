@@ -538,11 +538,9 @@ fn load_v2_time_zone(configured_version: &str, tz: &str) -> Result<Arc<Zone>, St
     load_zone(tz).map_err(|e| e.message().to_string())
 }
 
-/// `now.In(loc)`: (UTC offset, end of the current zone period, local civil
-/// date and clock).
+/// `now.In(loc)`: (UTC offset, local civil date and clock).
 struct LocalTime {
     offset: i64,
-    zone_end: Option<i64>,
     year: i64,
     month: u32,
     day: u32,
@@ -554,7 +552,6 @@ fn local_time(zone: &Zone, now: i64) -> LocalTime {
     let (year, month, day, hour, minute, _) = civil_from_unix(now.wrapping_add(info.offset_seconds));
     LocalTime {
         offset: info.offset_seconds,
-        zone_end: info.end,
         year,
         month,
         day,
@@ -658,6 +655,35 @@ pub(crate) fn evaluate_constraint_v2(
     }
 }
 
+/// Go `nextUTCOffsetChangeV2`: the first instant after `now` at which the UTC
+/// offset of `zone` differs from its offset at `now` (SPEC-v2 §5.2), or `None`
+/// when it never changes again within the timestamp domain. Explicit
+/// transitions come from the transition table, then the POSIX TZ footer rule
+/// recurs every year; a transition that keeps the offset is not a change.
+///
+/// Past a year's last footer transition the zone period reports the start of
+/// the year plus 365 days as its end. That bound keeps the offset, so the loop
+/// steps past it instead of ending the period there.
+fn next_utc_offset_change_v2(zone: &Zone, now: i64) -> Option<i64> {
+    let offset = zone.lookup(now).offset_seconds;
+    let mut candidate = now;
+    while candidate <= V2_MAX_TIMESTAMP_SECONDS {
+        let mut end = zone.lookup(candidate).end?;
+        if end <= candidate {
+            // The leap-year bound can equal the instant it was computed from;
+            // resume at the next UTC year, which has no footer transition
+            // before it.
+            let year = civil_from_unix(candidate).0;
+            end = unix_from_civil_utc(year + 1, 1, 1, 0, 0, 0);
+        }
+        if zone.lookup(end).offset_seconds != offset {
+            return Some(end);
+        }
+        candidate = end;
+    }
+    None
+}
+
 /// Go `localTimeWindowValidUntilV2`: bound an allow at the end of each
 /// currently accepted local minute window or the next time-zone offset
 /// transition, whichever is first.
@@ -687,9 +713,9 @@ pub(crate) fn local_time_window_valid_until_v2(bundle: &ProofBundleV2, tzdb_vers
                 0,
             )
             .wrapping_sub(local.offset);
-            if let Some(zone_end) = local.zone_end {
-                if zone_end < until {
-                    until = zone_end;
+            if let Some(change) = next_utc_offset_change_v2(&zone, now) {
+                if change < until {
+                    until = change;
                 }
             }
             if until <= now {

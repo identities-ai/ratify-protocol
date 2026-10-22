@@ -180,7 +180,7 @@ fn v2_conformance_security_journal() {
         );
         negatives += 1;
     }
-    assert_eq!((migrations, negatives), (1, 6));
+    assert_eq!((migrations, negatives), (1, 11));
     let readme = readme_line("security-journal.json");
     assert!(
         readme.contains(&format!("{scenarios} transition scenarios ({steps} steps"))

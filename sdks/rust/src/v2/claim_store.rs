@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::authorization::V2LocalAuthorizationAssessment;
 use super::context::V2Context;
-use super::errors::{plain, V2Error, V2ErrorClass, V2Result};
+use super::errors::{err, plain, V2Error, V2ErrorClass, V2Result};
 use super::evaluation_progress::{V2EvaluationProgress, V2InterruptedClaim};
 use super::evaluator::ConstraintEvaluatorRefV2;
 use super::json::{parse_json, JV};
@@ -359,8 +359,9 @@ impl TokenState {
 /// Go `ClaimProofBundleV2`: repeat the security-relevant freshness and
 /// binding checks immediately before invoking the atomic claim store. No
 /// trust, status, or policy callback runs before this succeeds. An
-/// unclassified failure (Go) is reported as `claim_store_unavailable`, as the
-/// live verifier reports it; a different proof is `claim_replay`.
+/// unclassified failure is reported as `claim_store_unavailable`, as the live
+/// verifier reports it; a missing or different successful preflight is
+/// `configuration_invalid`; a different proof is `claim_replay`.
 pub fn claim_proof_bundle_v2(
     ctx: &V2Context,
     store: &dyn ClaimStoreV2,
@@ -385,11 +386,11 @@ pub(crate) fn claim_proof_bundle_v2_inner(
 ) -> V2Result<(V2ChallengeClaim, V2ClaimDisposition, Option<V2EvaluationToken>)> {
     let sealed = &preflight.state;
     if sealed.context_policy.is_none() && !sealed.no_context_policy {
-        return plain("v2 successful preflight state is required before claim");
+        return err(V2ErrorClass::ConfigurationInvalid, "v2 successful preflight state is required before claim");
     }
     let bundle_hash = match bundle_hash_v2(bundle) {
         Ok(h) if h == sealed.bundle_hash => h,
-        _ => return plain("v2 proof bundle differs from successful preflight"),
+        _ => return err(V2ErrorClass::ConfigurationInvalid, "v2 proof bundle differs from successful preflight"),
     };
     let expected = ExpectedChallengeV2 {
         value: sealed.value.clone(),

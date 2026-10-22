@@ -17,6 +17,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("challenge-issuance.json", "v2_challenge_issuance.rs", "challenge-issuance.json"),
     ("cross-sdk", "v2_cross_sdk.rs", "\"cross-sdk\""),
     ("delegation-signature.json", "v2_crypto.rs", "delegation-signature.json"),
+    ("device-state.json", "v2_device_state.rs", "device-state.json"),
     ("derive-external-mu.py", "v2_crypto.rs", "fn v2_external_mu_matches_shared_signature_vector"),
     ("evaluator-profiles.json", "v2_issuance_profiles.rs", "evaluator-profiles.json"),
     ("hedged-signatures.json", "v2_objects.rs", "hedged-signatures.json"),
@@ -38,7 +39,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
 ];
 
 /// The cross-SDK fixtures `v2_cross_sdk_fixtures` must verify.
-const CROSS_SDK_FIXTURES: &[&str] = &["go.json", "python.json", "rust.json", "typescript.json"];
+const CROSS_SDK_FIXTURES: &[&str] = &["c.json", "go.json", "python.json", "rust.json", "typescript.json"];
 
 fn manifest() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

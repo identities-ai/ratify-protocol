@@ -11,7 +11,9 @@ pub mod store;
 
 pub use approval_ledger::{ApprovalErrorTestOnly, ApprovalLedgerTestOnly, ApprovalSetTestOnly};
 pub use challenges::{PersistFault, TestOnlyChallengeIssuanceStore};
-pub use device_state::{DeviceIssuanceTestOnly, DeviceJournalTestOnly, DevicePrimaryTestOnly};
+pub use device_state::{
+    DeviceIssuanceTestOnly, DeviceJournalTestOnly, DevicePrimaryTestOnly, DeviceStateProjectionTestOnly,
+};
 pub use journal::JournalStore;
 pub use offline_device::{
     verify_device_acknowledgement_test_only, DeviceAcknowledgementTestOnly, DeviceCheckpointTestOnly,

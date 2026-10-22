@@ -219,6 +219,12 @@ pub fn populate_status_journal(store: &dyn SecurityJournalStoreV2, inputs: &Valu
     }
 }
 
+thread_local! {
+    /// The invocation mode of registries built on this test thread.
+    pub static EVALUATOR_INVOCATION: std::cell::Cell<ConstraintEvaluatorInvocationV2> =
+        const { std::cell::Cell::new(ConstraintEvaluatorInvocationV2::WorkerThread) };
+}
+
 /// Go `v2BuildEvaluatorRegistry`.
 fn build_evaluator_registry(inputs: &Value, counts: &Arc<Counts>) -> ConstraintEvaluatorRegistryV2 {
     let mut registrations = Vec::new();
@@ -268,7 +274,12 @@ fn build_evaluator_registry(inputs: &Value, counts: &Arc<Counts>) -> ConstraintE
             }),
         });
     }
-    ConstraintEvaluatorRegistryV2::new(Duration::from_secs(1), registrations).expect("evaluator registry")
+    ConstraintEvaluatorRegistryV2::new_with_invocation(
+        Duration::from_secs(1),
+        registrations,
+        EVALUATOR_INVOCATION.with(|m| m.get()),
+    )
+    .expect("evaluator registry")
 }
 
 /// Go `v2BuildVerifyRequest`: the request and callbacks shared by the

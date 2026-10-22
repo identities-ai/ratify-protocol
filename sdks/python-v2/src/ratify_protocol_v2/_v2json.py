@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import re
 from typing import Any
 
 from .canonical import _encode_string
@@ -119,27 +120,26 @@ def reject_unpaired_surrogate_escapes(text: str) -> None:
         i += 1
 
 
+# A JSON string token: an opening quote, then any characters with backslash
+# escaping the next one, then the closing quote. The closing quote is optional
+# so an unterminated string runs to the end of the text, as the parser's own
+# scan would treat it.
+_STRING_TOKEN = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"?', re.S)
+_STRUCTURE = re.compile(r"[\[\]{}]")
+
+
 def _check_depth(text: str) -> None:
     """Reject nesting beyond MAX_JSON_NESTING_DEPTH before the recursive parser runs."""
+    if text.count("[") + text.count("{") <= MAX_JSON_NESTING_DEPTH:
+        return  # not even counting brackets inside strings can exceed the limit
     depth = 0
-    in_string = False
-    escaped = False
-    for c in text:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif c == "\\":
-                escaped = True
-            elif c == '"':
-                in_string = False
-            continue
-        if c == '"':
-            in_string = True
-        elif c in "[{":
+    # Brackets inside strings do not nest; strip string tokens, then count.
+    for c in _STRUCTURE.findall(_STRING_TOKEN.sub("", text)):
+        if c in "[{":
             depth += 1
             if depth > MAX_JSON_NESTING_DEPTH:
                 raise ValueError(f"wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH ({MAX_JSON_NESTING_DEPTH})")
-        elif c in "]}":
+        else:
             depth -= 1
 
 
@@ -220,7 +220,9 @@ class RawJSON:
 
 
 def _encode(value: Any, out: list) -> None:
-    if isinstance(value, RawJSON):
+    if type(value) is str:  # the common case first; a str is none of the types below
+        out.append(_encode_string(value))
+    elif isinstance(value, RawJSON):
         out.append(value.data.decode("utf-8"))
     elif value is None:
         out.append("null")

@@ -159,11 +159,13 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 	if ctx == nil || cb.ClaimStore == nil {
 		return preflightFailure(v2Errorf(V2ErrConfigurationInvalid, "v2 verification requires a context and claim store"))
 	}
-	if err := validateV2VerifyConfiguration(req); err != nil {
-		return preflightFailure(err)
-	}
+	// SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2
+	// (configuration bounds and supplied request context).
 	bundle, err := DecodeProofBundleV2(req.Bundle)
 	if err != nil {
+		return preflightFailure(err)
+	}
+	if err := validateV2VerifyConfiguration(req); err != nil {
 		return preflightFailure(err)
 	}
 	preflight, err := preflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, true, safeV2ReceiverBinding(cb.ReceiverBinding),
@@ -344,8 +346,8 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 	return evaluating(fmt.Errorf("v2 terminal finalization did not complete"))
 }
 
-// validateV2VerifyConfiguration rejects out-of-bounds configuration before
-// the presented bytes are decoded (SPEC-v2 A5).
+// validateV2VerifyConfiguration rejects out-of-bounds configuration and an
+// invalid supplied request context (SPEC-v2 §2.5, §5.2, §6.2 step 2).
 func validateV2VerifyConfiguration(req V2VerifyRequest) error {
 	if err := validateV2FreshnessConfiguration(req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds); err != nil {
 		return err

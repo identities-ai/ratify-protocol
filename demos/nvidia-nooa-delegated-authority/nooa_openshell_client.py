@@ -96,13 +96,10 @@ def _count_nooa_loads(event: str, args) -> None:
 
 sys.addaudithook(_count_nooa_loads)
 
-from ratify_protocol import (
-    HybridPrivateKey,
-    HybridPublicKey,
-    derive_id,
-    generate_agent,
-)
-from ratify_protocol.wire import decode_delegation_cert
+from ratify_protocol_v2 import key_id_v2
+from ratify_protocol_v2.protocol_v2 import decode_delegation_cert_v2
+from ratify_protocol_v2.signing_v2 import generate_keypair_v2
+from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
 
 from mcp_refund_client import MCPRefundClient, MCPTransportError
 
@@ -148,6 +145,11 @@ def _pub_from_json(obj: dict) -> HybridPublicKey:
     )
 
 
+def _decode_cert(encoded: str):
+    """A v2 delegation certificate, sent as base64 of its exact wire bytes."""
+    return decode_delegation_cert_v2(base64.b64decode(encoded))
+
+
 def _write(path: str, payload: dict) -> None:
     pathlib.Path(path).write_text(json.dumps(payload))
     print(json.dumps(payload))
@@ -157,7 +159,8 @@ def keygen(state_dir: str, out_path: str) -> None:
     """Generate the agent's own keypair. Emit public material only."""
     state = pathlib.Path(state_dir)
     state.mkdir(parents=True, exist_ok=True)
-    agent, private = generate_agent("nooa-openshell-agent", "assistant")
+    public, private = generate_keypair_v2()
+    agent_id = key_id_v2(public)
 
     secret = state / "agent-key.json"
     secret.write_text(
@@ -169,17 +172,17 @@ def keygen(state_dir: str, out_path: str) -> None:
         )
     )
     secret.chmod(0o600)
-    (state / "agent-pub.json").write_text(json.dumps(_pub_to_json(agent.public_key)))
+    (state / "agent-pub.json").write_text(json.dumps(_pub_to_json(public)))
 
     _write(
         out_path,
         {
             "step": "keygen",
-            "agent_id": agent.id,
-            "agent_pub": _pub_to_json(agent.public_key),
+            "agent_id": agent_id,
+            "agent_pub": _pub_to_json(public),
             # Stated so the host can confirm the identifier is derived from the
             # key rather than trusted from this side of the boundary.
-            "derived_id_matches": derive_id(agent.public_key) == agent.id,
+            "derived_id_matches": key_id_v2(public) == agent_id,
         },
     )
 
@@ -193,14 +196,14 @@ def _load_agent(state_dir: str):
         ml_dsa_65=base64.b64decode(secret["ml_dsa_65"]),
     )
     pub = _pub_from_json(public)
-    return derive_id(pub), pub, private
+    return key_id_v2(pub), pub, private
 
 
 def run(state_dir: str, out_path: str, job_path: str) -> None:
     job = json.loads(pathlib.Path(job_path).read_text())
     agent_id, agent_pub, agent_priv = _load_agent(state_dir)
 
-    certs = [decode_delegation_cert(c) for c in job.get("delegations", [])]
+    certs = [_decode_cert(c) for c in job.get("delegations", [])]
 
     # Imported here rather than at module scope so `keygen` does not need NOOA
     # installed, which keeps the failure modes of the two steps separate.
@@ -239,7 +242,7 @@ def run(state_dir: str, out_path: str, job_path: str) -> None:
         # The ordinary public NOOA call. Dispatch goes through the event
         # manager, so agent_call middleware runs; nothing here reaches past
         # NOOA's public surface.
-        return await agent.issue_refund(job["order_id"], job["amount"])
+        return await agent.issue_refund(job["order_id"], job["amount_micros"])
 
     try:
         decision = asyncio.run(invoke())
@@ -318,7 +321,7 @@ def suite(state_dir: str, job_path: str, out_path: str) -> None:
             agent_id,
             agent_pub,
             agent_priv,
-            [decode_delegation_cert(c) for c in spec["delegations"]],
+            [_decode_cert(c) for c in spec["delegations"]],
             spec["tenant"],
             prepare_tool=spec.get("prepare_tool", "refund.prepare"),
             execute_tool=spec.get("execute_tool", "refund.execute"),
@@ -332,12 +335,12 @@ def suite(state_dir: str, job_path: str, out_path: str) -> None:
         record = {
             "subcase": spec["name"],
             "order_id": spec["order_id"],
-            "amount": spec["amount"],
+            "amount_micros": spec["amount_micros"],
             "adapter_installed": unsubscribe is not None,
             "capability": CAPABILITY,
         }
         try:
-            decision = asyncio.run(agent.issue_refund(spec["order_id"], spec["amount"]))
+            decision = asyncio.run(agent.issue_refund(spec["order_id"], spec["amount_micros"]))
             record["outcome"] = "returned"
             record["decision"] = decision
         except MCPTransportError as exc:

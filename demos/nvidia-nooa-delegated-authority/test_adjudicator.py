@@ -37,7 +37,7 @@ EXECUTE = "refund.execute"
 PREPARE = "refund.prepare"
 
 
-def snap(seq=0, ingress=0, dispatch=(), prepare=0, execute=0, refunded=0.0,
+def snap(seq=0, ingress=0, dispatch=(), prepare=0, execute=0, refunded=0,
          receipts=0, all_verify=True, refusals=0, internal_errors=0,
          proof_sha=(), proof_len=()):
     return {
@@ -47,7 +47,7 @@ def snap(seq=0, ingress=0, dispatch=(), prepare=0, execute=0, refunded=0.0,
             "tool_dispatch": list(dispatch),
             "prepare": prepare,
             "execute": execute,
-            "refunded_total": refunded,
+            "refunded_total_micros": refunded,
             "receipts": receipts,
             "receipts_all_verify": all_verify,
             "receipt_ids": [f"refund-service:{i + 1}" for i in range(receipts)],
@@ -66,7 +66,7 @@ def ok_case(**over):
     # check under test rather than tripping the completeness guard first.
     base = {"http_status": 200, "policy_denied": False, "transport_error": False,
             "is_error": False, "decision": "authorized", "status_code": "authorized_agent",
-            "reason": "", "receipt_id": "refund-service:1", "refunded": 75.0,
+            "reason": "", "receipt_id": "refund-service:1", "refunded_micros": 75_000_000,
             "outcome": "returned"}
     base.update(over)
     return base
@@ -80,7 +80,7 @@ def authorized_pair():
     before = snap(seq=10, ingress=5, dispatch=[PREPARE], prepare=1)
     # ingress + dispatch + execute + its decision + proof_observed = 5 events.
     after = snap(seq=15, ingress=6, dispatch=[PREPARE, EXECUTE], prepare=1, execute=1,
-                 refunded=75.0, receipts=1, proof_sha=[SENT["sha256"]],
+                 refunded=75_000_000, receipts=1, proof_sha=[SENT["sha256"]],
                  proof_len=[SENT["len"]])
     return before, after
 
@@ -211,7 +211,7 @@ def test_the_wrong_tool_dispatched_fails():
     before = snap(seq=10, ingress=5)
     # Everything the authorized case expects, except that the server dispatched
     # the other tool.
-    after = snap(seq=15, ingress=6, dispatch=[PREPARE], execute=1, refunded=75.0,
+    after = snap(seq=15, ingress=6, dispatch=[PREPARE], execute=1, refunded=75_000_000,
                  receipts=1, proof_sha=[SENT["sha256"]], proof_len=[SENT["len"]])
     v = judge("execute_valid", AUTHORIZE, ok_case(), before, after, SENT)
     assert v.result == "FAIL"
@@ -250,7 +250,7 @@ def test_missing_expected_mcp_ingress_fails():
     something other than the receiver. Believing the status code over the
     receiver's own counter is how a harness ends up testing a proxy."""
     before = snap(seq=10, ingress=5)
-    after = snap(seq=13, ingress=5, dispatch=[EXECUTE], execute=1, refunded=75.0,
+    after = snap(seq=13, ingress=5, dispatch=[EXECUTE], execute=1, refunded=75_000_000,
                  receipts=1, proof_sha=[SENT["sha256"]], proof_len=[SENT["len"]])
     v = judge("execute_valid", AUTHORIZE, ok_case(), before, after, SENT)
     assert v.result == "FAIL"
@@ -267,7 +267,7 @@ def test_an_unexpected_refundservice_entry_fails():
                  proof_sha=["x" * 64], proof_len=[10])
     v = judge("malformed_proof", carriage_refusal_expect(),
               ok_case(is_error=True, error_text="invalid base64", decision=None,
-                      status_code=None, receipt_id=None, refunded=None),
+                      status_code=None, receipt_id=None, refunded_micros=None),
               before, after)
     assert v.result == "FAIL"
     assert "execute delta 1" in v.detail
@@ -282,7 +282,7 @@ def test_a_missing_refundservice_entry_fails():
     after = snap(seq=12, ingress=6, dispatch=[EXECUTE], receipts=1,
                  proof_sha=["x" * 64], proof_len=[10])
     v = judge("expired_delegation", denial_expect("expired"),
-              ok_case(decision="denied", status_code="expired", refunded=0.0),
+              ok_case(decision="denied", status_code="expired", refunded_micros=0),
               before, after)
     assert v.result == "FAIL"
     assert "execute delta 0" in v.detail
@@ -294,13 +294,13 @@ def test_an_unexpected_refund_fails():
     """WHY: the one thing a denial must never do is move money. A denial that
     refunded is the worst possible outcome and must never read as a pass."""
     before = snap(seq=10, ingress=5)
-    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75.0,
+    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75_000_000,
                  receipts=1, proof_sha=["x" * 64], proof_len=[10])
     v = judge("expired_delegation", denial_expect("expired"),
-              ok_case(decision="denied", status_code="expired", refunded=0.0),
+              ok_case(decision="denied", status_code="expired", refunded_micros=0),
               before, after)
     assert v.result == "FAIL"
-    assert "refund delta 75.0" in v.detail
+    assert "refund delta 75000000" in v.detail
 
 
 def test_an_unexpected_receipt_fails():
@@ -312,7 +312,7 @@ def test_an_unexpected_receipt_fails():
     after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refusals=1,
                  receipts=1, proof_sha=["x" * 64], proof_len=[10])
     v = judge("execute_replay", refusal_expect(),
-              ok_case(decision="denied", status_code="invalid", refunded=0.0,
+              ok_case(decision="denied", status_code="invalid", refunded_micros=0,
                       receipt_id=""),
               before, after)
     assert v.result == "FAIL"
@@ -323,7 +323,7 @@ def test_a_missing_receipt_fails():
     """WHY: an authorized action with no attestation is an unauditable one. The
     receipt is the deliverable, not a side effect."""
     before = snap(seq=10, ingress=5)
-    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75.0,
+    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75_000_000,
                  receipts=0, proof_sha=[SENT["sha256"]], proof_len=[SENT["len"]])
     v = judge("execute_valid", AUTHORIZE, ok_case(), before, after, SENT)
     assert v.result == "FAIL"
@@ -345,7 +345,7 @@ def test_an_empty_receipt_set_is_not_treated_as_verified():
     nothing would otherwise report 'every receipt verified' and the artifact
     would carry vacuous truth as positive verification evidence."""
     before = snap(seq=10, ingress=5, receipts=0)
-    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75.0,
+    after = snap(seq=14, ingress=6, dispatch=[EXECUTE], execute=1, refunded=75_000_000,
                  receipts=0, all_verify=True,
                  proof_sha=[SENT["sha256"]], proof_len=[SENT["len"]])
     v = judge("execute_valid", AUTHORIZE, ok_case(), before, after, SENT)
@@ -495,7 +495,7 @@ def test_an_unknown_outcome_fails_closed():
     to judge rather than silently pass the case."""
     before, after = authorized_pair()
     v = judge("weird", Expect(outcome="probably_fine", ingress=1, dispatch=(EXECUTE,),
-                              execute=1, refund=75.0, receipts=1, proof_observed=1),
+                              execute=1, refund=75_000_000, receipts=1, proof_observed=1),
               ok_case(), before, after, SENT)
     assert v.result == "FAIL"
     assert "unknown expected outcome" in v.detail
@@ -645,7 +645,7 @@ def segment(events, resources=None):
 
     before = snap(seq=0)
     after = snap(seq=len(events), ingress=8, dispatch=[PREPARE, EXECUTE] * 2,
-                 prepare=2, execute=2, refunded=75.0, receipts=2,
+                 prepare=2, execute=2, refunded=75_000_000, receipts=2,
                  proof_sha=["b" * 64] * 2, proof_len=[900] * 2)
     after["events"] = events
     windows = Runner._segment_suite(before, after, SUBCASES,
@@ -672,7 +672,7 @@ def test_the_unified_windows_partition_the_event_log_and_every_subcase_passes():
         "nooa_authorized_refund": ok_case(),
         "nooa_over_limit_denied_by_ratify": ok_case(
             decision="denied", status_code="constraint_denied", receipt_id=None,
-            refunded=None),
+            refunded_micros=None),
         "nooa_unlisted_tool_denied_by_openshell": {"outcome": "mcp_transport_error"},
     }
     for name, case in cases.items():
@@ -1078,10 +1078,11 @@ def test_an_unknown_group_is_recorded_rather_than_raising(tmp_path):
 
 # -- clock-skew preflight ---------------------------------------------------
 #
-# The in-sandbox presenter backdates its challenge_at by a safety margin. The
-# preflight is the diagnostic that says when that margin is no longer enough,
-# so a run fails with a clock-discipline error up front instead of a confusing
-# stale_challenge somewhere in the middle of the matrix.
+# Under Protocol v1 the in-sandbox presenter backdated its challenge_at by a
+# safety margin, and this preflight said when that margin was no longer enough.
+# Under v2 challenge_at is the receiver's issuance time, so no protocol check
+# reads the sandbox clock; the preflight is kept as a clock-discipline
+# diagnostic, and these tests still pin how it decides.
 
 from openshell_driver import (  # noqa: E402
     CHALLENGE_CLOCK_SAFETY_MARGIN_SECONDS as MARGIN,

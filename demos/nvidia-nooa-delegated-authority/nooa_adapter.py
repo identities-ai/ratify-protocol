@@ -34,10 +34,13 @@ class RefundAgent(Agent):
         # method, but Agent requires an LLM object. FakeLLMClient is NOOA's
         # public double for hermetic use and is never called here.
         super().__init__(llm=llm if llm is not None else FakeLLMClient())
-        self.presented: list[tuple[str, str, float]] = []
+        self.presented: list[tuple[str, str, int]] = []
 
-    async def issue_refund(self, order_id: str, amount: float) -> dict:
+    async def issue_refund(self, order_id: str, amount_micros: int) -> dict:
         """Refund an order through the payments service.
+
+        ``amount_micros`` is integer micro-units (75.00 USD is 75_000_000), the
+        unit Protocol v2 uses end to end.
 
         The body is unreachable when a presentation adapter is installed: the
         adapter carries the call to the receiving service, which decides.
@@ -57,19 +60,21 @@ def install_presentation_adapter(agent: RefundAgent, client) -> callable:
         if ctx.method_name != CAPABILITY:
             return await nxt(ctx)
 
-        order_id, amount = _arguments(ctx)
-        agent.presented.append((ctx.method_name, order_id, amount))
+        order_id, amount_micros = _arguments(ctx)
+        agent.presented.append((ctx.method_name, order_id, amount_micros))
 
         # The receiver verifies, decides, and acts. Whatever it says, allowed
         # or denied, is passed through untouched. A denial is a normal return
         # value, not something this adapter produced.
-        ctx.result = client.request_refund(order_id, amount)
+        ctx.result = client.request_refund(order_id, amount_micros)
         return ctx
 
     return agent.event_manager.intercept("agent_call", present)
 
 
-def _arguments(ctx: AgentCallContext) -> tuple[str, float]:
+def _arguments(ctx: AgentCallContext) -> tuple[str, object]:
+    # Passed through untouched. The adapter does not coerce or judge the
+    # amount; the receiver alone decides whether it is a valid integer.
     if ctx.args:
-        return str(ctx.args[0]), float(ctx.args[1])
-    return str(ctx.kwargs["order_id"]), float(ctx.kwargs["amount"])
+        return str(ctx.args[0]), ctx.args[1]
+    return str(ctx.kwargs["order_id"]), ctx.kwargs["amount_micros"]

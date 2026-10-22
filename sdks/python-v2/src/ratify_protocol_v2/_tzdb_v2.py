@@ -323,6 +323,31 @@ def _tzset(s: str, last_tx_sec: int, sec: int):
     return (dst_name, dst_offset, start_sec + ystart, end_sec + ystart, dst_is_dst)
 
 
+def next_utc_offset_change(zone: TimeZoneV2, now: int, limit: int) -> Optional[int]:
+    """The first instant after ``now`` at which the UTC offset of ``zone``
+    differs from its offset at ``now`` (SPEC-v2 §5.2), or None when the offset
+    never changes again within ``limit``. Mirrors Go
+    ``nextUTCOffsetChangeV2``: zone ends that keep the offset (including the
+    start-of-year-plus-365-days bound past a year's last footer transition)
+    are stepped past, never treated as a change."""
+    offset = zone.lookup(now)[1]
+    candidate = now
+    while candidate <= limit:
+        end = zone.lookup(candidate)[3]
+        if end == _OMEGA:
+            return None
+        if end <= candidate:
+            # The leap-year bound can equal the instant it was computed from;
+            # resume at the next UTC year, which has no footer transition
+            # before it.
+            year = civil_from_days(candidate // _SECONDS_PER_DAY)[0]
+            end = days_from_civil(year + 1, 1, 1) * _SECONDS_PER_DAY
+        if zone.lookup(end)[1] != offset:
+            return end
+        candidate = end
+    return None
+
+
 class _Reader:
     __slots__ = ("data", "pos", "error")
 

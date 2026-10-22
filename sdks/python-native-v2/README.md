@@ -1,6 +1,6 @@
 # ratify-protocol-native-v2
 
-Native key generation and hybrid signing for
+Native key generation, hybrid signing and hybrid verification for
 [`ratify-protocol-v2`](https://pypi.org/project/ratify-protocol-v2/), which
 requires it. Install the SDK and this extension comes with it:
 
@@ -27,8 +27,19 @@ is hedged with fresh OS randomness. The keyword-only
 variant, which is how the shared test vectors are generated; it is for
 conformance tests only.
 
-This is not a wire verifier. The SDK verifies every signature returned here
-with its ordinary pure-Python verifier before using it.
+Signing is not wire verification. The SDK verifies every signature returned
+here with its ordinary verifier before using it.
+
+Verification: the internal `_verify_hybrid` function checks one hybrid
+signature over an SDK-computed 77-byte transcript and its ML-DSA context with
+the Rust core's strict v2 verifier (`ratify_protocol::v2::verify_v2_message`):
+canonical, non-identity, prime-order Ed25519 `A` and `R`, canonical `S < L`,
+the cofactorless Ed25519 equation, and FIPS 204 ML-DSA-65 verification under the
+per-type context. It handles only public data and releases the GIL while it
+runs. The SDK uses it for every signature check by default and keeps its
+pure-Python verifier as an explicit fallback (`RATIFY_V2_PURE_VERIFY=1`, or a
+verify-only environment without this extension); the SDK's test suite runs the
+whole shared signature corpus through both and requires identical results.
 
 Key material: `HybridSigningKey` keeps the parsed keys in native memory and
 zeroizes them on drop. The SDK's `HybridPrivateKey` is bytes-backed, so private

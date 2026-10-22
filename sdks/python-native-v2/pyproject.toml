@@ -6,7 +6,7 @@ build-backend = "maturin"
 # Distinct from the v1 `ratify-protocol-native` extension so both can be
 # installed together. Version-locked to `ratify-protocol-v2`.
 name = "ratify-protocol-native-v2"
-description = "Native key generation and hybrid signing for the Ratify Protocol v2 Python SDK"
+description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"
 readme = "README.md"
 authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
 license = {text = "Apache-2.0"}

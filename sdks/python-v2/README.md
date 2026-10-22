@@ -15,10 +15,18 @@ This is a separate distribution from the v1 SDK. It imports as
 Key generation and signing run only in the required native extension
 `ratify-protocol-native-v2` (constant-time Ed25519 and ML-DSA-65), which pip
 installs with this package. There is no pure-Python signing path: without the
-extension every signer raises `ImportError`. Verification handles only public
-data, is pure Python, and works without the extension. The extension is
+extension every signer raises `ImportError`. Hybrid signature verification
+also runs in the extension by default, through the Rust core's strict v2
+verifier. Verification handles only public data, so the package keeps a
+pure-Python verifier as a fallback: a verify-only install without the
+extension uses it, and `RATIFY_V2_PURE_VERIFY=1` selects it explicitly
+(`signing_v2.native_verify_enabled()` reports which is active). The test suite
+replays every signature check in the shared corpus through both verifiers and
+requires identical verdicts and error classes. The pure-Python verifier is
+about 35 times slower per signature; see [Performance](#performance). The extension is
 versioned in lockstep with this package, and importing `ratify_protocol_v2`
-fails if a mismatched extension is installed.
+fails if a mismatched extension, or one built without native verification, is
+installed.
 
 Every object is signed through a typed signer (`sign_delegation_cert_v2`,
 `sign_proof_bundle_v2`, `sign_revocation_list_v2`, `sign_revocation_push_v2`,
@@ -88,6 +96,53 @@ This is a prerelease. Review so far is internal adversarial review; external
 independent review is a gate for `2.0.0` (SPEC-v2 §8), and v2 carries no
 production security claim yet. The per-SDK record is in
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+
+## Performance
+
+`bench/bench_v2.py` measures, on the in-memory reference stores: one hybrid
+verification (`verify_v2_statement`); `verify_delegation_cert_v2_signature`
+(structure and key-ID checks plus one verification); one complete decision on
+the quickstart flow (verify with signed status, commit, publish the receipt,
+checkpoint acknowledgement, release); and a dual-root call (two such decisions
+under independent roots, one with a two-certificate chain). Challenge issuance
+and presentation signing happen before the clock starts. `bench/go` and
+`bench/rust` run the same flow on the Go and Rust SDKs.
+
+```bash
+python bench/bench_v2.py              # table; --json out.json; --check (CI floors)
+go run ./sdks/python-v2/bench/go      # from the repository root
+cd bench/rust && cargo run --release
+```
+
+Measured on 2026-10-22 on an Apple M2 Pro (10 cores, 16 GB, macOS 26.6),
+Python 3.12.10, Go 1.27.3, Rust 1.95.0, one process at a time on an otherwise
+idle host. Operations per second, single thread:
+
+| Measurement | Python, before | Python, pure fallback | Python, native | Go | Rust |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hybrid verify | 83 | 82 | 3,130 | n/a | n/a |
+| certificate signature verify | n/a | 81 | 2,628 | 2,066 | 2,574 |
+| decision | 5.4 | 6.7 | 68.7 | 63.0 | 99.7 |
+| dual-root decision | 2.1 | 2.4 | 21.7 | 17.1 | 27.8 |
+
+"Before" is the previous release line, which verified in pure Python and
+encoded canonical JSON strings character by character. "Pure fallback" is the
+current code with `RATIFY_V2_PURE_VERIFY=1`. Go does not export a raw hybrid
+verifier, so the SDKs are compared on the certificate call.
+
+With native verification a decision spends most of its time in Python
+protocol logic: loading, validating and digesting the reference security
+journal snapshot during the status stage, canonical JSON encoding, and strict
+wire decoding. Signature verification is under a tenth of it.
+
+The Google ADK reference's dual-root scale benchmark (8 worker threads, 76 KB
+presentations) went from 1.3 / 1.6 / 1.6 calls/s to 13.2 / 15.6 / 14.2 calls/s
+for the 10 / 100 / 1,000-call tiers on the same host. The earlier run shared
+the host with other work for part of its duration.
+
+CI runs `bench/bench_v2.py --check`, which fails if verification is not
+native or any measurement falls below a floor set between a tenth and a
+quarter of the native numbers above, and above the pure-Python ones.
 
 ## Examples and upgrading
 

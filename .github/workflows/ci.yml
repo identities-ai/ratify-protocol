@@ -164,8 +164,10 @@ jobs:
         run: pytest -v
 
   # The v2 Python SDK (ratify-protocol-v2) is a separate distribution from the
-  # v1 package above, run the same way: pure Python first, then with its
-  # native extra (ratify-protocol-native-v2) built from source and required.
+  # v1 package above. Its native extension (ratify-protocol-native-v2) is built
+  # from source and required for the full suite, the examples and the
+  # performance floors; the extension is then removed and the verify-only
+  # suite runs against the pure-Python verification fallback.
   python-v2:
     name: Python v2 SDK
     runs-on: ubuntu-latest
@@ -205,6 +207,17 @@ jobs:
         env:
           RATIFY_V2_PYTHON: python
         run: examples/v2/python/test.sh
+
+      # Fails if signature verification is not native or a decision falls far
+      # below the recorded throughput (floors in bench/bench_v2.py).
+      - name: performance floors (native verification)
+        run: python bench/bench_v2.py --check
+
+      - name: verify-only suite on the pure-Python fallback (extension removed)
+        run: |
+          pip uninstall -y ratify-protocol-native-v2
+          python -c "import ratify_protocol_v2.signing_v2 as s; assert not s.native_verify_enabled()"
+          pytest -v
 
   # The optional native extra's wheels are built on five platforms at release
   # time. That matrix would otherwise run for the first time during a release,

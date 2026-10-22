@@ -1,0 +1,14 @@
+# Rust counterpart of sdks/python-v2/bench/bench_v2.py. The path dependency
+# builds it against this source tree.
+[package]
+name = "ratify-v2-python-bench-rust"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+
+# A standalone package, never a member of another workspace.
+[workspace]
+
+[dependencies]
+ratify-protocol = { path = "../../../rust" }

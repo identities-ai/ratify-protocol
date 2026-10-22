@@ -177,10 +177,18 @@ def test_import_rejects_v1_native_version_under_v2_module_name(tmp_path):
 
 def test_import_accepts_matching_native_version(tmp_path):
     result = _import_with_fake_native(
-        tmp_path, f"def version(): return {NATIVE_VERSION!r}\n"
+        tmp_path, f"def version(): return {NATIVE_VERSION!r}\ndef _verify_hybrid(*args): pass\n"
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "True"
+
+
+def test_import_rejects_matching_version_without_native_verification(tmp_path):
+    """A stale local build with the right version string but no native
+    verifier must fail loudly at import, not silently verify some other way."""
+    result = _import_with_fake_native(tmp_path, f"def version(): return {NATIVE_VERSION!r}\n")
+    assert result.returncode != 0
+    assert "lacks native verification" in result.stderr
 
 
 @requires_native

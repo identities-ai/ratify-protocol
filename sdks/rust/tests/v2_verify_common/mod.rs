@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use ratify_protocol::v2::reference::JournalStore;
+use ratify_protocol::v2::reference::{JournalStore, TrustRegistry};
 use ratify_protocol::v2::*;
 use ratify_protocol::HybridPublicKey;
 use serde_json::Value;
@@ -376,8 +376,18 @@ pub fn build_verify_request(
     {
         let counts = Arc::clone(counts);
         let trust = inputs["trust"].clone();
-        cb.trust = Some(Arc::new(move |_ctx: &V2Context, _chain: &[DelegationCertV2]| {
+        // `registry` mode resolves through the reference candidate-record
+        // trust registry (SPEC-v2 §6.1).
+        let registry = (s(&trust["mode"]) == "registry").then(|| {
+            let records: Vec<HybridPublicKey> =
+                trust["registry"].as_array().expect("trust registry").iter().map(public_key_json).collect();
+            TrustRegistry::new(&records).expect("trust registry")
+        });
+        cb.trust = Some(Arc::new(move |ctx: &V2Context, chain: &[DelegationCertV2]| {
             bump(&counts.trust);
+            if let Some(registry) = &registry {
+                return registry.resolve(ctx, chain);
+            }
             if trust.is_null() {
                 return Ok(V2TrustResolution {
                     outcome: V2TrustOutcome::Unavailable,

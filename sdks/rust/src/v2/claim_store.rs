@@ -448,6 +448,14 @@ pub(crate) fn claim_proof_bundle_v2_inner(
         stream_seq: bundle.stream_seq,
         constraint_evaluators: sealed.evaluator_refs.clone(),
     };
+    // SPEC-v2 §6.11: cancellation before the claim consumes nothing, so a
+    // caller that has already cancelled never reaches the store.
+    if ctx.is_done() {
+        return err(
+            V2ErrorClass::EvaluationCancelled,
+            "v2 claim cancelled before the store was called: context done",
+        );
+    }
     let result = store.claim_v2(ctx, claim.clone()).map_err(V2StoreError::into_v2)?;
     match result.disposition {
         V2ClaimDisposition::Created => {

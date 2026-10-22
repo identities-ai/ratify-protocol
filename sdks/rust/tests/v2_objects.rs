@@ -215,7 +215,7 @@ fn v2_objects() {
     for code in 1..=9u16 {
         t.check("codes", &format!("code {code}"), codes.contains(&code), || "no signature for code".into());
     }
-    t.finish(&[("re-encode", 10), ("verify", 10), ("signatures", 14), ("codes", 9)]);
+    t.finish(&[("re-encode", 11), ("verify", 11), ("signatures", 15), ("codes", 9)]);
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn v2_object_negatives() {
         });
     }
     assert_eq!(kinds.len(), 9, "negative kinds: {kinds:?}");
-    t.finish(&[("negatives", 399)]);
+    t.finish(&[("negatives", 401)]);
 }
 
 fn hedged_idempotency(fx: &Fixture, kind: &str, vc: &Value, deterministic: &[u8], hedged: &[u8]) -> Result<(), String> {

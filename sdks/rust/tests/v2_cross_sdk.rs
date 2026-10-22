@@ -18,6 +18,11 @@ use v2_common::*;
 
 const TOP_LEVEL: [&str; 8] =
     ["version", "description", "sdk", "sdk_version", "generator", "kind_object_type_codes", "keys", "objects"];
+const SCENARIO_MEMBERS: [&str; 2] = ["scenario_configuration", "scenarios"];
+/// Fixtures that must carry the verifier and release scenarios. The others
+/// are replayed whenever present; one that predates the scenarios is
+/// reported as not meeting SPEC-v2 §8.1 for its producer.
+const SCENARIO_REQUIRED: [&str; 2] = ["go", "rust"];
 const KEY_FIELDS: [&str; 6] =
     ["name", "ed25519_seed_hex", "ml_dsa_65_seed_hex", "public_key", "key_id_v2", "v1_key_id_128"];
 const OBJECT_FIELDS: [&str; 7] = ["name", "kind", "description", "wire_b64", "verify", "signatures", "digests"];
@@ -241,9 +246,13 @@ fn verify_fixture(data: &[u8], stem: &str) -> Vec<String> {
         Ok(v) => v,
         Err(e) => return vec![format!("parse: {e}")],
     };
-    f.check(keys_of(&doc) == TOP_LEVEL.iter().map(|s| s.to_string()).collect(), || {
-        format!("top-level members {:?}", keys_of(&doc))
-    });
+    // A fixture that predates the SPEC-v2 §8.1 verifier and release
+    // scenarios has neither scenario member.
+    let mut top_level: BTreeSet<String> = TOP_LEVEL.iter().map(|s| s.to_string()).collect();
+    if doc.get("scenarios").is_some() || doc.get("scenario_configuration").is_some() {
+        top_level.extend(SCENARIO_MEMBERS.iter().map(|s| s.to_string()));
+    }
+    f.check(keys_of(&doc) == top_level, || format!("top-level members {:?}", keys_of(&doc)));
     f.check(doc["version"] == 2, || "version is not 2".into());
     f.check(doc["sdk"] == stem, || format!("sdk {} is not the file stem {stem}", doc["sdk"]));
     for k in ["description", "sdk_version", "generator"] {
@@ -431,10 +440,29 @@ fn verify_fixture(data: &[u8], stem: &str) -> Vec<String> {
     f.0
 }
 
-fn assert_verifies(data: &[u8], stem: &str) {
+/// Verify a fixture and replay its scenarios; returns how many scenarios
+/// were replayed (each through this SDK's verifier, reference store and
+/// release gate by the library verifier).
+fn assert_verifies(data: &[u8], stem: &str) -> usize {
     let failures = verify_fixture(data, stem);
     assert!(failures.is_empty(), "{stem}: {} failure(s):\n{}", failures.len(), failures.join("\n"));
     verify_cross_sdk_fixture_v2(data, stem).unwrap_or_else(|e| panic!("{stem}: library verifier: {e}"));
+    let fixture: CrossSdkFixtureV2 = serde_json::from_slice(data).unwrap();
+    let names: BTreeSet<&str> = fixture.scenarios.iter().map(|s| s.name.as_str()).collect();
+    if fixture.scenarios.is_empty() {
+        assert!(
+            !SCENARIO_REQUIRED.contains(&stem),
+            "{stem}.json has no verifier and release scenarios (SPEC-v2 §8.1)"
+        );
+        println!("NOT MET {stem}.json predates the SPEC-v2 §8.1 verifier and release scenarios");
+    } else {
+        assert_eq!(
+            names,
+            CROSS_SDK_SCENARIO_NAMES_V2.into_iter().collect(),
+            "{stem}.json scenarios"
+        );
+    }
+    fixture.scenarios.len()
 }
 
 #[test]
@@ -448,7 +476,8 @@ fn v2_cross_sdk_fixtures() {
         }
         let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
         assert!(CROSS_SDK_NAMES_V2.contains(&stem.as_str()), "unexpected fixture {stem}.json");
-        assert_verifies(&fs::read(&path).unwrap(), &stem);
+        let replayed = assert_verifies(&fs::read(&path).unwrap(), &stem);
+        println!("COVERAGE {stem}.json scenarios replayed: {replayed}");
         verified.push(stem);
     }
     verified.sort();
@@ -461,7 +490,7 @@ fn v2_cross_sdk_fixtures() {
 #[test]
 fn v2_cross_sdk_fresh_fixture_verifies() {
     let a = generate_cross_sdk_fixture_v2("rust", env!("CARGO_PKG_VERSION"), "in-memory test").unwrap();
-    assert_verifies(&a, "rust");
+    assert_eq!(assert_verifies(&a, "rust"), 4);
     // Keys come from fresh randomness and ML-DSA-65 is hedged: a second
     // fixture shares no seed and no signature with the first.
     let b = generate_cross_sdk_fixture_v2("c", "0.0.0-test", "in-memory test").unwrap();
@@ -510,5 +539,17 @@ fn v2_cross_sdk_tampering_is_detected() {
         if library {
             assert!(verify_cross_sdk_fixture_v2(&bytes, "rust").is_err(), "{case}: library verifier accepted");
         }
+    }
+    // Scenario expectations are checked by replay in the library verifier.
+    let scenario_cases: Vec<(&str, Vec<u8>)> = vec![
+        ("release status", tamper(&|d| d["scenarios"][0]["expected"]["release"]["status"] = json!("withheld"))),
+        ("receipt body", tamper(&|d| flip_b64(&mut d["scenarios"][1]["expected"]["receipt_body_b64"]))),
+        ("allow horizon", tamper(&|d| d["scenarios"][0]["expected"]["allow_horizon"] = json!(1800003599))),
+        ("signed receipt", tamper(&|d| flip_b64(&mut d["scenarios"][0]["expected"]["signed_receipt_b64"]))),
+        ("configuration", tamper(&|d| d["scenario_configuration"]["lease_seconds"] = json!(31))),
+        ("missing scenario", tamper(&|d| d["scenarios"].as_array_mut().unwrap().truncate(3))),
+    ];
+    for (case, bytes) in scenario_cases {
+        assert!(verify_cross_sdk_fixture_v2(&bytes, "rust").is_err(), "scenario {case}: library verifier accepted");
     }
 }

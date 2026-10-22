@@ -11,8 +11,10 @@
 //! `configure_status_key_epoch_v2`, `apply_revocation_*_to_journal_v2`,
 //! `register_*`) use `status_object_rejected`; the query
 //! `revocation_status_from_journal_v2` uses `configuration_invalid`;
-//! record validation (`validate_security_journal_v2`,
-//! `validate_security_journal_transition_v2`) uses `malformed`. A class Go
+//! record validation (`validate_security_journal_v2`) uses `malformed`;
+//! `validate_security_journal_transition_v2` reports an invalid record as
+//! `malformed` and an invalid transition between valid records as
+//! `status_object_rejected`. A class Go
 //! already fixed (a reducer rejection, an epoch transition's
 //! `configuration_invalid`, a store's own class) is kept.
 
@@ -535,14 +537,18 @@ pub(crate) fn validate_security_journal_inner(journal: &SecurityJournalV2) -> V2
     Ok(())
 }
 
-/// Enforce generation continuity and append-only key histories (class
-/// `malformed`). Status-state evolution itself is performed by the reducer
-/// and the epoch transition before this validation.
+/// Enforce generation continuity and append-only key histories. An invalid
+/// record is `malformed`; an invalid transition between valid records is
+/// `status_object_rejected`. Status-state evolution itself is performed by
+/// the reducer and the epoch transition before this validation.
 pub fn validate_security_journal_transition_v2(
     current: &SecurityJournalV2,
     next: &SecurityJournalV2,
 ) -> V2Result<()> {
-    validate_security_journal_transition_inner(current, next).classify(V2ErrorClass::Malformed)
+    validate_security_journal_v2(current).map_err(|e| e.context("invalid current journal"))?;
+    validate_security_journal_v2(next).map_err(|e| e.context("invalid next journal"))?;
+    validate_security_journal_transition_inner(current, next)
+        .classify(V2ErrorClass::StatusObjectRejected)
 }
 
 /// Go `ValidateSecurityJournalTransitionV2` with Go's (unclassified) classes.

@@ -875,6 +875,63 @@ pub fn revocation_push_v2_signable_bytes(p: &RevocationPushV2) -> V2Result<Vec<u
     canonical(&push_cj(p, false))
 }
 
+/// Accepts exactly the bytes [`revocation_list_v2_signable_bytes`] produces
+/// for a valid list.
+pub(crate) fn validate_revocation_list_signable_body(body: &[u8]) -> V2Result<()> {
+    (|| {
+        let names = &LIST_FIELDS[..6];
+        let root = parse_wire(body, &[], &[])?;
+        let o = obj(&root)?;
+        o.require(names, &[])?;
+        o.only(names)?;
+        let l = RevocationListV2 {
+            version: o.i64("version")?,
+            issuer_id: o.str("issuer_id")?,
+            updated_at: o.i64("updated_at")?,
+            next_update: o.i64("next_update")?,
+            sequence: o.i64("sequence")?,
+            revoked: revoked_from(&o)?,
+            signature: HybridSignature {
+                ed25519: Vec::new(),
+                ml_dsa_65: Vec::new(),
+            },
+        };
+        if revocation_list_v2_signable_bytes(&l)? != body {
+            return plain("must use RatifyCanonicalJSON");
+        }
+        Ok(())
+    })()
+    .map_err(|e| e.context("revocation list signable body"))
+}
+
+/// Accepts exactly the bytes [`revocation_push_v2_signable_bytes`] produces
+/// for a valid push.
+pub(crate) fn validate_revocation_push_signable_body(body: &[u8]) -> V2Result<()> {
+    (|| {
+        let names = &PUSH_FIELDS[..5];
+        let root = parse_wire(body, &[], &[])?;
+        let o = obj(&root)?;
+        o.require(names, &[])?;
+        o.only(names)?;
+        let p = RevocationPushV2 {
+            version: o.i64("version")?,
+            issuer_id: o.str("issuer_id")?,
+            sequence: o.i64("sequence")?,
+            pushed_at: o.i64("pushed_at")?,
+            revoked: revoked_from(&o)?,
+            signature: HybridSignature {
+                ed25519: Vec::new(),
+                ml_dsa_65: Vec::new(),
+            },
+        };
+        if revocation_push_v2_signable_bytes(&p)? != body {
+            return plain("must use RatifyCanonicalJSON");
+        }
+        Ok(())
+    })()
+    .map_err(|e| e.context("revocation push signable body"))
+}
+
 fn revoked_from(o: &super::json::Obj<'_>) -> V2Result<Vec<RevokedCertV2>> {
     o.array("revoked")?
         .iter()
@@ -1114,4 +1171,27 @@ pub fn status_evidence_digest_list_v2(l: &RevocationListV2) -> V2Result<Vec<u8>>
 /// StatusEvidenceDigest(0x0005, push).
 pub fn status_evidence_digest_push_v2(p: &RevocationPushV2) -> V2Result<Vec<u8>> {
     Ok(status_digest(0x0005, &encode_revocation_push_v2(p)?))
+}
+
+/// A complete signed status object for [`status_evidence_digest_v2`].
+#[derive(Debug, Clone, Copy)]
+pub enum StatusEvidenceObjectV2<'a> {
+    List(&'a RevocationListV2),
+    Push(&'a RevocationPushV2),
+}
+
+/// Go `StatusEvidenceDigest(code, object)` under an explicit object type
+/// code: 0x0003 requires a list and 0x0005 a push (`malformed` otherwise);
+/// any other code is `unsupported_object_type` with no digest.
+pub fn status_evidence_digest_v2(object_type: u16, object: StatusEvidenceObjectV2<'_>) -> V2Result<Vec<u8>> {
+    match (object_type, object) {
+        (0x0003, StatusEvidenceObjectV2::List(l)) => status_evidence_digest_list_v2(l),
+        (0x0005, StatusEvidenceObjectV2::Push(p)) => status_evidence_digest_push_v2(p),
+        (0x0003, _) => plain("status evidence type 0x0003 requires RevocationListV2"),
+        (0x0005, _) => plain("status evidence type 0x0005 requires RevocationPushV2"),
+        _ => err(
+            V2ErrorClass::UnsupportedObjectType,
+            format!("unsupported status evidence object type: {object_type:04x}"),
+        ),
+    }
 }

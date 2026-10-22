@@ -194,7 +194,7 @@ fn v2_conformance_challenge_issuance() {
     let scenarios = arr(&f["scenarios"]);
     assert!(!scenarios.is_empty(), "no challenge issuance scenarios");
     let steps: usize = scenarios.iter().map(|sc| run_scenario(sc, &fx)).sum();
-    assert_eq!((scenarios.len(), steps), (9, 33));
+    assert_eq!((scenarios.len(), steps), (10, 36));
     let readme = readme_line("challenge-issuance.json");
-    assert!(readme.contains("9 challenge issuance helper scenarios (33 steps"), "README row: {readme}");
+    assert!(readme.contains("10 challenge issuance helper scenarios (36 steps"), "README row: {readme}");
 }

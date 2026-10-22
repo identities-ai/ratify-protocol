@@ -8,6 +8,7 @@ pub mod device_state;
 pub mod journal;
 pub mod offline_device;
 pub mod store;
+pub mod trust_registry;
 
 pub use approval_ledger::{ApprovalErrorTestOnly, ApprovalLedgerTestOnly, ApprovalSetTestOnly};
 pub use challenges::{PersistFault, TestOnlyChallengeIssuanceStore};
@@ -20,3 +21,4 @@ pub use offline_device::{
     DeviceComponentTestOnly, DeviceErrorTestOnly, DevicePowerLoss, DeviceStartupStatus, DeviceUplinkTestOnly,
 };
 pub use store::{RateAtFinalizationStore, Store};
+pub use trust_registry::TrustRegistry;

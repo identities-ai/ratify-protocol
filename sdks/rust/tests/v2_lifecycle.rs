@@ -198,11 +198,81 @@ fn check_recover(step: usize, result: V2Result<CommittedV2Outcome>, want: &Value
     Some(outcome)
 }
 
+type ClaimIds = (BTreeMap<String, String>, BTreeMap<String, String>);
+
+/// Go `runVerify`: one verify step against the scenario store at its current
+/// clock. Safe for concurrent use with mode "" (`verify_concurrent`). Returns
+/// the outcome and, for `recover_during_status`, the recovery run inside the
+/// status lookup.
+fn run_verify(
+    store: &Arc<Store>,
+    rate_at_finalization: bool,
+    request: &str,
+    mode: &str,
+    time: i64,
+    epoch_override: i64,
+    ids: &Mutex<ClaimIds>,
+) -> (V2VerifyOutcome, Option<V2Result<CommittedV2Outcome>>) {
+    let counts = Arc::new(Counts::default());
+    let inputs = request_inputs(request, store.now(), epoch_override);
+    let (req, mut cb, _) = build_verify_request(&inputs, bundle_of(request), &counts);
+    let (claim_store, rate) = claim_store_of(store, rate_at_finalization);
+    cb.claim_store = Some(claim_store);
+    if rate.is_some() {
+        cb.rate = rate;
+    }
+    let claim_id = protocol_claim_id_v2(
+        &req.verifier_namespace,
+        req.replay_epoch,
+        &req.expected.as_ref().expect("expected challenge").value,
+    )
+    .expect("claim id");
+    {
+        let mut ids = ids.lock().unwrap();
+        ids.0.insert(request.to_string(), claim_id.clone());
+        ids.1.insert(claim_id.clone(), request.to_string());
+    }
+    let (vctx, cancel) = V2Context::background().with_cancel();
+    let recovered: Arc<Mutex<Option<V2Result<CommittedV2Outcome>>>> = Arc::new(Mutex::new(None));
+    match mode {
+        "" => {}
+        "cancel_before_claim" => cancel.cancel(),
+        _ => {
+            let provider = cb.status_evidence.clone().expect("status provider");
+            let fired = Arc::new(AtomicUsize::new(0));
+            let (store, recovered, mode, cancel) = (store.clone(), recovered.clone(), mode.to_string(), cancel.clone());
+            cb.status_evidence = Some(Arc::new(move |c: &V2Context, r: &V2StatusEvidenceRequest| {
+                if fired.fetch_add(1, Ordering::SeqCst) == 0 {
+                    match mode.as_str() {
+                        "cancel_during_status" => {
+                            // The provider reports the caller's cancellation.
+                            cancel.cancel();
+                            return Err(V2StatusProviderError::new("context canceled"));
+                        }
+                        "recover_during_status" => {
+                            store.set_time(time);
+                            let result = recover_interrupted_claim_v2(c, store.as_ref(), &claim_id);
+                            *recovered.lock().unwrap() = Some(result);
+                        }
+                        "expire_lease_during_status" | "regress_clock_during_status" => store.set_time(time),
+                        other => panic!("unknown verify mode {other}"),
+                    }
+                }
+                provider(c, r)
+            }));
+        }
+    }
+    let outcome = verify_proof_bundle_v2(&vctx, &req, &cb);
+    let recovered = recovered.lock().unwrap().take();
+    (outcome, recovered)
+}
+
 #[test]
 fn lifecycle_scenarios() {
     let f = file();
     let scenarios = arr(&f["scenarios"]);
     assert!(!scenarios.is_empty(), "no lifecycle scenarios");
+    let mut steps = 0usize;
     let verifier_public = keys().public(&s(&f["verifier_key"]));
     let ctx = V2Context::background();
     for sc in &scenarios {
@@ -212,9 +282,11 @@ fn lifecycle_scenarios() {
         let mut log_id = s(&f["log_id"]);
         let mut committed: BTreeMap<String, CommittedV2Outcome> = BTreeMap::new();
         let mut receipts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        let mut claim_ids: BTreeMap<String, String> = BTreeMap::new();
-        let mut request_of: BTreeMap<String, String> = BTreeMap::new();
+        // (claim IDs by request name, request name by claim ID), written by
+        // concurrent verify steps.
+        let ids: Mutex<ClaimIds> = Mutex::new((BTreeMap::new(), BTreeMap::new()));
         let mut epoch_override = 0;
+        steps += arr(&sc["steps"]).len();
         for (step_index, step) in arr(&sc["steps"]).iter().enumerate() {
             let want = &step["expect"];
             let now = store.now();
@@ -225,45 +297,16 @@ fn lifecycle_scenarios() {
                 "set_time" => store.set_time(i(&step["time"])),
                 "set_ack_withheld" => store.set_acknowledgement_withheld(b(&step["withheld"])),
                 "verify" => {
-                    let counts = Arc::new(Counts::default());
-                    let inputs = request_inputs(&request, now, epoch_override);
-                    let (req, mut cb, _) = build_verify_request(&inputs, bundle_of(&request), &counts);
-                    let (claim_store, rate) = claim_store_of(&store, rate_at_finalization);
-                    cb.claim_store = Some(claim_store);
-                    if rate.is_some() {
-                        cb.rate = rate;
-                    }
-                    let claim_id = protocol_claim_id_v2(
-                        &req.verifier_namespace,
-                        req.replay_epoch,
-                        &req.expected.as_ref().expect("expected challenge").value,
-                    )
-                    .expect("claim id");
-                    claim_ids.insert(request.clone(), claim_id.clone());
-                    request_of.insert(claim_id.clone(), request.clone());
-                    let recovered: Arc<Mutex<Option<V2Result<CommittedV2Outcome>>>> = Arc::new(Mutex::new(None));
-                    if !mode.is_empty() {
-                        let provider = cb.status_evidence.clone().expect("status provider");
-                        let fired = Arc::new(AtomicUsize::new(0));
-                        let (store, recovered, mode, time) =
-                            (store.clone(), recovered.clone(), mode.clone(), i(&step["time"]));
-                        cb.status_evidence = Some(Arc::new(move |c: &V2Context, r: &V2StatusEvidenceRequest| {
-                            if fired.fetch_add(1, Ordering::SeqCst) == 0 {
-                                store.set_time(time);
-                                match mode.as_str() {
-                                    "recover_during_status" => {
-                                        let result = recover_interrupted_claim_v2(c, store.as_ref(), &claim_id);
-                                        *recovered.lock().unwrap() = Some(result);
-                                    }
-                                    "expire_lease_during_status" | "regress_clock_during_status" => {}
-                                    other => panic!("unknown verify mode {other}"),
-                                }
-                            }
-                            provider(c, r)
-                        }));
-                    }
-                    let outcome = verify_proof_bundle_v2(&ctx, &req, &cb);
-                    if let Some(result) = recovered.lock().unwrap().take() {
+                    let (outcome, recovered) = run_verify(
+                        &store,
+                        rate_at_finalization,
+                        &request,
+                        &mode,
+                        i(&step["time"]),
+                        epoch_override,
+                        &ids,
+                    );
+                    if let Some(result) = recovered {
                         if let Some(c) = check_recover(step_index, result, &want["recovered"]) {
                             committed.insert(request.clone(), c);
                         }
@@ -284,6 +327,37 @@ fn lifecycle_scenarios() {
                         check_committed_decision(step_index, &c, want);
                         committed.insert(request.clone(), c);
                     }
+                }
+                "verify_concurrent" => {
+                    let names: Vec<String> = arr(&step["requests"]).iter().map(s).collect();
+                    let start = std::sync::Barrier::new(names.len());
+                    let results: Vec<V2VerifyOutcome> = std::thread::scope(|scope| {
+                        let handles: Vec<_> = names
+                            .iter()
+                            .map(|name| {
+                                let (store, start, ids) = (&store, &start, &ids);
+                                scope.spawn(move || {
+                                    start.wait();
+                                    run_verify(store, rate_at_finalization, name, "", 0, epoch_override, ids).0
+                                })
+                            })
+                            .collect();
+                        handles.into_iter().map(|h| h.join().expect("verify thread")).collect()
+                    });
+                    let mut got = Vec::new();
+                    for (name, outcome) in names.iter().zip(results) {
+                        let mut label = outcome.stage.as_str().to_string();
+                        if matches!(outcome.stage, V2VerifyStage::Preflight | V2VerifyStage::Evaluating) {
+                            label = format!("{label}/{}", class_str(outcome.error_class));
+                        }
+                        got.push(label);
+                        if let Some(c) = outcome.committed {
+                            committed.insert(name.clone(), c);
+                        }
+                    }
+                    got.sort();
+                    let expected: Vec<String> = arr(&want["outcomes"]).iter().map(s).collect();
+                    assert_eq!(got, expected, "{at} verify_concurrent {names:?}");
                 }
                 "claim_only" => {
                     let bundle = decode_proof_bundle_v2(&bundle_of(&request)).expect("bundle");
@@ -321,11 +395,18 @@ fn lifecycle_scenarios() {
                         (s(&want["error_class"]).as_str(), s(&want["disposition"]).as_str()),
                         "{at} claim_only"
                     );
-                    claim_ids.insert(request.clone(), claim_id.clone());
-                    request_of.insert(claim_id, request.clone());
+                    let mut ids = ids.lock().unwrap();
+                    ids.0.insert(request.clone(), claim_id.clone());
+                    ids.1.insert(claim_id, request.clone());
                 }
                 "recover" => {
-                    let result = recover_interrupted_claim_v2(&ctx, store.as_ref(), &claim_ids[&request]);
+                    let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
+                        // Never claimed: the request's own claim ID (claim_not_found).
+                        let e = &file()["requests"][&request]["expected_challenge"];
+                        protocol_claim_id_v2(&s(&e["verifier_namespace"]), i(&e["replay_epoch"]), &unb64(&e["value_b64"]))
+                            .expect("claim id")
+                    });
+                    let result = recover_interrupted_claim_v2(&ctx, store.as_ref(), &claim_id);
                     if let Some(c) = check_recover(step_index, result, want) {
                         committed.insert(request.clone(), c);
                     }
@@ -358,7 +439,7 @@ fn lifecycle_scenarios() {
                     let got: Vec<String> = store
                         .abandon_pending_receipts()
                         .iter()
-                        .map(|id| request_of.get(id).cloned().unwrap_or_default())
+                        .map(|id| ids.lock().unwrap().1.get(id).cloned().unwrap_or_default())
                         .collect();
                     let expected: Vec<String> = arr(&want["abandoned"]).iter().map(s).collect();
                     assert_eq!(got, expected, "{at} abandon");
@@ -412,6 +493,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
+    assert_eq!((scenarios.len(), steps), (32, 162), "Part B scripts");
+    let readme = readme_line("lifecycle-scenarios.json");
+    assert!(readme.contains("32 Part B scripts (162 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

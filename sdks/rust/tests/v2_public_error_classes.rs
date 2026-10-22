@@ -29,14 +29,6 @@ use V2ErrorClass::*;
 /// Go entries with no Rust counterpart, and why.
 const NOT_REPRESENTABLE: &[(&str, &str)] = &[
     (
-        "StatusEvidenceDigest unregistered code",
-        "Rust exposes status_evidence_digest_list_v2 and status_evidence_digest_push_v2, typed by object; no code is passed",
-    ),
-    (
-        "StatusEvidenceDigest wrong value",
-        "the typed digest functions cannot be handed the wrong object kind",
-    ),
-    (
         "V2ReleasedDecision.Receipt",
         "a V2ReleasedDecision is only constructed by a successful release, so an invalid one cannot exist",
     ),
@@ -421,6 +413,16 @@ fn v2_public_api_errors_are_classified() {
             class(statement_body_digest_v2(0x0001, b"{}")),
         ),
         ("StatementBodyDigestV2 bad body", Some(Malformed), class(statement_body_digest_v2(0x0006, b"{}"))),
+        (
+            "StatusEvidenceDigest unregistered code",
+            Some(UnsupportedObjectType),
+            class(status_evidence_digest_v2(0x0001, StatusEvidenceObjectV2::List(&zero_list()))),
+        ),
+        (
+            "StatusEvidenceDigest wrong value",
+            Some(Malformed),
+            class(status_evidence_digest_v2(0x0003, StatusEvidenceObjectV2::Push(&zero_push()))),
+        ),
         ("ChallengeClaimDigestV2", Some(Malformed), class(challenge_claim_digest_v2(b"short"))),
         ("ProtocolClaimIDV2 namespace", Some(ConfigurationInvalid), class(protocol_claim_id_v2("", 0, &[0; 32]))),
         ("ProtocolClaimIDV2 challenge", Some(Malformed), class(protocol_claim_id_v2("ns", 0, b"short"))),

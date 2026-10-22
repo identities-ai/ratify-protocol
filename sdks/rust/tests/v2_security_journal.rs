@@ -10,7 +10,8 @@ use ratify_protocol::v2::{
     decode_security_journal_json_v2, empty_security_journal_v2, encode_security_journal_json_v2,
     export_security_journal_snapshot_v2, import_security_journal_snapshot_v2,
     migrate_security_journal_v2, record_security_key_role_v2, security_journal_snapshot_digest_v2,
-    SecurityJournalHeadV2, SecurityJournalStoreV2, V2Context, V2Result,
+    validate_security_journal_transition_v2, SecurityJournalHeadV2, SecurityJournalStoreV2,
+    V2Context, V2Result,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha384};
@@ -180,11 +181,41 @@ fn v2_conformance_security_journal() {
         );
         negatives += 1;
     }
-    assert_eq!((migrations, negatives), (1, 11));
+    assert_eq!((migrations, negatives), (1, 20));
+
+    // Transition negatives: valid snapshot pairs whose transition fails.
+    let mut transitions = 0usize;
+    for neg in f["transition_negatives"]
+        .as_array()
+        .expect("transition_negatives")
+    {
+        let name = s(&neg["name"]);
+        let current = import_security_journal_snapshot_v2(
+            &unb64(&neg["current_snapshot_b64"]),
+            &head(&neg["current_head"]),
+        )
+        .unwrap_or_else(|e| panic!("transition_{name}: current snapshot: {e}"));
+        let next = import_security_journal_snapshot_v2(
+            &unb64(&neg["next_snapshot_b64"]),
+            &head(&neg["next_head"]),
+        )
+        .unwrap_or_else(|e| panic!("transition_{name}: next snapshot: {e}"));
+        let e = validate_security_journal_transition_v2(&current, &next)
+            .err()
+            .unwrap_or_else(|| panic!("transition_{name} accepted"));
+        assert_eq!(
+            e.class.as_str(),
+            s(&neg["expect_error_class"]),
+            "transition_{name}: {e}"
+        );
+        transitions += 1;
+    }
+    assert_eq!(transitions, 6);
     let readme = readme_line("security-journal.json");
     assert!(
         readme.contains(&format!("{scenarios} transition scenarios ({steps} steps"))
-            && readme.contains(&format!("{negatives} import negatives")),
+            && readme.contains(&format!("{negatives} import negatives"))
+            && readme.contains(&format!("{transitions} `transition_negatives`")),
         "README disagrees: {readme}"
     );
 }

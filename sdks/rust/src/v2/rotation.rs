@@ -169,16 +169,20 @@ pub fn key_rotation_statement_v2_signable_bytes(s: &KeyRotationStatementV2) -> V
 }
 
 /// SHA-384("ratify-protocol-statement-body-v2\0" || code_be16 || body) for a
-/// rotation (0x0004), witness (0x0006), or verification receipt (0x0008)
-/// signable body, which is schema-validated first.
+/// revocation list (0x0003), rotation (0x0004), revocation push (0x0005),
+/// witness entry (0x0006), or verification receipt (0x0008) signable body,
+/// which is schema-validated first; any other code is
+/// `unsupported_object_type`.
 pub fn statement_body_digest_v2(object_type: u16, signable_body: &[u8]) -> V2Result<Vec<u8>> {
-    if ![0x0004, 0x0006, 0x0008].contains(&object_type) {
+    if ![0x0003, 0x0004, 0x0005, 0x0006, 0x0008].contains(&object_type) {
         return err(
             V2ErrorClass::UnsupportedObjectType,
             format!("object type 0x{object_type:04x} does not use StatementBodyDigestV2"),
         );
     }
-    let root = if object_type == 0x0008 {
+    let root = if object_type == 0x0003 || object_type == 0x0005 {
+        parse_wire(signable_body, &[], &[])
+    } else if object_type == 0x0008 {
         parse_wire(signable_body, &["previous_receipt_hash"], &["bundle_hash"])
     } else {
         parse_wire(
@@ -205,6 +209,8 @@ pub fn statement_body_digest_v2(object_type: u16, signable_body: &[u8]) -> V2Res
         return plain("signable body must use RatifyCanonicalJSON");
     }
     match object_type {
+        0x0003 => super::wire::validate_revocation_list_signable_body(signable_body)?,
+        0x0005 => super::wire::validate_revocation_push_signable_body(signable_body)?,
         0x0004 => validate_rotation_signable_body(signable_body)?,
         0x0006 => super::witness::validate_witness_signable_body(signable_body)?,
         _ => super::receipt::validate_receipt_signable_body(signable_body)?,

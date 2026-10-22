@@ -87,8 +87,8 @@ fn v2_conformance_status_sequences() {
     let f = load_v2_vector("status-sequences.json");
     let scenarios = f["scenarios"].as_array().expect("scenarios");
     assert!(!scenarios.is_empty(), "no status scenarios");
-    let (mut scenario_count, mut step_count, mut queries, mut errors) =
-        (0usize, 0usize, 0usize, 0usize);
+    let (mut scenario_count, mut step_count, mut queries, mut errors, mut body_digests) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
     for sc in scenarios {
         let name = s(&sc["name"]);
         let issuer_id = s(&sc["issuer_id"]);
@@ -155,11 +155,23 @@ fn v2_conformance_status_sequences() {
             if let Some(w) = step.get("expect_state").filter(|w| !w.is_null()) {
                 check_state(&format!("{name} step {n} {op} {label}"), &state, w);
             }
+            // SPEC-v2 §6.6: the observation's body_digest is the unlabelled
+            // SHA-384 of the canonical signable body.
+            if let Some(want) = step.get("expect_body_digest").and_then(Value::as_str) {
+                body_digests += 1;
+                let code = if op == "apply_push" { 5 } else { 3 };
+                assert!(
+                    state.observations.iter().any(|o| o.status_key_epoch == epoch
+                        && o.object_type == code
+                        && format!("sha384:{}", hex::encode(&o.body_digest)) == want),
+                    "{name} step {n} {op} {label}: no observation with body_digest {want}"
+                );
+            }
         }
         scenario_count += 1;
     }
     assert_eq!((scenario_count, step_count), (22, 112));
-    assert_eq!((queries, errors), (43, 3));
+    assert_eq!((queries, errors, body_digests), (43, 3, 63));
     let readme = readme_line("status-sequences.json");
     assert!(
         readme.contains(&format!(

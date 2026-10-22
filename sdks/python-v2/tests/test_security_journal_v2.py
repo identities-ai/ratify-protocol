@@ -3,7 +3,9 @@
 Every step runs against the reference anchored store and must reproduce the
 exact anchored head and canonical snapshot bytes; the version 1 record must
 validate under its legacy digest and migrate to the exact version 2
-successor; every import negative must be refused with its class.
+successor; every import negative must be refused with its class; and every
+transition negative (two snapshots that each import) must fail transition
+validation with its class.
 """
 from __future__ import annotations
 
@@ -93,6 +95,26 @@ def test_version_1_migration():
     assert error_class_of(excinfo.value) == "malformed"
     # A loaded version 1 record is never used directly: it requires migration.
     assert legacy.version == 1
+
+
+def test_journal_corpus_shape():
+    assert len(VECTORS["scenarios"]) == 2
+    assert len(VECTORS["import_negatives"]) == 20
+    assert sum(n["name"].startswith("invariant_") for n in VECTORS["import_negatives"]) == 9
+    assert len(VECTORS["transition_negatives"]) == 6
+
+
+def _head(h: dict) -> sj.SecurityJournalHeadV2:
+    return sj.SecurityJournalHeadV2(generation=h["generation"], digest=h["digest"])
+
+
+@pytest.mark.parametrize("case", VECTORS["transition_negatives"], ids=lambda c: c["name"])
+def test_transition_negative(case):
+    current = snap.import_security_journal_snapshot_v2(b64(case["current_snapshot_b64"]), _head(case["current_head"]))
+    nxt = snap.import_security_journal_snapshot_v2(b64(case["next_snapshot_b64"]), _head(case["next_head"]))
+    with pytest.raises(V2Error) as excinfo:
+        sj.validate_security_journal_transition_v2(current, nxt)
+    assert error_class_of(excinfo.value) == case["expect_error_class"]
 
 
 @pytest.mark.parametrize("case", VECTORS["import_negatives"], ids=lambda c: c["name"])

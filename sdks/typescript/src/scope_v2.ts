@@ -2,7 +2,8 @@
 // ExpandScopes, IntersectScopes). The v1 helpers in scope.ts stay unchanged.
 
 import { CUSTOM_SCOPE_PREFIX, scopeWildcards, vocabulary } from "./scope.js";
-import { compareStrings } from "./json_v2.js";
+import { compareStrings, isWellFormedString, utf8Len } from "./json_v2.js";
+import { MAX_SCOPE_LENGTH_BYTES } from "./types.js";
 
 const VALID = new Set(vocabulary());
 const WILDCARDS = new Map(Object.entries(scopeWildcards()));
@@ -32,12 +33,20 @@ export function validateScopesV2(scopes: readonly string[] | null): string | nul
   return null;
 }
 
-/** Go ValidateRequiredScopeV2: exactly one registered canonical scope. */
+/**
+ * Go ValidateRequiredScopeV2: exactly one requestable action scope (SPEC-v2
+ * §2.4), either a registered canonical non-wildcard scope or one exact
+ * custom: scope (not custom:*, not the bare prefix, valid UTF-8, at most
+ * MAX_SCOPE_LENGTH_BYTES). A custom required scope is an exact string.
+ */
 export function validateRequiredScopeV2(scope: string): string | null {
-  if (typeof scope !== "string" || !VALID.has(scope) || WILDCARDS.has(scope) || scope.startsWith(CUSTOM_SCOPE_PREFIX)) {
-    return "required scope must be one non-empty canonical scope";
+  if (typeof scope !== "string") return "required scope must be one canonical scope or one exact custom: scope";
+  if (VALID.has(scope) && !WILDCARDS.has(scope)) return null;
+  if (scope.startsWith(CUSTOM_SCOPE_PREFIX) && scope.length > CUSTOM_SCOPE_PREFIX.length && scope !== "custom:*" &&
+      isWellFormedString(scope) && utf8Len(scope) <= MAX_SCOPE_LENGTH_BYTES) {
+    return null;
   }
-  return null;
+  return "required scope must be one canonical scope or one exact custom: scope";
 }
 
 export function expandScopesV2(scopes: readonly string[]): string[] {

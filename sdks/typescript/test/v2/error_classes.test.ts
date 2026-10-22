@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { V2_ERROR_CLASSES, V2Error, v2ErrorClassOf } from "../../src/errors_v2.js";
@@ -37,4 +37,35 @@ test("v2ErrorClassOf never invents a class", () => {
   assert.equal(v2ErrorClassOf(null), "");
   assert.equal(v2ErrorClassOf(new Error("plain")), "unclassified");
   for (const cls of V2_ERROR_CLASSES) assert.equal(v2ErrorClassOf(new Error("wrapped", { cause: new V2Error(cls, "x") })), cls);
+});
+
+// Members whose string value is an expected §2.7 class; outcomes entries end
+// in "/<class>" (Go TestV2CorpusAssertsEveryErrorClass).
+const CLASS_ASSERTION_MEMBERS = new Set(["error_class", "expected_error_class", "expect_error_class", "expect", "device_error"]);
+
+test("every SPEC-v2 §2.7 class is asserted by a shared vector", () => {
+  const listed = new Set<string>(V2_ERROR_CLASSES);
+  const seen = new Set<string>();
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) {
+      v.forEach(walk);
+      return;
+    }
+    if (v === null || typeof v !== "object") return;
+    for (const [k, child] of Object.entries(v)) {
+      if (typeof child === "string" && CLASS_ASSERTION_MEMBERS.has(k) && listed.has(child)) seen.add(child);
+      if (k === "outcomes") {
+        for (const o of child as string[]) {
+          const cls = o.slice(o.lastIndexOf("/") + 1);
+          if (o.includes("/") && listed.has(cls)) seen.add(cls);
+        }
+      }
+      walk(child);
+    }
+  };
+  const files = readdirSync(VECTOR_DIR).filter((f) => f.endsWith(".json"));
+  assert.ok(files.length > 0, "no vector files");
+  for (const f of files) walk(JSON.parse(readFileSync(join(VECTOR_DIR, f), "utf8")));
+  const missing = [...listed].filter((c) => !seen.has(c)).sort();
+  assert.deepEqual(missing, [], "no shared vector asserts these classes");
 });

@@ -734,6 +734,47 @@ export function revocationPushV2SignBytes(p: RevocationPushV2): Uint8Array {
   });
 }
 
+const REVOCATION_LIST_SIGNABLE_V2_FIELDS = ["issuer_id", "next_update", "revoked", "sequence", "updated_at", "version"];
+const REVOCATION_PUSH_SIGNABLE_V2_FIELDS = ["issuer_id", "pushed_at", "revoked", "sequence", "version"];
+
+/** Accepts exactly the bytes revocationListV2SignBytes produces for a valid list. */
+export function validateRevocationListSignableBodyV2(root: JNode, body: Uint8Array): void {
+  let canonical: Uint8Array;
+  try {
+    requireV2Fields(root, REVOCATION_LIST_SIGNABLE_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
+    const f = gStruct(root, REVOCATION_LIST_SIGNABLE_V2_FIELDS, "revocation list signable body");
+    canonical = revocationListV2SignBytes({
+      version: gInt(f.get("version"), "version"), issuer_id: gString(f.get("issuer_id"), "issuer_id"),
+      updated_at: gInt(f.get("updated_at"), "updated_at"), next_update: gInt(f.get("next_update"), "next_update"),
+      sequence: gInt(f.get("sequence"), "sequence"), revoked: decodeRevoked(f.get("revoked")),
+      signature: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
+    });
+  } catch (err) {
+    throw wrapError("revocation list signable body", err);
+  }
+  if (!bytesEqual(body, canonical)) throw new Error("revocation list signable body must use RatifyCanonicalJSON");
+}
+
+/** Accepts exactly the bytes revocationPushV2SignBytes produces for a valid push. */
+export function validateRevocationPushSignableBodyV2(root: JNode, body: Uint8Array): void {
+  let canonical: Uint8Array;
+  try {
+    requireV2Fields(root, REVOCATION_PUSH_SIGNABLE_V2_FIELDS);
+    rejectV2UnexpectedNull(root);
+    const f = gStruct(root, REVOCATION_PUSH_SIGNABLE_V2_FIELDS, "revocation push signable body");
+    canonical = revocationPushV2SignBytes({
+      version: gInt(f.get("version"), "version"), issuer_id: gString(f.get("issuer_id"), "issuer_id"),
+      sequence: gInt(f.get("sequence"), "sequence"), pushed_at: gInt(f.get("pushed_at"), "pushed_at"),
+      revoked: decodeRevoked(f.get("revoked")),
+      signature: { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) },
+    });
+  } catch (err) {
+    throw wrapError("revocation push signable body", err);
+  }
+  if (!bytesEqual(body, canonical)) throw new Error("revocation push signable body must use RatifyCanonicalJSON");
+}
+
 export function decodeRevocationListV2(data: Uint8Array): RevocationListV2 {
   return classified("malformed", () => {
     checkV2WireSize(data, "revocation list", "MAX_REVOCATION_LIST_BYTES_V2", MAX_REVOCATION_LIST_BYTES_V2);

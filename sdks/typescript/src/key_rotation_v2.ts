@@ -45,6 +45,8 @@ import {
   lowerHexString,
   validV2ID,
   validateHybridSignatureV2,
+  validateRevocationListSignableBodyV2,
+  validateRevocationPushSignableBodyV2,
   verifyV2Statement,
 } from "./protocol_v2_wire.js";
 import { validateWitnessSignableBodyV2 } from "./witness_v2.js";
@@ -168,20 +170,23 @@ export function keyRotationStatementV2SignBytes(s: KeyRotationStatementV2): Uint
 
 /**
  * StatementBodyDigestV2 hashes the canonical signable projection of a
- * rotation (0x0004), witness (0x0006) or verification-receipt (0x0008)
- * body after validating it against its schema.
+ * revocation list (0x0003), rotation (0x0004), revocation push (0x0005),
+ * witness entry (0x0006) or verification receipt (0x0008) body after
+ * validating it against its schema; any other code is
+ * unsupported_object_type.
  */
 export function statementBodyDigestV2(objectType: number, body: Uint8Array): Uint8Array {
   return classified("malformed", () => {
     const code = objectType;
-    if (code !== V2_OBJECT_TYPE.keyRotationAuthorization && code !== V2_OBJECT_TYPE.witnessEntry && code !== V2_OBJECT_TYPE.verificationReceipt) {
+    if (code !== V2_OBJECT_TYPE.revocationList && code !== V2_OBJECT_TYPE.keyRotationAuthorization && code !== V2_OBJECT_TYPE.revocationPush &&
+      code !== V2_OBJECT_TYPE.witnessEntry && code !== V2_OBJECT_TYPE.verificationReceipt) {
       throw v2Errorf("unsupported_object_type", `object type 0x${code.toString(16).padStart(4, "0")} does not use StatementBodyDigestV2`);
     }
     let root: JNode;
     try {
-      root = code === V2_OBJECT_TYPE.verificationReceipt
-        ? checkWireJSONV2(body, ["previous_receipt_hash"], ["bundle_hash"])
-        : checkWireJSONV2(body, ["previous_statement_hash", "delegation_digest", "previous_receipt_hash"]);
+      if (code === V2_OBJECT_TYPE.revocationList || code === V2_OBJECT_TYPE.revocationPush) root = checkWireJSONV2(body);
+      else if (code === V2_OBJECT_TYPE.verificationReceipt) root = checkWireJSONV2(body, ["previous_receipt_hash"], ["bundle_hash"]);
+      else root = checkWireJSONV2(body, ["previous_statement_hash", "delegation_digest", "previous_receipt_hash"]);
     } catch (err) {
       throw wrapError("signable body", err);
     }
@@ -199,7 +204,9 @@ export function statementBodyDigestV2(objectType: number, body: Uint8Array): Uin
       canonical = null;
     }
     if (canonical === null || !bytesEqual(canonical, body)) throw new Error("signable body must use RatifyCanonicalJSON");
-    if (code === V2_OBJECT_TYPE.keyRotationAuthorization) validateKeyRotationSignableBodyV2(root, body);
+    if (code === V2_OBJECT_TYPE.revocationList) validateRevocationListSignableBodyV2(root, body);
+    else if (code === V2_OBJECT_TYPE.revocationPush) validateRevocationPushSignableBodyV2(root, body);
+    else if (code === V2_OBJECT_TYPE.keyRotationAuthorization) validateKeyRotationSignableBodyV2(root, body);
     else if (code === V2_OBJECT_TYPE.witnessEntry) validateWitnessSignableBodyV2(root, body);
     else validateVerificationReceiptSignableV2(body);
     return sha384(concatBytes(utf8("ratify-protocol-statement-body-v2\0"), uint16BE(code), body));

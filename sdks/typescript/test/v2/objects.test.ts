@@ -14,7 +14,7 @@ test("objects.json: every positive object", async (t) => {
   const keys = await corpusKeyPairs();
   const seenCodes = new Set<number>();
   const kinds = new Set<string>();
-  assert.equal(file.objects.length, 10);
+  assert.equal(file.objects.length, 11);
   for (const o of file.objects as Any[]) {
     kinds.add(o.kind);
     await t.test(o.name, async () => {

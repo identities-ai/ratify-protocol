@@ -86,3 +86,39 @@ test("archival: proof bundle result and every proof-bundle negative class", asyn
   }
   assert.ok(n > 0);
 });
+
+// testvectors/v2/archival.json: the exact result (or error class) for every
+// signed object kind (Go TestV2ConformanceArchival).
+const archival = load("archival.json");
+const ARCHIVAL_KINDS = ["proof_bundle", "delegation_certificate", "revocation_list", "revocation_push", "key_rotation_statement", "witness_entry", "verification_receipt", "transaction_receipt"];
+
+test("archival.json: corpus shape", () => {
+  assert.equal(archival.cases.length, 19);
+  assert.deepEqual([...new Set((archival.cases as Any[]).map((c) => c.kind))].sort(), [...ARCHIVAL_KINDS].sort());
+});
+
+for (const c of archival.cases as Any[]) {
+  test(`archival.json: ${c.name}`, async () => {
+    const keys = await corpusKeyPairs();
+    const pub = (name: string) => keys.get(name)!.publicKey;
+    const wire = unb64(c.wire_b64);
+    const run = async (): Promise<unknown> => {
+      switch (c.kind) {
+        case "proof_bundle": return verifyArchivalProofBundleV2(wire);
+        case "delegation_certificate": return verifyArchivalDelegationCertV2(wire);
+        case "revocation_list": return verifyArchivalRevocationListV2(wire, c.verify.issuer_id, pub(c.verify.status_key));
+        case "revocation_push": return verifyArchivalRevocationPushV2(wire, c.verify.issuer_id, pub(c.verify.status_key));
+        case "key_rotation_statement": return verifyArchivalKeyRotationStatementV2(wire);
+        case "witness_entry": return verifyArchivalWitnessEntryV2(wire, pub(c.verify.witness_key));
+        case "verification_receipt": return verifyArchivalVerificationReceiptV2(wire, pub(c.verify.verifier_key));
+        case "transaction_receipt": return verifyArchivalTransactionReceiptV2(wire);
+        default: throw new Error(`unknown kind ${c.kind}`);
+      }
+    };
+    if (c.expected_error_class) {
+      assert.equal(await classOfAsync(run), c.expected_error_class);
+      return;
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(await run())), c.expected);
+  });
+}

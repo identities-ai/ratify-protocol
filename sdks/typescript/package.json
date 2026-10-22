@@ -1,7 +1,7 @@
 {
   "name": "@identities-ai/ratify-protocol",
   "version": "2.0.0-alpha.1",
-  "description": "Delegated-authority proofs for human-agent and agent-agent interactions \u2014 TypeScript reference SDK for the Ratify Protocol.",
+  "description": "Delegated-authority proofs for human-agent and agent-agent interactions — TypeScript reference SDK for the Ratify Protocol.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx/esm --test test/*.test.ts",
+    "test": "node --import tsx/esm --test test/*.test.ts test/v2/*.test.ts",
     "test:conformance": "node --import tsx/esm --test test/conformance.test.ts",
     "prepublishOnly": "rm -rf dist && tsc && npm test",
     "clean": "rm -rf dist"
@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "fast-check": "^3.23.2",
     "tsx": "^4.23.0",
     "typescript": "^5.6.0"
   },

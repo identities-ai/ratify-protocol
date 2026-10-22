@@ -81,8 +81,14 @@ func loadV2Keys(t *testing.T) (v2KeysFile, v2Fixture) {
 	t.Helper()
 	var f v2KeysFile
 	loadV2Vector(t, "keys.json", &f)
+	return f, v2FixtureFromKeys(t, f.Keys)
+}
+
+// v2FixtureFromKeys derives every key from its seeds.
+func v2FixtureFromKeys(t *testing.T, keys []v2KeyEntry) v2Fixture {
+	t.Helper()
 	fx := v2Fixture{pub: map[string]ratify.HybridPublicKey{}, priv: map[string]ratify.HybridPrivateKey{}, id: map[string]string{}}
-	for _, k := range f.Keys {
+	for _, k := range keys {
 		var ed, ml [32]byte
 		copy(ed[:], mustHex(t, k.Ed25519SeedHex))
 		copy(ml[:], mustHex(t, k.MLDSA65SeedHex))
@@ -92,7 +98,7 @@ func loadV2Keys(t *testing.T) (v2KeysFile, v2Fixture) {
 		}
 		fx.pub[k.Name], fx.priv[k.Name], fx.id[k.Name] = pub, priv, k.KeyIDV2
 	}
-	return f, fx
+	return fx
 }
 
 func mustHex(t *testing.T, s string) []byte {
@@ -217,6 +223,7 @@ type v2ObjectVector struct {
 	Kind        string            `json:"kind"`
 	Description string            `json:"description"`
 	WireB64     string            `json:"wire_b64"`
+	BundleB64   string            `json:"bundle_b64"`
 	Verify      v2VerifyContext   `json:"verify"`
 	Signatures  []v2SigVector     `json:"signatures"`
 	Digests     map[string]string `json:"digests"`
@@ -439,52 +446,58 @@ func TestV2ConformanceObjects(t *testing.T) {
 	loadV2Vector(t, "objects.json", &f)
 	seenCodes := map[int]bool{}
 	for _, o := range f.Objects {
-		t.Run(o.Name, func(t *testing.T) {
-			wire := unb64(t, o.WireB64)
-			if got := v2Reencode(t, o.Kind, wire); !bytes.Equal(got, wire) {
-				t.Fatalf("re-encoding is not byte-identical")
-			}
-			if err := v2VerifyObject(t, fx, o.Kind, wire, nil, o.Verify); err != nil {
-				t.Fatalf("verify: %v", err)
-			}
-			for _, s := range o.Signatures {
-				seenCodes[s.ObjectTypeCode] = true
-				signable := unb64(t, s.SignableB64)
-				if got := v2Projection(t, wire, s.Field); !bytes.Equal(got, signable) {
-					t.Errorf("%s: signable projection differs:\n got %s\nwant %s", s.Field, got, signable)
-				}
-				if d := sha512.Sum384(signable); hex.EncodeToString(d[:]) != s.SignableSHA384 {
-					t.Errorf("%s: signable SHA-384 differs", s.Field)
-				}
-				m := v2Message(uint16(s.ObjectTypeCode), signable)
-				if !bytes.Equal(m, unb64(t, s.MessageB64)) || len(m) != 77 {
-					t.Errorf("%s: transcript M differs", s.Field)
-				}
-				ctx := fmt.Sprintf("ratify-protocol/2/%04x", s.ObjectTypeCode)
-				if s.MLDSAContext != ctx || len(ctx) != 22 {
-					t.Errorf("%s: context %q, want %q", s.Field, s.MLDSAContext, ctx)
-				}
-				signer := fx.pub[s.Signer]
-				if fx.id[s.Signer] != s.SignerKeyIDV2 {
-					t.Errorf("%s: signer key ID differs", s.Field)
-				}
-				tr := sha3.SumSHAKE256(signer.MLDSA65, 64)
-				mu := sha3.SumSHAKE256(append(append(append(append([]byte{}, tr...), 0, byte(len(ctx))), ctx...), m...), 64)
-				if !bytes.Equal(tr, unb64(t, s.MLDSATrB64)) || !bytes.Equal(mu, unb64(t, s.MLDSAMuB64)) {
-					t.Errorf("%s: external-mu tr/mu differ", s.Field)
-				}
-				if !bytes.Contains(wire, []byte(base64.StdEncoding.EncodeToString(s.Signature.MLDSA65))) || !bytes.Contains(wire, []byte(base64.StdEncoding.EncodeToString(s.Signature.Ed25519))) {
-					t.Errorf("%s: pinned signature is not the one carried by the wire object", s.Field)
-				}
-			}
-			v2CheckObjectDigests(t, o, wire)
-		})
+		t.Run(o.Name, func(t *testing.T) { v2CheckPositiveObject(t, fx, o, seenCodes) })
 	}
 	for code := 1; code <= 9; code++ {
 		if !seenCodes[code] {
 			t.Errorf("objects.json has no signature for object_type_code %d", code)
 		}
 	}
+}
+
+// v2CheckPositiveObject runs the objects.json positive procedure on one
+// object: byte-identical re-encode, verify, every signature transcript, and
+// every digest. Cross-SDK fixtures reuse it with their own keys.
+func v2CheckPositiveObject(t *testing.T, fx v2Fixture, o v2ObjectVector, seenCodes map[int]bool) {
+	t.Helper()
+	wire := unb64(t, o.WireB64)
+	if got := v2Reencode(t, o.Kind, wire); !bytes.Equal(got, wire) {
+		t.Fatalf("re-encoding is not byte-identical")
+	}
+	if err := v2VerifyObject(t, fx, o.Kind, wire, nil, o.Verify); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	for _, s := range o.Signatures {
+		seenCodes[s.ObjectTypeCode] = true
+		signable := unb64(t, s.SignableB64)
+		if got := v2Projection(t, wire, s.Field); !bytes.Equal(got, signable) {
+			t.Errorf("%s: signable projection differs:\n got %s\nwant %s", s.Field, got, signable)
+		}
+		if d := sha512.Sum384(signable); hex.EncodeToString(d[:]) != s.SignableSHA384 {
+			t.Errorf("%s: signable SHA-384 differs", s.Field)
+		}
+		m := v2Message(uint16(s.ObjectTypeCode), signable)
+		if !bytes.Equal(m, unb64(t, s.MessageB64)) || len(m) != 77 {
+			t.Errorf("%s: transcript M differs", s.Field)
+		}
+		ctx := fmt.Sprintf("ratify-protocol/2/%04x", s.ObjectTypeCode)
+		if s.MLDSAContext != ctx || len(ctx) != 22 {
+			t.Errorf("%s: context %q, want %q", s.Field, s.MLDSAContext, ctx)
+		}
+		signer := fx.pub[s.Signer]
+		if fx.id[s.Signer] != s.SignerKeyIDV2 {
+			t.Errorf("%s: signer key ID differs", s.Field)
+		}
+		tr := sha3.SumSHAKE256(signer.MLDSA65, 64)
+		mu := sha3.SumSHAKE256(append(append(append(append([]byte{}, tr...), 0, byte(len(ctx))), ctx...), m...), 64)
+		if !bytes.Equal(tr, unb64(t, s.MLDSATrB64)) || !bytes.Equal(mu, unb64(t, s.MLDSAMuB64)) {
+			t.Errorf("%s: external-mu tr/mu differ", s.Field)
+		}
+		if !bytes.Contains(wire, []byte(base64.StdEncoding.EncodeToString(s.Signature.MLDSA65))) || !bytes.Contains(wire, []byte(base64.StdEncoding.EncodeToString(s.Signature.Ed25519))) {
+			t.Errorf("%s: pinned signature is not the one carried by the wire object", s.Field)
+		}
+	}
+	v2CheckObjectDigests(t, o, wire)
 }
 
 func v2CheckObjectDigests(t *testing.T, o v2ObjectVector, wire []byte) {

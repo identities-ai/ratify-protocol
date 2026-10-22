@@ -119,6 +119,9 @@ type Key struct {
 	ID     string
 	EdSeed [32]byte
 	MLSeed [32]byte
+	// Hedged keys sign ML-DSA-65 with fresh FIPS 204 randomness. Only the
+	// cross-SDK fixture generator sets it; the deterministic corpus never does.
+	Hedged bool
 }
 
 type gen struct {
@@ -164,8 +167,12 @@ func (g *gen) addKey(name string, edByte, mlByte byte) {
 	for i := range edSeed {
 		edSeed[i], mlSeed[i] = edByte, mlByte
 	}
+	g.addSeededKey(name, edSeed, mlSeed, false)
+}
+
+func (g *gen) addSeededKey(name string, edSeed, mlSeed [32]byte, hedged bool) {
 	pub, priv := must2(ratify.HybridKeypairFromSeeds(edSeed, mlSeed))
-	g.keys[name] = &Key{Name: name, Pub: pub, Priv: priv, ID: keyIDV2(pub), EdSeed: edSeed, MLSeed: mlSeed}
+	g.keys[name] = &Key{Name: name, Pub: pub, Priv: priv, ID: keyIDV2(pub), EdSeed: edSeed, MLSeed: mlSeed, Hedged: hedged}
 	g.order = append(g.order, name)
 }
 
@@ -217,11 +224,12 @@ func externalMu(mlPub []byte, code uint16, m []byte) (tr, mu []byte) {
 }
 
 // signDet signs with deterministic Ed25519 and deterministic (non-hedged)
-// ML-DSA-65 so the corpus is reproducible byte for byte.
+// ML-DSA-65 so the corpus is reproducible byte for byte. A Hedged key (cross-SDK
+// fixtures only) signs ML-DSA-65 with fresh randomness instead.
 func signDet(key *Key, code uint16, signable []byte) ratify.HybridSignature {
 	m := message(code, signable)
 	ml := make([]byte, mldsa65.SignatureSize)
-	if err := mldsa65.SignTo(key.Priv.MLDSA65, m, mldsaContext(code), false, ml); err != nil {
+	if err := mldsa65.SignTo(key.Priv.MLDSA65, m, mldsaContext(code), key.Hedged, ml); err != nil {
 		panic(err)
 	}
 	return ratify.HybridSignature{Ed25519: ed25519.Sign(key.Priv.Ed25519, m), MLDSA65: ml}

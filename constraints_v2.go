@@ -464,6 +464,13 @@ func loadV2TimeZone(configuredVersion, tz string) (*time.Location, error) {
 func evaluateConstraintV2(c ConstraintV2, ctx ConstraintContextV2, tzdbVersion string, now time.Time) error {
 	switch c.Type {
 	case ConstraintResourcePath:
+		// SPEC-v2 §5.2 order: the signed path_prefix is checked before any
+		// request input, because its validity does not depend on the request.
+		if c.PathPrefix != "" {
+			if _, err := NormalizeResourcePath(c.PathPrefix); err != nil {
+				return fmt.Errorf("malformed path_prefix: %v", err)
+			}
+		}
 		if !ctx.HasResource || ctx.RequestedResourceID == "" {
 			return errConstraintUnverifiable("no requested resource in context")
 		}
@@ -472,9 +479,6 @@ func evaluateConstraintV2(c ConstraintV2, ctx ConstraintContextV2, tzdbVersion s
 		}
 		if c.PathPrefix == "" {
 			return nil
-		}
-		if _, err := NormalizeResourcePath(c.PathPrefix); err != nil {
-			return fmt.Errorf("malformed path_prefix: %v", err)
 		}
 		if ctx.RequestedPath == "" {
 			return errConstraintUnverifiable("no requested path in context")

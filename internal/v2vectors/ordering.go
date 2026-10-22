@@ -3,6 +3,7 @@ package v2vectors
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"sort"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -773,6 +774,44 @@ func (g *gen) terminalScenarios() []scenario {
 		constraintOut("constraint_unknown", 1), withReceiver))
 	add(g.terminal("mixed_unverifiable_constraint_and_audience_match", "audience passes, resource_path unverifiable: constraint_unverifiable", g.chain(chainSpec{leafCons: []ratify.ConstraintV2{resourcePath}, rootCons: []ratify.ConstraintV2{domainB}}),
 		constraintOut("constraint_unverifiable", 1), func(s *scenario) { withReceiver(s); s.memberships = []membershipJSON{membership(1, "domain-b")} }))
+
+	// resource_path evaluation order (SPEC-v2 §5.2): the signed path_prefix
+	// is checked first, then the request. Every prefix form against every
+	// request form.
+	type pathRequest struct {
+		name string
+		ctx  *requestContextJSON
+	}
+	pathRequests := []pathRequest{
+		{"no_resource", nil},
+		{"resource_mismatch", &requestContextJSON{HasResource: true, RequestedResourceID: "customer/999", RequestedPath: "/v1/customers/123"}},
+		{"path_absent", &requestContextJSON{HasResource: true, RequestedResourceID: "customer/123"}},
+		{"path_matching", &requestContextJSON{HasResource: true, RequestedResourceID: "customer/123", RequestedPath: "/v1/customers/123"}},
+		{"path_not_matching", &requestContextJSON{HasResource: true, RequestedResourceID: "customer/123", RequestedPath: "/v1/orders/123"}},
+		{"path_invalid", &requestContextJSON{HasResource: true, RequestedResourceID: "customer/123", RequestedPath: "/v1/customers/../orders"}},
+	}
+	pathPrefixes := []struct {
+		name, prefix string
+		want         map[string]string // request name -> decision reason; "" = allow
+	}{
+		{"prefix_absent", "", map[string]string{"no_resource": "constraint_unverifiable", "resource_mismatch": "constraint_denied"}},
+		{"prefix_valid", "/v1/customers", map[string]string{"no_resource": "constraint_unverifiable", "resource_mismatch": "constraint_denied",
+			"path_absent": "constraint_unverifiable", "path_not_matching": "constraint_denied", "path_invalid": "constraint_denied"}},
+		{"prefix_invalid", "/v1//customers", map[string]string{"no_resource": "constraint_denied", "resource_mismatch": "constraint_denied",
+			"path_absent": "constraint_denied", "path_matching": "constraint_denied", "path_not_matching": "constraint_denied", "path_invalid": "constraint_denied"}},
+	}
+	for _, prefix := range pathPrefixes {
+		certs := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintResourcePath, ResourceID: "customer/123", PathPrefix: prefix.prefix}}})
+		for _, req := range pathRequests {
+			reqCtx, reason := req.ctx, prefix.want[req.name]
+			out, result := allow(), "allow"
+			if reason != "" {
+				out, result = constraintOut(reason, 0), reason
+			}
+			desc := fmt.Sprintf("resource_path %s (%q) with request %s: %s", prefix.name, prefix.prefix, req.name, result)
+			add(g.terminal("resource_path_"+prefix.name+"_"+req.name, desc, certs, out, func(s *scenario) { s.reqCtx = reqCtx }))
+		}
+	}
 
 	// Closed v2 registry: integer micro-unit amounts, IANA zones the verifier
 	// cannot load, and v1 geo types that v2 does not register.

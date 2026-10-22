@@ -99,7 +99,7 @@ passing it. Changes to `testvectors/v2`:
 | File | Change since alpha.1 |
 |---|---|
 | `object-negatives.json` | 224 → 273 negatives: the closed v2 constraint registry and every wire timestamp outside 0..253402300799 |
-| `verifier-ordering.json` | 81 → 135 cases (43 pre-claim, 2 replay, 88 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
+| `verifier-ordering.json` | 81 → 153 cases (43 pre-claim, 2 replay, 106 committed, 2 evaluating); new input fields (`tzdb_version`, amount and currency request context, `status_keys`, `status_policy`, `journal`, signed status evidence batches) and the `progress` callback count; committed outcomes are not decisions |
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |

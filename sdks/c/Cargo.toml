@@ -30,6 +30,12 @@ default = ["std"]
 std = []
 custom-entropy = ["getrandom/custom"]
 
+# Test-only: compiles a one-shot panic injection point into the C ABI panic
+# guard so tests/panic_containment.rs can drive the panic path of real
+# exports. Enabled for this crate's own tests through the self dev-dependency
+# below; never enable it in a shipped build.
+panic-test-hook = []
+
 [dependencies]
 ratify-protocol = { path = "../rust", version = "2.0.0-alpha.1" }
 serde_json = "1"
@@ -58,10 +64,17 @@ path = "tests/bounds.rs"
 name = "v2_abi"
 path = "tests/v2_abi.rs"
 
+[[test]]
+name = "panic_containment"
+path = "tests/panic_containment.rs"
+
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
+# Self dev-dependency: turns on the test-only panic hook for integration
+# tests. Under resolver 2 it does not leak into normal or release builds.
+ratify-c = { path = ".", features = ["panic-test-hook"] }
 
 # ---------------------------------------------------------------------------
 # Release profile: optimised for embedded / small-footprint targets.
@@ -72,7 +85,10 @@ hex = "0.4"
 opt-level    = "z"   # optimise for binary size (smallest output)
 lto          = true  # link-time optimisation removes dead code across crates
 codegen-units = 1    # single codegen unit enables maximum LTO effectiveness
-panic        = "abort"  # no stack-unwinding machinery; critical for no_std targets
+# Unwind, not abort: every exported function catches panics at the C ABI
+# boundary (src/guard.rs) and returns its internal-error code. With abort,
+# that containment is inert and any panic terminates the host process.
+panic        = "unwind"
 strip        = "symbols" # strip debug symbols from the final library
 
 # Debug builds keep full debug info and no size pressure.

@@ -60,7 +60,7 @@ static int my_entropy(uint8_t *buf, size_t len) {
     for (size_t i = 0; i < len; i += 4) {
         uint32_t rnd;
         if (HAL_RNG_GenerateRandomNumber(&hrng, &rnd) != HAL_OK)
-            return -1;  /* -1 means "entropy unavailable" → library panics */
+            return -1;  /* -1 means "entropy unavailable": the call fails */
         size_t copy = (len - i < 4) ? (len - i) : 4;
         memcpy(buf + i, &rnd, copy);
     }
@@ -75,9 +75,10 @@ int main(void) {
 }
 ```
 
-The library **panics** (halts) if `ratify_set_entropy_source()` was never called when the
-`custom-entropy` feature is enabled. This is intentional — generating certs with weak
-randomness is worse than not running at all.
+If `ratify_set_entropy_source()` was never called when the `custom-entropy` feature is
+enabled, or the callback reports failure, every operation that needs randomness fails with
+`RatifyErrInternal` (or NULL) instead of producing output. This is intentional: generating
+certs with weak randomness is worse than not running at all. See [Panic behavior](#panic-behavior).
 
 ### Note on std requirement
 
@@ -240,8 +241,8 @@ public:
 Key generation returns a `RatifyStatus` (check it for null-pointer and argument
 errors). On a standard OS target it has no recoverable failure mode, because the
 operating system supplies entropy. It is not truly infallible on embedded targets:
-if no entropy source is configured, the library halts (panics) rather than
-returning an error. See the Embedded deployment guide.
+if no entropy source is configured, it returns `RatifyErrInternal` rather than
+generate a key from weak randomness. See the Embedded deployment guide.
 
 ```c
 // Generate a HumanRoot keypair (the delegating principal)
@@ -451,6 +452,40 @@ ratify_error_free(err);         // for err_out parameters
 
 ---
 
+## Panic behavior
+
+A Rust panic never unwinds into your code. Every exported function catches a
+panic at the C ABI boundary and returns its internal-error value instead:
+
+| Function returns | Value after a caught panic |
+|---|---|
+| `RatifyStatus` | `RatifyErrInternal` (5) |
+| `int32_t` (`ratify_v2_*`) | `RatifyV2ErrInternal` (-3, class `"internal"`) |
+| an owned pointer (`char *`, handles) | `NULL` |
+| `ratify_verify_result_is_valid`, `ratify_scope_has` | `0` |
+| `ratify_scope_is_sensitive`, `ratify_revocation_list_contains` | `1` (fail closed) |
+| `ratify_v2_abi_version`, `ratify_v2_protocol_version` | `0` (matches no header) |
+| `void` (`*_free`) | returns normally |
+
+Before returning, the function puts every output parameter in a defined state:
+handle and string outputs are set to `NULL`, fixed-size byte outputs (hashes,
+challenges, seeds) are zeroed, caller string buffers start with NUL, and
+`valid_out` flags are 0. Never use an output after a non-OK status. When the
+function has an `err_out` parameter it receives the message
+`internal error: a panic was caught at the C ABI boundary` (prefixed with
+`internal: ` for `ratify_v2_*`).
+
+A caught panic is a library bug or an unusable environment (for example no
+entropy source); report it. The library stays usable for later calls, with
+one exception: a panic inside a challenge store operation leaves that store
+returning `RatifyErrInternal`, so free it and create a new one. Rust's default
+panic hook still prints the panic message to stderr.
+
+Release builds use `panic = "unwind"` so this containment works. If you
+rebuild with `panic = "abort"`, any panic terminates the process instead.
+
+---
+
 ## Revocation callback return values
 
 | Return | Meaning |
@@ -515,6 +550,10 @@ cargo test --test bounds
 
 # Conformance tests (79/79 fixtures)
 cargo test --test conformance
+
+# Panic containment: injected panics in v1 and v2 exports return the internal
+# error with outputs reset, and every header export goes through the guard
+cargo test --test panic_containment
 
 # Protocol v2 ABI against testvectors/v2 (keys, objects, object negatives,
 # key-rotation signature), then keys, objects, and object negatives from a

@@ -47,7 +47,9 @@ typedef enum RatifyStatus {
     RatifyErrCrypto = 3,
     // A size argument was invalid (e.g., `buf_len` != 32 for a 32-byte field).
     RatifyErrBadArgument = 4,
-    // An internal error that should not occur in normal operation.
+    // An internal error that should not occur in normal operation, including
+    // a Rust panic caught at the C ABI boundary (output parameters are reset
+    // to NULL / zero first).
     RatifyErrInternal = 5,
     // A required argument contained invalid UTF-8.
     RatifyErrEncoding = 6,
@@ -327,9 +329,9 @@ extern "C" {
 // The handle contains both the public identity and the private signing key.
 // Free with `ratify_human_root_free`.
 //
-// # Panics
-// On embedded targets where the entropy source is unavailable. This indicates
-// a non-functional system; no security operation is possible.
+// Returns `RatifyErrInternal` on embedded targets where the entropy source
+// is unavailable. This indicates a non-functional system; no security
+// operation is possible.
 enum RatifyStatus ratify_human_root_generate(struct RatifyHumanRoot **out);
 
 // Free a `RatifyHumanRoot` handle. Safe to call with NULL.
@@ -648,6 +650,7 @@ enum RatifyStatus ratify_revocation_list_verify(const char *list_json,
                                                 char **err_out);
 
 // Returns 1 if `cert_id` appears in the revocation list, 0 otherwise.
+// An internal error (caught panic) returns 1, failing closed.
 int ratify_revocation_list_contains(const struct RatifyRevocationList *handle, const char *cert_id);
 
 // Serialise a RevocationList to JSON. Free with `ratify_string_free`.
@@ -756,7 +759,8 @@ int ratify_scope_has(const char *granted_json, const char *required);
 
 // Returns 1 if `scope` is marked sensitive in the protocol vocabulary
 // (i.e., requires high-assurance verification), 0 otherwise.
-// NULL or non-UTF-8 input returns 0.
+// NULL or non-UTF-8 input returns 0. An internal error (caught panic)
+// returns 1, failing closed.
 int ratify_scope_is_sensitive(const char *scope);
 
 // Expand wildcard scopes to their concrete members.
@@ -1467,7 +1471,8 @@ int32_t ratify_v2_receipt_bundle_binding_check(const uint8_t *receipt_wire,
 // `callback` must:
 // - Write exactly `len` cryptographically random bytes to `buf`.
 // - Return 0 on success, non-zero if insufficient entropy is available
-//   (the library will panic rather than use weak randomness).
+//   (the operation then fails with an internal-error status rather
+//   than use weak randomness).
 // - Be thread-safe if `ratify_*` functions are called from multiple threads.
 //
 // Call this once at startup, before any delegation or challenge operation.

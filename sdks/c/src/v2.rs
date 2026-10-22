@@ -20,7 +20,6 @@
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
 use ratify_protocol::v2::{
@@ -206,25 +205,32 @@ fn null_arg(name: &str) -> Failure {
 
 type AbiResult<T> = Result<T, Failure>;
 
-/// Run `f`, map its outcome to an `int32_t` code, write any diagnostic, and
-/// convert a panic into `RatifyV2ErrInternal` rather than unwinding into C.
-fn run(err_out: *mut *mut c_char, f: impl FnOnce() -> AbiResult<()>) -> i32 {
-    let outcome = catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| {
-        Err(Failure {
-            code: RatifyV2Code::RatifyV2ErrInternal,
-            message: "internal error (panic)".into(),
-        })
-    });
-    match outcome {
-        Ok(()) => RatifyV2Code::RatifyV2Ok as i32,
-        Err(f) => {
-            crate::set_err(
-                err_out,
-                &format!("{}: {}", class_str(f.code as i32), f.message),
-            );
-            f.code as i32
-        }
-    }
+/// Run `f` under the C ABI panic guard, map its outcome to an `int32_t` code,
+/// and write any diagnostic. A caught panic runs `reset` (which puts every
+/// output parameter in a defined state) and returns `RatifyV2ErrInternal`
+/// rather than unwinding into C.
+fn run(
+    err_out: *mut *mut c_char,
+    reset: impl FnOnce(),
+    f: impl FnOnce() -> AbiResult<()>,
+) -> i32 {
+    crate::guard::ffi_guard(
+        || {
+            reset();
+            crate::set_err(err_out, &format!("internal: {}", crate::guard::PANIC_MESSAGE));
+            RatifyV2Code::RatifyV2ErrInternal as i32
+        },
+        || match f() {
+            Ok(()) => RatifyV2Code::RatifyV2Ok as i32,
+            Err(f) => {
+                crate::set_err(
+                    err_out,
+                    &format!("{}: {}", class_str(f.code as i32), f.message),
+                );
+                f.code as i32
+            }
+        },
+    )
 }
 
 unsafe fn bytes<'a>(ptr: *const u8, len: usize, name: &str) -> AbiResult<&'a [u8]> {
@@ -446,20 +452,27 @@ fn write_hex_out(out: *mut c_char, out_len: usize, hex: &str) -> AbiResult<()> {
 /// built against a header with a different value must not use `ratify_v2_*`.
 #[no_mangle]
 pub extern "C" fn ratify_v2_abi_version() -> u32 {
-    RATIFY_V2_ABI_VERSION
+    crate::guard::ffi_guard(
+        // 0 matches no header's RATIFY_V2_ABI_VERSION, so a caller refuses the ABI.
+        || 0,
+        || RATIFY_V2_ABI_VERSION,
+    )
 }
 
 /// Returns the Protocol major version implemented by `ratify_v2_*` (2).
 #[no_mangle]
 pub extern "C" fn ratify_v2_protocol_version() -> u32 {
-    RATIFY_V2_PROTOCOL_VERSION
+    crate::guard::ffi_guard(|| 0, || RATIFY_V2_PROTOCOL_VERSION)
 }
 
 /// Returns the library package version (e.g. "2.0.0-alpha.1"). Statically
 /// allocated — do NOT free. Same value as `ratify_version()`.
 #[no_mangle]
 pub extern "C" fn ratify_v2_library_version() -> *const c_char {
-    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
+    crate::guard::ffi_guard(
+        || c"".as_ptr(),
+        || concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char,
+    )
 }
 
 /// Returns the stable spelling for a `ratify_v2_*` result code: "ok", a
@@ -467,7 +480,7 @@ pub extern "C" fn ratify_v2_library_version() -> *const c_char {
 /// "bad_argument", "internal", or "unknown". Statically allocated — do NOT free.
 #[no_mangle]
 pub extern "C" fn ratify_v2_error_class_str(code: i32) -> *const c_char {
-    class_cstr(code).as_ptr()
+    crate::guard::ffi_guard(|| c"internal".as_ptr(), || class_cstr(code).as_ptr())
 }
 
 /// Derive the full 256-bit v2 key ID
@@ -484,7 +497,7 @@ pub unsafe extern "C" fn ratify_v2_key_id(
     out_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || crate::guard::clear_cstr(out, out_len), || {
         let key = HybridPublicKey {
             ed25519: bytes(ed25519, ed25519_len, "ed25519")?.to_vec(),
             ml_dsa_65: bytes(ml_dsa_65, ml_dsa_65_len, "ml_dsa_65")?.to_vec(),
@@ -501,7 +514,7 @@ pub unsafe extern "C" fn ratify_v2_key_id_check(
     key_id: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || {}, || {
         if key_id.is_null() {
             return Err(null_arg("key_id"));
         }
@@ -545,7 +558,7 @@ pub unsafe extern "C" fn ratify_v2_verify_object(
     verify_context_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || {}, || {
         let wire = bytes(wire, wire_len, "wire")?;
         let ctx = if verify_context_json.is_null() {
             None
@@ -572,7 +585,7 @@ pub unsafe extern "C" fn ratify_v2_proof_bundle_verify_signatures(
     bundle_hash_out_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || crate::guard::clear_cstr(bundle_hash_out, bundle_hash_out_len), || {
         let b = decode_proof_bundle_v2(bytes(wire, wire_len, "wire")?)?;
         verify_proof_bundle_v2_signatures(&b)?;
         if !bundle_hash_out.is_null() {
@@ -596,7 +609,7 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_verify(
     head_json: *const c_char,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || {}, || {
         let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
         let key = HybridPublicKey {
             ed25519: bytes(verifier_ed25519, verifier_ed25519_len, "verifier_ed25519")?.to_vec(),
@@ -620,7 +633,7 @@ pub unsafe extern "C" fn ratify_v2_receipt_bundle_binding_check(
     bundle_wire_len: usize,
     err_out: *mut *mut c_char,
 ) -> i32 {
-    run(err_out, || {
+    run(err_out, || {}, || {
         let r = decode_verification_receipt_v2(bytes(receipt_wire, receipt_wire_len, "receipt_wire")?)?;
         let b = decode_proof_bundle_v2(bytes(bundle_wire, bundle_wire_len, "bundle_wire")?)?;
         check_verification_receipt_v2_bundle_binding(&r, &b)?;

@@ -118,19 +118,19 @@ type outcomeJSON struct {
 }
 
 type orderingVector struct {
-	Name                   string                      `json:"name"`
-	Description            string                      `json:"description"`
-	Bundle                 string                      `json:"bundle"`
-	RequiredScope          string                      `json:"required_scope"`
-	ExpectedChallenge      *expectedChallengeJSON      `json:"expected_challenge"`
-	ContextPolicy          *contextPolicyJSON          `json:"context_policy"`
-	ConfiguredNamespace    string                      `json:"configured_namespace"`
-	ConfiguredReplayEpoch  int64                       `json:"configured_replay_epoch"`
-	Now                    int64                       `json:"now"`
-	MaxChallengeAgeSeconds int64                       `json:"max_challenge_age_seconds"`
-	FutureSkewSeconds      int64                       `json:"future_skew_seconds"`
-	RequestContext         *requestContextJSON         `json:"request_context"`
-	ReceiverBindingHook    string                      `json:"receiver_binding_hook"`
+	Name                   string                        `json:"name"`
+	Description            string                        `json:"description"`
+	Bundle                 string                        `json:"bundle"`
+	RequiredScope          string                        `json:"required_scope"`
+	ExpectedChallenge      *expectedChallengeJSON        `json:"expected_challenge"`
+	ContextPolicy          *contextPolicyJSON            `json:"context_policy"`
+	ConfiguredNamespace    string                        `json:"configured_namespace"`
+	ConfiguredReplayEpoch  int64                         `json:"configured_replay_epoch"`
+	Now                    int64                         `json:"now"`
+	MaxChallengeAgeSeconds int64                         `json:"max_challenge_age_seconds"`
+	FutureSkewSeconds      int64                         `json:"future_skew_seconds"`
+	RequestContext         *requestContextJSON           `json:"request_context"`
+	ReceiverBindingHook    string                        `json:"receiver_binding_hook"`
 	ClaimStore             string                        `json:"claim_store"`
 	ClaimTimeOffset        int64                         `json:"claim_time_offset"`
 	FinalizeTimeOffset     int64                         `json:"finalize_time_offset"`
@@ -583,7 +583,10 @@ func (g *gen) terminalScenarios() []scenario {
 		}))
 	add(g.terminal("trust_unavailable", "no caller-authenticated trust configuration", def,
 		indeterminate("trust_unavailable", "unavailable", "not_evaluated", "not_evaluated", nil, nil, noStatus), func(s *scenario) { s.trust = nil }))
-	for _, c := range []struct{ name, desc string; trust *trustJSON }{
+	for _, c := range []struct {
+		name, desc string
+		trust      *trustJSON
+	}{
 		{"trust_ambiguous", "the trust provider reports more than one matching candidate: never trusted", &trustJSON{Mode: "ok", Outcome: "ambiguous"}},
 		{"trust_provider_error", "a trust provider error fails closed", &trustJSON{Mode: "error"}},
 		{"trust_provider_panic", "a trust provider panic fails closed", &trustJSON{Mode: "panic"}},
@@ -808,7 +811,10 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 			s.statusKeys = g.statusKeyConfig()
 			s.statusKeys[intermediateID] = statusKeyJSON{Epoch: 1, StatusKeyID: mixed.ID, PublicKey: pubJSON(mixed.Pub)}
 		}))
-	for _, c := range []struct{ mode, desc string; queries int }{
+	for _, c := range []struct {
+		mode, desc string
+		queries    int
+	}{
 		{"absent", "no status journal is configured: every reference is unavailable and no provider is called", 0},
 		{"unanchored", "the journal record does not match the store's anchored head: never not_revoked, no provider call", 0},
 		{"load_error", "the journal store fails to load: unavailable, no provider call", 0},

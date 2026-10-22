@@ -114,7 +114,6 @@ func testTokenFromPreflightV2(t testing.TB, preflight *V2PreflightResult) *V2Eva
 		futureSkew:     state.FutureSkew,
 		ownerToken:     make([]byte, 32),
 		claimedAt:      15, // authoritative claim time used for evaluation
-
 		claimTimeValid: true,
 		expected:       cloneExpectedChallengeStateV2(state),
 	}}
@@ -460,7 +459,7 @@ func TestEvaluateProofBundleV2DefersLocalConstraintFailuresUntilEveryStatusCheck
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
 			got := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
+				TrustedRootID:  bundle.Delegations[rootIndex].IssuerID,
 				TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 				Context: tt.context, ContextPolicy: policy, ExpectedChallenge: expected,
 				ClaimToken: testEvaluationTokenForTest(t, bundle, expected, policy, "data:read"),
@@ -521,7 +520,7 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 			expected := testExpectedContextChallenge(t, bundle, policy)
 			token := testEvaluationTokenForTest(t, bundle, expected, policy, "data:read")
 			assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-				TrustedRootID: bundle.Delegations[rootIndex].IssuerID,
+				TrustedRootID:  bundle.Delegations[rootIndex].IssuerID,
 				TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 				Context:       VerifierContext{HasAmount: true, RequestedAmount: 10, RequestedCurrency: "USD"},
 				ContextPolicy: policy, ExpectedChallenge: expected, ClaimToken: token,
@@ -711,7 +710,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 		t.Fatal("claim store rate batch aliases caller-owned output")
 	}
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		TrustedRootID: bundle.Delegations[1].IssuerID,
+		TrustedRootID:  bundle.Delegations[1].IssuerID,
 		TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read", ContextPolicy: policy, ExpectedChallenge: expected,
 		ClaimToken: token,
 	})

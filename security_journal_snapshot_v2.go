@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strings"
 	"sort"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -211,7 +211,7 @@ func securityJournalSnapshotStructV2(journal SecurityJournalV2) (securityJournal
 			AcceptedCertIDs: state.AcceptedCertIDs, DenyUnionCertIDs: state.DenyUnionCertIDs,
 			ForkSequence: state.ForkSequence, FutureDatedObjectObserved: state.FutureDatedObjectObserved,
 			IssuerID: state.IssuerID, MaxObservedSequence: state.MaxObservedSequence,
-			Observations: make([]securityJournalObservationV2, 0, len(state.Observations)),
+			Observations:           make([]securityJournalObservationV2, 0, len(state.Observations)),
 			ReconciliationRequired: state.ReconciliationRequired, RetiredStatusKeyIDs: state.RetiredStatusKeyIDs,
 			StatusKeyEpoch: state.StatusKeyEpoch, StatusKeyID: state.StatusKeyID,
 		}

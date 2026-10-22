@@ -175,7 +175,7 @@ func TestLocalAuthorizationEvaluatesContextBeforeConstraints(t *testing.T) {
 	}
 	contextPolicy := testBoundContextPolicy(t, policyContext)
 	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
-		TrustedRootID: bundle.Delegations[1].IssuerID,
+		TrustedRootID:  bundle.Delegations[1].IssuerID,
 		TrustedRootKey: rootKey, TrustConfigured: true, RequiredScope: "data:read",
 		ContextPolicy:     contextPolicy,
 		ExpectedChallenge: testExpectedContextChallenge(t, bundle, contextPolicy),

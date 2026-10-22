@@ -73,6 +73,27 @@ func TestSecurityJournalV2SnapshotRoundTripAndRejections(t *testing.T) {
 	}
 }
 
+// FuzzImportSecurityJournalSnapshotV2NeverPanics: the snapshot importer is a
+// decoder of persisted, possibly corrupted bytes and must fail closed; any
+// accepted snapshot must re-export byte for byte.
+func FuzzImportSecurityJournalSnapshotV2NeverPanics(f *testing.F) {
+	snapshot, err := ExportSecurityJournalSnapshotV2(EmptySecurityJournalV2())
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(snapshot)
+	f.Add([]byte(`{"generation":1,"issuers":[{}],"key_role_history":[],"previous_digest":"","status_key_history":[],"version":2}`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		journal, err := ImportSecurityJournalSnapshotV2(data, SecurityJournalHeadV2{Generation: 0, Digest: SecurityJournalSnapshotDigestV2(data)})
+		if err == nil {
+			again, exportErr := ExportSecurityJournalSnapshotV2(journal)
+			if exportErr != nil || !bytes.Equal(again, data) {
+				t.Fatalf("imported snapshot does not re-export identically: %v", exportErr)
+			}
+		}
+	})
+}
+
 // Migration turns a version 1 record into its version 2 successor as one
 // contiguous transition, so the anchored head advances by compare-and-swap
 // and the logical content is unchanged.

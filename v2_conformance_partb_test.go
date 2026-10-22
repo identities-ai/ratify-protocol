@@ -425,9 +425,11 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					}
 					if result.Decision != nil {
 						d := result.Decision
-						if d.Decision != want.Decision || d.ReleaseTime != want.ReleaseTime || d.Receipt.Sequence != want.ReceiptSeq {
-							t.Fatalf("step %d release: decision %s time %d seq %d, want %+v", i, d.Decision, d.ReleaseTime, d.Receipt.Sequence, want)
+						receipt, err := d.Receipt()
+						if err != nil || d.Decision() != want.Decision || d.ReleaseTime() != want.ReleaseTime || receipt.Sequence != want.ReceiptSeq {
+							t.Fatalf("step %d release: decision %s time %d receipt %v (%v), want %+v", i, d.Decision(), d.ReleaseTime(), receipt, err, want)
 						}
+						checkV2ReleasedDecisionAllowed(t, i, d)
 					}
 				default:
 					t.Fatalf("unknown op %s", step.Op)
@@ -436,6 +438,49 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 		})
 	}
 }
+
+// checkV2ReleasedDecisionAllowed checks that Allowed compares the receiver's
+// authoritative time only with the sealed exclusive deadlines, and that
+// changing values returned by the accessors does not change the decision.
+func checkV2ReleasedDecisionAllowed(t *testing.T, step int, d *ratify.V2ReleasedDecision) {
+	t.Helper()
+	ctx := context.Background()
+	at := func(now int64) bool { return d.Allowed(ctx, v2FixedClock(now)) }
+	horizon, isAllow := d.AllowHorizon()
+	if isAllow != (d.Decision() == "allow") {
+		t.Fatalf("step %d: allow horizon present=%v for decision %s", step, isAllow, d.Decision())
+	}
+	if !isAllow {
+		if at(d.ReleaseTime()) {
+			t.Fatalf("step %d: a released %s is Allowed", step, d.Decision())
+		}
+		return
+	}
+	deadline := min(horizon, d.ChallengeExpiresAt())
+	if !at(d.ReleaseTime()) || !at(deadline-1) || at(deadline) || at(deadline+1) {
+		t.Fatalf("step %d: Allowed does not end exactly at the exclusive deadline %d", step, deadline)
+	}
+	scope, wire := d.GrantedScope(), d.ReceiptWire()
+	receipt, err := d.Receipt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range scope {
+		scope[i] = "mutated"
+	}
+	for i := range wire {
+		wire[i] = 0
+	}
+	receipt.Decision, receipt.Sequence = "deny", receipt.Sequence+1
+	again, err := d.Receipt()
+	if err != nil || again.Decision != "allow" || again.Sequence != receipt.Sequence-1 || slices.Contains(d.GrantedScope(), "mutated") || !at(d.ReleaseTime()) {
+		t.Fatalf("step %d: a returned copy changed the released decision", step)
+	}
+}
+
+type v2FixedClock int64
+
+func (c v2FixedClock) AuthoritativeTimeV2(context.Context) (int64, error) { return int64(c), nil }
 
 // checkV2CommittedDecision reads the committed receipt body for the test
 // only; applications must never authorize from it.

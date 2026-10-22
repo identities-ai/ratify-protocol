@@ -147,29 +147,129 @@ const (
 	V2ReleaseRejected V2ReleaseStatus = "rejected"
 )
 
-// V2ReleasedDecision is an actionable decision; it exists only inside a
-// released V2ReleaseResult.
+// V2ReleasedDecision is the only actionable value in this package (SPEC-v2
+// §6.9). It is sealed: every field is unexported, ReleaseV2Decision is its
+// only constructor, and every accessor returns a copy, so a caller can neither
+// forge a released decision nor change one it was given. The zero value, and
+// any value obtained by decoding JSON or other data into this type, is never
+// actionable.
 type V2ReleasedDecision struct {
-	ClaimID            string
-	Decision           string
-	Reason             string
-	IdentityStatus     string
-	GrantedScope       []string
-	Receipt            *VerificationReceiptV2
-	ReleaseTime        int64
-	ChallengeExpiresAt int64
-	AllowHorizon       int64
+	claimID            string
+	decision           string
+	reason             string
+	identityStatus     string
+	grantedScope       []string
+	receiptWire        []byte
+	releaseTime        int64
+	challengeExpiresAt int64
+	allowHorizon       int64
 }
 
-// Allowed reports whether this released allow may still be acted on at the
-// receiver's authoritative time now (now < every exclusive deadline). The
-// receiver calls it immediately before its side effect.
-func (d V2ReleasedDecision) Allowed(now int64) bool {
-	return d.Decision == "allow" && d.Receipt != nil && now < d.ChallengeExpiresAt && now < d.AllowHorizon
+// ClaimID is the Protocol claim ID of the released evaluation.
+func (d *V2ReleasedDecision) ClaimID() string {
+	if d == nil {
+		return ""
+	}
+	return d.claimID
+}
+
+// Decision is the released decision: "allow", "deny", or "indeterminate".
+// Use Allowed, not this value, to gate a side effect.
+func (d *V2ReleasedDecision) Decision() string {
+	if d == nil {
+		return ""
+	}
+	return d.decision
+}
+
+// Reason is the released decision reason.
+func (d *V2ReleasedDecision) Reason() string {
+	if d == nil {
+		return ""
+	}
+	return d.reason
+}
+
+// IdentityStatus is the released identity status.
+func (d *V2ReleasedDecision) IdentityStatus() string {
+	if d == nil {
+		return ""
+	}
+	return d.identityStatus
+}
+
+// GrantedScope returns a copy of the released granted scope.
+func (d *V2ReleasedDecision) GrantedScope() []string {
+	if d == nil {
+		return nil
+	}
+	return slices.Clone(d.grantedScope)
+}
+
+// ReceiptWire returns a copy of the signed receipt wire that was verified
+// during release.
+func (d *V2ReleasedDecision) ReceiptWire() []byte {
+	if d == nil {
+		return nil
+	}
+	return bytes.Clone(d.receiptWire)
+}
+
+// Receipt returns a freshly decoded copy of the signed receipt that was
+// verified during release. Changing the returned value does not change the
+// released decision.
+func (d *V2ReleasedDecision) Receipt() (*VerificationReceiptV2, error) {
+	if d == nil || len(d.receiptWire) == 0 {
+		return nil, fmt.Errorf("v2 released decision carries no receipt")
+	}
+	return DecodeVerificationReceiptV2(d.receiptWire)
+}
+
+// ReleaseTime is the checkpoint acknowledgement time of the release.
+func (d *V2ReleasedDecision) ReleaseTime() int64 {
+	if d == nil {
+		return 0
+	}
+	return d.releaseTime
+}
+
+// ChallengeExpiresAt is the sealed exclusive challenge deadline.
+func (d *V2ReleasedDecision) ChallengeExpiresAt() int64 {
+	if d == nil {
+		return 0
+	}
+	return d.challengeExpiresAt
+}
+
+// AllowHorizon is the sealed exclusive allow deadline; ok is false unless the
+// released decision is an allow.
+func (d *V2ReleasedDecision) AllowHorizon() (horizon int64, ok bool) {
+	if d == nil {
+		return 0, false
+	}
+	return d.allowHorizon, d.allowHorizon > 0
+}
+
+// Allowed reports whether this released allow may be acted on now. It reads
+// the receiver's authoritative clock and compares that time only with the
+// sealed exclusive deadlines: it is true only when the released decision is
+// an allow and now < challenge_expires_at and now < allow_horizon. A clock
+// error, panic, regression, or reading outside the timestamp domain is false.
+// The receiver calls it immediately before its side effect.
+func (d *V2ReleasedDecision) Allowed(ctx context.Context, clock V2AuthoritativeClock) bool {
+	if d == nil || ctx == nil || clock == nil || d.decision != "allow" || len(d.receiptWire) == 0 || d.allowHorizon <= 0 {
+		return false
+	}
+	now, err := readV2AuthoritativeTime(ctx, clock)
+	if err != nil {
+		return false
+	}
+	return now < d.challengeExpiresAt && now < d.allowHorizon
 }
 
 // V2ReleaseResult is the result of ReleaseV2Decision. Decision is non-nil
-// only when Status is released; Reason is empty only when released.
+// only when Status is released; Reason is empty only when released. Only
+// Decision.Allowed may gate a side effect; Status alone is not actionable.
 type V2ReleaseResult struct {
 	Status   V2ReleaseStatus
 	Reason   string
@@ -278,12 +378,12 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	}
 	// 10. Return.
 	decision := &V2ReleasedDecision{
-		ClaimID: committed.claimID, Decision: receipt.Decision, Reason: receipt.DecisionReason,
-		IdentityStatus: receipt.IdentityStatus, GrantedScope: slices.Clone(receipt.GrantedScope), Receipt: receipt,
-		ReleaseTime: ack.Timestamp, ChallengeExpiresAt: committed.challengeExpiresAt,
+		claimID: committed.claimID, decision: receipt.Decision, reason: receipt.DecisionReason,
+		identityStatus: receipt.IdentityStatus, grantedScope: slices.Clone(receipt.GrantedScope), receiptWire: bytes.Clone(signedReceipt),
+		releaseTime: ack.Timestamp, challengeExpiresAt: committed.challengeExpiresAt,
 	}
 	if receipt.Decision == "allow" {
-		decision.AllowHorizon = committed.allowHorizon
+		decision.allowHorizon = committed.allowHorizon
 	}
 	return V2ReleaseResult{Status: V2ReleaseReleased, Decision: decision}
 }

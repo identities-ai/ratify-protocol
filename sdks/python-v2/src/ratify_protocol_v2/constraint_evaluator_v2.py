@@ -34,7 +34,6 @@ from .types_v2 import (
     is_int,
     valid_constraint_evaluator_refs_v2,
     valid_extension_type_v2,
-    valid_prefixed_digest_v2,
     valid_profile_id_v2,
 )
 
@@ -79,12 +78,9 @@ CONSTRAINT_OUTCOME_UNVERIFIABLE_V2 = "unverifiable"
 def _unverifiable(reason: str) -> Exception:
     """The constraint_unverifiable error of the v2 constraint error model
     (Go ``errConstraintUnverifiable``), declared in constraints_v2."""
-    from . import constraints_v2
+    from .constraints_v2 import ConstraintUnverifiableError
 
-    factory = getattr(constraints_v2, "err_constraint_unverifiable", None) or getattr(
-        constraints_v2, "_err_constraint_unverifiable"
-    )
-    return factory(reason)
+    return ConstraintUnverifiableError(reason)
 
 
 @dataclass(frozen=True)
@@ -350,7 +346,9 @@ def run_constraint_evaluator_v2(
     if got.outcome == CONSTRAINT_OUTCOME_DENIED_V2:
         if got.valid_until != 0:
             raise _unverifiable(f"{in_.type} evaluator returned a horizon with a denial")
-        raise ValueError(f"{in_.type} denied: {got.detail}")
+        from .constraints_v2 import ConstraintDeniedError
+
+        raise ConstraintDeniedError(f"{in_.type} denied: {got.detail}")
     if got.outcome == CONSTRAINT_OUTCOME_UNVERIFIABLE_V2:
         if got.valid_until != 0:
             raise _unverifiable(f"{in_.type} evaluator returned a horizon with an unverifiable result")
@@ -571,6 +569,3 @@ def extension_params_json_v2(c: Any) -> Optional[bytes]:
         return None
     return _v2json.canonical(params)
 
-
-# Imported here so the evaluator registry stays importable on its own.
-_ = (valid_prefixed_digest_v2,)

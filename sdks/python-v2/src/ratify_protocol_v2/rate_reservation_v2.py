@@ -51,16 +51,19 @@ def decode_sealed_constraint_v2(data: bytes):
     if not isinstance(data, (bytes, bytearray)):
         raise ValueError("sealed constraint must be bytes")
     data = bytes(data)
-    constraint = constraints_v2.decode_constraint_v2(data)
-    if constraints_v2.encode_constraint_v2(constraint) != data:
+    constraint = constraints_v2.constraint_v2_from_fields(_v2json.parse(data))
+    if encode_constraint_canonical_v2(constraint) != data:
         raise ValueError("sealed constraint is not canonical")
     return constraint
 
 
+def encode_constraint_canonical_v2(constraint) -> bytes:
+    """RatifyCanonicalJSON of one constraint (Go ``CanonicalJSON(constraint)``)."""
+    return _v2json.canonical(constraint.to_canonical_dict())
+
+
 def signed_v2_rate_reservation_batch(bundle) -> list:
     """Seal every rate counter from an already preflight-verified proof."""
-    from . import constraints_v2
-
     deferred = []
     for i, cert in enumerate(bundle.delegations or ()):
         for j, constraint in enumerate(cert.constraints or ()):
@@ -68,7 +71,7 @@ def signed_v2_rate_reservation_batch(bundle) -> list:
                 continue
             deferred.append(V2DeferredConstraint(
                 delegation_index=i, constraint_index=j, issuer_id=cert.issuer_id, cert_id=cert.cert_id,
-                type=MAX_RATE, canonical_json=constraints_v2.encode_constraint_v2(constraint),
+                type=MAX_RATE, canonical_json=encode_constraint_canonical_v2(constraint),
             ))
     return build_v2_rate_reservation_batch(deferred)
 
@@ -112,5 +115,3 @@ def build_v2_rate_reservation_batch(deferred) -> list:
     batch.sort(key=lambda r: (r.issuer_id.encode("utf-8"), r.cert_id.encode("utf-8", "surrogatepass"), r.window_s))
     return batch
 
-
-_ = _v2json

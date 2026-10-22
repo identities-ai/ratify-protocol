@@ -12,7 +12,7 @@ import pytest
 
 from ratify_protocol_v2 import constraint_evaluator_v2 as ce
 from ratify_protocol_v2.audience_v2 import V2AudienceMembership, evaluate_receiver_audience_v2
-from ratify_protocol_v2.constraints_v2 import ConstraintContextV2, ConstraintV2, encode_constraint_v2
+from ratify_protocol_v2.constraints_v2 import ConstraintContextV2, ConstraintDeniedError, ConstraintUnverifiableError, ConstraintV2
 from ratify_protocol_v2.context_policy_v2 import (
     VERIFY_SESSION_CONTEXT_FIELDS_V2,
     VERIFY_SESSION_CONTEXT_PROFILE_V2,
@@ -28,6 +28,7 @@ from ratify_protocol_v2.rate_reservation_v2 import (
     V2RateLimitExceededError,
     V2RateReservation,
     build_v2_rate_reservation_batch,
+    encode_constraint_canonical_v2 as encode_constraint_v2,
 )
 from ratify_protocol_v2.stream_sequence_v2 import check_v2_stream_sequence
 
@@ -176,10 +177,12 @@ class _Bundle:
 
 def test_context_policy_digest_and_outcomes():
     unbound = new_v2_context_policy("ratify.test.context/v1", False, None, None)
-    assert unbound.digest == (
-        "sha384:610c40faa472aa2a4f905988899733758cccf30f243aed35f1f42433228a28dbab1725cb2a4a6811029a8109da0b9b29")
     want, other = bytes([0x51]) * 32, bytes([0x52]) * 32
     bound = new_v2_context_policy(VERIFY_SESSION_CONTEXT_PROFILE_V2, True, list(VERIFY_SESSION_CONTEXT_FIELDS_V2), want)
+    # Go testV2ContextPolicyDigest: the Verify session-context policy digest,
+    # which excludes the per-invocation expected context.
+    assert bound.digest == (
+        "sha384:610c40faa472aa2a4f905988899733758cccf30f243aed35f1f42433228a28dbab1725cb2a4a6811029a8109da0b9b29")
     mismatch = new_v2_context_policy("ratify.test.session-context/v1", True, ["session"], other)
     cases = [
         (_Bundle(), None, "authorization_unverified", "unbound", False),
@@ -264,9 +267,7 @@ def _registry(evaluate, timeout=0.2, kind="com.example.custom"):
 
 
 def _unverifiable(exc) -> bool:
-    from ratify_protocol_v2 import constraints_v2
-
-    return isinstance(exc, getattr(constraints_v2, "ConstraintUnverifiableError", ()) or ()) or "unverifiable" in str(exc).lower()
+    return isinstance(exc, ConstraintUnverifiableError)
 
 
 @pytest.mark.parametrize("timeout", [0, -1, 10.5, True, "1"])
@@ -307,7 +308,7 @@ def test_run_evaluator_maps_outcomes_horizons_and_faults():
         assert _unverifiable(exc.value)
     with pytest.raises(Exception) as exc:
         run(answer(R("denied", detail="no")))
-    assert not _unverifiable(exc.value) and "denied" in str(exc.value)
+    assert isinstance(exc.value, ConstraintDeniedError) and "denied" in str(exc.value)
     with pytest.raises(Exception) as exc:
         run(answer(R("unverifiable")))
     assert _unverifiable(exc.value)

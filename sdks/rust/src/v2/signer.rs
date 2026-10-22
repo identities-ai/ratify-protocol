@@ -203,6 +203,9 @@ pub(crate) fn sign_v2_statement_with_signer(
 
 /// Sign under a local private key through the same path as an external
 /// signer, including verification of the produced signature.
+// No typed signer currently routes through it; kept as the local-key
+// counterpart of sign_v2_statement_with_signer.
+#[allow(dead_code)]
 pub(crate) fn sign_v2_statement_local(
     object_type: V2ObjectType,
     signable: &[u8],

@@ -17,12 +17,16 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub const TZDB_VERSION: &str = "2025c";
 
 /// Lowercase hexadecimal SHA-256 of the embedded archive.
+// Go internal/tzdbv2.ZipSHA256; only the pinning test reads it.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const TZDB_ZIP_SHA256: &str =
     "8f55634d05f8bca1f7bc7c69c5933428c69357e0bdf565e5ba224e3f88ff12e8";
 
 static ZONEINFO_ZIP: &[u8] = include_bytes!("tzdata/zoneinfo-2025c.zip");
 
 /// Returns the embedded archive bytes.
+// Go internal/tzdbv2.Archive; only the pinning test reads it.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn archive() -> &'static [u8] {
     ZONEINFO_ZIP
 }
@@ -1042,6 +1046,8 @@ pub fn load_zone(name: &str) -> Result<Arc<Zone>, TzError> {
 
 /// Names of all entries in the embedded archive that [`load_zone`] accepts
 /// candidates for (sorted). Intended for tests and diagnostics.
+// Diagnostics helper kept for parity with the Go tzdb tooling; no caller.
+#[allow(dead_code)]
 pub fn zone_names() -> Result<Vec<String>, TzError> {
     let index = index().as_ref().map_err(Clone::clone)?;
     let mut names: Vec<String> = index

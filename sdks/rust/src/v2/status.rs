@@ -1350,7 +1350,9 @@ fn add_history(
 /// Go `aggregateCertificateStatusResultsV2` (internal; SPEC-v2 §6.5):
 /// exactly one reducer result per check, in order. Revoked outranks
 /// unavailable, which outranks stale, independent of chain order.
-// Used by the authorization port (Go authorization_v2.go), not yet ported.
+// Go uses it only in resolveClaimProofBundleV2AfterStatusResults, which only
+// Go unit tests call; the live verifier aggregates inside runV2StatusStage.
+// Kept for parity.
 #[allow(dead_code)]
 pub(crate) fn aggregate_certificate_status_results_v2(
     checks: &[V2CertificateStatusCheck],

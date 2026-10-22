@@ -135,7 +135,6 @@ pub type V2StatusEvidenceProvider = Arc<
 /// (`StatusKeys`, `StatusPolicy`) and `V2VerifyCallbacks` (`StatusEvidence`,
 /// `StatusJournal`). A `None` provider or journal makes every issuer
 /// unavailable, as a nil Go callback does.
-#[allow(dead_code)]
 pub(crate) struct V2StatusStageInputs<'a> {
     pub status_evidence: Option<&'a V2StatusEvidenceProvider>,
     pub status_journal: Option<&'a dyn SecurityJournalStoreV2>,
@@ -145,11 +144,12 @@ pub(crate) struct V2StatusStageInputs<'a> {
 
 /// Go `v2StatusStageResult`. `cancelled` replaces Go's `ctx.Err()`: the
 /// caller's context ended during the stage and nothing further was committed.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct V2StatusStageResult {
     pub assessment: V2StatusAssessment,
     pub cancelled: bool,
+    // Go reads it only in tests (provider-call accounting).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub queries: usize,
 }
 
@@ -187,9 +187,6 @@ fn call_journal_safely<T>(
 }
 
 /// Go `runV2StatusStage`: the status stage for every CertificateRef check.
-// Called by the live and transaction verifiers (Go verify_v2.go,
-// transaction_verify_v2.go), which are ported separately.
-#[allow(dead_code)]
 pub(crate) fn run_v2_status_stage(
     ctx: &V2Context,
     bundle: &ProofBundleV2,

@@ -71,7 +71,7 @@ fn v2_annex_a() {
     let wildcards = vocab["wildcards"].as_object().unwrap();
     t.check("vocabulary", "wildcard count", wildcards.len() == scope_wildcards().len(), || "count".into());
     for (w, want) in wildcards {
-        let got = expand_scopes(&[w.clone()]);
+        let got = expand_scopes(std::slice::from_ref(w));
         let want = strings(want);
         t.check("wildcards", w, got == want && want.iter().all(|x| !is_sensitive(x)), || format!("{got:?}"));
     }

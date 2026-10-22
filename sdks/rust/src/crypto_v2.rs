@@ -165,9 +165,31 @@ fn little_endian_ge(left: &[u8], right: &[u8; 32]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_ed_public_key, validate_ed_signature};
+    use super::{
+        sign_delegation_v2, validate_ed_public_key, validate_ed_signature, verify_delegation_v2,
+    };
+    use crate::crypto::generate_hybrid_keypair;
+    use crate::v2::{verify_v2_statement, V2ObjectType};
     use curve25519_dalek::edwards::CompressedEdwardsY;
     use ed25519_dalek::{Signer, SigningKey};
+
+    // The delegation helper and the typed registry must produce the same
+    // transcript: a delegation signed one way verifies the other way.
+    #[test]
+    fn delegation_signing_matches_the_typed_registry_transcript() {
+        let (public, private) = generate_hybrid_keypair();
+        let signable = b"delegation signable bytes";
+        let signature = sign_delegation_v2(signable, &private).unwrap();
+        verify_delegation_v2(signable, &signature, &public).unwrap();
+        verify_v2_statement(
+            V2ObjectType::DelegationCertificate,
+            signable,
+            &signature,
+            &public,
+        )
+        .unwrap();
+        assert!(verify_delegation_v2(b"other bytes", &signature, &public).is_err());
+    }
 
     fn mixed_order_encoding() -> [u8; 32] {
         let prime = SigningKey::from_bytes(&[7; 32]).verifying_key();

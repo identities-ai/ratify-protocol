@@ -138,6 +138,12 @@ impl V2Error {
         self
     }
 
+    /// Whether the class was fixed deliberately (Go: the error is a
+    /// `*V2Error`); false for a provisional (Go: unclassified) error.
+    pub(crate) fn is_classified(&self) -> bool {
+        self.explicit
+    }
+
     /// Prefix the diagnostic message, keeping the class.
     pub fn context(mut self, prefix: impl fmt::Display) -> Self {
         self.message = format!("{prefix}: {}", self.message);

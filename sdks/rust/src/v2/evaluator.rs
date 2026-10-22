@@ -396,8 +396,17 @@ pub(crate) fn run_constraint_evaluator_v2(
         return Err(ConstraintFailure::Unverifiable(format!("{kind} evaluator could not be started")));
     }
     let answer = rx.recv_timeout(timeout);
+    // Go selects on the answer and on the evaluation context's deadline: an
+    // answer that arrives only once the deadline has passed (for example an
+    // evaluator that returns because its context ended) is a timeout.
+    let deadline_passed = ctx.is_done();
     cancel.cancel();
     let result = match answer {
+        _ if deadline_passed => {
+            return Err(ConstraintFailure::Unverifiable(format!(
+                "{kind} evaluator did not answer within {timeout:?}"
+            )))
+        }
         Err(_) => {
             return Err(ConstraintFailure::Unverifiable(format!(
                 "{kind} evaluator did not answer within {timeout:?}"

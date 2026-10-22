@@ -273,3 +273,26 @@ pub(crate) fn lp(value: &[u8]) -> Vec<u8> {
     out.extend_from_slice(value);
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::generate_hybrid_keypair;
+
+    // Fixed fixtures depend on deterministic signing reproducing the same
+    // bytes, and the registry code must domain-separate every object type.
+    #[test]
+    fn deterministic_signing_is_reproducible_and_bound_to_the_object_type() {
+        let (public, private) = generate_hybrid_keypair();
+        let signable = b"fixture signable bytes";
+        let a = sign_v2_statement_deterministic(V2ObjectType::WitnessEntry, signable, &private)
+            .unwrap();
+        let b = sign_v2_statement_deterministic(V2ObjectType::WitnessEntry, signable, &private)
+            .unwrap();
+        assert_eq!(a, b);
+        verify_v2_statement(V2ObjectType::WitnessEntry, signable, &a, &public).unwrap();
+        let wrong =
+            verify_v2_statement(V2ObjectType::RevocationPush, signable, &a, &public).unwrap_err();
+        assert_eq!(wrong.class, V2ErrorClass::InvalidSignature);
+    }
+}

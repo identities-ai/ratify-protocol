@@ -50,8 +50,11 @@ export {
   validV2Timestamp,
 } from "./clock_bounds_v2.js";
 
-// Canonical JSON, key IDs, signing transcript, typed and external signers.
+// Canonical JSON, key generation, key IDs, signing transcript, typed and
+// external signers. Key generation is shared with v1: the hybrid key format
+// did not change between protocol versions.
 export { canonicalJSONV2 } from "./json_v2.js";
+export { generateHybridKeypair, hybridKeypairFromSeeds } from "./crypto.js";
 export {
   deriveKeyIDV2,
   verifyV2DelegationCertificateSignature,
@@ -106,6 +109,12 @@ export {
   PROFILE_ALLOWED_VALUES_V2,
   MAX_CONSTRAINT_EVALUATORS_V2,
   MAX_CONSTRAINT_EVALUATOR_TIMEOUT_MS_V2,
+  MAX_EXTENSION_TYPE_BYTES_V2,
+  MAX_PROFILE_ID_BYTES_V2,
+  MAX_EXTENSION_CONTEXT_ENTRIES_V2,
+  MAX_EXTENSION_CONTEXT_NAME_BYTES_V2,
+  MAX_EXTENSION_CONTEXT_VALUE_BYTES_V2,
+  MAX_ALLOWED_VALUES_V2,
   ConstraintEvaluatorRegistryV2,
   newConstraintEvaluatorRegistryV2,
   constraintProfileDigestV2,
@@ -263,6 +272,8 @@ export {
   loadAnchoredSecurityJournalV2,
   recordSecurityKeyRoleV2,
   configureStatusKeyEpochV2,
+  registerKeyRoleV2,
+  registerStatusKeyEpochV2,
   applyRevocationListToJournalV2,
   applyRevocationPushToJournalV2,
   revocationStatusFromJournalV2,

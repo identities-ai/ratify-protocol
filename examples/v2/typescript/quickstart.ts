@@ -107,7 +107,7 @@ async function verify(): Promise<V2VerifyOutcome> {
   return verifyProofBundleV2({
     bundle: bundleWire, expected, contextPolicy: newV2ContextPolicy("example.quickstart/v1", false, null, null),
     requiredScope: "payments:send", verifierNamespace: namespace, replayEpoch: epoch,
-    now: store.now, maxChallengeAgeSeconds: 300, futureSkewSeconds: 5,
+    now: store.now(), maxChallengeAgeSeconds: 300, futureSkewSeconds: 5,
     context: { hasAmount: true, requestedAmountMicros: 12_500_000, requestedCurrency: "USD" },
     tzdbVersion: TZDB_VERSION_V2,
     statusKeys: new Map([[rootID, { epoch: 1, key: status.publicKey }]]),

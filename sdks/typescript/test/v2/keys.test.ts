@@ -59,3 +59,21 @@ test("keys.json: invalid v2 key IDs are rejected where a v2 key ID is required",
     assert.equal(classOf(() => decodeWitnessEntryV2(setTopLevelString(witnessWire, "witness_id", bad.value))), bad.expected_error_class, `${bad.name} as witness_id`);
   }
 });
+
+test("keys: the ./v2 entry generates hybrid keys without the v1 entry", async () => {
+  // A v2-only consumer imports from ./v2 alone, so it must be able to create
+  // the keys every v2 signer and verifier takes. The seeded form reproduces
+  // the pinned fixture key; the random form yields a valid, distinct pair.
+  const v2 = await import("../../src/v2.js");
+  const k = (f.keys as Any[])[0];
+  const seeded = await v2.hybridKeypairFromSeeds(Buffer.from(k.ed25519_seed_hex, "hex"), Buffer.from(k.ml_dsa_65_seed_hex, "hex"));
+  assert.equal(v2.keyIDV2(seeded.publicKey), k.key_id_v2);
+  await v2.validateHybridKeyPairV2(seeded);
+  await assert.rejects(() => v2.hybridKeypairFromSeeds(new Uint8Array(31), new Uint8Array(32)));
+
+  const a = await v2.generateHybridKeypair();
+  const b = await v2.generateHybridKeypair();
+  await v2.validateHybridKeyPairV2(a);
+  await v2.validateHybridKeyPairV2(b);
+  assert.notEqual(v2.keyIDV2(a.publicKey), v2.keyIDV2(b.publicKey));
+});

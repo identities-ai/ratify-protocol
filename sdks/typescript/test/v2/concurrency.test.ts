@@ -196,3 +196,18 @@ test("finalization: a store's rate exhaustion keeps the sentinel and is claim_st
     return true;
   });
 });
+
+test("reference store: now() reads the clock without an authoritative reading", async () => {
+  // Harnesses derive request times from now(). It must report the setting,
+  // including a backward move, and must not raise the high-water mark the
+  // way an authoritative reading does, or the regression it reports could
+  // never be detected.
+  const store = await newStore();
+  assert.equal(store.now(), START);
+  store.setTime(START + 10);
+  assert.equal(await store.authoritativeTimeV2(), START + 10);
+  store.setTime(START + 5);
+  assert.equal(store.now(), START + 5);
+  assert.equal(store.highWater, START + 10);
+  await assert.rejects(() => store.authoritativeTimeV2(), (e: unknown) => v2ErrorClassOf(e) === "clock_regressed");
+});

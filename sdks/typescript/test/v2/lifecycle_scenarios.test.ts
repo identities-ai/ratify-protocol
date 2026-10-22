@@ -74,7 +74,7 @@ for (const sc of file.scenarios as Any[]) {
     for (let i = 0; i < sc.steps.length; i++) {
       const step = sc.steps[i];
       const want = step.expect ?? {};
-      const now = store.now;
+      const now = store.now();
       const request = file.requests[step.request];
       switch (step.op) {
         case "set_time":

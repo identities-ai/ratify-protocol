@@ -121,3 +121,21 @@ test("package: ./v2 subpath and the v2 release line", () => {
   assert.equal(pkg.exports["./v2"].import, "./dist/v2.js");
   assert.equal(pkg.exports["./v2/reference"].import, "./dist/v2reference.js");
 });
+
+test("public API: v2 entry carries the names the other SDKs export", () => {
+  // Parity with Go (module root), Python (ratify_protocol_v2) and Rust
+  // (ratify_protocol::v2): a v2-only consumer must not need a deep import
+  // for key generation, the in-memory journal role registration, or the
+  // constraint-evaluator bounds it has to validate input against.
+  for (const name of [
+    "generateHybridKeypair", "hybridKeypairFromSeeds",
+    "registerKeyRoleV2", "registerStatusKeyEpochV2",
+    "MAX_EXTENSION_TYPE_BYTES_V2", "MAX_PROFILE_ID_BYTES_V2", "MAX_EXTENSION_CONTEXT_ENTRIES_V2",
+    "MAX_EXTENSION_CONTEXT_NAME_BYTES_V2", "MAX_EXTENSION_CONTEXT_VALUE_BYTES_V2", "MAX_ALLOWED_VALUES_V2",
+    "TZDB_VERSION_V2",
+  ]) {
+    assert.ok(name in v2, `${name} missing from ./v2`);
+    assert.ok(name in root, `${name} missing from the package root`);
+  }
+  assert.equal(v2.TZDB_VERSION_V2, "2025c");
+});

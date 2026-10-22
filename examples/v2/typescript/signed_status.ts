@@ -108,7 +108,7 @@ async function verifyAndRelease(label: string): Promise<void> {
   const outcome = await verifyProofBundleV2({
     bundle: encodeProofBundleV2(bundle), expected,
     contextPolicy: newV2ContextPolicy("example.signed-status/v1", false, null, null), requiredScope: "data:read",
-    verifierNamespace: namespace, replayEpoch: epoch, now: store.now,
+    verifierNamespace: namespace, replayEpoch: epoch, now: store.now(),
     maxChallengeAgeSeconds: 300, futureSkewSeconds: 5, tzdbVersion: TZDB_VERSION_V2,
     statusKeys: new Map([[rootID, { epoch: 1, key: status.publicKey }]]),
     statusPolicy: policy,

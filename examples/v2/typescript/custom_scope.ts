@@ -88,7 +88,7 @@ const issuance = new ChallengeIssuanceStoreTestOnly();
 
 // attempt verifies one request for `nodes` nodes and releases the result.
 async function attempt(label: string, nodes: number, evaluators: ConstraintEvaluatorRegistryV2 | null): Promise<void> {
-  store.setTime(store.now + 1);
+  store.setTime(store.now() + 1);
   const challenge = await issueChallengeV2({ clock: store, store: issuance }, {
     verifierNamespace: namespace, replayEpoch: epoch, verifierID,
     lifetimeSeconds: 120, expectedAgentID: agentID, expectedAgentPublicKey: agent.publicKey,
@@ -103,7 +103,7 @@ async function attempt(label: string, nodes: number, evaluators: ConstraintEvalu
   const outcome = await verifyProofBundleV2({
     bundle: encodeProofBundleV2(bundle), expected,
     contextPolicy: newV2ContextPolicy("example.custom-scope/v1", false, null, null), requiredScope: customScope,
-    verifierNamespace: namespace, replayEpoch: epoch, now: store.now,
+    verifierNamespace: namespace, replayEpoch: epoch, now: store.now(),
     maxChallengeAgeSeconds: 300, futureSkewSeconds: 5, tzdbVersion: TZDB_VERSION_V2,
     // The requested quantity comes from the authenticated request, never
     // from the proof.

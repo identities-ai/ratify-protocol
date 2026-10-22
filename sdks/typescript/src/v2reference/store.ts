@@ -159,7 +159,7 @@ export interface StoreOptionsTestOnly {
  */
 export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint {
   readonly mutex = new MutexTestOnly();
-  now: number;
+  private nowSeconds: number;
   highWater: number;
   readonly leaseSeconds: number;
   claims = new Map<string, ClaimRecord>();
@@ -179,7 +179,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   constructor(now: number, leaseSeconds: number, logID: string, verifierKey: HybridKeyPairV2, options: StoreOptionsTestOnly = {}) {
     if (!(leaseSeconds > 0) || logID.length !== 32) throw new Error("v2reference: lease must be positive and log ID 32 hex characters");
-    this.now = now;
+    this.nowSeconds = now;
     this.highWater = now;
     this.leaseSeconds = leaseSeconds;
     this.logID = logID;
@@ -190,13 +190,13 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   /** An independent copy of the complete state (a restore equal to the anchored state). */
   clone(): StoreTestOnly {
-    const out = new StoreTestOnly(this.now, this.leaseSeconds, this.logID, this.verifierKey, this.options);
+    const out = new StoreTestOnly(this.nowSeconds, this.leaseSeconds, this.logID, this.verifierKey, this.options);
     this.copyStateInto(out);
     return out;
   }
 
   copyStateInto(out: StoreTestOnly): void {
-    out.now = this.now;
+    out.nowSeconds = this.nowSeconds;
     out.highWater = this.highWater;
     out.ackWithheld = this.ackWithheld;
     out.logFrozen = this.logFrozen;
@@ -241,7 +241,16 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   /** Sets the authoritative clock (tests may move it backward). */
   setTime(now: number): void {
-    this.now = now;
+    this.nowSeconds = now;
+  }
+
+  /**
+   * The store's current clock setting, without taking an authoritative
+   * reading (for test harnesses that derive request times). Move the clock
+   * with setTime.
+   */
+  now(): number {
+    return this.nowSeconds;
   }
 
   /** Makes the reference receipt signer fail (or recover). */
@@ -260,7 +269,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       const e = this.outbox[i]!;
       if (e.wire === null) return;
       if (e.ack !== null) continue;
-      e.ack = { logID: this.logID, sequence: i + 1, entryHash: Uint8Array.from(e.digest), timestamp: this.now };
+      e.ack = { logID: this.logID, sequence: i + 1, entryHash: Uint8Array.from(e.digest), timestamp: this.nowSeconds };
     }
   }
 
@@ -273,11 +282,11 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   /** One authoritative reading; a reading below the high-water mark is a regression. */
   readClock(): number {
-    if (this.now < this.highWater) {
-      throw storeError("clock_regressed", `v2reference: authoritative clock ${this.now} is below its high-water mark ${this.highWater}`);
+    if (this.nowSeconds < this.highWater) {
+      throw storeError("clock_regressed", `v2reference: authoritative clock ${this.nowSeconds} is below its high-water mark ${this.highWater}`);
     }
-    this.highWater = this.now;
-    return this.now;
+    this.highWater = this.nowSeconds;
+    return this.nowSeconds;
   }
 
   async authoritativeTimeV2(): Promise<number> {
@@ -531,7 +540,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         if (prior.ack === null) throw ErrNotAcknowledgedTestOnly;
       }
       if (!bytesEqual(previous, previousEntryHash)) throw ErrNotAcknowledgedTestOnly;
-      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.now };
+      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.nowSeconds };
       return { ...entry.ack, entryHash: Uint8Array.from(entry.ack.entryHash) };
     });
   }

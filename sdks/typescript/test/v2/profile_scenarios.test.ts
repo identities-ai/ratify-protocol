@@ -79,7 +79,7 @@ for (const sc of file.profile_scenarios as Any[]) {
           store.setAcknowledgementWithheld(step.withheld);
           break;
         case "verify": {
-          const { req, cb } = await buildVerifyRequest({ ...request, now: store.now }, unb64(file.bundles_b64[request.bundle]), zeroCounts());
+          const { req, cb } = await buildVerifyRequest({ ...request, now: store.now() }, unb64(file.bundles_b64[request.bundle]), zeroCounts());
           const callbacks = { ...cb, claimStore: store as never };
           if (sc.rate_at_finalization) {
             const rateStore = store.withRateAtFinalization();
@@ -145,7 +145,7 @@ for (const sc of file.profile_scenarios as Any[]) {
           snapshots.set(step.snapshot, primary!.clone());
           break;
         case "restore": {
-          const now = store.now;
+          const now = store.now();
           primary = snapshots.get(step.snapshot)!.clone();
           store = primary.store;
           store.setTime(now);

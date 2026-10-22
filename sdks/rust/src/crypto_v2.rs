@@ -6,12 +6,18 @@
 use alloc::{string::{String, ToString}, vec::Vec};
 
 use curve25519_dalek::{edwards::CompressedEdwardsY, traits::IsIdentity};
-use ed25519_dalek::{Signature as EdSignature, Signer as _, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature as EdSignature, VerifyingKey};
+#[cfg(test)]
+use ed25519_dalek::{Signer as _, SigningKey};
 use fips204::ml_dsa_65;
-use fips204::traits::{SerDes, Signer, Verifier};
+use fips204::traits::{SerDes, Verifier};
+#[cfg(test)]
+use fips204::traits::Signer;
 use sha2::{Digest, Sha256, Sha384};
 
-use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
+#[cfg(test)]
+use crate::types::HybridPrivateKey;
+use crate::types::{HybridPublicKey, HybridSignature};
 
 const SIGNATURE_PREFIX: &[u8] = b"ratify-protocol-signature\0\x02";
 const KEY_ID_PREFIX: &[u8] = b"ratify-key-id-v2\0";

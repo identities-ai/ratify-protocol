@@ -193,12 +193,45 @@ pub fn verify_v2_statement(
         .map_err(|m| V2Error::new(V2ErrorClass::InvalidSignature, m))
 }
 
+/// Strict AND verification of both components over an already-computed
+/// transcript `message`, which must be exactly the 77-byte v2 signing message
+/// for `object_type` (`v2_signing_message`); the ML-DSA-65 context is derived
+/// from `object_type`. For bindings that compute `M` themselves. Every
+/// failure, including a message that is not a transcript for `object_type`,
+/// is `invalid_signature`.
+pub fn verify_v2_message(
+    object_type: V2ObjectType,
+    message: &[u8],
+    signature: &HybridSignature,
+    public_key: &HybridPublicKey,
+) -> V2Result<()> {
+    verify_message_unclassified(object_type, message, signature, public_key)
+        .map_err(|m| V2Error::new(V2ErrorClass::InvalidSignature, m))
+}
+
 fn verify_unclassified(
     object_type: V2ObjectType,
     signable: &[u8],
     signature: &HybridSignature,
     public_key: &HybridPublicKey,
 ) -> Result<(), String> {
+    let message = v2_signing_message(object_type, signable);
+    verify_message_unclassified(object_type, &message, signature, public_key)
+}
+
+fn verify_message_unclassified(
+    object_type: V2ObjectType,
+    message: &[u8],
+    signature: &HybridSignature,
+    public_key: &HybridPublicKey,
+) -> Result<(), String> {
+    const PREFIX: &[u8] = b"ratify-protocol-signature\0\x02";
+    if message.len() != 77
+        || !message.starts_with(PREFIX)
+        || message[PREFIX.len()..PREFIX.len() + 2] != object_type.code().to_be_bytes()
+    {
+        return Err("message is not the v2 signing transcript for this object type".into());
+    }
     if public_key.ed25519.len() != 32 || public_key.ml_dsa_65.len() != ml_dsa_65::PK_LEN {
         return Err("hybrid public key has invalid component length".into());
     }
@@ -207,7 +240,6 @@ fn verify_unclassified(
     }
     validate_ed_public_key(&public_key.ed25519)?;
     validate_ed_signature(&signature.ed25519)?;
-    let message = v2_signing_message(object_type, signable);
     let ed_bytes: [u8; 32] = public_key.ed25519[..]
         .try_into()
         .map_err(|_| "hybrid public key has invalid component length".to_string())?;
@@ -216,7 +248,7 @@ fn verify_unclassified(
     let ed_sig = EdSignature::from_slice(&signature.ed25519)
         .map_err(|_| "Ed25519 v2 signature malformed".to_string())?;
     ed_key
-        .verify_strict(&message, &ed_sig)
+        .verify_strict(message, &ed_sig)
         .map_err(|_| "Ed25519 v2 signature invalid".to_string())?;
     let ml_pk_bytes: [u8; ml_dsa_65::PK_LEN] = public_key.ml_dsa_65[..]
         .try_into()
@@ -226,7 +258,7 @@ fn verify_unclassified(
     let ml_sig: [u8; ml_dsa_65::SIG_LEN] = signature.ml_dsa_65[..]
         .try_into()
         .map_err(|_| "hybrid signature has invalid component length".to_string())?;
-    if !ml_pk.verify(&message, &ml_sig, &v2_mldsa_context(object_type)) {
+    if !ml_pk.verify(message, &ml_sig, &v2_mldsa_context(object_type)) {
         return Err("ML-DSA-65 v2 signature invalid".into());
     }
     Ok(())
@@ -297,5 +329,31 @@ mod tests {
         let wrong =
             verify_v2_statement(V2ObjectType::RevocationPush, signable, &a, &public).unwrap_err();
         assert_eq!(wrong.class, V2ErrorClass::InvalidSignature);
+    }
+
+    // A binding that computes M itself must get the same verdict as the
+    // signable-bytes entry point, and M must be the transcript for the code.
+    #[test]
+    fn verify_v2_message_matches_statement_verification() {
+        let (public, private) = generate_hybrid_keypair();
+        let signable = b"fixture signable bytes";
+        let ty = V2ObjectType::VerificationReceipt;
+        let sig = sign_v2_statement_deterministic(ty, signable, &private).unwrap();
+        let message = v2_signing_message(ty, signable);
+        verify_v2_message(ty, &message, &sig, &public).unwrap();
+
+        let other =
+            verify_v2_message(V2ObjectType::WitnessEntry, &message, &sig, &public).unwrap_err();
+        assert_eq!(other.class, V2ErrorClass::InvalidSignature);
+        let short = verify_v2_message(ty, &message[..76], &sig, &public).unwrap_err();
+        assert_eq!(short.class, V2ErrorClass::InvalidSignature);
+        let mut tampered = message.clone();
+        tampered[76] ^= 1;
+        let bad = verify_v2_message(ty, &tampered, &sig, &public).unwrap_err();
+        assert_eq!(bad.class, V2ErrorClass::InvalidSignature);
+        let mut ml_bad = sig.clone();
+        ml_bad.ml_dsa_65[0] ^= 1;
+        let ml = verify_v2_message(ty, &message, &ml_bad, &public).unwrap_err();
+        assert_eq!(ml.class, V2ErrorClass::InvalidSignature);
     }
 }

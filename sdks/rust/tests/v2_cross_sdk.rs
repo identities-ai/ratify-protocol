@@ -22,7 +22,7 @@ const SCENARIO_MEMBERS: [&str; 2] = ["scenario_configuration", "scenarios"];
 /// Fixtures that must carry the verifier and release scenarios. The others
 /// are replayed whenever present; one that predates the scenarios is
 /// reported as not meeting SPEC-v2 §8.1 for its producer.
-const SCENARIO_REQUIRED: [&str; 2] = ["go", "rust"];
+const SCENARIO_REQUIRED: [&str; 4] = ["go", "python", "rust", "typescript"];
 const KEY_FIELDS: [&str; 6] =
     ["name", "ed25519_seed_hex", "ml_dsa_65_seed_hex", "public_key", "key_id_v2", "v1_key_id_128"];
 const OBJECT_FIELDS: [&str; 7] = ["name", "kind", "description", "wire_b64", "verify", "signatures", "digests"];

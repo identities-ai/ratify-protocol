@@ -489,6 +489,7 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
         for n in o.array("parties")? {
             let p = obj(n)?;
             p.only(PARTY)?;
+            p.require(PARTY, &[])?;
             raw_bundles.push(p.get("proof_bundle").map(|b| &data[b.start..b.end]).unwrap_or(&[]));
             parties.push(TransactionReceiptPartyV2 {
                 party_id: p.str("party_id")?,
@@ -508,6 +509,7 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
         for n in o.array("party_signatures")? {
             let s = obj(n)?;
             s.only(&["party_id", "signature"])?;
+            s.require(&["party_id", "signature"], &[])?;
             party_signatures.push(TransactionReceiptSignatureV2 {
                 party_id: s.str("party_id")?,
                 signature: s.sig("signature")?,
@@ -523,8 +525,8 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             party_signatures,
         };
         for (p, raw) in r.parties.iter_mut().zip(raw_bundles) {
-            if raw.is_empty() {
-                return plain("wire v2: party proof_bundle is required");
+            if !raw.starts_with(b"{") {
+                return plain("wire v2: party proof_bundle must be a JSON object");
             }
             if p.proof_bundle_hash != bundle_hash_of_bytes(raw) {
                 return err(

@@ -303,7 +303,6 @@ fn validate_v2_scope_array(node: &JNode) -> V2Result<()> {
     for (i, item) in items.iter().enumerate() {
         match &item.v {
             JV::Str(s) if s.len() <= MAX_SCOPE_LENGTH_BYTES => {}
-            JV::Null => {}
             _ => return plain(format!("wire v2: scope {i} must be a bounded string")),
         }
     }

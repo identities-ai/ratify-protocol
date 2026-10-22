@@ -31,14 +31,12 @@ Seeding `corpus/<target>/` with the wire objects of `testvectors/v2/objects.json
 certificate constraint for `constraint_v2`) reaches far more code in a short run.
 `corpus/` and `artifacts/` are not committed.
 
-## Known gaps
+## Strict decoding
 
-Two non-canonical spellings are accepted by the decoders (the Go reference
-behaves the same). A long run of `delegation_cert_v2` or `proof_bundle_v2` may
-report them as round-trip failures:
-
-- a proof bundle `agent_pub_key` that omits a component, such as `{}`, decodes
-  with that component empty and re-encodes it as `""`;
-- `null` inside a delegation certificate `scope` array decodes as `""`.
-
-`tests/v2_proptest.rs` pins both (`known_gap_*`).
+Every v2 decoder applies the strict-decode rules of SPEC-v2 §2.1: member names
+must match byte for byte, `null` appears only for the members the schema
+declares nullable, a required hybrid key or signature cannot be `{}`, and a
+byte string must be a base64 string. A decoder that accepts input must
+therefore have been handed the canonical encoding of what it decoded.
+`tests/v2_proptest.rs` pins the two spellings that earlier decoders accepted
+(an `agent_pub_key` of `{}` and `null` in a delegation `scope`).

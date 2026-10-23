@@ -240,6 +240,22 @@ match before the beta.
   full size in memory). The audience adapter copies only memberships for a
   deferred constraint, at most two per constraint, which leaves the result
   unchanged.
+- **C: forged lengths and counts no longer abort the process.** A length
+  or count over `PTRDIFF_MAX` bytes in total, passed by a caller or returned
+  by a callback, used to reach `slice::from_raw_parts`, which aborts instead
+  of unwinding into the panic guard. `ratify_v2_object_decode(kind, p,
+  SIZE_MAX, out)` was one such call; an audience answer with
+  `count = SIZE_MAX` was another. Every v1 and v2 export now checks the
+  length before reading. An input with a SPEC-v2 §2.6 byte limit (every
+  strict decoder input, including the bundle and receipt the verifiers
+  decode) is reported exactly as a real oversized input (`malformed` before
+  parsing, after any check the operation makes first) and is never read;
+  any other byte input or count is `bad_argument` (v1:
+  `RatifyErrBadArgument`). An audience answer whose membership or domain
+  count is over the bound is `constraint_unverifiable`, any other callback
+  answer fails closed as that provider or store failing, and an evaluator
+  registry over 32 entries is `configuration_invalid` before any entry is
+  read.
 - **C: `ratify_v2_verify_object` rejects unknown context members**
   (`bad_argument`), as the README states for every structured input. It
   used to ignore them, so a misspelled member was silently dropped.

@@ -389,6 +389,28 @@ func TestDecodeTransactionReceiptV2ChecksBundleHashBeforeBundleSignatures(t *tes
 	}
 }
 
+// SPEC-v2 §2.1, §5.7: a nested bundle that does not strictly decode, or is
+// not canonical, is malformed even though its hash no longer matches.
+func TestDecodeTransactionReceiptV2DecodesBundleBeforeHash(t *testing.T) {
+	receipt, _ := signedTransactionReceiptV2Test(t)
+	wire, err := EncodeTransactionReceiptV2(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, edit := range map[string][2]string{
+		"challenge_at as a string": {`"challenge_at":10`, `"challenge_at":"10"`},
+		"whitespace in the bundle": {`"proof_bundle":{`, `"proof_bundle":{ `},
+	} {
+		mutated := bytes.Replace(wire, []byte(edit[0]), []byte(edit[1]), 1)
+		if bytes.Equal(mutated, wire) {
+			t.Fatalf("%s: fixture did not contain %s", name, edit[0])
+		}
+		if _, err := DecodeTransactionReceiptV2(mutated); V2ErrorClassOf(err) != V2ErrMalformed {
+			t.Errorf("%s: %v (class %s), want malformed", name, err, V2ErrorClassOf(err))
+		}
+	}
+}
+
 func TestTransactionReceiptV2EnforcesPublishedBounds(t *testing.T) {
 	receipt, _ := signedTransactionReceiptV2Test(t)
 	tooManyParties := *receipt

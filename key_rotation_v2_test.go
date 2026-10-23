@@ -732,3 +732,34 @@ func TestStatementBodyDigestV2RevocationBodies(t *testing.T) {
 		}
 	}
 }
+
+// SPEC-v2 §2.5: rotation verification applies the configured bounds to the
+// caller's clock inputs. A skew of 301 must not admit what 300 rejects.
+func TestVerifyKeyRotationStatementV2ClockConfigurationBounds(t *testing.T) {
+	stmt, oldPrivate, newPrivate := validRotationTestStatement(t)
+	signed, err := SignKeyRotationStatementV2(stmt, oldPrivate, newPrivate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := rotationTestState(stmt)
+	for _, c := range []struct {
+		now, skew int64
+		class     V2ErrorClass
+	}{
+		{106, 301, V2ErrConfigurationInvalid},
+		{106, -1, V2ErrConfigurationInvalid},
+		{-1, 2, V2ErrConfigurationInvalid},
+		{V2MaxTimestampSeconds + 1, 2, V2ErrConfigurationInvalid},
+		{0, signed.NotBefore - 1, V2ErrRotationFutureDated},
+	} {
+		err := VerifyKeyRotationStatementV2(signed, state, c.now, c.skew)
+		if V2ErrorClassOf(err) != c.class {
+			t.Errorf("now %d skew %d: %v, want %s", c.now, c.skew, err, c.class)
+		}
+	}
+	for _, c := range []struct{ now, skew int64 }{{0, signed.NotBefore}, {V2MaxTimestampSeconds, 0}} {
+		if err := VerifyKeyRotationStatementV2(signed, state, c.now, c.skew); err != nil {
+			t.Errorf("now %d skew %d: %v", c.now, c.skew, err)
+		}
+	}
+}

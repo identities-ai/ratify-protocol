@@ -1,6 +1,7 @@
 package v2vectors
 
 import (
+	"bytes"
 	"encoding/base64"
 	"strings"
 
@@ -270,6 +271,29 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 		b := obj(party(o, 1)["proof_bundle"])
 		b["challenge"] = flipB64(b["challenge"])
 	})
+	// A malformed nested bundle is malformed, never bundle_hash_mismatch:
+	// the bundle is strictly decoded, and must be canonical, before its
+	// hash is compared (SPEC-v2 §2.1, §5.7). Party signatures cover only
+	// proof_bundle_hash, so they stay valid.
+	m("bundle_byte_string_as_number_array", "parties[0].proof_bundle.agent_pub_key.ed25519 spelled as an array of its byte values; proof_bundle_hash still names the canonical bundle", "malformed", func(o map[string]any) {
+		key := obj(obj(party(o, 0)["proof_bundle"])["agent_pub_key"])
+		raw := must(base64.StdEncoding.DecodeString(key["ed25519"].(string)))
+		values := make([]any, len(raw))
+		for i, b := range raw {
+			values[i] = num(int64(b))
+		}
+		key["ed25519"] = values
+	})
+	m("bundle_digest_base64url", "parties[0].proof_bundle.delegation_digest in base64url; proof_bundle_hash still names the canonical bundle", "malformed", func(o map[string]any) {
+		b := obj(party(o, 0)["proof_bundle"])
+		std := b["delegation_digest"].(string)
+		b["delegation_digest"] = base64.URLEncoding.EncodeToString(must(base64.StdEncoding.DecodeString(std)))
+		if b["delegation_digest"] == std {
+			panic("delegation_digest has no base64url-specific character")
+		}
+	})
+	whitespace := bytes.Replace(base, []byte(`"proof_bundle":{`), []byte(`"proof_bundle":{ `), 1)
+	n.add("bundle_whitespace", kind, "a space after the opening brace of parties[0].proof_bundle; the bundle decodes semantically but is not canonical", whitespace, v, "malformed")
 	m("parties_unsorted", "parties order reversed", "malformed", func(o map[string]any) { p := arr(o["parties"]); p[0], p[1] = p[1], p[0] })
 	m("agent_represents_two_parties", "parties[1] reuses parties[0]'s agent", "malformed", func(o map[string]any) {
 		party(o, 1)["agent_id"], party(o, 1)["agent_pub_key"] = party(o, 0)["agent_id"], party(o, 0)["agent_pub_key"]

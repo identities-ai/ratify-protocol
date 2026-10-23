@@ -91,6 +91,16 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   `expected_session_context` is present but not exactly 32 bytes is
   `configuration_invalid` at §6.2 step 2; previously, with no context policy,
   it surfaced later as `session_context_mismatch`.
+- **Revoked `cert_id` length.** A revocation list or push whose revoked
+  `cert_id` exceeds 512 UTF-8 bytes is `malformed` (SPEC-v2 §2.6); decoders
+  previously accepted it.
+- **Rotation verification clock bounds.** `now` outside 0 through
+  253402300799 or a future skew outside 0 through 300 is
+  `configuration_invalid` (SPEC-v2 §2.5, §5.5); previously any skew up to
+  2^53−1 was accepted.
+- **Transaction receipt nested bundles** are strictly decoded, and must be
+  canonical, before their hash is compared, so a malformed nested bundle is
+  `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
 
 ### Not carried into v2
 

@@ -566,15 +566,21 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		if len(party.ProofBundle) == 0 || party.ProofBundle[0] != '{' {
 			return nil, fmt.Errorf("wire v2: party %d proof_bundle must be a JSON object", i)
 		}
+		// The nested bundle is decoded strictly, and must be in canonical
+		// form like the whole receipt, before its hash is compared, so a
+		// malformed bundle is malformed rather than bundle_hash_mismatch.
+		bundle, err := DecodeProofBundleV2(party.ProofBundle)
+		if err != nil {
+			return nil, fmt.Errorf("wire v2: party %q proof bundle: %w", party.PartyID, err)
+		}
+		if canonicalBundle, err := EncodeProofBundleV2(bundle); err != nil || !bytes.Equal(canonicalBundle, party.ProofBundle) {
+			return nil, fmt.Errorf("wire v2: party %q proof bundle is not canonical JSON", party.PartyID)
+		}
 		hash := sha512.New384()
 		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))
 		hash.Write(party.ProofBundle)
 		if party.ProofBundleHash != "sha384:"+hex.EncodeToString(hash.Sum(nil)) {
 			return nil, v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its canonical bundle bytes", party.PartyID)
-		}
-		bundle, err := DecodeProofBundleV2(party.ProofBundle)
-		if err != nil {
-			return nil, fmt.Errorf("wire v2: party %q proof bundle: %w", party.PartyID, err)
 		}
 		receipt.Parties[i] = TransactionReceiptPartyV2{
 			PartyID: party.PartyID, Role: party.Role, AgentID: party.AgentID,

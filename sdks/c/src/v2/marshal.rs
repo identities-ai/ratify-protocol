@@ -11,6 +11,21 @@ use serde_json::{json, Map, Value};
 
 use super::{bad_arg, AbiResult};
 
+/// A configured verifier namespace. The library passes it to the claim and
+/// issuance store callbacks as a C string, which cannot carry U+0000, so a
+/// namespace containing one is `configuration_invalid` before any callback.
+fn configured_namespace(o: &Obj, k: &str) -> AbiResult<String> {
+    let ns = o.str(k)?;
+    if ns.contains('\0') {
+        return Err(V2Error::new(
+            V2ErrorClass::ConfigurationInvalid,
+            format!("{}.{k} contains U+0000", o.name),
+        )
+        .into());
+    }
+    Ok(ns)
+}
+
 pub(crate) fn b64(data: &[u8]) -> String {
     base64_std_encode(data)
 }
@@ -480,7 +495,7 @@ pub(crate) fn verify_request(v: &Value) -> AbiResult<V2Result<V2VerifyRequest>> 
     let o = Obj::new(v, "request", REQUEST_FIELDS)?;
     let mut req = V2VerifyRequest {
         required_scope: o.str("required_scope")?,
-        verifier_namespace: o.str("verifier_namespace")?,
+        verifier_namespace: configured_namespace(&o, "verifier_namespace")?,
         replay_epoch: o.i64("replay_epoch")?,
         now: o.i64("now")?,
         max_challenge_age_seconds: o.i64("max_challenge_age_seconds")?,
@@ -804,7 +819,7 @@ pub(crate) fn issue_request(v: &Value) -> AbiResult<V2ChallengeIssueRequest> {
         ],
     )?;
     Ok(V2ChallengeIssueRequest {
-        verifier_namespace: o.str("verifier_namespace")?,
+        verifier_namespace: configured_namespace(&o, "verifier_namespace")?,
         replay_epoch: o.i64("replay_epoch")?,
         verifier_id: o.str("verifier_id")?,
         lifetime_seconds: o.i64("lifetime_seconds")?,

@@ -92,6 +92,12 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   Rust batch decoders do. It used to decode and re-encode every nested
   object, so it rejected batches the other SDKs accept. `canonical_out` now
   keeps each object's received bytes.
+- **C: identifiers containing U+0000 are never stripped before a
+  callback.** The callback adapters removed the NUL, so a C store keyed
+  `"lab\0x"` and `"labx"` (or rate counters for `"x\0y"` and `"xy"`) to the
+  same record. A configured `verifier_namespace` containing U+0000 is now
+  `configuration_invalid`; any other such identifier fails the call closed
+  as that provider or store being unavailable, without calling it.
 
 ### Not carried into v2
 

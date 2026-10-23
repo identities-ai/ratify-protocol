@@ -95,6 +95,17 @@ pub const RATIFY_V2_ERROR_CLASS_COUNT: u32 = 49;
 /// reports its SPEC-v2 §2.7 class like every other failure. Values are
 /// stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
 /// `default` case.
+///
+/// Identifiers containing U+0000: the library passes identifiers (verifier
+/// namespace, claim, agent, issuer, certificate, subject, receiver and
+/// status key IDs, constraint types) to callbacks as NUL-terminated C
+/// strings, which cannot carry U+0000. It never strips the NUL, which would
+/// merge distinct identifiers. A configured `verifier_namespace` containing
+/// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs. Any
+/// other such identifier is not passed: the callback is not called and the
+/// call fails closed exactly as if that provider or store were unavailable
+/// (for example `RatifyV2ClaimStoreUnavailable` for the claim store, or a
+/// trust, status or audience provider failure).
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RatifyV2Code {

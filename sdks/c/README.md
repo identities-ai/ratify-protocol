@@ -476,6 +476,11 @@ callback writes into an output struct must stay valid until it returns, and
 the library copies them immediately. A callback returns `0`, a positive class
 (for example `RatifyV2ClockRegressed`), a store sentinel, or
 `RatifyV2ErrCancelled`. A callback failure is always handled fail-closed.
+Identifiers reach callbacks as NUL-terminated C strings, so the library
+never passes one that contains U+0000 (and never strips the NUL): a
+configured `verifier_namespace` containing U+0000 is `configuration_invalid`
+before any callback runs, and any other such identifier fails the call
+closed as that provider or store being unavailable, without calling it.
 
 Constraint evaluators also run on the calling thread (SPEC-v2 §1.3). The
 registry timeout is enforced by elapsed time, not by interrupting the call:

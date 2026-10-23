@@ -19,7 +19,7 @@ use super::marshal::{
 use super::sign::{build, finish, Built, RatifyV2ExternalSigner};
 use super::{
     bad_arg, bytes, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run, run_h,
-    write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
+    wire_arg, wire_limit, write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
 };
 
 /// The caller-authenticated revocation status policy (§2.5 bounds).
@@ -139,7 +139,7 @@ pub unsafe extern "C" fn ratify_v2_status_state_apply(
         || {},
         || {
             let st = handle(state, "state")?;
-            let wire = bytes(wire, wire_len, "wire")?;
+            let wire = &*wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let issuer = cstr(issuer_id, "issuer_id")?;
             let key = key_arg(status_key, "status_key")?;
             let pol = policy_arg(policy)?;
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn ratify_v2_journal_apply(
         || {},
         || {
             let (ctx, j) = journal(journal_store)?;
-            let wire = bytes(wire, wire_len, "wire")?;
+            let wire = &*wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let issuer = cstr(issuer_id, "issuer_id")?;
             let key = key_arg(status_key, "status_key")?;
             let pol = policy_arg(policy)?;
@@ -462,7 +462,12 @@ pub unsafe extern "C" fn ratify_v2_journal_import(
                 digest: cstr(digest, "digest")?.to_string(),
             };
             let j = import_security_journal_snapshot_v2(
-                bytes(snapshot, snapshot_len, "snapshot")?,
+                &wire_arg(
+                    snapshot,
+                    snapshot_len,
+                    "snapshot",
+                    Some(MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES),
+                )?,
                 &head,
             )?;
             super::write_opt_buffer(head_out, to_bytes(&snapshot_head_json(&j)))
@@ -497,7 +502,12 @@ pub unsafe extern "C" fn ratify_v2_journal_validate_transition(
                     digest: cstr(digest, what)?.to_string(),
                 };
                 Ok(import_security_journal_snapshot_v2(
-                    bytes(snapshot, len, what)?,
+                    &wire_arg(
+                        snapshot,
+                        len,
+                        what,
+                        Some(MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES),
+                    )?,
                     &head,
                 )?)
             };
@@ -800,7 +810,12 @@ pub unsafe extern "C" fn ratify_v2_rotation_journal_accept(
         || crate::guard::clear_val(result_out),
         || {
             let h = handle(journal_handle, "journal")?;
-            let stmt = decode_key_rotation_statement_v2(bytes(wire, wire_len, "wire")?)?;
+            let stmt = decode_key_rotation_statement_v2(&wire_arg(
+                wire,
+                wire_len,
+                "wire",
+                wire_limit(4),
+            )?)?;
             let mut j = h.inner.lock().unwrap_or_else(|p| p.into_inner());
             let (next, result) =
                 accept_key_rotation_statement_v2(&stmt, &j, now, future_skew_seconds);
@@ -880,7 +895,7 @@ pub unsafe extern "C" fn ratify_v2_witness_entry_append(
             clear_buffer(digest_out);
         },
         || {
-            let e = decode_witness_entry_v2(bytes(wire, wire_len, "wire")?)?;
+            let e = decode_witness_entry_v2(&wire_arg(wire, wire_len, "wire", wire_limit(6))?)?;
             let head = witness_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
             let r = verify_witness_entry_v2(&e, &head, &key_arg(witness_key, "witness_key")?)?;
             write_val(result_out, log_result(r))?;
@@ -908,7 +923,8 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_append(
             clear_buffer(digest_out);
         },
         || {
-            let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
+            let r =
+                decode_verification_receipt_v2(&wire_arg(wire, wire_len, "wire", wire_limit(8))?)?;
             let head = receipt_head(&json_bytes(head_json, head_json_len, "head_json")?)?;
             let result =
                 verify_verification_receipt_v2(&r, &key_arg(verifier_key, "verifier_key")?, &head)?;
@@ -947,7 +963,7 @@ pub unsafe extern "C" fn ratify_v2_archival_verify(
         std::ptr::null_mut(),
         || clear_buffer(result_out),
         || {
-            let data = bytes(wire, wire_len, "wire")?;
+            let data = &*wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let r = match kind {
                 2 => {
                     return write_buffer(

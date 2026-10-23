@@ -962,7 +962,8 @@ pub unsafe extern "C" fn ratify_v2_ref_trust_registry_new(
             } else if records.is_null() {
                 return Err(null_arg("records"));
             } else {
-                std::slice::from_raw_parts(records, records_len)
+                crate::raw_slice(records, records_len)
+                    .ok_or_else(|| bad_arg(crate::oversized("records", records_len)))?
                     .iter()
                     .map(RatifyV2PublicKey::as_hybrid)
                     .collect()
@@ -1029,11 +1030,9 @@ unsafe extern "C" fn br_trust_resolve(
         if outcome.is_null() || root_key.is_null() || (chain.is_null() && chain_len != 0) {
             return RatifyV2Code::RatifyV2ErrNullPointer as i32;
         }
-        let views = if chain_len == 0 {
-            &[][..]
-        } else {
-            // SAFETY: the verifier passes `chain_len` views.
-            unsafe { std::slice::from_raw_parts(chain, chain_len) }
+        // SAFETY: the verifier passes `chain_len` views.
+        let Some(views) = (unsafe { crate::raw_slice(chain, chain_len) }) else {
+            return RatifyV2Code::RatifyV2ErrBadArgument as i32;
         };
         let mut certs = Vec::with_capacity(views.len());
         for v in views {

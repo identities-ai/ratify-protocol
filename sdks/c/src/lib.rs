@@ -429,6 +429,26 @@ fn set_err(err_out: *mut *mut c_char, msg: &str) {
     }
 }
 
+/// `len` elements of `T` at `ptr` as a slice, or `None` when their total
+/// size exceeds `isize::MAX`. No object can be that large, and
+/// `slice::from_raw_parts` aborts the process on such a length instead of
+/// unwinding, so every slice over a caller- or callback-supplied pointer
+/// and length is formed here. `ptr` must be non-NULL when `len` is non-zero.
+pub(crate) unsafe fn raw_slice<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
+    if len == 0 {
+        return Some(&[]);
+    }
+    if len.checked_mul(std::mem::size_of::<T>())? > isize::MAX as usize {
+        return None;
+    }
+    Some(slice::from_raw_parts(ptr, len))
+}
+
+/// The diagnostic for a length [`raw_slice`] refuses.
+pub(crate) fn oversized(name: &str, len: usize) -> String {
+    format!("{name} length {len} exceeds isize::MAX")
+}
+
 /// Convert a null-terminated C string to an owned `String`.
 /// Returns an error (via `err_out`) and `None` if the pointer is null or if the
 /// string is not valid UTF-8 — never silently degrades.

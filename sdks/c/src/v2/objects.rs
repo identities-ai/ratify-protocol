@@ -19,7 +19,7 @@ use ratify_protocol::HybridPublicKey;
 use serde_json::Value;
 
 use super::marshal::{public_key, receipt_head, rotation_state, witness_head, Obj};
-use super::{bad_arg, bytes, null_arg, run, AbiResult};
+use super::{bad_arg, bytes, null_arg, run, wire_arg, wire_limit, AbiResult};
 
 fn field<'a>(v: &'a Value, name: &str) -> AbiResult<&'a Value> {
     v.get(name)
@@ -229,13 +229,13 @@ pub unsafe extern "C" fn ratify_v2_verify_object(
         err_out,
         || {},
         || {
-            let wire = bytes(wire, wire_len, "wire")?;
+            let wire = wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let ctx = if verify_context_json.is_null() {
                 None
             } else {
                 Some(json_arg(verify_context_json, "verify_context_json")?)
             };
-            verify_kind(kind, wire, ctx.as_ref())
+            verify_kind(kind, &wire, ctx.as_ref())
         },
     )
 }
@@ -260,7 +260,7 @@ pub unsafe extern "C" fn ratify_v2_proof_bundle_verify_signatures(
         err_out,
         || crate::guard::clear_cstr(bundle_hash_out, bundle_hash_out_len),
         || {
-            let b = decode_proof_bundle_v2(bytes(wire, wire_len, "wire")?)?;
+            let b = decode_proof_bundle_v2(&wire_arg(wire, wire_len, "wire", wire_limit(2))?)?;
             verify_proof_bundle_v2_signatures(&b)?;
             if !bundle_hash_out.is_null() {
                 write_hex_out(bundle_hash_out, bundle_hash_out_len, &bundle_hash_v2(&b)?)?;
@@ -288,7 +288,8 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_verify(
         err_out,
         || {},
         || {
-            let r = decode_verification_receipt_v2(bytes(wire, wire_len, "wire")?)?;
+            let r =
+                decode_verification_receipt_v2(&wire_arg(wire, wire_len, "wire", wire_limit(8))?)?;
             let key = HybridPublicKey {
                 ed25519: bytes(verifier_ed25519, verifier_ed25519_len, "verifier_ed25519")?
                     .to_vec(),
@@ -321,12 +322,18 @@ pub unsafe extern "C" fn ratify_v2_receipt_bundle_binding_check(
         err_out,
         || {},
         || {
-            let r = decode_verification_receipt_v2(bytes(
+            let r = decode_verification_receipt_v2(&wire_arg(
                 receipt_wire,
                 receipt_wire_len,
                 "receipt_wire",
+                wire_limit(8),
             )?)?;
-            let b = decode_proof_bundle_v2(bytes(bundle_wire, bundle_wire_len, "bundle_wire")?)?;
+            let b = decode_proof_bundle_v2(&wire_arg(
+                bundle_wire,
+                bundle_wire_len,
+                "bundle_wire",
+                wire_limit(2),
+            )?)?;
             check_verification_receipt_v2_bundle_binding(&r, &b)?;
             Ok(())
         },

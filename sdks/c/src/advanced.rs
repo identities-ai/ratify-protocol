@@ -99,7 +99,11 @@ unsafe fn validated_buf<'a>(
         );
         return None;
     }
-    Some(slice::from_raw_parts(ptr, len))
+    let buf = crate::raw_slice(ptr, len);
+    if buf.is_none() {
+        set_err(err_out, &crate::oversized(name, len));
+    }
+    buf
 }
 
 /// Validate a NULLABLE fixed-size buffer (NULL+0 = absent, returns `Some(&[])`).
@@ -1061,7 +1065,11 @@ pub unsafe extern "C" fn ratify_witness_entry_issue(
                 set_err(err_out, "witness, entry_data, and out must be non-null");
                 return RatifyStatus::RatifyErrNullPointer;
             }
-            let data = slice::from_raw_parts(entry_data, entry_data_len).to_vec();
+            let Some(data) = crate::raw_slice(entry_data, entry_data_len) else {
+                set_err(err_out, &crate::oversized("entry_data", entry_data_len));
+                return RatifyStatus::RatifyErrBadArgument;
+            };
+            let data = data.to_vec();
             let prev: Vec<u8> = if prev_hash.is_null() || prev_hash_len == 0 {
                 vec![0u8; 32]
             } else {
@@ -1456,9 +1464,12 @@ pub unsafe extern "C" fn ratify_scopes_intersect(
             set_err(err_out, "scope_arrays_json is null");
             return std::ptr::null_mut();
         }
-        let mut parsed: Vec<Vec<String>> = Vec::with_capacity(count);
-        for i in 0..count {
-            let ptr = *scope_arrays_json.add(i);
+        let Some(arrays) = crate::raw_slice(scope_arrays_json, count) else {
+            set_err(err_out, &crate::oversized("scope_arrays_json", count));
+            return std::ptr::null_mut();
+        };
+        let mut parsed: Vec<Vec<String>> = Vec::new();
+        for (i, &ptr) in arrays.iter().enumerate() {
             if ptr.is_null() {
                 set_err(err_out, &format!("scope_arrays_json[{i}] is null"));
                 return std::ptr::null_mut();
@@ -3186,7 +3197,10 @@ unsafe fn challenge_store_op(
         set_err(err_out, "store and challenge must be non-null");
         return RatifyStatus::RatifyErrNullPointer;
     }
-    let challenge = slice::from_raw_parts(challenge, challenge_len);
+    let Some(challenge) = crate::raw_slice(challenge, challenge_len) else {
+        set_err(err_out, &crate::oversized("challenge", challenge_len));
+        return RatifyStatus::RatifyErrBadArgument;
+    };
     let ctx = match validated_buf_opt(session_context, session_context_len, err_out) {
         Ok(c) => c,
         Err(status) => return status,
@@ -3276,7 +3290,10 @@ unsafe fn validated_buf_opt<'a>(
         );
         return Err(RatifyStatus::RatifyErrNullPointer);
     }
-    Ok(slice::from_raw_parts(ptr, len))
+    crate::raw_slice(ptr, len).ok_or_else(|| {
+        set_err(err_out, &crate::oversized("buffer", len));
+        RatifyStatus::RatifyErrBadArgument
+    })
 }
 
 fn unix_now() -> i64 {
@@ -3653,7 +3670,10 @@ pub unsafe extern "C" fn ratify_challenge_sign_bytes_hex(
             set_err(err_out, "challenge is null");
             return std::ptr::null_mut();
         }
-        let ch = slice::from_raw_parts(challenge, challenge_len);
+        let Some(ch) = crate::raw_slice(challenge, challenge_len) else {
+            set_err(err_out, &crate::oversized("challenge", challenge_len));
+            return std::ptr::null_mut();
+        };
 
         let sc: &[u8] = if session_context.is_null() {
             if session_context_len != 0 {
@@ -3921,7 +3941,10 @@ pub unsafe extern "C" fn ratify_agent_sign_challenge(
             set_err(err_out, "agent and challenge must be non-null");
             return std::ptr::null_mut();
         }
-        let ch = slice::from_raw_parts(challenge, challenge_len);
+        let Some(ch) = crate::raw_slice(challenge, challenge_len) else {
+            set_err(err_out, &crate::oversized("challenge", challenge_len));
+            return std::ptr::null_mut();
+        };
         let sc = match optional_32(
             session_context,
             session_context_len,
@@ -4007,7 +4030,10 @@ pub unsafe extern "C" fn ratify_verify_challenge_signature(
                 }
             };
 
-            let ch = slice::from_raw_parts(challenge, challenge_len);
+            let Some(ch) = crate::raw_slice(challenge, challenge_len) else {
+                set_err(err_out, &crate::oversized("challenge", challenge_len));
+                return RatifyStatus::RatifyErrBadArgument;
+            };
             let sc = match optional_32(
                 session_context,
                 session_context_len,

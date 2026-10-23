@@ -474,6 +474,9 @@ pub struct RatifyV2AudienceMembership {
 /// The memberships an audience provider returns. Only memberships for a
 /// deferred constraint are read, at most two per constraint (two already make
 /// that constraint unverifiable); the rest are ignored without being copied.
+/// A `count`, or a membership's `trust_domain_ids_len`, over `PTRDIFF_MAX`
+/// bytes in total is never read: the answer is unverifiable
+/// (`constraint_unverifiable`, SPEC-v2 §5.2).
 #[repr(C)]
 pub struct RatifyV2AudienceResult {
     pub memberships: *const RatifyV2AudienceMembership,
@@ -653,7 +656,8 @@ pub struct RatifyV2EvaluatorRegistration {
 }
 
 /// The caller-authenticated evaluator registry for one call: at most 32
-/// registrations, one per type, `timeout_ms` in 1..=10000.
+/// registrations, one per type, `timeout_ms` in 1..=10000. A larger
+/// `count` is `configuration_invalid` before any registration is read.
 #[repr(C)]
 pub struct RatifyV2EvaluatorConfig {
     pub timeout_ms: u32,
@@ -684,12 +688,23 @@ pub(crate) unsafe fn owned(p: *const c_char) -> String {
     }
 }
 
-pub(crate) unsafe fn slice_vec(s: RatifyV2Slice) -> Vec<u8> {
+/// A copy of the bytes a callback answered with (NULL or empty is empty), or
+/// the diagnostic for a length over `isize::MAX`, which no answer can have.
+pub(crate) unsafe fn try_slice_vec(s: RatifyV2Slice, name: &str) -> Result<Vec<u8>, String> {
     if s.ptr.is_null() || s.len == 0 {
-        Vec::new()
-    } else {
-        std::slice::from_raw_parts(s.ptr, s.len).to_vec()
+        return Ok(Vec::new());
     }
+    crate::raw_slice(s.ptr, s.len)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| crate::oversized(name, s.len))
+}
+
+/// [`try_slice_vec`] for the test-reference stores. Their callbacks run
+/// under a panic boundary, so a slice over `isize::MAX` there is reported
+/// as `RatifyV2ErrInternal` rather than aborting the process.
+#[cfg(feature = "test-reference")]
+pub(crate) unsafe fn slice_vec(s: RatifyV2Slice) -> Vec<u8> {
+    try_slice_vec(s, "slice").unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// `s` as a C string for a callback. An identifier containing U+0000 cannot
@@ -876,7 +891,8 @@ impl ClaimStoreV2 for CClaimStore {
             disposition,
             claimed_at: out.claimed_at,
             // SAFETY: the callback's output pointer is valid until we copy it.
-            owner_token: unsafe { slice_vec(out.owner_token) },
+            owner_token: unsafe { try_slice_vec(out.owner_token, "owner_token") }
+                .map_err(V2StoreError::Unavailable)?,
         })
     }
 
@@ -956,7 +972,12 @@ impl ClaimStoreV2 for CClaimStore {
             return Err(store_error(code, &self.cancel, "load_interrupted"));
         }
         // SAFETY: output pointers valid until copied.
-        let (record, progress) = unsafe { (slice_vec(out.record), slice_vec(out.progress)) };
+        let (record, progress) = unsafe {
+            (
+                try_slice_vec(out.record, "record").map_err(V2StoreError::Unavailable)?,
+                try_slice_vec(out.progress, "progress").map_err(V2StoreError::Unavailable)?,
+            )
+        };
         let claim = claim_from_json(&record).map_err(|f| {
             V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message))
         })?;
@@ -1149,6 +1170,9 @@ impl V2ReleaseClaimStore for CReleaseStore {
             return Err(store_error(code, &self.cancel, "load_terminal"));
         }
         // SAFETY: output pointers valid until copied.
+        let entry_hash = unsafe { try_slice_vec(out.release_entry_hash, "release_entry_hash") }
+            .map_err(V2StoreError::Unavailable)?;
+        // SAFETY: as above.
         unsafe {
             Ok(V2TerminalClaimRecord {
                 terminal: out.terminal != 0,
@@ -1159,7 +1183,7 @@ impl V2ReleaseClaimStore for CReleaseStore {
                 receipt_abandoned: out.receipt_abandoned != 0,
                 release: (out.has_release != 0).then(|| V2ReleaseRecord {
                     claim_id: owned(out.release_claim_id),
-                    entry_hash: slice_vec(out.release_entry_hash),
+                    entry_hash,
                     ack_timestamp: out.release_ack_timestamp,
                     outcome: super::verifier::release_status_from_c(out.release_outcome),
                     reason: owned(out.release_reason),
@@ -1213,13 +1237,13 @@ fn empty_ack() -> RatifyV2Acknowledgement {
     }
 }
 
-unsafe fn ack_of(a: &RatifyV2Acknowledgement) -> V2CheckpointAcknowledgement {
-    V2CheckpointAcknowledgement {
+unsafe fn ack_of(a: &RatifyV2Acknowledgement) -> Result<V2CheckpointAcknowledgement, V2StoreError> {
+    Ok(V2CheckpointAcknowledgement {
         log_id: owned(a.log_id),
         sequence: a.sequence,
-        entry_hash: slice_vec(a.entry_hash),
+        entry_hash: try_slice_vec(a.entry_hash, "entry_hash").map_err(V2StoreError::Unavailable)?,
         timestamp: a.timestamp,
-    }
+    })
 }
 
 impl V2ReceiptCheckpoint for CCheckpoint {
@@ -1249,7 +1273,7 @@ impl V2ReceiptCheckpoint for CCheckpoint {
             return Err(store_error(code, &self.cancel, "acknowledge"));
         }
         // SAFETY: output pointers valid until copied.
-        Ok(unsafe { ack_of(&out) })
+        unsafe { ack_of(&out) }
     }
 
     fn get_v2_acknowledgement(
@@ -1267,7 +1291,7 @@ impl V2ReceiptCheckpoint for CCheckpoint {
             return Err(store_error(code, &self.cancel, "get acknowledgement"));
         }
         // SAFETY: output pointers valid until copied.
-        Ok(unsafe { ack_of(&out) })
+        unsafe { ack_of(&out) }
     }
 }
 
@@ -1311,7 +1335,13 @@ impl SecurityJournalStoreV2 for CJournal {
             return Err(journal_error(code, &self.cancel, "load"));
         }
         // SAFETY: output pointers valid until copied.
-        let (snapshot, digest) = unsafe { (slice_vec(out.snapshot), owned(out.digest)) };
+        let (snapshot, digest) = unsafe {
+            (
+                try_slice_vec(out.snapshot, "journal snapshot")
+                    .map_err(|e| V2Error::new(V2ErrorClass::StatusObjectRejected, e))?,
+                owned(out.digest),
+            )
+        };
         let own = SecurityJournalHeadV2 {
             generation: out.generation,
             digest: security_journal_snapshot_digest_v2(&snapshot),
@@ -1570,7 +1600,8 @@ pub(crate) fn status_provider(
                 objects.push(V2StatusEvidenceObject {
                     object_type: o.object_type,
                     // SAFETY: as above.
-                    wire: unsafe { slice_vec(o.wire) },
+                    wire: unsafe { try_slice_vec(o.wire, "status object") }
+                        .map_err(V2StatusProviderError::new)?,
                 });
             }
         }
@@ -1650,8 +1681,14 @@ pub(crate) fn audience_provider(
                     .iter()
                     .map(|d| ((d.delegation_index, d.constraint_index), 0))
                     .collect();
-                // SAFETY: the callback reported `count` readable entries.
-                for m in unsafe { std::slice::from_raw_parts(out.memberships, out.count) } {
+                // SAFETY: the callback reported `count` readable entries; a
+                // count no allocation can hold is unverifiable evidence
+                // (SPEC-v2 §5.2) and is never read.
+                let answers =
+                    unsafe { crate::raw_slice(out.memberships, out.count) }.ok_or_else(|| {
+                        V2ProviderError::new(crate::oversized("audience memberships", out.count))
+                    })?;
+                for m in answers {
                     match per_link.get_mut(&(m.delegation_index, m.constraint_index)) {
                         Some(n) if *n < 2 => *n += 1,
                         _ => continue,
@@ -1659,9 +1696,15 @@ pub(crate) fn audience_provider(
                     let mut domains = Vec::new();
                     if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
                         // SAFETY: as above.
-                        for d in unsafe {
-                            std::slice::from_raw_parts(m.trust_domain_ids, m.trust_domain_ids_len)
-                        } {
+                        let ids =
+                            unsafe { crate::raw_slice(m.trust_domain_ids, m.trust_domain_ids_len) }
+                                .ok_or_else(|| {
+                                    V2ProviderError::new(crate::oversized(
+                                        "audience trust_domain_ids",
+                                        m.trust_domain_ids_len,
+                                    ))
+                                })?;
+                        for d in ids {
                             // SAFETY: as above.
                             domains.push(unsafe { owned(*d) });
                         }
@@ -1771,7 +1814,8 @@ impl V2ChallengeIssuanceStore for CIssuance {
             return Err(store_error(code, &self.cancel, "issuance load"));
         }
         // SAFETY: output pointer valid until copied.
-        let data = unsafe { slice_vec(out) };
+        let data =
+            unsafe { try_slice_vec(out, "issuance record") }.map_err(V2StoreError::Unavailable)?;
         let v: serde_json::Value = super::strict_json(&data)
             .map_err(|e| V2StoreError::Unavailable(format!("issuance record is not JSON: {e}")))?;
         expected_challenge(&v)
@@ -1871,6 +1915,17 @@ pub(crate) unsafe fn evaluator_registry(
     let Some(config) = config.as_ref() else {
         return Ok(None);
     };
+    // The registry bound (SPEC-v2 §5.2) applies before any registration is
+    // read, so a forged count is never used as a length.
+    if config.count > MAX_CONSTRAINT_EVALUATORS_V2 {
+        return Err(V2Error::new(
+            V2ErrorClass::ConfigurationInvalid,
+            format!(
+                "v2 constraint evaluator registry holds at most {MAX_CONSTRAINT_EVALUATORS_V2} profiles"
+            ),
+        )
+        .into());
+    }
     let regs: &[RatifyV2EvaluatorRegistration] = if config.count == 0 {
         &[]
     } else if config.registrations.is_null() {

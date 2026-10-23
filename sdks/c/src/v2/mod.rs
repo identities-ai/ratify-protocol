@@ -33,12 +33,19 @@
 //! are never retained after the call returns; a panic is caught at every
 //! export and poisons any handle in use.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use ratify_protocol::v2::{V2Error, V2ErrorClass, V2SignError, V2StoreError};
+use ratify_protocol::v2::{
+    V2Error, V2ErrorClass, V2SignError, V2StoreError, MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2,
+    MAX_DELEGATION_CERT_BYTES_V2, MAX_KEY_ROTATION_STATEMENT_BYTES_V2, MAX_PROOF_BUNDLE_BYTES_V2,
+    MAX_REVOCATION_LIST_BYTES_V2, MAX_REVOCATION_PUSH_BYTES_V2, MAX_STATUS_EVIDENCE_BATCH_BYTES_V2,
+    MAX_TRANSACTION_RECEIPT_BYTES_V2, MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2,
+    MAX_VERIFICATION_RECEIPT_BYTES_V2, MAX_WITNESS_ENTRY_BYTES_V2,
+};
 use ratify_protocol::{HybridPublicKey, HybridSignature};
 
 pub mod callbacks;
@@ -162,7 +169,9 @@ pub enum RatifyV2Code {
     /// A required pointer argument was NULL.
     RatifyV2ErrNullPointer = -1,
     /// A caller-supplied argument (length, UTF-8, JSON shape, enum value) was
-    /// invalid at the ABI layer.
+    /// invalid at the ABI layer. A byte input or count over `PTRDIFF_MAX`
+    /// bytes in total is this code, except that an input with a SPEC-v2
+    /// §2.6 byte limit is `malformed` over that limit.
     RatifyV2ErrBadArgument = -2,
     /// An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
@@ -737,7 +746,8 @@ impl RatifyV2Slice {
         }
     }
 
-    /// The bytes, or `bad_argument` for a NULL pointer with a non-zero length.
+    /// The bytes, or `bad_argument` for a NULL pointer with a non-zero
+    /// length or a length over `isize::MAX`.
     pub(crate) unsafe fn bytes<'a>(&self, name: &str) -> AbiResult<&'a [u8]> {
         if self.len == 0 {
             return Ok(&[]);
@@ -745,7 +755,8 @@ impl RatifyV2Slice {
         if self.ptr.is_null() {
             return Err(bad_arg(format!("{name} is NULL with a non-zero length")));
         }
-        Ok(std::slice::from_raw_parts(self.ptr, self.len))
+        crate::raw_slice(self.ptr, self.len)
+            .ok_or_else(|| bad_arg(crate::oversized(name, self.len)))
     }
 }
 
@@ -899,12 +910,51 @@ pub(crate) unsafe fn cstr<'a>(p: *const c_char, name: &str) -> AbiResult<&'a str
 }
 
 /// A required byte argument: NULL is `null_pointer` even with a zero
-/// length (pass any non-NULL pointer for empty input).
+/// length (pass any non-NULL pointer for empty input), and a length over
+/// `isize::MAX` is `bad_argument`.
 pub(crate) unsafe fn bytes<'a>(ptr: *const u8, len: usize, name: &str) -> AbiResult<&'a [u8]> {
     if ptr.is_null() {
         return Err(null_arg(name));
     }
-    Ok(std::slice::from_raw_parts(ptr, len))
+    crate::raw_slice(ptr, len).ok_or_else(|| bad_arg(crate::oversized(name, len)))
+}
+
+/// A required strict-decoder input whose SPEC-v2 §2.6 byte limit is
+/// `limit` (see [`wire_limit`]). Over the limit the caller's bytes are
+/// never read: the decoder receives `limit + 1` zero bytes instead, so it
+/// reports the oversized input exactly as it reports a real one (`malformed`
+/// before parsing, after any check the operation makes first). A forged
+/// length up to `SIZE_MAX` is therefore classified, not an abort.
+pub(crate) unsafe fn wire_arg<'a>(
+    ptr: *const u8,
+    len: usize,
+    name: &str,
+    limit: Option<usize>,
+) -> AbiResult<Cow<'a, [u8]>> {
+    match limit {
+        Some(limit) if !ptr.is_null() && len > limit => Ok(Cow::Owned(vec![0; limit + 1])),
+        _ => bytes(ptr, len, name).map(Cow::Borrowed),
+    }
+}
+
+/// The SPEC-v2 §2.6 byte limit of an object kind (`RatifyV2ObjectKind`; a
+/// signed kind equals its signature code), or `None` for an unregistered
+/// kind.
+pub(crate) fn wire_limit(kind: i64) -> Option<usize> {
+    Some(match kind {
+        1 => MAX_DELEGATION_CERT_BYTES_V2,
+        2 => MAX_PROOF_BUNDLE_BYTES_V2,
+        3 => MAX_REVOCATION_LIST_BYTES_V2,
+        4 | 9 => MAX_KEY_ROTATION_STATEMENT_BYTES_V2,
+        5 => MAX_REVOCATION_PUSH_BYTES_V2,
+        6 => MAX_WITNESS_ENTRY_BYTES_V2,
+        7 => MAX_TRANSACTION_RECEIPT_BYTES_V2,
+        8 => MAX_VERIFICATION_RECEIPT_BYTES_V2,
+        100 => MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2,
+        101 => MAX_STATUS_EVIDENCE_BATCH_BYTES_V2,
+        102 => MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2,
+        _ => return None,
+    })
 }
 
 /// Parse structured ABI JSON, refusing an object with a repeated member name

@@ -1,8 +1,10 @@
 //! Property tests for every v2 decoder (the in-tree complement to
-//! sdks/rust/fuzz). Untrusted bytes must never panic a decoder, and a strict
-//! decoder that accepts bytes must have been handed the canonical encoding of
-//! what it decoded: re-encoding reproduces the input exactly. Otherwise two
-//! SDKs could hash or sign different bytes for the same accepted object.
+//! sdks/rust/fuzz). Untrusted bytes must never panic a decoder. Wire decoding
+//! is semantic (SPEC-v2 §2.1): an accepted spelling re-encodes to one stable
+//! canonical form, so two SDKs hash and sign the same bytes for the same
+//! accepted object. The canonical-only decoders (witness entry, verification
+//! receipt and its outbox body, transaction receipt) accept nothing else:
+//! re-encoding reproduces their input exactly.
 
 mod v2_common;
 
@@ -40,9 +42,21 @@ fn decoder(kind: &str) -> Decoder {
 }
 
 /// The strict-decoder property for one decoder and input.
+/// SPEC-v2 §2.1: these decoders accept only the canonical encoding.
+const CANONICAL_ONLY: [&str; 4] = ["witness_entry", "verification_receipt", "verification_receipt_body", "transaction_receipt"];
+
 fn check_wire(kind: &str, data: &[u8]) -> Result<(), TestCaseError> {
     if let Some(reencoded) = decoder(kind)(data) {
         let reencoded = reencoded.map_err(|e| TestCaseError::fail(format!("{kind}: decoded object does not encode: {e}")))?;
+        if !CANONICAL_ONLY.contains(&kind) {
+            // A semantic decoder may accept another spelling, but its
+            // re-encoding must be a fixed point.
+            let again = decoder(kind)(&reencoded)
+                .ok_or_else(|| TestCaseError::fail(format!("{kind}: re-encoding does not decode")))?
+                .map_err(|e| TestCaseError::fail(format!("{kind}: re-decoded object does not encode: {e}")))?;
+            prop_assert!(again == reencoded, "{} re-encoding is not stable", kind);
+            return Ok(());
+        }
         prop_assert!(
             reencoded == data,
             "{} accepted bytes that re-encode differently:\n input: {}\n  again: {}",

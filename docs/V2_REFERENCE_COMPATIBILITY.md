@@ -75,17 +75,17 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
 | `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
 | `lifecycle-scenarios.json` (48 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
-| `limits.json` (32 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `limits.json` (57 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `object-negatives.json` (401 negatives) | Yes | Yes | Yes | Yes | Yes |
+| `object-negatives.json` (423 negatives) | Yes | Yes | Yes | Yes | Yes |
 | `objects.json` (11 objects) | Yes | Yes | Yes | Yes | Yes |
 | `operation-session-context.json` (context known answers) | Yes | Yes | Yes | Yes | Yes |
-| `rotation-sequences.json` (1 scenario) | Yes | Yes | Yes | Yes | Yes |
+| `rotation-sequences.json` (4 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `security-journal.json` (2 scenarios, 8 migrations, 20 import negatives, 6 transition negatives) | Yes | Yes | Yes | Yes | Yes |
 | `status-publisher.json` (13 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `status-sequences.json` (22 scenarios, 63 body digest checks) | Yes | Yes | Yes | Yes | Yes |
-| `transaction-verification.json` (12 vectors) | Yes | Yes | Yes | Yes | Yes |
-| `verifier-ordering.json` (213 cases) | Yes | Yes | Yes | Yes | Yes |
+| `transaction-verification.json` (13 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `verifier-ordering.json` (340 cases) | Yes | Yes | Yes | Yes | Yes |
 
 Go, TypeScript, Python v2, Rust, and the C ABI all run the full stateful
 verifier against the ordering vectors, including stage, error class, terminal
@@ -139,11 +139,11 @@ All five SDKs have since been ported and pass the resulting corpus. Changes to
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines; a rejected status-key epoch transition (reuse of a retired key) is `status_object_rejected`, no longer `configuration_invalid` (SPEC-v2 §2.7) |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
-| `limits.json` | New: 32 byte, count, and timestamp boundary cases, including the status evidence batch |
+| `limits.json` | New: 57 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, 11 import negatives (including unsafe integers, a member-name case variant, and a `null` array element) |
 | `lifecycle-scenarios.json` | New: 28 Part B scripts (140 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |
-| `transaction-verification.json` | New: 12 composed transaction verification cases |
+| `transaction-verification.json` | New: 13 composed transaction verification cases |
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 | `issuer-duties.json` | New: 11 delegation issuer-duty cases for the typed signer |
 | `challenge-issuance.json` | New: 9 challenge issuance helper scenarios (33 steps) |

@@ -72,5 +72,33 @@ func (g *gen) rotationFile() any {
 	acc("old_epoch_statement_after_recovery", s1, "rotation_state_mismatch", 0, "rotation_recovery", 2, false)
 	acc("new_epoch_genesis", r1, "appended", 1, "intermediate_2", 2, false)
 	f.Scenarios = append(f.Scenarios, rotationScenarioJSON{Name: "continuity_fork_and_recovery", Description: "genesis, idempotent repeats, continuation, fork freeze, rejected recoveries, root-authorized recovery with an epoch increase", AuthorityID: rotationAuthority, RecoveryEpoch: 1, Role: "issuer", GenesisKey: "rotation_genesis", FutureSkew: 5, Steps: steps})
+
+	// Caller clock configuration (SPEC-v2 §2.5): now outside the timestamp
+	// domain or a future skew outside 0..300 is configuration_invalid and
+	// leaves the state unchanged; the bounds themselves are accepted.
+	scenario := func(name, desc string, skew int64, build func()) {
+		steps = []rotationStepJSON{}
+		build()
+		f.Scenarios = append(f.Scenarios, rotationScenarioJSON{Name: name, Description: desc, AuthorityID: rotationAuthority, RecoveryEpoch: 1, Role: "issuer", GenesisKey: "rotation_genesis", FutureSkew: skew, Steps: steps})
+	}
+	at := func(label string, wire []byte, now int64, expect string, seq int64, current string) {
+		steps = append(steps, rotationStepJSON{Op: "accept", Label: label, WireB64: b64(wire), Now: now, Expect: expect, ExpectSequence: seq, ExpectCurrentKey: current, ExpectEpoch: 1})
+	}
+	scenario("clock_now_bounds", "the caller's now must be in the timestamp domain 0..253402300799", 5, func() {
+		at("now_one_past_timestamp_domain", s1, maxTimestampV2+1, "configuration_invalid", 0, "rotation_genesis")
+		at("now_negative", s1, -1, "configuration_invalid", 0, "rotation_genesis")
+		at("now_at_timestamp_domain_end", s1, maxTimestampV2, "appended", 1, "rotation_second")
+	})
+	future := func(offset int64) []byte {
+		_, w, _, _, _ := g.rotation(rotationSpec{sequence: 1, oldKey: gen1, newKey: second, issuedAt: Now + offset, notBefore: Now + offset})
+		return w
+	}
+	scenario("future_skew_above_bound", "a configured future skew of 301 is outside 0..300: configuration_invalid, even for a statement it would admit", 301, func() {
+		at("skew_301_statement_301_ahead", future(301), Now, "configuration_invalid", 0, "rotation_genesis")
+	})
+	scenario("future_skew_at_bound", "a configured future skew of 300 admits a statement dated exactly 300 seconds ahead and no later", 300, func() {
+		at("statement_301_ahead", future(301), Now, "rotation_future_dated", 0, "rotation_genesis")
+		at("statement_300_ahead", future(300), Now, "appended", 1, "rotation_second")
+	})
 	return f
 }

@@ -120,7 +120,7 @@ func BuildLimitBytes(c LimitConstruction) ([]byte, error) {
 func (g *gen) limitsFile() any {
 	f := limitsFile{
 		Version:     2,
-		Description: "Byte-boundary, count-boundary and timestamp-domain vectors for the SPEC-v2 per-object limits (§2.5, §2.6). A byte limit bounds the complete encoded object as received, including signatures and any insignificant whitespace, and is checked before parsing. Build each input from construction, confirm length and sha256_hex, then decode it with the strict decoder for kind. expected=accept: decoding succeeds. expected=reject: decoding fails with expected_error_class. size_gate records whether the input passes the pre-parse byte gate: an input at a limit always passes it (it may still be rejected later, for example because a canonical-only object cannot carry padding); an input one byte over always fails it.",
+		Description: "Byte-boundary, count-boundary, identifier-length and timestamp-domain vectors for the SPEC-v2 per-object limits (§2.5, §2.6). A byte limit bounds the complete encoded object as received, including signatures and any insignificant whitespace, and is checked before parsing. Build each input from construction, confirm length and sha256_hex, then decode it with the strict decoder for kind. expected=accept: decoding succeeds. expected=reject: decoding fails with expected_error_class. size_gate records whether the input passes the pre-parse byte gate: an input at a limit always passes it (it may still be rejected later, for example because a canonical-only object cannot carry padding); an input one byte over always fails it.",
 		Limits: map[string]int{
 			"MAX_DELEGATION_CERT_BYTES_V2":           ratify.MaxDelegationCertBytesV2,
 			"MAX_PROOF_BUNDLE_BYTES_V2":              ratify.MaxProofBundleBytesV2,
@@ -137,6 +137,7 @@ func (g *gen) limitsFile() any {
 			"MAX_TIMESTAMP_SECONDS_V2":               int(ratify.V2MaxTimestampSeconds),
 			"MAX_STATUS_EVIDENCE_BATCH_BYTES_V2":     ratify.MaxStatusEvidenceBatchBytesV2,
 			"MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2":   ratify.MaxStatusEvidenceBatchObjectsV2,
+			"MAX_IDENTIFIER_LENGTH_BYTES":            ratify.MaxIdentifierLengthBytes,
 		},
 		Procedure: map[string]string{
 			"delegation_certificate":    "strict v2 certificate decode",
@@ -215,6 +216,31 @@ func (g *gen) limitsFile() any {
 	add("refs_at_limit", "revocation_list", "MAX_REVOCATION_LIST_REFS_V2", ratify.MaxRevocationListRefsV2, repeat(listRefs, ratify.MaxRevocationListRefsV2), "accept", "pass", "signed under status_root for issuer root")
 	add("refs_over_limit", "revocation_list", "MAX_REVOCATION_LIST_REFS_V2", ratify.MaxRevocationListRefsV2, repeat(listRefs, ratify.MaxRevocationListRefsV2+1), "reject", "pass", "")
 
+	// Revoked cert_id length (SPEC-v2 §2.6): every cert_id is at most 512
+	// bytes, counted in UTF-8 bytes, in a list and in a push. Each input is
+	// validly signed under status_root for issuer root.
+	certIDCase := func(kind, name, certID, expected, note string) {
+		var wire []byte
+		var code uint16
+		if kind == "revocation_list" {
+			_, wire, _ = g.list(g.k("status_root"), root.ID, 11, Now-60, Now+3600, "cert-a")
+			code = codeList
+		} else {
+			_, wire, _ = g.push(g.k("status_root"), root.ID, 12, Now-30, "cert-a")
+			code = codePush
+		}
+		o := parse(wire).(map[string]any)
+		o["revoked"] = []any{map[string]any{"cert_id": certID}}
+		signedWire := resignObject(o, "signature", g.k("status_root"), code)
+		add(name, kind, "MAX_IDENTIFIER_LENGTH_BYTES", ratify.MaxIdentifierLengthBytes, LimitConstruction{Method: "inline", WireB64: b64(signedWire)}, expected, "pass", note)
+	}
+	for _, kind := range []string{"revocation_list", "revocation_push"} {
+		certIDCase(kind, "cert_id_at_limit", strings.Repeat("a", ratify.MaxIdentifierLengthBytes), "accept", "one revoked cert_id of 512 ASCII bytes")
+		certIDCase(kind, "cert_id_over_limit", strings.Repeat("a", ratify.MaxIdentifierLengthBytes+1), "reject", "one revoked cert_id of 513 ASCII bytes")
+		certIDCase(kind, "cert_id_multibyte_at_limit", strings.Repeat("\u00e9", ratify.MaxIdentifierLengthBytes/2), "accept", "one revoked cert_id of 256 two-byte characters (512 bytes)")
+		certIDCase(kind, "cert_id_multibyte_over_limit", strings.Repeat("\u00e9", ratify.MaxIdentifierLengthBytes/2)+"a", "reject", "one revoked cert_id of 256 two-byte characters and one ASCII byte (513 bytes, 257 characters)")
+	}
+
 	_, witnessWire, _ := g.witness(g.k("witness"), witnessLogA, 1, make([]byte, 48), "entry-1", Now-20, "", 0)
 	bytesPair("witness_entry", "MAX_WITNESS_ENTRY_BYTES_V2", ratify.MaxWitnessEntryBytesV2, witnessWire, "reject", canonicalOnly)
 	_, dataAtLimit, _ := g.witness(g.k("witness"), witnessLogA, 1, make([]byte, 48), strings.Repeat("w", ratify.MaxWitnessEntryDataBytesV2), Now-20, "", 0)
@@ -241,6 +267,32 @@ func (g *gen) limitsFile() any {
 	}
 	add("objects_at_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2), "accept", "pass", "64 copies of one signed list entry")
 	add("objects_over_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2+1), "reject", "pass", "")
+	// The batch decoder checks only the envelope (SPEC-v2 §2.1, §6.5 step 3):
+	// the array, exactly the two entry members, the code 3 or 5 as a JSON
+	// integer, a JSON object for each object, and the size and count. Each
+	// nested object stays opaque until it is authenticated (step 4), so its
+	// members, nulls, and agreement with the code are not checked here.
+	const envelope = "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2"
+	batchCase := func(name, wire, expected, note string) {
+		add(name, "status_evidence_batch", envelope, ratify.MaxStatusEvidenceBatchObjectsV2, LimitConstruction{Method: "inline", WireB64: b64([]byte(wire))}, expected, "pass", note)
+	}
+	batchCase("empty_array", `[]`, "accept", "an empty batch")
+	batchCase("nested_object_empty", `[{"object":{},"object_type_code":3}]`, "accept", "the nested object is opaque at decode; it fails authentication later")
+	batchCase("nested_null_member", `[{"object":{"a":null},"object_type_code":3}]`, "accept", "a null inside the opaque nested object is not checked by the batch decoder")
+	batchCase("nested_null_nullable_name", `[{"object":{"stream_id":null},"object_type_code":5}]`, "accept", "a null inside the opaque nested object is not checked by the batch decoder")
+	batchCase("nested_unknown_and_case_variant_members", `[{"object":{"Issuer_ID":"x","extra":1},"object_type_code":3}]`, "accept", "nested member names are checked when the object is authenticated, not here")
+	batchCase("code_does_not_match_object", `[{"object":`+string(listWire)+`,"object_type_code":5}]`, "accept", "a signed list labelled code 5; the label is checked when the object is authenticated")
+	batchCase("not_an_array", `{"object":{},"object_type_code":3}`, "reject", "")
+	batchCase("entry_null", `[null]`, "reject", "")
+	batchCase("object_null", `[{"object":null,"object_type_code":3}]`, "reject", "")
+	batchCase("object_array", `[{"object":[],"object_type_code":3}]`, "reject", "")
+	batchCase("object_missing", `[{"object_type_code":3}]`, "reject", "")
+	batchCase("entry_extra_member", `[{"extra":1,"object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("entry_case_variant_member", `[{"Object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("entry_duplicate_member", `[{"object":{},"object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("code_4", `[{"object":{},"object_type_code":4}]`, "reject", "")
+	batchCase("code_string", `[{"object":{},"object_type_code":"3"}]`, "reject", "")
+	batchCase("code_fraction", `[{"object":{},"object_type_code":3.0}]`, "reject", "")
 	if !bytes.Equal(must(ratify.EncodeV2StatusEvidenceBatch(ratify.V2StatusEvidenceBatch{Objects: []ratify.V2StatusEvidenceObject{{ObjectType: 3, Wire: listWire}}})), append(append([]byte("["), entry...), ']')) {
 		panic("status evidence batch entry is not the canonical encoding")
 	}

@@ -397,11 +397,10 @@ func VerifyKeyRotationStatementV2(stmt *KeyRotationStatementV2, state KeyRotatio
 	if _, ok := usedKeyIDs[stmt.NewKeyID]; ok {
 		return v2Errorf(V2ErrRotationKeyReused, "rotation replacement key was already used by this authority")
 	}
-	if futureSkew < 0 || nowUnix < -maxSafeInteger || nowUnix > maxSafeInteger || futureSkew > maxSafeInteger {
-		return v2Errorf(V2ErrConfigurationInvalid, "rotation verification clock inputs are outside safe bounds")
-	}
-	if nowUnix > maxSafeInteger-futureSkew {
-		futureSkew = maxSafeInteger - nowUnix
+	// SPEC-v2 §2.5: the caller's time is in the timestamp domain and the
+	// configured future skew is 0..300 seconds.
+	if !validV2Timestamp(nowUnix) || futureSkew < 0 || futureSkew > V2MaxFutureSkewSeconds {
+		return v2Errorf(V2ErrConfigurationInvalid, "rotation verification time must be 0..%d and future skew 0..%d seconds", V2MaxTimestampSeconds, V2MaxFutureSkewSeconds)
 	}
 	if !equalHybridPublicKeys(stmt.OldKey, state.CurrentKey) || stmt.AuthorityID != state.AuthorityID || stmt.RecoveryEpoch != state.RecoveryEpoch || stmt.Role != state.Role || stmt.Sequence != state.Sequence+1 || !bytes.Equal(stmt.PreviousStatementHash, state.HeadHash) {
 		return v2Errorf(V2ErrRotationStateMismatch, "rotation statement does not extend the caller-authenticated authority state")

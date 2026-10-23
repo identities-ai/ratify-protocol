@@ -194,6 +194,9 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 // authorization decision.
 func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
+	if expected.ExpectedSessionContext != nil && len(expected.ExpectedSessionContext) != 32 {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 expected session context must be absent or exactly 32 bytes")
+	}
 	if expected.ContextPolicy != nil {
 		if !expected.ContextPolicy.valid || expected.ContextPolicy.digest == "" || !validPrefixedDigestV2(expected.ContextPolicy.digest) {
 			return v2Errorf(V2ErrConfigurationInvalid, "v2 expected context policy is invalid")
@@ -245,7 +248,7 @@ func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChal
 		}
 	}
 	if expected.ExpectedSessionContext != nil {
-		if len(expected.ExpectedSessionContext) != 32 || bundle.SessionContext == nil || *bundle.SessionContext == nil || !bytes.Equal(*bundle.SessionContext, expected.ExpectedSessionContext) {
+		if bundle.SessionContext == nil || *bundle.SessionContext == nil || !bytes.Equal(*bundle.SessionContext, expected.ExpectedSessionContext) {
 			return v2Errorf(V2ErrSessionContextMismatch, "v2 presentation does not match expected session context")
 		}
 	}

@@ -472,3 +472,39 @@ func FuzzDecodeRevocationPushV2NeverPanics(f *testing.F) {
 		_, _ = DecodeRevocationPushV2(data)
 	})
 }
+
+// SPEC-v2 §2.6: every cert_id, including a revoked reference in a list or a
+// push, is at most MAX_IDENTIFIER_LENGTH_BYTES UTF-8 bytes. The encoders
+// refuse a longer ID, so the signed objects are built by hand.
+func TestRevokedCertIDLengthBoundV2(t *testing.T) {
+	sig := HybridSignature{Ed25519: make([]byte, 64), MLDSA65: make([]byte, 3309)}
+	issuer := strings.Repeat("a", 64)
+	for _, c := range []struct {
+		id string
+		ok bool
+	}{
+		{strings.Repeat("a", MaxIdentifierLengthBytes), true},
+		{strings.Repeat("a", MaxIdentifierLengthBytes+1), false},
+		{strings.Repeat("é", MaxIdentifierLengthBytes/2), true},
+		{strings.Repeat("é", MaxIdentifierLengthBytes/2) + "a", false},
+	} {
+		refs := []RevokedCertV2{{CertID: c.id}}
+		list := &RevocationListV2{Version: 2, IssuerID: issuer, UpdatedAt: 1800000000, NextUpdate: 1800003600, Sequence: 1, Revoked: refs, Signature: sig}
+		push := &RevocationPushV2{Version: 2, IssuerID: issuer, Sequence: 1, PushedAt: 1800000000, Revoked: refs, Signature: sig}
+		listWire, listErr := json.Marshal(revocationListCanonicalV2{list.IssuerID, list.NextUpdate, list.Revoked, list.Sequence, list.Signature, list.UpdatedAt, list.Version})
+		pushWire, pushErr := EncodeRevocationPushV2(&RevocationPushV2{Version: 2, IssuerID: issuer, Sequence: 1, PushedAt: 1800000000, Revoked: []RevokedCertV2{{CertID: "x"}}, Signature: sig})
+		if listErr != nil || pushErr != nil {
+			t.Fatal(listErr, pushErr)
+		}
+		pushWire = bytes.Replace(pushWire, []byte(`"cert_id":"x"`), []byte(`"cert_id":"`+c.id+`"`), 1)
+		_, decodeListErr := DecodeRevocationListV2(listWire)
+		_, decodePushErr := DecodeRevocationPushV2(pushWire)
+		_, encodeListErr := EncodeRevocationListV2(list)
+		_, encodePushErr := EncodeRevocationPushV2(push)
+		for name, err := range map[string]error{"decode list": decodeListErr, "decode push": decodePushErr, "encode list": encodeListErr, "encode push": encodePushErr} {
+			if c.ok != (err == nil) || !c.ok && V2ErrorClassOf(err) != V2ErrMalformed {
+				t.Errorf("%s with a %d-byte cert_id: %v", name, len(c.id), err)
+			}
+		}
+	}
+}

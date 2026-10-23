@@ -60,6 +60,7 @@ func (g *gen) objectNegativesFile() any {
 	g.witnessNegatives(n)
 	g.transactionNegatives(n)
 	g.receiptNegatives(n)
+	g.canonicalOnlyNegatives(n)
 	g.shapeNegatives(n)
 	return negativesFile{
 		Version:     2,
@@ -172,6 +173,12 @@ func (g *gen) certNegatives(n *negBuilder) {
 	constraint("constraint_max_speed_v1_member", "max_speed_mps (unregistered in v2) carries max_mps", map[string]any{"type": "max_speed_mps", "max_mps": num(3)})
 	constraint("constraint_unregistered_params_float", "unregistered constraint params carry a float", map[string]any{"type": "geo_circle", "params": map[string]any{"lat": json.Number("0.5")}})
 	constraint("constraint_unregistered_params_not_object", "unregistered constraint params is an array", map[string]any{"type": "vendor.example", "params": []any{}})
+	// SPEC-v2 §5.2: params, when present on an extension constraint, is a
+	// JSON object; any other JSON type is malformed before claim.
+	constraint("constraint_unregistered_params_string", "unregistered constraint params is a string", map[string]any{"type": "vendor.example", "params": "s"})
+	constraint("constraint_unregistered_params_integer", "unregistered constraint params is an integer", map[string]any{"type": "vendor.example", "params": num(5)})
+	constraint("constraint_unregistered_params_boolean", "unregistered constraint params is a boolean", map[string]any{"type": "vendor.example", "params": true})
+	constraint("constraint_unregistered_params_null", "unregistered constraint params is null (params is not nullable)", map[string]any{"type": "vendor.example", "params": nil})
 	m("issued_at_changed", "issued_at+1", "invalid_signature", func(o map[string]any) { o["issued_at"] = addNum(o["issued_at"], 1) })
 	m("expires_at_changed", "expires_at+1", "invalid_signature", func(o map[string]any) { o["expires_at"] = addNum(o["expires_at"], 1) })
 	m("signature_ed25519_flipped", "Ed25519 component bit flip", "invalid_signature", func(o map[string]any) { s := obj(o["signature"]); s["ed25519"] = flipB64(s["ed25519"]) })

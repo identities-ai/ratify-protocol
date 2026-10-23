@@ -134,6 +134,31 @@ match before the beta.
   `checkpoint_refusal_without_fork_does_not_freeze`, with the new
   `acknowledge` step.
 
+### Changed in pre-release review
+
+- **One future skew in the live verifier.** Status freshness uses
+  `future_skew_seconds` (SPEC-v2 §6.1). A verify request whose status policy
+  carries a different `clock_skew_seconds` is `configuration_invalid` before
+  claim; previously the status policy skew silently governed status
+  freshness. The status policy member remains for the standalone reducer.
+- **Configured replay epoch** outside 0 through 2^53−1 is
+  `configuration_invalid` at §6.2 step 2, before signatures; previously it
+  surfaced later as `stale_replay_epoch`.
+- **Expected session context length.** An `ExpectedChallenge` whose
+  `expected_session_context` is present but not exactly 32 bytes is
+  `configuration_invalid` at §6.2 step 2; previously, with no context policy,
+  it surfaced later as `session_context_mismatch`.
+- **Revoked `cert_id` length.** A revocation list or push whose revoked
+  `cert_id` exceeds 512 UTF-8 bytes is `malformed` (SPEC-v2 §2.6); decoders
+  previously accepted it.
+- **Rotation verification clock bounds.** `now` outside 0 through
+  253402300799 or a future skew outside 0 through 300 is
+  `configuration_invalid` (SPEC-v2 §2.5, §5.5); previously any skew up to
+  2^53−1 was accepted.
+- **Transaction receipt nested bundles** are strictly decoded, and must be
+  canonical, before their hash is compared, so a malformed nested bundle is
+  `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

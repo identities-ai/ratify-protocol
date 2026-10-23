@@ -465,6 +465,9 @@ func validateRevokedCertsV2(refs []RevokedCertV2) error {
 		if ref.CertID == "" || seen[ref.CertID] {
 			return fmt.Errorf("v2 revoked cert IDs must be non-empty and unique")
 		}
+		if len(ref.CertID) > MaxIdentifierLengthBytes {
+			return fmt.Errorf("v2 revoked cert ID exceeds %d bytes", MaxIdentifierLengthBytes)
+		}
 		seen[ref.CertID] = true
 	}
 	return nil

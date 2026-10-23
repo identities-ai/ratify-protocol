@@ -70,6 +70,9 @@ export async function verifyTransactionReceiptV2(req: TransactionVerifyRequestV2
     if (!Number.isSafeInteger(req.futureSkewSeconds) || req.futureSkewSeconds < 0 || req.futureSkewSeconds > V2_MAX_FUTURE_SKEW_SECONDS) {
       throw v2Errorf("configuration_invalid", `transaction verification future skew must be 0..${V2_MAX_FUTURE_SKEW_SECONDS} seconds`);
     }
+    if (sources.statusPolicy?.clockSkewSeconds !== req.futureSkewSeconds) {
+      throw v2Errorf("configuration_invalid", "status policy clock skew must equal the transaction verification future skew");
+    }
     validateV2StatusConfiguration(sources.statusKeys ?? null, sources.statusPolicy);
     const receipt = await decodeTransactionReceiptV2(req.receipt);
     const result: TransactionReceiptVerificationV2 = { transaction_id: receipt.transaction_id, actionable: false, parties: [] };

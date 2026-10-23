@@ -338,6 +338,15 @@ export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCall
 /** Out-of-bounds configuration and invalid request context (Go validateV2VerifyConfiguration). */
 export function validateV2VerifyConfiguration(req: V2VerifyRequest): void {
   validateV2FreshnessConfiguration(req.now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
+  if (!Number.isSafeInteger(req.replayEpoch) || req.replayEpoch < 0 || req.replayEpoch > MAX_SAFE_INTEGER_V2) {
+    throw v2Errorf("configuration_invalid", `v2 configured replay epoch must be 0..${MAX_SAFE_INTEGER_V2}`);
+  }
+  // The live verifier has one future skew (SPEC-v2 §6.1): status freshness
+  // uses future_skew_seconds, so a status policy carrying another skew is a
+  // configuration error rather than a second, silently different bound.
+  if (req.statusPolicy?.clockSkewSeconds !== req.futureSkewSeconds) {
+    throw v2Errorf("configuration_invalid", "v2 status policy skew must equal future_skew_seconds");
+  }
   validateV2RequestContext(req.context ?? {});
   if (req.constraintEvaluators !== undefined && req.constraintEvaluators !== null && !isConstraintEvaluatorRegistryV2(req.constraintEvaluators)) {
     throw v2Errorf("configuration_invalid", "v2 constraint evaluator registry was not built by newConstraintEvaluatorRegistryV2");

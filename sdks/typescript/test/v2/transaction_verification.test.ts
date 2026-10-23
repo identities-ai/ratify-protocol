@@ -13,7 +13,7 @@ const file = load("transaction-verification.json");
 
 test("transaction-verification.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.vectors.length, 12);
+  assert.equal(file.vectors.length, 13);
 });
 
 for (const v of file.vectors as Any[]) {

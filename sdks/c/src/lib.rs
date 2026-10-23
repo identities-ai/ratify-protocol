@@ -97,6 +97,9 @@ mod entropy {
     ///   }
     ///   ratify_set_entropy_source(my_entropy);
     ///   ```
+    ///
+    /// Exported only by a `custom-entropy` build; the header declares it
+    /// only when `RATIFY_CUSTOM_ENTROPY` is defined.
     #[no_mangle]
     pub extern "C" fn ratify_set_entropy_source(
         callback: unsafe extern "C" fn(buf: *mut u8, len: usize) -> i32,

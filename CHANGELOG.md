@@ -98,6 +98,11 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   same record. A configured `verifier_namespace` containing U+0000 is now
   `configuration_invalid`; any other such identifier fails the call closed
   as that provider or store being unavailable, without calling it.
+- **C: `ratify_set_entropy_source` is declared only under
+  `RATIFY_CUSTOM_ENTROPY`.** It is exported only by a `custom-entropy`
+  build, but the header declared it unconditionally, so a default-build
+  program that referenced it failed to link. The C ABI test now links every
+  function the header declares by default against the default build.
 
 ### Not carried into v2
 

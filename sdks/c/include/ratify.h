@@ -3365,6 +3365,7 @@ int32_t ratify_v2_verify_transaction_receipt(const uint8_t *receipt,
                                              const struct RatifyV2JournalStoreCallbacks *status_journal,
                                              struct RatifyV2Buffer *result_out);
 
+#if defined(RATIFY_CUSTOM_ENTROPY)
 // Register a custom entropy callback for platforms without OS-level RNG.
 //
 // `callback` must:
@@ -3387,7 +3388,11 @@ int32_t ratify_v2_verify_transaction_receipt(const uint8_t *receipt,
 //   }
 //   ratify_set_entropy_source(my_entropy);
 //   ```
+//
+// Exported only by a `custom-entropy` build; the header declares it
+// only when `RATIFY_CUSTOM_ENTROPY` is defined.
 void ratify_set_entropy_source(int32_t (*callback)(uint8_t *buf, uintptr_t len));
+#endif
 
 #ifdef __cplusplus
 }  // extern "C"

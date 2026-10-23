@@ -76,8 +76,13 @@ Enable the `custom-entropy` Cargo feature and register your hardware RNG:
 ratify-c = { path = "…", features = ["custom-entropy"] }
 ```
 
+`ratify_set_entropy_source` is exported only by a `custom-entropy` build, and
+`ratify.h` declares it only when `RATIFY_CUSTOM_ENTROPY` is defined, so define
+it when compiling against that build (for example `-DRATIFY_CUSTOM_ENTROPY`).
+
 **C application startup:**
 ```c
+#define RATIFY_CUSTOM_ENTROPY  /* or -DRATIFY_CUSTOM_ENTROPY */
 #include "ratify.h"
 
 /* Provide random bytes from the STM32 hardware TRNG */

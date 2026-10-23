@@ -269,10 +269,12 @@ def build_verify_request(inputs: dict, bundle: Optional[bytes], counts: Counts):
         exp = ExpectedChallengeV2(value=b64(e["value_b64"]), issued_at=e["issued_at"], expires_at=e["expires_at"],
                                   verifier_namespace=e["verifier_namespace"], replay_epoch=e["replay_epoch"],
                                   verifier_id=e["verifier_id"])
+        # The agent ID and key pass through independently, so a vector can
+        # configure either one alone (SPEC-v2 §6.2 step 7).
         if e.get("expected_agent_id") is not None:
             exp.expected_agent_id = e["expected_agent_id"]
-            if e.get("expected_agent_public_key") is not None:
-                exp.expected_agent_public_key = pubkey(e["expected_agent_public_key"])
+        if e.get("expected_agent_public_key") is not None:
+            exp.expected_agent_public_key = pubkey(e["expected_agent_public_key"])
         if e.get("expected_receiver_id") is not None:
             exp.expected_receiver_id = e["expected_receiver_id"]
         if e.get("expected_session_context_b64") is not None:

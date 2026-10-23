@@ -18,10 +18,12 @@ from ratify_protocol_v2.claim_store_v2 import (
     finalize_claim_proof_bundle_v2,
 )
 from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
+from ratify_protocol_v2.evaluation_progress_v2 import initial_v2_evaluation_progress
 from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
 from ratify_protocol_v2.rate_reservation_v2 import V2RateLimitExceededError
 from ratify_protocol_v2.v2reference.store import Store
-from ratify_protocol_v2.verify_v2 import verify_proof_bundle_v2
+from ratify_protocol_v2.verification_receipt_v2 import VerificationReceiptV2, verification_receipt_v2_body
+from ratify_protocol_v2.verify_v2 import _build_v2_terminal_result, _V2EvaluationProgress, verify_proof_bundle_v2
 from ratify_protocol_v2.verify_v2_preflight import preflight_proof_bundle_v2
 
 import pytest  # noqa: E402
@@ -86,11 +88,35 @@ def test_stream_sequence_advances_once_per_sequence():
     assert sum(1 for r in results if r[0] == "ok") == 1
 
 
+def _bound_claim(claim_id: str) -> V2ChallengeClaim:
+    # A claim whose sealed members a receipt body can carry (SPEC-v2 §7.5).
+    claim = _claim(claim_id)
+    claim.verifier_id, claim.agent_id = "1" * 64, "2" * 64
+    claim.bundle_hash = claim.proof_digest = "sha384:" + "3" * 96
+    claim.issuer_ids = ["4" * 64]
+    return claim
+
+
+_UNAUTHORIZED_TERMINAL = b'{"decision":"deny","decision_reason":"unauthorized","identity_status":"unauthorized"}'
+
+
+def _unauthorized_body(claim: V2ChallengeClaim, verified_at: int = START) -> bytes:
+    """The receipt outbox body of an unauthorized deny bound to ``claim``."""
+    return verification_receipt_v2_body(VerificationReceiptV2(
+        version=2, verifier_id=claim.verifier_id, agent_id=claim.agent_id, bundle_hash=claim.bundle_hash,
+        issuer_ids=list(claim.issuer_ids), decision="deny", decision_reason="unauthorized",
+        identity_status="unauthorized", trust_assessment="untrusted", status_assessment="not_evaluated",
+        challenge_assessment="current", context_assessment="not_evaluated", context_policy_digest=None,
+        verified_at=verified_at, required_scope=claim.required_scope, granted_scope=[], status_evidence=[],
+    ))
+
+
 def test_identical_finalization_commits_once():
     store = _store()
-    created = store.claim_v2(BACKGROUND, _claim("fin"))
-    terminal = b'{"decision":"deny","decision_reason":"unauthorized","identity_status":"unauthorized"}'
-    body = b'{"x":1}'
+    claim = _bound_claim("fin")
+    created = store.claim_v2(BACKGROUND, claim)
+    terminal = _UNAUTHORIZED_TERMINAL
+    body = _unauthorized_body(claim)
     results = _race(THREADS, lambda i: store.finalize_v2_claim(BACKGROUND, "fin", created.owner_token, terminal, body, 0))
     assert all(r[0] == "ok" for r in results)
     assert [r[1] for r in results].count(True) == 1
@@ -99,12 +125,13 @@ def test_identical_finalization_commits_once():
 
 def test_competing_finalizations_one_wins():
     store = _store()
-    created = store.claim_v2(BACKGROUND, _claim("compete"))
-    body = b'{"x":1}'
+    claim = _bound_claim("compete")
+    created = store.claim_v2(BACKGROUND, claim)
 
     def finalize(i):
-        terminal = ('{"decision":"deny","decision_reason":"r%d"}' % i).encode()
-        return store.finalize_v2_claim(BACKGROUND, "compete", created.owner_token, terminal, body, 0)
+        # Every payload binds the sealed claim; they differ in verified_at.
+        body = _unauthorized_body(claim, START + i)
+        return store.finalize_v2_claim(BACKGROUND, "compete", created.owner_token, _UNAUTHORIZED_TERMINAL, body, 0)
 
     results = _race(THREADS, finalize)
     winners = [r for r in results if r[0] == "ok" and r[1] is True]
@@ -151,13 +178,15 @@ def test_finalization_rate_exhaustion_is_claim_store_unavailable():
     req, _, _ = build_verify_request(request, None, Counts())
     pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
                                     req.replay_epoch, START, req.max_challenge_age_seconds, req.future_skew_seconds)
-    _, _, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, START)
+    claim, _, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, START)
     opts = V2LocalAuthorizationOptions(future_skew_seconds=req.future_skew_seconds, required_scope=req.required_scope,
                                        context=req.context, tzdb_version=req.tzdb_version, context_policy=req.context_policy,
                                        claim_token=token, trust_configured=False)
-    assert evaluate_proof_bundle_v2_local_authorization(bundle, opts).reason == "trust_unavailable"
-    terminal = b'{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}'
-    body = b'{"decision":"indeterminate","decision_reason":"trust_unavailable"}'
+    assessment = evaluate_proof_bundle_v2_local_authorization(bundle, opts)
+    assert assessment.reason == "trust_unavailable"
+    progress = initial_v2_evaluation_progress()
+    progress.trust_assessment = "unavailable"
+    _, terminal, body = _build_v2_terminal_result(bundle, assessment, _V2EvaluationProgress(persisted=progress), claim, START)
     with pytest.raises(V2RateLimitExceededError) as raised:
         finalize_claim_proof_bundle_v2(BACKGROUND, store, token, terminal, body)
     assert error_class_of(raised.value) == V2ErrorClass.CLAIM_STORE_UNAVAILABLE

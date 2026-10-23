@@ -31,6 +31,7 @@ from ..claim_store_v2 import (
     V2RateAtFinalizationStore,
     challenge_claim_time_current_v2,
     clone_v2_challenge_claim,
+    validate_v2_finalization_payload,
 )
 from ..errors_v2 import V2Error, V2ErrorClass
 from ..evaluation_progress_v2 import (
@@ -316,6 +317,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
                 if r.terminal == bytes(terminal_result) and r.receipt_body == bytes(receipt_body):
                     return False
                 raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal") from None
+            validate_v2_finalization_payload(record.claim, terminal_result, receipt_body)
             if allow_valid_until > 0 and (final_at >= allow_valid_until or final_at >= record.claim.expires_at):
                 raise V2Error(V2ErrorClass.ALLOW_HORIZON_PASSED, "v2reference: allow is at or beyond its horizon")
             admit_rate = allow_valid_until > 0 and self._rate_at_finalization and len(record.claim.rate_batch) != 0

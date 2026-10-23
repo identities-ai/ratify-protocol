@@ -122,6 +122,11 @@ match before the beta.
   `rate_admission_is_all_or_none`,
   `rate_retry_and_changed_batch_count_once`,
   `rate_clock_rollback_keeps_admissions_blocking`, `rate_counts_only_allow`.
+- **Journal head mismatch class** (SPEC-v2 §2.7): `log_state_mismatch` also
+  covers a canonical `SecurityJournalV2` snapshot whose generation or digest
+  does not match the anchored head, as every SDK and
+  `security-journal.json` (`head_digest_mismatch`,
+  `head_generation_mismatch`) already report. Specification text only.
 - **The reference checkpoint freezes a log after a fork** (SPEC-v2 §7.8): a
   different entry hash at an acknowledged sequence is refused and no later
   sequence of that log is acknowledged. Vectors: `lifecycle-scenarios.json`

@@ -155,7 +155,7 @@ Every v2 failure that is not a terminal Protocol result or a release result has 
 | `receipt_bundle_mismatch` | A verification receipt does not bind the supplied proof bundle (§5.8) |
 | `bundle_hash_mismatch`, `transaction_party_mismatch`, `transaction_context_mismatch`, `transaction_signature_set_invalid` | Transaction receipt verification failures (§5.7) |
 | `rotation_state_mismatch`, `rotation_key_reused`, `rotation_future_dated`, `rotation_fork`, `rotation_frozen`, `rotation_recovery_invalid` | Key-rotation acceptance failures (§5.5) |
-| `log_state_mismatch`, `log_gap`, `log_orphan`, `log_fork`, `log_frozen` | Witness and verification-receipt log failures (§5.6, §5.8) |
+| `log_state_mismatch`, `log_gap`, `log_orphan`, `log_fork`, `log_frozen` | Witness and verification-receipt log failures (§5.6, §5.8); `log_state_mismatch` also covers a canonical `SecurityJournalV2` snapshot whose generation or digest does not match the anchored head it is imported against (§6.6) |
 
 The list has 49 classes. Every error returned by a public v2 API carries exactly one of them; an implementation never reports a class outside the list and never leaves an error unclassified. A rejected status-key epoch transition, including reuse of a current or retired status key, is `status_object_rejected`, not `configuration_invalid`, whether it is applied to a reducer state directly or through `ConfigureStatusKeyEpoch`. A live verification reports one stage with its outcome: `preflight` (a pre-claim failure with its class; nothing consumed), `replay` (an existing claim; the result is not disclosed), `evaluating` (the claim exists and nothing was committed; the class says why), or `committed` (a terminal result is committed and not actionable, §6.9).
 

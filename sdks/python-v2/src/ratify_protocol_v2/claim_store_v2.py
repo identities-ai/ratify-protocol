@@ -381,9 +381,11 @@ def validate_v2_finalization_payload(claim: V2ChallengeClaim, terminal_result: b
     its unsigned receipt outbox body belong to the sealed claim (SPEC-v2
     §7.5). The body must decode strictly as a canonical receipt body
     (malformed otherwise). Its verifier_id, agent_id, bundle_hash, issuer_ids
-    (the sorted, distinct sealed issuer IDs), required_scope, a non-null
-    context_policy_digest, and constraint_evaluators must equal the sealed
-    claim's values, and the terminal result must be a JSON object whose
+    (the sorted, distinct sealed issuer IDs), required_scope, and
+    constraint_evaluators must equal the sealed claim's values; its
+    context_policy_digest must equal the sealed claim's (None for a
+    policy-less claim) unless context_assessment is not_evaluated, when it
+    must be None. The terminal result must be a JSON object whose
     decision and decision_reason equal the body's; any difference is
     configuration_invalid. ``finalize_claim_proof_bundle_v2`` applies it
     before the store is called, and a claim store applies it inside its
@@ -405,7 +407,10 @@ def validate_v2_finalization_payload(claim: V2ChallengeClaim, terminal_result: b
         raise ValueError("v2 receipt body issuer_ids differ from the sealed claim")
     if body.required_scope != claim.required_scope:
         raise ValueError("v2 receipt body required_scope differs from the sealed claim")
-    if body.context_policy_digest is not None and body.context_policy_digest != claim.context_policy_digest:
+    want_policy_digest = None
+    if body.context_assessment != "not_evaluated" and claim.context_policy_digest:
+        want_policy_digest = claim.context_policy_digest
+    if body.context_policy_digest != want_policy_digest:
         raise ValueError("v2 receipt body context_policy_digest differs from the sealed claim")
     if list(body.constraint_evaluators or []) != list(claim.constraint_evaluators or []):
         raise ValueError("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")

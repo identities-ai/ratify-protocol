@@ -180,7 +180,9 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
     try:
         claim, disposition, token = claim_proof_bundle_v2(ctx, cb.claim_store, bundle, preflight, req.verifier_namespace,
                                                           req.replay_epoch, req.now)
-    except Exception as exc:  # noqa: BLE001 - a store failure or exception before claim
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic) before claim
         if error_class_of(exc) == V2ErrorClass.UNCLASSIFIED:
             exc = classify(V2ErrorClass.CLAIM_STORE_UNAVAILABLE, exc)
         return preflight_failure(exc)
@@ -205,7 +207,9 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
     def record() -> Optional[BaseException]:
         try:
             _record_v2_progress_safely(ctx, cb.claim_store, token, progress.persisted)
-        except Exception as exc:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001
             if ctx.err() is not None:
                 wrapped = V2Error(V2ErrorClass.EVALUATION_CANCELLED, f"v2 evaluation cancelled before commit: {ctx.err()}")
                 wrapped.__cause__ = exc
@@ -311,7 +315,9 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
         try:
             finalize_claim_proof_bundle_v2(ctx, cb.claim_store, token, terminal, body)
             finalize_err = None
-        except Exception as exc:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
             finalize_err = exc
         if finalize_err is None:
             horizon = state.allow_horizon() if decision == "allow" else 0

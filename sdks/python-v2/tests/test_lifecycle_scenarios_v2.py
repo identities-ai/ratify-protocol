@@ -63,8 +63,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 48
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 271
+    assert len(SCENARIOS) == 51
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 283
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}

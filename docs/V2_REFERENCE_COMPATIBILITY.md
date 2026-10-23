@@ -74,8 +74,8 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
 | `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
-| `lifecycle-scenarios.json` (48 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
-| `limits.json` (57 vectors) | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (51 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
+| `limits.json` (76 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `object-negatives.json` (423 negatives) | Yes | Yes | Yes | Yes | Yes |
 | `objects.json` (11 objects) | Yes | Yes | Yes | Yes | Yes |
@@ -139,7 +139,7 @@ All five SDKs have since been ported and pass the resulting corpus. Changes to
 | `status-sequences.json` | 20 → 22 scenarios; exclusive `next_update` and status-age deadlines; a rejected status-key epoch transition (reuse of a retired key) is `status_object_rejected`, no longer `configuration_invalid` (SPEC-v2 §2.7) |
 | `objects.json` | The constrained-certificate object now pins every v2 registry schema (`time_window`, `max_amount` in micro-units); its bytes, digests, and signatures changed |
 | `log-sequences.json`, `rotation-sequences.json` | Section references in descriptions only |
-| `limits.json` | New: 57 byte, count, and timestamp boundary cases, including the status evidence batch |
+| `limits.json` | New: 76 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, 11 import negatives (including unsafe integers, a member-name case variant, and a `null` array element) |
 | `lifecycle-scenarios.json` | New: 28 Part B scripts (140 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 23 requests |

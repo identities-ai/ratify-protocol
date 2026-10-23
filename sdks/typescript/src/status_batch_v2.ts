@@ -6,10 +6,14 @@
 // exactly these two members; the batch may be empty. The canonical encoding
 // re-encodes each object canonically; a decoder accepts any strict JSON
 // spelling and keeps each object's exact received bytes, which the verifier
-// then decodes and authenticates under the object's own limits.
+// then decodes and authenticates under the object's own limits. The strict
+// JSON value model applies to the whole document, nested objects included;
+// each object's schema (member names, nulls, byte-field spellings, required
+// members) is checked only when it is decoded under its code (SPEC-v2 §2.1,
+// §6.5).
 
 import { v2Classify, v2Errorf } from "./errors_v2.js";
-import { checkWireJSONV2, concatBytes, utf8, type JNode } from "./json_v2.js";
+import { concatBytes, parseJSONV2, utf8, type JNode } from "./json_v2.js";
 import { MAX_STATUS_EVIDENCE_BATCH_BYTES_V2, MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2, checkV2WireSize } from "./limits_v2.js";
 import { decodeRevocationListV2, decodeRevocationPushV2, encodeRevocationListV2, encodeRevocationPushV2 } from "./protocol_v2_wire.js";
 
@@ -53,12 +57,16 @@ export function encodeV2StatusEvidenceBatch(batch: V2StatusEvidenceBatch): Uint8
 
 /**
  * Strictly decodes a status evidence batch. The byte limit is checked
- * before parsing; any violation is malformed. It does not authenticate.
+ * before parsing; any violation is malformed. The JSON value model applies
+ * to the whole document and the schema to the envelope only. It does not
+ * authenticate.
  */
 export function decodeV2StatusEvidenceBatch(data: Uint8Array): V2StatusEvidenceBatch {
   try {
     checkV2WireSize(data, "status evidence batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2", MAX_STATUS_EVIDENCE_BATCH_BYTES_V2);
-    const root = checkWireJSONV2(data);
+    // The value model only (Go checkWireValueModelV2): no member name has a
+    // schema here, so no byte-field spelling is checked.
+    const root = parseJSONV2(data, { rejectDuplicates: true, limitDepth: true, safeIntegers: true, strictV2: true });
     if (root.k !== "arr") throw new Error("wire v2: status evidence batch must be a JSON array of objects");
     for (const entry of root.a) {
       if (entry.k !== "obj" && entry.k !== "null") throw new Error("wire v2: status evidence batch must be a JSON array of objects");

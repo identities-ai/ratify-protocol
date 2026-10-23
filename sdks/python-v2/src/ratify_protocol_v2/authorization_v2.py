@@ -560,7 +560,9 @@ def resolve_claim_proof_bundle_v2_after_rate(ctx: context_v2.Context, store: Opt
         else:
             try:
                 store.reserve_v2_rate_batch(ctx, state.claim_id, bytes(state.owner_token), assessment.bundle_hash, list(batch))
-            except Exception as exc:  # noqa: BLE001 - a store failure or panic is unverifiable
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as exc:  # noqa: BLE001 - a store failure or panic is unverifiable
                 rate_err = exc
         if rate_err is None:
             assessment.status, assessment.reason = "authorized_agent", "authorized"

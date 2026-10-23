@@ -100,7 +100,9 @@ class V2ChallengeIssuer:
         for _ in range(MAX_V2_ISSUANCE_ATTEMPTS):
             try:
                 value = random(32)
-            except Exception as exc:  # noqa: BLE001 - a failing random source is caller configuration
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as exc:  # noqa: BLE001 - a failing random source is caller configuration
                 raise classify(V2ErrorClass.CONFIGURATION_INVALID,
                                ValueError(f"v2 challenge issuance: random source: {exc}")) from exc
             if not isinstance(value, (bytes, bytearray)) or len(value) != 32:
@@ -117,7 +119,9 @@ class V2ChallengeIssuer:
                 self.store.persist_v2_challenge(ctx, clone_expected_challenge_v2(record))
             except ChallengeIssuanceConflictErrorV2:
                 continue
-            except Exception as exc:  # noqa: BLE001
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
                 raise RuntimeError("v2 challenge issuance: the record was not durably persisted, "
                                    f"so the challenge is not exposed: {exc}") from exc
             return clone_expected_challenge_v2(record)
@@ -139,7 +143,9 @@ def load_expected_challenge_v2(ctx: context_v2.Context, store: V2ChallengeIssuan
         raise V2Error(V2ErrorClass.EXPECTED_CHALLENGE_MISSING, "v2 presented challenge is not 32 bytes") from exc
     try:
         record = store.load_v2_challenge(ctx, namespace, replay_epoch, bytes(digest))
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
         raise classify(V2ErrorClass.EXPECTED_CHALLENGE_MISSING, exc) from exc
     # The store is keyed by digest; the record must still name these exact
     # bytes and key, or it is not this challenge's record.

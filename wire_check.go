@@ -74,11 +74,27 @@ func checkWireJSONV2WithTextTopLevel(data []byte, topLevelByteFields map[string]
 	return checkWireJSON(data, topLevelByteFields, topLevelTextFields, true)
 }
 
+// checkWireValueModelV2 applies only the strict v2 JSON value model (SPEC-v2
+// §2.1): UTF-8, no duplicate member names, integer-only safe numbers, no -0,
+// no unpaired surrogate escape, and the nesting depth limit. It checks no
+// byte-field spelling, because no member name has a schema here: the status
+// evidence batch decoder (§6.5 step 3) applies it to the whole document,
+// including each opaque nested object.
+func checkWireValueModelV2(data []byte) error {
+	return checkWireJSONFields(data, nil, nil, nil, true)
+}
+
 // checkWireJSON validates wire JSON. strictV2 adds the Protocol v2 rules that
 // the released v1 decoders do not apply: an unpaired UTF-16 surrogate escape
 // (which Go's decoder silently replaces with U+FFFD, letting a different
 // string carry a valid signature) and the integer spelling -0 are rejected.
 func checkWireJSON(data []byte, topLevelByteFields map[string]bool, topLevelTextFields map[string]bool, strictV2 bool) error {
+	return checkWireJSONFields(data, wireByteFields, topLevelByteFields, topLevelTextFields, strictV2)
+}
+
+// checkWireJSONFields is checkWireJSON with byteFields, the member names
+// whose string values must be canonical base64 at any depth.
+func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTextFields map[string]bool, strictV2 bool) error {
 	if !utf8.Valid(data) {
 		return fmt.Errorf("wire: invalid UTF-8")
 	}
@@ -154,7 +170,7 @@ func checkWireJSON(data []byte, topLevelByteFields map[string]bool, topLevelText
 				f.pendingKey = t
 				f.expectKey = false
 			} else {
-				if f := top(); f != nil && f.keys != nil && (wireByteFields[f.pendingKey] && !(len(stack) == 1 && topLevelTextFields[f.pendingKey]) || len(stack) == 1 && topLevelByteFields[f.pendingKey]) {
+				if f := top(); f != nil && f.keys != nil && (byteFields[f.pendingKey] && !(len(stack) == 1 && topLevelTextFields[f.pendingKey]) || len(stack) == 1 && topLevelByteFields[f.pendingKey]) {
 					if err := checkCanonicalBase64(f.pendingKey, t); err != nil {
 						return err
 					}

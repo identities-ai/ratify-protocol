@@ -14,7 +14,10 @@
 //! sorts each entry's members and re-encodes each object canonically; a
 //! decoder accepts any strict JSON spelling and keeps each object's exact
 //! received bytes, which the verifier then decodes and authenticates under
-//! the object's own limits.
+//! the object's own limits. The strict JSON value model applies to the whole
+//! document, nested objects included; each object's schema (member names,
+//! nulls, byte-field spellings, required members) is checked only when it is
+//! decoded under its code (SPEC-v2 §2.1, §6.5).
 
 use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
 use super::json::{obj, parse_wire_envelope, JV};
@@ -70,11 +73,12 @@ pub fn encode_v2_status_evidence_batch(batch: &V2StatusEvidenceBatch) -> V2Resul
 }
 
 /// Strictly decode a status evidence batch. The byte limit is checked before
-/// parsing; any violation is `malformed`. It checks the envelope only
-/// (SPEC-v2 §6.5 step 3): a JSON array of at most 64 entries, each with
-/// exactly `object` and `object_type_code`, the code 3 or 5, and each
-/// `object` a JSON object, kept as received. It does not inspect or
-/// authenticate the objects.
+/// parsing; any violation is `malformed`. The strict JSON value model
+/// applies to the whole document, nested objects included (SPEC-v2 §2.1).
+/// The schema applies to the envelope only (§6.5 step 3): a JSON array of at
+/// most 64 entries, each with exactly `object` and `object_type_code`, the
+/// code 3 or 5, and each `object` a JSON object, kept as received. It does
+/// not check an object's schema or authenticate it.
 pub fn decode_v2_status_evidence_batch(data: &[u8]) -> V2Result<V2StatusEvidenceBatch> {
     (|| {
         check_v2_wire_size(

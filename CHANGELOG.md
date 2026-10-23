@@ -175,6 +175,30 @@ match before the beta.
 - **Transaction receipt nested bundles** are strictly decoded, and must be
   canonical, before their hash is compared, so a malformed nested bundle is
   `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
+- **Finalization binds a null `context_policy_digest`** (all SDKs). The
+  finalization helper and every reference claim store compared only a
+  non-null receipt-body digest with the sealed claim, so a body that dropped
+  the configured policy's digest was committed. Once `context_assessment` is
+  other than `not_evaluated`, the body's digest must now equal the sealed
+  claim's (null only for a claim sealed without a context policy); otherwise
+  the finalization is `configuration_invalid` and commits nothing (SPEC-v2
+  §7.5). Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_null_context_policy_digest_unverified`,
+  `..._unbound`, and `finalize_rejects_body_with_context_policy_digest_not_evaluated`
+  (`malformed`, as §5.8 already requires a null digest there).
+- **Status evidence batch: one rule for nested objects** (all SDKs). The
+  JSON value model (UTF-8, duplicate member names, number grammar and
+  safe-integer range, `-0`, unpaired surrogate escapes, nesting depth
+  counted from the batch array) applies to the whole batch document,
+  nested objects included; object schema rules (member names and case
+  variants, nullability, required members, base64 spelling of byte fields)
+  apply to a nested object only when it is decoded under its code during
+  authentication (SPEC-v2 §2.1, §6.5). Every SDK already applied the value
+  model to nested objects and left their schema alone, except that it
+  rejected a nested byte field such as `ed25519` or `challenge` spelled as
+  non-canonical base64; such a batch now decodes and the object fails
+  authentication instead, with the same `unavailable` status result.
+  Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
 
 ### Fixed
 
@@ -183,6 +207,14 @@ match before the beta.
   `constraint_unverifiable` instead of passing. Through the C ABI, a
   `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
   now fails closed the same way without calling the callback.
+- **Python: store failures are contained like any other failure.** The
+  claim store (claim, progress write, finalization, lease-expiry recovery,
+  release load and record, and the release clock), the rate store and the
+  `SecurityJournalV2` store adapters caught only `Exception`, so a store
+  that raised another `BaseException` escaped the verifier instead of
+  failing closed as Go does for a store panic. Every `BaseException` is now
+  classified exactly as an `Exception` failure; `KeyboardInterrupt` and
+  `SystemExit` are the caller's own cancellation and propagate.
 - **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
   A successful call that did not release left the output unwritten, so a
   reused caller variable could still hold an earlier released handle.

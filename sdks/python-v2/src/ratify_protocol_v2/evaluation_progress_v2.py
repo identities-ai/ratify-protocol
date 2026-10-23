@@ -128,14 +128,18 @@ def recover_interrupted_claim_v2(ctx: context_v2.Context, store, claim_id: str):
 
     try:
         interrupted = store.load_v2_interrupted_claim(ctx, claim_id)
-    except Exception as exc:  # noqa: BLE001 - a store failure or panic is unavailability
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 - a store failure or panic is unavailability
         raise classify_store(exc) from exc
     if not isinstance(interrupted, V2InterruptedClaim) or getattr(interrupted.claim, "claim_id", None) != claim_id:
         raise V2Error(V2ErrorClass.CLAIM_STORE_UNAVAILABLE, "v2 claim store returned a different claim for recovery")
     terminal, body = v2_evaluation_interrupted_result(interrupted.claim, interrupted.claimed_at, interrupted.progress)
     try:
         store.recover_interrupted_v2_claim(ctx, claim_id, terminal, body)
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001
         raise classify_store(exc) from exc
     return _new_committed_v2_outcome(interrupted.claim, body, 0)
 
@@ -151,7 +155,9 @@ def _record_v2_progress_safely(ctx: context_v2.Context, store, token, progress: 
         raise exc
     try:
         store.record_v2_evaluation_progress(ctx, state.claim_id, bytes(state.owner_token), clone_v2_evaluation_progress(progress))
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001
         if error_class_of(exc) == V2ErrorClass.UNCLASSIFIED:
             raise classify(V2ErrorClass.CLAIM_STORE_UNAVAILABLE, exc) from exc
         raise

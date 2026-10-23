@@ -363,9 +363,10 @@ func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *
 // unsigned receipt outbox body belong to the sealed claim (SPEC-v2 §7.5).
 // The body must decode strictly as a canonical receipt body (malformed
 // otherwise). Its verifier_id, agent_id, bundle_hash, issuer_ids (the sorted,
-// distinct sealed issuer IDs), required_scope, a non-null
-// context_policy_digest, and constraint_evaluators must equal the sealed
-// claim's values, and the terminal result must be a JSON object whose
+// distinct sealed issuer IDs), required_scope, and constraint_evaluators must
+// equal the sealed claim's values; its context_policy_digest must equal the
+// sealed claim's (null for a policy-less claim) unless context_assessment is
+// not_evaluated, when it must be null. The terminal result must be a JSON object whose
 // decision and decision_reason equal the body's; any difference is
 // configuration_invalid. FinalizeClaimProofBundleV2 applies it before the
 // store is called, and a claim store applies it inside its finalization
@@ -379,6 +380,10 @@ func ValidateV2FinalizationPayload(claim V2ChallengeClaim, terminalResult, recei
 	issuers := slices.Clone(claim.IssuerIDs)
 	slices.Sort(issuers)
 	issuers = slices.Compact(issuers)
+	var wantPolicyDigest *string
+	if body.ContextAssessment != "not_evaluated" && claim.ContextPolicyDigest != "" {
+		wantPolicyDigest = &claim.ContextPolicyDigest
+	}
 	switch {
 	case body.VerifierID != claim.VerifierID:
 		return fmt.Errorf("v2 receipt body verifier_id differs from the sealed claim")
@@ -390,7 +395,7 @@ func ValidateV2FinalizationPayload(claim V2ChallengeClaim, terminalResult, recei
 		return fmt.Errorf("v2 receipt body issuer_ids differ from the sealed claim")
 	case body.RequiredScope != claim.RequiredScope:
 		return fmt.Errorf("v2 receipt body required_scope differs from the sealed claim")
-	case body.ContextPolicyDigest != nil && *body.ContextPolicyDigest != claim.ContextPolicyDigest:
+	case (body.ContextPolicyDigest == nil) != (wantPolicyDigest == nil) || body.ContextPolicyDigest != nil && *body.ContextPolicyDigest != *wantPolicyDigest:
 		return fmt.Errorf("v2 receipt body context_policy_digest differs from the sealed claim")
 	case !slices.Equal(body.ConstraintEvaluators, claim.ConstraintEvaluators):
 		return fmt.Errorf("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")

@@ -356,7 +356,9 @@ class V2ReleasedDecision:
             return False
         try:
             now = _read_v2_authoritative_time(ctx, clock)
-        except Exception:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 - any clock failure answers False
             return False
         return now < st.challenge_expires_at and now < st.allow_horizon
 
@@ -428,7 +430,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         record = config.claim_store.load_v2_terminal_claim(ctx, claim_id)
         if not isinstance(record, V2TerminalClaimRecord):
             raise ValueError("claim store returned an invalid terminal record")
-    except Exception:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:  # noqa: BLE001 - a store failure (Go: a recovered panic)
         return _result(V2_RELEASE_PENDING, "claim_store_unavailable")
     if record.receipt_abandoned:
         return _result(V2_RELEASE_WITHHELD, "receipt_abandoned")
@@ -481,7 +485,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
             previous = config.checkpoint.get_v2_acknowledgement(ctx, receipt.log_id, receipt.sequence - 1)
             if not isinstance(previous, V2CheckpointAcknowledgement):
                 raise ValueError("invalid acknowledgement")
-        except Exception:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 - a checkpoint failure (Go: a recovered panic)
             return _result(V2_RELEASE_PENDING, "acknowledgement_unavailable")
         if (previous.log_id != receipt.log_id or previous.sequence != receipt.sequence - 1
                 or bytes(previous.entry_hash) != bytes(receipt.previous_receipt_hash)):
@@ -491,7 +497,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         ack = config.checkpoint.get_v2_acknowledgement(ctx, receipt.log_id, receipt.sequence)
         if not isinstance(ack, V2CheckpointAcknowledgement):
             raise ValueError("invalid acknowledgement")
-    except Exception:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:  # noqa: BLE001 - a checkpoint failure (Go: a recovered panic)
         return _result(V2_RELEASE_PENDING, "acknowledgement_unavailable")
     if ack.log_id != receipt.log_id or ack.sequence != receipt.sequence or bytes(ack.entry_hash) != entry_hash:
         return _result(V2_RELEASE_REJECTED, "acknowledgement_mismatch")
@@ -511,14 +519,18 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
                     outcome=V2_RELEASE_WITHHELD, reason=reason))
             except ReleaseStateMismatchErrorV2:
                 return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
-            except Exception:  # noqa: BLE001
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException:  # noqa: BLE001 - a store failure (Go: a recovered panic)
                 pass
         return _result(V2_RELEASE_WITHHELD, reason)
 
     # 7. Clock.
     try:
         now = _read_v2_authoritative_time(ctx, config.claim_store)
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 - a clock failure (Go: a recovered panic)
         if error_class_of(exc) == V2ErrorClass.CLOCK_REGRESSED:
             return withhold("clock_regressed")
         return _result(V2_RELEASE_PENDING, "clock_unavailable")
@@ -537,7 +549,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
                                                                       outcome=V2_RELEASE_RELEASED))
         except ReleaseStateMismatchErrorV2:
             return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
-        except Exception:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 - a store failure (Go: a recovered panic)
             return _result(V2_RELEASE_PENDING, "claim_store_unavailable")
     return _ReleasedState(
         claim_id=claim_id, decision=receipt.decision, reason=receipt.decision_reason,

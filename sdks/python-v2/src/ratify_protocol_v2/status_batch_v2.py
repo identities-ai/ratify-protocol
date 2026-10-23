@@ -8,7 +8,11 @@ with at most 64 entries and at most 8388608 encoded bytes. Each entry has
 exactly these two members; the batch may be empty. A decoder accepts any
 strict JSON spelling and keeps each object's exact received bytes, which the
 verifier then decodes and authenticates under the object's own limits. The
-canonical encoding sorts each entry's members and re-encodes each object.
+strict JSON value model applies to the whole document, nested objects
+included; each object's schema (member names, nulls, byte-field spellings,
+required members) is checked only when it is decoded under its code (SPEC-v2
+§2.1, §6.5). The canonical encoding sorts each entry's members and re-encodes
+each object.
 
 ``V2StatusEvidenceObject`` and ``V2StatusEvidenceBatch`` (declared in Go
 status_provenance_v2.go) are defined here so the codec and the status
@@ -80,11 +84,16 @@ def encode_v2_status_evidence_batch(batch: V2StatusEvidenceBatch) -> bytes:
 
 def decode_v2_status_evidence_batch(data: bytes) -> V2StatusEvidenceBatch:
     """Go ``DecodeV2StatusEvidenceBatch``: strict, bounded, and
-    unauthenticated. Every failure is ``malformed``."""
+    unauthenticated. The JSON value model applies to the whole document and
+    the schema to the envelope only. Every failure is ``malformed``."""
     try:
         check_v2_wire_size(data, "status evidence batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2",
                            MAX_STATUS_EVIDENCE_BATCH_BYTES_V2)
-        value = _v2json.check_wire_json(data)
+        if not isinstance(data, (bytes, bytearray)):
+            raise ValueError("wire data must be bytes")
+        # The value model only (Go checkWireValueModelV2): no member name has
+        # a schema here, so no byte-field spelling is checked.
+        value = _v2json.parse(data)
         if not isinstance(value, list) or not all(e is None or isinstance(e, dict) for e in value):
             raise ValueError("wire v2: status evidence batch must be a JSON array of objects")
         if len(value) > MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2:

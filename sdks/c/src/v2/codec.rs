@@ -111,9 +111,10 @@ pub(crate) fn signable(code: u32, wire: &[u8]) -> AbiResult<Vec<u8>> {
 /// conforming object). Signed objects 1..=8 are decoded with all their
 /// structural checks; a transaction receipt also verifies its signatures.
 /// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
-/// §6.5 step 3): its nested objects are not decoded, and `canonical_out`
-/// carries each object's received bytes unchanged, with the entry members in
-/// canonical order.
+/// §6.5 step 3): the strict JSON value model applies to the whole document,
+/// but its nested objects are not decoded, and `canonical_out` carries each
+/// object's received bytes unchanged, with the entry members in canonical
+/// order.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_object_decode(
     kind: i32,

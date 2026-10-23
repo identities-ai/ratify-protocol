@@ -101,7 +101,7 @@ test("limits.json: byte, count and timestamp boundaries", async (t) => {
     transaction_receipt: decodeTransactionReceiptV2,
     status_evidence_batch: decodeBatch,
   };
-  assert.equal(file.vectors.length, 57);
+  assert.equal(file.vectors.length, 76);
   for (const kind of Object.keys(file.procedure_by_kind)) assert.ok(kind in decoders, `no decoder for ${kind}`);
   for (const v of file.vectors as Any[]) {
     await t.test(v.name, async () => {

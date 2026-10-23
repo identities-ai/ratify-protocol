@@ -186,6 +186,19 @@ match before the beta.
   `finalize_rejects_body_with_null_context_policy_digest_unverified`,
   `..._unbound`, and `finalize_rejects_body_with_context_policy_digest_not_evaluated`
   (`malformed`, as §5.8 already requires a null digest there).
+- **Status evidence batch: one rule for nested objects** (all SDKs). The
+  JSON value model (UTF-8, duplicate member names, number grammar and
+  safe-integer range, `-0`, unpaired surrogate escapes, nesting depth
+  counted from the batch array) applies to the whole batch document,
+  nested objects included; object schema rules (member names and case
+  variants, nullability, required members, base64 spelling of byte fields)
+  apply to a nested object only when it is decoded under its code during
+  authentication (SPEC-v2 §2.1, §6.5). Every SDK already applied the value
+  model to nested objects and left their schema alone, except that it
+  rejected a nested byte field such as `ed25519` or `challenge` spelled as
+  non-canonical base64; such a batch now decodes and the object fails
+  authentication instead, with the same `unavailable` status result.
+  Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
 
 ### Fixed
 

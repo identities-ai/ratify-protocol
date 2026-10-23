@@ -18,6 +18,10 @@ import (
 // members and re-encodes each object canonically; a decoder accepts any
 // strict JSON spelling and keeps each object's exact received bytes, which
 // the verifier then decodes and authenticates under the object's own limits.
+// The strict JSON value model applies to the whole document, nested objects
+// included; each object's schema (member names, nulls, byte-field
+// spellings, required members) is checked only when it is decoded under its
+// code (SPEC-v2 §2.1, §6.5).
 
 // EncodeV2StatusEvidenceBatch returns the canonical JSON encoding of batch.
 // Every object must decode strictly under its code.
@@ -64,14 +68,15 @@ func EncodeV2StatusEvidenceBatch(batch V2StatusEvidenceBatch) ([]byte, error) {
 }
 
 // DecodeV2StatusEvidenceBatch strictly decodes a status evidence batch. The
-// byte limit is checked before parsing; any violation is malformed. It does
-// not authenticate the objects.
+// byte limit is checked before parsing; any violation is malformed. The JSON
+// value model applies to the whole document and the schema to the envelope
+// only. It does not authenticate the objects.
 func DecodeV2StatusEvidenceBatch(data []byte) (_ V2StatusEvidenceBatch, err error) {
 	defer func() { err = v2Classify(V2ErrMalformed, err) }()
 	if err := checkV2WireSize(data, "status evidence batch", "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2", MaxStatusEvidenceBatchBytesV2); err != nil {
 		return V2StatusEvidenceBatch{}, err
 	}
-	if err := checkWireJSONV2(data); err != nil {
+	if err := checkWireValueModelV2(data); err != nil {
 		return V2StatusEvidenceBatch{}, err
 	}
 	var entries []map[string]json.RawMessage

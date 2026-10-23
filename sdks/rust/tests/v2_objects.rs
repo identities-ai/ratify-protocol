@@ -398,5 +398,5 @@ fn v2_limits() {
         let gate_ok = (s(&v["size_gate"]) == "fail") == gate_failed;
         t.check("limits", &name, expectation_ok && gate_ok, || format!("{result:?}"));
     }
-    t.finish(&[("limits", 57)]);
+    t.finish(&[("limits", 76)]);
 }

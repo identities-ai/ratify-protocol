@@ -712,6 +712,302 @@
       "note": "a signed list labelled code 5; the label is checked when the object is authenticated"
     },
     {
+      "name": "status_evidence_batch/nested_duplicate_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjEsImEiOjJ9LCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 47,
+      "sha256_hex": "55a43eb006e01087856cc26642e8a2512cc6acf2b681c025fc844d3c10ce3271",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_duplicate_member_escaped",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjEsIlx1MDA2MSI6Mn0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 52,
+      "sha256_hex": "1cc7f987e2bc5e5ce5e2e2964c851b311ee6d71758827d7bdb0a5f7179d95da1",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object; member names compare after escapes are decoded"
+    },
+    {
+      "name": "status_evidence_batch/nested_number_fraction",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjEuNX0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 43,
+      "sha256_hex": "41b9dc9f9a02ed18ea3a4b1217b2fddb41d64a585faff3525ce3c3df63772b7e",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_number_integral_fraction",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjEuMH0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 43,
+      "sha256_hex": "b0d5fa42dc8a934bee97f98fdadc5b0aedb84d47712718c3bc786e986cbbe086",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_number_exponent",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjFlM30sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 43,
+      "sha256_hex": "cfb79e0f8d9a31a6dd69d93af7f2b65d0ab32052b8103b816f924a77a8ae610a",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_number_unsafe_integer",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOjkwMDcxOTkyNTQ3NDA5OTJ9LCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 56,
+      "sha256_hex": "9095417c34009b1e179641f86b04c4470214af01e89480723f383d3d3d92309f",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_negative_zero",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOi0wfSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 42,
+      "sha256_hex": "08212f4cf182bba5f283a387289d93c0e6c1f115960ca6c9cb492cd5184dbb45",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_unpaired_high_surrogate",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOiJcdWQ4MDAifSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 48,
+      "sha256_hex": "db63288a8b8d1692fe24d6f6a388c02f9c6e5e85781daf077d8f2f701ed0e58d",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_unpaired_low_surrogate",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOiJcdWRjMDB4In0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 49,
+      "sha256_hex": "b409e65f070a477512fe2004488fe05072e018d3dad34d918312119337e2dee0",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_invalid_utf8",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOiL/In0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 43,
+      "sha256_hex": "b729e2239abb655e2cae9570100648a33d7f664e200c8c4c4cd0b8047fd8933d",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_depth_at_limit",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnt9fX19fX19fX19fX19fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 114,
+      "sha256_hex": "17ceab9b16215a0774e90e4f18266c167e6809702eaa24be1d0b6000037c2495",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "the whole document nests exactly MAX_JSON_NESTING_DEPTH levels: the array, the entry and the nested object"
+    },
+    {
+      "name": "status_evidence_batch/nested_depth_over_limit",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6eyJhIjp7ImEiOnsiYSI6e319fX19fX19fX19fX19fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 120,
+      "sha256_hex": "ad04cb7f14fc4bf7c6441ae8bc2e32e271136aef591b6b072f399944bca1941e",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass",
+      "note": "the JSON value model applies to the whole batch document, including the nested object; the depth limit counts from the batch array"
+    },
+    {
+      "name": "status_evidence_batch/nested_byte_field_noncanonical_base64",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InNpZ25hdHVyZSI6eyJlZDI1NTE5IjoiQUI9PSIsIm1sX2RzYV82NSI6IkFCPT0ifX0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 85,
+      "sha256_hex": "fa95af9c0ada9f626e9371012147c611cd5e67fc139d93bc63c8eb4c1057a5e5",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_byte_field_not_base64",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImNoYWxsZW5nZSI6IkFCPT0iLCJzZXNzaW9uX2NvbnRleHQiOiIhISJ9LCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 77,
+      "sha256_hex": "d17a8f6971103a040edde24f5aa9dc0b0b1e34a286aaebc2549cad77d8fb1f90",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_byte_field_array_of_numbers",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InNpZ25hdHVyZSI6eyJlZDI1NTE5IjpbMSwyXSwibWxfZHNhXzY1IjoiQUE9PSJ9fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 84,
+      "sha256_hex": "0ed8cf5d0bf37563821c1237ef740840c04d82c112ced7740471e5b669d54de6",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_null_signature",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InNpZ25hdHVyZSI6bnVsbH0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 52,
+      "sha256_hex": "9b30cbce4c97d7b9cac6558331f1b22d25b0f47e6933e5cbd3dacff321f0371b",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_null_array_element",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InJldm9rZWQiOltudWxsXX0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 52,
+      "sha256_hex": "5b4453e53c798a0c50e1a5b86a428931a16a49b5db814fec49e960bd736c2438",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_case_variant_beside_exact_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7Iklzc3Vlcl9JRCI6IngiLCJpc3N1ZXJfaWQiOiJ5In0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 67,
+      "sha256_hex": "4c062d089dedb2234efdcdb85b2299e3cb6ed359bf2b1ddb7fe4ed8cc0162869",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/nested_required_members_missing",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InNpZ25hdHVyZSI6e319LCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 50,
+      "sha256_hex": "0e14c50df3e47b6a7c0397ec8dab71b2ca65118b4925cf0284cd2d4d4251161d",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a schema rule of the nested object, checked when it is authenticated, not here"
+    },
+    {
       "name": "status_evidence_batch/not_an_array",
       "kind": "status_evidence_batch",
       "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",

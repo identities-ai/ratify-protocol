@@ -267,11 +267,15 @@ func (g *gen) limitsFile() any {
 	}
 	add("objects_at_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2), "accept", "pass", "64 copies of one signed list entry")
 	add("objects_over_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2+1), "reject", "pass", "")
-	// The batch decoder checks only the envelope (SPEC-v2 §2.1, §6.5 step 3):
-	// the array, exactly the two entry members, the code 3 or 5 as a JSON
-	// integer, a JSON object for each object, and the size and count. Each
-	// nested object stays opaque until it is authenticated (step 4), so its
-	// members, nulls, and agreement with the code are not checked here.
+	// The batch decoder checks the envelope schema (SPEC-v2 §2.1, §6.5 step
+	// 3): the array, exactly the two entry members, the code 3 or 5 as a
+	// JSON integer, a JSON object for each object, and the size and count.
+	// The JSON value model applies to the whole document, nested objects
+	// included: duplicate member names, the number grammar and safe-integer
+	// range, -0, unpaired surrogate escapes, UTF-8 and the nesting depth.
+	// Each nested object's schema stays opaque until it is authenticated
+	// (step 4), so its member names, nulls, byte-field spellings, required
+	// members, and agreement with the code are not checked here.
 	const envelope = "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2"
 	batchCase := func(name, wire, expected, note string) {
 		add(name, "status_evidence_batch", envelope, ratify.MaxStatusEvidenceBatchObjectsV2, LimitConstruction{Method: "inline", WireB64: b64([]byte(wire))}, expected, "pass", note)
@@ -282,6 +286,29 @@ func (g *gen) limitsFile() any {
 	batchCase("nested_null_nullable_name", `[{"object":{"stream_id":null},"object_type_code":5}]`, "accept", "a null inside the opaque nested object is not checked by the batch decoder")
 	batchCase("nested_unknown_and_case_variant_members", `[{"object":{"Issuer_ID":"x","extra":1},"object_type_code":3}]`, "accept", "nested member names are checked when the object is authenticated, not here")
 	batchCase("code_does_not_match_object", `[{"object":`+string(listWire)+`,"object_type_code":5}]`, "accept", "a signed list labelled code 5; the label is checked when the object is authenticated")
+	nested := func(object string) string { return `[{"object":` + object + `,"object_type_code":3}]` }
+	deep := func(levels int) string { return strings.Repeat(`{"a":`, levels-1) + `{}` + strings.Repeat(`}`, levels-1) }
+	valueModel := "the JSON value model applies to the whole batch document, including the nested object"
+	batchCase("nested_duplicate_member", nested(`{"a":1,"a":2}`), "reject", valueModel)
+	batchCase("nested_duplicate_member_escaped", nested(`{"a":1,"\u0061":2}`), "reject", valueModel+"; member names compare after escapes are decoded")
+	batchCase("nested_number_fraction", nested(`{"a":1.5}`), "reject", valueModel)
+	batchCase("nested_number_integral_fraction", nested(`{"a":1.0}`), "reject", valueModel)
+	batchCase("nested_number_exponent", nested(`{"a":1e3}`), "reject", valueModel)
+	batchCase("nested_number_unsafe_integer", nested(`{"a":9007199254740992}`), "reject", valueModel)
+	batchCase("nested_negative_zero", nested(`{"a":-0}`), "reject", valueModel)
+	batchCase("nested_unpaired_high_surrogate", nested(`{"a":"\ud800"}`), "reject", valueModel)
+	batchCase("nested_unpaired_low_surrogate", nested(`{"a":"\udc00x"}`), "reject", valueModel)
+	batchCase("nested_invalid_utf8", nested("{\"a\":\"\xff\"}"), "reject", valueModel)
+	batchCase("nested_depth_at_limit", nested(deep(ratify.MaxJSONNestingDepth-2)), "accept", "the whole document nests exactly MAX_JSON_NESTING_DEPTH levels: the array, the entry and the nested object")
+	batchCase("nested_depth_over_limit", nested(deep(ratify.MaxJSONNestingDepth-1)), "reject", valueModel+"; the depth limit counts from the batch array")
+	schema := "a schema rule of the nested object, checked when it is authenticated, not here"
+	batchCase("nested_byte_field_noncanonical_base64", nested(`{"signature":{"ed25519":"AB==","ml_dsa_65":"AB=="}}`), "accept", schema)
+	batchCase("nested_byte_field_not_base64", nested(`{"challenge":"AB==","session_context":"!!"}`), "accept", schema)
+	batchCase("nested_byte_field_array_of_numbers", nested(`{"signature":{"ed25519":[1,2],"ml_dsa_65":"AA=="}}`), "accept", schema)
+	batchCase("nested_null_signature", nested(`{"signature":null}`), "accept", schema)
+	batchCase("nested_null_array_element", nested(`{"revoked":[null]}`), "accept", schema)
+	batchCase("nested_case_variant_beside_exact_member", nested(`{"Issuer_ID":"x","issuer_id":"y"}`), "accept", schema)
+	batchCase("nested_required_members_missing", nested(`{"signature":{}}`), "accept", schema)
 	batchCase("not_an_array", `{"object":{},"object_type_code":3}`, "reject", "")
 	batchCase("entry_null", `[null]`, "reject", "")
 	batchCase("object_null", `[{"object":null,"object_type_code":3}]`, "reject", "")

@@ -94,11 +94,12 @@ SDK's public error class table mirrors Go `TestV2PublicAPIErrorsAreClassified`
 (`errors_v2_public_test.go`), and every row an SDK calls with Go's input
 returns Go's SPEC-v2 §2.7 class.
 
-What this branch does not yet prove, against the `2.0.0-beta.1` gates in
-SPEC-v2 §8.1: the items in the "Still missing" column of
+Every vector gate in
 [`testvectors/v2/README.md`](../testvectors/v2/README.md#required-for-200-beta1)
-and a recorded closure of the internal adversarial review. Embedded v2 targets
-other than armv7 Linux remain untested. External independent review and a
+is closed on this branch, and the internal adversarial review closure is
+recorded in [`releases/v2.0.0-beta.1-review.md`](releases/v2.0.0-beta.1-review.md).
+The release notes record the tag commit and the per-SDK results. Embedded v2
+targets other than armv7 Linux remain untested. External independent review and a
 soak are `2.0.0` gates (SPEC-v2 §8.2), not beta gates. This is therefore not a
 v2 conformance claim.
 

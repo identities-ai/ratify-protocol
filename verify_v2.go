@@ -360,6 +360,15 @@ func validateV2VerifyConfiguration(req V2VerifyRequest) error {
 	if err := validateV2FreshnessConfiguration(req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds); err != nil {
 		return err
 	}
+	if req.ReplayEpoch < 0 || req.ReplayEpoch > maxSafeInteger {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured replay epoch must be 0..%d", maxSafeInteger)
+	}
+	// The live verifier has one future skew (SPEC-v2 §6.1): status freshness
+	// uses future_skew_seconds, so a status policy carrying another skew is a
+	// configuration error rather than a second, silently different bound.
+	if req.StatusPolicy.ClockSkewSeconds != req.FutureSkewSeconds {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 status policy skew must equal future_skew_seconds")
+	}
 	if err := validateV2RequestContext(req.Context); err != nil {
 		return err
 	}

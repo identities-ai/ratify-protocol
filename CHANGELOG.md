@@ -77,6 +77,21 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   external signer), with identical output checked in CI. They use the
   test-only in-memory reference stores.
 
+### Changed in pre-release review
+
+- **One future skew in the live verifier.** Status freshness uses
+  `future_skew_seconds` (SPEC-v2 §6.1). A verify request whose status policy
+  carries a different `clock_skew_seconds` is `configuration_invalid` before
+  claim; previously the status policy skew silently governed status
+  freshness. The status policy member remains for the standalone reducer.
+- **Configured replay epoch** outside 0 through 2^53−1 is
+  `configuration_invalid` at §6.2 step 2, before signatures; previously it
+  surfaced later as `stale_replay_epoch`.
+- **Expected session context length.** An `ExpectedChallenge` whose
+  `expected_session_context` is present but not exactly 32 bytes is
+  `configuration_invalid` at §6.2 step 2; previously, with no context policy,
+  it surfaced later as `session_context_mismatch`.
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

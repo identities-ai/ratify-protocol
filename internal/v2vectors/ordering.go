@@ -416,7 +416,7 @@ func (g *gen) orderingFile() any {
 		Semantics: map[string]string{
 			"bundle":                           "key into bundles_b64; the exact presented proof bundle bytes",
 			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); evaluating = claim created but nothing committed (error_class says why; lease-expiry recovery commits evaluation_interrupted later); committed = a terminal Protocol result was committed with receipt_body_b64 (not actionable until released)",
-			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, status_policy and status_keys are validated against the SPEC-v2 §2.5 bounds, together with the supplied request context (§5.2), after the bundle decodes (§6.2 step 2)",
+			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, configured_replay_epoch (0..2^53-1), status_policy and status_keys are validated against the SPEC-v2 §2.5 bounds, together with the supplied request context (§5.2), after the bundle decodes (§6.2 step 2). The live verifier has one future skew: status_policy.clock_skew_seconds must equal future_skew_seconds, or the request is configuration_invalid. An expected_session_context_b64 that is not exactly 32 bytes is configuration_invalid at the same step",
 			"tzdb_version":                     "the configured IANA tzdata release required for time_window (SPEC-v2 §5.2); empty = not configured. The corpus assumes the pinned release named in SPEC-v2 §5.2; any other value makes every time_window constraint_unverifiable",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
 			"claim_store":                      "create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final < T_claim fails with clock_regressed, and an allow commits only while T_final < its allow horizon and T_final < the challenge expiry, else allow_horizon_passed; either failure commits nothing",
@@ -441,7 +441,7 @@ func (g *gen) orderingFile() any {
 		},
 	}
 	f.Bundles = map[string]string{}
-	for _, s := range append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...) {
+	for _, s := range append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...) {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}

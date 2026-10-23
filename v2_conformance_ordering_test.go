@@ -350,10 +350,12 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 	}
 	if e := in.ExpectedChallenge; e != nil {
 		exp := &ratify.ExpectedChallengeV2{Value: unb64(t, e.ValueB64), IssuedAt: e.IssuedAt, ExpiresAt: e.ExpiresAt, VerifierNamespace: e.VerifierNamespace, ReplayEpoch: e.ReplayEpoch, VerifierID: e.VerifierID}
+		// The agent ID and key pass through independently, so a vector can
+		// configure either one alone (SPEC-v2 §6.2 step 7).
 		if e.ExpectedAgentID != nil {
 			exp.ExpectedAgentID = *e.ExpectedAgentID
-			exp.ExpectedAgentPublicKey = e.ExpectedAgentPublicKey
 		}
+		exp.ExpectedAgentPublicKey = e.ExpectedAgentPublicKey
 		if e.ExpectedReceiverID != nil {
 			exp.ExpectedReceiverID = *e.ExpectedReceiverID
 		}

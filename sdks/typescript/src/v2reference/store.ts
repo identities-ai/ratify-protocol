@@ -14,6 +14,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import type { V2RateReservation } from "../audience_v2.js";
 import {
   challengeClaimTimeCurrentV2,
+  validateV2FinalizationPayload,
   type ClaimStoreV2,
   type V2ChallengeClaim,
   type V2ClaimResult,
@@ -29,6 +30,7 @@ import {
   ErrV2AcknowledgementNotFound,
   ErrV2ReleaseStateMismatch,
   receiptOutboxDigestV2,
+  validV2ReleaseRecordOutcome,
   type V2ReceiptCheckpoint,
   type V2ReceiptPublisher,
   type V2ReleaseClaimStore,
@@ -170,6 +172,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
   outbox: OutboxEntry[] = [];
   ackWithheld = false;
   logFrozen = false;
+  checkpointFrozen = false;
   signerFailure = false;
   rateAtFinalization = false;
   rateCommits = new Map<string, { issuerID: string; certID: string; windowS: number; times: number[] }>();
@@ -200,6 +203,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     out.highWater = this.highWater;
     out.ackWithheld = this.ackWithheld;
     out.logFrozen = this.logFrozen;
+    out.checkpointFrozen = this.checkpointFrozen;
     out.signerFailure = this.signerFailure;
     out.rateAtFinalization = this.rateAtFinalization;
     out.claims = new Map([...this.claims].map(([id, r]) => [id, {
@@ -264,12 +268,29 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     if (!withheld) this.acknowledgePending();
   }
 
+  /**
+   * Submits every appended, unacknowledged entry to the reference checkpoint
+   * in log order. Acknowledgements are timestamped by one authoritative
+   * reading (SPEC-v2 §7.2), which advances the high-water mark; while the
+   * clock is regressed nothing is acknowledged.
+   */
   private acknowledgePending(): void {
+    if (this.checkpointFrozen) return;
+    let now = 0;
+    let read = false;
     for (let i = 0; i < this.outbox.length; i++) {
       const e = this.outbox[i]!;
       if (e.wire === null) return;
       if (e.ack !== null) continue;
-      e.ack = { logID: this.logID, sequence: i + 1, entryHash: Uint8Array.from(e.digest), timestamp: this.nowSeconds };
+      if (!read) {
+        try {
+          now = this.readClock();
+        } catch {
+          return;
+        }
+        read = true;
+      }
+      e.ack = { logID: this.logID, sequence: i + 1, entryHash: Uint8Array.from(e.digest), timestamp: now };
     }
   }
 
@@ -370,6 +391,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         throw err;
       }
       const { record, now: finalAt } = owned;
+      validateV2FinalizationPayload(record.claim, terminalResult, receiptBody);
       if (allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.expiresAt)) {
         throw storeError("allow_horizon_passed", "v2reference: allow is at or beyond its horizon");
       }
@@ -462,15 +484,28 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     });
   }
 
+  /**
+   * Records a release or a withheld result (SPEC-v2 §6.9): the first record
+   * for a claim wins, an identical repeat is a no-op, and any different
+   * record is ErrV2ReleaseStateMismatch. A new record is a durable
+   * security-state change, anchored like any other.
+   */
   async recordV2Release(release: V2ReleaseRecord): Promise<void> {
     return this.mutex.run(() => {
+      if (!validV2ReleaseRecordOutcome(release.outcome, release.reason)) {
+        throw storeError("configuration_invalid", `v2reference: invalid release record outcome ${JSON.stringify(release.outcome)} reason ${JSON.stringify(release.reason)}`);
+      }
       const record = this.claims.get(release.claimID);
       if (!record || record.state !== "terminal") throw ErrV2ReleaseStateMismatch;
       if (record.release !== null) {
-        if (bytesEqual(record.release.entryHash, release.entryHash) && record.release.ackTimestamp === release.ackTimestamp) return;
+        if (bytesEqual(record.release.entryHash, release.entryHash) && record.release.ackTimestamp === release.ackTimestamp &&
+            record.release.outcome === release.outcome && record.release.reason === release.reason) return;
         throw ErrV2ReleaseStateMismatch;
       }
-      const copy = { claimID: release.claimID, entryHash: Uint8Array.from(release.entryHash), ackTimestamp: release.ackTimestamp };
+      const copy: V2ReleaseRecord = {
+        claimID: release.claimID, entryHash: Uint8Array.from(release.entryHash), ackTimestamp: release.ackTimestamp,
+        outcome: release.outcome, reason: release.reason,
+      };
       this.change(() => {
         record.release = copy;
       });
@@ -481,7 +516,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
   plantReleaseTestOnly(claimID: string, ackTimestamp: number): void {
     const record = this.claims.get(claimID);
     if (record && record.outboxIndex >= 0 && this.outbox[record.outboxIndex]!.wire !== null) {
-      record.release = { claimID, entryHash: Uint8Array.from(this.outbox[record.outboxIndex]!.digest), ackTimestamp };
+      record.release = { claimID, entryHash: Uint8Array.from(this.outbox[record.outboxIndex]!.digest), ackTimestamp, outcome: "released", reason: "" };
     }
   }
 
@@ -529,10 +564,27 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     });
   }
 
+  /**
+   * Accepts only the next appended entry of the log, linked by
+   * previousEntryHash, and returns the original acknowledgement for an
+   * identical retry. A different entry hash at an acknowledged sequence is a
+   * fork (SPEC-v2 §7.8): it is refused and freezes the log, after which the
+   * checkpoint acknowledges nothing further for it, neither here nor from the
+   * publisher's submissions. Identical retries of acknowledgements made
+   * before the fork still return the original acknowledgement.
+   */
   async acknowledgeV2Receipt(logID: string, sequence: number, previousEntryHash: Uint8Array, entryHash: Uint8Array): Promise<V2CheckpointAcknowledgement> {
     return this.mutex.run(() => {
       const entry = this.outbox[sequence - 1];
-      if (logID !== this.logID || sequence < 1 || !entry || entry.wire === null || !bytesEqual(entry.digest, entryHash)) throw ErrNotAcknowledgedTestOnly;
+      if (logID !== this.logID || sequence < 1 || !entry) throw ErrNotAcknowledgedTestOnly;
+      if (entry.ack !== null && !bytesEqual(entry.ack.entryHash, entryHash)) {
+        this.checkpointFrozen = true;
+        throw new Error(`v2reference: a different entry hash at acknowledged sequence ${sequence} is a fork; the log is frozen`, { cause: ErrNotAcknowledgedTestOnly });
+      }
+      if (this.checkpointFrozen && entry.ack === null) {
+        throw new Error("v2reference: the log is frozen after a fork", { cause: ErrNotAcknowledgedTestOnly });
+      }
+      if (entry.wire === null || !bytesEqual(entry.digest, entryHash)) throw ErrNotAcknowledgedTestOnly;
       let previous: Uint8Array = new Uint8Array(48);
       if (sequence > 1) {
         const prior = this.outbox[sequence - 2]!;
@@ -540,7 +592,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         if (prior.ack === null) throw ErrNotAcknowledgedTestOnly;
       }
       if (!bytesEqual(previous, previousEntryHash)) throw ErrNotAcknowledgedTestOnly;
-      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.nowSeconds };
+      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.readClock() };
       return { ...entry.ack, entryHash: Uint8Array.from(entry.ack.entryHash) };
     });
   }
@@ -578,7 +630,11 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     });
   }
 
-  /** Enables rate admission at finalization and returns the view that advertises it. */
+  /**
+   * Enables rate admission at finalization and returns the view that
+   * advertises it. This is the single-store max_rate implementation of
+   * SPEC-v2 §7.6.
+   */
   withRateAtFinalization(): RateAtFinalizationStoreTestOnly {
     this.rateAtFinalization = true;
     return new RateAtFinalizationStoreTestOnly(this);
@@ -656,7 +712,10 @@ function claimProjection(id: string, r: ClaimRecord): Record<string, unknown> {
     claimed_at: r.claimedAt, finalized_at: r.finalizedAt, lease_expires_at: r.leaseExpiresAt,
     log_sequence: r.outboxIndex >= 0 ? r.outboxIndex + 1 : null, owner_digest: base64Encode(r.ownerDigest),
     progress: progressProjection(r.progress), receipt_body_sha384: sha384OrNull(r.receiptBody),
-    release: r.release ? { ack_timestamp: r.release.ackTimestamp, claim_id: r.release.claimID, entry_hash: base64Encode(r.release.entryHash) } : null,
+    release: r.release ? {
+      ack_timestamp: r.release.ackTimestamp, claim_id: r.release.claimID, entry_hash: base64Encode(r.release.entryHash),
+      outcome: r.release.outcome, reason: r.release.reason === "" ? null : r.release.reason,
+    } : null,
     state: r.state, terminal_sha384: sha384OrNull(r.terminal),
   };
 }
@@ -672,6 +731,11 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 export class RateAtFinalizationStoreTestOnly implements V2RateAtFinalizationStore {
   constructor(readonly store: StoreTestOnly) {}
   admitsV2RateAtFinalization(): void {}
+  /**
+   * Exists only to satisfy V2RateReservationStore. The verifier never calls
+   * it for a store that admits at finalization, and it always fails (SPEC-v2
+   * §7.1, §7.6).
+   */
   async reserveV2RateBatch(_claimID: string, _owner: Uint8Array, _bundleHash: string, _batch: V2RateReservation[]): Promise<void> {
     throw new Error("v2reference: provisional rate reservation is not used with admission at finalization");
   }

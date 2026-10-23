@@ -39,7 +39,7 @@ test("profile_scenarios: corpus shape", () => {
   for (const sc of file.profile_scenarios) profiles[sc.profile] = (profiles[sc.profile] ?? 0) + 1;
   assert.ok(profiles.single_device_offline! >= 16 && profiles.dual_root! >= 13 && Object.keys(profiles).length === 2, JSON.stringify(profiles));
   assert.equal(file.profile_scenarios.length, 29);
-  assert.equal(file.profile_scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 279);
+  assert.equal(file.profile_scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 283);
 });
 
 for (const sc of file.profile_scenarios as Any[]) {

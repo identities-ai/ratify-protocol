@@ -4,7 +4,9 @@
 // opaque CommittedV2Outcome holding the handoff tuple {claim_id,
 // receipt_body_digest, challenge_expires_at, allow_horizon} and the sealed
 // receipt outbox body. It exposes no decision. releaseV2Decision is the only
-// path to an actionable decision.
+// path to an actionable decision; it returns released, pending (retryable),
+// withheld (permanent for the claim once recorded), or rejected (a result of
+// that call's inputs that changes no claim state).
 
 import { sha384 } from "@noble/hashes/sha2";
 
@@ -125,11 +127,36 @@ export interface V2ReceiptCheckpoint {
   getV2Acknowledgement(logID: string, sequence: number, signal?: AbortSignal): Promise<V2CheckpointAcknowledgement>;
 }
 
-/** The durable release record of §6.9 step 9. */
+/**
+ * The durable release record of SPEC-v2 §6.9: the release of step 9 (outcome
+ * released, reason "") or a withheld result of steps 7 and 8 (outcome
+ * withheld, reason clock_regressed, challenge_expired, or
+ * allow_horizon_passed). entryHash and ackTimestamp name the verified receipt
+ * entry and its acknowledgement. The first record for a claim wins; a claim
+ * store throws ErrV2ReleaseStateMismatch for any different later record and
+ * must persist and return every field unchanged.
+ */
 export interface V2ReleaseRecord {
   claimID: string;
   entryHash: Uint8Array;
   ackTimestamp: number;
+  outcome: V2ReleaseStatus;
+  reason: string;
+}
+
+/**
+ * Reports whether outcome and reason form a release record: released with no
+ * reason, or withheld with one of the reasons release steps 7 and 8 record.
+ */
+export function validV2ReleaseRecordOutcome(outcome: unknown, reason: unknown): boolean {
+  switch (outcome) {
+    case "released":
+      return reason === "";
+    case "withheld":
+      return reason === "clock_regressed" || reason === "challenge_expired" || reason === "allow_horizon_passed";
+    default:
+      return false;
+  }
 }
 
 /** What the claim store returns to release (§7.3). */
@@ -143,7 +170,7 @@ export interface V2TerminalClaimRecord {
   release: V2ReleaseRecord | null;
 }
 
-/** Thrown by recordV2Release when a different release already exists. */
+/** Thrown by recordV2Release when a different release or withheld record already exists. */
 export const ErrV2ReleaseStateMismatch = new V2SentinelError("v2 claim already records a different release");
 
 /** The claim-store view release needs. */
@@ -317,6 +344,16 @@ export async function releaseV2Decision(
       verifierID === "" || verifierID !== c.verifierID) {
     return result("rejected", "release_state_mismatch");
   }
+  // A recorded withheld result is permanent for the claim and is returned
+  // before any other step. A record that is neither a valid withheld nor a
+  // valid released record for this claim is a state mismatch.
+  const prior = record.release ?? null;
+  if (prior !== null) {
+    if (prior.claimID !== c.claimID || !validV2ReleaseRecordOutcome(prior.outcome, prior.reason)) {
+      return result("rejected", "release_state_mismatch");
+    }
+    if (prior.outcome === "withheld") return result("withheld", prior.reason);
+  }
   // 2. Receipt.
   if (!signedReceipt || signedReceipt.length === 0) return result("pending", "receipt_not_appended");
   let receipt: VerificationReceiptV2;
@@ -341,8 +378,7 @@ export async function releaseV2Decision(
     return result("rejected", "receipt_invalid");
   }
   // 4. Prior release: the same entry. Never evidence of acknowledgement.
-  const prior = record.release ?? null;
-  if (prior !== null && (prior.claimID !== c.claimID || !bytesEqual(prior.entryHash, entryHash))) {
+  if (prior !== null && !bytesEqual(prior.entryHash, entryHash)) {
     return result("rejected", "release_state_mismatch");
   }
   // 5. Predecessor.
@@ -368,26 +404,45 @@ export async function releaseV2Decision(
     return result("rejected", "acknowledgement_mismatch");
   }
   if (prior !== null && prior.ackTimestamp !== ack.timestamp) return result("rejected", "release_state_mismatch");
+  // withhold ends release at step 7 or 8. With no release recorded it
+  // durably records the withheld result first, so it is permanent for the
+  // claim; if the store is unavailable this call is still withheld. With a
+  // release already recorded, that first record stands and this call alone
+  // is withheld.
+  const withhold = async (reason: string): Promise<V2ReleaseResult> => {
+    if (prior === null) {
+      try {
+        await config.claimStore.recordV2Release({
+          claimID: c.claimID, entryHash: Uint8Array.from(entryHash), ackTimestamp: ack.timestamp, outcome: "withheld", reason,
+        }, signal);
+      } catch (err) {
+        if (errorIs(err, ErrV2ReleaseStateMismatch)) return result("rejected", "release_state_mismatch");
+      }
+    }
+    return result("withheld", reason);
+  };
   // 7. Clock.
   let now: number;
   try {
     now = await readV2AuthoritativeTime(config.claimStore, signal);
   } catch (err) {
-    if (v2ErrorClassOf(err) === "clock_regressed") return result("withheld", "clock_regressed");
+    if (v2ErrorClassOf(err) === "clock_regressed") return withhold("clock_regressed");
     return result("pending", "clock_unavailable");
   }
   if (!validV2Timestamp(ack.timestamp) || record.finalizedAt > ack.timestamp || ack.timestamp > now) {
-    return result("withheld", "clock_regressed");
+    return withhold("clock_regressed");
   }
   // 8. Deadlines.
-  if (ack.timestamp >= c.challengeExpiresAt || now >= c.challengeExpiresAt) return result("withheld", "challenge_expired");
+  if (ack.timestamp >= c.challengeExpiresAt || now >= c.challengeExpiresAt) return withhold("challenge_expired");
   if (receipt.decision === "allow" && (c.allowHorizon <= 0 || ack.timestamp >= c.allowHorizon || now >= c.allowHorizon)) {
-    return result("withheld", "allow_horizon_passed");
+    return withhold("allow_horizon_passed");
   }
   // 9. Record.
   if (prior === null) {
     try {
-      await config.claimStore.recordV2Release({ claimID: c.claimID, entryHash: Uint8Array.from(entryHash), ackTimestamp: ack.timestamp }, signal);
+      await config.claimStore.recordV2Release({
+        claimID: c.claimID, entryHash: Uint8Array.from(entryHash), ackTimestamp: ack.timestamp, outcome: "released", reason: "",
+      }, signal);
     } catch (err) {
       if (errorIs(err, ErrV2ReleaseStateMismatch)) return result("rejected", "release_state_mismatch");
       return result("pending", "claim_store_unavailable");

@@ -37,7 +37,10 @@ async function loadCase(state: Any): Promise<DevicePrimaryTestOnly> {
       ownerDigest: unb64(c.owner_digest), leaseExpiresAt: c.lease_expires_at, state: c.state,
       terminal: bytesOf(c.terminal_b64), receiptBody: bytesOf(c.receipt_body_b64), allowHorizon: c.allow_horizon,
       claimedAt: c.claimed_at, finalizedAt: c.finalized_at,
-      release: c.release === null ? null : { claimID: c.release.claim_id, entryHash: unb64(c.release.entry_hash), ackTimestamp: c.release.ack_timestamp },
+      release: c.release === null ? null : {
+        claimID: c.release.claim_id, entryHash: unb64(c.release.entry_hash), ackTimestamp: c.release.ack_timestamp,
+        outcome: c.release.outcome, reason: c.release.reason ?? "",
+      },
       progress: {
         trustAssessment: c.progress.trust_assessment, statusAssessment: c.progress.status_assessment,
         contextAssessment: c.progress.context_assessment, contextPolicyDigest: c.progress.context_policy_digest,
@@ -81,7 +84,7 @@ async function loadCase(state: Any): Promise<DevicePrimaryTestOnly> {
 test("device-state.json: corpus shape", () => {
   assert.equal(file.label, "ratify/device-complete-state/v2");
   assert.equal(file.version, 1);
-  assert.equal(file.cases.length, 5);
+  assert.equal(file.cases.length, 6);
 });
 
 for (const c of file.cases as Any[]) {

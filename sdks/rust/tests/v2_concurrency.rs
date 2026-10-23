@@ -63,12 +63,16 @@ fn class(e: &V2StoreError) -> Option<V2ErrorClass> {
 fn racing_finalizations_commit_exactly_once() {
     let store = new_store();
     let ctx = V2Context::background();
-    let created = store.claim_v2(&ctx, claim_for("c", "proof", None)).expect("claim");
+    let mut claim = claim_for("c", "proof", None);
+    // Bodies that differ only in verified_at, each bound to the claim.
+    let payloads: Vec<(Vec<u8>, Vec<u8>)> =
+        (0..WORKERS).map(|i| bind_claim_to_receipt_body(&mut claim, NOW + i as i64)).collect();
+    let created = store.claim_v2(&ctx, claim).expect("claim");
     let owner = created.owner_token;
     // Conflicting payloads: one commits, every other is claim_already_terminal.
     let results = race(WORKERS, |i| {
-        let terminal = format!(r#"{{"decision":"deny","n":{i}}}"#);
-        store.finalize_v2_claim(&ctx, "c", &owner, terminal.as_bytes(), b"body", 0)
+        let (terminal, body) = &payloads[i];
+        store.finalize_v2_claim(&ctx, "c", &owner, terminal, body, 0)
     });
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1, "{results:?}");
     for r in results.iter().filter(|r| **r != Ok(true)) {
@@ -78,14 +82,16 @@ fn racing_finalizations_commit_exactly_once() {
 
     // Identical payloads: one commits, every repeat is an idempotent false.
     let store = new_store();
-    let created = store.claim_v2(&ctx, claim_for("d", "proof", None)).expect("claim");
+    let mut claim = claim_for("d", "proof", None);
+    let (terminal, body) = bind_claim_to_receipt_body(&mut claim, NOW);
+    let created = store.claim_v2(&ctx, claim).expect("claim");
     let owner = created.owner_token;
-    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, "d", &owner, b"{}", b"body", 0));
+    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, "d", &owner, &terminal, &body, 0));
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1);
     assert_eq!(results.iter().filter(|r| **r == Ok(false)).count(), WORKERS - 1);
 
     // A different owner never finalizes.
-    let lost = store.finalize_v2_claim(&ctx, "d", &[9; 32], b"{}", b"body", 0).expect_err("owner");
+    let lost = store.finalize_v2_claim(&ctx, "d", &[9; 32], &terminal, &body, 0).expect_err("owner");
     assert_eq!(class(&lost), Some(V2ErrorClass::ClaimLeaseLost));
 }
 

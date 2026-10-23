@@ -5,7 +5,10 @@
 //! returns an opaque [`CommittedV2Outcome`] holding the handoff tuple
 //! {claim_id, receipt_body_digest, challenge_expires_at, allow_horizon} and
 //! the sealed receipt outbox body. It exposes no decision.
-//! [`release_v2_decision`] is the only path to an actionable decision.
+//! [`release_v2_decision`] is the only path to an actionable decision; it
+//! returns released, pending (retryable), withheld (permanent for the claim
+//! once recorded), or rejected (a result of that call's inputs that changes
+//! no claim state).
 //!
 //! There is no production local-log substitute for an independent
 //! checkpoint. The in-memory store in [`super::reference`] exists only for
@@ -124,12 +127,34 @@ pub trait V2ReceiptCheckpoint: Send + Sync {
     ) -> Result<V2CheckpointAcknowledgement, V2StoreError>;
 }
 
-/// The durable release record of §6.9 step 9.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// The durable release record of SPEC-v2 §6.9: the release of step 9
+/// (`outcome` released, `reason` empty) or a withheld result of steps 7 and
+/// 8 (`outcome` withheld, `reason` `clock_regressed`, `challenge_expired`, or
+/// `allow_horizon_passed`). `entry_hash` and `ack_timestamp` name the
+/// verified receipt entry and its acknowledgement. The first record for a
+/// claim wins; a claim store returns [`V2StoreError::ReleaseStateMismatch`]
+/// for any different later record and must persist and return every field
+/// unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct V2ReleaseRecord {
     pub claim_id: String,
     pub entry_hash: Vec<u8>,
     pub ack_timestamp: i64,
+    pub outcome: V2ReleaseStatus,
+    pub reason: String,
+}
+
+/// Go `ValidV2ReleaseRecordOutcome`: whether `outcome` and `reason` form a
+/// release record: released with no reason, or withheld with one of the
+/// reasons release steps 7 and 8 record.
+pub fn valid_v2_release_record_outcome(outcome: V2ReleaseStatus, reason: &str) -> bool {
+    match outcome {
+        V2ReleaseStatus::Released => reason.is_empty(),
+        V2ReleaseStatus::Withheld => {
+            matches!(reason, "clock_regressed" | "challenge_expired" | "allow_horizon_passed")
+        }
+        _ => false,
+    }
 }
 
 /// What the claim store returns to release (§7.3): the sealed handoff
@@ -147,8 +172,8 @@ pub struct V2TerminalClaimRecord {
 }
 
 /// The claim-store view release needs. `record_v2_release` returns
-/// [`V2StoreError::ReleaseStateMismatch`] when a different release record
-/// already exists for the claim.
+/// [`V2StoreError::ReleaseStateMismatch`] when a different release or
+/// withheld record already exists for the claim.
 pub trait V2ReleaseClaimStore: V2AuthoritativeClock {
     fn load_v2_terminal_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError>;
     fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError>;
@@ -350,6 +375,17 @@ pub fn release_v2_decision(
     {
         return release_result_v2(Rejected, "release_state_mismatch");
     }
+    // A recorded withheld result is permanent for the claim and is returned
+    // before any other step. A record that is neither a valid withheld nor a
+    // valid released record for this claim is a state mismatch.
+    if let Some(release) = &record.release {
+        if release.claim_id != committed.claim_id || !valid_v2_release_record_outcome(release.outcome, &release.reason) {
+            return release_result_v2(Rejected, "release_state_mismatch");
+        }
+        if release.outcome == Withheld {
+            return release_result_v2(Withheld, &release.reason);
+        }
+    }
     // 2. Receipt.
     let Some(signed_receipt) = signed_receipt.filter(|r| !r.is_empty()) else {
         return release_result_v2(Pending, "receipt_not_appended");
@@ -366,11 +402,10 @@ pub fn release_v2_decision(
     let Ok(entry_hash) = verification_receipt_v2_digest(&receipt) else {
         return release_result_v2(Rejected, "receipt_invalid");
     };
-    // 4. Prior release: the same receipt entry.
-    if let Some(release) = &record.release {
-        if release.claim_id != committed.claim_id || release.entry_hash != entry_hash {
-            return release_result_v2(Rejected, "release_state_mismatch");
-        }
+    // 4. Prior release: the same receipt entry. A recorded release only
+    // enforces sameness; it never substitutes for the acknowledgement.
+    if record.release.as_ref().is_some_and(|r| r.entry_hash != entry_hash) {
+        return release_result_v2(Rejected, "release_state_mismatch");
     }
     // 5. Predecessor.
     if receipt.sequence > 1 {
@@ -396,25 +431,43 @@ pub fn release_v2_decision(
     if record.release.as_ref().is_some_and(|r| r.ack_timestamp != ack.timestamp) {
         return release_result_v2(Rejected, "release_state_mismatch");
     }
+    // withhold ends release at step 7 or 8. With no release recorded it
+    // durably records the withheld result first, so it is permanent for the
+    // claim; if the store is unavailable this call is still withheld. With a
+    // release already recorded, that first record stands and this call alone
+    // is withheld.
+    let withhold = |reason: &str| -> V2ReleaseResult {
+        if record.release.is_none() {
+            let withheld = V2ReleaseRecord {
+                claim_id: committed.claim_id.clone(),
+                entry_hash: entry_hash.clone(),
+                ack_timestamp: ack.timestamp,
+                outcome: Withheld,
+                reason: reason.into(),
+            };
+            if let Err(V2StoreError::ReleaseStateMismatch) = record_v2_release_safely(ctx, config.claim_store, withheld) {
+                return release_result_v2(Rejected, "release_state_mismatch");
+            }
+        }
+        release_result_v2(Withheld, reason)
+    };
     // 7. Clock.
     let now = match read_v2_authoritative_time(ctx, config.claim_store) {
         Ok(now) => now,
-        Err(e) if e.class == V2ErrorClass::ClockRegressed && e.is_classified() => {
-            return release_result_v2(Withheld, "clock_regressed")
-        }
+        Err(e) if e.class == V2ErrorClass::ClockRegressed && e.is_classified() => return withhold("clock_regressed"),
         Err(_) => return release_result_v2(Pending, "clock_unavailable"),
     };
     if !valid_v2_timestamp(ack.timestamp) || record.finalized_at > ack.timestamp || ack.timestamp > now {
-        return release_result_v2(Withheld, "clock_regressed");
+        return withhold("clock_regressed");
     }
     // 8. Deadlines.
     if ack.timestamp >= committed.challenge_expires_at || now >= committed.challenge_expires_at {
-        return release_result_v2(Withheld, "challenge_expired");
+        return withhold("challenge_expired");
     }
     if receipt.decision == "allow"
         && (committed.allow_horizon <= 0 || ack.timestamp >= committed.allow_horizon || now >= committed.allow_horizon)
     {
-        return release_result_v2(Withheld, "allow_horizon_passed");
+        return withhold("allow_horizon_passed");
     }
     // 9. Record.
     if record.release.is_none() {
@@ -422,13 +475,13 @@ pub fn release_v2_decision(
             claim_id: committed.claim_id.clone(),
             entry_hash: entry_hash.clone(),
             ack_timestamp: ack.timestamp,
+            outcome: Released,
+            reason: String::new(),
         };
-        match catch_unwind(AssertUnwindSafe(|| config.claim_store.record_v2_release(ctx, new_record))) {
-            Ok(Ok(())) => {}
-            Ok(Err(V2StoreError::ReleaseStateMismatch)) => {
-                return release_result_v2(Rejected, "release_state_mismatch")
-            }
-            _ => return release_result_v2(Pending, "claim_store_unavailable"),
+        match record_v2_release_safely(ctx, config.claim_store, new_record) {
+            Ok(()) => {}
+            Err(V2StoreError::ReleaseStateMismatch) => return release_result_v2(Rejected, "release_state_mismatch"),
+            Err(_) => return release_result_v2(Pending, "claim_store_unavailable"),
         }
     }
     // 10. Return.
@@ -463,6 +516,15 @@ fn verify_published_v2_receipt(wire: &[u8], config: V2ReleaseConfig<'_>) -> V2Re
         config.verifier_public_key,
     )?;
     Ok(receipt)
+}
+
+fn record_v2_release_safely(
+    ctx: &V2Context,
+    store: &dyn V2ReleaseClaimStore,
+    record: V2ReleaseRecord,
+) -> Result<(), V2StoreError> {
+    catch_unwind(AssertUnwindSafe(|| store.record_v2_release(ctx, record)))
+        .unwrap_or_else(|_| Err(V2StoreError::Unavailable("claim store panicked".into())))
 }
 
 fn get_v2_acknowledgement_safely(

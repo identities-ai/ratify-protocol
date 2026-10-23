@@ -3,7 +3,7 @@ package ratify_test
 // Cross-SDK fixtures (SPEC-v2 §8.1). Each SDK writes
 // testvectors/v2/cross-sdk/<sdk>.json from fresh keys and hedged signatures;
 // this test verifies every fixture present with the objects.json positive
-// procedure. Fixtures from other SDKs are optional here; go.json is required.
+// procedure. All five fixtures are required.
 
 import (
 	"bytes"
@@ -180,14 +180,16 @@ func TestV2CrossSDKFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foundGo := false
+	found := map[string]bool{}
 	for _, path := range paths {
 		name := strings.TrimSuffix(filepath.Base(path), ".json")
-		foundGo = foundGo || name == "go"
+		found[name] = true
 		t.Run(name, func(t *testing.T) { v2CheckCrossSDKFile(t, path, name) })
 	}
-	if !foundGo {
-		t.Fatal("testvectors/v2/cross-sdk/go.json is missing; run go run ./cmd/ratify-v2-cross-sdk")
+	for _, sdk := range []string{"c", "go", "python", "rust", "typescript"} {
+		if !found[sdk] {
+			t.Errorf("testvectors/v2/cross-sdk/%s.json is missing", sdk)
+		}
 	}
 }
 

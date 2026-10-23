@@ -15,11 +15,11 @@ import { type Any, VECTOR_DIR } from "./helpers.js";
 const dir = join(VECTOR_DIR, "cross-sdk");
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 
-test("cross-sdk: the directory holds only <sdk>.json fixtures, including typescript.json", () => {
+test("cross-sdk: the directory holds exactly the five <sdk>.json fixtures", () => {
   const all = readdirSync(dir);
   assert.deepEqual(all.filter((f) => !/^(go|typescript|python|rust|c)\.json$/.test(f)), []);
   assert.ok(files.includes("typescript.json"), "run npm run generate:cross-sdk");
-  assert.ok(files.includes("go.json"));
+  assert.deepEqual(files, ["c.json", "go.json", "python.json", "rust.json", "typescript.json"]);
 });
 
 for (const name of files) {

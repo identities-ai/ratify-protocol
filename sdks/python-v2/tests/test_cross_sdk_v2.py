@@ -19,7 +19,7 @@ KNOWN_SDKS = {"go", "typescript", "python", "rust", "c"}
 
 def test_cross_sdk_directory_holds_only_known_fixtures():
     assert FIXTURES, "no cross-SDK fixtures present"
-    assert {p.stem for p in FIXTURES} <= KNOWN_SDKS
+    assert {p.stem for p in FIXTURES} == KNOWN_SDKS, "every SDK's fixture is required"
     assert {p.name for p in CROSS_SDK_DIR.iterdir()} == {p.name for p in FIXTURES}
     assert "python" in {p.stem for p in FIXTURES}, "this SDK's own fixture is missing"
 

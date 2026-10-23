@@ -112,6 +112,10 @@ implementation outside this repository, and a soak are gates for `2.0.0`
 - **C: `ratify_v2_verify_object` rejects unknown context members**
   (`bad_argument`), as the README states for every structured input. It
   used to ignore them, so a misspelled member was silently dropped.
+- **C: `ratify_v2_challenge_time_current` fails closed on out-of-range
+  configuration.** A maximum age outside 1 to 300 seconds or a skew outside
+  0 to 300 seconds returns 0. Inside those bounds the result matches the
+  documented formula; with a negative skew it used to contradict it.
 
 ### Not carried into v2
 

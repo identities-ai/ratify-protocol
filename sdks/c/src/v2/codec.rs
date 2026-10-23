@@ -910,7 +910,10 @@ pub unsafe extern "C" fn ratify_v2_evaluate_standard_profile(
 /// Whether an authoritative time `now` is inside a claim's sealed challenge
 /// bounds with exclusive deadlines (`issued_at <= now + skew`, `now <
 /// expires_at`, `now < issued_at + max_age`). Returns 1 or 0; 0 on any
-/// failure. For claim stores implementing the freshness recheck.
+/// failure, including a timestamp outside 0..=253402300799, `max_age_seconds`
+/// outside 1..=300 or `clock_skew_seconds` outside 0..=300 (the SPEC-v2 §2.5
+/// bounds every sealed claim satisfies). For claim stores implementing the
+/// freshness recheck.
 #[no_mangle]
 pub extern "C" fn ratify_v2_challenge_time_current(
     issued_at: i64,
@@ -922,6 +925,11 @@ pub extern "C" fn ratify_v2_challenge_time_current(
     crate::guard::ffi_guard(
         || 0,
         || {
+            if !(1..=V2_MAX_CHALLENGE_AGE_SECONDS).contains(&max_age_seconds)
+                || !(0..=V2_MAX_FUTURE_SKEW_SECONDS).contains(&clock_skew_seconds)
+            {
+                return 0;
+            }
             let claim = V2ChallengeClaim {
                 issued_at,
                 expires_at,

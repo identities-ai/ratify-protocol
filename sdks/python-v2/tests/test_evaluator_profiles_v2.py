@@ -5,12 +5,14 @@ SDKs' implementations of one standard profile interchangeable (SPEC-v2 §5.2).
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from corpus import load
 from ratify_protocol_v2 import _v2json
 from ratify_protocol_v2 import constraint_evaluator_v2 as ce
-from ratify_protocol_v2.constraints_v2 import ConstraintContextV2
+from ratify_protocol_v2.constraints_v2 import ConstraintContextV2, constraint_v2_from_fields
 from ratify_protocol_v2.context_v2 import background
 from ratify_protocol_v2.errors_v2 import error_class_of
 
@@ -50,6 +52,15 @@ def test_profile_case(suite, case):
     else:
         assert "params" in case, "case has neither params nor params_absent"
         params = _v2json.canonical(case["params"])
+        # SPEC-v2 §5.2: a certificate can carry these params only when they
+        # are a JSON object; direct_api_only says not.
+        carried = json.loads(b'{"params":' + params + b',"type":' + json.dumps(suite["type"]).encode() + b"}")
+        try:
+            constraint_v2_from_fields(carried)
+            wire_err = None
+        except Exception as exc:  # noqa: BLE001
+            wire_err = exc
+        assert (wire_err is not None) == bool(case.get("direct_api_only")), wire_err
     ctx = _context(case["context"])
     ce.validate_v2_extension_context(ctx)
     result = registration.evaluate(

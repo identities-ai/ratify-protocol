@@ -97,7 +97,8 @@ def _claim_projection(claim_id: str, r) -> dict:
     release = None
     if r.release is not None:
         release = {"ack_timestamp": r.release.ack_timestamp, "claim_id": r.release.claim_id,
-                   "entry_hash": _b64(r.release.entry_hash)}
+                   "entry_hash": _b64(r.release.entry_hash), "outcome": r.release.outcome,
+                   "reason": r.release.reason or None}
     return {
         "abandoned": r.abandoned, "allow_horizon": r.allow_horizon, "claim": _sealed_claim_projection(r.claim),
         "claim_id": claim_id, "claimed_at": r.claimed_at, "finalized_at": r.finalized_at,

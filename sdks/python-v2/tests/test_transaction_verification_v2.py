@@ -20,7 +20,7 @@ VECTORS = FILE["vectors"]
 
 
 def test_transaction_verification_corpus_shape():
-    assert len(VECTORS) == 12
+    assert len(VECTORS) == 13
 
 
 @pytest.mark.parametrize("v", VECTORS, ids=[v["name"] for v in VECTORS])

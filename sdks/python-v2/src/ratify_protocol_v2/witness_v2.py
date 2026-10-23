@@ -46,7 +46,7 @@ from .signing_v2 import (
     SignerV2,
     V2SigningError,
     _as_signer,
-    key_id_v2,
+    _key_id_v2,
     _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
@@ -230,7 +230,7 @@ def sign_witness_entry_v2_with_signer(ctx: Context, entry: WitnessEntryV2, signe
     """Go ``SignWitnessEntryV2WithSigner``: the signer's key ID must equal witness_id."""
     validate_witness_entry_v2(entry, False)
     witness_public = signer_public_key_v2(signer)
-    if key_id_v2(witness_public) != entry.witness_id:
+    if _key_id_v2(witness_public) != entry.witness_id:
         raise V2SigningError("witness_id does not match signing key", V2ErrorClass.KEY_ID_MISMATCH)
     body = witness_entry_signable_bytes_v2(entry)
     signature = _sign_v2_statement_with_signer(ctx, WITNESS_ENTRY, body, signer, witness_public)
@@ -275,7 +275,7 @@ def verify_witness_entry_v2(entry: WitnessEntryV2, head: WitnessV2Head, witness_
     _run(V2ErrorClass.MALFORMED, lambda: validate_witness_entry_v2(entry, True))
     _run(V2ErrorClass.MALFORMED, lambda: encode_witness_entry_v2(entry))
     _validate_log_head(head.log_id, head.sequence, head.head_hash, head.accepted_digests, "witness")
-    witness_id = _run(V2ErrorClass.UNCLASSIFIED, lambda: key_id_v2(witness_public))
+    witness_id = _run(V2ErrorClass.UNCLASSIFIED, lambda: _key_id_v2(witness_public))
     if entry.witness_id != witness_id or entry.log_id != head.log_id:
         raise V2Error(V2ErrorClass.LOG_STATE_MISMATCH,
                       "witness entry key or log ID does not match caller-authenticated state")

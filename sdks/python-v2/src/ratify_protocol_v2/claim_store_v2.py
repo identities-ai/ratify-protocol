@@ -172,15 +172,16 @@ def challenge_claim_time_current_v2(claim: V2ChallengeClaim, now: int) -> bool:
 
 class _V2EvaluationTokenState:
     __slots__ = (
-        "claim_id", "proof_digest", "required_scope", "future_skew", "expected", "_used_lock", "used",
+        "claim_id", "claim", "proof_digest", "required_scope", "future_skew", "expected", "_used_lock", "used",
         "evaluation_complete", "finalization_mu", "finalization_digest", "finalization_started",
         "claim_time_valid", "claimed_at", "evaluated_at", "rate_batch", "rate_at_finalization",
         "allow_valid_until", "owner_token", "evaluation_status", "evaluation_reason", "pending_assessment",
     )
 
-    def __init__(self, *, claim_id: str, proof_digest: str, rate_batch: list, required_scope: str, future_skew: int,
+    def __init__(self, *, claim_id: str, claim: V2ChallengeClaim, proof_digest: str, rate_batch: list, required_scope: str, future_skew: int,
                  owner_token: bytes, claimed_at: int, claim_time_valid: bool, expected: _ExpectedChallengeStateV2):
         self.claim_id = claim_id
+        self.claim = clone_v2_challenge_claim(claim)
         self.proof_digest = proof_digest
         self.required_scope = required_scope
         self.future_skew = future_skew
@@ -315,7 +316,7 @@ def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: 
         claim_time_valid = v2_challenge_time_current(result.claimed_at, sealed.issued_at, sealed.expires_at,
                                                      max_age_seconds, future_skew_seconds)
         token = V2EvaluationToken._create(_V2EvaluationTokenState(
-            claim_id=claim.claim_id, proof_digest=claim.proof_digest, rate_batch=claim.rate_batch,
+            claim_id=claim.claim_id, claim=claim, proof_digest=claim.proof_digest, rate_batch=claim.rate_batch,
             required_scope=required_scope, future_skew=future_skew_seconds, owner_token=bytes(result.owner_token),
             claimed_at=result.claimed_at, claim_time_valid=claim_time_valid, expected=sealed,
         ))
@@ -351,6 +352,7 @@ def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2,
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 proof evaluation has not reached a terminal local result")
         if not terminal_payload_matches_v2(terminal_result, receipt_body, decision, state.evaluation_reason):
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result does not match the completed local evaluation")
+        validate_v2_finalization_payload(state.claim, terminal_result, receipt_body)
         if (decision == "allow" and state.allow_valid_until <= 0) or (decision != "allow" and state.allow_valid_until != 0):
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result lacks a valid allow freshness horizon")
         if state.rate_at_finalization and not is_v2_rate_at_finalization_store(store):
@@ -371,6 +373,44 @@ def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2,
                 state.finalization_started = False
                 state.finalization_digest = b""
             raise
+
+
+@classified(V2ErrorClass.CONFIGURATION_INVALID)
+def validate_v2_finalization_payload(claim: V2ChallengeClaim, terminal_result: bytes, receipt_body: bytes) -> None:
+    """Go ``ValidateV2FinalizationPayload``: check that a terminal result and
+    its unsigned receipt outbox body belong to the sealed claim (SPEC-v2
+    §7.5). The body must decode strictly as a canonical receipt body
+    (malformed otherwise). Its verifier_id, agent_id, bundle_hash, issuer_ids
+    (the sorted, distinct sealed issuer IDs), required_scope, a non-null
+    context_policy_digest, and constraint_evaluators must equal the sealed
+    claim's values, and the terminal result must be a JSON object whose
+    decision and decision_reason equal the body's; any difference is
+    configuration_invalid. ``finalize_claim_proof_bundle_v2`` applies it
+    before the store is called, and a claim store applies it inside its
+    finalization compare-and-set so that no caller can commit a body for
+    another proof."""
+    from .verification_receipt_v2 import decode_verification_receipt_body_v2
+
+    if not isinstance(claim, V2ChallengeClaim):
+        raise ValueError("v2 sealed claim is required")
+    body = decode_verification_receipt_body_v2(bytes(receipt_body))
+    issuers = sorted(set(claim.issuer_ids or []))
+    if body.verifier_id != claim.verifier_id:
+        raise ValueError("v2 receipt body verifier_id differs from the sealed claim")
+    if body.agent_id != claim.agent_id:
+        raise ValueError("v2 receipt body agent_id differs from the sealed claim")
+    if body.bundle_hash != claim.bundle_hash:
+        raise ValueError("v2 receipt body bundle_hash differs from the sealed claim")
+    if list(body.issuer_ids or []) != issuers:
+        raise ValueError("v2 receipt body issuer_ids differ from the sealed claim")
+    if body.required_scope != claim.required_scope:
+        raise ValueError("v2 receipt body required_scope differs from the sealed claim")
+    if body.context_policy_digest is not None and body.context_policy_digest != claim.context_policy_digest:
+        raise ValueError("v2 receipt body context_policy_digest differs from the sealed claim")
+    if list(body.constraint_evaluators or []) != list(claim.constraint_evaluators or []):
+        raise ValueError("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")
+    if not terminal_payload_matches_v2(terminal_result, receipt_body, body.decision, body.decision_reason):
+        raise ValueError("v2 terminal result decision or reason differs from the receipt body")
 
 
 def terminal_decision_for_v2_evaluation(status: str, reason: str) -> tuple[str, bool]:

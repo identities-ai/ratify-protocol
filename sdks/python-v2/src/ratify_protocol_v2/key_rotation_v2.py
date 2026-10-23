@@ -28,7 +28,7 @@ from .protocol_v2 import (
     valid_v2_id,
     validate_hybrid_signature_v2,
 )
-from .clock_bounds_v2 import valid_v2_timestamp
+from .clock_bounds_v2 import V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_TIMESTAMP_SECONDS, valid_v2_timestamp
 from .context_v2 import Context, background
 from .limits_v2 import MAX_KEY_ROTATION_STATEMENT_BYTES_V2, check_v2_wire_size
 from .signing_v2 import (
@@ -39,6 +39,7 @@ from .signing_v2 import (
     _as_signer,
     clone_public_key,
     equal_public_keys,
+    _key_id_v2,
     key_id_v2,
     _sign_v2_statement_with_signer,
     signer_public_key_v2,
@@ -121,8 +122,8 @@ def validate_key_rotation_statement_v2(stmt: KeyRotationStatementV2, signatures:
         raise ValueError("wire v2: non-genesis rotation must link to a prior statement")
     if not valid_v2_id(stmt.old_key_id) or not valid_v2_id(stmt.new_key_id):
         raise ValueError("wire v2: old_key_id and new_key_id must be 64 lowercase hexadecimal characters")
-    old_id = key_id_v2(stmt.old_key)
-    new_id = key_id_v2(stmt.new_key)
+    old_id = _key_id_v2(stmt.old_key)
+    new_id = _key_id_v2(stmt.new_key)
     if old_id != stmt.old_key_id or new_id != stmt.new_key_id:
         raise V2Error(V2ErrorClass.KEY_ID_MISMATCH, "wire v2: rotation key IDs must match distinct complete keys")
     if old_id == new_id or equal_public_keys(stmt.old_key, stmt.new_key):
@@ -261,11 +262,12 @@ def verify_key_rotation_statement_v2(stmt: KeyRotationStatementV2, state: KeyRot
         raise V2Error(cfg, "caller used-key history does not contain the current key")
     if stmt.new_key_id in used:
         raise V2Error(V2ErrorClass.ROTATION_KEY_REUSED, "rotation replacement key was already used by this authority")
-    if (type(now_unix) is not int or type(future_skew) is not int or future_skew < 0
-            or not (-MAX_SAFE_INTEGER <= now_unix <= MAX_SAFE_INTEGER) or future_skew > MAX_SAFE_INTEGER):
-        raise V2Error(cfg, "rotation verification clock inputs are outside safe bounds")
-    if now_unix > MAX_SAFE_INTEGER - future_skew:
-        future_skew = MAX_SAFE_INTEGER - now_unix
+    # SPEC-v2 §2.5: the caller's time is in the timestamp domain and the
+    # configured future skew is 0..300 seconds.
+    if (not valid_v2_timestamp(now_unix) or type(future_skew) is not int or future_skew < 0
+            or future_skew > V2_MAX_FUTURE_SKEW_SECONDS):
+        raise V2Error(cfg, f"rotation verification time must be 0..{V2_MAX_TIMESTAMP_SECONDS} and future skew "
+                           f"0..{V2_MAX_FUTURE_SKEW_SECONDS} seconds")
     if (
         not equal_public_keys(stmt.old_key, state.current_key) or stmt.authority_id != state.authority_id
         or stmt.recovery_epoch != state.recovery_epoch or stmt.role != state.role

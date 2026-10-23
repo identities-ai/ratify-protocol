@@ -413,11 +413,21 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
         parties = []
         for fields, raw_bundle in party_values:
             party_id = fields["party_id"]
+            # The nested bundle is decoded strictly, and must be in canonical
+            # form like the whole receipt, before its hash is compared, so a
+            # malformed bundle is malformed rather than bundle_hash_mismatch.
+            bundle = decode_proof_bundle_v2(raw_bundle)
+            try:
+                canonical_bundle = encode_proof_bundle_v2(bundle)
+            except Exception:  # noqa: BLE001
+                canonical_bundle = None
+            if canonical_bundle != raw_bundle:
+                raise ValueError(f"wire v2: party {party_id!r} proof bundle is not canonical JSON")
             actual = "sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + raw_bundle).hexdigest()
             if fields["proof_bundle_hash"] != actual:
                 raise V2Error(V2ErrorClass.BUNDLE_HASH_MISMATCH,
                               f"wire v2: party {party_id!r} proof_bundle_hash does not match its canonical bundle bytes")
-            parties.append(TransactionReceiptPartyV2(proof_bundle=decode_proof_bundle_v2(raw_bundle), **fields))
+            parties.append(TransactionReceiptPartyV2(proof_bundle=bundle, **fields))
         receipt = TransactionReceiptV2(
             version=version, transaction_id=transaction_id, created_at=created_at,
             terms_schema_uri=terms_schema_uri, terms_canonical_json=terms, parties=parties,

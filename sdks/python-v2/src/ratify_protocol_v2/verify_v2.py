@@ -341,6 +341,14 @@ def _validate_v2_verify_configuration(req: V2VerifyRequest, request_context) -> 
         if not isinstance(getattr(req, name), str):
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 request {name} must be a string")
     validate_v2_freshness_configuration(req.now, req.max_challenge_age_seconds, req.future_skew_seconds)
+    if req.replay_epoch < 0 or req.replay_epoch > MAX_SAFE_INTEGER:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 configured replay epoch must be 0..{MAX_SAFE_INTEGER}")
+    # The live verifier has one future skew (SPEC-v2 §6.1): status freshness
+    # uses future_skew_seconds, so a status policy carrying another skew is a
+    # configuration error rather than a second, silently different bound.
+    status_skew = getattr(req.status_policy, "clock_skew_seconds", None)
+    if not is_int(status_skew) or status_skew != req.future_skew_seconds:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 status policy skew must equal future_skew_seconds")
     _validate_v2_request_context(request_context)
     registry = req.constraint_evaluators
     if registry is not None and (not isinstance(registry, ConstraintEvaluatorRegistryV2) or getattr(registry, "_valid", False) is not True):
@@ -477,7 +485,10 @@ def _call_v2_trust_safely(ctx, trust: Optional[Callable], chain: list):
         return V2TrustResolution(), None
     try:
         return trust(ctx, chain), None
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        # The caller's own cancellation propagates.
+        raise
+    except BaseException as exc:  # noqa: BLE001 - any provider failure (Go: a recovered panic) fails closed
         return None, exc
 
 
@@ -486,5 +497,8 @@ def _call_v2_audience_safely(ctx, audience: Optional[Callable], deferred: list, 
         return None, None
     try:
         return audience(ctx, deferred, receiver_id), None
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        # The caller's own cancellation propagates.
+        raise
+    except BaseException as exc:  # noqa: BLE001 - any provider failure (Go: a recovered panic) fails closed
         return None, exc

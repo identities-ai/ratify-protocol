@@ -123,6 +123,10 @@ def _validate_v2_transaction_verify_configuration(req: TransactionVerifyRequestV
         raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "transaction verification time is outside 0..253402300799")
     if not is_int(req.future_skew_seconds) or req.future_skew_seconds < 0 or req.future_skew_seconds > V2_MAX_FUTURE_SKEW_SECONDS:
         raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "transaction verification future skew must be 0..300 seconds")
+    status_skew = getattr(sources.status_policy, "clock_skew_seconds", None)
+    if not is_int(status_skew) or status_skew != req.future_skew_seconds:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
+                      "status policy clock skew must equal the transaction verification future skew")
     _validate_v2_status_configuration(sources.status_keys, sources.status_policy)
 
 

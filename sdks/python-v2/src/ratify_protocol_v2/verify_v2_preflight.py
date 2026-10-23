@@ -245,7 +245,10 @@ def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[Expecte
     if hook is not None:
         try:
             hook(bundle, checked)
-        except Exception as exc:  # noqa: BLE001 - an application hook failure rejects
+        except (KeyboardInterrupt, SystemExit):
+            # The caller's own cancellation propagates.
+            raise
+        except BaseException as exc:  # noqa: BLE001 - any hook failure (Go: a recovered panic) rejects
             raise V2Error(V2ErrorClass.RECEIVER_BINDING_REJECTED,
                           f"v2 receiver-binding hook rejected the presentation: {exc}") from exc
     try:
@@ -274,6 +277,10 @@ def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: Expected
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 preflight configuration must be integers")
     if not isinstance(configured_namespace, str):
         raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 configured namespace must be a string")
+    if configured_replay_epoch < 0 or configured_replay_epoch > MAX_SAFE_INTEGER:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 configured replay epoch must be 0..{MAX_SAFE_INTEGER}")
+    if expected.expected_session_context is not None and len(expected.expected_session_context) != 32:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 expected session context must be absent or exactly 32 bytes")
     policy = expected.context_policy
     if policy is not None:
         if not _policy_valid(policy):
@@ -317,8 +324,7 @@ def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: Expected
                 or not equal_hybrid_public_keys(bundle.agent_pub_key, expected.expected_agent_public_key)):
             raise V2Error(V2ErrorClass.EXPECTED_AGENT_MISMATCH, "v2 presentation does not match authenticated expected agent")
     if expected.expected_session_context is not None:
-        if (len(expected.expected_session_context) != 32 or bundle.session_context is None
-                or bytes(bundle.session_context) != bytes(expected.expected_session_context)):
+        if bundle.session_context is None or bytes(bundle.session_context) != bytes(expected.expected_session_context):
             raise V2Error(V2ErrorClass.SESSION_CONTEXT_MISMATCH, "v2 presentation does not match expected session context")
     _check_exact_receiver_audience_v2(bundle, expected.expected_receiver_id)
 

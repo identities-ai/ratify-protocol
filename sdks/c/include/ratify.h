@@ -2545,12 +2545,13 @@ int32_t ratify_v2_check_stream_sequence(int32_t has_last, int64_t last, int64_t 
 // `RatifyV2ClaimView.record` as the store persisted it. Returns 0 when the
 // receipt body decodes strictly as a canonical receipt outbox body whose
 // `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids` (the sorted,
-// distinct sealed issuer IDs), `required_scope`, non-null
-// `context_policy_digest` and `constraint_evaluators` equal the sealed
-// claim's, and the terminal result is a JSON object whose `decision` and
-// `decision_reason` equal the body's. Otherwise `malformed` (the body does
-// not decode) or `configuration_invalid` (any difference); a store commits
-// nothing in either case. A `claim_record` that is not a claim record is
+// distinct sealed issuer IDs), `required_scope` and `constraint_evaluators`
+// equal the sealed claim's, whose `context_policy_digest` equals the sealed
+// claim's (null for a policy-less claim) unless `context_assessment` is
+// `not_evaluated`, when it is null, and the terminal result is a JSON
+// object whose `decision` and `decision_reason` equal the body's. Otherwise
+// `malformed` (the body does not decode) or `configuration_invalid` (any
+// difference); a store commits nothing in either case. A `claim_record` that is not a claim record is
 // `bad_argument`.
 int32_t ratify_v2_validate_finalization_payload(const uint8_t *claim_record,
                                                 uintptr_t claim_record_len,

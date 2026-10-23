@@ -175,6 +175,17 @@ match before the beta.
 - **Transaction receipt nested bundles** are strictly decoded, and must be
   canonical, before their hash is compared, so a malformed nested bundle is
   `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
+- **Finalization binds a null `context_policy_digest`** (all SDKs). The
+  finalization helper and every reference claim store compared only a
+  non-null receipt-body digest with the sealed claim, so a body that dropped
+  the configured policy's digest was committed. Once `context_assessment` is
+  other than `not_evaluated`, the body's digest must now equal the sealed
+  claim's (null only for a claim sealed without a context policy); otherwise
+  the finalization is `configuration_invalid` and commits nothing (SPEC-v2
+  §7.5). Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_null_context_policy_digest_unverified`,
+  `..._unbound`, and `finalize_rejects_body_with_context_policy_digest_not_evaluated`
+  (`malformed`, as §5.8 already requires a null digest there).
 
 ### Fixed
 

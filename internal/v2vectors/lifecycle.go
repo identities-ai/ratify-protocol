@@ -7,6 +7,7 @@ package v2vectors
 // here, not read back from the Go reference.
 
 import (
+	"bytes"
 	"slices"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -507,4 +508,31 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
 			lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
 	}
+	// A null context_policy_digest is bound too (SPEC-v2 §5.8, §7.5): once
+	// context was evaluated, the body's digest equals the sealed claim's,
+	// so a body that drops the configured policy's digest is refused.
+	for _, assessment := range []string{"unverified", "unbound"} {
+		body := genuine()
+		body.ContextAssessment, body.ContextPolicyDigest = assessment, nil
+		sc("finalize_rejects_body_with_null_context_policy_digest_"+assessment, "the claim sealed a context policy, and the canonical receipt body records context_assessment "+assessment+" with a null context_policy_digest: the claim store refuses it (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once",
+			lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+			finalize(genuineTerminal, b64(must(ratify.VerificationReceiptV2Body(body))), lifecycleExpectJSON{ErrorClass: "configuration_invalid"}),
+			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+			lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+	}
+	// A non-null digest with context not_evaluated is never a receipt body
+	// (SPEC-v2 §5.8), so it fails the strict body decode before binding.
+	interrupted := genuine()
+	interrupted.DecisionReason, interrupted.ContextAssessment, interrupted.ContextPolicyDigest = "evaluation_interrupted", "not_evaluated", nil
+	interruptedBody := must(ratify.VerificationReceiptV2Body(interrupted))
+	withDigest := bytes.Replace(interruptedBody, []byte(`"context_policy_digest":null`), []byte(`"context_policy_digest":"`+vp+`"`), 1)
+	if bytes.Equal(withDigest, interruptedBody) {
+		panic("context_policy_digest member not found in the interrupted receipt body")
+	}
+	interruptedTerminal := terminal("indeterminate", "evaluation_interrupted", "authorization_unverified")
+	sc("finalize_rejects_body_with_context_policy_digest_not_evaluated", "the claim sealed a context policy, and the receipt body records context_assessment not_evaluated with the sealed context_policy_digest: that body is not a receipt body (SPEC-v2 §5.8), so the claim store refuses it as malformed (SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		finalize(interruptedTerminal, b64(withDigest), lifecycleExpectJSON{ErrorClass: "malformed"}),
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
 }

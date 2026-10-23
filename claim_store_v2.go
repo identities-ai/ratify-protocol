@@ -144,9 +144,12 @@ const (
 // indeterminate/evaluation_interrupted result and false when that same
 // interrupted result and receipt body are already committed. It errors while
 // the lease is live, when an external attempt remains unresolved, when another
-// terminal result won, or when either JSON
+// terminal result won, when the result and receipt body fail
+// ValidateV2FinalizationPayload for the sealed claim (malformed or
+// configuration_invalid, exactly as for finalization), or when either JSON
 // object lacks string decision/reason fields exactly equal to
-// indeterminate/evaluation_interrupted. Recovery never creates a claim or
+// indeterminate/evaluation_interrupted (configuration_invalid). A refused
+// recovery commits nothing. Recovery never creates a claim or
 // returns Created; ClaimV2 returns Created only to the transaction that
 // inserted the row, and exact retries return InProgress until publication.
 // AuthoritativeTimeV2 returns the store's security clock, the same clock that

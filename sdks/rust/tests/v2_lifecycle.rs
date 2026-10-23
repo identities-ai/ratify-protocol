@@ -517,6 +517,31 @@ fn lifecycle_scenarios() {
                     };
                     assert_eq!(got, s(&want["finalize_result"]), "{at} finalize");
                 }
+                "recover_direct" => {
+                    let (claim_store, _) = claim_store_of(&store, rate_at_finalization);
+                    let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_default();
+                    let recovered = claim_store.recover_interrupted_v2_claim(
+                        &ctx,
+                        &claim_id,
+                        &unb64(&step["terminal_b64"]),
+                        &unb64(&step["body_b64"]),
+                    );
+                    let class = s(&want["error_class"]);
+                    if !class.is_empty() {
+                        let got = recovered.as_ref().err().and_then(V2StoreError::class);
+                        assert!(
+                            !matches!(recovered, Ok(true)) && class_str(got) == class,
+                            "{at} recover_direct: {recovered:?}, want class {class}"
+                        );
+                        continue;
+                    }
+                    let got = match recovered {
+                        Ok(true) => "committed",
+                        Ok(false) => "identical",
+                        Err(e) => panic!("{at} recover_direct: {e:?}"),
+                    };
+                    assert_eq!(got, s(&want["finalize_result"]), "{at} recover_direct");
+                }
                 "recover" => {
                     let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
                         // Never claimed: the request's own claim ID (claim_not_found).
@@ -614,9 +639,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (51, 283), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (57, 320), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("51 Part B scripts (283 steps)"), "README row: {readme}");
+    assert!(readme.contains("57 Part B scripts (320 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

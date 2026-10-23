@@ -395,13 +395,17 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             now = self._read_clock_locked()
             if now < record.lease_expires_at:
                 raise V2Error(V2ErrorClass.CLAIM_LEASE_LIVE, "v2reference: evaluator lease is still live")
+            # Validated exactly as finalization (SPEC-v2 §7.5): malformed or
+            # configuration_invalid, committing nothing.
+            validate_v2_finalization_payload(record.claim, terminal_result, receipt_body)
             try:
                 fields = json.loads(bytes(terminal_result))
             except ValueError:
                 fields = None
             if (not isinstance(fields, dict) or fields.get("decision") != "indeterminate"
                     or fields.get("decision_reason") != "evaluation_interrupted"):
-                raise ValueError("v2reference: recovery may commit only indeterminate/evaluation_interrupted")
+                raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
+                              "v2reference: recovery may commit only indeterminate/evaluation_interrupted")
             self._change_locked(lambda: self._commit_terminal_locked(record, terminal_result, receipt_body, 0, now))
             return True
 

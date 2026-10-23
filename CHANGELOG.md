@@ -199,6 +199,21 @@ match before the beta.
   non-canonical base64; such a batch now decodes and the object fails
   authentication instead, with the same `unavailable` status result.
   Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **Lease-expiry recovery validates what it commits** (all SDKs). Every
+  reference claim store's recovery operation accepted any terminal result
+  whose decision and reason were `indeterminate / evaluation_interrupted`,
+  with any receipt body, so a body that was not a receipt body (for example
+  `{"decision":"allow","verifier_id":"forged"}`) or that named another
+  claim was sealed as the terminal result: the claim could then never
+  publish, and a canonical recovery failed `claim_already_terminal`.
+  Recovery now validates the result and body exactly as finalization does
+  (`malformed` for a body that is not a canonical receipt body,
+  `configuration_invalid` for one that does not bind the sealed claim) and
+  requires `indeterminate / evaluation_interrupted`
+  (`configuration_invalid`, previously an unclassified error); a refused
+  recovery commits nothing (SPEC-v2 §7.5). The recovery helpers already
+  built the canonical body and are unchanged. Vectors: 6 new
+  `lifecycle-scenarios.json` scripts through a new `recover_direct` step.
 
 ### Fixed
 

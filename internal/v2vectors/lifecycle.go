@@ -63,6 +63,8 @@ type lifecycleStepJSON struct {
 	LogID       string   `json:"log_id,omitempty"`
 	// TerminalB64, BodyB64 and AllowValidUntil are the exact arguments of a
 	// finalize step.
+	// TerminalB64 and BodyB64 are also the exact arguments of a
+	// recover_direct step.
 	TerminalB64     string              `json:"terminal_b64,omitempty"`
 	BodyB64         string              `json:"body_b64,omitempty"`
 	AllowValidUntil int64               `json:"allow_valid_until,omitempty"`
@@ -139,6 +141,7 @@ func (g *gen) lifecycleFile() any {
 			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
 			"acknowledge":            "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
 			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
+			"recover_direct":         "call the claim store's recovery operation directly for the request's claim (from its claim_only step) with terminal_b64 as the terminal result and body_b64 as the receipt outbox body, after the evaluator lease expired; expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store validates the result and body exactly as finalize does (SPEC-v2 §7.5: malformed for a body that is not a canonical receipt body, configuration_invalid for a body that does not bind the sealed claim or a result that differs from it) and accepts only indeterminate/evaluation_interrupted (configuration_invalid otherwise): a refused recovery commits nothing",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
 			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
@@ -439,6 +442,7 @@ func (g *gen) lifecycleFile() any {
 		acknowledge("B", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
 		release("B", released(Now+4, 2)), release("A", released(Now+4, 1)))
 	g.finalizeBindingScenarios(sc, bundles)
+	g.recoveryBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f
 }
@@ -535,4 +539,81 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 		finalize(interruptedTerminal, b64(withDigest), lifecycleExpectJSON{ErrorClass: "malformed"}),
 		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+}
+
+// recoveryBindingScenarios pins SPEC-v2 §7.5 for lease-expiry recovery: the
+// claim store's recovery operation validates its terminal result and receipt
+// body exactly as finalize does and commits only the canonical
+// indeterminate/evaluation_interrupted result. Each refusal commits nothing,
+// so the recovery helper then commits the canonical interrupted receipt,
+// which publishes at sequence 1.
+func (g *gen) recoveryBindingScenarios(sc func(string, string, ...lifecycleStepJSON), bundles map[string][]byte) {
+	b := must(ratify.DecodeProofBundleV2(bundles["A"]))
+	issuers := []string{}
+	for _, c := range b.Delegations {
+		if !slices.Contains(issuers, c.IssuerID) {
+			issuers = append(issuers, c.IssuerID)
+		}
+	}
+	slices.Sort(issuers)
+	// The body the recovery helper builds for request A claimed at Now with
+	// no recorded progress (SPEC-v2 §6.7).
+	interrupted := func() *ratify.VerificationReceiptV2 {
+		return &ratify.VerificationReceiptV2{
+			Version: 2, VerifierID: b.VerifierID, AgentID: b.AgentID, BundleHash: bundleHash(bundles["A"]), IssuerIDs: slices.Clone(issuers),
+			Decision: "indeterminate", DecisionReason: "evaluation_interrupted", IdentityStatus: "authorization_unverified",
+			TrustAssessment: "not_evaluated", StatusAssessment: "not_evaluated", ChallengeAssessment: "current",
+			ContextAssessment: "not_evaluated", VerifiedAt: Now, RequiredScope: "data:read",
+			GrantedScope: []string{}, StatusEvidence: []ratify.StatusEvidenceEntryV2{},
+		}
+	}
+	terminal := func(decision, reason, identity string) string {
+		return b64(must(ratify.CanonicalJSON(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": identity})))
+	}
+	interruptedTerminal := terminal("indeterminate", "evaluation_interrupted", "authorization_unverified")
+	genuineBody := must(ratify.VerificationReceiptV2Body(interrupted()))
+	recoverDirect := func(terminalB64 string, body []byte, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "recover_direct", Request: "A", TerminalB64: terminalB64, BodyB64: b64(body), Expect: expect}
+	}
+	recovered := lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted",
+		TrustAssessment: "not_evaluated", StatusAssessment: "not_evaluated", ContextAssessment: "not_evaluated"}
+	claimAndExpire := []lifecycleStepJSON{
+		{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		{Op: "set_time", Time: Now + lifecycleLeaseSeconds},
+	}
+	thenRecover := []lifecycleStepJSON{
+		{Op: "recover", Request: "A", Expect: recovered},
+		{Op: "publish", Request: "A", Mode: "ok", Expect: lifecycleExpectJSON{ReceiptSeq: 1}},
+		{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}},
+	}
+	refused := func(name, desc, terminalB64 string, body []byte, class string) {
+		steps := append(slices.Clone(claimAndExpire), recoverDirect(terminalB64, body, lifecycleExpectJSON{ErrorClass: class}))
+		sc("recover_rejects_"+name, desc+"; the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay", append(steps, thenRecover...)...)
+	}
+
+	refused("malformed_body", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted result with a receipt body that is not a canonical receipt body ({\"decision\":\"allow\",\"verifier_id\":\"forged\"}): it is malformed (SPEC-v2 §7.5, §7.7)",
+		interruptedTerminal, []byte(`{"decision":"allow","verifier_id":"forged"}`), "malformed")
+	other := interrupted()
+	other.BundleHash = bundleHash(bundles["B"])
+	refused("body_for_another_claim", "after the evaluator lease expired, the claim store's recovery operation receives a canonical interrupted receipt body whose bundle_hash names request B's proof bundle: it does not bind the sealed claim and is configuration_invalid (SPEC-v2 §7.5)",
+		interruptedTerminal, must(ratify.VerificationReceiptV2Body(other)), "configuration_invalid")
+	withDigest := bytes.Replace(genuineBody, []byte(`"context_policy_digest":null`), []byte(`"context_policy_digest":"`+policyDigest(verifyPolicy, true, verifyPolicyFields)+`"`), 1)
+	if bytes.Equal(withDigest, genuineBody) {
+		panic("context_policy_digest member not found in the interrupted receipt body")
+	}
+	refused("context_policy_digest_not_evaluated", "after the evaluator lease expired, the claim store's recovery operation receives an interrupted receipt body with context_assessment not_evaluated and the sealed context_policy_digest: that body is not a receipt body (SPEC-v2 §5.8), so recovery refuses it as malformed (SPEC-v2 §7.5)",
+		interruptedTerminal, withDigest, "malformed")
+	statusUnavailable := interrupted()
+	statusUnavailable.DecisionReason, statusUnavailable.TrustAssessment, statusUnavailable.StatusAssessment = "status_unavailable", "trusted", "unavailable"
+	statusUnavailable.ContextAssessment = "bound"
+	statusUnavailable.ContextPolicyDigest = strp(policyDigest(verifyPolicy, true, verifyPolicyFields))
+	refused("other_decision", "after the evaluator lease expired, the claim store's recovery operation receives a canonical receipt body bound to the sealed claim and a matching terminal result, both indeterminate/status_unavailable: recovery commits only indeterminate/evaluation_interrupted, so it is configuration_invalid (SPEC-v2 §7.5)",
+		terminal("indeterminate", "status_unavailable", "authorization_unverified"), must(ratify.VerificationReceiptV2Body(statusUnavailable)), "configuration_invalid")
+	refused("terminal_result_other_than_body", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result naming deny/delegation_revoked: the result differs from the body and is configuration_invalid (SPEC-v2 §7.5)",
+		terminal("deny", "delegation_revoked", "revoked"), genuineBody, "configuration_invalid")
+	sc("recover_direct_accepts_canonical_interrupted_body", "after the evaluator lease expired, the claim store's recovery operation commits the canonical interrupted result and receipt body for the sealed claim; an identical repeat is a no-op, the recovery helper builds the same bytes and returns the committed result, and the receipt publishes at sequence 1",
+		append(slices.Clone(claimAndExpire),
+			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
+			thenRecover[0], thenRecover[1], thenRecover[2])...)
 }

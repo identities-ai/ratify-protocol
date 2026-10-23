@@ -520,7 +520,12 @@ func cloneClaim(claim ratify.V2ChallengeClaim) ratify.V2ChallengeClaim {
 }
 
 // RecoverInterruptedV2Claim commits the canonical interrupted result after
-// the lease expired. It refuses while the lease is live.
+// the lease expired. It refuses while the lease is live. The result and
+// receipt body are validated exactly as FinalizeV2Claim validates them
+// (ratify.ValidateV2FinalizationPayload: malformed or configuration_invalid),
+// and the decision and reason must be indeterminate/evaluation_interrupted
+// (configuration_invalid otherwise); a refused recovery commits nothing
+// (SPEC-v2 §7.5).
 func (s *Store) RecoverInterruptedV2Claim(_ context.Context, claimID string, terminalResult, receiptBody []byte) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -541,9 +546,12 @@ func (s *Store) RecoverInterruptedV2Claim(_ context.Context, claimID string, ter
 	if now < record.leaseExpiresAt {
 		return false, &ratify.V2Error{Class: ratify.V2ErrClaimLeaseLive, Err: fmt.Errorf("v2reference: evaluator lease is still live")}
 	}
+	if err := ratify.ValidateV2FinalizationPayload(record.claim, terminalResult, receiptBody); err != nil {
+		return false, err
+	}
 	var fields map[string]string
 	if json.Unmarshal(terminalResult, &fields) != nil || fields["decision"] != "indeterminate" || fields["decision_reason"] != "evaluation_interrupted" {
-		return false, fmt.Errorf("v2reference: recovery may commit only indeterminate/evaluation_interrupted")
+		return false, &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: recovery may commit only indeterminate/evaluation_interrupted")}
 	}
 	if err := s.changeLocked(func() { s.commitTerminalLocked(record, terminalResult, receiptBody, 0, now) }); err != nil {
 		return false, err

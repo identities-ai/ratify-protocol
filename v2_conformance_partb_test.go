@@ -501,6 +501,18 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					if err != nil || got != want.FinalizeResult {
 						t.Fatalf("step %d finalize: %s (%v), want %s", i, got, err, want.FinalizeResult)
 					}
+				case "recover_direct":
+					recovered, err := claimStore().RecoverInterruptedV2Claim(ctx, claimIDs[step.Request], unb64(t, step.TerminalB64), unb64(t, step.BodyB64))
+					if want.ErrorClass != "" {
+						if recovered || string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
+							t.Fatalf("step %d recover_direct: recovered=%t err=%v (class %s), want class %s", i, recovered, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
+						}
+						continue
+					}
+					got := map[bool]string{true: "committed", false: "identical"}[recovered]
+					if err != nil || got != want.FinalizeResult {
+						t.Fatalf("step %d recover_direct: %s (%v), want %s", i, got, err, want.FinalizeResult)
+					}
 				case "recover":
 					recoverStep(i, step.Request, want)
 				case "publish":

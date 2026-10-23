@@ -77,6 +77,14 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   external signer), with identical output checked in CI. They use the
   test-only in-memory reference stores.
 
+### Fixed
+
+- **v1 `max_rate` fails closed when the rate count is unavailable** (Rust and
+  C). A negative count from the invocation counter is now
+  `constraint_unverifiable` instead of passing. Through the C ABI, a
+  `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
+  now fails closed the same way without calling the callback.
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

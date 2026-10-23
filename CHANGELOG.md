@@ -109,6 +109,9 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   full size in memory). The audience adapter copies only memberships for a
   deferred constraint, at most two per constraint, which leaves the result
   unchanged.
+- **C: `ratify_v2_verify_object` rejects unknown context members**
+  (`bad_argument`), as the README states for every structured input. It
+  used to ignore them, so a misspelled member was silently dropped.
 
 ### Not carried into v2
 

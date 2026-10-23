@@ -1727,3 +1727,39 @@ fn v2c_status_batch_decode_is_envelope_only() {
         );
     }
 }
+
+/// `ratify_v2_verify_object` reads its context like every other structured
+/// input: an unknown top-level member is `bad_argument`, never ignored, so a
+/// misspelled member cannot silently drop a check the caller intended.
+#[test]
+fn v2c_verify_object_context_rejects_unknown_members() {
+    let fx = Fixture::load();
+    let mut kinds = BTreeSet::new();
+    for o in arr(&load("objects.json")["objects"]) {
+        let Some(ctx) = verify_context(&o["verify"], &fx) else {
+            continue;
+        };
+        let kind = s(&o["kind"]);
+        if !kinds.insert(kind.clone()) {
+            continue;
+        }
+        let wire = b64(&o["wire_b64"]);
+        let call = |c: &std::ffi::CStr| {
+            check(unsafe {
+                ratify_v2_verify_object(
+                    kind_code(&kind),
+                    ptr_of(&wire),
+                    wire.len(),
+                    c.as_ptr(),
+                    ptr::null_mut(),
+                )
+            })
+        };
+        call(&ctx).unwrap_or_else(|e| panic!("{kind}: {e:?}"));
+        let mut v: Value = serde_json::from_slice(ctx.as_bytes()).unwrap();
+        v["unknown_member"] = json!(123);
+        let extra = cs(&v.to_string());
+        assert_eq!(class_of(&call(&extra)), "bad_argument", "{kind}");
+    }
+    assert_eq!(kinds.len(), 5, "context kinds: {kinds:?}");
+}

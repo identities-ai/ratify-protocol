@@ -2571,6 +2571,9 @@ int32_t ratify_v2_key_id_check(const char *key_id, char **err_out);
 // - witness_entry: `{"witness_key": <HybridPublicKey>, "head": <head>}`
 // - verification_receipt: `{"verifier_key": <HybridPublicKey>, "head": <head>}`
 //
+// Each context has exactly the members listed for its kind; an unknown
+// member is `RatifyV2ErrBadArgument`.
+//
 // `<head>` is `{"log_id", "sequence", "head_hash_b64",
 // "accepted_digests_b64": {"<seq>": "<b64>"}, "frozen"}` plus `"verifier_id"`
 // for a verification receipt. `<HybridPublicKey>` is

@@ -115,11 +115,9 @@ def request_json(v):
     e = v.get("expected_challenge")
     if e is not None:
         exp = {k: e.get(k) for k in ["value_b64", "issued_at", "expires_at", "verifier_namespace", "replay_epoch", "verifier_id"]}
-        if e.get("expected_agent_id") is not None:
-            exp["expected_agent_id"] = e["expected_agent_id"]
-            if e.get("expected_agent_public_key") is not None:
-                exp["expected_agent_public_key"] = e["expected_agent_public_key"]
-        for k in ["expected_receiver_id", "expected_session_context_b64"]:
+        # The agent ID and key pass through independently, so a vector can
+        # configure either one alone (SPEC-v2 §6.2 step 7).
+        for k in ["expected_agent_id", "expected_agent_public_key", "expected_receiver_id", "expected_session_context_b64"]:
             if e.get(k) is not None:
                 exp[k] = e[k]
         r["expected_challenge"] = exp

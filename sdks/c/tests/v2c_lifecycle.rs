@@ -337,6 +337,100 @@ impl WrongEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Claim store wrapper that records the owner token handed to the creator
+
+/// Go `v2OwnerCapturingClaimStore`: forwards every callback to the store and
+/// records the evaluator owner token its `claim` returns, so a `finalize`
+/// step can call the store's finalize directly.
+struct OwnerCapture {
+    inner: RatifyV2ClaimStoreCallbacks,
+    owner: Mutex<Vec<u8>>,
+}
+
+fn capture(user: *mut c_void) -> &'static OwnerCapture {
+    // SAFETY: `user` is the OwnerCapture of `callbacks`, alive for the call.
+    unsafe { &*(user as *const OwnerCapture) }
+}
+
+unsafe extern "C" fn cap_now(user: *mut c_void, out: *mut i64) -> i32 {
+    let w = capture(user);
+    (w.inner.now.unwrap())(w.inner.user, out)
+}
+
+unsafe extern "C" fn cap_claim(
+    user: *mut c_void,
+    view: *const RatifyV2ClaimView,
+    out: *mut RatifyV2ClaimResult,
+) -> i32 {
+    let w = capture(user);
+    let code = (w.inner.claim.unwrap())(w.inner.user, view, out);
+    *w.owner.lock().unwrap() = if code == 0 {
+        slice_in((*out).owner_token)
+    } else {
+        Vec::new()
+    };
+    code
+}
+
+unsafe extern "C" fn cap_finalize(
+    user: *mut c_void,
+    id: *const c_char,
+    owner: RatifyV2Slice,
+    terminal: RatifyV2Slice,
+    body: RatifyV2Slice,
+    allow_valid_until: i64,
+    committed: *mut i32,
+) -> i32 {
+    let w = capture(user);
+    (w.inner.finalize.unwrap())(w.inner.user, id, owner, terminal, body, allow_valid_until, committed)
+}
+
+unsafe extern "C" fn cap_progress(
+    user: *mut c_void,
+    id: *const c_char,
+    owner: RatifyV2Slice,
+    progress: RatifyV2Slice,
+) -> i32 {
+    let w = capture(user);
+    (w.inner.record_progress.unwrap())(w.inner.user, id, owner, progress)
+}
+
+unsafe extern "C" fn cap_load(
+    user: *mut c_void,
+    id: *const c_char,
+    out: *mut RatifyV2InterruptedClaim,
+) -> i32 {
+    let w = capture(user);
+    (w.inner.load_interrupted.unwrap())(w.inner.user, id, out)
+}
+
+unsafe extern "C" fn cap_recover(
+    user: *mut c_void,
+    id: *const c_char,
+    terminal: RatifyV2Slice,
+    body: RatifyV2Slice,
+    committed: *mut i32,
+) -> i32 {
+    let w = capture(user);
+    (w.inner.recover.unwrap())(w.inner.user, id, terminal, body, committed)
+}
+
+impl OwnerCapture {
+    fn callbacks(&self) -> RatifyV2ClaimStoreCallbacks {
+        RatifyV2ClaimStoreCallbacks {
+            user: self as *const OwnerCapture as *mut c_void,
+            rate_at_finalization: self.inner.rate_at_finalization,
+            now: Some(cap_now),
+            claim: Some(cap_claim),
+            finalize: Some(cap_finalize),
+            record_progress: Some(cap_progress),
+            load_interrupted: Some(cap_load),
+            recover: Some(cap_recover),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Status provider wrapper running one step mid-lookup
 
 struct ModeStatus {
@@ -471,6 +565,7 @@ fn v2c_lifecycle_scenarios() {
         let mut log_id = s(&f["log_id"]);
         let mut committed: BTreeMap<String, Committed> = BTreeMap::new();
         let mut receipts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+        let mut owners: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         // (claim IDs by request, request by claim ID), written by
         // concurrent verify steps.
         let ids: Mutex<ClaimIds> = Mutex::new((BTreeMap::new(), BTreeMap::new()));
@@ -566,7 +661,11 @@ fn v2c_lifecycle_scenarios() {
                     req["now"] = now.into();
                     let req = json_bytes(&req);
                     let bundle = bundle_of(&request);
-                    let claim_cb = claim_callbacks(&store, rate_at_finalization);
+                    let capturing = OwnerCapture {
+                        inner: claim_callbacks(&store, rate_at_finalization),
+                        owner: Mutex::new(Vec::new()),
+                    };
+                    let claim_cb = capturing.callbacks();
                     let mut disposition = 0i32;
                     let result = string(|o| unsafe {
                         ratify_v2_claim_proof_bundle(
@@ -598,6 +697,81 @@ fn v2c_lifecycle_scenarios() {
                     let mut ids = ids.lock().unwrap();
                     ids.0.insert(request.clone(), claim_id.clone());
                     ids.1.insert(claim_id, request.clone());
+                    owners.insert(request.clone(), capturing.owner.into_inner().unwrap());
+                }
+                "acknowledge" => {
+                    // The reference checkpoint through its C callbacks; the
+                    // entry hash is `ratify_v2_object_body_digest` of the
+                    // published receipt.
+                    let wire = &receipts[&request];
+                    let receipt = parse(&canonicalize(8, wire).expect("receipt decodes"));
+                    let mut entry = buf(|o| unsafe {
+                        ratify_v2_object_body_digest(8, ptr_of(wire), wire.len(), o)
+                    })
+                    .expect("entry hash");
+                    match mode.as_str() {
+                        "exact" => {}
+                        "fork" => entry[0] ^= 1,
+                        other => panic!("unknown acknowledge mode {other}"),
+                    }
+                    let previous = b64(&receipt["previous_receipt_hash"]);
+                    let log = cs(&s(&receipt["log_id"]));
+                    let sequence = i(&receipt["sequence"]);
+                    let cp = store.checkpoint();
+                    let mut ack = RatifyV2Acknowledgement {
+                        log_id: ptr::null(),
+                        sequence: 0,
+                        entry_hash: null_slice(),
+                        timestamp: 0,
+                    };
+                    let code = unsafe {
+                        (cp.acknowledge.unwrap())(
+                            cp.user,
+                            log.as_ptr(),
+                            sequence,
+                            slice(&previous),
+                            slice(&entry),
+                            &mut ack,
+                        )
+                    };
+                    if b(&want["failed"]) {
+                        assert_ne!(code, 0, "{at} acknowledge {mode}: acknowledged at {}, want refusal", ack.timestamp);
+                        continue;
+                    }
+                    assert_eq!(code, 0, "{at} acknowledge: {}", class(code));
+                    assert_eq!(
+                        (ack.timestamp, ack.sequence, unsafe { slice_in(ack.entry_hash) }),
+                        (i(&want["ack_timestamp"]), sequence, entry),
+                        "{at} acknowledge"
+                    );
+                }
+                "finalize" => {
+                    // The store's finalize through its C callbacks, with the
+                    // owner token claim_only recorded.
+                    let cb = claim_callbacks(&store, rate_at_finalization);
+                    let claim_id = cs(&ids.lock().unwrap().0.get(&request).cloned().unwrap_or_default());
+                    let owner = owners.get(&request).cloned().unwrap_or_default();
+                    let (terminal, body) = (b64(&step["terminal_b64"]), b64(&step["body_b64"]));
+                    let mut committed_flag = 0i32;
+                    let code = unsafe {
+                        (cb.finalize.unwrap())(
+                            cb.user,
+                            claim_id.as_ptr(),
+                            slice(&owner),
+                            slice(&terminal),
+                            slice(&body),
+                            i(&step["allow_valid_until"]),
+                            &mut committed_flag,
+                        )
+                    };
+                    let want_class = s(&want["error_class"]);
+                    if !want_class.is_empty() {
+                        assert_eq!(class(code), want_class, "{at} finalize");
+                        continue;
+                    }
+                    assert_eq!(code, 0, "{at} finalize: {}", class(code));
+                    let got = if committed_flag == 1 { "committed" } else { "identical" };
+                    assert_eq!(got, s(&want["finalize_result"]), "{at} finalize");
                 }
                 "recover" => {
                     // A request never claimed recovers its own claim ID
@@ -670,11 +844,13 @@ fn v2c_lifecycle_scenarios() {
                         .get(&request)
                         .unwrap_or_else(|| panic!("{at}: {request} was never committed"));
                     let receipt_of = s(&step["receipt_of"]);
-                    let receipt = receipts.get(if receipt_of.is_empty() {
-                        &request
-                    } else {
-                        &receipt_of
-                    });
+                    let receipt = receipts
+                        .get(if receipt_of.is_empty() {
+                            &request
+                        } else {
+                            &receipt_of
+                        })
+                        .filter(|_| mode != "no_receipt");
                     let wrong = WrongEntry {
                         inner: store.checkpoint(),
                         hash: Mutex::new(Vec::new()),
@@ -724,10 +900,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (32, 162), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (48, 271), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("32 Part B scripts (162 steps)"),
+        readme.contains("48 Part B scripts (271 steps)"),
         "README row: {readme}"
     );
     println!(

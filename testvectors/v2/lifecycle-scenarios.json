@@ -3,6 +3,7 @@
   "description": "Part B lifecycle scenarios (SPEC-v2 §6.9, §7). Replay each scenario against a fresh in-memory reference store whose authoritative clock starts at start_time, whose evaluator lease is lease_seconds, and whose receipt log log_id is signed by verifier_key. Requests use the verifier-ordering input schema; the request's now is always the store clock at the step.",
   "semantics": {
     "abandon": "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
+    "acknowledge": "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
     "claim_only": "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
     "corrupt_state": "alter one byte of the request's sealed terminal result in the primary store",
     "device_power_loss": "arm a power loss for the next submission only: before_commit records nothing; after_commit records the acknowledgement durably but loses the response",
@@ -4707,6 +4708,203 @@
           "expect": {
             "stage": "preflight",
             "error_class": "challenge_not_fresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "checkpoint_fork_freezes_log",
+      "description": "an identical acknowledgement retry returns the original timestamp; a different entry hash at an acknowledged sequence is refused as a fork and freezes the log, so the next correctly linked entry is never acknowledged (neither by the publisher's submission nor directly) and its release stays pending",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000007,
+          "expect": {}
+        },
+        {
+          "op": "acknowledge",
+          "request": "A",
+          "mode": "exact",
+          "expect": {
+            "ack_timestamp": 1800000000
+          }
+        },
+        {
+          "op": "acknowledge",
+          "request": "A",
+          "mode": "fork",
+          "expect": {
+            "failed": true
+          }
+        },
+        {
+          "op": "acknowledge",
+          "request": "A",
+          "mode": "exact",
+          "expect": {
+            "ack_timestamp": 1800000000
+          }
+        },
+        {
+          "op": "verify",
+          "request": "B",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "B",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 2
+          }
+        },
+        {
+          "op": "release",
+          "request": "B",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "acknowledgement_unavailable"
+          }
+        },
+        {
+          "op": "acknowledge",
+          "request": "B",
+          "mode": "exact",
+          "expect": {
+            "failed": true
+          }
+        },
+        {
+          "op": "release",
+          "request": "B",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "acknowledgement_unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "checkpoint_refusal_without_fork_does_not_freeze",
+      "description": "an out-of-order acknowledgement is refused without freezing the log: the entries are then acknowledged in order and release",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "set_ack_withheld",
+          "withheld": true,
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "B",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "B",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 2
+          }
+        },
+        {
+          "op": "acknowledge",
+          "request": "B",
+          "mode": "exact",
+          "expect": {
+            "failed": true
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000004,
+          "expect": {}
+        },
+        {
+          "op": "acknowledge",
+          "request": "A",
+          "mode": "exact",
+          "expect": {
+            "ack_timestamp": 1800000004
+          }
+        },
+        {
+          "op": "acknowledge",
+          "request": "B",
+          "mode": "exact",
+          "expect": {
+            "ack_timestamp": 1800000004
+          }
+        },
+        {
+          "op": "release",
+          "request": "B",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000004,
+            "receipt_sequence": 2
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000004,
+            "receipt_sequence": 1
           }
         }
       ]

@@ -216,6 +216,7 @@ type v2LifecycleExpect struct {
 	Recovered         *v2LifecycleExpect `json:"recovered"`
 	Outcomes          []string           `json:"outcomes"`
 	FinalizeResult    string             `json:"finalize_result"`
+	AckTimestamp      int64              `json:"ack_timestamp"`
 }
 
 type v2LifecycleRequest struct {
@@ -462,6 +463,32 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					}
 					claimIDs[step.Request], requestOf[claim.ClaimID] = claim.ClaimID, step.Request
 					owners[step.Request] = capturing.owner
+				case "acknowledge":
+					receipt, err := ratify.DecodeVerificationReceiptV2(receipts[step.Request])
+					if err != nil {
+						t.Fatal(err)
+					}
+					entry, err := ratify.VerificationReceiptV2Digest(receipt)
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch step.Mode {
+					case "exact":
+					case "fork":
+						entry[0] ^= 1
+					default:
+						t.Fatalf("unknown acknowledge mode %s", step.Mode)
+					}
+					ack, err := store.AcknowledgeV2Receipt(ctx, receipt.LogID, receipt.Sequence, receipt.PreviousReceiptHash, entry)
+					if want.Failed {
+						if err == nil {
+							t.Fatalf("step %d acknowledge %s: acknowledged at %d, want refusal", i, step.Mode, ack.Timestamp)
+						}
+						continue
+					}
+					if err != nil || ack.Timestamp != want.AckTimestamp || ack.Sequence != receipt.Sequence || !bytes.Equal(ack.EntryHash, entry) {
+						t.Fatalf("step %d acknowledge: %+v (%v), want timestamp %d", i, ack, err, want.AckTimestamp)
+					}
 				case "finalize":
 					finalized, err := claimStore().FinalizeV2Claim(ctx, claimIDs[step.Request], owners[step.Request], unb64(t, step.TerminalB64), unb64(t, step.BodyB64), step.AllowValidUntil)
 					if want.ErrorClass != "" {

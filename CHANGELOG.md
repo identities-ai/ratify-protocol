@@ -90,6 +90,12 @@ match before the beta.
   body that does not decode). Go adds `ValidateV2FinalizationPayload` for
   claim-store implementers. Vectors: `lifecycle-scenarios.json`
   `finalize_rejects_body_with_other_*`, with the new `finalize` step.
+- **The reference checkpoint freezes a log after a fork** (SPEC-v2 §7.8): a
+  different entry hash at an acknowledged sequence is refused and no later
+  sequence of that log is acknowledged. Vectors: `lifecycle-scenarios.json`
+  `checkpoint_fork_freezes_log` and
+  `checkpoint_refusal_without_fork_does_not_freeze`, with the new
+  `acknowledge` step.
 
 ### Not carried into v2
 

@@ -99,6 +99,7 @@ type Store struct {
 	outbox             []outboxEntry
 	ackWithheld        bool
 	logFrozen          bool
+	checkpointFrozen   bool
 	signerFailure      bool
 	rateAtFinalization bool
 	rateCommits        map[rateKey][]int64
@@ -138,7 +139,7 @@ func (s *Store) Clone() *Store {
 func (s *Store) cloneLocked() *Store {
 	out := &Store{
 		now: s.now, highWater: s.highWater, leaseSeconds: s.leaseSeconds, claims: map[string]*claimRecord{}, streams: maps.Clone(s.streams),
-		verifierKey: s.verifierKey, verifierID: s.verifierID, logID: s.logID, ackWithheld: s.ackWithheld, logFrozen: s.logFrozen,
+		verifierKey: s.verifierKey, verifierID: s.verifierID, logID: s.logID, ackWithheld: s.ackWithheld, logFrozen: s.logFrozen, checkpointFrozen: s.checkpointFrozen,
 		signerFailure: s.signerFailure, rateAtFinalization: s.rateAtFinalization, rateCommits: map[rateKey][]int64{}, ownerTokenRand: s.ownerTokenRand,
 	}
 	for id, record := range s.claims {
@@ -234,6 +235,9 @@ func (s *Store) SetAcknowledgementWithheld(withheld bool) {
 }
 
 func (s *Store) acknowledgePendingLocked() {
+	if s.checkpointFrozen {
+		return
+	}
 	for i := range s.outbox {
 		if s.outbox[i].wire == nil {
 			return
@@ -641,11 +645,26 @@ func (s *Store) PublishV2Receipt(_ context.Context, claimID string, receiptBody 
 
 // AcknowledgeV2Receipt implements ratify.V2ReceiptCheckpoint: it accepts only
 // the next appended entry of the log, linked by previousEntryHash, and
-// returns the original acknowledgement for an identical retry.
+// returns the original acknowledgement for an identical retry. A different
+// entry hash at an acknowledged sequence is a fork (SPEC-v2 §7.8): it is
+// refused and freezes the log, after which the checkpoint acknowledges
+// nothing further for it, neither here nor from the publisher's submissions.
+// Identical retries of acknowledgements made before the fork still return
+// the original acknowledgement.
 func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence int64, previousEntryHash, entryHash []byte) (ratify.V2CheckpointAcknowledgement, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if logID != s.logID || sequence < 1 || sequence > int64(len(s.outbox)) || s.outbox[sequence-1].wire == nil || !bytes.Equal(s.outbox[sequence-1].digest, entryHash) {
+	if logID != s.logID || sequence < 1 || sequence > int64(len(s.outbox)) {
+		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
+	}
+	if acked := s.outbox[sequence-1].ack; acked != nil && !bytes.Equal(acked.EntryHash, entryHash) {
+		s.checkpointFrozen = true
+		return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: a different entry hash at acknowledged sequence %d is a fork; the log is frozen", ErrNotAcknowledged, sequence)
+	}
+	if s.checkpointFrozen && s.outbox[sequence-1].ack == nil {
+		return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: the log is frozen after a fork", ErrNotAcknowledged)
+	}
+	if s.outbox[sequence-1].wire == nil || !bytes.Equal(s.outbox[sequence-1].digest, entryHash) {
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
 	previous := make([]byte, 48)

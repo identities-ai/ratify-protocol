@@ -44,6 +44,9 @@ type lifecycleExpectJSON struct {
 	// "committed" (the store committed the result) or "identical" (the same
 	// result was already committed).
 	FinalizeResult string `json:"finalize_result,omitempty"`
+	// AckTimestamp is the timestamp of the acknowledgement an acknowledge
+	// step returns.
+	AckTimestamp int64 `json:"ack_timestamp,omitempty"`
 }
 
 type lifecycleStepJSON struct {
@@ -133,6 +136,7 @@ func (g *gen) lifecycleFile() any {
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
 			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
+			"acknowledge":            "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
 			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
@@ -354,6 +358,28 @@ func (g *gen) lifecycleFile() any {
 		publish("A", "ok", 1),
 		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}),
 		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "challenge_not_fresh"}))
+	acknowledge := func(request, mode string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "acknowledge", Request: request, Mode: mode, Expect: expect}
+	}
+	sc("checkpoint_fork_freezes_log", "an identical acknowledgement retry returns the original timestamp; a different entry hash at an acknowledged sequence is refused as a fork and freezes the log, so the next correctly linked entry is never acknowledged (neither by the publisher's submission nor directly) and its release stays pending",
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		setTime(Now+7),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now}),
+		acknowledge("A", "fork", lifecycleExpectJSON{Failed: true}),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now}),
+		step("verify", "B", committedAllow), publish("B", "ok", 2),
+		release("B", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "acknowledgement_unavailable"}),
+		acknowledge("B", "exact", lifecycleExpectJSON{Failed: true}),
+		release("B", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "acknowledgement_unavailable"}))
+	sc("checkpoint_refusal_without_fork_does_not_freeze", "an out-of-order acknowledgement is refused without freezing the log: the entries are then acknowledged in order and release",
+		withhold(true),
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		step("verify", "B", committedAllow), publish("B", "ok", 2),
+		acknowledge("B", "exact", lifecycleExpectJSON{Failed: true}),
+		setTime(Now+4),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
+		acknowledge("B", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
+		release("B", released(Now+4, 2)), release("A", released(Now+4, 1)))
 	g.finalizeBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f

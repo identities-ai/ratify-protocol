@@ -29,7 +29,7 @@
 //! See the C README. In short: inputs are borrowed for the duration of the
 //! call; library outputs are owned by the caller and released only through the
 //! matching `ratify_v2_*_free` function; callbacks run on the calling thread
-//! (constraint evaluators excepted, see `RatifyV2EvaluatorRegistration`) and
+//! (constraint evaluators included, see `RatifyV2EvaluatorRegistration`) and
 //! are never retained after the call returns; a panic is caught at every
 //! export and poisons any handle in use.
 
@@ -95,6 +95,17 @@ pub const RATIFY_V2_ERROR_CLASS_COUNT: u32 = 49;
 /// reports its SPEC-v2 §2.7 class like every other failure. Values are
 /// stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
 /// `default` case.
+///
+/// Identifiers containing U+0000: the library passes identifiers (verifier
+/// namespace, claim, agent, issuer, certificate, subject, receiver and
+/// status key IDs, constraint types) to callbacks as NUL-terminated C
+/// strings, which cannot carry U+0000. It never strips the NUL, which would
+/// merge distinct identifiers. A configured `verifier_namespace` containing
+/// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs. Any
+/// other such identifier is not passed: the callback is not called and the
+/// call fails closed exactly as if that provider or store were unavailable
+/// (for example `RatifyV2ClaimStoreUnavailable` for the claim store, or a
+/// trust, status or audience provider failure).
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RatifyV2Code {
@@ -156,7 +167,16 @@ pub enum RatifyV2Code {
     /// An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     /// Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    /// §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
+    /// §6.11). The effect depends on the callback: from the receiver-binding
+    /// hook, verification stops before the claim with
+    /// `RatifyV2EvaluationCancelled` and consumes nothing; from a trust,
+    /// status, journal, audience, rate, progress or finalize callback after
+    /// the claim, it reports `RatifyV2EvaluationCancelled` and commits
+    /// nothing. From the `claim` callback it is a claim-store failure
+    /// (`RatifyV2ClaimStoreUnavailable`); from a constraint evaluator it is
+    /// a provider failure, so the constraint is `constraint_unverifiable` and
+    /// the result is committed; from a release-store or checkpoint callback
+    /// the release status is pending.
     RatifyV2ErrCancelled = -4,
     /// Store sentinel: an unclassified store, provider, or clock failure. The
     /// verifier assigns the class SPEC-v2 names for that step.

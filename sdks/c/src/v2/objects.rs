@@ -18,7 +18,7 @@ use ratify_protocol::v2::{
 use ratify_protocol::HybridPublicKey;
 use serde_json::Value;
 
-use super::marshal::{public_key, receipt_head, rotation_state, witness_head};
+use super::marshal::{public_key, receipt_head, rotation_state, witness_head, Obj};
 use super::{bad_arg, bytes, null_arg, run, AbiResult};
 
 fn field<'a>(v: &'a Value, name: &str) -> AbiResult<&'a Value> {
@@ -49,12 +49,18 @@ unsafe fn json_arg(ptr: *const c_char, name: &str) -> AbiResult<Value> {
 }
 
 fn verify_kind(kind: i32, wire: &[u8], ctx: Option<&Value>) -> AbiResult<()> {
-    let need_ctx = || ctx.ok_or_else(|| null_arg("verify_context_json"));
+    // The context of each kind has exactly these members; unknown ones are
+    // rejected, as for every structured input.
+    let need_ctx = |members: &[&str]| -> AbiResult<&Value> {
+        let c = ctx.ok_or_else(|| null_arg("verify_context_json"))?;
+        Obj::new(c, "context", members)?;
+        Ok(c)
+    };
     match kind {
         1 => verify_delegation_cert_v2_signature(&decode_delegation_cert_v2(wire)?)?,
         2 => verify_proof_bundle_v2_signatures(&decode_proof_bundle_v2(wire)?)?,
         3 => {
-            let c = need_ctx()?;
+            let c = need_ctx(&["bound_issuer_id", "status_key"])?;
             verify_revocation_list_v2_signature(
                 &decode_revocation_list_v2(wire)?,
                 &str_field(c, "bound_issuer_id")?,
@@ -62,7 +68,7 @@ fn verify_kind(kind: i32, wire: &[u8], ctx: Option<&Value>) -> AbiResult<()> {
             )?
         }
         4 => {
-            let c = need_ctx()?;
+            let c = need_ctx(&["rotation_state", "now", "future_skew_seconds"])?;
             verify_key_rotation_statement_v2(
                 &decode_key_rotation_statement_v2(wire)?,
                 &rotation_state(field(c, "rotation_state")?)?,
@@ -71,7 +77,7 @@ fn verify_kind(kind: i32, wire: &[u8], ctx: Option<&Value>) -> AbiResult<()> {
             )?
         }
         5 => {
-            let c = need_ctx()?;
+            let c = need_ctx(&["bound_issuer_id", "status_key"])?;
             verify_revocation_push_v2_signature(
                 &decode_revocation_push_v2(wire)?,
                 &str_field(c, "bound_issuer_id")?,
@@ -79,7 +85,7 @@ fn verify_kind(kind: i32, wire: &[u8], ctx: Option<&Value>) -> AbiResult<()> {
             )?
         }
         6 => {
-            let c = need_ctx()?;
+            let c = need_ctx(&["witness_key", "head"])?;
             verify_witness_entry_v2(
                 &decode_witness_entry_v2(wire)?,
                 &witness_head(field(c, "head")?)?,
@@ -89,7 +95,7 @@ fn verify_kind(kind: i32, wire: &[u8], ctx: Option<&Value>) -> AbiResult<()> {
         }
         7 => verify_transaction_receipt_v2_signatures(&decode_transaction_receipt_v2(wire)?)?,
         8 => {
-            let c = need_ctx()?;
+            let c = need_ctx(&["verifier_key", "head"])?;
             verify_verification_receipt_v2(
                 &decode_verification_receipt_v2(wire)?,
                 &key_field(c, "verifier_key")?,
@@ -203,6 +209,9 @@ pub unsafe extern "C" fn ratify_v2_key_id_check(
 ///   "now": <unix>, "future_skew_seconds": <int>}`
 /// - witness_entry: `{"witness_key": <HybridPublicKey>, "head": <head>}`
 /// - verification_receipt: `{"verifier_key": <HybridPublicKey>, "head": <head>}`
+///
+/// Each context has exactly the members listed for its kind; an unknown
+/// member is `RatifyV2ErrBadArgument`.
 ///
 /// `<head>` is `{"log_id", "sequence", "head_hash_b64",
 /// "accepted_digests_b64": {"<seq>": "<b64>"}, "frozen"}` plus `"verifier_id"`

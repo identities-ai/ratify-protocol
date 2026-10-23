@@ -6,16 +6,20 @@
 //! returns and is never retained afterwards, constraint evaluators included
 //! (see `RatifyV2EvaluatorRegistration`). Buffers the
 //! library passes in are valid only until the callback returns. Pointers a
-//! callback writes into an output struct must stay valid until the callback
-//! returns; the library copies them immediately after it returns.
+//! callback writes into an output struct are read after it returns, so they
+//! must stay valid after the callback returns until the library has copied
+//! them (before the ABI call returns); they must never point into the
+//! callback's own stack frame.
 //!
 //! A callback returns 0 on success; a positive SPEC-v2 §2.7 code for a
 //! classified failure (for example `RatifyV2ClockRegressed`); a store
 //! sentinel (`RatifyV2Store*`); or `RatifyV2ErrCancelled`, which the library
-//! treats as a provider cancellation under SPEC-v2 §6.11. Any other value is
+//! treats as a provider cancellation under SPEC-v2 §6.11 (its effect per
+//! callback is documented on `RatifyV2ErrCancelled`). Any other value is
 //! an unclassified failure. A provider or store failure is always handled
 //! fail-closed.
 
+use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::os::raw::{c_char, c_void};
@@ -161,6 +165,9 @@ pub type RatifyV2RecoverFn = Option<
 >;
 
 /// The claim store (SPEC-v2 §7.2, §7.3, §7.5) with its authoritative clock.
+/// Verification, claim and recovery do not call `now`: the store reads
+/// T_claim and T_final itself inside `claim` and `finalize` (§7.2). Release
+/// reads time through `RatifyV2ReleaseStoreCallbacks.now`.
 /// Set `rate_at_finalization` to 1 when `finalize` admits the sealed rate
 /// batch atomically (§7.6); it may then return
 /// `RatifyV2StoreRateLimitExceeded` after a definitive rollback.
@@ -385,7 +392,9 @@ pub struct RatifyV2StatusObject {
     pub wire: RatifyV2Slice,
 }
 
-/// A provider's bounded batch for one issuer (empty is valid).
+/// A provider's bounded batch for one issuer (empty is valid). A batch over
+/// 64 objects or 8 MiB (SPEC-v2 §2.6, measured as the batch wire form) is
+/// refused before any object is copied, and the issuer is unavailable.
 #[repr(C)]
 pub struct RatifyV2StatusBatch {
     pub objects: *const RatifyV2StatusObject,
@@ -432,7 +441,9 @@ pub struct RatifyV2AudienceMembership {
     pub evidence_digest: *const c_char,
 }
 
-/// The memberships an audience provider returns.
+/// The memberships an audience provider returns. Only memberships for a
+/// deferred constraint are read, at most two per constraint (two already make
+/// that constraint unverifiable); the rest are ignored without being copied.
 #[repr(C)]
 pub struct RatifyV2AudienceResult {
     pub memberships: *const RatifyV2AudienceMembership,
@@ -651,8 +662,13 @@ pub(crate) unsafe fn slice_vec(s: RatifyV2Slice) -> Vec<u8> {
     }
 }
 
-pub(crate) fn cs(s: &str) -> CString {
-    CString::new(s.replace('\0', "")).unwrap_or_default()
+/// `s` as a C string for a callback. An identifier containing U+0000 cannot
+/// cross into a C string unchanged, and stripping the NUL would merge
+/// distinct identifiers, so it is refused; each caller reports the refusal
+/// as its own provider or store failure, which fails closed.
+pub(crate) fn cs(s: &str, what: &str) -> Result<CString, String> {
+    CString::new(s)
+        .map_err(|_| format!("{what} contains U+0000 and cannot be passed to a C callback"))
 }
 
 /// The operation's cancellation: a callback returning `RatifyV2ErrCancelled`
@@ -763,15 +779,16 @@ impl ClaimStoreV2 for CClaimStore {
         let f = self.cb.claim.ok_or_else(|| missing("claim"))?;
         let record = claim_json(&claim);
         let (id, ns, agent) = (
-            cs(&claim.claim_id),
-            cs(&claim.namespace),
-            cs(&claim.agent_id),
+            cs(&claim.claim_id, "claim_id").map_err(V2StoreError::Unavailable)?,
+            cs(&claim.namespace, "verifier_namespace").map_err(V2StoreError::Unavailable)?,
+            cs(&claim.agent_id, "agent_id").map_err(V2StoreError::Unavailable)?,
         );
         let rate_strings: Vec<(CString, CString)> = claim
             .rate_batch
             .iter()
-            .map(|r| (cs(&r.issuer_id), cs(&r.cert_id)))
-            .collect();
+            .map(|r| Ok((cs(&r.issuer_id, "issuer_id")?, cs(&r.cert_id, "cert_id")?)))
+            .collect::<Result<_, String>>()
+            .map_err(V2StoreError::Unavailable)?;
         let rate: Vec<RatifyV2RateReservation> = claim
             .rate_batch
             .iter()
@@ -843,7 +860,7 @@ impl ClaimStoreV2 for CClaimStore {
         allow_valid_until: i64,
     ) -> Result<bool, V2StoreError> {
         let f = self.cb.finalize.ok_or_else(|| missing("finalize"))?;
-        let id = cs(claim_id);
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let mut committed = 0i32;
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -871,7 +888,7 @@ impl ClaimStoreV2 for CClaimStore {
             .cb
             .record_progress
             .ok_or_else(|| missing("record_progress"))?;
-        let id = cs(claim_id);
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let record = progress_json(&progress);
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -897,7 +914,7 @@ impl ClaimStoreV2 for CClaimStore {
             .cb
             .load_interrupted
             .ok_or_else(|| missing("load_interrupted"))?;
-        let id = cs(claim_id);
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let mut out = RatifyV2InterruptedClaim {
             record: RatifyV2Slice::empty(),
             claimed_at: 0,
@@ -935,7 +952,7 @@ impl ClaimStoreV2 for CClaimStore {
         receipt_body: &[u8],
     ) -> Result<bool, V2StoreError> {
         let f = self.cb.recover.ok_or_else(|| missing("recover"))?;
-        let id = cs(claim_id);
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let mut committed = 0i32;
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -1000,11 +1017,15 @@ impl V2RateReservationStore for CRate {
         batch: &[V2RateReservation],
     ) -> Result<(), V2StoreError> {
         let f = self.cb.reserve.ok_or_else(|| missing("reserve"))?;
-        let (id, hash) = (cs(claim_id), cs(bundle_hash));
+        let (id, hash) = (
+            cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?,
+            cs(bundle_hash, "bundle_hash").map_err(V2StoreError::Unavailable)?,
+        );
         let strings: Vec<(CString, CString)> = batch
             .iter()
-            .map(|r| (cs(&r.issuer_id), cs(&r.cert_id)))
-            .collect();
+            .map(|r| Ok((cs(&r.issuer_id, "issuer_id")?, cs(&r.cert_id, "cert_id")?)))
+            .collect::<Result<_, String>>()
+            .map_err(V2StoreError::Unavailable)?;
         let items: Vec<RatifyV2RateReservation> = batch
             .iter()
             .zip(&strings)
@@ -1077,7 +1098,7 @@ impl V2ReleaseClaimStore for CReleaseStore {
             .cb
             .load_terminal
             .ok_or_else(|| missing("load_terminal"))?;
-        let id = cs(claim_id);
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let mut out = RatifyV2TerminalClaim {
             terminal: 0,
             receipt_outbox_digest: std::ptr::null(),
@@ -1122,7 +1143,7 @@ impl V2ReleaseClaimStore for CReleaseStore {
             .cb
             .record_release
             .ok_or_else(|| missing("record_release"))?;
-        let id = cs(&record.claim_id);
+        let id = cs(&record.claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
         let view = RatifyV2ReleaseRecord {
             claim_id: id.as_ptr(),
             entry_hash: RatifyV2Slice::of(&record.entry_hash),
@@ -1174,7 +1195,7 @@ impl V2ReceiptCheckpoint for CCheckpoint {
         entry_hash: &[u8],
     ) -> Result<V2CheckpointAcknowledgement, V2StoreError> {
         let f = self.cb.acknowledge.ok_or_else(|| missing("acknowledge"))?;
-        let id = cs(log_id);
+        let id = cs(log_id, "log_id").map_err(V2StoreError::Unavailable)?;
         let mut out = empty_ack();
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -1201,7 +1222,7 @@ impl V2ReceiptCheckpoint for CCheckpoint {
         sequence: i64,
     ) -> Result<V2CheckpointAcknowledgement, V2StoreError> {
         let f = self.cb.get.ok_or_else(|| missing("get acknowledgement"))?;
-        let id = cs(log_id);
+        let id = cs(log_id, "log_id").map_err(V2StoreError::Unavailable)?;
         let mut out = empty_ack();
         // SAFETY: caller-supplied callback.
         let code = unsafe { f(self.cb.user, id.as_ptr(), sequence, &mut out) };
@@ -1281,7 +1302,16 @@ impl SecurityJournalStoreV2 for CJournal {
             ))
         })?;
         let snapshot = export_security_journal_snapshot_v2(next)?;
-        let (expected_digest, next_digest) = (cs(&expected.digest), cs(&next.digest));
+        let journal_digest = |d: &str| {
+            cs(d, "journal digest").map_err(|m| {
+                SecurityJournalStoreErrorV2::Failed(V2Error::new(
+                    V2ErrorClass::StatusObjectRejected,
+                    m,
+                ))
+            })
+        };
+        let (expected_digest, next_digest) =
+            (journal_digest(&expected.digest)?, journal_digest(&next.digest)?);
         let view = RatifyV2JournalSnapshot {
             snapshot: RatifyV2Slice::of(&snapshot),
             generation: next.generation,
@@ -1346,7 +1376,11 @@ pub(crate) fn trust_provider(cb: RatifyV2TrustCallbacks, cancel: Cancel) -> V2Tr
         let mut keys = Vec::new();
         let mut wires = Vec::new();
         for c in chain {
-            strings.push((cs(&c.cert_id), cs(&c.issuer_id), cs(&c.subject_id)));
+            strings.push((
+                cs(&c.cert_id, "cert_id").map_err(V2ProviderError::new)?,
+                cs(&c.issuer_id, "issuer_id").map_err(V2ProviderError::new)?,
+                cs(&c.subject_id, "subject_id").map_err(V2ProviderError::new)?,
+            ));
             keys.push((
                 key_struct(&c.issuer_pub_key),
                 key_struct(&c.subject_pub_key),
@@ -1420,12 +1454,16 @@ pub(crate) fn status_provider(
         let f = cb
             .fetch
             .ok_or_else(|| V2StatusProviderError::new("status fetch callback is not set"))?;
-        let (issuer, key_id) = (cs(&r.issuer_id), cs(&r.status_key_id));
+        let (issuer, key_id) = (
+            cs(&r.issuer_id, "issuer_id").map_err(V2StatusProviderError::new)?,
+            cs(&r.status_key_id, "status_key_id").map_err(V2StatusProviderError::new)?,
+        );
         let ref_strings: Vec<(CString, CString)> = r
             .refs
             .iter()
-            .map(|x| (cs(&x.issuer_id), cs(&x.cert_id)))
-            .collect();
+            .map(|x| Ok((cs(&x.issuer_id, "issuer_id")?, cs(&x.cert_id, "cert_id")?)))
+            .collect::<Result<_, String>>()
+            .map_err(V2StatusProviderError::new)?;
         let refs: Vec<RatifyV2CertRef> = ref_strings
             .iter()
             .map(|(i, c)| RatifyV2CertRef {
@@ -1464,8 +1502,34 @@ pub(crate) fn status_provider(
                     "status callback returned a NULL batch",
                 ));
             }
+            // SPEC-v2 §2.6 batch bounds, checked before any object is
+            // copied: the verifier would reject the batch afterwards anyway,
+            // and an oversized answer must not cost its size in memory.
+            if out.count > MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 {
+                return Err(V2StatusProviderError::new(format!(
+                    "status callback returned {} objects; a batch holds at most {MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2}",
+                    out.count
+                )));
+            }
             // SAFETY: the callback reported `count` readable entries.
-            for o in unsafe { std::slice::from_raw_parts(out.objects, out.count) } {
+            let entries = unsafe { std::slice::from_raw_parts(out.objects, out.count) };
+            // The batch wire length with each object as received (Go
+            // `v2StatusEvidenceBatchEncodedLength`).
+            let encoded = entries.iter().enumerate().fold(2usize, |total, (i, o)| {
+                total
+                    .saturating_add(usize::from(i > 0))
+                    .saturating_add(r#"{"object":"#.len())
+                    .saturating_add(if o.wire.ptr.is_null() { 0 } else { o.wire.len })
+                    .saturating_add(r#","object_type_code":"#.len())
+                    .saturating_add(o.object_type.to_string().len())
+                    .saturating_add(1)
+            });
+            if encoded > MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 {
+                return Err(V2StatusProviderError::new(format!(
+                    "status callback returned a batch over {MAX_STATUS_EVIDENCE_BATCH_BYTES_V2} bytes"
+                )));
+            }
+            for o in entries {
                 objects.push(V2StatusEvidenceObject {
                     object_type: o.object_type,
                     // SAFETY: as above.
@@ -1490,8 +1554,15 @@ pub(crate) fn audience_provider(
                 .ok_or_else(|| V2ProviderError::new("audience lookup callback is not set"))?;
             let strings: Vec<(CString, CString, CString)> = deferred
                 .iter()
-                .map(|d| (cs(&d.issuer_id), cs(&d.cert_id), cs(&d.kind)))
-                .collect();
+                .map(|d| {
+                    Ok((
+                        cs(&d.issuer_id, "issuer_id")?,
+                        cs(&d.cert_id, "cert_id")?,
+                        cs(&d.kind, "constraint type")?,
+                    ))
+                })
+                .collect::<Result<_, String>>()
+                .map_err(V2ProviderError::new)?;
             let views: Vec<RatifyV2DeferredConstraint> = deferred
                 .iter()
                 .zip(&strings)
@@ -1504,7 +1575,7 @@ pub(crate) fn audience_provider(
                     canonical_json: RatifyV2Slice::of(&d.canonical_json),
                 })
                 .collect();
-            let receiver = cs(receiver_id);
+            let receiver = cs(receiver_id, "receiver_id").map_err(V2ProviderError::new)?;
             let mut out = RatifyV2AudienceResult {
                 memberships: std::ptr::null(),
                 count: 0,
@@ -1533,8 +1604,21 @@ pub(crate) fn audience_provider(
                         "audience callback returned NULL memberships",
                     ));
                 }
+                // Copy only answers the verifier can use: a membership for a
+                // link that is not deferred is ignored, and two for the same
+                // link already make it unverifiable, so further ones change
+                // nothing. This bounds the copy by the deferred constraints,
+                // not by the provider's count.
+                let mut per_link: BTreeMap<(usize, usize), u8> = deferred
+                    .iter()
+                    .map(|d| ((d.delegation_index, d.constraint_index), 0))
+                    .collect();
                 // SAFETY: the callback reported `count` readable entries.
                 for m in unsafe { std::slice::from_raw_parts(out.memberships, out.count) } {
+                    match per_link.get_mut(&(m.delegation_index, m.constraint_index)) {
+                        Some(n) if *n < 2 => *n += 1,
+                        _ => continue,
+                    }
                     let mut domains = Vec::new();
                     if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
                         // SAFETY: as above.
@@ -1608,7 +1692,7 @@ impl V2ChallengeIssuanceStore for CIssuance {
     ) -> Result<(), V2StoreError> {
         let f = self.cb.persist.ok_or_else(|| missing("issuance persist"))?;
         let digest = challenge_claim_digest_v2(&record.value).map_err(V2StoreError::Classified)?;
-        let ns = cs(&record.verifier_namespace);
+        let ns = cs(&record.verifier_namespace, "verifier_namespace").map_err(V2StoreError::Unavailable)?;
         let json = to_bytes(&expected_challenge_json(&record));
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -1634,7 +1718,7 @@ impl V2ChallengeIssuanceStore for CIssuance {
         claim_digest: &[u8],
     ) -> Result<ExpectedChallengeV2, V2StoreError> {
         let f = self.cb.load.ok_or_else(|| missing("issuance load"))?;
-        let ns = cs(namespace);
+        let ns = cs(namespace, "verifier_namespace").map_err(V2StoreError::Unavailable)?;
         let mut out = RatifyV2Slice::empty();
         // SAFETY: caller-supplied callback.
         let code = unsafe {
@@ -1691,7 +1775,11 @@ fn custom_evaluator(reg: RatifyV2EvaluatorRegistration) -> ConstraintEvaluatorFn
             let f = reg.evaluate.ok_or_else(|| {
                 ConstraintEvaluatorError("custom evaluator has no evaluate callback".into())
             })?;
-            let (kind, issuer, cert) = (cs(&input.kind), cs(&input.issuer_id), cs(&input.cert_id));
+            let (kind, issuer, cert) = (
+                cs(&input.kind, "constraint type").map_err(ConstraintEvaluatorError)?,
+                cs(&input.issuer_id, "issuer_id").map_err(ConstraintEvaluatorError)?,
+                cs(&input.cert_id, "cert_id").map_err(ConstraintEvaluatorError)?,
+            );
             let context = to_bytes(&constraint_context_json(&input.context));
             let params = input.params_json.clone().unwrap_or_default();
             let view = RatifyV2EvaluationInput {
@@ -1845,4 +1933,433 @@ pub(crate) unsafe fn build_callbacks(
         out.receiver_binding = Some(receiver_binding_hook(*h, cancel.clone()));
     }
     VerifyDeps { callbacks: out }
+}
+
+#[cfg(test)]
+mod nul_identifier_tests {
+    //! An identifier containing U+0000 cannot reach a C callback unchanged.
+    //! Each adapter must refuse it (fail closed, as that provider or store
+    //! being unavailable) and must never call the callback with the NUL
+    //! stripped, which would merge distinct identifiers.
+
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    // The tests share CALLS, so they run one at a time.
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn called() -> usize {
+        CALLS.swap(0, Ordering::SeqCst)
+    }
+
+    fn cancel() -> Cancel {
+        Cancel(V2Context::background().with_cancel().1)
+    }
+
+    unsafe extern "C" fn claim(
+        _: *mut c_void,
+        _: *const RatifyV2ClaimView,
+        out: *mut RatifyV2ClaimResult,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        (*out).disposition = 1;
+        0
+    }
+
+    unsafe extern "C" fn reserve(
+        _: *mut c_void,
+        _: *const c_char,
+        _: RatifyV2Slice,
+        _: *const c_char,
+        _: *const RatifyV2RateReservation,
+        _: usize,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn persist(
+        _: *mut c_void,
+        _: *const c_char,
+        _: i64,
+        _: RatifyV2Slice,
+        _: RatifyV2Slice,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn load(
+        _: *mut c_void,
+        _: *const c_char,
+        _: i64,
+        _: RatifyV2Slice,
+        _: *mut RatifyV2Slice,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        RatifyV2Code::RatifyV2StoreIssuanceNotFound as i32
+    }
+
+    unsafe extern "C" fn trust(
+        _: *mut c_void,
+        _: *const RatifyV2CertView,
+        _: usize,
+        _: *mut i32,
+        _: *mut RatifyV2PublicKey,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn fetch(
+        _: *mut c_void,
+        _: *const RatifyV2StatusRequest,
+        _: *mut RatifyV2StatusBatch,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn lookup(
+        _: *mut c_void,
+        _: *const RatifyV2DeferredConstraint,
+        _: usize,
+        _: *const c_char,
+        _: *mut RatifyV2AudienceResult,
+    ) -> i32 {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    fn claim_store() -> CClaimStore {
+        CClaimStore {
+            cb: RatifyV2ClaimStoreCallbacks {
+                user: std::ptr::null_mut(),
+                rate_at_finalization: 0,
+                now: None,
+                claim: Some(claim),
+                finalize: None,
+                record_progress: None,
+                load_interrupted: None,
+                recover: None,
+            },
+            cancel: cancel(),
+        }
+    }
+
+    fn rate(cert_id: &str) -> V2RateReservation {
+        V2RateReservation {
+            issuer_id: "issuer".into(),
+            cert_id: cert_id.into(),
+            window_s: 60,
+            limit: 1,
+        }
+    }
+
+    fn unavailable<T: std::fmt::Debug>(r: Result<T, V2StoreError>) {
+        match r {
+            Err(V2StoreError::Unavailable(m)) => assert!(m.contains("U+0000"), "{m}"),
+            other => panic!("expected an unavailable store, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claim_store_refuses_nul_identifiers() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = V2Context::background();
+        let store = claim_store();
+        let ok = V2ChallengeClaim {
+            namespace: "lab".into(),
+            rate_batch: vec![rate("xy")],
+            ..Default::default()
+        };
+        store.claim_v2(&ctx, ok.clone()).expect("control claim");
+        assert_eq!(called(), 1);
+        for claim in [
+            V2ChallengeClaim {
+                namespace: "lab\0x".into(),
+                ..ok.clone()
+            },
+            V2ChallengeClaim {
+                rate_batch: vec![rate("x\0y")],
+                ..ok.clone()
+            },
+        ] {
+            unavailable(store.claim_v2(&ctx, claim));
+            assert_eq!(called(), 0);
+        }
+    }
+
+    #[test]
+    fn rate_store_refuses_nul_cert_id() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = V2Context::background();
+        let store = CRate {
+            cb: RatifyV2RateCallbacks {
+                user: std::ptr::null_mut(),
+                rate_at_finalization: 0,
+                reserve: Some(reserve),
+            },
+            claim_store: None,
+            fallback: claim_store(),
+            cancel: cancel(),
+        };
+        store
+            .reserve_v2_rate_batch(&ctx, "id", b"t", "h", &[rate("xy")])
+            .expect("control reservation");
+        assert_eq!(called(), 1);
+        unavailable(store.reserve_v2_rate_batch(&ctx, "id", b"t", "h", &[rate("x\0y")]));
+        assert_eq!(called(), 0);
+    }
+
+    #[test]
+    fn issuance_store_refuses_nul_namespace() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = V2Context::background();
+        let store = CIssuance {
+            cb: RatifyV2IssuanceStoreCallbacks {
+                user: std::ptr::null_mut(),
+                persist: Some(persist),
+                load: Some(load),
+            },
+            cancel: cancel(),
+        };
+        let record = |ns: &str| ExpectedChallengeV2 {
+            value: vec![7; 32],
+            verifier_namespace: ns.into(),
+            ..Default::default()
+        };
+        store
+            .persist_v2_challenge(&ctx, record("labx"))
+            .expect("control persist");
+        assert_eq!(called(), 1);
+        unavailable(store.persist_v2_challenge(&ctx, record("lab\0x")));
+        unavailable(store.load_v2_challenge(&ctx, "lab\0x", 1, &[0; 32]));
+        assert_eq!(called(), 0);
+    }
+
+    #[test]
+    fn providers_refuse_nul_identifiers() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = V2Context::background();
+
+        let objects: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../testvectors/v2/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let wire = objects["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["kind"] == "delegation_certificate")
+            .and_then(|o| o["wire_b64"].as_str())
+            .map(|w| ratify_protocol::base64_std_decode(w).unwrap())
+            .unwrap();
+        let mut cert = decode_delegation_cert_v2(&wire).unwrap();
+        let trust_cb = trust_provider(
+            RatifyV2TrustCallbacks {
+                user: std::ptr::null_mut(),
+                resolve: Some(trust),
+            },
+            cancel(),
+        );
+        let _ = trust_cb(&ctx, std::slice::from_ref(&cert));
+        assert_eq!(called(), 1, "control trust call");
+        cert.cert_id = "x\0y".into();
+        assert!(trust_cb(&ctx, std::slice::from_ref(&cert)).is_err());
+        assert_eq!(called(), 0);
+
+        let status_cb = status_provider(
+            RatifyV2StatusEvidenceCallbacks {
+                user: std::ptr::null_mut(),
+                fetch: Some(fetch),
+            },
+            cancel(),
+        );
+        let request = |cert_id: &str| V2StatusEvidenceRequest {
+            issuer_id: "issuer".into(),
+            status_key_epoch: 1,
+            status_key_id: "key".into(),
+            refs: vec![CertificateRefV2 {
+                issuer_id: "issuer".into(),
+                cert_id: cert_id.into(),
+            }],
+        };
+        let _ = status_cb(&ctx, &request("xy"));
+        assert_eq!(called(), 1, "control status call");
+        assert!(status_cb(&ctx, &request("x\0y")).is_err());
+        assert_eq!(called(), 0);
+
+        let audience_cb = audience_provider(
+            RatifyV2AudienceCallbacks {
+                user: std::ptr::null_mut(),
+                lookup: Some(lookup),
+            },
+            cancel(),
+        );
+        let deferred = |cert_id: &str| {
+            vec![V2DeferredConstraint {
+                issuer_id: "issuer".into(),
+                cert_id: cert_id.into(),
+                kind: "ratify.receiver_audience".into(),
+                ..Default::default()
+            }]
+        };
+        let _ = audience_cb(&ctx, &deferred("xy"), "receiver");
+        assert_eq!(called(), 1, "control audience call");
+        assert!(audience_cb(&ctx, &deferred("x\0y"), "receiver").is_err());
+        assert!(audience_cb(&ctx, &deferred("xy"), "recei\0ver").is_err());
+        assert_eq!(called(), 0);
+    }
+}
+
+#[cfg(test)]
+mod provider_bound_tests {
+    //! Provider answers are bounded before the library copies them.
+
+    use super::*;
+
+    /// A status answer of `count` entries, every one aliasing `WIRE`.
+    struct StatusAnswer {
+        entries: Vec<RatifyV2StatusObject>,
+    }
+
+    static WIRE: [u8; 1 << 20] = [b' '; 1 << 20];
+
+    fn answer(count: usize, len: usize) -> StatusAnswer {
+        StatusAnswer {
+            entries: (0..count)
+                .map(|_| RatifyV2StatusObject {
+                    object_type: 3,
+                    wire: RatifyV2Slice {
+                        ptr: WIRE.as_ptr(),
+                        len,
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    unsafe extern "C" fn fetch(
+        user: *mut c_void,
+        _: *const RatifyV2StatusRequest,
+        out: *mut RatifyV2StatusBatch,
+    ) -> i32 {
+        let a = &*(user as *const StatusAnswer);
+        (*out).objects = a.entries.as_ptr();
+        (*out).count = a.entries.len();
+        0
+    }
+
+    fn status(a: &StatusAnswer) -> Result<V2StatusEvidenceBatch, V2StatusProviderError> {
+        let p = status_provider(
+            RatifyV2StatusEvidenceCallbacks {
+                user: a as *const StatusAnswer as *mut c_void,
+                fetch: Some(fetch),
+            },
+            Cancel(V2Context::background().with_cancel().1),
+        );
+        p(
+            &V2Context::background(),
+            &V2StatusEvidenceRequest {
+                issuer_id: "issuer".into(),
+                status_key_epoch: 1,
+                status_key_id: "key".into(),
+                refs: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn status_batch_object_count_is_bounded_before_copying() {
+        let at = answer(MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2, 16);
+        assert_eq!(status(&at).expect("64 objects").objects.len(), 64);
+        let over = answer(MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 + 1, 16);
+        assert!(status(&over).is_err(), "65 objects must be refused");
+        let huge = answer(100_000, 16);
+        assert!(status(&huge).is_err());
+    }
+
+    #[test]
+    fn status_batch_bytes_are_bounded_before_copying() {
+        // Nine aliases of a 1 MiB object exceed the 8 MiB batch limit.
+        let over = answer(9, 1 << 20);
+        assert!(status(&over).is_err(), "a batch over 8 MiB must be refused");
+        // The largest per-object length that keeps eight objects in bounds.
+        let overhead = 2 + 7 + 8 * (r#"{"object":"#.len() + r#","object_type_code":3}"#.len());
+        let len = (MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 - overhead) / 8;
+        assert!(len <= WIRE.len());
+        let at = answer(8, len);
+        assert_eq!(status(&at).expect("in bounds").objects.len(), 8);
+    }
+
+    struct AudienceAnswer {
+        receiver: CString,
+        digest: CString,
+        entries: Vec<RatifyV2AudienceMembership>,
+    }
+
+    unsafe extern "C" fn lookup(
+        user: *mut c_void,
+        _: *const RatifyV2DeferredConstraint,
+        _: usize,
+        _: *const c_char,
+        out: *mut RatifyV2AudienceResult,
+    ) -> i32 {
+        let a = &*(user as *const AudienceAnswer);
+        (*out).memberships = a.entries.as_ptr();
+        (*out).count = a.entries.len();
+        0
+    }
+
+    #[test]
+    fn audience_copies_only_answers_the_verifier_can_use() {
+        let mut a = AudienceAnswer {
+            receiver: CString::new("receiver").unwrap(),
+            digest: CString::new("sha256:00").unwrap(),
+            entries: vec![],
+        };
+        let membership = |a: &AudienceAnswer, d: usize, c: usize| RatifyV2AudienceMembership {
+            delegation_index: d,
+            constraint_index: c,
+            receiver_id: a.receiver.as_ptr(),
+            trust_domain_ids: std::ptr::null(),
+            trust_domain_ids_len: 0,
+            issued_at: 1,
+            expires_at: 2,
+            evidence_digest: a.digest.as_ptr(),
+        };
+        // 100000 answers for links that are not deferred, then three for
+        // the one deferred link.
+        let mut entries: Vec<_> = (0..100_000).map(|i| membership(&a, 9, i)).collect();
+        entries.extend((0..3).map(|_| membership(&a, 0, 1)));
+        a.entries = entries;
+        let p = audience_provider(
+            RatifyV2AudienceCallbacks {
+                user: &a as *const AudienceAnswer as *mut c_void,
+                lookup: Some(lookup),
+            },
+            Cancel(V2Context::background().with_cancel().1),
+        );
+        let deferred = [V2DeferredConstraint {
+            delegation_index: 0,
+            constraint_index: 1,
+            issuer_id: "issuer".into(),
+            cert_id: "cert".into(),
+            kind: "ratify.receiver_audience".into(),
+            canonical_json: vec![],
+        }];
+        let got = p(&V2Context::background(), &deferred, "receiver").expect("lookup");
+        // Two answers for the link are kept: that is already a duplicate,
+        // which the verifier treats as unverifiable, as it would all three.
+        assert_eq!(got.len(), 2);
+        assert!(got
+            .iter()
+            .all(|m| (m.delegation_index, m.constraint_index) == (0, 1)));
+    }
 }

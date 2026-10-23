@@ -635,6 +635,8 @@ enum FieldValue {
 
 /// Callback answering "how many invocations of this cert in this window?"
 /// — (cert_id, window_s) -> count. Used by rate-limit constraints.
+/// A negative return means the count is unavailable; `max_rate` then fails
+/// closed with `constraint_unverifiable`.
 pub type InvocationCounter<'a> = Box<dyn Fn(&str, i64) -> i64 + 'a>;
 
 /// Application-supplied inputs for evaluating first-class constraints.

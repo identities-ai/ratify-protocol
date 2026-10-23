@@ -82,6 +82,17 @@ typedef enum RatifyStatus {
 // reports its SPEC-v2 §2.7 class like every other failure. Values are
 // stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
 // `default` case.
+//
+// Identifiers containing U+0000: the library passes identifiers (verifier
+// namespace, claim, agent, issuer, certificate, subject, receiver and
+// status key IDs, constraint types) to callbacks as NUL-terminated C
+// strings, which cannot carry U+0000. It never strips the NUL, which would
+// merge distinct identifiers. A configured `verifier_namespace` containing
+// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs. Any
+// other such identifier is not passed: the callback is not called and the
+// call fails closed exactly as if that provider or store were unavailable
+// (for example `RatifyV2ClaimStoreUnavailable` for the claim store, or a
+// trust, status or audience provider failure).
 enum RatifyV2Code
 #ifdef __cplusplus
   : int32_t
@@ -145,7 +156,16 @@ enum RatifyV2Code
     // An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     // Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    // §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
+    // §6.11). The effect depends on the callback: from the receiver-binding
+    // hook, verification stops before the claim with
+    // `RatifyV2EvaluationCancelled` and consumes nothing; from a trust,
+    // status, journal, audience, rate, progress or finalize callback after
+    // the claim, it reports `RatifyV2EvaluationCancelled` and commits
+    // nothing. From the `claim` callback it is a claim-store failure
+    // (`RatifyV2ClaimStoreUnavailable`); from a constraint evaluator it is
+    // a provider failure, so the constraint is `constraint_unverifiable` and
+    // the result is committed; from a release-store or checkpoint callback
+    // the release status is pending.
     RatifyV2ErrCancelled = -4,
     // Store sentinel: an unclassified store, provider, or clock failure. The
     // verifier assigns the class SPEC-v2 names for that step.
@@ -489,6 +509,11 @@ typedef struct RatifyVerifierContext {
     int has_amount;
     // Returns how many times `cert_id` was exercised in the last `window_s`
     // seconds. NULL = skip rate evaluation (constraint fails closed).
+    // Return a negative value when the count is unavailable (for example a
+    // storage error): `max_rate` then fails closed with
+    // `constraint_unverifiable`. A `cert_id` containing U+0000 cannot be
+    // passed as a C string; the callback is not called and `max_rate` fails
+    // closed the same way.
     // The `cert_id` pointer is only valid for the duration of the callback.
     int64_t (*rate_fn)(const char *cert_id, int64_t window_s, void *userdata);
     // Passed back to `rate_fn`.
@@ -727,6 +752,9 @@ typedef int32_t (*RatifyV2RecoverFn)(void *user,
                                      int32_t *committed);
 
 // The claim store (SPEC-v2 §7.2, §7.3, §7.5) with its authoritative clock.
+// Verification, claim and recovery do not call `now`: the store reads
+// T_claim and T_final itself inside `claim` and `finalize` (§7.2). Release
+// reads time through `RatifyV2ReleaseStoreCallbacks.now`.
 // Set `rate_at_finalization` to 1 when `finalize` admits the sealed rate
 // batch atomically (§7.6); it may then return
 // `RatifyV2StoreRateLimitExceeded` after a definitive rollback.
@@ -1041,7 +1069,9 @@ typedef struct RatifyV2StatusObject {
     struct RatifyV2Slice wire;
 } RatifyV2StatusObject;
 
-// A provider's bounded batch for one issuer (empty is valid).
+// A provider's bounded batch for one issuer (empty is valid). A batch over
+// 64 objects or 8 MiB (SPEC-v2 §2.6, measured as the batch wire form) is
+// refused before any object is copied, and the issuer is unavailable.
 typedef struct RatifyV2StatusBatch {
     const struct RatifyV2StatusObject *objects;
     uintptr_t count;
@@ -1079,7 +1109,9 @@ typedef struct RatifyV2AudienceMembership {
     const char *evidence_digest;
 } RatifyV2AudienceMembership;
 
-// The memberships an audience provider returns.
+// The memberships an audience provider returns. Only memberships for a
+// deferred constraint are read, at most two per constraint (two already make
+// that constraint unverifiable); the rest are ignored without being copied.
 typedef struct RatifyV2AudienceResult {
     const struct RatifyV2AudienceMembership *memberships;
     uintptr_t count;
@@ -2238,6 +2270,10 @@ int32_t ratify_v2_evaluator_call_expired(const struct RatifyV2EvaluatorCall *cal
 // canonical re-encoding is written there (it equals `wire` for every
 // conforming object). Signed objects 1..=8 are decoded with all their
 // structural checks; a transaction receipt also verifies its signatures.
+// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
+// §6.5 step 3): its nested objects are not decoded, and `canonical_out`
+// carries each object's received bytes unchanged, with the entry members in
+// canonical order.
 int32_t ratify_v2_object_decode(int32_t kind,
                                 const uint8_t *wire,
                                 uintptr_t wire_len,
@@ -2456,7 +2492,10 @@ int32_t ratify_v2_evaluate_standard_profile(const char *profile,
 // Whether an authoritative time `now` is inside a claim's sealed challenge
 // bounds with exclusive deadlines (`issued_at <= now + skew`, `now <
 // expires_at`, `now < issued_at + max_age`). Returns 1 or 0; 0 on any
-// failure. For claim stores implementing the freshness recheck.
+// failure, including a timestamp outside 0..=253402300799, `max_age_seconds`
+// outside 1..=300 or `clock_skew_seconds` outside 0..=300 (the SPEC-v2 §2.5
+// bounds every sealed claim satisfies). For claim stores implementing the
+// freshness recheck.
 int32_t ratify_v2_challenge_time_current(int64_t issued_at,
                                          int64_t expires_at,
                                          int64_t max_age_seconds,
@@ -2546,6 +2585,9 @@ int32_t ratify_v2_key_id_check(const char *key_id, char **err_out);
 //   "now": <unix>, "future_skew_seconds": <int>}`
 // - witness_entry: `{"witness_key": <HybridPublicKey>, "head": <head>}`
 // - verification_receipt: `{"verifier_key": <HybridPublicKey>, "head": <head>}`
+//
+// Each context has exactly the members listed for its kind; an unknown
+// member is `RatifyV2ErrBadArgument`.
 //
 // `<head>` is `{"log_id", "sequence", "head_hash_b64",
 // "accepted_digests_b64": {"<seq>": "<b64>"}, "frozen"}` plus `"verifier_id"`
@@ -3189,11 +3231,13 @@ int32_t ratify_v2_archival_verify(int32_t kind,
 // `claim_record_out` is non-NULL the claim record (the
 // `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 // exists. A malformed request or evaluator registry fails the call itself
-// (`bad_argument` or its class) without running the verifier. A callback
-// returning `RatifyV2ErrCancelled` after the claim yields
+// (`bad_argument` or its class) without running the verifier. A provider
+// or store callback returning `RatifyV2ErrCancelled` after the claim yields
 // `evaluation_cancelled` and commits nothing; the receiver-binding hook
 // returning it cancels before the claim, so the outcome is a preflight
-// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
+// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11). The
+// `claim` callback and constraint evaluators are the exceptions: see
+// `RatifyV2ErrCancelled`.
 int32_t ratify_v2_verify_proof_bundle(const uint8_t *bundle,
                                       uintptr_t bundle_len,
                                       const uint8_t *request_json,
@@ -3255,7 +3299,8 @@ int32_t ratify_v2_committed_allow_horizon(const struct RatifyV2Committed *c,
 // `log_id` are caller-authenticated configuration. Returns 0 with
 // `*status_out` (a `RatifyV2ReleaseStatus`) and `*reason_out` (empty only
 // when released; free with `ratify_v2_string_free`); `*released_out` is a
-// new released-decision handle exactly when the status is released.
+// new released-decision handle exactly when the status is released, and is
+// set to NULL on entry, so it is NULL after every call that does not release.
 int32_t ratify_v2_release_decision(const struct RatifyV2Committed *committed,
                                    struct RatifyV2Slice signed_receipt,
                                    const struct RatifyV2PublicKey *verifier_key,
@@ -3344,6 +3389,7 @@ int32_t ratify_v2_verify_transaction_receipt(const uint8_t *receipt,
                                              const struct RatifyV2JournalStoreCallbacks *status_journal,
                                              struct RatifyV2Buffer *result_out);
 
+#if defined(RATIFY_CUSTOM_ENTROPY)
 // Register a custom entropy callback for platforms without OS-level RNG.
 //
 // `callback` must:
@@ -3366,7 +3412,11 @@ int32_t ratify_v2_verify_transaction_receipt(const uint8_t *receipt,
 //   }
 //   ratify_set_entropy_source(my_entropy);
 //   ```
+//
+// Exported only by a `custom-entropy` build; the header declares it
+// only when `RATIFY_CUSTOM_ENTROPY` is defined.
 void ratify_set_entropy_source(int32_t (*callback)(uint8_t *buf, uintptr_t len));
+#endif
 
 #ifdef __cplusplus
 }  // extern "C"

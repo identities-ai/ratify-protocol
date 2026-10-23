@@ -49,10 +49,30 @@ pub(crate) fn canonicalize(kind: i32, wire: &[u8]) -> AbiResult<Vec<u8>> {
         7 => encode_transaction_receipt_v2(&decode_transaction_receipt_v2(wire)?)?,
         8 => encode_verification_receipt_v2(&decode_verification_receipt_v2(wire)?)?,
         100 => verification_receipt_v2_body(&decode_verification_receipt_body_v2(wire)?)?,
-        101 => encode_v2_status_evidence_batch(&decode_v2_status_evidence_batch(wire)?)?,
+        101 => status_batch_envelope(&decode_v2_status_evidence_batch(wire)?),
         102 => encode_v2_checkpoint_acknowledgement(&decode_v2_checkpoint_acknowledgement(wire)?)?,
         other => return Err(unsupported_kind(other)),
     })
+}
+
+/// A status evidence batch in its envelope form: entry members in canonical
+/// order, each object's received bytes unchanged. SPEC-v2 §6.5 step 3 decodes
+/// only the envelope; each object is decoded strictly when it is
+/// authenticated, so the batch decode must not decode or re-encode it.
+fn status_batch_envelope(batch: &V2StatusEvidenceBatch) -> Vec<u8> {
+    let mut buf = vec![b'['];
+    for (i, object) in batch.objects.iter().enumerate() {
+        if i > 0 {
+            buf.push(b',');
+        }
+        buf.extend_from_slice(br#"{"object":"#);
+        buf.extend_from_slice(&object.wire);
+        buf.extend_from_slice(br#","object_type_code":"#);
+        buf.extend_from_slice(object.object_type.to_string().as_bytes());
+        buf.push(b'}');
+    }
+    buf.push(b']');
+    buf
 }
 
 /// The exact signable projection of `wire` for signature code `code`.
@@ -90,6 +110,10 @@ pub(crate) fn signable(code: u32, wire: &[u8]) -> AbiResult<Vec<u8>> {
 /// canonical re-encoding is written there (it equals `wire` for every
 /// conforming object). Signed objects 1..=8 are decoded with all their
 /// structural checks; a transaction receipt also verifies its signatures.
+/// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
+/// §6.5 step 3): its nested objects are not decoded, and `canonical_out`
+/// carries each object's received bytes unchanged, with the entry members in
+/// canonical order.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_object_decode(
     kind: i32,
@@ -886,7 +910,10 @@ pub unsafe extern "C" fn ratify_v2_evaluate_standard_profile(
 /// Whether an authoritative time `now` is inside a claim's sealed challenge
 /// bounds with exclusive deadlines (`issued_at <= now + skew`, `now <
 /// expires_at`, `now < issued_at + max_age`). Returns 1 or 0; 0 on any
-/// failure. For claim stores implementing the freshness recheck.
+/// failure, including a timestamp outside 0..=253402300799, `max_age_seconds`
+/// outside 1..=300 or `clock_skew_seconds` outside 0..=300 (the SPEC-v2 §2.5
+/// bounds every sealed claim satisfies). For claim stores implementing the
+/// freshness recheck.
 #[no_mangle]
 pub extern "C" fn ratify_v2_challenge_time_current(
     issued_at: i64,
@@ -898,6 +925,11 @@ pub extern "C" fn ratify_v2_challenge_time_current(
     crate::guard::ffi_guard(
         || 0,
         || {
+            if !(1..=V2_MAX_CHALLENGE_AGE_SECONDS).contains(&max_age_seconds)
+                || !(0..=V2_MAX_FUTURE_SKEW_SECONDS).contains(&clock_skew_seconds)
+            {
+                return 0;
+            }
             let claim = V2ChallengeClaim {
                 issued_at,
                 expires_at,

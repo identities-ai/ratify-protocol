@@ -5,6 +5,9 @@
 # keys, objects, object negatives, hedged signatures, limits, every
 # verifier-ordering vector with C-implemented providers, a release lifecycle
 # with a C-implemented in-memory store, and every cross-sdk/*.json fixture.
+# It also links a program referencing every function the header declares
+# without feature macros, so a declaration the default build does not export
+# fails here.
 #
 # Usage: ./scripts/test-v2-c-abi.sh [work-dir]   (default: a fresh mktemp dir)
 #
@@ -292,3 +295,21 @@ if [ "${SANITIZE:-0}" = "1" ]; then
 fi
 "$CC" "${FLAGS[@]}" "$SDK_DIR"/tests/c/*.c "$LIB" "${EXTRA[@]}" -o "$WORK/v2_abi"
 "$WORK/v2_abi" "$WORK/data"
+
+# Every function the header declares without feature macros must be exported
+# by the default build: reference each one and link.
+echo '#include "ratify.h"' | "$CC" -E -P -I"$SDK_DIR/include" -x c - > "$WORK/ratify.i"
+python3 -I - "$WORK/ratify.i" "$WORK/decls.c" <<'PY'
+import re, sys
+names = sorted(set(re.findall(r"\b(ratify_\w+)\s*\(", open(sys.argv[1]).read())))
+assert names, "no declarations found"
+body = "".join(f"    (fn){n},\n" for n in names)
+open(sys.argv[2], "w").write(
+    '#include <stdio.h>\n#include "ratify.h"\ntypedef void (*fn)(void);\n'
+    f"static const fn declared[] = {{\n{body}}};\n"
+    "int main(void) {\n    size_t n = 0;\n"
+    "    for (size_t i = 0; i < sizeof declared / sizeof declared[0]; i++) n += declared[i] != NULL;\n"
+    '    printf("header declarations linked: %zu\\n", n);\n    return 0;\n}\n')
+PY
+"$CC" "${FLAGS[@]}" "$WORK/decls.c" "$LIB" "${EXTRA[@]}" -o "$WORK/decls"
+"$WORK/decls"

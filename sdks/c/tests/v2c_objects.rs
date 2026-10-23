@@ -1652,3 +1652,114 @@ fn v2c_rotation_refuses_mixed_local_and_external_signers() {
         );
     }
 }
+
+/// SPEC-v2 §6.5 step 3: the status evidence batch decoder checks the
+/// envelope only (a JSON array of exact two-member entries, code 3 or 5,
+/// size and count limits) and keeps each object's received bytes. Nested
+/// objects are decoded strictly later, when they are authenticated, so
+/// `ratify_v2_object_decode` must accept exactly what the Go, TypeScript,
+/// Python and Rust batch decoders accept (every input below) and must not
+/// decode or re-encode the nested objects.
+#[test]
+fn v2c_status_batch_decode_is_envelope_only() {
+    let kind = kind_code("status_evidence_batch");
+    let list = b64(&object_by_kind(&load("objects.json"), "revocation_list")["wire_b64"]);
+    let canonical_batch = [
+        br#"[{"object":"#.as_slice(),
+        &list,
+        br#","object_type_code":3}]"#,
+    ]
+    .concat();
+    let accepted: [(&[u8], &[u8]); 6] = [
+        // A conforming batch is unchanged.
+        (&canonical_batch, &canonical_batch),
+        (b"[]", b"[]"),
+        // Nested objects the batch decoder does not inspect.
+        (
+            br#"[{"object":{},"object_type_code":3}]"#,
+            br#"[{"object":{},"object_type_code":3}]"#,
+        ),
+        (
+            br#"[{"object":{"stream_id":null},"object_type_code":5}]"#,
+            br#"[{"object":{"stream_id":null},"object_type_code":5}]"#,
+        ),
+        // A list labelled as a push, an unknown and a case-variant member.
+        (
+            &[br#"[{"object":"#.as_slice(), &list, br#","object_type_code":5}]"#].concat(),
+            &[br#"[{"object":"#.as_slice(), &list, br#","object_type_code":5}]"#].concat(),
+        ),
+        // Entry members are put in canonical order; the object keeps its
+        // received bytes, including its inner spelling.
+        (
+            br#" [ {"object_type_code":3, "object":{ "Version" : 1 ,"zz":[1, 2]} } ] "#,
+            br#"[{"object":{ "Version" : 1 ,"zz":[1, 2]},"object_type_code":3}]"#,
+        ),
+    ];
+    for (wire, want) in accepted {
+        let shown = String::from_utf8_lossy(wire);
+        let got = canonicalize(kind, wire).unwrap_or_else(|e| panic!("C rejects {shown}: {e:?}"));
+        assert_eq!(
+            String::from_utf8_lossy(&got),
+            String::from_utf8_lossy(want),
+            "canonical_out for {shown}"
+        );
+        // A NULL canonical_out decodes the same way.
+        check(unsafe { ratify_v2_object_decode(kind, ptr_of(wire), wire.len(), ptr::null_mut()) })
+            .unwrap_or_else(|e| panic!("C rejects {shown} without canonical_out: {e:?}"));
+    }
+    // The envelope itself is still strict.
+    for wire in [
+        br#"{}"#.as_slice(),
+        br#"[null]"#,
+        br#"[{"object":{}}]"#,
+        br#"[{"object":{},"object_type_code":4}]"#,
+        br#"[{"object":{},"object_type_code":"3"}]"#,
+        br#"[{"object":{},"object_type_code":3.0}]"#,
+        br#"[{"object":[],"object_type_code":3}]"#,
+        br#"[{"object":{},"object_type_code":3,"extra":1}]"#,
+        br#"[{"object":{},"object_type_code":3,"object_type_code":3}]"#,
+    ] {
+        let shown = String::from_utf8_lossy(wire);
+        assert_eq!(
+            class_of(&canonicalize(kind, wire)),
+            "malformed",
+            "C class for {shown}"
+        );
+    }
+}
+
+/// `ratify_v2_verify_object` reads its context like every other structured
+/// input: an unknown top-level member is `bad_argument`, never ignored, so a
+/// misspelled member cannot silently drop a check the caller intended.
+#[test]
+fn v2c_verify_object_context_rejects_unknown_members() {
+    let fx = Fixture::load();
+    let mut kinds = BTreeSet::new();
+    for o in arr(&load("objects.json")["objects"]) {
+        let Some(ctx) = verify_context(&o["verify"], &fx) else {
+            continue;
+        };
+        let kind = s(&o["kind"]);
+        if !kinds.insert(kind.clone()) {
+            continue;
+        }
+        let wire = b64(&o["wire_b64"]);
+        let call = |c: &std::ffi::CStr| {
+            check(unsafe {
+                ratify_v2_verify_object(
+                    kind_code(&kind),
+                    ptr_of(&wire),
+                    wire.len(),
+                    c.as_ptr(),
+                    ptr::null_mut(),
+                )
+            })
+        };
+        call(&ctx).unwrap_or_else(|e| panic!("{kind}: {e:?}"));
+        let mut v: Value = serde_json::from_slice(ctx.as_bytes()).unwrap();
+        v["unknown_member"] = json!(123);
+        let extra = cs(&v.to_string());
+        assert_eq!(class_of(&call(&extra)), "bad_argument", "{kind}");
+    }
+    assert_eq!(kinds.len(), 5, "context kinds: {kinds:?}");
+}

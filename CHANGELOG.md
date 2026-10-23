@@ -159,6 +159,51 @@ match before the beta.
   canonical, before their hash is compared, so a malformed nested bundle is
   `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
 
+### Fixed
+
+- **v1 `max_rate` fails closed when the rate count is unavailable** (Rust and
+  C). A negative count from the invocation counter is now
+  `constraint_unverifiable` instead of passing. Through the C ABI, a
+  `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
+  now fails closed the same way without calling the callback.
+- **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
+  A successful call that did not release left the output unwritten, so a
+  reused caller variable could still hold an earlier released handle.
+- **C: `ratify_v2_object_decode` decodes a status evidence batch at the
+  envelope only** (SPEC-v2 §6.5 step 3), as the Go, TypeScript, Python and
+  Rust batch decoders do. It used to decode and re-encode every nested
+  object, so it rejected batches the other SDKs accept. `canonical_out` now
+  keeps each object's received bytes.
+- **C: identifiers containing U+0000 are never stripped before a
+  callback.** The callback adapters removed the NUL, so a C store keyed
+  `"lab\0x"` and `"labx"` (or rate counters for `"x\0y"` and `"xy"`) to the
+  same record. A configured `verifier_namespace` containing U+0000 is now
+  `configuration_invalid`; any other such identifier fails the call closed
+  as that provider or store being unavailable, without calling it.
+- **C: `ratify_set_entropy_source` is declared only under
+  `RATIFY_CUSTOM_ENTROPY`.** It is exported only by a `custom-entropy`
+  build, but the header declared it unconditionally, so a default-build
+  program that referenced it failed to link. The C ABI test now links every
+  function the header declares by default against the default build.
+- **C: provider answers are bounded before they are copied.** A status
+  batch over 64 objects or 8 MiB is refused before any object is copied
+  (the verifier rejected it only after copying, so a large answer cost its
+  full size in memory). The audience adapter copies only memberships for a
+  deferred constraint, at most two per constraint, which leaves the result
+  unchanged.
+- **C: `ratify_v2_verify_object` rejects unknown context members**
+  (`bad_argument`), as the README states for every structured input. It
+  used to ignore them, so a misspelled member was silently dropped.
+- **C: `ratify_v2_challenge_time_current` fails closed on out-of-range
+  configuration.** A maximum age outside 1 to 300 seconds or a skew outside
+  0 to 300 seconds returns 0. Inside those bounds the result matches the
+  documented formula; with a negative skew it used to contradict it.
+- **C: documentation corrections.** `RatifyV2ErrCancelled` and the README
+  now give its effect per callback (it is not always
+  `evaluation_cancelled`); callback output pointers must stay valid until
+  the library copies them, never on the callback's stack; the claim store's
+  `now` is not called during verification.
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

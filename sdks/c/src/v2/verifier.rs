@@ -109,11 +109,13 @@ unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
 /// `claim_record_out` is non-NULL the claim record (the
 /// `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 /// exists. A malformed request or evaluator registry fails the call itself
-/// (`bad_argument` or its class) without running the verifier. A callback
-/// returning `RatifyV2ErrCancelled` after the claim yields
+/// (`bad_argument` or its class) without running the verifier. A provider
+/// or store callback returning `RatifyV2ErrCancelled` after the claim yields
 /// `evaluation_cancelled` and commits nothing; the receiver-binding hook
 /// returning it cancels before the claim, so the outcome is a preflight
-/// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
+/// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11). The
+/// `claim` callback and constraint evaluators are the exceptions: see
+/// `RatifyV2ErrCancelled`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
     bundle: *const u8,
@@ -393,7 +395,8 @@ pub enum RatifyV2ReleaseStatus {
 /// `log_id` are caller-authenticated configuration. Returns 0 with
 /// `*status_out` (a `RatifyV2ReleaseStatus`) and `*reason_out` (empty only
 /// when released; free with `ratify_v2_string_free`); `*released_out` is a
-/// new released-decision handle exactly when the status is released.
+/// new released-decision handle exactly when the status is released, and is
+/// set to NULL on entry, so it is NULL after every call that does not release.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_release_decision(
     committed: *const RatifyV2Committed,
@@ -415,6 +418,12 @@ pub unsafe extern "C" fn ratify_v2_release_decision(
             crate::guard::clear_ptr(released_out);
         },
         || {
+            // Clear the decision output first, so a caller variable that still
+            // holds an earlier handle (or garbage) never survives a call that
+            // does not release.
+            if !released_out.is_null() {
+                *released_out = std::ptr::null_mut();
+            }
             let c = handle(committed, "committed")?;
             let key = verifier_key
                 .as_ref()

@@ -233,7 +233,13 @@ fn release(
     let key = keys().key(&s(&file()["verifier_key"]));
     let log = cs(log_id);
     let release_cb = store.release();
-    let (mut status, mut reason, mut released) = (0i32, ptr::null_mut(), ptr::null_mut());
+    // Seed the output with a stale non-NULL value, as a caller reusing a
+    // variable would: the library must overwrite it on every call.
+    let (mut status, mut reason, mut released) = (
+        0i32,
+        ptr::null_mut(),
+        ptr::NonNull::<RatifyV2Released>::dangling().as_ptr(),
+    );
     let code = unsafe {
         ratify_v2_release_decision(
             c.0,
@@ -248,6 +254,12 @@ fn release(
         )
     };
     check(code).unwrap_or_else(|e| panic!("{at} release: {e:?}"));
+    if status != RatifyV2ReleaseStatus::RatifyV2ReleaseReleased as i32 {
+        assert!(
+            released.is_null(),
+            "{at}: released_out must be NULL unless released"
+        );
+    }
     let reason = take_str(reason);
     let d = (!released.is_null()).then_some(Released(released));
     assert_eq!(

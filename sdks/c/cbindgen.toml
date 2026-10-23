@@ -35,3 +35,4 @@ parse_deps = false
 
 [defines]
 "feature = test-reference" = "RATIFY_V2_TEST_REFERENCE"
+"feature = custom-entropy" = "RATIFY_CUSTOM_ENTROPY"

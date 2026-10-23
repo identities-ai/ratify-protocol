@@ -131,3 +131,16 @@ func TestCheckV2StreamSequenceRule(t *testing.T) {
 		}
 	}
 }
+
+// The reference store admits max_rate inside its terminal compare-and-set
+// (SPEC-v2 §7.1, §7.6). Its provisional reservation call exists only to
+// satisfy the rate-store interface and must never report capacity: if a
+// verifier ever called it, the result has to fail closed.
+func TestRateAtFinalizationStoreNeverReservesProvisionally(t *testing.T) {
+	store := newStore(t).WithRateAtFinalization()
+	var _ ratify.V2RateAtFinalizationStore = store
+	err := store.ReserveV2RateBatch(context.Background(), "claim", make([]byte, 32), "sha384:x", []ratify.V2RateReservation{{IssuerID: "i", CertID: "c", WindowS: 60, Limit: 1}})
+	if err == nil {
+		t.Fatal("the reference provisional reservation reported capacity")
+	}
+}

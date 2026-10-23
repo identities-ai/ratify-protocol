@@ -99,6 +99,7 @@ type Store struct {
 	outbox             []outboxEntry
 	ackWithheld        bool
 	logFrozen          bool
+	checkpointFrozen   bool
 	signerFailure      bool
 	rateAtFinalization bool
 	rateCommits        map[rateKey][]int64
@@ -138,7 +139,7 @@ func (s *Store) Clone() *Store {
 func (s *Store) cloneLocked() *Store {
 	out := &Store{
 		now: s.now, highWater: s.highWater, leaseSeconds: s.leaseSeconds, claims: map[string]*claimRecord{}, streams: maps.Clone(s.streams),
-		verifierKey: s.verifierKey, verifierID: s.verifierID, logID: s.logID, ackWithheld: s.ackWithheld, logFrozen: s.logFrozen,
+		verifierKey: s.verifierKey, verifierID: s.verifierID, logID: s.logID, ackWithheld: s.ackWithheld, logFrozen: s.logFrozen, checkpointFrozen: s.checkpointFrozen,
 		signerFailure: s.signerFailure, rateAtFinalization: s.rateAtFinalization, rateCommits: map[rateKey][]int64{}, ownerTokenRand: s.ownerTokenRand,
 	}
 	for id, record := range s.claims {
@@ -233,7 +234,16 @@ func (s *Store) SetAcknowledgementWithheld(withheld bool) {
 	}
 }
 
+// acknowledgePendingLocked submits every appended, unacknowledged entry to
+// the reference checkpoint in log order. Acknowledgements are timestamped by
+// one authoritative reading (SPEC-v2 §7.2), which advances the high-water
+// mark; while the clock is regressed nothing is acknowledged.
 func (s *Store) acknowledgePendingLocked() {
+	if s.checkpointFrozen {
+		return
+	}
+	var now int64
+	read := false
 	for i := range s.outbox {
 		if s.outbox[i].wire == nil {
 			return
@@ -241,7 +251,14 @@ func (s *Store) acknowledgePendingLocked() {
 		if s.outbox[i].ack != nil {
 			continue
 		}
-		s.outbox[i].ack = &ratify.V2CheckpointAcknowledgement{LogID: s.logID, Sequence: int64(i + 1), EntryHash: bytes.Clone(s.outbox[i].digest), Timestamp: s.now}
+		if !read {
+			var err error
+			if now, err = s.readClockLocked(); err != nil {
+				return
+			}
+			read = true
+		}
+		s.outbox[i].ack = &ratify.V2CheckpointAcknowledgement{LogID: s.logID, Sequence: int64(i + 1), EntryHash: bytes.Clone(s.outbox[i].digest), Timestamp: now}
 	}
 }
 
@@ -391,7 +408,9 @@ func (s *Store) commitTerminalLocked(record *claimRecord, terminal, body []byte,
 
 // FinalizeV2Claim commits the evaluator's terminal result while its lease is
 // live, reading T_final inside the same critical section and recording it.
-// A regressed clock (below the high-water mark or below T_claim) fails with
+// The receipt body must bind the sealed claim (ratify.ValidateV2FinalizationPayload:
+// malformed or configuration_invalid otherwise, committing nothing). A
+// regressed clock (below the high-water mark or below T_claim) fails with
 // clock_regressed; an allow is rejected at or beyond its allow horizon or the
 // challenge expiry (SPEC-v2 §7.2, §7.5). With rate admission at finalization
 // enabled, an allow is admitted against the sealed rate batch here and fails
@@ -405,6 +424,9 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 		if record != nil && record.state == stateTerminal && bytes.Equal(record.terminal, terminalResult) && bytes.Equal(record.receiptBody, receiptBody) {
 			return false, nil
 		}
+		return false, err
+	}
+	if err := ratify.ValidateV2FinalizationPayload(record.claim, terminalResult, receiptBody); err != nil {
 		return false, err
 	}
 	if allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.ExpiresAt) {
@@ -549,18 +571,24 @@ func (s *Store) LoadV2TerminalClaim(_ context.Context, claimID string) (ratify.V
 	return out, nil
 }
 
-// RecordV2Release implements ratify.V2ReleaseClaimStore. An identical repeat
-// is a no-op; a different existing record is ErrV2ReleaseStateMismatch. A
-// new record is a durable security-state change, anchored like any other.
+// RecordV2Release implements ratify.V2ReleaseClaimStore. It records a
+// release or a withheld result (SPEC-v2 §6.9): the first record for a claim
+// wins, an identical repeat is a no-op, and any different record is
+// ErrV2ReleaseStateMismatch. A new record is a durable security-state change,
+// anchored like any other.
 func (s *Store) RecordV2Release(_ context.Context, release ratify.V2ReleaseRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !ratify.ValidV2ReleaseRecordOutcome(release.Outcome, release.Reason) {
+		return &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: invalid release record outcome %q reason %q", release.Outcome, release.Reason)}
+	}
 	record, ok := s.claims[release.ClaimID]
 	if !ok || record.state != stateTerminal {
 		return ratify.ErrV2ReleaseStateMismatch
 	}
 	if record.release != nil {
-		if bytes.Equal(record.release.EntryHash, release.EntryHash) && record.release.AckTimestamp == release.AckTimestamp {
+		if bytes.Equal(record.release.EntryHash, release.EntryHash) && record.release.AckTimestamp == release.AckTimestamp &&
+			record.release.Outcome == release.Outcome && record.release.Reason == release.Reason {
 			return nil
 		}
 		return ratify.ErrV2ReleaseStateMismatch
@@ -577,7 +605,7 @@ func (s *Store) PlantReleaseTestOnly(claimID string, ackTimestamp int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if record, ok := s.claims[claimID]; ok && record.outboxIndex >= 0 && s.outbox[record.outboxIndex].wire != nil {
-		record.release = &ratify.V2ReleaseRecord{ClaimID: claimID, EntryHash: bytes.Clone(s.outbox[record.outboxIndex].digest), AckTimestamp: ackTimestamp}
+		record.release = &ratify.V2ReleaseRecord{ClaimID: claimID, EntryHash: bytes.Clone(s.outbox[record.outboxIndex].digest), AckTimestamp: ackTimestamp, Outcome: ratify.V2ReleaseReleased}
 	}
 }
 
@@ -636,11 +664,26 @@ func (s *Store) PublishV2Receipt(_ context.Context, claimID string, receiptBody 
 
 // AcknowledgeV2Receipt implements ratify.V2ReceiptCheckpoint: it accepts only
 // the next appended entry of the log, linked by previousEntryHash, and
-// returns the original acknowledgement for an identical retry.
+// returns the original acknowledgement for an identical retry. A different
+// entry hash at an acknowledged sequence is a fork (SPEC-v2 §7.8): it is
+// refused and freezes the log, after which the checkpoint acknowledges
+// nothing further for it, neither here nor from the publisher's submissions.
+// Identical retries of acknowledgements made before the fork still return
+// the original acknowledgement.
 func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence int64, previousEntryHash, entryHash []byte) (ratify.V2CheckpointAcknowledgement, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if logID != s.logID || sequence < 1 || sequence > int64(len(s.outbox)) || s.outbox[sequence-1].wire == nil || !bytes.Equal(s.outbox[sequence-1].digest, entryHash) {
+	if logID != s.logID || sequence < 1 || sequence > int64(len(s.outbox)) {
+		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
+	}
+	if acked := s.outbox[sequence-1].ack; acked != nil && !bytes.Equal(acked.EntryHash, entryHash) {
+		s.checkpointFrozen = true
+		return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: a different entry hash at acknowledged sequence %d is a fork; the log is frozen", ErrNotAcknowledged, sequence)
+	}
+	if s.checkpointFrozen && s.outbox[sequence-1].ack == nil {
+		return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: the log is frozen after a fork", ErrNotAcknowledged)
+	}
+	if s.outbox[sequence-1].wire == nil || !bytes.Equal(s.outbox[sequence-1].digest, entryHash) {
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
 	previous := make([]byte, 48)
@@ -654,7 +697,11 @@ func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence i
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
 	if s.outbox[sequence-1].ack == nil {
-		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: s.now}
+		now, err := s.readClockLocked()
+		if err != nil {
+			return ratify.V2CheckpointAcknowledgement{}, err
+		}
+		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: now}
 	}
 	ack := *s.outbox[sequence-1].ack
 	ack.EntryHash = bytes.Clone(ack.EntryHash)
@@ -714,7 +761,9 @@ func (s *Store) WithRateAtFinalization() *RateAtFinalizationStore {
 // AdmitsV2RateAtFinalization implements ratify.V2RateAtFinalizationStore.
 func (*RateAtFinalizationStore) AdmitsV2RateAtFinalization() {}
 
-// ReserveV2RateBatch is never used with admission at finalization.
+// ReserveV2RateBatch exists only to satisfy ratify.V2RateReservationStore.
+// The verifier never calls it for a store that admits at finalization, and
+// it always fails (SPEC-v2 §7.1, §7.6).
 func (*RateAtFinalizationStore) ReserveV2RateBatch(context.Context, string, []byte, string, []ratify.V2RateReservation) error {
 	return fmt.Errorf("v2reference: provisional rate reservation is not used with admission at finalization")
 }

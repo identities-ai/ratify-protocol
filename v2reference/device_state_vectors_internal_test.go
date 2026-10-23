@@ -53,9 +53,11 @@ type dsClaim struct {
 	Progress       ratify.V2EvaluationProgress `json:"progress"`
 	ReceiptBody    []byte                      `json:"receipt_body_b64"`
 	Release        *struct {
-		AckTimestamp int64  `json:"ack_timestamp"`
-		ClaimID      string `json:"claim_id"`
-		EntryHash    []byte `json:"entry_hash"`
+		AckTimestamp int64   `json:"ack_timestamp"`
+		ClaimID      string  `json:"claim_id"`
+		EntryHash    []byte  `json:"entry_hash"`
+		Outcome      string  `json:"outcome"`
+		Reason       *string `json:"reason"`
 	} `json:"release"`
 	State    string `json:"state"`
 	Terminal []byte `json:"terminal_b64"`
@@ -149,7 +151,10 @@ func loadDeviceStateCase(t *testing.T, c dsCase) *DevicePrimaryTestOnly {
 			record.outboxIndex = int(*in.LogSequence) - 1
 		}
 		if in.Release != nil {
-			record.release = &ratify.V2ReleaseRecord{ClaimID: in.Release.ClaimID, EntryHash: in.Release.EntryHash, AckTimestamp: in.Release.AckTimestamp}
+			record.release = &ratify.V2ReleaseRecord{ClaimID: in.Release.ClaimID, EntryHash: in.Release.EntryHash, AckTimestamp: in.Release.AckTimestamp, Outcome: ratify.V2ReleaseStatus(in.Release.Outcome)}
+			if in.Release.Reason != nil {
+				record.release.Reason = *in.Release.Reason
+			}
 		}
 		store.claims[in.ClaimID] = record
 	}

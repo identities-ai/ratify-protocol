@@ -200,7 +200,7 @@ func (g *gen) deviceStateFile() any {
 	staged := []byte(`{"version":1,"generation":4,"note":"opaque staged snapshot bytes"}`)
 
 	// A primary with every record kind, listed out of order.
-	full := func(withRelease bool) map[string]any {
+	full := func(release map[string]any) map[string]any {
 		bodyA, bodyB := `{"receipt":"a"}`, `{"receipt":"b"}`
 		released := terminalClaim(claim("claim-a", func() map[string]any {
 			c := sealed("claim-a", 0xa1, nil, nil)
@@ -216,8 +216,8 @@ func (g *gen) deviceStateFile() any {
 			}
 			return c
 		}(), currentProgress()), "allow", "authorized", "authorized_agent", bodyA, 1, Now+120)
-		if withRelease {
-			released["release"] = map[string]any{"ack_timestamp": Now + 3, "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48))}
+		if release != nil {
+			released["release"] = release
 		}
 		pending := terminalClaim(claim("claim-b", sealed("claim-b", 0xb2, rep(0x5a, 32), i64(2)), currentProgress()), "deny", "delegation_revoked", "revoked", bodyB, 2, 0)
 		interrupted := claim("claim-c", sealed("claim-c", 0xc3, nil, nil), map[string]any{
@@ -258,9 +258,11 @@ func (g *gen) deviceStateFile() any {
 			State: state(3, false, []any{claim("claim-e", sealed("claim-e", 0xe5, rep(0x5a, 32), i64(1)), initialProgress())}, []any{stream("device-ns", 0x5a, 1)},
 				[]any{issuanceRecord("device-ns", 3, 0xe5)}, []any{}, []any{}, 0, genesis)},
 		{Name: "every_record_kind", Description: "every record kind, listed out of order: a released allow with a rate batch, evaluator snapshot, two issuer IDs, and an appended receipt; a committed deny whose receipt is not yet appended (entry_hash null); a claim interrupted after lease expiry with recorded progress; streams whose namespaces order differently in UTF-8 and UTF-16; issuance records with a bound and an unbound context policy, a full expected agent key, and a namespace containing U+2028; rate counters ordered by issuer, certificate, and window",
-			State: full(true)},
+			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48)), "outcome": "released", "reason": nil})},
 		{Name: "every_record_kind_without_release", Description: "every_record_kind with the release record of claim-a absent: only the claims member and the complete-state digest change",
-			State: full(false)},
+			State: full(nil)},
+		{Name: "every_record_kind_with_withheld_record", Description: "every_record_kind with claim-a's record a recorded withheld result (outcome withheld, reason allow_horizon_passed, SPEC-v2 §6.9) instead of a release: only the claims member and the complete-state digest change",
+			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48)), "outcome": "withheld", "reason": "allow_horizon_passed"})},
 		{Name: "abandoned_frozen_log", Description: "a terminal claim whose receipt was abandoned before it was appended, in a frozen receipt log, at the maximum safe replay epoch and journal generation",
 			State: state(9007199254740991, true, []any{abandoned}, []any{}, []any{}, []any{}, []any{map[string]any{"body_b64": b64([]byte(`{"receipt":"d"}`)), "claim_id": "claim-d", "entry_hash": nil}},
 				9007199254740991, staged)},

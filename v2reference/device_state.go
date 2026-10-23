@@ -116,7 +116,12 @@ func progressProjection(p ratify.V2EvaluationProgress) object {
 func claimProjection(id string, r *claimRecord) object {
 	var release, logSequence any
 	if r.release != nil {
-		release = object{"ack_timestamp": r.release.AckTimestamp, "claim_id": r.release.ClaimID, "entry_hash": base64.StdEncoding.EncodeToString(r.release.EntryHash)}
+		var reason any
+		if r.release.Reason != "" {
+			reason = r.release.Reason
+		}
+		release = object{"ack_timestamp": r.release.AckTimestamp, "claim_id": r.release.ClaimID, "entry_hash": base64.StdEncoding.EncodeToString(r.release.EntryHash),
+			"outcome": string(r.release.Outcome), "reason": reason}
 	}
 	if r.outboxIndex >= 0 {
 		logSequence = int64(r.outboxIndex) + 1

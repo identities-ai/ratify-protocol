@@ -6,7 +6,11 @@ package v2vectors
 // independent checkpoint). Expected outcomes are written from the spec rules
 // here, not read back from the Go reference.
 
-import ratify "github.com/identities-ai/ratify-protocol/v2"
+import (
+	"slices"
+
+	ratify "github.com/identities-ai/ratify-protocol/v2"
+)
 
 const (
 	lifecycleLogID        = "dddddddddddddddddddddddddddddd01"
@@ -36,20 +40,32 @@ type lifecycleExpectJSON struct {
 	Recovered *lifecycleExpectJSON `json:"recovered,omitempty"`
 	// Outcomes is the sorted multiset of verify_concurrent results.
 	Outcomes []string `json:"outcomes,omitempty"`
+	// FinalizeResult is the outcome of a successful finalize step:
+	// "committed" (the store committed the result) or "identical" (the same
+	// result was already committed).
+	FinalizeResult string `json:"finalize_result,omitempty"`
+	// AckTimestamp is the timestamp of the acknowledgement an acknowledge
+	// step returns.
+	AckTimestamp int64 `json:"ack_timestamp,omitempty"`
 }
 
 type lifecycleStepJSON struct {
-	Op          string              `json:"op"`
-	Request     string              `json:"request,omitempty"`
-	Requests    []string            `json:"requests,omitempty"`
-	Time        int64               `json:"time,omitempty"`
-	Withheld    *bool               `json:"withheld,omitempty"`
-	Mode        string              `json:"mode,omitempty"`
-	ReceiptOf   string              `json:"receipt_of,omitempty"`
-	Checkpoint  string              `json:"checkpoint,omitempty"`
-	ReplayEpoch int64               `json:"replay_epoch,omitempty"`
-	LogID       string              `json:"log_id,omitempty"`
-	Expect      lifecycleExpectJSON `json:"expect"`
+	Op          string   `json:"op"`
+	Request     string   `json:"request,omitempty"`
+	Requests    []string `json:"requests,omitempty"`
+	Time        int64    `json:"time,omitempty"`
+	Withheld    *bool    `json:"withheld,omitempty"`
+	Mode        string   `json:"mode,omitempty"`
+	ReceiptOf   string   `json:"receipt_of,omitempty"`
+	Checkpoint  string   `json:"checkpoint,omitempty"`
+	ReplayEpoch int64    `json:"replay_epoch,omitempty"`
+	LogID       string   `json:"log_id,omitempty"`
+	// TerminalB64, BodyB64 and AllowValidUntil are the exact arguments of a
+	// finalize step.
+	TerminalB64     string              `json:"terminal_b64,omitempty"`
+	BodyB64         string              `json:"body_b64,omitempty"`
+	AllowValidUntil int64               `json:"allow_valid_until,omitempty"`
+	Expect          lifecycleExpectJSON `json:"expect"`
 }
 
 type lifecycleScenarioJSON struct {
@@ -116,18 +132,20 @@ func (g *gen) lifecycleFile() any {
 		Version:     2,
 		Description: "Part B lifecycle scenarios (SPEC-v2 §6.9, §7). Replay each scenario against a fresh in-memory reference store whose authoritative clock starts at start_time, whose evaluator lease is lease_seconds, and whose receipt log log_id is signed by verifier_key. Requests use the verifier-ordering input schema; the request's now is always the store clock at the step.",
 		Semantics: map[string]string{
-			"set_time":               "set the authoritative clock (it may move backward to exercise clock regression)",
+			"set_time":               "set the authoritative clock (it may move backward to exercise clock regression). The store keeps a high-water mark of every authoritative reading, including the checkpoint's acknowledgement timestamps, and a reading below it is a reported clock regression",
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
-			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class",
+			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
+			"acknowledge":            "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
+			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
 			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
 			"publish":                "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
-			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
-			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
+			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
+			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
@@ -143,6 +161,7 @@ func (g *gen) lifecycleFile() any {
 		s.epoch = fixtureReplayEpoch + 1
 		s.expected.ReplayEpoch = fixtureReplayEpoch + 1
 	}
+	bundles := map[string][]byte{}
 	for _, r := range []struct {
 		name      string
 		challenge byte
@@ -153,11 +172,30 @@ func (g *gen) lifecycleFile() any {
 	} {
 		v, bundle := g.lifecycleRequest(r.challenge, 0, r.edit)
 		add(r.name, v, bundle)
+		bundles[r.name] = bundle
 	}
 	// Rate requests: a leaf max_rate of 2 per 60 seconds.
 	rateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 60}}})
 	for i, name := range []string{"R1", "R2", "R3", "R4"} {
 		v, bundle := g.lifecycleRequestWithChain(byte(0x71+i), 0, rateChain, nil)
+		add(name, v, bundle)
+	}
+	// R1x reuses R1's challenge with a chain whose signed rate batch differs
+	// (3 per 60 seconds), so its claim collides with R1's sealed batch. RI has
+	// R1's chain and no trust configuration (indeterminate/trust_unavailable).
+	{
+		otherRateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 3, WindowS: 60}}})
+		v, bundle := g.lifecycleRequestWithChain(0x71, 0, otherRateChain, nil)
+		add("R1x", v, bundle)
+		v, bundle = g.lifecycleRequestWithChain(0x79, 0, rateChain, func(s *scenario) { s.trust = nil })
+		add("RI", v, bundle)
+	}
+	// Two-counter requests: one leaf certificate signs 2 per 120 seconds and
+	// 1 per 60 seconds, so its sealed batch has two counters.
+	twoCounterChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{
+		{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 120}, {Type: ratify.ConstraintMaxRate, Count: 1, WindowS: 60}}})
+	for i, name := range []string{"T1", "T2", "T3"} {
+		v, bundle := g.lifecycleRequestWithChain(byte(0x81+i), 0, twoCounterChain, nil)
 		add(name, v, bundle)
 	}
 	// Stream requests share stream_id 0x5a..; S1x reuses S1's challenge with a
@@ -228,16 +266,18 @@ func (g *gen) lifecycleFile() any {
 	sc("signer_failure_then_retry", "a publisher (signer) failure appends nothing and release stays pending; a retry publishes and releases",
 		step("verify", "A", committedAllow), publish("A", "signer_failure", 0), release("A", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "receipt_not_appended"}),
 		publish("A", "ok", 1), release("A", released(Now, 1)))
-	sc("corrupt_receipt_signature_is_rejected", "a published receipt whose signature does not verify under the configured verifier key is rejected",
+	sc("corrupt_receipt_signature_is_rejected", "a published receipt whose signature does not verify under the configured verifier key is rejected; rejected describes only that call's inputs, so the genuine receipt then releases (SPEC-v2 §6.9)",
 		step("verify", "A", committedAllow), lifecycleStepJSON{Op: "publish", Request: "A", Mode: "corrupt_signature", Expect: lifecycleExpectJSON{ReceiptSeq: 1}},
-		release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_invalid"}))
-	sc("receipt_of_another_claim_is_rejected", "a valid receipt for a different committed claim does not bind this claim's body",
+		release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_invalid"}),
+		publish("A", "ok", 1), release("A", released(Now, 1)))
+	sc("receipt_of_another_claim_is_rejected", "a valid receipt for a different committed claim does not bind this claim's body; the rejection is per call, so this claim's own receipt then releases",
 		step("verify", "A", committedAllow), step("verify", "B", committedAllow), publish("A", "ok", 1), publish("B", "ok", 2),
 		lifecycleStepJSON{Op: "release", Request: "A", ReceiptOf: "B", Checkpoint: "reference", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_body_mismatch"}},
-		release("B", released(Now, 2)))
-	sc("acknowledgement_for_another_entry_is_rejected", "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected",
+		release("B", released(Now, 2)), release("A", released(Now, 1)))
+	sc("acknowledgement_for_another_entry_is_rejected", "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected; the rejection records nothing for the claim, so a call through the genuine checkpoint releases",
 		step("verify", "A", committedAllow), publish("A", "ok", 1),
-		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}})
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}},
+		release("A", released(Now, 1)))
 	sc("planted_release_record_does_not_replace_acknowledgement", "a release record written into the claim store with the appended receipt's entry hash and a plausible acknowledgement time is not evidence of acknowledgement: release stays pending while the entry is unacknowledged, and once acknowledged at a different time the planted record is a release_state_mismatch",
 		withhold(true), step("verify", "A", committedAllow), publish("A", "ok", 1),
 		lifecycleStepJSON{Op: "plant_release", Request: "A", Time: Now},
@@ -249,9 +289,21 @@ func (g *gen) lifecycleFile() any {
 		release("A", released(Now, 1)))
 	sc("forged_committed_outcome_is_rejected", "an application cannot release a committed outcome the verifier did not produce",
 		ls("release_forged", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}))
-	sc("clock_regression_at_release_is_withheld", "a release reading earlier than the acknowledgement time is a clock regression",
+	withheldRegressed := lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "clock_regressed"}
+	sc("clock_regression_at_release_is_withheld", "a release reading earlier than the acknowledgement time is a clock regression; the withheld result is recorded and is permanent, so a later release after the clock passes the acknowledgement time is still withheld (SPEC-v2 §6.9)",
 		step("verify", "A", committedAllow), setTime(Now+5), publish("A", "ok", 1), setTime(Now+3),
-		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "clock_regressed"}))
+		release("A", withheldRegressed), setTime(Now+6), release("A", withheldRegressed))
+	expired := lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}
+	sc("recorded_withheld_answers_before_receipt_checks", "once a withheld result is recorded, every later release of the claim returns it right after the committed-state step: without a receipt it is withheld rather than pending, and with a mismatched acknowledgement it is withheld rather than rejected",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		release("A", expired),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expired},
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: expired},
+		release("A", expired))
+	sc("withheld_after_recorded_release_records_nothing", "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+10), release("A", released(Now, 1)),
+		setTime(Now+8), release("A", withheldRegressed),
+		setTime(Now+11), release("A", released(Now, 1)))
 	sc("crash_after_claim_lease_recovery", "an evaluator that crashes after claiming leaves the claim in progress; recovery is refused while the lease is live, then commits evaluation_interrupted, which publishes and releases as a non-actionable indeterminate; recovery is idempotent",
 		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}),
 		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "in_progress"}),
@@ -305,6 +357,31 @@ func (g *gen) lifecycleFile() any {
 		step("verify", "R3", lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}),
 		setTime(Now+60), step("verify", "R4", committedAllow))
 	f.Scenarios[len(f.Scenarios)-1].RateAtFinalization = true
+	rateDenied := lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}
+	rateScenario := func(name, desc string, steps ...lifecycleStepJSON) {
+		sc(name, desc, steps...)
+		f.Scenarios[len(f.Scenarios)-1].RateAtFinalization = true
+	}
+	rateScenario("rate_admission_is_all_or_none", "the sealed batch has two counters of one certificate (2 per 120 seconds and 1 per 60 seconds). T2, 30 seconds after T1, is denied by the 60-second counter alone and must not count against the 120-second counter, so T3 at 60 seconds is admitted (with a partial admission it would be denied)",
+		step("verify", "T1", committedAllow), setTime(Now+30),
+		step("verify", "T2", rateDenied), setTime(Now+60),
+		step("verify", "T3", committedAllow))
+	rateScenario("rate_retry_and_changed_batch_count_once", "an exact retry of an admitted claim is a terminal replay and is not counted again; a different proof whose signed rate batch differs is a replay of the claimed challenge and admits nothing; so one more allow fills the 2-per-60-second counter and the next is denied",
+		step("verify", "R1", committedAllow),
+		step("verify", "R1", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}),
+		step("verify", "R1x", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_replay"}),
+		step("verify", "R2", committedAllow), step("verify", "R3", rateDenied))
+	rateScenario("rate_clock_rollback_keeps_admissions_blocking", "two allows admitted at Now+30 fill the counter; with the clock rolled back to Now nothing is claimed or admitted (claim_store_unavailable); back at Now+30 the admissions still count, and only a reading strictly later than their window (Now+90) admits again",
+		setTime(Now+30), step("verify", "R1", committedAllow), step("verify", "R2", committedAllow),
+		setTime(Now), step("verify", "R3", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_store_unavailable"}),
+		setTime(Now+30), step("verify", "R3", rateDenied),
+		setTime(Now+90), step("verify", "R4", committedAllow))
+	rateScenario("rate_counts_only_allow", "terminal results other than allow count nothing: an indeterminate (trust_unavailable) and a claim recovered as evaluation_interrupted after its evaluator crashed leave the 2-per-60-second counter empty, so two allows are admitted and only the third is denied",
+		step("verify", "RI", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "trust_unavailable"}),
+		step("claim_only", "R1", lifecycleExpectJSON{Disposition: "created"}),
+		setTime(Now+lifecycleLeaseSeconds),
+		step("recover", "R1", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("verify", "R2", committedAllow), step("verify", "R3", committedAllow), step("verify", "R4", rateDenied))
 	sc("different_proof_for_claimed_challenge_is_replay", "a second, different proof for an already claimed challenge is rejected before claim without disclosure and does not advance the stream",
 		step("verify", "S1", committedAllow), step("verify", "S1x", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_replay"}),
 		step("verify", "S2", committedAllow))
@@ -338,6 +415,96 @@ func (g *gen) lifecycleFile() any {
 		publish("A", "ok", 1),
 		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}),
 		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "challenge_not_fresh"}))
+	acknowledge := func(request, mode string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "acknowledge", Request: request, Mode: mode, Expect: expect}
+	}
+	sc("checkpoint_fork_freezes_log", "an identical acknowledgement retry returns the original timestamp; a different entry hash at an acknowledged sequence is refused as a fork and freezes the log, so the next correctly linked entry is never acknowledged (neither by the publisher's submission nor directly) and its release stays pending",
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		setTime(Now+7),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now}),
+		acknowledge("A", "fork", lifecycleExpectJSON{Failed: true}),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now}),
+		step("verify", "B", committedAllow), publish("B", "ok", 2),
+		release("B", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "acknowledgement_unavailable"}),
+		acknowledge("B", "exact", lifecycleExpectJSON{Failed: true}),
+		release("B", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "acknowledgement_unavailable"}))
+	sc("checkpoint_refusal_without_fork_does_not_freeze", "an out-of-order acknowledgement is refused without freezing the log: the entries are then acknowledged in order and release",
+		withhold(true),
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		step("verify", "B", committedAllow), publish("B", "ok", 2),
+		acknowledge("B", "exact", lifecycleExpectJSON{Failed: true}),
+		setTime(Now+4),
+		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
+		acknowledge("B", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
+		release("B", released(Now+4, 2)), release("A", released(Now+4, 1)))
+	g.finalizeBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f
+}
+
+// finalizeBindingScenarios pins SPEC-v2 §7.5: the claim store's finalize
+// binds the receipt outbox body to the sealed claim. Each scenario claims
+// request A, offers a body that differs from the sealed claim in exactly one
+// bound member (refused as configuration_invalid, committing nothing), and
+// then finalizes and retries the genuine body.
+func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJSON), bundles map[string][]byte) {
+	b := must(ratify.DecodeProofBundleV2(bundles["A"]))
+	issuers := []string{}
+	for _, c := range b.Delegations {
+		if !slices.Contains(issuers, c.IssuerID) {
+			issuers = append(issuers, c.IssuerID)
+		}
+	}
+	slices.Sort(issuers)
+	vp := policyDigest(verifyPolicy, true, verifyPolicyFields)
+	genuine := func() *ratify.VerificationReceiptV2 {
+		return &ratify.VerificationReceiptV2{
+			Version: 2, VerifierID: b.VerifierID, AgentID: b.AgentID, BundleHash: bundleHash(bundles["A"]), IssuerIDs: slices.Clone(issuers),
+			Decision: "indeterminate", DecisionReason: "status_unavailable", IdentityStatus: "authorization_unverified",
+			TrustAssessment: "trusted", StatusAssessment: "unavailable", ChallengeAssessment: "current",
+			ContextAssessment: "bound", ContextPolicyDigest: strp(vp), VerifiedAt: Now, RequiredScope: "data:read",
+			GrantedScope: []string{}, StatusEvidence: []ratify.StatusEvidenceEntryV2{},
+		}
+	}
+	terminal := func(decision, reason, identity string) string {
+		return b64(must(ratify.CanonicalJSON(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": identity})))
+	}
+	genuineTerminal := terminal("indeterminate", "status_unavailable", "authorization_unverified")
+	genuineBody := b64(must(ratify.VerificationReceiptV2Body(genuine())))
+	finalize := func(terminalB64, bodyB64 string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "finalize", Request: "A", TerminalB64: terminalB64, BodyB64: bodyB64, Expect: expect}
+	}
+	for _, m := range []struct {
+		name, member string
+		terminal     string
+		edit         func(*ratify.VerificationReceiptV2)
+	}{
+		{"verifier_id", "verifier_id names another verifier key", "", func(r *ratify.VerificationReceiptV2) { r.VerifierID = g.k("root").ID }},
+		{"agent_id", "agent_id names another agent", "", func(r *ratify.VerificationReceiptV2) { r.AgentID = g.k("intermediate").ID }},
+		{"bundle_hash", "bundle_hash names request B's proof bundle", "", func(r *ratify.VerificationReceiptV2) { r.BundleHash = bundleHash(bundles["B"]) }},
+		{"issuer_ids", "issuer_ids omits one sealed issuer", "", func(r *ratify.VerificationReceiptV2) { r.IssuerIDs = r.IssuerIDs[:len(r.IssuerIDs)-1] }},
+		{"required_scope", "required_scope is data:write while the claim sealed data:read", "", func(r *ratify.VerificationReceiptV2) { r.RequiredScope = "data:write" }},
+		{"context_policy_digest", "context_policy_digest is another policy's digest", "", func(r *ratify.VerificationReceiptV2) {
+			r.ContextPolicyDigest = strp(policyDigest(notRequiredPolicy, false, nil))
+		}},
+		{"constraint_evaluators", "constraint_evaluators lists an evaluator the sealed snapshot does not contain", "", func(r *ratify.VerificationReceiptV2) {
+			r.ConstraintEvaluators = []ratify.ConstraintEvaluatorRefV2{{Type: maxCountType, ProfileDigest: profileDigest(maxCountProfile, maxCountType)}}
+		}},
+		{"terminal_decision", "the terminal result is deny/delegation_revoked while the body is indeterminate/status_unavailable", terminal("deny", "delegation_revoked", "revoked"), nil},
+	} {
+		body := genuine()
+		if m.edit != nil {
+			m.edit(body)
+		}
+		mutatedTerminal := genuineTerminal
+		if m.terminal != "" {
+			mutatedTerminal = m.terminal
+		}
+		sc("finalize_rejects_body_with_other_"+m.name, "the claim store refuses to finalize a canonical receipt body whose "+m.member+" (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+			lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+			finalize(mutatedTerminal, b64(must(ratify.VerificationReceiptV2Body(body))), lifecycleExpectJSON{ErrorClass: "configuration_invalid"}),
+			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
+			lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+	}
 }

@@ -102,7 +102,26 @@ func testEvaluationTokenForTest(t testing.TB, bundle *ProofBundleV2, expected *E
 	if err != nil {
 		t.Fatal(err)
 	}
-	return testTokenFromPreflightV2(t, preflight)
+	token := testTokenFromPreflightV2(t, preflight)
+	token.state.claim.AgentID = bundle.AgentID
+	return token
+}
+
+// v2TestTerminalPayload builds the terminal result and receipt outbox body
+// the live verifier would finalize for assessment, bound to the token's
+// sealed claim (SPEC-v2 §7.5), so helper tests exercise a payload that
+// FinalizeClaimProofBundleV2 can accept.
+func v2TestTerminalPayload(t testing.TB, bundle *ProofBundleV2, token *V2EvaluationToken, assessment V2LocalAuthorizationAssessment) (terminal, body []byte) {
+	t.Helper()
+	progress := v2EvaluationProgress{persisted: InitialV2EvaluationProgress()}
+	if assessment.Reason != "evaluation_interrupted" {
+		progress.persisted.TrustAssessment = "trusted"
+	}
+	_, terminal, body, err := buildV2TerminalResult(bundle, assessment, progress, token.state.claim, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return terminal, body
 }
 
 func testTokenFromPreflightV2(t testing.TB, preflight *V2PreflightResult) *V2EvaluationToken {
@@ -112,8 +131,15 @@ func testTokenFromPreflightV2(t testing.TB, preflight *V2PreflightResult) *V2Eva
 	if err != nil {
 		t.Fatal(err)
 	}
+	claim := V2ChallengeClaim{
+		ClaimID: claimID, Namespace: state.VerifierNamespace, ReplayEpoch: state.ReplayEpoch, ProofDigest: state.BundleHash,
+		BundleHash: state.BundleHash, IssuerIDs: append([]string{}, state.IssuerIDs...), RequiredScope: state.RequiredScope,
+		ContextPolicyDigest: state.ContextPolicyDigest, VerifierID: state.VerifierID, AgentID: state.ExpectedAgentID,
+		IssuedAt: state.IssuedAt, ExpiresAt: state.ExpiresAt, MaxAgeSeconds: state.MaxAge, ClockSkewSeconds: state.FutureSkew,
+		ConstraintEvaluators: cloneConstraintEvaluatorRefsV2(state.EvaluatorRefs),
+	}
 	return &V2EvaluationToken{state: &v2EvaluationTokenState{
-		claimID: claimID, proofDigest: state.BundleHash,
+		claimID: claimID, claim: claim, proofDigest: state.BundleHash,
 		requiredScope:  state.RequiredScope,
 		futureSkew:     state.FutureSkew,
 		ownerToken:     make([]byte, 32),
@@ -562,9 +588,12 @@ func TestResolveClaimProofBundleV2AppliesStatusBeforePendingLocalDenial(t *testi
 			if resolved.Status == "authorization_unverified" {
 				decision = "indeterminate"
 			}
-			terminal := []byte(fmt.Sprintf(`{"decision":%q,"decision_reason":%q}`, decision, resolved.Reason))
+			terminal, body := v2TestTerminalPayload(t, bundle, token, resolved)
+			if !bytes.Contains(terminal, []byte(fmt.Sprintf(`"decision":%q`, decision))) {
+				t.Fatalf("terminal result %s is not a %s", terminal, decision)
+			}
 			store := &recordingClaimStoreV2{disposition: V2ClaimCreated}
-			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, terminal); err != nil || !finalized {
+			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, body); err != nil || !finalized {
 				t.Fatalf("resolved terminal result could not finalize: finalized=%t err=%v", finalized, err)
 			}
 		})
@@ -597,9 +626,9 @@ func TestResolveClaimProofBundleV2AllowsOnlyAfterCurrentStatus(t *testing.T) {
 	if err != nil || resolved.Status != "authorized_agent" || resolved.Reason != "authorized" || resolved.StatusAssessment != "current" {
 		t.Fatalf("current status did not resolve the pending allow: %+v, %v", resolved, err)
 	}
-	terminal := []byte(`{"decision":"allow","decision_reason":"authorized"}`)
+	terminal, body := v2TestTerminalPayload(t, bundle, token, resolved)
 	store := &recordingClaimStoreV2{disposition: V2ClaimCreated}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, terminal); err != nil || !finalized {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, body); err != nil || !finalized {
 		t.Fatalf("current, fully checked allow could not finalize: finalized=%t err=%v", finalized, err)
 	}
 }
@@ -773,7 +802,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	}
 	newRateToken := func(pending V2LocalAuthorizationAssessment) *V2EvaluationToken {
 		state := &v2EvaluationTokenState{
-			claimID: claim.ClaimID, proofDigest: claim.ProofDigest,
+			claimID: claim.ClaimID, claim: cloneV2ChallengeClaim(claim), proofDigest: claim.ProofDigest,
 			requiredScope: claim.RequiredScope, expected: cloneExpectedChallengeStateV2(pre.state),
 			ownerToken: bytes.Repeat([]byte{0x7a}, 32), rateBatch: append([]V2RateReservation{}, claimStore.claim.RateBatch...),
 			evaluationStatus: "pending_external_checks", pendingAssessment: cloneV2LocalAuthorizationAssessment(pending),
@@ -788,22 +817,24 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 		atomicStore.reserveCalls != 0 || !atomicToken.state.rateAtFinalization {
 		t.Fatalf("atomic rate admission ran before finalization: outcome=%+v calls=%d err=%v", atomicOutcome, atomicStore.reserveCalls, err)
 	}
-	allowPayload := []byte(`{"decision":"allow","decision_reason":"authorized"}`)
+	allowTerminal, allowBody := v2TestTerminalPayload(t, bundle, atomicToken, atomicOutcome)
+	deniedOutcome := atomicOutcome
+	deniedOutcome.Status, deniedOutcome.Reason = "constraint_denied", "constraint_denied"
+	deniedTerminal, deniedBody := v2TestTerminalPayload(t, bundle, atomicToken, deniedOutcome)
 	otherStore := &recordingClaimStoreV2{}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), otherStore, atomicToken, allowPayload, allowPayload); err == nil || finalized || otherStore.finalizeCalls != 0 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), otherStore, atomicToken, allowTerminal, allowBody); err == nil || finalized || otherStore.finalizeCalls != 0 {
 		t.Fatalf("rate-at-finalization token reached a non-atomic store: finalized=%t err=%v", finalized, err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowPayload, allowPayload); !errors.Is(err, ErrV2RateLimitExceeded) || finalized || atomicStore.finalizeCalls != 0 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowTerminal, allowBody); !errors.Is(err, ErrV2RateLimitExceeded) || finalized || atomicStore.finalizeCalls != 0 {
 		t.Fatalf("rolled-back rate exhaustion did not release the allow payload: finalized=%t err=%v", finalized, err)
 	} else if class := V2ErrorClassOf(err); class != V2ErrClaimStoreUnavailable {
 		// Every SDK reports this class for the same refusal (SPEC-v2 §2.7).
 		t.Fatalf("finalization rate exhaustion class %q, want %q", class, V2ErrClaimStoreUnavailable)
 	}
-	if _, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowPayload, allowPayload); err == nil {
+	if _, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, allowTerminal, allowBody); err == nil {
 		t.Fatal("exhausted rate attempt still permitted an allow")
 	}
-	deniedPayload := []byte(`{"decision":"deny","decision_reason":"constraint_denied"}`)
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, deniedPayload, deniedPayload); err != nil || !finalized || atomicToken.state.allowValidUntil != 0 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), atomicStore, atomicToken, deniedTerminal, deniedBody); err != nil || !finalized || atomicToken.state.allowValidUntil != 0 {
 		t.Fatalf("rolled-back capacity denial did not terminalize exactly once: finalized=%t err=%v", finalized, err)
 	}
 	ambiguousAtomic := &recordingV2AtomicRateStore{nextError: errors.New("ambiguous external commit")}
@@ -811,10 +842,10 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	if _, err := ResolveClaimProofBundleV2AfterRate(context.Background(), ambiguousAtomic, ambiguousToken); err != nil {
 		t.Fatal(err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), ambiguousAtomic, ambiguousToken, allowPayload, allowPayload); err == nil || finalized {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), ambiguousAtomic, ambiguousToken, allowTerminal, allowBody); err == nil || finalized {
 		t.Fatalf("ambiguous atomic allow unexpectedly committed: finalized=%t err=%v", finalized, err)
 	}
-	if _, err := FinalizeClaimProofBundleV2(context.Background(), ambiguousAtomic, ambiguousToken, deniedPayload, deniedPayload); err == nil {
+	if _, err := FinalizeClaimProofBundleV2(context.Background(), ambiguousAtomic, ambiguousToken, deniedTerminal, deniedBody); err == nil {
 		t.Fatal("ambiguous atomic allow changed its terminal payload")
 	}
 	wrappedAtomic := &recordingV2AtomicRateStore{nextError: fmt.Errorf("ambiguous: %w", ErrV2RateLimitExceeded)}
@@ -822,10 +853,10 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	if _, err := ResolveClaimProofBundleV2AfterRate(context.Background(), wrappedAtomic, wrappedToken); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FinalizeClaimProofBundleV2(context.Background(), wrappedAtomic, wrappedToken, allowPayload, allowPayload); !errors.Is(err, ErrV2RateLimitExceeded) {
+	if _, err := FinalizeClaimProofBundleV2(context.Background(), wrappedAtomic, wrappedToken, allowTerminal, allowBody); !errors.Is(err, ErrV2RateLimitExceeded) {
 		t.Fatalf("wrapped ambiguous rate error was lost: %v", err)
 	}
-	if _, err := FinalizeClaimProofBundleV2(context.Background(), wrappedAtomic, wrappedToken, deniedPayload, deniedPayload); err == nil {
+	if _, err := FinalizeClaimProofBundleV2(context.Background(), wrappedAtomic, wrappedToken, deniedTerminal, deniedBody); err == nil {
 		t.Fatal("wrapped ambiguous rate error changed its terminal payload")
 	}
 	successAtomic := &recordingV2AtomicRateStore{}
@@ -833,10 +864,10 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	if _, err := ResolveClaimProofBundleV2AfterRate(context.Background(), successAtomic, successToken); err != nil {
 		t.Fatal(err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), successAtomic, successToken, allowPayload, allowPayload); err != nil || !finalized || successAtomic.reserveCalls != 0 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), successAtomic, successToken, allowTerminal, allowBody); err != nil || !finalized || successAtomic.reserveCalls != 0 {
 		t.Fatalf("atomic rate allow did not finalize once: finalized=%t err=%v", finalized, err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), successAtomic, successToken, allowPayload, allowPayload); err != nil || finalized {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), successAtomic, successToken, allowTerminal, allowBody); err != nil || finalized {
 		t.Fatalf("atomic allow exact retry was not idempotent: finalized=%t err=%v", finalized, err)
 	}
 	lostResponseAtomic := &recordingV2AtomicRateStore{}
@@ -845,10 +876,10 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	if _, err := ResolveClaimProofBundleV2AfterRate(context.Background(), lostResponseAtomic, lostResponseToken); err != nil {
 		t.Fatal(err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), lostResponseAtomic, lostResponseToken, allowPayload, allowPayload); err == nil || finalized {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), lostResponseAtomic, lostResponseToken, allowTerminal, allowBody); err == nil || finalized {
 		t.Fatalf("lost atomic finalization response unexpectedly succeeded: finalized=%t err=%v", finalized, err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), lostResponseAtomic, lostResponseToken, allowPayload, allowPayload); err != nil || finalized {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), lostResponseAtomic, lostResponseToken, allowTerminal, allowBody); err != nil || finalized {
 		t.Fatalf("atomic finalization response loss did not preserve exact retry: finalized=%t err=%v", finalized, err)
 	}
 	for _, test := range []struct {
@@ -866,8 +897,11 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 			if err != nil || outcome.Status != test.status || outcome.Reason != test.reason || outcome.RateStoreUnavailable != test.unavailable || rate.calls != 1 {
 				t.Fatalf("rate outcome did not fail closed: %+v calls=%d err=%v", outcome, rate.calls, err)
 			}
-			terminal := []byte(fmt.Sprintf(`{"decision":%q,"decision_reason":%q}`, test.decision, test.reason))
-			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), &recordingClaimStoreV2{}, candidate, terminal, terminal); err != nil || !finalized {
+			terminal, body := v2TestTerminalPayload(t, bundle, candidate, outcome)
+			if !bytes.Contains(terminal, []byte(fmt.Sprintf(`"decision":%q,"decision_reason":%q`, test.decision, test.reason))) {
+				t.Fatalf("rate terminal result %s is not %s/%s", terminal, test.decision, test.reason)
+			}
+			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), &recordingClaimStoreV2{}, candidate, terminal, body); err != nil || !finalized {
 				t.Fatalf("rate denial did not reach its exact terminal tuple: finalized=%t err=%v", finalized, err)
 			}
 		})
@@ -887,12 +921,12 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 		rateResolved.RateAdmissionDeferred || rateStore.calls != 1 || !slices.Equal(rateStore.batch, claimStore.claim.RateBatch) {
 		t.Fatalf("signed rate batch did not complete authorization: %+v calls=%d batch=%+v err=%v", rateResolved, rateStore.calls, rateStore.batch, err)
 	}
-	allow := []byte(`{"decision":"allow","decision_reason":"authorized"}`)
+	allow, allowReceiptBody := v2TestTerminalPayload(t, bundle, token, rateResolved)
 	store.ambiguousFinalize = true
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, allow, allow); err == nil || finalized || rateStore.calls != 1 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, allow, allowReceiptBody); err == nil || finalized || rateStore.calls != 1 {
 		t.Fatalf("lost terminal response was released or rate was reserved again: finalized=%t calls=%d err=%v", finalized, rateStore.calls, err)
 	}
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, allow, allow); err != nil || finalized || rateStore.calls != 1 {
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, allow, allowReceiptBody); err != nil || finalized || rateStore.calls != 1 {
 		t.Fatalf("identical terminal retry did not reuse committed result: finalized=%t calls=%d err=%v", finalized, rateStore.calls, err)
 	}
 

@@ -77,6 +77,63 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   external signer), with identical output checked in CI. They use the
   test-only in-memory reference stores.
 
+### Release and Part B store changes before the beta
+
+These change the Part B interfaces every SDK implements; SDKs are ported to
+match before the beta.
+
+- **Finalization binds the receipt body to the sealed claim** (SPEC-v2 §7.5).
+  The finalize helper and the reference claim store refuse a receipt body
+  whose `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids`,
+  `required_scope`, `context_policy_digest` or `constraint_evaluators`
+  differs from the sealed claim (`configuration_invalid`; `malformed` for a
+  body that does not decode). Go adds `ValidateV2FinalizationPayload` for
+  claim-store implementers. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_other_*`, with the new `finalize` step.
+- **Withheld is permanent; rejected is per call** (SPEC-v2 §6.9). When
+  release is withheld at step 7 or 8 and no release is recorded, it records
+  the withheld result through the same claim-store record call, and every
+  later release of the claim returns that result right after step 1. If the
+  store is unavailable while recording, the call is still withheld. A
+  `rejected` result describes only that call and records nothing. Interface
+  change: `V2ReleaseRecord` gains `Outcome` (`released` or `withheld`) and
+  `Reason`; claim stores persist and return both, and compare them for the
+  first-record-wins rule. Go adds `ValidV2ReleaseRecordOutcome`. The
+  single-device complete-state projection's `release` member gains `outcome`
+  and `reason` (SPEC-v2 §7.13). The reference checkpoint now timestamps
+  acknowledgements from the store's authoritative clock and its high-water
+  mark (SPEC-v2 §7.2). Vectors: `lifecycle-scenarios.json`
+  `clock_regression_at_release_is_withheld` (extended),
+  `recorded_withheld_answers_before_receipt_checks`,
+  `withheld_after_recorded_release_records_nothing`,
+  `corrupt_receipt_signature_is_rejected`,
+  `receipt_of_another_claim_is_rejected` and
+  `acknowledgement_for_another_entry_is_rejected` (extended),
+  `device_rtc_regression` (now stays withheld); `device-state.json`
+  `every_record_kind_with_withheld_record`.
+- **`max_rate` admission is specified for the SDK surface** (SPEC-v2 §7.1,
+  §7.2, §7.6). The reference claim store is the single-store
+  implementation: it admits the sealed rate batch inside the terminal
+  compare-and-set, all counters or none, counts only an `allow`, and its
+  provisional `ReserveV2RateBatch` is never called and always fails. A
+  separate rate store that cannot share the claim store's transaction is a
+  managed-deployment option outside the SDK reference surface for beta. No
+  interface change. Vectors: `lifecycle-scenarios.json`
+  `rate_admission_is_all_or_none`,
+  `rate_retry_and_changed_batch_count_once`,
+  `rate_clock_rollback_keeps_admissions_blocking`, `rate_counts_only_allow`.
+- **Journal head mismatch class** (SPEC-v2 §2.7): `log_state_mismatch` also
+  covers a canonical `SecurityJournalV2` snapshot whose generation or digest
+  does not match the anchored head, as every SDK and
+  `security-journal.json` (`head_digest_mismatch`,
+  `head_generation_mismatch`) already report. Specification text only.
+- **The reference checkpoint freezes a log after a fork** (SPEC-v2 §7.8): a
+  different entry hash at an acknowledged sequence is refused and no later
+  sequence of that log is acknowledged. Vectors: `lifecycle-scenarios.json`
+  `checkpoint_fork_freezes_log` and
+  `checkpoint_refusal_without_fork_does_not_freeze`, with the new
+  `acknowledge` step.
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

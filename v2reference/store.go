@@ -761,7 +761,9 @@ func (s *Store) WithRateAtFinalization() *RateAtFinalizationStore {
 // AdmitsV2RateAtFinalization implements ratify.V2RateAtFinalizationStore.
 func (*RateAtFinalizationStore) AdmitsV2RateAtFinalization() {}
 
-// ReserveV2RateBatch is never used with admission at finalization.
+// ReserveV2RateBatch exists only to satisfy ratify.V2RateReservationStore.
+// The verifier never calls it for a store that admits at finalization, and
+// it always fails (SPEC-v2 §7.1, §7.6).
 func (*RateAtFinalizationStore) ReserveV2RateBatch(context.Context, string, []byte, string, []ratify.V2RateReservation) error {
 	return fmt.Errorf("v2reference: provisional rate reservation is not used with admission at finalization")
 }

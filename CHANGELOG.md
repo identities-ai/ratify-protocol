@@ -111,6 +111,17 @@ match before the beta.
   `acknowledgement_for_another_entry_is_rejected` (extended),
   `device_rtc_regression` (now stays withheld); `device-state.json`
   `every_record_kind_with_withheld_record`.
+- **`max_rate` admission is specified for the SDK surface** (SPEC-v2 §7.1,
+  §7.2, §7.6). The reference claim store is the single-store
+  implementation: it admits the sealed rate batch inside the terminal
+  compare-and-set, all counters or none, counts only an `allow`, and its
+  provisional `ReserveV2RateBatch` is never called and always fails. A
+  separate rate store that cannot share the claim store's transaction is a
+  managed-deployment option outside the SDK reference surface for beta. No
+  interface change. Vectors: `lifecycle-scenarios.json`
+  `rate_admission_is_all_or_none`,
+  `rate_retry_and_changed_batch_count_once`,
+  `rate_clock_rollback_keeps_admissions_blocking`, `rate_counts_only_allow`.
 - **The reference checkpoint freezes a log after a fork** (SPEC-v2 §7.8): a
   different entry hash at an acknowledged sequence is refused and no later
   sequence of that log is acknowledged. Vectors: `lifecycle-scenarios.json`

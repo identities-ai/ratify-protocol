@@ -144,7 +144,7 @@ func (g *gen) lifecycleFile() any {
 			"publish":                "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
-			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
+			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
 			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
@@ -178,6 +178,24 @@ func (g *gen) lifecycleFile() any {
 	rateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 60}}})
 	for i, name := range []string{"R1", "R2", "R3", "R4"} {
 		v, bundle := g.lifecycleRequestWithChain(byte(0x71+i), 0, rateChain, nil)
+		add(name, v, bundle)
+	}
+	// R1x reuses R1's challenge with a chain whose signed rate batch differs
+	// (3 per 60 seconds), so its claim collides with R1's sealed batch. RI has
+	// R1's chain and no trust configuration (indeterminate/trust_unavailable).
+	{
+		otherRateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 3, WindowS: 60}}})
+		v, bundle := g.lifecycleRequestWithChain(0x71, 0, otherRateChain, nil)
+		add("R1x", v, bundle)
+		v, bundle = g.lifecycleRequestWithChain(0x79, 0, rateChain, func(s *scenario) { s.trust = nil })
+		add("RI", v, bundle)
+	}
+	// Two-counter requests: one leaf certificate signs 2 per 120 seconds and
+	// 1 per 60 seconds, so its sealed batch has two counters.
+	twoCounterChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{
+		{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 120}, {Type: ratify.ConstraintMaxRate, Count: 1, WindowS: 60}}})
+	for i, name := range []string{"T1", "T2", "T3"} {
+		v, bundle := g.lifecycleRequestWithChain(byte(0x81+i), 0, twoCounterChain, nil)
 		add(name, v, bundle)
 	}
 	// Stream requests share stream_id 0x5a..; S1x reuses S1's challenge with a
@@ -339,6 +357,31 @@ func (g *gen) lifecycleFile() any {
 		step("verify", "R3", lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}),
 		setTime(Now+60), step("verify", "R4", committedAllow))
 	f.Scenarios[len(f.Scenarios)-1].RateAtFinalization = true
+	rateDenied := lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}
+	rateScenario := func(name, desc string, steps ...lifecycleStepJSON) {
+		sc(name, desc, steps...)
+		f.Scenarios[len(f.Scenarios)-1].RateAtFinalization = true
+	}
+	rateScenario("rate_admission_is_all_or_none", "the sealed batch has two counters of one certificate (2 per 120 seconds and 1 per 60 seconds). T2, 30 seconds after T1, is denied by the 60-second counter alone and must not count against the 120-second counter, so T3 at 60 seconds is admitted (with a partial admission it would be denied)",
+		step("verify", "T1", committedAllow), setTime(Now+30),
+		step("verify", "T2", rateDenied), setTime(Now+60),
+		step("verify", "T3", committedAllow))
+	rateScenario("rate_retry_and_changed_batch_count_once", "an exact retry of an admitted claim is a terminal replay and is not counted again; a different proof whose signed rate batch differs is a replay of the claimed challenge and admits nothing; so one more allow fills the 2-per-60-second counter and the next is denied",
+		step("verify", "R1", committedAllow),
+		step("verify", "R1", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}),
+		step("verify", "R1x", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_replay"}),
+		step("verify", "R2", committedAllow), step("verify", "R3", rateDenied))
+	rateScenario("rate_clock_rollback_keeps_admissions_blocking", "two allows admitted at Now+30 fill the counter; with the clock rolled back to Now nothing is claimed or admitted (claim_store_unavailable); back at Now+30 the admissions still count, and only a reading strictly later than their window (Now+90) admits again",
+		setTime(Now+30), step("verify", "R1", committedAllow), step("verify", "R2", committedAllow),
+		setTime(Now), step("verify", "R3", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_store_unavailable"}),
+		setTime(Now+30), step("verify", "R3", rateDenied),
+		setTime(Now+90), step("verify", "R4", committedAllow))
+	rateScenario("rate_counts_only_allow", "terminal results other than allow count nothing: an indeterminate (trust_unavailable) and a claim recovered as evaluation_interrupted after its evaluator crashed leave the 2-per-60-second counter empty, so two allows are admitted and only the third is denied",
+		step("verify", "RI", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "trust_unavailable"}),
+		step("claim_only", "R1", lifecycleExpectJSON{Disposition: "created"}),
+		setTime(Now+lifecycleLeaseSeconds),
+		step("recover", "R1", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("verify", "R2", committedAllow), step("verify", "R3", committedAllow), step("verify", "R4", rateDenied))
 	sc("different_proof_for_claimed_challenge_is_replay", "a second, different proof for an already claimed challenge is rejected before claim without disclosure and does not advance the stream",
 		step("verify", "S1", committedAllow), step("verify", "S1x", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "claim_replay"}),
 		step("verify", "S2", committedAllow))

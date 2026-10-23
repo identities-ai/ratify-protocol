@@ -310,6 +310,18 @@ pub fn validate_proof_bundle_v2_preflight(
     future_skew_seconds: i64,
 ) -> V2Result<()> {
     use V2ErrorClass::*;
+    if !(0..=MAX_SAFE).contains(&configured_replay_epoch) {
+        return err(
+            ConfigurationInvalid,
+            format!("v2 configured replay epoch must be 0..{MAX_SAFE}"),
+        );
+    }
+    if expected.expected_session_context.as_ref().is_some_and(|c| c.len() != 32) {
+        return err(
+            ConfigurationInvalid,
+            "v2 expected session context must be absent or exactly 32 bytes",
+        );
+    }
     if let Some(policy) = &expected.context_policy {
         if !policy.is_valid() {
             return err(ConfigurationInvalid, "v2 expected context policy is invalid");
@@ -399,8 +411,7 @@ pub fn validate_proof_bundle_v2_preflight(
         }
     }
     if let Some(ctx) = &expected.expected_session_context {
-        let matches = ctx.len() == 32 && bundle.session_context.as_ref() == Some(ctx);
-        if !matches {
+        if bundle.session_context.as_ref() != Some(ctx) {
             return err(
                 SessionContextMismatch,
                 "v2 presentation does not match expected session context",

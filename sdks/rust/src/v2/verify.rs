@@ -548,6 +548,21 @@ pub fn verify_proof_bundle_v2(ctx: &V2Context, req: &V2VerifyRequest, cb: &V2Ver
 /// invalid supplied request context are rejected before claim.
 fn validate_v2_verify_configuration(req: &V2VerifyRequest) -> V2Result<()> {
     validate_v2_freshness_configuration(req.now, req.max_challenge_age_seconds, req.future_skew_seconds)?;
+    if !(0..=MAX_SAFE).contains(&req.replay_epoch) {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            format!("v2 configured replay epoch must be 0..{MAX_SAFE}"),
+        );
+    }
+    // The live verifier has one future skew (SPEC-v2 §6.1): status freshness
+    // uses future_skew_seconds, so a status policy carrying another skew is a
+    // configuration error rather than a second, silently different bound.
+    if req.status_policy.clock_skew_seconds != req.future_skew_seconds {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            "v2 status policy skew must equal future_skew_seconds",
+        );
+    }
     validate_v2_request_context(&req.context)?;
     validate_v2_status_configuration(&req.status_keys, &req.status_policy)
 }

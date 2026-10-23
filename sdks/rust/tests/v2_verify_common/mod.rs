@@ -322,11 +322,13 @@ pub fn build_verify_request(
             verifier_id: s(&e["verifier_id"]),
             ..Default::default()
         };
+        // The agent ID and key pass through independently, so a vector can
+        // configure either one alone (SPEC-v2 §6.2 step 7).
         if !e["expected_agent_id"].is_null() {
             exp.expected_agent_id = s(&e["expected_agent_id"]);
-            if !e["expected_agent_public_key"].is_null() {
-                exp.expected_agent_public_key = Some(public_key_json(&e["expected_agent_public_key"]));
-            }
+        }
+        if !e["expected_agent_public_key"].is_null() {
+            exp.expected_agent_public_key = Some(public_key_json(&e["expected_agent_public_key"]));
         }
         if !e["expected_receiver_id"].is_null() {
             exp.expected_receiver_id = s(&e["expected_receiver_id"]);

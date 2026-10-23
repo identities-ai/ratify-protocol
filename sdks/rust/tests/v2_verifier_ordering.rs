@@ -281,18 +281,18 @@ fn v2_conformance_verifier_ordering() {
     }
     assert!(failures.is_empty(), "{} of {} vectors failed:\n{}", failures.len(), vectors.len(), failures.join("\n"));
     // Exact counts from the corpus and its README row.
-    assert_eq!(consumed.load(Ordering::SeqCst), 213);
-    assert_eq!(vectors.len(), 213);
+    assert_eq!(consumed.load(Ordering::SeqCst), 340);
+    assert_eq!(vectors.len(), 340);
     let want_stages = BTreeMap::from([
-        ("committed".to_string(), 146),
+        ("committed".to_string(), 240),
         ("evaluating".to_string(), 2),
-        ("preflight".to_string(), 63),
+        ("preflight".to_string(), 96),
         ("replay".to_string(), 2),
     ]);
     assert_eq!(stages, want_stages);
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("213 end-to-end live-verifier cases (63 pre-claim, 2 replay, 146 committed, 2 evaluating"),
+        readme.contains("340 end-to-end live-verifier cases (96 pre-claim, 2 replay, 240 committed, 2 evaluating"),
         "README row: {readme}"
     );
     let custody = vectors.iter().filter(|v| s(&v["name"]).starts_with("custody_profile_")).count();

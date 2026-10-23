@@ -267,7 +267,9 @@ class VerifierContext:
     requested_amount: Optional[float] = None
     requested_currency: Optional[str] = None
 
-    # Rate counter — required by max_rate. (cert_id, window_s) -> count
+    # Rate counter — required by max_rate. (cert_id, window_s) -> count. A
+    # negative return means the count is unavailable; max_rate then fails
+    # closed with constraint_unverifiable.
     invocations_in_window: Optional[Callable[[str, int], int]] = None
 
     # Resource — required by resource_path (SPEC §5.16). requested_resource_id

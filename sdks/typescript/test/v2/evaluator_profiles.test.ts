@@ -26,9 +26,9 @@ import {
   type ConstraintEvaluationResultV2,
   type ConstraintEvaluatorRegistrationV2,
 } from "../../src/constraint_evaluator_v2.js";
-import { ConstraintUnverifiableError, type ConstraintContextV2 } from "../../src/constraints_v2.js";
+import { ConstraintUnverifiableError, decodeConstraintNodeV2, type ConstraintContextV2 } from "../../src/constraints_v2.js";
 import { v2ErrorClassOf } from "../../src/errors_v2.js";
-import { canonicalJSONV2 } from "../../src/json_v2.js";
+import { canonicalJSONV2, parseJSONV2 } from "../../src/json_v2.js";
 import type { ProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { load, type Any } from "./helpers.js";
 
@@ -67,6 +67,17 @@ for (const suite of file.profiles) {
       if (!c.params_absent) {
         assert.ok("params" in c, "case has neither params nor params_absent");
         params = canonicalJSONV2(c.params);
+        // SPEC-v2 §5.2: a certificate can carry these params only when they
+        // are a JSON object; direct_api_only says not.
+        const carried = new TextEncoder().encode(`{"params":${new TextDecoder().decode(params)},"type":${JSON.stringify(suite.type)}}`);
+        let wireErr: unknown = null;
+        try {
+          decodeConstraintNodeV2(parseJSONV2(carried));
+        } catch (err) {
+          wireErr = err;
+        }
+        assert.equal(wireErr !== null, c.direct_api_only === true,
+          `direct_api_only ${c.direct_api_only === true}, but a certificate constraint with these params decodes with error ${(wireErr as Error)?.message}`);
       }
       const ctx = contextOf(c.context);
       validateV2ExtensionContext(ctx);

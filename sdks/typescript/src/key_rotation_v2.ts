@@ -6,7 +6,7 @@
 import { sha384 } from "@noble/hashes/sha2";
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
-import { V2_MAX_TIMESTAMP_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
+import { V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_TIMESTAMP_SECONDS, validV2Timestamp } from "./clock_bounds_v2.js";
 import { MAX_KEY_ROTATION_STATEMENT_BYTES_V2, checkV2WireSize } from "./limits_v2.js";
 import { disposeLocalSignerV2, newLocalSignerV2, signV2StatementWithSigner, signerPublicKeyV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import {
@@ -395,10 +395,11 @@ export async function verifyKeyRotationStatementV2(s: KeyRotationStatementV2, st
     }
     if (!used.has(currentID)) throw v2Errorf("configuration_invalid", "caller used-key history does not contain the current key");
     if (used.has(s.new_key_id)) throw v2Errorf("rotation_key_reused", "rotation replacement key was already used by this authority");
-    if (futureSkew < 0 || nowUnix < -MAX_SAFE || nowUnix > MAX_SAFE || futureSkew > MAX_SAFE) {
-      throw v2Errorf("configuration_invalid", "rotation verification clock inputs are outside safe bounds");
+    // SPEC-v2 §2.5: the caller's time is in the timestamp domain and the
+    // configured future skew is 0..300 seconds.
+    if (!validV2Timestamp(nowUnix) || !Number.isSafeInteger(futureSkew) || futureSkew < 0 || futureSkew > V2_MAX_FUTURE_SKEW_SECONDS) {
+      throw v2Errorf("configuration_invalid", `rotation verification time must be 0..${V2_MAX_TIMESTAMP_SECONDS} and future skew 0..${V2_MAX_FUTURE_SKEW_SECONDS} seconds`);
     }
-    if (nowUnix > MAX_SAFE - futureSkew) futureSkew = MAX_SAFE - nowUnix;
     if (!equalHybridPublicKeys(s.old_key, state.currentKey) || s.authority_id !== state.authorityID ||
         s.recovery_epoch !== state.recoveryEpoch || s.role !== state.role || s.sequence !== state.sequence + 1 ||
         !bytesEqual(s.previous_statement_hash, state.headHash)) {

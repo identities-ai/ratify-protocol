@@ -23,10 +23,6 @@ use crate::types::{
 
 pub(crate) const MAX_SAFE: i64 = crate::canonical::wire_int::MAX_SAFE_INTEGER;
 
-pub(crate) fn safe(v: i64) -> bool {
-    (-MAX_SAFE..=MAX_SAFE).contains(&v)
-}
-
 /// Delegation certificate (object code 0x0001).
 #[derive(Debug, Clone)]
 pub struct DelegationCertV2 {
@@ -785,6 +781,9 @@ fn validate_revoked(refs: &[RevokedCertV2]) -> V2Result<()> {
     for r in refs {
         if r.cert_id.is_empty() || !seen.insert(r.cert_id.as_str()) {
             return plain("v2 revoked cert IDs must be non-empty and unique");
+        }
+        if r.cert_id.len() > MAX_IDENTIFIER_LENGTH_BYTES {
+            return plain(format!("v2 revoked cert ID exceeds {MAX_IDENTIFIER_LENGTH_BYTES} bytes"));
         }
     }
     Ok(())

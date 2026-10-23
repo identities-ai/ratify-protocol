@@ -125,6 +125,12 @@ fn validate_v2_transaction_verify_configuration(
             format!("transaction verification future skew must be 0..{V2_MAX_FUTURE_SKEW_SECONDS} seconds"),
         );
     }
+    if sources.status_policy.clock_skew_seconds != req.future_skew_seconds {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            "status policy clock skew must equal the transaction verification future skew",
+        );
+    }
     validate_v2_status_configuration(&sources.status_keys, &sources.status_policy)
 }
 

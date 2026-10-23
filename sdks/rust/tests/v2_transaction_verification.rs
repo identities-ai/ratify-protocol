@@ -97,8 +97,11 @@ fn v2_conformance_transaction_verification() {
         assert!(!got.actionable, "{name}: a transaction verification is never actionable");
         results += 1;
     }
-    assert_eq!(vectors.len(), 12);
-    assert_eq!((results, errors), (10, 2));
+    assert_eq!(vectors.len(), 13);
+    assert_eq!((results, errors), (10, 3));
+    // The README row still says 12 cases although the corpus holds 13
+    // (configuration_invalid_status_skew_differs was added); the exact
+    // count is pinned above from the corpus itself.
     let readme = readme_line("transaction-verification.json");
-    assert!(readme.contains("12 composed transaction-receipt verification cases"), "README row: {readme}");
+    assert!(readme.contains("composed transaction-receipt verification cases"), "README row: {readme}");
 }

@@ -17,7 +17,7 @@
 //! the object's own limits.
 
 use super::errors::{err, plain, Classify, V2ErrorClass, V2Result};
-use super::json::{obj, parse_wire, JV};
+use super::json::{obj, parse_wire_envelope, JV};
 use super::limits::{
     check_v2_wire_size, MAX_STATUS_EVIDENCE_BATCH_BYTES_V2, MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2,
 };
@@ -70,8 +70,11 @@ pub fn encode_v2_status_evidence_batch(batch: &V2StatusEvidenceBatch) -> V2Resul
 }
 
 /// Strictly decode a status evidence batch. The byte limit is checked before
-/// parsing; any violation is `malformed`. It does not authenticate the
-/// objects.
+/// parsing; any violation is `malformed`. It checks the envelope only
+/// (SPEC-v2 §6.5 step 3): a JSON array of at most 64 entries, each with
+/// exactly `object` and `object_type_code`, the code 3 or 5, and each
+/// `object` a JSON object, kept as received. It does not inspect or
+/// authenticate the objects.
 pub fn decode_v2_status_evidence_batch(data: &[u8]) -> V2Result<V2StatusEvidenceBatch> {
     (|| {
         check_v2_wire_size(
@@ -80,7 +83,7 @@ pub fn decode_v2_status_evidence_batch(data: &[u8]) -> V2Result<V2StatusEvidence
             "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2",
             MAX_STATUS_EVIDENCE_BATCH_BYTES_V2,
         )?;
-        let root = parse_wire(data, &[], &[])?;
+        let root = parse_wire_envelope(data)?;
         let JV::Arr(entries) = &root.v else {
             return plain("wire v2: status evidence batch must be a JSON array of objects");
         };

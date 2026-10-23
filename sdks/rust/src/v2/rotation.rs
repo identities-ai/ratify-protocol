@@ -8,11 +8,14 @@ use super::crypto::{
     equal_keys, key_id_v2, lower_hex, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
 use super::errors::{V2SignError, V2SignResult};
-use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_KEY_ROTATION_STATEMENT_BYTES_V2};
+use super::limits::{
+    check_v2_wire_size, valid_v2_timestamp, MAX_KEY_ROTATION_STATEMENT_BYTES_V2, V2_MAX_FUTURE_SKEW_SECONDS,
+    V2_MAX_TIMESTAMP_SECONDS,
+};
 use super::signer::{sign_v2_statement_with_signer, signer_public_key_v2, LocalSignerV2, SignerV2};
 use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use super::json::{canonical, node_to_cj, obj, parse_wire, CJ, JV};
-use super::wire::{safe, MAX_SAFE};
+use super::wire::MAX_SAFE;
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature};
 
 /// Outcome of a log or journal acceptance check.
@@ -406,16 +409,17 @@ pub fn verify_key_rotation_statement_v2(
             "rotation replacement key was already used by this authority",
         );
     }
-    let mut skew = future_skew;
-    if skew < 0 || !safe(now) || skew > MAX_SAFE {
+    // SPEC-v2 §2.5: the caller's time is in the timestamp domain and the
+    // configured future skew is 0..300 seconds.
+    if !valid_v2_timestamp(now) || !(0..=V2_MAX_FUTURE_SKEW_SECONDS).contains(&future_skew) {
         return err(
             ConfigurationInvalid,
-            "rotation verification clock inputs are outside safe bounds",
+            format!(
+                "rotation verification time must be 0..{V2_MAX_TIMESTAMP_SECONDS} and future skew 0..{V2_MAX_FUTURE_SKEW_SECONDS} seconds"
+            ),
         );
     }
-    if now > MAX_SAFE - skew {
-        skew = MAX_SAFE - now;
-    }
+    let skew = future_skew;
     if !equal_keys(&s.old_key, &state.current_key)
         || s.authority_id != state.authority_id
         || s.recovery_epoch != state.recovery_epoch

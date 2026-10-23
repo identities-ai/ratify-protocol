@@ -529,15 +529,21 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             if !raw.starts_with(b"{") {
                 return plain("wire v2: party proof_bundle must be a JSON object");
             }
+            // The nested bundle is decoded strictly, and must be in canonical
+            // form like the whole receipt, before its hash is compared, so a
+            // malformed bundle is malformed rather than bundle_hash_mismatch.
+            let bundle =
+                decode_proof_bundle_v2(raw).map_err(|e| e.context(format!("wire v2: party {:?} proof bundle", p.party_id)))?;
+            if !encode_proof_bundle_v2(&bundle).is_ok_and(|canonical| canonical == raw) {
+                return plain(format!("wire v2: party {:?} proof bundle is not canonical JSON", p.party_id));
+            }
             if p.proof_bundle_hash != bundle_hash_of_bytes(raw) {
                 return err(
                     V2ErrorClass::BundleHashMismatch,
                     format!("wire v2: party {:?} proof_bundle_hash does not match its canonical bundle bytes", p.party_id),
                 );
             }
-            p.proof_bundle = Some(
-                decode_proof_bundle_v2(raw).map_err(|e| e.context(format!("wire v2: party {:?} proof bundle", p.party_id)))?,
-            );
+            p.proof_bundle = Some(bundle);
         }
         verify_transaction_receipt_v2_signatures(&r)?;
         if encode_canonical(&r)? != data {

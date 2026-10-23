@@ -221,6 +221,11 @@ func evaluateConstraint(c Constraint, certID string, ctx VerifierContext, now ti
 			return fmt.Errorf("malformed max_rate: count and window_s must be positive")
 		}
 		got := ctx.InvocationsInWindow(certID, c.WindowS)
+		// A negative count is not a count: the counter could not answer.
+		// Fail closed rather than read it as "no invocations".
+		if got < 0 {
+			return errConstraintUnverifiable(fmt.Sprintf("rate counter returned negative count %d", got))
+		}
 		if got >= c.Count {
 			return fmt.Errorf("rate limit exceeded: %d invocations in last %ds (max %d)",
 				got, c.WindowS, c.Count)

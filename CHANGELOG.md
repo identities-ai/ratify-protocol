@@ -169,8 +169,8 @@ match before the beta.
 
 ### Fixed
 
-- **v1 `max_rate` fails closed when the rate count is unavailable** (Rust and
-  C). A negative count from the invocation counter is now
+- **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,
+  C, TypeScript and Python). A negative count from the invocation counter is now
   `constraint_unverifiable` instead of passing. Through the C ABI, a
   `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
   now fails closed the same way without calling the callback.

@@ -236,7 +236,7 @@ fn v2_object_negatives() {
         });
     }
     assert_eq!(kinds.len(), 9, "negative kinds: {kinds:?}");
-    t.finish(&[("negatives", 401)]);
+    t.finish(&[("negatives", 423)]);
 }
 
 fn hedged_idempotency(fx: &Fixture, kind: &str, vc: &Value, deterministic: &[u8], hedged: &[u8]) -> Result<(), String> {
@@ -398,5 +398,5 @@ fn v2_limits() {
         let gate_ok = (s(&v["size_gate"]) == "fail") == gate_failed;
         t.check("limits", &name, expectation_ok && gate_ok, || format!("{result:?}"));
     }
-    t.finish(&[("limits", 32)]);
+    t.finish(&[("limits", 57)]);
 }

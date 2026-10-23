@@ -133,6 +133,15 @@ match before the beta.
   `checkpoint_fork_freezes_log` and
   `checkpoint_refusal_without_fork_does_not_freeze`, with the new
   `acknowledge` step.
+- **Rust and C interfaces for these changes.** Rust: `V2ReleaseRecord` gains
+  `outcome` and `reason` (and no longer implements `Default`), with
+  `valid_v2_release_record_outcome` and `validate_v2_finalization_payload`.
+  C: `RATIFY_V2_ABI_VERSION` is 3. `RatifyV2ReleaseRecord` gains `outcome`
+  (a `RatifyV2ReleaseStatus`) and `reason`, `RatifyV2TerminalClaim` gains
+  `release_outcome` and `release_reason`, and the store helpers
+  `ratify_v2_validate_finalization_payload` and
+  `ratify_v2_valid_release_record_outcome` are exported. A C program built
+  against ABI version 2 must be rebuilt.
 
 ### Changed in pre-release review
 

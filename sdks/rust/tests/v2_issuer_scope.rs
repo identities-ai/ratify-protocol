@@ -82,8 +82,10 @@ fn rate_batches_are_issuer_scoped() {
         ..Default::default()
     };
     let admit = |id: &str, item: &V2RateReservation| {
-        let created = view.claim_v2(&ctx, claim(id, item)).expect("claim");
-        view.finalize_v2_claim(&ctx, id, &created.owner_token, b"{}", id.as_bytes(), 1_800_000_100)
+        let mut sealed = claim(id, item);
+        let (terminal, body) = bind_claim_to_receipt_body(&mut sealed, 1_800_000_000);
+        let created = view.claim_v2(&ctx, sealed).expect("claim");
+        view.finalize_v2_claim(&ctx, id, &created.owner_token, &terminal, &body, 1_800_000_100)
     };
     assert_eq!(admit("a1", &batch[0]), Ok(true));
     assert_eq!(admit("b1", &batch[1]), Ok(true), "another issuer's counter is independent");

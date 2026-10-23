@@ -48,7 +48,7 @@ fn v2_device_state_projection_vectors() {
             "{name}: the anchoring digest differs from the projection digest"
         );
     }
-    assert_eq!(cases.len(), 5);
+    assert_eq!(cases.len(), 6);
     let readme = readme_line("device-state.json");
-    assert!(readme.contains("5 single-device offline complete-state projection known answers"), "README row: {readme}");
+    assert!(readme.contains("6 single-device offline complete-state projection known answers"), "README row: {readme}");
 }

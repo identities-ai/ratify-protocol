@@ -41,6 +41,7 @@ const NOT_FALLIBLE: &[&str] = &[
     "ratify_v2_released_free",
     "ratify_v2_evaluator_call_expired",
     "ratify_v2_challenge_time_current",
+    "ratify_v2_valid_release_record_outcome",
     "ratify_v2_released_allowed",
 ];
 
@@ -575,6 +576,13 @@ fn v2c_public_api_errors_are_classified() {
             "ratify_v2_check_stream_sequence",
             "stream_sequence_mismatch",
             || ratify_v2_check_stream_sequence(1, 5, 5),
+        ),
+        call(
+            "ratify_v2_validate_finalization_payload",
+            "bad_argument",
+            || unsafe {
+                ratify_v2_validate_finalization_payload(b"[]".as_ptr(), 2, b"{}".as_ptr(), 2, b"{}".as_ptr(), 2)
+            },
         ),
         call("ratify_v2_cross_sdk_fixture_verify", "", move || {
             let sdk = cs("c");

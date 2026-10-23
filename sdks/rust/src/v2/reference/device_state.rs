@@ -145,7 +145,9 @@ fn progress_projection(p: &V2EvaluationProgress) -> Value {
 
 fn claim_projection(id: &str, r: &ClaimRecord) -> Value {
     let release = r.release.as_ref().map(|rel| {
-        json!({"ack_timestamp": rel.ack_timestamp, "claim_id": rel.claim_id, "entry_hash": STANDARD.encode(&rel.entry_hash)})
+        let reason = (!rel.reason.is_empty()).then_some(rel.reason.as_str());
+        json!({"ack_timestamp": rel.ack_timestamp, "claim_id": rel.claim_id, "entry_hash": STANDARD.encode(&rel.entry_hash),
+            "outcome": rel.outcome.as_str(), "reason": reason})
     });
     let state = match r.state {
         ClaimState::Evaluating => "evaluating",
@@ -593,7 +595,7 @@ fn load_records(state_json: &[u8]) -> V2Result<DevicePrimaryTestOnly> {
     use crate::v2::evaluator::ConstraintEvaluatorRefV2;
     use crate::v2::rate_reservation::V2RateReservation;
     use crate::v2::receipt::StatusEvidenceEntryV2;
-    use crate::v2::release::V2ReleaseRecord;
+    use crate::v2::release::{V2ReleaseRecord, V2ReleaseStatus};
     use super::store::OutboxEntry;
 
     let st: Value = serde_json::from_slice(state_json)
@@ -664,6 +666,12 @@ fn load_records(state_json: &[u8]) -> V2Result<DevicePrimaryTestOnly> {
                     claim_id: text(r, "claim_id")?,
                     entry_hash: bytes(r, "entry_hash")?,
                     ack_timestamp: int(r, "ack_timestamp")?,
+                    outcome: match text(r, "outcome")?.as_str() {
+                        "released" => V2ReleaseStatus::Released,
+                        "withheld" => V2ReleaseStatus::Withheld,
+                        _ => return Err(V2Error::plain("v2reference: device state: unknown release outcome")),
+                    },
+                    reason: field(r, "reason")?.as_str().unwrap_or_default().to_string(),
                 }),
             };
             let owner = bytes(c, "owner_digest")?;
@@ -863,7 +871,7 @@ mod tests {
     use crate::crypto::generate_hybrid_keypair;
     use crate::v2::claim_store::{ClaimStoreV2, V2ChallengeClaim};
     use crate::v2::journal::record_security_key_role_v2;
-    use crate::v2::release::V2ReleaseRecord;
+    use crate::v2::release::{V2ReleaseRecord, V2ReleaseStatus};
 
     const LOG_ID: &str = "dddddddddddddddddddddddddddddd01";
 
@@ -908,6 +916,8 @@ mod tests {
             claim_id: "claim-1".into(),
             entry_hash: vec![entry; 48],
             ack_timestamp: at,
+            outcome: V2ReleaseStatus::Released,
+            reason: String::new(),
         }
     }
 
@@ -986,7 +996,16 @@ mod tests {
         // Every field of a release record is covered, not only its presence.
         let released = with_store(&primary, |s| claim_1(s).release = Some(release_record(1, 1_000)));
         let with_release = released.complete_state_digest_test_only().unwrap();
-        for (name, record) in [("release entry hash", release_record(2, 1_000)), ("release ack timestamp", release_record(1, 999))] {
+        let withheld = V2ReleaseRecord {
+            outcome: V2ReleaseStatus::Withheld,
+            reason: "challenge_expired".into(),
+            ..release_record(1, 1_000)
+        };
+        for (name, record) in [
+            ("release entry hash", release_record(2, 1_000)),
+            ("release ack timestamp", release_record(1, 999)),
+            ("release outcome", withheld),
+        ] {
             let p = with_store(&released, |s| claim_1(s).release = Some(record));
             assert_ne!(p.complete_state_digest_test_only().unwrap(), with_release, "changing the {name} does not change the digest");
         }

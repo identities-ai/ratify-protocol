@@ -122,7 +122,9 @@ pub type RatifyV2ClaimFn = Option<
 >;
 /// Commits a terminal result under the owner token and live lease, reading
 /// T_final inside the compare-and-set. `*committed` is 1 when it commits, 0
-/// for an identical repeat.
+/// for an identical repeat. Inside the compare-and-set the store refuses a
+/// receipt body that does not bind the sealed claim (SPEC-v2 §7.5; see
+/// `ratify_v2_validate_finalization_payload`), committing nothing.
 pub type RatifyV2FinalizeFn = Option<
     unsafe extern "C" fn(
         user: *mut c_void,
@@ -211,7 +213,15 @@ pub struct RatifyV2RateCallbacks {
 
 /// What the claim store returns to release (§7.3, §6.9).
 /// `receipt_outbox_digest` is `ReceiptOutboxDigest` of the committed body
-/// (see `ratify_v2_receipt_outbox_digest`) or "" when not terminal.
+/// (see `ratify_v2_receipt_outbox_digest`) or "" when not terminal. With
+/// `has_release` set, the `release_*` members are the claim's release record
+/// exactly as `record_release` received it: `release_outcome` is
+/// `RatifyV2ReleaseReleased` with `release_reason` "" (or NULL), or
+/// `RatifyV2ReleaseWithheld` with the recorded withheld reason. A recorded
+/// withheld result is returned by every later release right after the
+/// committed-state step; any other outcome or reason (including
+/// `RatifyV2ReleaseNone`, the zero value) is `rejected /
+/// release_state_mismatch`.
 #[repr(C)]
 pub struct RatifyV2TerminalClaim {
     pub terminal: i32,
@@ -224,14 +234,26 @@ pub struct RatifyV2TerminalClaim {
     pub release_claim_id: *const c_char,
     pub release_entry_hash: RatifyV2Slice,
     pub release_ack_timestamp: i64,
+    pub release_outcome: i32,
+    pub release_reason: *const c_char,
 }
 
-/// The durable release record of §6.9 step 9.
+/// The durable release record of SPEC-v2 §6.9: the release of step 9
+/// (`outcome` `RatifyV2ReleaseReleased`, `reason` "") or a withheld result of
+/// steps 7 and 8 (`outcome` `RatifyV2ReleaseWithheld`, `reason`
+/// "clock_regressed", "challenge_expired" or "allow_horizon_passed").
+/// `entry_hash` and `ack_timestamp` name the verified receipt entry and its
+/// acknowledgement. `reason` is never NULL. The first record for a claim
+/// wins: the store persists every member and returns it unchanged through
+/// `load_terminal`, an identical record is 0, and any different record is
+/// `RatifyV2StoreReleaseStateMismatch`.
 #[repr(C)]
 pub struct RatifyV2ReleaseRecord {
     pub claim_id: *const c_char,
     pub entry_hash: RatifyV2Slice,
     pub ack_timestamp: i64,
+    pub outcome: i32,
+    pub reason: *const c_char,
 }
 
 pub type RatifyV2LoadTerminalFn = Option<
@@ -241,8 +263,10 @@ pub type RatifyV2LoadTerminalFn = Option<
         out: *mut RatifyV2TerminalClaim,
     ) -> i32,
 >;
-/// Records a release; an identical repeat is 0, a different existing record
-/// is `RatifyV2StoreReleaseStateMismatch`.
+/// Records a release or withheld record; an identical repeat is 0, a
+/// different existing record is `RatifyV2StoreReleaseStateMismatch`. When
+/// recording a withheld result fails otherwise, that release call is still
+/// withheld.
 pub type RatifyV2RecordReleaseFn =
     Option<unsafe extern "C" fn(user: *mut c_void, record: *const RatifyV2ReleaseRecord) -> i32>;
 
@@ -265,6 +289,12 @@ pub struct RatifyV2Acknowledgement {
     pub timestamp: i64,
 }
 
+/// Acknowledges the next appended entry of a log, linked by
+/// `previous_entry_hash`, and returns the original acknowledgement for an
+/// identical retry (SPEC-v2 §7.8). A different entry hash at an acknowledged
+/// sequence is a fork: the checkpoint refuses it and acknowledges nothing
+/// further for that log, while `get` still returns acknowledgements given
+/// before the fork.
 pub type RatifyV2AcknowledgeFn = Option<
     unsafe extern "C" fn(
         user: *mut c_void,
@@ -1110,6 +1140,8 @@ impl V2ReleaseClaimStore for CReleaseStore {
             release_claim_id: std::ptr::null(),
             release_entry_hash: RatifyV2Slice::empty(),
             release_ack_timestamp: 0,
+            release_outcome: 0,
+            release_reason: std::ptr::null(),
         };
         // SAFETY: caller-supplied callback.
         let code = unsafe { f(self.cb.user, id.as_ptr(), &mut out) };
@@ -1129,6 +1161,8 @@ impl V2ReleaseClaimStore for CReleaseStore {
                     claim_id: owned(out.release_claim_id),
                     entry_hash: slice_vec(out.release_entry_hash),
                     ack_timestamp: out.release_ack_timestamp,
+                    outcome: super::verifier::release_status_from_c(out.release_outcome),
+                    reason: owned(out.release_reason),
                 }),
             })
         }
@@ -1144,10 +1178,13 @@ impl V2ReleaseClaimStore for CReleaseStore {
             .record_release
             .ok_or_else(|| missing("record_release"))?;
         let id = cs(&record.claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
+        let reason = cs(&record.reason, "reason").map_err(V2StoreError::Unavailable)?;
         let view = RatifyV2ReleaseRecord {
             claim_id: id.as_ptr(),
             entry_hash: RatifyV2Slice::of(&record.entry_hash),
             ack_timestamp: record.ack_timestamp,
+            outcome: super::verifier::release_status_to_c(record.outcome),
+            reason: reason.as_ptr(),
         };
         // SAFETY: caller-supplied callback.
         let code = unsafe { f(self.cb.user, &view) };

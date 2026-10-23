@@ -433,6 +433,7 @@ independent implementation. Check `ratify_v2_abi_version()` against
 | Stateless verification | `ratify_v2_verify_object`, `ratify_v2_proof_bundle_verify_signatures`, `ratify_v2_receipt_bundle_binding_check`, `ratify_v2_archival_verify` |
 | Live verifier | `ratify_v2_verify_proof_bundle`, `ratify_v2_claim_proof_bundle`, `ratify_v2_recover_interrupted_claim`, `ratify_v2_issue_challenge`, `ratify_v2_load_expected_challenge`, `ratify_v2_verify_transaction_receipt` |
 | Release | `ratify_v2_release_decision`, `ratify_v2_released_allowed` and the `ratify_v2_committed_*` / `ratify_v2_released_*` accessors |
+| Store helpers | `ratify_v2_challenge_time_current`, `ratify_v2_check_stream_sequence`, `ratify_v2_validate_finalization_payload`, `ratify_v2_valid_release_record_outcome` |
 | State machines | status reducer (`ratify_v2_status_state_*`), `SecurityJournalV2` (`ratify_v2_journal_*`), status publisher (`ratify_v2_status_publish`), rotation journal (`ratify_v2_rotation_journal_*`), witness and receipt logs (`ratify_v2_witness_entry_append`, `ratify_v2_verification_receipt_append`) |
 
 No function signs caller-selected bytes, codes, contexts, or prehash modes.
@@ -520,6 +521,25 @@ outcome is an opaque `RatifyV2Committed` handle that is not actionable.
 effect only on `ratify_v2_released_allowed`, which reads your authoritative
 clock and returns 1 only for an allow strictly before both sealed deadlines;
 any failure returns 0.
+
+**Release records.** A release store records two kinds of
+`RatifyV2ReleaseRecord` through `record_release` (SPEC-v2 §6.9): a release
+(`outcome` `RatifyV2ReleaseReleased`, `reason` "") and a withheld result of
+release steps 7 and 8 (`outcome` `RatifyV2ReleaseWithheld`, `reason`
+"clock_regressed", "challenge_expired" or "allow_horizon_passed"). The first
+record for a claim wins: an identical record returns 0 and any different
+one returns `RatifyV2StoreReleaseStateMismatch`. `load_terminal` returns the
+record unchanged in `release_outcome` and `release_reason`; a recorded
+withheld result makes every later release of the claim withheld with that
+reason, and an outcome other than released or withheld (including the zero
+value) is `rejected / release_state_mismatch`. If recording a withheld
+result fails, that call is still withheld. `rejected` describes only the
+call that returned it and records nothing. A claim store's `finalize`
+refuses a receipt body that does not bind the sealed claim (SPEC-v2 §7.5),
+which `ratify_v2_validate_finalization_payload` checks against the claim's
+persisted `record`, and a checkpoint that sees a different entry hash at an
+acknowledged sequence refuses it and acknowledges nothing further for that
+log (§7.8).
 
 **Thread safety.** Functions that take no handle are safe to call
 concurrently. A handle is used by one thread at a time; serialize concurrent

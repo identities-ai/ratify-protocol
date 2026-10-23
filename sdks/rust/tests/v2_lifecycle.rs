@@ -166,6 +166,64 @@ impl V2ReceiptCheckpoint for WrongEntryCheckpoint {
     }
 }
 
+/// Go `v2OwnerCapturingClaimStore`: records the evaluator owner token a
+/// claim store returns to the creator, so a finalize step can call the store
+/// directly.
+struct OwnerCapturingClaimStore {
+    inner: Arc<dyn ClaimStoreV2>,
+    owner: Mutex<Vec<u8>>,
+}
+
+impl V2AuthoritativeClock for OwnerCapturingClaimStore {
+    fn authoritative_time_v2(&self, ctx: &V2Context) -> Result<i64, V2StoreError> {
+        self.inner.authoritative_time_v2(ctx)
+    }
+}
+
+impl ClaimStoreV2 for OwnerCapturingClaimStore {
+    fn claim_v2(&self, ctx: &V2Context, claim: V2ChallengeClaim) -> Result<V2ClaimResult, V2StoreError> {
+        let result = self.inner.claim_v2(ctx, claim);
+        *self.owner.lock().unwrap() = result.as_ref().map(|r| r.owner_token.clone()).unwrap_or_default();
+        result
+    }
+    fn finalize_v2_claim(
+        &self,
+        ctx: &V2Context,
+        claim_id: &str,
+        owner_token: &[u8],
+        terminal_result: &[u8],
+        receipt_body: &[u8],
+        allow_valid_until: i64,
+    ) -> Result<bool, V2StoreError> {
+        self.inner
+            .finalize_v2_claim(ctx, claim_id, owner_token, terminal_result, receipt_body, allow_valid_until)
+    }
+    fn record_v2_evaluation_progress(
+        &self,
+        ctx: &V2Context,
+        claim_id: &str,
+        owner_token: &[u8],
+        progress: V2EvaluationProgress,
+    ) -> Result<(), V2StoreError> {
+        self.inner.record_v2_evaluation_progress(ctx, claim_id, owner_token, progress)
+    }
+    fn load_v2_interrupted_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2InterruptedClaim, V2StoreError> {
+        self.inner.load_v2_interrupted_claim(ctx, claim_id)
+    }
+    fn recover_interrupted_v2_claim(
+        &self,
+        ctx: &V2Context,
+        claim_id: &str,
+        terminal_result: &[u8],
+        receipt_body: &[u8],
+    ) -> Result<bool, V2StoreError> {
+        self.inner.recover_interrupted_v2_claim(ctx, claim_id, terminal_result, receipt_body)
+    }
+    fn rate_at_finalization_view(&self) -> Option<&dyn V2RateAtFinalizationStore> {
+        self.inner.rate_at_finalization_view()
+    }
+}
+
 /// The claim store of a scenario: the reference store, or its
 /// rate-at-finalization view used as both claim and rate store.
 fn claim_store_of(store: &Arc<Store>, rate_at_finalization: bool) -> (Arc<dyn ClaimStoreV2>, Option<Arc<dyn V2RateReservationStore>>) {
@@ -280,6 +338,7 @@ fn lifecycle_scenarios() {
         let rate_at_finalization = b(&sc["rate_at_finalization"]);
         let mut store = new_store(i(&sc["start_time"]), &s(&f["log_id"]));
         let mut log_id = s(&f["log_id"]);
+        let mut owners: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         let mut committed: BTreeMap<String, CommittedV2Outcome> = BTreeMap::new();
         let mut receipts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         // (claim IDs by request name, request name by claim ID), written by
@@ -376,9 +435,13 @@ fn lifecycle_scenarios() {
                     )
                     .expect("preflight");
                     let (claim_store, _) = claim_store_of(&store, rate_at_finalization);
+                    let capturing = OwnerCapturingClaimStore {
+                        inner: claim_store,
+                        owner: Mutex::new(Vec::new()),
+                    };
                     let result = claim_proof_bundle_v2(
                         &ctx,
-                        claim_store.as_ref(),
+                        &capturing,
                         &bundle,
                         &pre,
                         &req.verifier_namespace,
@@ -398,6 +461,61 @@ fn lifecycle_scenarios() {
                     let mut ids = ids.lock().unwrap();
                     ids.0.insert(request.clone(), claim_id.clone());
                     ids.1.insert(claim_id, request.clone());
+                    owners.insert(request.clone(), capturing.owner.into_inner().unwrap());
+                }
+                "acknowledge" => {
+                    let receipt = decode_verification_receipt_v2(&receipts[&request]).expect("receipt");
+                    let mut entry = verification_receipt_v2_digest(&receipt).expect("entry hash");
+                    match mode.as_str() {
+                        "exact" => {}
+                        "fork" => entry[0] ^= 1,
+                        other => panic!("unknown acknowledge mode {other}"),
+                    }
+                    let ack = store.acknowledge_v2_receipt(
+                        &ctx,
+                        &receipt.log_id,
+                        receipt.sequence,
+                        &receipt.previous_receipt_hash,
+                        &entry,
+                    );
+                    if b(&want["failed"]) {
+                        assert!(ack.is_err(), "{at} acknowledge {mode}: {ack:?}, want refusal");
+                        continue;
+                    }
+                    let ack = ack.unwrap_or_else(|e| panic!("{at} acknowledge: {e:?}"));
+                    assert!(
+                        ack.timestamp == i(&want["ack_timestamp"]) && ack.sequence == receipt.sequence && ack.entry_hash == entry,
+                        "{at} acknowledge: {ack:?}, want timestamp {}",
+                        i(&want["ack_timestamp"])
+                    );
+                }
+                "finalize" => {
+                    let (claim_store, _) = claim_store_of(&store, rate_at_finalization);
+                    let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_default();
+                    let owner = owners.get(&request).cloned().unwrap_or_default();
+                    let finalized = claim_store.finalize_v2_claim(
+                        &ctx,
+                        &claim_id,
+                        &owner,
+                        &unb64(&step["terminal_b64"]),
+                        &unb64(&step["body_b64"]),
+                        i(&step["allow_valid_until"]),
+                    );
+                    let class = s(&want["error_class"]);
+                    if !class.is_empty() {
+                        let got = finalized.as_ref().err().and_then(V2StoreError::class);
+                        assert!(
+                            !matches!(finalized, Ok(true)) && class_str(got) == class,
+                            "{at} finalize: {finalized:?}, want class {class}"
+                        );
+                        continue;
+                    }
+                    let got = match finalized {
+                        Ok(true) => "committed",
+                        Ok(false) => "identical",
+                        Err(e) => panic!("{at} finalize: {e:?}"),
+                    };
+                    assert_eq!(got, s(&want["finalize_result"]), "{at} finalize");
                 }
                 "recover" => {
                     let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
@@ -457,7 +575,10 @@ fn lifecycle_scenarios() {
                 "release" => {
                     let c = committed.get(&request).unwrap_or_else(|| panic!("{at}: {request} was never committed"));
                     let receipt_of = s(&step["receipt_of"]);
-                    let receipt = receipts.get(if receipt_of.is_empty() { &request } else { &receipt_of });
+                    let mut receipt = receipts.get(if receipt_of.is_empty() { &request } else { &receipt_of });
+                    if mode == "no_receipt" {
+                        receipt = None;
+                    }
                     let wrong = WrongEntryCheckpoint(store.clone());
                     let checkpoint: &dyn V2ReceiptCheckpoint = if s(&step["checkpoint"]) == "wrong_entry" {
                         &wrong
@@ -493,9 +614,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (32, 162), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (48, 271), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("32 Part B scripts (162 steps)"), "README row: {readme}");
+    assert!(readme.contains("48 Part B scripts (271 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

@@ -318,6 +318,17 @@ pub(crate) fn parse_wire(data: &[u8], top_byte: &[&str], top_text: &[&str]) -> V
     Ok(root)
 }
 
+/// Parse a status evidence batch envelope (SPEC-v2 §2.1, §6.5 step 3): the
+/// strict JSON and byte-field rules of [`parse_wire`], without the `null`
+/// rule, because each entry's `object` is opaque to the batch decoder and is
+/// decoded strictly under its code during authentication. The batch decoder
+/// itself rejects a `null` envelope, entry, member, or object.
+pub(crate) fn parse_wire_envelope(data: &[u8]) -> V2Result<JNode> {
+    let root = parse_json(data)?;
+    check_byte_fields(&root, 0, &[], &[])?;
+    Ok(root)
+}
+
 /// The only v2 schema members whose value may be `null` (SPEC-v2 §2.1).
 const NULLABLE_MEMBERS: &[&str] = &[
     "session_context",

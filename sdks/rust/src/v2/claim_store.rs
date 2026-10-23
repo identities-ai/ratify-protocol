@@ -18,6 +18,7 @@ use super::limits::v2_challenge_time_current;
 use super::operation_context::{challenge_claim_digest_v2, protocol_claim_id_v2};
 use super::preflight::{validate_proof_bundle_v2_preflight, ExpectedChallengeStateV2, ExpectedChallengeV2, V2PreflightResult};
 use super::rate_reservation::{signed_v2_rate_reservation_batch, V2RateReservation};
+use super::receipt::decode_verification_receipt_body_v2;
 use super::wire::{bundle_hash_v2, ProofBundleV2};
 
 // ---------------------------------------------------------------------------
@@ -322,6 +323,7 @@ impl fmt::Debug for V2EvaluationToken {
 
 pub(crate) struct TokenState {
     pub claim_id: String,
+    pub claim: V2ChallengeClaim,
     pub proof_digest: String,
     pub required_scope: String,
     pub future_skew: i64,
@@ -475,6 +477,7 @@ pub(crate) fn claim_proof_bundle_v2_inner(
             let token = V2EvaluationToken {
                 state: Arc::new(TokenState {
                     claim_id: claim.claim_id.clone(),
+                    claim: claim.clone(),
                     proof_digest: claim.proof_digest.clone(),
                     required_scope: sealed.required_scope.clone(),
                     future_skew: sealed.future_skew,
@@ -573,6 +576,7 @@ pub(crate) fn finalize_claim_proof_bundle_v2_inner(
     if !terminal_payload_matches_v2(terminal_result, receipt_body, decision, &m.evaluation_reason) {
         return own("v2 terminal result does not match the completed local evaluation");
     }
+    validate_v2_finalization_payload(&state.claim, terminal_result, receipt_body).map_err(FinalizeFailure::Own)?;
     if (decision == "allow" && m.allow_valid_until <= 0) || (decision != "allow" && m.allow_valid_until != 0) {
         return own("v2 terminal result lacks a valid allow freshness horizon");
     }
@@ -604,6 +608,57 @@ pub(crate) fn finalize_claim_proof_bundle_v2_inner(
         }
     }
     result.map_err(FinalizeFailure::Store)
+}
+
+/// Go `ValidateV2FinalizationPayload`: checks that a terminal result and its
+/// unsigned receipt outbox body belong to the sealed claim (SPEC-v2 §7.5).
+/// The body must decode strictly as a canonical receipt body (`malformed`
+/// otherwise). Its `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids`
+/// (the sorted, distinct sealed issuer IDs), `required_scope`, a non-null
+/// `context_policy_digest`, and `constraint_evaluators` must equal the sealed
+/// claim's values, and the terminal result must be a JSON object whose
+/// `decision` and `decision_reason` equal the body's; any difference is
+/// `configuration_invalid`. [`finalize_claim_proof_bundle_v2`] applies it
+/// before the store is called, and a claim store applies it inside its
+/// finalization compare-and-set so that no caller can commit a body for
+/// another proof.
+pub fn validate_v2_finalization_payload(
+    claim: &V2ChallengeClaim,
+    terminal_result: &[u8],
+    receipt_body: &[u8],
+) -> V2Result<()> {
+    (|| {
+        let body = decode_verification_receipt_body_v2(receipt_body)?;
+        let mut issuers = claim.issuer_ids.clone();
+        issuers.sort();
+        issuers.dedup();
+        if body.verifier_id != claim.verifier_id {
+            return plain("v2 receipt body verifier_id differs from the sealed claim");
+        }
+        if body.agent_id != claim.agent_id {
+            return plain("v2 receipt body agent_id differs from the sealed claim");
+        }
+        if body.bundle_hash != claim.bundle_hash {
+            return plain("v2 receipt body bundle_hash differs from the sealed claim");
+        }
+        if body.issuer_ids != issuers {
+            return plain("v2 receipt body issuer_ids differ from the sealed claim");
+        }
+        if body.required_scope != claim.required_scope {
+            return plain("v2 receipt body required_scope differs from the sealed claim");
+        }
+        if body.context_policy_digest.as_ref().is_some_and(|d| *d != claim.context_policy_digest) {
+            return plain("v2 receipt body context_policy_digest differs from the sealed claim");
+        }
+        if body.constraint_evaluators != claim.constraint_evaluators {
+            return plain("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot");
+        }
+        if !terminal_payload_matches_v2(terminal_result, receipt_body, &body.decision, &body.decision_reason) {
+            return plain("v2 terminal result decision or reason differs from the receipt body");
+        }
+        Ok(())
+    })()
+    .map_err(|e| e.classify(V2ErrorClass::ConfigurationInvalid))
 }
 
 /// Go `terminalDecisionForV2Evaluation`.

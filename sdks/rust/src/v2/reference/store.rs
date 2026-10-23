@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use crate::types::HybridPrivateKey;
 use crate::v2::checkpoint_ack::V2CheckpointAcknowledgement;
 use crate::v2::claim_store::{
-    challenge_claim_time_current_v2, ClaimStoreV2, V2AuthoritativeClock, V2ChallengeClaim, V2ClaimDisposition,
+    challenge_claim_time_current_v2, validate_v2_finalization_payload, ClaimStoreV2, V2AuthoritativeClock, V2ChallengeClaim, V2ClaimDisposition,
     V2ClaimResult, V2RateAtFinalizationStore, V2RateReservationStore, V2StoreError,
 };
 use crate::v2::context::V2Context;
@@ -36,8 +36,8 @@ use crate::v2::receipt::{
     ReceiptV2Head,
 };
 use crate::v2::release::{
-    receipt_outbox_digest_v2, V2ReceiptCheckpoint, V2ReceiptPublisher, V2ReleaseClaimStore, V2ReleaseRecord,
-    V2TerminalClaimRecord,
+    receipt_outbox_digest_v2, valid_v2_release_record_outcome, V2ReceiptCheckpoint, V2ReceiptPublisher,
+    V2ReleaseClaimStore, V2ReleaseRecord, V2ReleaseStatus, V2TerminalClaimRecord,
 };
 use crate::v2::stream_sequence::check_v2_stream_sequence;
 
@@ -112,6 +112,9 @@ pub(crate) struct StoreState {
     pub outbox: Vec<OutboxEntry>,
     pub ack_withheld: bool,
     pub log_frozen: bool,
+    /// The reference checkpoint refused a fork for this log (SPEC-v2 §7.8)
+    /// and acknowledges nothing further for it.
+    pub checkpoint_frozen: bool,
     pub signer_failure: bool,
     pub rate_at_finalization: bool,
     pub rate_commits: BTreeMap<(String, String, i64), Vec<i64>>,
@@ -167,6 +170,7 @@ impl Store {
                 outbox: Vec::new(),
                 ack_withheld: false,
                 log_frozen: false,
+                checkpoint_frozen: false,
                 signer_failure: false,
                 rate_at_finalization: false,
                 rate_commits: BTreeMap::new(),
@@ -241,6 +245,8 @@ impl Store {
                 claim_id: claim_id.to_string(),
                 entry_hash,
                 ack_timestamp,
+                outcome: V2ReleaseStatus::Released,
+                reason: String::new(),
             });
         }
     }
@@ -312,20 +318,37 @@ impl StoreState {
         Ok(())
     }
 
+    /// Go `acknowledgePendingLocked`: submit every appended, unacknowledged
+    /// entry to the reference checkpoint in log order. Acknowledgements are
+    /// timestamped by one authoritative reading (SPEC-v2 §7.2), which
+    /// advances the high-water mark; while the clock is regressed nothing is
+    /// acknowledged.
     fn acknowledge_pending_locked(&mut self) {
-        let (log_id, now) = (self.log_id.clone(), self.now);
-        for (i, entry) in self.outbox.iter_mut().enumerate() {
-            if entry.wire.is_none() {
+        if self.checkpoint_frozen {
+            return;
+        }
+        let mut now = None;
+        for i in 0..self.outbox.len() {
+            if self.outbox[i].wire.is_none() {
                 return;
             }
-            if entry.ack.is_some() {
+            if self.outbox[i].ack.is_some() {
                 continue;
             }
+            let timestamp = match now {
+                Some(t) => t,
+                None => match self.read_clock_locked() {
+                    Ok(t) => *now.insert(t),
+                    Err(_) => return,
+                },
+            };
+            let log_id = self.log_id.clone();
+            let entry = &mut self.outbox[i];
             entry.ack = Some(V2CheckpointAcknowledgement {
-                log_id: log_id.clone(),
+                log_id,
                 sequence: i as i64 + 1,
                 entry_hash: entry.digest.clone(),
-                timestamp: now,
+                timestamp,
             });
         }
     }
@@ -515,7 +538,10 @@ impl ClaimStoreV2 for Store {
     }
 
     /// Commit the evaluator's terminal result while its lease is live,
-    /// reading T_final inside the same critical section. A regressed clock
+    /// reading T_final inside the same critical section. The receipt body
+    /// must bind the sealed claim ([`validate_v2_finalization_payload`]:
+    /// `malformed` or `configuration_invalid` otherwise, committing
+    /// nothing). A regressed clock
     /// fails with `clock_regressed`; an allow is rejected at or beyond its
     /// horizon or the challenge expiry. With rate admission at finalization,
     /// an allow is admitted against the sealed rate batch here and fails
@@ -546,6 +572,7 @@ impl ClaimStoreV2 for Store {
         let Some(record) = s.claims.get(claim_id) else {
             return Err(classified(V2ErrorClass::ClaimNotFound, "v2reference: unknown claim"));
         };
+        validate_v2_finalization_payload(&record.claim, terminal_result, receipt_body)?;
         if allow_valid_until > 0 && (final_at >= allow_valid_until || final_at >= record.claim.expires_at) {
             return Err(classified(
                 V2ErrorClass::AllowHorizonPassed,
@@ -706,10 +733,22 @@ impl V2ReleaseClaimStore for Store {
         })
     }
 
-    /// An identical repeat is a no-op; a different existing record is
-    /// [`V2StoreError::ReleaseStateMismatch`].
+    /// Records a release or a withheld result (SPEC-v2 §6.9): the first
+    /// record for a claim wins, an identical repeat is a no-op, and any
+    /// different record is [`V2StoreError::ReleaseStateMismatch`]. A new
+    /// record is a durable security-state change, anchored like any other.
     fn record_v2_release(&self, _ctx: &V2Context, release: V2ReleaseRecord) -> Result<(), V2StoreError> {
         let mut s = self.lock();
+        if !valid_v2_release_record_outcome(release.outcome, &release.reason) {
+            return Err(classified(
+                V2ErrorClass::ConfigurationInvalid,
+                &format!(
+                    "v2reference: invalid release record outcome {:?} reason {:?}",
+                    release.outcome.as_str(),
+                    release.reason
+                ),
+            ));
+        }
         let Some(record) = s.claims.get(&release.claim_id) else {
             return Err(V2StoreError::ReleaseStateMismatch);
         };
@@ -717,7 +756,11 @@ impl V2ReleaseClaimStore for Store {
             return Err(V2StoreError::ReleaseStateMismatch);
         }
         if let Some(existing) = &record.release {
-            if existing.entry_hash == release.entry_hash && existing.ack_timestamp == release.ack_timestamp {
+            if existing.entry_hash == release.entry_hash
+                && existing.ack_timestamp == release.ack_timestamp
+                && existing.outcome == release.outcome
+                && existing.reason == release.reason
+            {
                 return Ok(());
             }
             return Err(V2StoreError::ReleaseStateMismatch);
@@ -796,7 +839,12 @@ impl V2ReceiptPublisher for Store {
 impl V2ReceiptCheckpoint for Store {
     /// Accept only the next appended entry of the log, linked by
     /// `previous_entry_hash`, and return the original acknowledgement for an
-    /// identical retry.
+    /// identical retry. A different entry hash at an acknowledged sequence is
+    /// a fork (SPEC-v2 §7.8): it is refused and freezes the log, after which
+    /// the checkpoint acknowledges nothing further for it, neither here nor
+    /// from the publisher's submissions. Identical retries of
+    /// acknowledgements made before the fork still return the original
+    /// acknowledgement.
     fn acknowledge_v2_receipt(
         &self,
         _ctx: &V2Context,
@@ -811,6 +859,18 @@ impl V2ReceiptCheckpoint for Store {
             return Err(refused());
         }
         let index = sequence as usize - 1;
+        let acked = s.outbox[index].ack.as_ref().map(|a| a.entry_hash.clone());
+        if acked.as_ref().is_some_and(|h| h != entry_hash) {
+            s.checkpoint_frozen = true;
+            return Err(V2StoreError::Unavailable(format!(
+                "{ERR_NOT_ACKNOWLEDGED}: a different entry hash at acknowledged sequence {sequence} is a fork; the log is frozen"
+            )));
+        }
+        if s.checkpoint_frozen && acked.is_none() {
+            return Err(V2StoreError::Unavailable(format!(
+                "{ERR_NOT_ACKNOWLEDGED}: the log is frozen after a fork"
+            )));
+        }
         match s.outbox.get(index) {
             Some(e) if e.wire.is_some() && e.digest == entry_hash => {}
             _ => return Err(refused()),
@@ -825,9 +885,9 @@ impl V2ReceiptCheckpoint for Store {
         if previous != previous_entry_hash {
             return Err(refused());
         }
-        let now = s.now;
-        let entry = s.outbox.get_mut(index).ok_or_else(refused)?;
-        if entry.ack.is_none() {
+        if s.outbox[index].ack.is_none() {
+            let now = s.read_clock_locked()?;
+            let entry = s.outbox.get_mut(index).ok_or_else(refused)?;
             entry.ack = Some(V2CheckpointAcknowledgement {
                 log_id: log_id.to_string(),
                 sequence,
@@ -835,7 +895,7 @@ impl V2ReceiptCheckpoint for Store {
                 timestamp: now,
             });
         }
-        entry.ack.clone().ok_or_else(refused)
+        s.outbox[index].ack.clone().ok_or_else(refused)
     }
 
     fn get_v2_acknowledgement(
@@ -910,7 +970,9 @@ impl ClaimStoreV2 for RateAtFinalizationStore {
 }
 
 impl V2RateReservationStore for RateAtFinalizationStore {
-    /// Never used with admission at finalization.
+    /// Exists only to satisfy [`V2RateReservationStore`]. The verifier never
+    /// calls it for a store that admits at finalization, and it always fails
+    /// (SPEC-v2 §7.1, §7.6).
     fn reserve_v2_rate_batch(
         &self,
         _ctx: &V2Context,
@@ -938,5 +1000,30 @@ impl V2ReleaseClaimStore for RateAtFinalizationStore {
     }
     fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError> {
         self.0.record_v2_release(ctx, record)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::generate_hybrid_keypair;
+
+    // The reference store admits max_rate inside its terminal compare-and-set
+    // (SPEC-v2 §7.1, §7.6). Its provisional reservation call exists only to
+    // satisfy the rate-store interface and must never report capacity: if a
+    // verifier ever called it, the result has to fail closed.
+    #[test]
+    fn rate_at_finalization_store_never_reserves_provisionally() {
+        let (_, private) = generate_hybrid_keypair();
+        let store = Arc::new(Store::new(1_800_000_000, 30, "dddddddddddddddddddddddddddddd01", &private).unwrap())
+            .with_rate_at_finalization();
+        let batch = [V2RateReservation {
+            issuer_id: "i".into(),
+            cert_id: "c".into(),
+            window_s: 60,
+            limit: 1,
+        }];
+        let reserved = store.reserve_v2_rate_batch(&V2Context::background(), "claim", &[0; 32], "sha384:x", &batch);
+        assert!(reserved.is_err(), "the reference provisional reservation reported capacity");
     }
 }

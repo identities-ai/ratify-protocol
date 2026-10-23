@@ -322,11 +322,13 @@ pub fn build_verify_request(
             verifier_id: s(&e["verifier_id"]),
             ..Default::default()
         };
+        // The agent ID and key pass through independently, so a vector can
+        // configure either one alone (SPEC-v2 §6.2 step 7).
         if !e["expected_agent_id"].is_null() {
             exp.expected_agent_id = s(&e["expected_agent_id"]);
-            if !e["expected_agent_public_key"].is_null() {
-                exp.expected_agent_public_key = Some(public_key_json(&e["expected_agent_public_key"]));
-            }
+        }
+        if !e["expected_agent_public_key"].is_null() {
+            exp.expected_agent_public_key = Some(public_key_json(&e["expected_agent_public_key"]));
         }
         if !e["expected_receiver_id"].is_null() {
             exp.expected_receiver_id = s(&e["expected_receiver_id"]);
@@ -507,4 +509,31 @@ pub fn evidence_json(v: &Value) -> StatusEvidenceEntryV2 {
         object_type: u(&v["object_type_code"]) as u16,
         digest: s(&v["digest"]),
     }
+}
+
+/// A terminal result and receipt outbox body that a claim store accepts for
+/// `claim` (SPEC-v2 §7.5): a genuine committed body from the
+/// verifier-ordering corpus, with `verified_at` set (it is not bound), and
+/// the claim's bound members set to that body's values. Tests that drive a
+/// store's finalization directly use it in place of placeholder payloads.
+pub fn bind_claim_to_receipt_body(claim: &mut V2ChallengeClaim, verified_at: i64) -> (Vec<u8>, Vec<u8>) {
+    let f = load_v2_vector("verifier-ordering.json");
+    let v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| s(&v["name"]) == "allow_bound_context")
+        .expect("allow_bound_context");
+    let mut body = decode_verification_receipt_body_v2(&unb64(&v["expected"]["receipt_body_b64"])).expect("body");
+    body.verified_at = verified_at;
+    claim.verifier_id = body.verifier_id.clone();
+    claim.agent_id = body.agent_id.clone();
+    claim.bundle_hash = body.bundle_hash.clone();
+    claim.issuer_ids = body.issuer_ids.clone();
+    claim.required_scope = body.required_scope.clone();
+    claim.context_policy_digest = body.context_policy_digest.clone().unwrap_or_default();
+    claim.constraint_evaluators = body.constraint_evaluators.clone();
+    let terminal = format!(
+        r#"{{"decision":"{}","decision_reason":"{}"}}"#,
+        body.decision, body.decision_reason
+    );
+    (terminal.into_bytes(), verification_receipt_v2_body(&body).expect("body"))
 }

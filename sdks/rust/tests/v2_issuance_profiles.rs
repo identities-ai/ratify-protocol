@@ -94,7 +94,22 @@ fn v2_evaluator_profiles() {
                 None
             } else {
                 let raw = serde_json::to_vec(&c["params"]).unwrap();
-                Some(canonical_json_v2(&raw).unwrap_or_else(|e| panic!("{}: params: {e}", s(&c["name"]))))
+                let params = canonical_json_v2(&raw).unwrap_or_else(|e| panic!("{}: params: {e}", s(&c["name"])));
+                // SPEC-v2 §5.2: a certificate can carry these params only
+                // when they are a JSON object; direct_api_only says not.
+                let carried = format!(
+                    r#"{{"params":{},"type":{}}}"#,
+                    String::from_utf8_lossy(&params),
+                    serde_json::to_string(&s(&suite["type"])).unwrap()
+                );
+                let wire = ConstraintV2::decode(carried.as_bytes());
+                assert_eq!(
+                    wire.is_err(),
+                    c["direct_api_only"].as_bool().unwrap_or(false),
+                    "{}: direct_api_only, but a certificate constraint with these params decodes as {wire:?}",
+                    s(&c["name"])
+                );
+                Some(params)
             };
             let ctx = context(&c["context"]);
             validate_v2_request_context(&ctx).expect("case context is inside the request-context bounds");

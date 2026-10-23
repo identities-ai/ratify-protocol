@@ -34,6 +34,8 @@ typedef struct {
     uint8_t release_hash[64];
     size_t release_hash_len;
     int64_t release_ts;
+    int32_t release_outcome;
+    char release_reason[64];
     int outbox_index;
 } claim_rec;
 
@@ -165,6 +167,10 @@ static int32_t st_finalize(void *user, const char *id, RatifyV2Slice token, Rati
         return rc;
     }
     if (rc) return rc;
+    /* SPEC-v2 §7.5: the receipt body must bind the sealed claim; a refused
+     * body commits nothing. */
+    rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
+    if (rc) return rc;
     if (allow_valid_until > 0 && (now >= allow_valid_until || now >= r->expires_at)) return RatifyV2AllowHorizonPassed;
     commit(s, r, terminal, body, allow_valid_until, now);
     *committed = 1;
@@ -233,21 +239,31 @@ static int32_t st_load_terminal(void *user, const char *id, RatifyV2TerminalClai
     out->release_entry_hash.ptr = r->release_hash;
     out->release_entry_hash.len = r->release_hash_len;
     out->release_ack_timestamp = r->release_ts;
+    out->release_outcome = r->release_outcome;
+    out->release_reason = r->release_reason;
     return 0;
 }
 
 static int32_t st_record_release(void *user, const RatifyV2ReleaseRecord *rec) {
     c_store *s = user;
     claim_rec *r = find(s, rec->claim_id);
+    /* A release record is released, or withheld with a step 7 or 8 reason. */
+    if (!ratify_v2_valid_release_record_outcome(rec->outcome, rec->reason)) return RatifyV2ConfigurationInvalid;
     if (!r || !r->terminal) return RatifyV2StoreReleaseStateMismatch;
+    /* The first record wins: an identical repeat is 0, anything else differs. */
     if (r->has_release) {
-        return same(r->release_hash, r->release_hash_len, rec->entry_hash) && r->release_ts == rec->ack_timestamp
-            ? 0 : RatifyV2StoreReleaseStateMismatch;
+        return same(r->release_hash, r->release_hash_len, rec->entry_hash) && r->release_ts == rec->ack_timestamp &&
+                       r->release_outcome == rec->outcome && strcmp(r->release_reason, rec->reason) == 0
+                   ? 0
+                   : RatifyV2StoreReleaseStateMismatch;
     }
-    if (rec->entry_hash.len > sizeof r->release_hash) return RatifyV2StoreReleaseStateMismatch;
+    if (rec->entry_hash.len > sizeof r->release_hash || strlen(rec->reason) >= sizeof r->release_reason)
+        return RatifyV2StoreReleaseStateMismatch;
     memcpy(r->release_hash, rec->entry_hash.ptr, rec->entry_hash.len);
     r->release_hash_len = rec->entry_hash.len;
     r->release_ts = rec->ack_timestamp;
+    r->release_outcome = rec->outcome;
+    snprintf(r->release_reason, sizeof r->release_reason, "%s", rec->reason);
     r->has_release = 1;
     return 0;
 }
@@ -406,6 +422,84 @@ static int release(c_store *s, const RatifyV2Committed *c, const RatifyV2PublicK
     return checks + 2;
 }
 
+static void reset_store(c_store *s) {
+    for (int i = 0; i < s->nclaims; i++) {
+        claim_rec *r = &s->claims[i];
+        free(r->record); free(r->progress); free(r->terminal_result); free(r->body);
+    }
+    for (int i = 0; i < s->noutbox; i++) free(s->outbox[i].wire);
+    s->nclaims = s->noutbox = 0;
+}
+
+static int release_status(c_store *s, const RatifyV2Committed *c, RatifyV2Slice receipt, const RatifyV2PublicKey *vk,
+                          RatifyV2ReleaseStoreCallbacks *rs, RatifyV2CheckpointCallbacks *cp, const char *want_reason) {
+    int32_t status = 0;
+    char *reason = NULL;
+    RatifyV2Released *d = NULL;
+    int32_t rc = ratify_v2_release_decision(c, receipt, vk, s->log_id, rs, cp, &status, &reason, &d);
+    int ok = rc == 0 && status == RatifyV2ReleaseWithheld && d == NULL && reason && strcmp(reason, want_reason) == 0;
+    v2c_check(ok, "withheld release", reason ? reason : ratify_v2_last_error_message());
+    ratify_v2_string_free(reason);
+    ratify_v2_released_free(d);
+    return 1;
+}
+
+static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2ClaimStoreCallbacks *claim,
+                                 const RatifyV2PublicKey *vk, RatifyV2ReleaseStoreCallbacks *rs,
+                                 RatifyV2CheckpointCallbacks *cp) {
+    int checks = 0;
+    reset_store(s);
+    v2c_vector *a = v2c_vector_load(allow_dir);
+    s->now = s->high_water = strtoll(v2c_vector_meta(a, "now"), NULL, 10);
+    RatifyV2VerifyOutcome out;
+    RatifyV2Committed *c = NULL;
+    run_verify(s, a, 0, claim, &out, &c);
+    v2c_vector_free(a);
+    v2c_check(out.stage == RatifyV2StageCommitted && c != NULL, "withheld fixture committed", ratify_v2_last_error_message());
+    checks++;
+    if (!c) return checks;
+    char *claim_id = NULL;
+    ratify_v2_committed_claim_id(c, &claim_id);
+    claim_rec *r = find(s, claim_id);
+
+    /* The store's finalize binds the receipt body to the sealed claim. */
+    v2c_check(r && ratify_v2_validate_finalization_payload(r->record, r->record_len, r->terminal_result, r->terminal_len,
+                                                           r->body, r->body_len) == 0,
+              "finalization payload", ratify_v2_last_error_message());
+    const char deny[] = "{\"decision\":\"deny\",\"decision_reason\":\"authorized\"}";
+    v2c_check(r && ratify_v2_validate_finalization_payload(r->record, r->record_len, (const uint8_t *)deny, strlen(deny),
+                                                           r->body, r->body_len) == RatifyV2ConfigurationInvalid,
+              "finalization other decision", "a terminal result naming another decision was accepted");
+    v2c_check(r && ratify_v2_validate_finalization_payload(r->record, r->record_len, r->terminal_result, r->terminal_len,
+                                                           (const uint8_t *)"{}", 2) == RatifyV2Malformed,
+              "finalization malformed body", "a body that does not decode was accepted");
+    v2c_check(ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased, "") &&
+                  ratify_v2_valid_release_record_outcome(RatifyV2ReleaseWithheld, "challenge_expired") &&
+                  !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseWithheld, "receipt_abandoned") &&
+                  !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased, "clock_regressed") &&
+                  !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseNone, ""),
+              "release record outcomes", "");
+    checks += 4;
+
+    uint8_t *wire = NULL;
+    size_t wire_len = 0;
+    v2c_check(publish(s, claim_id, &wire, &wire_len), "withheld publish", claim_id);
+    RatifyV2Slice receipt = {wire, wire_len}, none = {NULL, 0};
+    int64_t expires = 0;
+    v2c_check(ratify_v2_committed_challenge_expires_at(c, &expires) == 0, "challenge expiry", ratify_v2_last_error_message());
+    s->now = expires;
+    checks += release_status(s, c, receipt, vk, rs, cp, "challenge_expired");
+    v2c_check(r && r->has_release && r->release_outcome == RatifyV2ReleaseWithheld &&
+                  strcmp(r->release_reason, "challenge_expired") == 0,
+              "withheld recorded", "the withheld result was not recorded");
+    checks++;
+    checks += release_status(s, c, none, vk, rs, cp, "challenge_expired");
+    checks += release_status(s, c, receipt, vk, rs, cp, "challenge_expired");
+    ratify_v2_string_free(claim_id);
+    ratify_v2_committed_free(c);
+    return checks;
+}
+
 int v2c_run_lifecycle(void) {
     char *meta = (char *)v2c_read("lifecycle/meta.txt", NULL), *save = NULL;
     char seed_ed[256] = "", seed_ml[256] = "", allow_dir[256] = "", cancel_dir[256] = "", cancel_id[128] = "";
@@ -501,7 +595,13 @@ int v2c_run_lifecycle(void) {
     }
     v2c_vector_free(b);
 
-    /* 4. A regressed clock fails closed at the store. */
+    /* 4. Withheld is permanent (SPEC-v2 §6.9): a release at the challenge
+     *    expiry records the withheld result through record_release, and a
+     *    later call is withheld with the recorded reason right after the
+     *    committed-state step, even without a receipt. */
+    checks += withheld_is_permanent(&s, allow_dir, &claim, &vk, &rs, &cp);
+
+    /* 5. A regressed clock fails closed at the store. */
     s.now -= 10;
     int64_t t;
     v2c_check(st_now(&s, &t) == RatifyV2ClockRegressed, "clock regression", "regressed clock accepted");

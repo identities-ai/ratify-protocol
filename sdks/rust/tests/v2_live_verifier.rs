@@ -494,6 +494,18 @@ fn preflight_and_claim(
     (bundle, req, claimed)
 }
 
+/// The receipt outbox body the live verifier commits for vector `name` with
+/// no trust provider configured (`indeterminate / trust_unavailable`). It is
+/// bound to the same sealed claim values a direct claim of that vector
+/// seals (SPEC-v2 §7.5), so helper and store finalization accept it.
+fn untrusted_receipt_body(name: &str) -> (Vec<u8>, VerificationReceiptV2) {
+    let (outcome, _) = verify_case(name, &new_store(1_800_000_000), |cb| cb.trust = None);
+    let body = outcome.committed.expect("committed").receipt_body();
+    let decoded = decode_verification_receipt_body_v2(&body).expect("receipt body");
+    assert_eq!((decoded.decision.as_str(), decoded.decision_reason.as_str()), ("indeterminate", "trust_unavailable"));
+    (body, decoded)
+}
+
 fn local_options(req: &V2VerifyRequest, token: &V2EvaluationToken, trusted: bool) -> V2LocalAuthorizationOptions {
     V2LocalAuthorizationOptions {
         future_skew_seconds: req.future_skew_seconds,
@@ -610,7 +622,8 @@ fn finalization_binds_the_completed_local_result() {
     assert_eq!((assessment.status.as_str(), assessment.reason.as_str()), ("authorization_unverified", "trust_unavailable"));
     let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}"#;
     let duplicate = br#"{"decision":"indeterminate","decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
-    let body = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
+    let (body, _) = untrusted_receipt_body("allow_context_not_required");
+    let body = body.as_slice();
     let e = finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, duplicate, body).expect_err("duplicate keys");
     assert_eq!(e.class(), Some(V2ErrorClass::ConfigurationInvalid));
     let wrong = br#"{"decision":"deny","decision_reason":"trust_unavailable"}"#;
@@ -621,6 +634,73 @@ fn finalization_binds_the_completed_local_result() {
     assert_eq!(finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, terminal, body), Ok(false));
     let changed = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable","x":1}"#;
     assert!(finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, terminal, changed).is_err());
+}
+
+/// Go TestFinalizeClaimProofBundleV2BindsReceiptBodyToSealedClaim (SPEC-v2
+/// §7.5): a capability holder that changes any bound member of the receipt
+/// body could otherwise get a signed, log-appended receipt naming another
+/// proof, agent, or scope. Each mismatch is refused before the store
+/// commits, and the genuine body still finalizes afterwards.
+#[test]
+fn finalization_binds_the_receipt_body_to_the_sealed_claim() {
+    let store = new_store(1_800_000_000);
+    let (bundle, req, claimed) = preflight_and_claim("allow_context_not_required", store.as_ref(), 1_800_000_000);
+    let (claim, _, token) = claimed.expect("claim");
+    let token = token.expect("token");
+    let ctx = V2Context::background();
+    evaluate_proof_bundle_v2_local_authorization(&bundle, &local_options(&req, &token, false));
+    let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}"#;
+    let (genuine, decoded) = untrusted_receipt_body("allow_context_not_required");
+    let other_id = bundle.delegations.last().expect("root").issuer_id.clone();
+    assert!(other_id != claim.verifier_id && other_id != claim.agent_id, "fixture root ID collides with a sealed ID");
+    let other_digest = format!("sha384:{}", "2".repeat(96));
+    type Edit<'a> = Box<dyn Fn(&mut VerificationReceiptV2) + 'a>;
+    let edits: Vec<(&str, Edit)> = vec![
+        ("verifier_id", Box::new(|r| r.verifier_id = other_id.clone())),
+        ("agent_id", Box::new(|r| r.agent_id = other_id.clone())),
+        ("bundle_hash", Box::new(|r| r.bundle_hash = format!("sha384:{}", "0".repeat(96)))),
+        ("issuer_ids", Box::new(|r| {
+            r.issuer_ids.pop();
+        })),
+        ("required_scope", Box::new(|r| r.required_scope = "data:write".into())),
+        // A trust_unavailable body carries no context digest, so this case
+        // uses the interrupted tuple that can.
+        ("context_policy_digest", Box::new(|r| {
+            r.decision_reason = "evaluation_interrupted".into();
+            r.trust_assessment = "trusted".into();
+            r.context_assessment = "bound".into();
+            r.context_policy_digest = Some(other_digest.clone());
+        })),
+        ("constraint_evaluators", Box::new(|r| {
+            r.constraint_evaluators = vec![ConstraintEvaluatorRefV2 {
+                kind: "com.ratifyprotocol.max_count".into(),
+                profile_digest: format!("sha384:{}", "1".repeat(96)),
+            }]
+        })),
+    ];
+    for (name, edit) in edits {
+        let mut r = decoded.clone();
+        edit(&mut r);
+        let body = verification_receipt_v2_body(&r).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let e = finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, terminal, &body).expect_err(name);
+        assert_eq!(e.class(), Some(V2ErrorClass::ConfigurationInvalid), "{name}: {e:?}");
+        let direct_terminal = format!(
+            r#"{{"decision":"indeterminate","decision_reason":"{}"}}"#,
+            r.decision_reason
+        );
+        let direct = validate_v2_finalization_payload(&claim, direct_terminal.as_bytes(), &body);
+        assert_eq!(v2_error_class_of(&direct), Some(V2ErrorClass::ConfigurationInvalid), "{name}: {direct:?}");
+    }
+    // A body that does not decode is malformed, and a terminal result naming
+    // another decision is configuration_invalid.
+    let malformed = validate_v2_finalization_payload(&claim, terminal, b"{}");
+    assert_eq!(v2_error_class_of(&malformed), Some(V2ErrorClass::Malformed));
+    let other_decision = validate_v2_finalization_payload(&claim, br#"{"decision":"deny","decision_reason":"trust_unavailable"}"#, &genuine);
+    assert_eq!(v2_error_class_of(&other_decision), Some(V2ErrorClass::ConfigurationInvalid));
+    validate_v2_finalization_payload(&claim, terminal, &genuine).expect("genuine payload");
+    // Every refusal came before the store committed: the genuine body still
+    // finalizes once.
+    assert_eq!(finalize_claim_proof_bundle_v2(&ctx, store.as_ref(), &token, terminal, &genuine), Ok(true));
 }
 
 /// Go FinalizeClaimProofBundleV2 classifies a store's rate exhaustion as
@@ -657,8 +737,8 @@ fn finalization_rate_exhaustion_keeps_the_variant_and_the_reference_class() {
     let token = claimed.expect("claim").2.expect("token");
     evaluate_proof_bundle_v2_local_authorization(&bundle, &local_options(&req, &token, false));
     let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable","identity_status":"authorization_unverified"}"#;
-    let body = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
-    let e = finalize_claim_proof_bundle_v2(&V2Context::background(), &store, &token, terminal, body).expect_err("exhausted");
+    let (body, _) = untrusted_receipt_body("allow_context_not_required");
+    let e = finalize_claim_proof_bundle_v2(&V2Context::background(), &store, &token, terminal, &body).expect_err("exhausted");
     assert_eq!(e, V2StoreError::RateLimitExceeded);
     assert_eq!(e.class(), Some(V2ErrorClass::ClaimStoreUnavailable));
 }
@@ -707,12 +787,23 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
         window_s: 60,
         limit: 5,
     };
+    // Each prior claim seals the values of a genuine receipt body, which the
+    // reference store's finalization requires (SPEC-v2 §7.5).
+    let (body, sealed) = untrusted_receipt_body("rate_reserved");
+    let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
     for n in 0..5 {
         let id = format!("prior-{n}");
         let claim = V2ChallengeClaim {
             claim_id: id.clone(),
             namespace: "ns".into(),
             proof_digest: id.clone(),
+            verifier_id: sealed.verifier_id.clone(),
+            agent_id: sealed.agent_id.clone(),
+            bundle_hash: sealed.bundle_hash.clone(),
+            issuer_ids: sealed.issuer_ids.clone(),
+            required_scope: sealed.required_scope.clone(),
+            context_policy_digest: sealed.context_policy_digest.clone().unwrap_or_default(),
+            constraint_evaluators: sealed.constraint_evaluators.clone(),
             issued_at: 1_799_999_990,
             expires_at: 1_800_000_290,
             max_age_seconds: 300,
@@ -721,7 +812,7 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
             ..Default::default()
         };
         let created = view.claim_v2(&ctx, claim).expect("claim");
-        let finalized = view.finalize_v2_claim(&ctx, &id, &created.owner_token, b"{}", id.as_bytes(), 1_800_000_100);
+        let finalized = view.finalize_v2_claim(&ctx, &id, &created.owner_token, terminal, &body, 1_800_000_100);
         assert_eq!(finalized, Ok(true));
     }
     let (v, bundle) = case("rate_reserved");
@@ -738,4 +829,72 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
         (receipt.decision.as_str(), receipt.decision_reason.as_str(), receipt.granted_scope.len()),
         ("deny", "constraint_denied", 0)
     );
+}
+
+// SPEC-v2 §2.5, §6.1 and §6.2 step 2: configuration that is out of bounds or
+// internally inconsistent is configuration_invalid before any later
+// pre-claim step and before the claim store is consulted. Without the fault
+// each request stops later (expected challenge missing, or an invalid
+// required scope), so the class proves where the check runs.
+#[test]
+fn configuration_rejected_at_step_two() {
+    let (_, bundle) = case("pre_agent_key_without_id");
+    let base = || V2VerifyRequest {
+        bundle: bundle.clone(),
+        now: 1_800_000_000,
+        max_challenge_age_seconds: 60,
+        future_skew_seconds: 5,
+        status_policy: RevocationStatusPolicyV2 {
+            max_list_lifetime_seconds: 3600,
+            max_status_age_seconds: 3600,
+            clock_skew_seconds: 5,
+        },
+        ..Default::default()
+    };
+    let session_context = |len: usize| ExpectedChallengeV2 {
+        expected_session_context: Some(vec![0; len]),
+        ..Default::default()
+    };
+    type Edit = Box<dyn Fn(&mut V2VerifyRequest)>;
+    let cases: Vec<(&str, Edit)> = vec![
+        ("status skew below future skew", Box::new(|r| r.status_policy.clock_skew_seconds = 0)),
+        ("status skew above future skew", Box::new(|r| r.future_skew_seconds = 0)),
+        ("replay epoch above 2^53-1", Box::new(|r| r.replay_epoch = 1 << 53)),
+        ("replay epoch negative", Box::new(|r| r.replay_epoch = -1)),
+        ("31-byte expected session context without a policy", Box::new(move |r| r.expected = Some(session_context(31)))),
+        ("empty expected session context without a policy", Box::new(move |r| r.expected = Some(session_context(0)))),
+    ];
+    for (name, edit) in cases {
+        let mut req = base();
+        edit(&mut req);
+        let store = new_store(1_800_000_000);
+        let cb = V2VerifyCallbacks {
+            claim_store: Some(store.clone()),
+            ..Default::default()
+        };
+        let outcome = verify_proof_bundle_v2(&V2Context::background(), &req, &cb);
+        assert_eq!(
+            (outcome.stage, outcome.error_class),
+            (V2VerifyStage::Preflight, Some(V2ErrorClass::ConfigurationInvalid)),
+            "{name}: {:?}",
+            outcome.error
+        );
+    }
+}
+
+// The standalone preflight entry point applies the same §6.2 step 2 bound on
+// the configured replay epoch as verify_proof_bundle_v2, so a caller that
+// runs preflight itself sees configuration_invalid, not stale_replay_epoch.
+#[test]
+fn standalone_preflight_replay_epoch_bound() {
+    let (_, wire) = case("pre_agent_key_without_id");
+    let bundle = decode_proof_bundle_v2(&wire).expect("bundle");
+    for epoch in [-1, 1 << 53] {
+        let expected = ExpectedChallengeV2 {
+            replay_epoch: epoch,
+            ..Default::default()
+        };
+        let got = validate_proof_bundle_v2_preflight(&bundle, &expected, "data:read", "ns", epoch, 1_800_000_000, 60, 5);
+        assert_eq!(v2_error_class_of(&got), Some(V2ErrorClass::ConfigurationInvalid), "epoch {epoch}: {got:?}");
+    }
 }

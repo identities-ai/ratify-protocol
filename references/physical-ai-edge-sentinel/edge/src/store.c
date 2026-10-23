@@ -26,6 +26,8 @@ typedef struct {
     int has_release;
     uint8_t release_hash[48];
     int64_t release_ts;
+    int32_t release_outcome; /* RatifyV2ReleaseReleased or RatifyV2ReleaseWithheld */
+    char release_reason[32]; /* "" for a release */
 } claim_rec;
 
 typedef struct {
@@ -195,11 +197,12 @@ static char *serialize(const store *s, size_t *len)
         char *rec = b64_or_dash(c->record, c->record_len), *pr = b64_or_dash(c->progress, c->progress_len),
              *te = b64_or_dash(c->terminal_result, c->terminal_len), *bo = b64_or_dash(c->body, c->body_len),
              *rh = c->has_release ? b64_encode(c->release_hash, 48) : xformat("-");
-        sb_take(&b, xformat("claim %s %s %lld %lld %lld %d %lld %lld %lld %d %s %s %s %s %s %lld\n", c->claim_id,
+        sb_take(&b, xformat("claim %s %s %lld %lld %lld %d %lld %lld %lld %d %s %s %s %s %s %lld %d %s\n", c->claim_id,
                             c->owner_hex, (long long)c->claimed_at, (long long)c->lease_expires_at,
                             (long long)c->expires_at, c->terminal, (long long)c->allow_horizon,
                             (long long)c->finalized_at, (long long)c->log_sequence, c->abandoned, rec, pr, te, bo, rh,
-                            (long long)c->release_ts));
+                            (long long)c->release_ts, (int)c->release_outcome,
+                            c->release_reason[0] ? c->release_reason : "-"));
         free(rec);
         free(pr);
         free(te);
@@ -270,7 +273,7 @@ static int parse(store *s, char *text)
             r->epoch = strtoll(tok[2], NULL, 10);
             r->expires_at = strtoll(tok[4], NULL, 10);
             ok = b64_decode(tok[3], r->digest, 48) == 48 && b64_field(tok[5], &r->record, &r->record_len) == 0;
-        } else if (!strcmp(tok[0], "claim") && nt == 17) {
+        } else if (!strcmp(tok[0], "claim") && (nt == 17 || nt == 19)) {
             s->claims = realloc(s->claims, (s->nclaims + 1) * sizeof *s->claims);
             claim_rec *c = &s->claims[s->nclaims++];
             memset(c, 0, sizeof *c);
@@ -293,6 +296,14 @@ static int parse(store *s, char *text)
                 c->has_release = 1;
             }
             c->release_ts = strtoll(tok[16], NULL, 10);
+            /* A line without the release outcome and reason was written
+             * before withheld results were recorded: its record is a release. */
+            if (nt == 19) {
+                c->release_outcome = (int32_t)atoi(tok[17]);
+                snprintf(c->release_reason, sizeof c->release_reason, "%s", strcmp(tok[18], "-") ? tok[18] : "");
+            } else if (c->has_release) {
+                c->release_outcome = RatifyV2ReleaseReleased;
+            }
             set_outbox_digest(c);
         } else if (!strcmp(tok[0], "entry") && nt == 4) {
             s->entries = realloc(s->entries, (s->nentries + 1) * sizeof *s->entries);
@@ -492,6 +503,10 @@ static int32_t cb_finalize(void *user, const char *id, RatifyV2Slice token, Rati
         return rc;
     }
     if (rc) return rc;
+    /* SPEC-v2 §7.5: the receipt body binds the sealed claim; a refused body
+     * commits nothing. */
+    rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
+    if (rc) return rc;
     if (allow_valid_until > 0 && (now >= allow_valid_until || now >= r->expires_at)) return RatifyV2AllowHorizonPassed;
     seal(s, r, terminal, body, allow_valid_until, now);
     if (commit(s) != 0) return RatifyV2StoreUnavailable;
@@ -569,6 +584,8 @@ static int32_t cb_load_terminal(void *user, const char *id, RatifyV2TerminalClai
     out->release_entry_hash.ptr = r->has_release ? r->release_hash : NULL;
     out->release_entry_hash.len = r->has_release ? 48 : 0;
     out->release_ack_timestamp = r->release_ts;
+    out->release_outcome = r->release_outcome;
+    out->release_reason = r->release_reason;
     return 0;
 }
 
@@ -576,13 +593,20 @@ static int32_t cb_record_release(void *user, const RatifyV2ReleaseRecord *rec)
 {
     store *s = user;
     claim_rec *r = find_claim(s, rec->claim_id);
+    /* A release, or a withheld result of release steps 7 and 8 (SPEC-v2
+     * §6.9); the first record for a claim wins. */
+    if (!ratify_v2_valid_release_record_outcome(rec->outcome, rec->reason)) return RatifyV2ConfigurationInvalid;
     if (!r || !r->terminal) return RatifyV2StoreReleaseStateMismatch;
     if (r->has_release)
-        return same(r->release_hash, 48, rec->entry_hash) && r->release_ts == rec->ack_timestamp
+        return same(r->release_hash, 48, rec->entry_hash) && r->release_ts == rec->ack_timestamp &&
+                       r->release_outcome == rec->outcome && strcmp(r->release_reason, rec->reason) == 0
                    ? 0 : RatifyV2StoreReleaseStateMismatch;
-    if (rec->entry_hash.len != 48) return RatifyV2StoreReleaseStateMismatch;
+    if (rec->entry_hash.len != 48 || strlen(rec->reason) >= sizeof r->release_reason)
+        return RatifyV2StoreReleaseStateMismatch;
     memcpy(r->release_hash, rec->entry_hash.ptr, 48);
     r->release_ts = rec->ack_timestamp;
+    r->release_outcome = rec->outcome;
+    snprintf(r->release_reason, sizeof r->release_reason, "%s", rec->reason);
     r->has_release = 1;
     return commit(s) == 0 ? 0 : RatifyV2StoreUnavailable;
 }

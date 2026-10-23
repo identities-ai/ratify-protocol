@@ -1263,16 +1263,14 @@ pub fn request_json(inputs: &Value) -> Value {
         ] {
             exp.insert(k.into(), e[k].clone());
         }
-        if !e["expected_agent_id"].is_null() {
-            exp.insert("expected_agent_id".into(), e["expected_agent_id"].clone());
-            if !e["expected_agent_public_key"].is_null() {
-                exp.insert(
-                    "expected_agent_public_key".into(),
-                    e["expected_agent_public_key"].clone(),
-                );
-            }
-        }
-        for k in ["expected_receiver_id", "expected_session_context_b64"] {
+        // The agent ID and key pass through independently, so a vector can
+        // configure either one alone (SPEC-v2 §6.2 step 7).
+        for k in [
+            "expected_agent_id",
+            "expected_agent_public_key",
+            "expected_receiver_id",
+            "expected_session_context_b64",
+        ] {
             if !e[k].is_null() {
                 exp.insert(k.into(), e[k].clone());
             }

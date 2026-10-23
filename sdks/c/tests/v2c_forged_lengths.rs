@@ -10,11 +10,12 @@
 //!   decoder's own size gate) and the caller's memory is never read;
 //! - any other input over `isize::MAX` is `bad_argument`.
 //!
+//! Callback answers with forged lengths or counts fail closed the same way.
 //! These tests pass a one-byte buffer with lengths up to `SIZE_MAX`.
 
 mod v2c_common;
 
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 use std::ptr;
 
 use ratify_c::*;
@@ -781,4 +782,149 @@ fn v2c_other_byte_inputs_reject_lengths_over_isize_max() {
         }));
     }
     finish(f);
+}
+
+// ---------------------------------------------------------------------------
+// Callback answers
+
+unsafe extern "C" fn forged_claim(
+    _: *mut c_void,
+    _: *const RatifyV2ClaimView,
+    out: *mut RatifyV2ClaimResult,
+) -> i32 {
+    (*out).disposition = 1;
+    (*out).owner_token = RatifyV2Slice {
+        ptr: one(),
+        len: usize::MAX,
+    };
+    0
+}
+
+unsafe extern "C" fn forged_interrupted(
+    _: *mut c_void,
+    _: *const c_char,
+    out: *mut RatifyV2InterruptedClaim,
+) -> i32 {
+    (*out).record = RatifyV2Slice {
+        ptr: one(),
+        len: usize::MAX,
+    };
+    0
+}
+
+unsafe extern "C" fn forged_issuance(
+    _: *mut c_void,
+    _: *const c_char,
+    _: i64,
+    _: RatifyV2Slice,
+    out: *mut RatifyV2Slice,
+) -> i32 {
+    *out = RatifyV2Slice {
+        ptr: one(),
+        len: usize::MAX,
+    };
+    0
+}
+
+unsafe extern "C" fn forged_journal_load(_: *mut c_void, out: *mut RatifyV2JournalSnapshot) -> i32 {
+    (*out).snapshot = RatifyV2Slice {
+        ptr: one(),
+        len: usize::MAX,
+    };
+    (*out).digest = c"".as_ptr();
+    0
+}
+
+/// A claim store's owner token and an interrupted claim's record with a
+/// forged length are store failures, not aborts.
+#[test]
+fn v2c_claim_store_answers_with_forged_lengths_fail_closed() {
+    let mut store: RatifyV2ClaimStoreCallbacks = unsafe { std::mem::zeroed() };
+    store.load_interrupted = Some(forged_interrupted);
+    let id = cs("claim");
+    let mut committed = ptr::null_mut();
+    let code = unsafe { ratify_v2_recover_interrupted_claim(&store, id.as_ptr(), &mut committed) };
+    assert!(committed.is_null());
+    assert_eq!(class(code), "claim_store_unavailable", "{}", last_error());
+    assert!(last_error().contains("isize::MAX"), "{}", last_error());
+
+    // The claim answer is read only by a claim that passed preflight; see
+    // v2c_verifier.rs for the live path. Here the claim export reaches it
+    // through a real preflight-passing bundle from the ordering corpus.
+    let f = load("verifier-ordering.json");
+    let v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| s(&v["expected"]["decision"]) == "allow")
+        .expect("an allow vector");
+    let bundle = b64(&f["bundles_b64"][s(&v["bundle"])]);
+    let request = json_bytes(&request_json(&v));
+    let mut claim: RatifyV2ClaimStoreCallbacks = unsafe { std::mem::zeroed() };
+    claim.claim = Some(forged_claim);
+    let mut disposition = 0;
+    let mut claim_id = ptr::null_mut();
+    let code = unsafe {
+        ratify_v2_claim_proof_bundle(
+            bundle.as_ptr(),
+            bundle.len(),
+            request.as_ptr(),
+            request.len(),
+            &claim,
+            &mut disposition,
+            &mut claim_id,
+        )
+    };
+    take_str(claim_id);
+    assert_eq!(class(code), "claim_store_unavailable", "{}", last_error());
+    assert!(last_error().contains("isize::MAX"), "{}", last_error());
+}
+
+/// An issuance record and a journal snapshot with forged lengths fail
+/// closed.
+#[test]
+fn v2c_issuance_and_journal_answers_with_forged_lengths_fail_closed() {
+    let issuance = RatifyV2IssuanceStoreCallbacks {
+        user: ptr::null_mut(),
+        persist: None,
+        load: Some(forged_issuance),
+    };
+    let ns = cs("ns");
+    let challenge = [0u8; 32];
+    let r = buf(|o| unsafe {
+        ratify_v2_load_expected_challenge(&issuance, ns.as_ptr(), 1, challenge.as_ptr(), 32, o)
+    });
+    assert_eq!(
+        class_of(&r),
+        "expected_challenge_unavailable",
+        "{}",
+        last_error()
+    );
+    assert!(last_error().contains("isize::MAX"), "{}", last_error());
+
+    let journal = RatifyV2JournalStoreCallbacks {
+        user: ptr::null_mut(),
+        load: Some(forged_journal_load),
+        compare_and_swap: None,
+    };
+    let kp = Kp::generate().0;
+    let pk = kp.public();
+    let (issuer, cert) = (cs(&kp.id()), cs("c1"));
+    let policy = RatifyV2StatusPolicy {
+        max_list_lifetime_seconds: 3600,
+        max_status_age_seconds: 3600,
+        clock_skew_seconds: 5,
+    };
+    let r = buf(|o| unsafe {
+        ratify_v2_journal_status(
+            &journal,
+            issuer.as_ptr(),
+            cert.as_ptr(),
+            1,
+            &pk,
+            &policy,
+            150,
+            o,
+        )
+    });
+    assert_eq!(class_of(&r), "status_object_rejected", "{}", last_error());
+    assert!(last_error().contains("isize::MAX"), "{}", last_error());
 }

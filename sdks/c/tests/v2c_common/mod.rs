@@ -1721,6 +1721,11 @@ impl Setup {
         self.binding_cb = self.binding.as_ref().map(Binding::callbacks);
     }
 
+    /// Replace the audience provider.
+    pub fn set_audience(&mut self, cb: RatifyV2AudienceCallbacks) {
+        self.audience_cb = Some(cb);
+    }
+
     /// Wrap the status provider (e.g. to run a step mid-lookup).
     pub fn set_status(&mut self, cb: RatifyV2StatusEvidenceCallbacks) {
         self.status_cb = Some(cb);

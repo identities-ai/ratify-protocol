@@ -452,3 +452,243 @@ fn v2c_transaction_verification() {
     assert_eq!(results + errors, vectors.len());
     assert!(results > 0 && errors > 0);
 }
+
+// ---------------------------------------------------------------------------
+// Forged counts and lengths in provider answers (SPEC-v2 §1.3, §5.2)
+
+/// An audience provider claiming `usize::MAX` memberships.
+unsafe extern "C" fn forged_audience_count(
+    _user: *mut c_void,
+    _deferred: *const RatifyV2DeferredConstraint,
+    _len: usize,
+    _receiver: *const c_char,
+    out: *mut RatifyV2AudienceResult,
+) -> i32 {
+    *out = RatifyV2AudienceResult {
+        memberships: ptr::NonNull::dangling().as_ptr(),
+        count: usize::MAX,
+    };
+    0
+}
+
+/// An audience provider answering every deferred link with one membership
+/// whose domain list claims `usize::MAX` entries.
+unsafe extern "C" fn forged_audience_domains(
+    _user: *mut c_void,
+    deferred: *const RatifyV2DeferredConstraint,
+    len: usize,
+    receiver: *const c_char,
+    out: *mut RatifyV2AudienceResult,
+) -> i32 {
+    let memberships: Vec<RatifyV2AudienceMembership> = std::slice::from_raw_parts(deferred, len)
+        .iter()
+        .map(|d| RatifyV2AudienceMembership {
+            delegation_index: d.delegation_index,
+            constraint_index: d.constraint_index,
+            receiver_id: receiver,
+            trust_domain_ids: ptr::NonNull::dangling().as_ptr(),
+            trust_domain_ids_len: usize::MAX,
+            issued_at: 0,
+            expires_at: 0,
+            evidence_digest: c"sha384:x".as_ptr(),
+        })
+        .collect();
+    let memberships = Box::leak(memberships.into_boxed_slice());
+    *out = RatifyV2AudienceResult {
+        memberships: memberships.as_ptr(),
+        count: memberships.len(),
+    };
+    0
+}
+
+/// Run the `audience_domain_match` vector (an allow with the scripted
+/// membership) with `lookup` as the audience provider.
+fn audience_outcome(lookup: RatifyV2AudienceFn) -> Value {
+    let f = load("verifier-ordering.json");
+    let v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| v["name"] == "audience_domain_match")
+        .expect("audience_domain_match vector");
+    assert_eq!(s(&v["expected"]["decision"]), "allow");
+    let bundle = b64(&f["bundles_b64"][s(&v["bundle"])]);
+    let counts = Arc::new(Counts::default());
+    let mut setup = Setup::build(&v, &counts, false);
+    let claimed_at = i(&v["now"]) + i(&v["claim_time_offset"]);
+    let st = ScriptedClaimStore {
+        mode: s(&v["claim_store"]),
+        claimed_at,
+        finalization_at: claimed_at + i(&v["finalize_time_offset"]),
+        counts: Arc::clone(&counts),
+        final_body: Mutex::new(Vec::new()),
+        expires_at: Mutex::new(0),
+        token: vec![7; 32],
+    };
+    setup.claim_cb = Some(st.callbacks());
+    setup.set_audience(RatifyV2AudienceCallbacks {
+        user: ptr::null_mut(),
+        lookup,
+    });
+    let outcome = verify(&setup, &bundle).expect("verification runs");
+    assert_eq!(outcome.stage, "committed", "{}", outcome.message);
+    body_json(&outcome.committed.expect("committed").body())
+}
+
+/// SPEC-v2 §5.2: audience evidence the verifier cannot read is
+/// unverifiable. A forged membership count, or a forged domain count in a
+/// membership, is `constraint_unverifiable` and never forms a slice over
+/// the claimed length.
+#[test]
+fn v2c_audience_answers_with_forged_counts_are_unverifiable() {
+    for (name, lookup) in [
+        (
+            "membership count",
+            forged_audience_count as unsafe extern "C" fn(_, _, _, _, _) -> _,
+        ),
+        (
+            "domain count",
+            forged_audience_domains as unsafe extern "C" fn(_, _, _, _, _) -> _,
+        ),
+    ] {
+        let r = audience_outcome(Some(lookup));
+        assert_eq!(s(&r["decision"]), "deny", "{name}: {r}");
+        assert_eq!(
+            s(&r["decision_reason"]),
+            "constraint_unverifiable",
+            "{name}: {r}"
+        );
+    }
+}
+
+/// An evaluator registry count over the §5.2 maximum (32 profiles) is
+/// `configuration_invalid` before any registration is read.
+#[test]
+fn v2c_evaluator_registration_count_is_bounded_before_reading() {
+    let f = load("verifier-ordering.json");
+    let v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| v["name"] == "audience_domain_match")
+        .expect("audience_domain_match vector");
+    let bundle = b64(&f["bundles_b64"][s(&v["bundle"])]);
+    let setup = Setup::build(&v, &Arc::new(Counts::default()), false);
+    let cb = setup.callbacks();
+    for count in [33, isize::MAX as usize, usize::MAX] {
+        let config = RatifyV2EvaluatorConfig {
+            timeout_ms: 1000,
+            registrations: ptr::NonNull::dangling().as_ptr(),
+            count,
+        };
+        let mut outcome = RatifyV2VerifyOutcome {
+            stage: 0,
+            error_code: 0,
+            disposition: 0,
+        };
+        let mut record = empty_buf();
+        let mut committed = ptr::null_mut();
+        let code = unsafe {
+            ratify_v2_verify_proof_bundle(
+                bundle.as_ptr(),
+                bundle.len(),
+                setup.request.as_ptr(),
+                setup.request.len(),
+                &config,
+                &cb,
+                &mut outcome,
+                &mut record,
+                &mut committed,
+            )
+        };
+        take(record);
+        assert!(committed.is_null());
+        assert_eq!(
+            class(code),
+            "configuration_invalid",
+            "count {count}: {}",
+            last_error()
+        );
+    }
+}
+
+/// A signed receipt slice longer than `isize::MAX` is `bad_argument` at
+/// release, as are finalization payload lengths over `isize::MAX`.
+#[test]
+fn v2c_release_rejects_a_forged_signed_receipt_length() {
+    let f = load("verifier-ordering.json");
+    let v = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| v["name"] == "audience_domain_match")
+        .expect("audience_domain_match vector");
+    let bundle = b64(&f["bundles_b64"][s(&v["bundle"])]);
+    let counts = Arc::new(Counts::default());
+    let mut setup = Setup::build(&v, &counts, false);
+    let claimed_at = i(&v["now"]) + i(&v["claim_time_offset"]);
+    let st = ScriptedClaimStore {
+        mode: s(&v["claim_store"]),
+        claimed_at,
+        finalization_at: claimed_at + i(&v["finalize_time_offset"]),
+        counts: Arc::clone(&counts),
+        final_body: Mutex::new(Vec::new()),
+        expires_at: Mutex::new(0),
+        token: vec![7; 32],
+    };
+    setup.claim_cb = Some(st.callbacks());
+    let outcome = verify(&setup, &bundle).expect("verification runs");
+    let committed = outcome.committed.expect("committed");
+    let key = zero_key();
+    let log = cs("0123456789abcdef0123456789abcdef");
+    let store: RatifyV2ReleaseStoreCallbacks = unsafe { std::mem::zeroed() };
+    let checkpoint: RatifyV2CheckpointCallbacks = unsafe { std::mem::zeroed() };
+    for len in [isize::MAX as usize + 1, usize::MAX] {
+        let (mut status, mut reason, mut released) = (0, ptr::null_mut(), ptr::null_mut());
+        let code = unsafe {
+            ratify_v2_release_decision(
+                committed.0,
+                RatifyV2Slice {
+                    ptr: [0u8].as_ptr(),
+                    len,
+                },
+                &key,
+                log.as_ptr(),
+                &store,
+                &checkpoint,
+                &mut status,
+                &mut reason,
+                &mut released,
+            )
+        };
+        take_str(reason);
+        assert!(released.is_null());
+        assert_eq!(
+            class(code),
+            "bad_argument",
+            "length {len}: {}",
+            last_error()
+        );
+        assert!(last_error().contains("isize::MAX"), "{}", last_error());
+
+        // The finalization payload check reads its terminal result and
+        // receipt body only after a valid claim record.
+        let record = &outcome.claim_record;
+        let body = committed.body();
+        for arg in 0..2 {
+            let mut a = [(body.as_ptr(), body.len()); 2];
+            a[arg] = ([0u8].as_ptr(), len);
+            let code = unsafe {
+                ratify_v2_validate_finalization_payload(
+                    record.as_ptr(),
+                    record.len(),
+                    a[0].0,
+                    a[0].1,
+                    a[1].0,
+                    a[1].1,
+                )
+            };
+            assert_eq!(
+                class(code),
+                "bad_argument",
+                "payload arg {arg}: {}",
+                last_error()
+            );
+            assert!(last_error().contains("isize::MAX"), "{}", last_error());
+        }
+    }
+}

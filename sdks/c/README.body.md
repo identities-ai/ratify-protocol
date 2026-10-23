@@ -464,7 +464,10 @@ stay valid after the callback returns until the library has copied them
 (before the ABI call returns), and must never point into the callback's own
 stack frame. A callback returns `0`, a positive class
 (for example `RatifyV2ClockRegressed`), a store sentinel, or
-`RatifyV2ErrCancelled`. A callback failure is always handled fail-closed.
+`RatifyV2ErrCancelled`. A callback failure is always handled fail-closed,
+and so is an answer whose length or count is over `PTRDIFF_MAX` bytes in
+total: the library never reads it, and treats it as that provider or store
+failing (an audience answer is `constraint_unverifiable`).
 Identifiers reach callbacks as NUL-terminated C strings, so the library
 never passes one that contains U+0000 (and never strips the NUL): a
 configured `verifier_namespace` containing U+0000 is `configuration_invalid`

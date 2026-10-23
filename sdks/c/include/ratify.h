@@ -1075,7 +1075,8 @@ typedef struct RatifyV2EvaluatorRegistration {
 } RatifyV2EvaluatorRegistration;
 
 // The caller-authenticated evaluator registry for one call: at most 32
-// registrations, one per type, `timeout_ms` in 1..=10000.
+// registrations, one per type, `timeout_ms` in 1..=10000. A larger
+// `count` is `configuration_invalid` before any registration is read.
 typedef struct RatifyV2EvaluatorConfig {
     uint32_t timeout_ms;
     const struct RatifyV2EvaluatorRegistration *registrations;
@@ -1146,6 +1147,9 @@ typedef struct RatifyV2AudienceMembership {
 // The memberships an audience provider returns. Only memberships for a
 // deferred constraint are read, at most two per constraint (two already make
 // that constraint unverifiable); the rest are ignored without being copied.
+// A `count`, or a membership's `trust_domain_ids_len`, over `PTRDIFF_MAX`
+// bytes in total is never read: the answer is unverifiable
+// (`constraint_unverifiable`, SPEC-v2 §5.2).
 typedef struct RatifyV2AudienceResult {
     const struct RatifyV2AudienceMembership *memberships;
     uintptr_t count;

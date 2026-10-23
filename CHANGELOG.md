@@ -194,6 +194,14 @@ match before the beta.
   `constraint_unverifiable` instead of passing. Through the C ABI, a
   `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
   now fails closed the same way without calling the callback.
+- **Python: store failures are contained like any other failure.** The
+  claim store (claim, progress write, finalization, lease-expiry recovery,
+  release load and record, and the release clock), the rate store and the
+  `SecurityJournalV2` store adapters caught only `Exception`, so a store
+  that raised another `BaseException` escaped the verifier instead of
+  failing closed as Go does for a store panic. Every `BaseException` is now
+  classified exactly as an `Exception` failure; `KeyboardInterrupt` and
+  `SystemExit` are the caller's own cancellation and propagate.
 - **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
   A successful call that did not release left the output unwritten, so a
   reused caller variable could still hold an earlier released handle.

@@ -168,9 +168,9 @@ def commit_security_journal_transition_v2(ctx: Context, store, current: Security
     head = SecurityJournalHeadV2(generation=current.generation, digest=current.digest)
     try:
         store.compare_and_swap(ctx, head, nxt)
-    except SecurityJournalConflictV2:
+    except (SecurityJournalConflictV2, KeyboardInterrupt, SystemExit):
         raise
-    except Exception as exc:
+    except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
         raise RuntimeError(f"commit rollback-protected security journal: {exc}") from exc
     return nxt
 
@@ -179,7 +179,9 @@ def load_anchored_security_journal_v2(ctx: Context, store) -> SecurityJournalV2:
     """Load a version 2 record and require it to match the anchored head."""
     try:
         current, head = store.load(ctx)
-    except Exception as exc:
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
         raise RuntimeError(f"load rollback-protected security journal: {exc}") from exc
     if not isinstance(current, SecurityJournalV2) or not isinstance(head, SecurityJournalHeadV2):
         raise ValueError("security journal store returned an invalid record or head")

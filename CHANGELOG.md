@@ -233,6 +233,15 @@ match before the beta.
   among the configuration it checks; no callback runs in either case.
   Vectors: `verifier-ordering.json` `pre_malformed_and_claim_store_absent`
   and `pre_claim_store_absent`, with a new `claim_store` mode `absent`.
+- **C ABI return conventions stated exactly** (SPEC-v2 §1.3). The text said
+  every C function returns an integer status and every export returns the
+  internal-failure code after a caught panic, but the version, string,
+  predicate and free functions do not return a status. §1.3 now lists the
+  four forms with their result after a failure or caught panic: version
+  numbers return 0, strings return a fixed library-owned string,
+  predicates return their fail-closed value, and free functions return
+  nothing (a NULL pointer is a no-op and a poisoned handle is still freed).
+  Text only; the library already behaved this way.
 
 ### Fixed
 

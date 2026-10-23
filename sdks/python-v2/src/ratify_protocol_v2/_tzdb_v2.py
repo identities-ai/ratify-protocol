@@ -447,6 +447,18 @@ def parse_tzif(name: str, data: bytes) -> TimeZoneV2:
 
 _cache: dict[str, TimeZoneV2] = {}
 _cache_lock = threading.Lock()
+_zone_names: Optional[frozenset[str]] = None
+
+
+def _tzdata_zone_names() -> frozenset[str]:
+    """The exact zone names the tzdata package lists. Names are matched
+    byte for byte here, never through the filesystem, which may fold case."""
+    global _zone_names
+    with _cache_lock:
+        if _zone_names is None:
+            text = importlib.resources.files("tzdata").joinpath("zones").read_text(encoding="utf-8")
+            _zone_names = frozenset(line for line in text.splitlines() if line)
+        return _zone_names
 
 
 def tzdata_package_version() -> Optional[str]:
@@ -473,6 +485,8 @@ def load_zone(name: str) -> TimeZoneV2:
     if name in ("", "Local") or not segments or any(seg in ("", ".", "..") or seg.startswith("__") for seg in segments):
         raise ValueError(f"time zone {name!r} is not in IANA tzdata {TZDB_VERSION_V2}")
     try:
+        if name not in _tzdata_zone_names():
+            raise FileNotFoundError(name)
         resource = importlib.resources.files("tzdata").joinpath("zoneinfo", *segments)
         if not resource.is_file():
             raise FileNotFoundError(name)

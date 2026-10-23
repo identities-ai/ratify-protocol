@@ -142,6 +142,18 @@ def test_zone_transitions_match_the_go_reference():
     assert c2.local_time_v2("2025c", "Pacific/Kiritimati", 253402300799).year == 10000
 
 
+@pytest.mark.parametrize("tz", ["america/new_york", "AMERICA/NEW_YORK", "America/New_york", "utc", "us/eastern"])
+def test_time_window_zone_names_match_exactly(tz):
+    # A zone name that differs only in case is not in the database (SPEC-v2
+    # §5.2). The lookup must not depend on a case-insensitive filesystem
+    # (macOS, Windows): a window that would pass in America/New_York is
+    # unverifiable under any case variant.
+    window = c2.ConstraintV2(type="time_window", start="02:00", end="03:30", tz=tz)
+    assert outcome(window, ctx()) == "unverifiable"
+    exact = c2.ConstraintV2(type="time_window", start="02:00", end="03:30", tz="America/New_York")
+    assert outcome(exact, ctx()) == "pass"
+
+
 def test_days_from_civil_normalizes_like_go():
     assert c2.days_from_civil_v2(1970, 1, 1) == 0
     assert c2.days_from_civil_v2(2027, 1, 32) == c2.days_from_civil_v2(2027, 2, 1)

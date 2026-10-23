@@ -23,11 +23,11 @@
     "publish": "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
     "rate_at_finalization": "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
     "recover": "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
-    "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
+    "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
     "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
     "set_ack_withheld": "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
-    "set_time": "set the authoritative clock (it may move backward to exercise clock regression)",
+    "set_time": "set the authoritative clock (it may move backward to exercise clock regression). The store keeps a high-water mark of every authoritative reading, including the checkpoint's acknowledgement timestamps, and a reading below it is a reported clock regression",
     "snapshot": "copy the complete primary state (store, journal, issuance records) under snapshot",
     "stage_status": "stage the request's status keys (configured in ascending issuer order) and journal preload into the primary's anchored SecurityJournalV2 store, as before disconnection; each journal transition is anchored",
     "upload": "outbox upload after reconnection: send each signed receipt of the component-acknowledged prefix once, in log order; expect uploaded. Upload never releases or changes a release",
@@ -3480,7 +3480,7 @@
     },
     {
       "name": "corrupt_receipt_signature_is_rejected",
-      "description": "a published receipt whose signature does not verify under the configured verifier key is rejected",
+      "description": "a published receipt whose signature does not verify under the configured verifier key is rejected; rejected describes only that call's inputs, so the genuine receipt then releases (SPEC-v2 §6.9)",
       "start_time": 1800000000,
       "steps": [
         {
@@ -3509,12 +3509,31 @@
             "release_status": "rejected",
             "release_reason": "receipt_invalid"
           }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
         }
       ]
     },
     {
       "name": "receipt_of_another_claim_is_rejected",
-      "description": "a valid receipt for a different committed claim does not bind this claim's body",
+      "description": "a valid receipt for a different committed claim does not bind this claim's body; the rejection is per call, so this claim's own receipt then releases",
       "start_time": 1800000000,
       "steps": [
         {
@@ -3573,12 +3592,23 @@
             "release_time": 1800000000,
             "receipt_sequence": 2
           }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
         }
       ]
     },
     {
       "name": "acknowledgement_for_another_entry_is_rejected",
-      "description": "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected",
+      "description": "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected; the rejection records nothing for the claim, so a call through the genuine checkpoint releases",
       "start_time": 1800000000,
       "steps": [
         {
@@ -3606,6 +3636,17 @@
           "expect": {
             "release_status": "rejected",
             "release_reason": "acknowledgement_mismatch"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
           }
         }
       ]
@@ -3746,7 +3787,7 @@
     },
     {
       "name": "clock_regression_at_release_is_withheld",
-      "description": "a release reading earlier than the acknowledgement time is a clock regression",
+      "description": "a release reading earlier than the acknowledgement time is a clock regression; the withheld result is recorded and is permanent, so a later release after the clock passes the acknowledgement time is still withheld (SPEC-v2 §6.9)",
       "start_time": 1800000000,
       "steps": [
         {
@@ -3784,6 +3825,158 @@
           "expect": {
             "release_status": "withheld",
             "release_reason": "clock_regressed"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000006,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "clock_regressed"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recorded_withheld_answers_before_receipt_checks",
+      "description": "once a withheld result is recorded, every later release of the claim returns it right after the committed-state step: without a receipt it is withheld rather than pending, and with a mismatched acknowledgement it is withheld rather than rejected",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000290,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "no_receipt",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "wrong_entry",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        }
+      ]
+    },
+    {
+      "name": "withheld_after_recorded_release_records_nothing",
+      "description": "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000010,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000008,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "clock_regressed"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000011,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
           }
         }
       ]
@@ -6332,7 +6525,7 @@
     },
     {
       "name": "device_rtc_regression",
-      "description": "the device clock moves backward: the component cannot acknowledge, a new claim is refused, and a release reading below the acknowledgement time is withheld; once the clock recovers the entry releases at its acknowledgement time",
+      "description": "the device clock moves backward: the component cannot acknowledge, a new claim is refused, and a release reading below the acknowledgement time is withheld; the withheld result is recorded, so once the clock recovers the entry stays withheld (SPEC-v2 §6.9) and a later entry acknowledged on the recovered clock releases",
       "profile": "single_device_offline",
       "start_time": 1800000000,
       "device": {
@@ -6429,10 +6622,45 @@
           "request": "D1",
           "checkpoint": "device",
           "expect": {
+            "release_status": "withheld",
+            "release_reason": "clock_regressed"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "D2",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "D2",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 2
+          }
+        },
+        {
+          "op": "device_submit",
+          "expect": {
+            "acknowledged": [
+              2
+            ]
+          }
+        },
+        {
+          "op": "release",
+          "request": "D2",
+          "checkpoint": "device",
+          "expect": {
             "decision": "allow",
             "release_status": "released",
-            "release_time": 1800000010,
-            "receipt_sequence": 1
+            "release_time": 1800000011,
+            "receipt_sequence": 2
           }
         }
       ]

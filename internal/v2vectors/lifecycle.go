@@ -132,7 +132,7 @@ func (g *gen) lifecycleFile() any {
 		Version:     2,
 		Description: "Part B lifecycle scenarios (SPEC-v2 §6.9, §7). Replay each scenario against a fresh in-memory reference store whose authoritative clock starts at start_time, whose evaluator lease is lease_seconds, and whose receipt log log_id is signed by verifier_key. Requests use the verifier-ordering input schema; the request's now is always the store clock at the step.",
 		Semantics: map[string]string{
-			"set_time":               "set the authoritative clock (it may move backward to exercise clock regression)",
+			"set_time":               "set the authoritative clock (it may move backward to exercise clock regression). The store keeps a high-water mark of every authoritative reading, including the checkpoint's acknowledgement timestamps, and a reading below it is a reported clock regression",
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
 			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
@@ -145,7 +145,7 @@ func (g *gen) lifecycleFile() any {
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
 			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store",
-			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time",
+			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
@@ -248,16 +248,18 @@ func (g *gen) lifecycleFile() any {
 	sc("signer_failure_then_retry", "a publisher (signer) failure appends nothing and release stays pending; a retry publishes and releases",
 		step("verify", "A", committedAllow), publish("A", "signer_failure", 0), release("A", lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "receipt_not_appended"}),
 		publish("A", "ok", 1), release("A", released(Now, 1)))
-	sc("corrupt_receipt_signature_is_rejected", "a published receipt whose signature does not verify under the configured verifier key is rejected",
+	sc("corrupt_receipt_signature_is_rejected", "a published receipt whose signature does not verify under the configured verifier key is rejected; rejected describes only that call's inputs, so the genuine receipt then releases (SPEC-v2 §6.9)",
 		step("verify", "A", committedAllow), lifecycleStepJSON{Op: "publish", Request: "A", Mode: "corrupt_signature", Expect: lifecycleExpectJSON{ReceiptSeq: 1}},
-		release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_invalid"}))
-	sc("receipt_of_another_claim_is_rejected", "a valid receipt for a different committed claim does not bind this claim's body",
+		release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_invalid"}),
+		publish("A", "ok", 1), release("A", released(Now, 1)))
+	sc("receipt_of_another_claim_is_rejected", "a valid receipt for a different committed claim does not bind this claim's body; the rejection is per call, so this claim's own receipt then releases",
 		step("verify", "A", committedAllow), step("verify", "B", committedAllow), publish("A", "ok", 1), publish("B", "ok", 2),
 		lifecycleStepJSON{Op: "release", Request: "A", ReceiptOf: "B", Checkpoint: "reference", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "receipt_body_mismatch"}},
-		release("B", released(Now, 2)))
-	sc("acknowledgement_for_another_entry_is_rejected", "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected",
+		release("B", released(Now, 2)), release("A", released(Now, 1)))
+	sc("acknowledgement_for_another_entry_is_rejected", "an acknowledgement whose entry hash differs from the verified receipt is a fork signal and is rejected; the rejection records nothing for the claim, so a call through the genuine checkpoint releases",
 		step("verify", "A", committedAllow), publish("A", "ok", 1),
-		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}})
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "acknowledgement_mismatch"}},
+		release("A", released(Now, 1)))
 	sc("planted_release_record_does_not_replace_acknowledgement", "a release record written into the claim store with the appended receipt's entry hash and a plausible acknowledgement time is not evidence of acknowledgement: release stays pending while the entry is unacknowledged, and once acknowledged at a different time the planted record is a release_state_mismatch",
 		withhold(true), step("verify", "A", committedAllow), publish("A", "ok", 1),
 		lifecycleStepJSON{Op: "plant_release", Request: "A", Time: Now},
@@ -269,9 +271,21 @@ func (g *gen) lifecycleFile() any {
 		release("A", released(Now, 1)))
 	sc("forged_committed_outcome_is_rejected", "an application cannot release a committed outcome the verifier did not produce",
 		ls("release_forged", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}))
-	sc("clock_regression_at_release_is_withheld", "a release reading earlier than the acknowledgement time is a clock regression",
+	withheldRegressed := lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "clock_regressed"}
+	sc("clock_regression_at_release_is_withheld", "a release reading earlier than the acknowledgement time is a clock regression; the withheld result is recorded and is permanent, so a later release after the clock passes the acknowledgement time is still withheld (SPEC-v2 §6.9)",
 		step("verify", "A", committedAllow), setTime(Now+5), publish("A", "ok", 1), setTime(Now+3),
-		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "clock_regressed"}))
+		release("A", withheldRegressed), setTime(Now+6), release("A", withheldRegressed))
+	expired := lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}
+	sc("recorded_withheld_answers_before_receipt_checks", "once a withheld result is recorded, every later release of the claim returns it right after the committed-state step: without a receipt it is withheld rather than pending, and with a mismatched acknowledgement it is withheld rather than rejected",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		release("A", expired),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expired},
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: expired},
+		release("A", expired))
+	sc("withheld_after_recorded_release_records_nothing", "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+10), release("A", released(Now, 1)),
+		setTime(Now+8), release("A", withheldRegressed),
+		setTime(Now+11), release("A", released(Now, 1)))
 	sc("crash_after_claim_lease_recovery", "an evaluator that crashes after claiming leaves the claim in progress; recovery is refused while the lease is live, then commits evaluation_interrupted, which publishes and releases as a non-actionable indeterminate; recovery is idempotent",
 		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}),
 		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "in_progress"}),

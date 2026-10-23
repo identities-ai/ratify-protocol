@@ -565,6 +565,9 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					if step.Checkpoint == "wrong_entry" {
 						cfg.Checkpoint = v2WrongEntryCheckpoint{inner: store}
 					}
+					if step.Mode == "no_receipt" {
+						receipt = nil
+					}
 					if step.Op == "release_forged" {
 						c, receipt = &ratify.CommittedV2Outcome{}, nil
 					}

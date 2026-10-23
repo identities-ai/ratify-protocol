@@ -17,7 +17,8 @@ import (
 // receipt_body_digest, challenge_expires_at, allow_horizon} and the sealed
 // receipt outbox body. It exposes no decision. ReleaseV2Decision is the only
 // path to an actionable decision; it returns released, pending (retryable),
-// withheld (permanent), or rejected (permanent).
+// withheld (permanent for the claim once recorded), or rejected (a result of
+// that call's inputs that changes no claim state).
 //
 // There is no production local-log substitute for an independent checkpoint.
 // The in-memory store in package v2reference exists only for tests and
@@ -98,11 +99,33 @@ type V2ReceiptCheckpoint interface {
 	GetV2Acknowledgement(ctx context.Context, logID string, sequence int64) (V2CheckpointAcknowledgement, error)
 }
 
-// V2ReleaseRecord is the durable release record of §6.9 step 9.
+// V2ReleaseRecord is the durable release record of SPEC-v2 §6.9: the release
+// of step 9 (Outcome released, Reason empty) or a withheld result of steps 7
+// and 8 (Outcome withheld, Reason clock_regressed, challenge_expired, or
+// allow_horizon_passed). EntryHash and AckTimestamp name the verified receipt
+// entry and its acknowledgement. The first record for a claim wins; a claim
+// store returns ErrV2ReleaseStateMismatch for any different later record and
+// must persist and return every field unchanged.
 type V2ReleaseRecord struct {
 	ClaimID      string
 	EntryHash    []byte
 	AckTimestamp int64
+	Outcome      V2ReleaseStatus
+	Reason       string
+}
+
+// ValidV2ReleaseRecordOutcome reports whether outcome and reason form a
+// release record: released with no reason, or withheld with one of the
+// reasons release steps 7 and 8 record.
+func ValidV2ReleaseRecordOutcome(outcome V2ReleaseStatus, reason string) bool {
+	switch outcome {
+	case V2ReleaseReleased:
+		return reason == ""
+	case V2ReleaseWithheld:
+		return reason == "clock_regressed" || reason == "challenge_expired" || reason == "allow_horizon_passed"
+	default:
+		return false
+	}
 }
 
 // V2TerminalClaimRecord is what the claim store returns to release (§7.3):
@@ -119,7 +142,7 @@ type V2TerminalClaimRecord struct {
 }
 
 // ErrV2ReleaseStateMismatch is returned by RecordV2Release when a different
-// release record already exists for the claim.
+// release or withheld record already exists for the claim.
 var ErrV2ReleaseStateMismatch = errors.New("v2 claim already records a different release")
 
 // V2ReleaseClaimStore is the claim-store view release needs.
@@ -305,6 +328,17 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 		err != nil || verifierID != committed.verifierID {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
+	// A recorded withheld result is permanent for the claim and is returned
+	// before any other step. A record that is neither a valid withheld nor a
+	// valid released record for this claim is a state mismatch.
+	if record.Release != nil {
+		if record.Release.ClaimID != committed.claimID || !ValidV2ReleaseRecordOutcome(record.Release.Outcome, record.Release.Reason) {
+			return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
+		}
+		if record.Release.Outcome == V2ReleaseWithheld {
+			return releaseResultV2(V2ReleaseWithheld, record.Release.Reason)
+		}
+	}
 	// 2. Receipt.
 	if len(signedReceipt) == 0 {
 		return releaseResultV2(V2ReleasePending, "receipt_not_appended")
@@ -324,7 +358,7 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	}
 	// 4. Prior release: the same receipt entry. A recorded release only
 	// enforces sameness; it never substitutes for the acknowledgement.
-	if record.Release != nil && (record.Release.ClaimID != committed.claimID || !bytes.Equal(record.Release.EntryHash, entryHash)) {
+	if record.Release != nil && !bytes.Equal(record.Release.EntryHash, entryHash) {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
 	// 5. Predecessor.
@@ -348,27 +382,41 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if record.Release != nil && record.Release.AckTimestamp != ack.Timestamp {
 		return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
 	}
+	// withhold ends release at step 7 or 8. With no release recorded it
+	// durably records the withheld result first, so it is permanent for the
+	// claim; if the store is unavailable this call is still withheld. With a
+	// release already recorded, that first record stands and this call alone
+	// is withheld.
+	withhold := func(reason string) V2ReleaseResult {
+		if record.Release == nil {
+			err := recordV2ReleaseSafely(ctx, config.ClaimStore, V2ReleaseRecord{ClaimID: committed.claimID, EntryHash: bytes.Clone(entryHash), AckTimestamp: ack.Timestamp, Outcome: V2ReleaseWithheld, Reason: reason})
+			if errors.Is(err, ErrV2ReleaseStateMismatch) {
+				return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
+			}
+		}
+		return releaseResultV2(V2ReleaseWithheld, reason)
+	}
 	// 7. Clock.
 	now, err := readV2AuthoritativeTime(ctx, config.ClaimStore)
 	if V2ErrorClassOf(err) == V2ErrClockRegressed {
-		return releaseResultV2(V2ReleaseWithheld, "clock_regressed")
+		return withhold("clock_regressed")
 	}
 	if err != nil {
 		return releaseResultV2(V2ReleasePending, "clock_unavailable")
 	}
 	if !validV2Timestamp(ack.Timestamp) || record.FinalizedAt > ack.Timestamp || ack.Timestamp > now {
-		return releaseResultV2(V2ReleaseWithheld, "clock_regressed")
+		return withhold("clock_regressed")
 	}
 	// 8. Deadlines.
 	if ack.Timestamp >= committed.challengeExpiresAt || now >= committed.challengeExpiresAt {
-		return releaseResultV2(V2ReleaseWithheld, "challenge_expired")
+		return withhold("challenge_expired")
 	}
 	if receipt.Decision == "allow" && (committed.allowHorizon <= 0 || ack.Timestamp >= committed.allowHorizon || now >= committed.allowHorizon) {
-		return releaseResultV2(V2ReleaseWithheld, "allow_horizon_passed")
+		return withhold("allow_horizon_passed")
 	}
 	// 9. Record.
 	if record.Release == nil {
-		err := recordV2ReleaseSafely(ctx, config.ClaimStore, V2ReleaseRecord{ClaimID: committed.claimID, EntryHash: bytes.Clone(entryHash), AckTimestamp: ack.Timestamp})
+		err := recordV2ReleaseSafely(ctx, config.ClaimStore, V2ReleaseRecord{ClaimID: committed.claimID, EntryHash: bytes.Clone(entryHash), AckTimestamp: ack.Timestamp, Outcome: V2ReleaseReleased})
 		switch {
 		case errors.Is(err, ErrV2ReleaseStateMismatch):
 			return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")

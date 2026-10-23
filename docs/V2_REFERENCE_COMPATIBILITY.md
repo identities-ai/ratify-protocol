@@ -67,14 +67,14 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `cross-sdk/` (5 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes |
 | `digest-functions.json` (16 cases) | Yes | Yes | Yes | Yes | Yes |
 | `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes |
-| `device-state.json` (5 complete-state projections) | Yes | Yes | Yes | Yes | Yes |
+| `device-state.json` (6 complete-state projections) | Yes | Yes | Yes | Yes | Yes |
 | `evaluator-profiles.json` (70 profile cases, 13 context bounds) | Yes | Yes | Yes | Yes | Yes |
 | `external-signer.json` (17 cases) | Yes | Yes | Yes | Yes | Yes |
 | `hedged-signatures.json` (10 objects) | Yes | Yes | Yes | Yes | Yes |
 | `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
 | `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
-| `lifecycle-scenarios.json` (42 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (44 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
 | `limits.json` (32 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `object-negatives.json` (401 negatives) | Yes | Yes | Yes | Yes | Yes |

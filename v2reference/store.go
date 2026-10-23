@@ -234,10 +234,16 @@ func (s *Store) SetAcknowledgementWithheld(withheld bool) {
 	}
 }
 
+// acknowledgePendingLocked submits every appended, unacknowledged entry to
+// the reference checkpoint in log order. Acknowledgements are timestamped by
+// one authoritative reading (SPEC-v2 §7.2), which advances the high-water
+// mark; while the clock is regressed nothing is acknowledged.
 func (s *Store) acknowledgePendingLocked() {
 	if s.checkpointFrozen {
 		return
 	}
+	var now int64
+	read := false
 	for i := range s.outbox {
 		if s.outbox[i].wire == nil {
 			return
@@ -245,7 +251,14 @@ func (s *Store) acknowledgePendingLocked() {
 		if s.outbox[i].ack != nil {
 			continue
 		}
-		s.outbox[i].ack = &ratify.V2CheckpointAcknowledgement{LogID: s.logID, Sequence: int64(i + 1), EntryHash: bytes.Clone(s.outbox[i].digest), Timestamp: s.now}
+		if !read {
+			var err error
+			if now, err = s.readClockLocked(); err != nil {
+				return
+			}
+			read = true
+		}
+		s.outbox[i].ack = &ratify.V2CheckpointAcknowledgement{LogID: s.logID, Sequence: int64(i + 1), EntryHash: bytes.Clone(s.outbox[i].digest), Timestamp: now}
 	}
 }
 
@@ -558,18 +571,24 @@ func (s *Store) LoadV2TerminalClaim(_ context.Context, claimID string) (ratify.V
 	return out, nil
 }
 
-// RecordV2Release implements ratify.V2ReleaseClaimStore. An identical repeat
-// is a no-op; a different existing record is ErrV2ReleaseStateMismatch. A
-// new record is a durable security-state change, anchored like any other.
+// RecordV2Release implements ratify.V2ReleaseClaimStore. It records a
+// release or a withheld result (SPEC-v2 §6.9): the first record for a claim
+// wins, an identical repeat is a no-op, and any different record is
+// ErrV2ReleaseStateMismatch. A new record is a durable security-state change,
+// anchored like any other.
 func (s *Store) RecordV2Release(_ context.Context, release ratify.V2ReleaseRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !ratify.ValidV2ReleaseRecordOutcome(release.Outcome, release.Reason) {
+		return &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: invalid release record outcome %q reason %q", release.Outcome, release.Reason)}
+	}
 	record, ok := s.claims[release.ClaimID]
 	if !ok || record.state != stateTerminal {
 		return ratify.ErrV2ReleaseStateMismatch
 	}
 	if record.release != nil {
-		if bytes.Equal(record.release.EntryHash, release.EntryHash) && record.release.AckTimestamp == release.AckTimestamp {
+		if bytes.Equal(record.release.EntryHash, release.EntryHash) && record.release.AckTimestamp == release.AckTimestamp &&
+			record.release.Outcome == release.Outcome && record.release.Reason == release.Reason {
 			return nil
 		}
 		return ratify.ErrV2ReleaseStateMismatch
@@ -586,7 +605,7 @@ func (s *Store) PlantReleaseTestOnly(claimID string, ackTimestamp int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if record, ok := s.claims[claimID]; ok && record.outboxIndex >= 0 && s.outbox[record.outboxIndex].wire != nil {
-		record.release = &ratify.V2ReleaseRecord{ClaimID: claimID, EntryHash: bytes.Clone(s.outbox[record.outboxIndex].digest), AckTimestamp: ackTimestamp}
+		record.release = &ratify.V2ReleaseRecord{ClaimID: claimID, EntryHash: bytes.Clone(s.outbox[record.outboxIndex].digest), AckTimestamp: ackTimestamp, Outcome: ratify.V2ReleaseReleased}
 	}
 }
 
@@ -678,7 +697,11 @@ func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence i
 		return ratify.V2CheckpointAcknowledgement{}, ErrNotAcknowledged
 	}
 	if s.outbox[sequence-1].ack == nil {
-		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: s.now}
+		now, err := s.readClockLocked()
+		if err != nil {
+			return ratify.V2CheckpointAcknowledgement{}, err
+		}
+		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: now}
 	}
 	ack := *s.outbox[sequence-1].ack
 	ack.EntryHash = bytes.Clone(ack.EntryHash)

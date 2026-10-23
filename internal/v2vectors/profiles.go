@@ -318,12 +318,14 @@ func (g *gen) addProfileScenarios(f *lifecycleFile, add func(string, orderingVec
 		verify("DS", ex{lifecycleExpectJSON: le{Stage: "committed", Decision: "indeterminate", DecisionReason: "status_stale"}}),
 		publish("DS", 2), submit("", 2),
 		release("DS", "device", ex{lifecycleExpectJSON: le{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: statusFreshUntil, ReceiptSeq: 2}}))
-	device("device_rtc_regression", "the device clock moves backward: the component cannot acknowledge, a new claim is refused, and a release reading below the acknowledgement time is withheld; once the clock recovers the entry releases at its acknowledgement time", 8,
+	device("device_rtc_regression", "the device clock moves backward: the component cannot acknowledge, a new claim is refused, and a release reading below the acknowledgement time is withheld; the withheld result is recorded, so once the clock recovers the entry stays withheld (SPEC-v2 §6.9) and a later entry acknowledged on the recovered clock releases",
+		8,
 		setTime(Now+10), verify("D1", committedAllow), publish("D1", 1), setTime(Now+5),
 		submit("clock_regressed"), release("D1", "device", releaseState("pending", "acknowledgement_unavailable")),
 		verify("D2", ex{lifecycleExpectJSON: le{Stage: "preflight", ErrorClass: "claim_store_unavailable"}}),
 		setTime(Now+10), submit("", 1), setTime(Now+9), release("D1", "device", releaseState("withheld", "clock_regressed")),
-		setTime(Now+11), release("D1", "device", released(Now+10, 1)))
+		setTime(Now+11), release("D1", "device", releaseState("withheld", "clock_regressed")),
+		verify("D2", committedAllow), publish("D2", 2), submit("", 2), release("D2", "device", released(Now+11, 2)))
 	f.ProfileScenarios = append(f.ProfileScenarios, profileScenarioJSON{Name: "device_rollback_loses_rate_state",
 		Description: "with max_rate admitted at finalization and the receipt log unchanged, a restore loses an admitted rate commit and its claim: startup reports state_digest_mismatch and the lost request cannot be admitted again",
 		Profile:     "single_device_offline", StartTime: Now, RateAtFinalization: true,

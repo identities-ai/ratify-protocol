@@ -652,7 +652,12 @@ impl ClaimStoreV2 for Store {
         })
     }
 
-    /// Commit the canonical interrupted result after the lease expired.
+    /// Commit the canonical interrupted result after the lease expired. The
+    /// result and receipt body are validated exactly as finalization
+    /// validates them ([`validate_v2_finalization_payload`]: `malformed` or
+    /// `configuration_invalid`), and the decision and reason must be
+    /// `indeterminate` / `evaluation_interrupted` (`configuration_invalid`
+    /// otherwise); a refused recovery commits nothing (SPEC-v2 §7.5).
     fn recover_interrupted_v2_claim(
         &self,
         _ctx: &V2Context,
@@ -675,9 +680,14 @@ impl ClaimStoreV2 for Store {
         if now < lease_expires_at {
             return Err(classified(V2ErrorClass::ClaimLeaseLive, "v2reference: evaluator lease is still live"));
         }
+        let Some(record) = s.claims.get(claim_id) else {
+            return Err(classified(V2ErrorClass::ClaimNotFound, "v2reference: unknown claim"));
+        };
+        validate_v2_finalization_payload(&record.claim, terminal_result, receipt_body)?;
         if !is_interrupted_terminal(terminal_result) {
-            return Err(V2StoreError::Unavailable(
-                "v2reference: recovery may commit only indeterminate/evaluation_interrupted".into(),
+            return Err(classified(
+                V2ErrorClass::ConfigurationInvalid,
+                "v2reference: recovery may commit only indeterminate/evaluation_interrupted",
             ));
         }
         s.change_locked(|s| s.commit_terminal_locked(claim_id, terminal_result, receipt_body, 0, now))?;

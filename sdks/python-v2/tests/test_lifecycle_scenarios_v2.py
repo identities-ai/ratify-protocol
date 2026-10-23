@@ -63,8 +63,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 51
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 283
+    assert len(SCENARIOS) == 57
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 320
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}
@@ -348,6 +348,18 @@ def test_lifecycle_scenario(sc):
                 continue
             assert err is None, (i, err)
             assert ("committed" if finalized else "identical") == want.get("finalize_result", ""), i
+        elif op == "recover_direct":
+            try:
+                recovered, err = claim_store().recover_interrupted_v2_claim(
+                    BACKGROUND, claim_ids[step["request"]], b64(step.get("terminal_b64", "")),
+                    b64(step.get("body_b64", ""))), None
+            except Exception as exc:  # noqa: BLE001
+                recovered, err = False, exc
+            if want.get("error_class"):
+                assert not recovered and error_class_of(err) == want["error_class"], (i, err)
+                continue
+            assert err is None, (i, err)
+            assert ("committed" if recovered else "identical") == want.get("finalize_result", ""), i
         elif op == "recover":
             recover_step(i, step["request"], want)
         elif op == "publish":

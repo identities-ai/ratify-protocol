@@ -14,7 +14,7 @@ const file = load("verifier-ordering.json");
 
 test("verifier-ordering.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.vectors.length, 340);
+  assert.equal(file.vectors.length, 342);
 });
 
 for (const v of file.vectors as Any[]) {
@@ -25,7 +25,8 @@ for (const v of file.vectors as Any[]) {
     const { req, cb, rate } = await buildVerifyRequest(v, unb64(bundleB64), counts);
     const claimedAt = v.now + (v.claim_time_offset ?? 0);
     const store = new ScriptedClaimStore(v.claim_store, claimedAt, claimedAt + (v.finalize_time_offset ?? 0), counts);
-    const outcome = await verifyProofBundleV2(req, { ...cb, claimStore: store });
+    // claim_store "absent": no claim store is configured.
+    const outcome = await verifyProofBundleV2(req, v.claim_store === "absent" ? { ...cb, claimStore: undefined as never } : { ...cb, claimStore: store });
     const want = v.expected;
     assert.equal(outcome.stage, want.stage, `stage (class ${outcome.errorClass}: ${outcome.error?.message})`);
     assert.equal(outcome.errorClass, want.error_class ?? "", `error class (${outcome.error?.message})`);

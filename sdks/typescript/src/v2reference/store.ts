@@ -452,6 +452,9 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       }
       const now = this.readClock();
       if (now < record.leaseExpiresAt) throw storeError("claim_lease_live", "v2reference: evaluator lease is still live");
+      // Validated exactly as finalization (SPEC-v2 §7.5): malformed or
+      // configuration_invalid, committing nothing.
+      validateV2FinalizationPayload(record.claim, terminalResult, receiptBody);
       let fields: { decision?: string; reason?: string } = {};
       try {
         const root = parseJSONV2(terminalResult);
@@ -464,7 +467,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         fields = {};
       }
       if (fields.decision !== "indeterminate" || fields.reason !== "evaluation_interrupted") {
-        throw new Error("v2reference: recovery may commit only indeterminate/evaluation_interrupted");
+        throw storeError("configuration_invalid", "v2reference: recovery may commit only indeterminate/evaluation_interrupted");
       }
       this.change(() => this.commitTerminal(record, terminalResult, receiptBody, 0, now));
       return true;

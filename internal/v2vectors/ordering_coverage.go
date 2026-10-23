@@ -67,6 +67,8 @@ func (g *gen) orderingCoverageScenarios() []scenario {
 		s.reqCtx = &requestContextJSON{HasAmount: true, RequestedAmountMicros: -1, RequestedCurrency: "USD"}
 	}))
 	add(std("pre_malformed_and_now_invalid", "step 1 decode precedes the now bound", bundle[:len(bundle)/2], "malformed", func(s *scenario) { s.now = -1 }))
+	add(std("pre_malformed_and_claim_store_absent", "step 1 decode precedes step 2 configuration, including the claim-store presence check: a truncated bundle with no claim store configured is malformed and calls nothing", []byte("{"), "malformed", func(s *scenario) { s.claim = "absent" }))
+	add(std("pre_claim_store_absent", "a valid bundle with no claim store configured fails step 2 configuration before any callback", bundle, "configuration_invalid", func(s *scenario) { s.claim = "absent" }))
 	otherSession := append([]byte(nil), session...)
 	otherSession[0] ^= 1
 	add(std("pre_policy_inconsistent_and_scope_invalid", "step 2 policy/challenge consistency precedes step 3", bundle, "configuration_invalid", func(s *scenario) {

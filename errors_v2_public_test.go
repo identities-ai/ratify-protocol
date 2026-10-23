@@ -275,9 +275,11 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		})
 	}
 
-	// The live verifier reports a listed class in its outcome as well.
+	// The live verifier reports a listed class in its outcome as well. Bounded
+	// decode precedes the claim-store check (SPEC-v2 §6.2), so an undecodable
+	// bundle without a claim store is malformed.
 	outcome, _ := VerifyProofBundleV2(ctx, V2VerifyRequest{Bundle: garbage}, V2VerifyCallbacks{})
-	if outcome.Stage != V2StagePreflight || outcome.ErrorClass != V2ErrConfigurationInvalid {
+	if outcome.Stage != V2StagePreflight || outcome.ErrorClass != V2ErrMalformed {
 		t.Fatalf("VerifyProofBundleV2 without a claim store: stage %q class %q", outcome.Stage, outcome.ErrorClass)
 	}
 }

@@ -23,6 +23,7 @@
     "publish": "drain the outbox for the request's committed outcome; the reference store assigns each receipt-log position at terminal commit, in commit order. mode ok = reference publisher; signer_failure = the signer fails for this call and appends nothing; corrupt_signature = the published receipt with one Ed25519 signature byte flipped. Expect receipt_sequence, or failed=true with publish_error head_of_line_blocked (an earlier entry is unpublished), signer_unavailable, or log_frozen",
     "rate_at_finalization": "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
     "recover": "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
+    "recover_direct": "call the claim store's recovery operation directly for the request's claim (from its claim_only step) with terminal_b64 as the terminal result and body_b64 as the receipt outbox body, after the evaluator lease expired; expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store validates the result and body exactly as finalize does (SPEC-v2 §7.5: malformed for a body that is not a canonical receipt body, configuration_invalid for a body that does not bind the sealed claim or a result that differs from it) and accepts only indeterminate/evaluation_interrupted (configuration_invalid otherwise): a refused recovery commits nothing",
     "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
     "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
@@ -6470,6 +6471,351 @@
           "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
           "expect": {
             "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_malformed_body",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted result with a receipt body that is not a canonical receipt body ({\"decision\":\"allow\",\"verifier_id\":\"forged\"}): it is malformed (SPEC-v2 §7.5, §7.7); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwidmVyaWZpZXJfaWQiOiJmb3JnZWQifQ==",
+          "expect": {
+            "error_class": "malformed"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_body_for_another_claim",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives a canonical interrupted receipt body whose bundle_hash names request B's proof bundle: it does not bind the sealed claim and is configuration_invalid (SPEC-v2 §7.5); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDpkNTllY2VkNWMzMTllMmNlNWY2NmYzNzQxYTliZDQ2NDhjNDI3ZWIxZDQ1OTk5OWExNWNmOTkzODlkYzRiY2Y2ZmU2YjA0MTM5NjQ0NjgxZDg4YTk2MDIwMjFlZDhhYjMiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_context_policy_digest_not_evaluated",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives an interrupted receipt body with context_assessment not_evaluated and the sealed context_policy_digest: that body is not a receipt body (SPEC-v2 §5.8), so recovery refuses it as malformed (SPEC-v2 §7.5); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImRlY2lzaW9uIjoiaW5kZXRlcm1pbmF0ZSIsImRlY2lzaW9uX3JlYXNvbiI6ImV2YWx1YXRpb25faW50ZXJydXB0ZWQiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50Ijoibm90X2V2YWx1YXRlZCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbXSwidHJ1c3RfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJ2ZXJpZmllZF9hdCI6MTgwMDAwMDAwMCwidmVyaWZpZXJfaWQiOiJlYzRiZjE3YjVlNDMzYjE0YzU5N2FkYjc5MGQwNTZkMzZkMDkxMzlmNzNmMWNkNWYzZTdkNzAwMTEyNTcwYzJjIiwidmVyc2lvbiI6Mn0=",
+          "expect": {
+            "error_class": "malformed"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_other_decision",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives a canonical receipt body bound to the sealed claim and a matching terminal result, both indeterminate/status_unavailable: recovery commits only indeterminate/evaluation_interrupted, so it is configuration_invalid (SPEC-v2 §7.5); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_terminal_result_other_than_body",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result naming deny/delegation_revoked: the result differs from the body and is configuration_invalid (SPEC-v2 §7.5); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJkZWNpc2lvbl9yZWFzb24iOiJkZWxlZ2F0aW9uX3Jldm9rZWQiLCJpZGVudGl0eV9zdGF0dXMiOiJyZXZva2VkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_direct_accepts_canonical_interrupted_body",
+      "description": "after the evaluator lease expired, the claim store's recovery operation commits the canonical interrupted result and receipt body for the sealed claim; an identical repeat is a no-op, the recovery helper builds the same bytes and returns the committed result, and the receipt publishes at sequence 1",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
           }
         },
         {

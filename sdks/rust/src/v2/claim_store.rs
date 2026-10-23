@@ -222,7 +222,10 @@ pub trait V2AuthoritativeClock: Send + Sync {
 /// and live lease (`claim_lease_lost` or `claim_already_terminal`
 /// otherwise). `load_v2_interrupted_claim` fails with `claim_lease_live`
 /// while an evaluating claim's lease is live. `recover_interrupted_v2_claim`
-/// commits only indeterminate/evaluation_interrupted after the lease expired.
+/// validates the result and receipt body as finalization does
+/// ([`validate_v2_finalization_payload`]) and commits only
+/// indeterminate/evaluation_interrupted after the lease expired; a refused
+/// recovery commits nothing.
 ///
 /// This trait does not make a memory-only implementation safe for
 /// production.

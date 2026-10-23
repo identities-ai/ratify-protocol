@@ -773,6 +773,30 @@ fn v2c_lifecycle_scenarios() {
                     let got = if committed_flag == 1 { "committed" } else { "identical" };
                     assert_eq!(got, s(&want["finalize_result"]), "{at} finalize");
                 }
+                "recover_direct" => {
+                    // The store's recovery operation through its C callbacks.
+                    let cb = claim_callbacks(&store, rate_at_finalization);
+                    let claim_id = cs(&ids.lock().unwrap().0.get(&request).cloned().unwrap_or_default());
+                    let (terminal, body) = (b64(&step["terminal_b64"]), b64(&step["body_b64"]));
+                    let mut committed_flag = 0i32;
+                    let code = unsafe {
+                        (cb.recover.unwrap())(
+                            cb.user,
+                            claim_id.as_ptr(),
+                            slice(&terminal),
+                            slice(&body),
+                            &mut committed_flag,
+                        )
+                    };
+                    let want_class = s(&want["error_class"]);
+                    if !want_class.is_empty() {
+                        assert_eq!((class(code), committed_flag), (want_class, 0), "{at} recover_direct");
+                        continue;
+                    }
+                    assert_eq!(code, 0, "{at} recover_direct: {}", class(code));
+                    let got = if committed_flag == 1 { "committed" } else { "identical" };
+                    assert_eq!(got, s(&want["finalize_result"]), "{at} recover_direct");
+                }
                 "recover" => {
                     // A request never claimed recovers its own claim ID
                     // (claim_not_found).
@@ -900,10 +924,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (51, 283), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (57, 320), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("51 Part B scripts (283 steps)"),
+        readme.contains("57 Part B scripts (320 steps)"),
         "README row: {readme}"
     );
     println!(

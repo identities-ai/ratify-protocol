@@ -393,7 +393,12 @@ fn check_byte_fields(
                         check_canonical_base64(k, s)?;
                     }
                 }
-                check_byte_fields(v, d, top_byte, top_text)?;
+                // A params value is extension or audience params: application
+                // data where only the JSON value model applies (SPEC-v2 §2.1,
+                // §5.2), so member names inside it are not byte fields.
+                if k != "params" {
+                    check_byte_fields(v, d, top_byte, top_text)?;
+                }
             }
             Ok(())
         }

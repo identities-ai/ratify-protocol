@@ -199,6 +199,49 @@ match before the beta.
   non-canonical base64; such a batch now decodes and the object fails
   authentication instead, with the same `unavailable` status result.
   Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **Lease-expiry recovery validates what it commits** (all SDKs). Every
+  reference claim store's recovery operation accepted any terminal result
+  whose decision and reason were `indeterminate / evaluation_interrupted`,
+  with any receipt body, so a body that was not a receipt body (for example
+  `{"decision":"allow","verifier_id":"forged"}`) or that named another
+  claim was sealed as the terminal result: the claim could then never
+  publish, and a canonical recovery failed `claim_already_terminal`.
+  Recovery now validates the result and body exactly as finalization does
+  (`malformed` for a body that is not a canonical receipt body,
+  `configuration_invalid` for one that does not bind the sealed claim) and
+  requires `indeterminate / evaluation_interrupted`
+  (`configuration_invalid`, previously an unclassified error); a refused
+  recovery commits nothing (SPEC-v2 §7.5). The recovery helpers already
+  built the canonical body and are unchanged. Vectors: 6 new
+  `lifecycle-scenarios.json` scripts through a new `recover_direct` step.
+- **Extension `params` are application data at every depth** (all SDKs).
+  The strict wire check applied canonical-base64 validation to any string
+  member named like a protocol byte field (`challenge`, `ed25519`,
+  `session_context`, ...) at any depth, including inside a constraint's
+  `params` object, so a correctly signed certificate whose unregistered
+  constraint carried `params: {"challenge":"!"}` was `malformed` in every
+  SDK. Inside `params` only the JSON value model applies (SPEC-v2 §2.1,
+  §5.2; the text now says so explicitly), as it already did for nulls and
+  member-name case. Vectors: `objects.json`
+  `delegation_extension_params_byte_field_names` and
+  `proof_bundle_extension_params_byte_field_names`.
+- **Bounded decode runs before every configuration check** (all SDKs).
+  The verifier checked for a missing claim store before decoding the
+  bundle, so a malformed bundle with no claim store was
+  `configuration_invalid` instead of `malformed`, contrary to the SPEC-v2
+  §6.2 order. Decoding now runs first, and step 2 lists the claim store
+  among the configuration it checks; no callback runs in either case.
+  Vectors: `verifier-ordering.json` `pre_malformed_and_claim_store_absent`
+  and `pre_claim_store_absent`, with a new `claim_store` mode `absent`.
+- **C ABI return conventions stated exactly** (SPEC-v2 §1.3). The text said
+  every C function returns an integer status and every export returns the
+  internal-failure code after a caught panic, but the version, string,
+  predicate and free functions do not return a status. §1.3 now lists the
+  four forms with their result after a failure or caught panic: version
+  numbers return 0, strings return a fixed library-owned string,
+  predicates return their fail-closed value, and free functions return
+  nothing (a NULL pointer is a no-op and a poisoned handle is still freed).
+  Text only; the library already behaved this way.
 
 ### Fixed
 

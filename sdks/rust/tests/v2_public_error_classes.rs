@@ -808,11 +808,13 @@ fn v2_public_api_errors_are_classified() {
     assert_eq!(rows.len() + NOT_REPRESENTABLE.len(), 117);
 
     // The live verifier reports a listed class in its outcome as well.
+    // Bounded decode precedes the claim-store check (SPEC-v2 §6.2), so an
+    // undecodable bundle without a claim store is malformed.
     let outcome = verify_proof_bundle_v2(
         &ctx,
         &V2VerifyRequest { bundle: garbage.to_vec(), ..Default::default() },
         &V2VerifyCallbacks::default(),
     );
     assert_eq!(outcome.stage, V2VerifyStage::Preflight);
-    assert_eq!(outcome.error_class, Some(ConfigurationInvalid));
+    assert_eq!(outcome.error_class, Some(Malformed));
 }

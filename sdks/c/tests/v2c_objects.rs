@@ -386,7 +386,7 @@ fn v2c_objects() {
         );
     }
     let n = arr(&f["objects"]).len();
-    assert_eq!((n, n_sigs), (11, 15), "objects.json objects and signatures");
+    assert_eq!((n, n_sigs), (13, 19), "objects.json objects and signatures");
     t.finish(&[
         ("re-encode", n),
         ("verify", n),

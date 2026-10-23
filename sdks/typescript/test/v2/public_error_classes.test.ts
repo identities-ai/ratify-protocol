@@ -421,7 +421,8 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
       bundle: garbage, expected: null, contextPolicy: null, requiredScope: "", verifierNamespace: "", replayEpoch: 0, now: 0,
       maxChallengeAgeSeconds: 0, futureSkewSeconds: 0, statusPolicy: policy,
     }, { claimStore: nil });
+    // Bounded decode precedes the claim-store check (SPEC-v2 §6.2).
     assert.equal(outcome.stage, "preflight");
-    assert.equal(outcome.errorClass, "configuration_invalid");
+    assert.equal(outcome.errorClass, "malformed");
   });
 });

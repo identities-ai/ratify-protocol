@@ -146,7 +146,8 @@ fn run_vector(v: &Value, bundle: &[u8], builtin_standard: bool) -> Vec<String> {
         expires_at: Mutex::new(0),
         token: vec![7; 32],
     };
-    setup.claim_cb = Some(st.callbacks());
+    // claim_store "absent": no claim store is configured.
+    setup.claim_cb = (s(&v["claim_store"]) != "absent").then(|| st.callbacks());
     let outcome = match verify(&setup, bundle) {
         Ok(o) => o,
         Err(e) => return vec![format!("ABI call failed: {e:?}")],
@@ -319,11 +320,11 @@ fn run_ordering(builtin_standard: bool) {
         failures.join("\n")
     );
     // Exact counts, so a dropped vector fails; the README states the same.
-    assert_eq!(vectors.len(), 340, "verifier-ordering vectors");
+    assert_eq!(vectors.len(), 342, "verifier-ordering vectors");
     let want_stages: BTreeMap<String, usize> = [
         ("committed", 240),
         ("evaluating", 2),
-        ("preflight", 96),
+        ("preflight", 98),
         ("replay", 2),
     ]
     .into_iter()
@@ -337,7 +338,7 @@ fn run_ordering(builtin_standard: bool) {
     assert_eq!(registry, 5, "reference trust registry cases");
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("340 end-to-end live-verifier cases (96 pre-claim, 2 replay, 240 committed, 2 evaluating"),
+        readme.contains("342 end-to-end live-verifier cases (98 pre-claim, 2 replay, 240 committed, 2 evaluating"),
         "README row: {readme}"
     );
 }

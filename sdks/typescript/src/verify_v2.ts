@@ -147,13 +147,15 @@ export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCall
     const e = v2Classify("configuration_invalid", err instanceof Error ? err : new Error(String(err)));
     return { stage: "preflight", error: e, errorClass: v2ErrorClassOf(e), disposition: "", claim: null, committed: null };
   };
-  if (!cb?.claimStore) return preflightFailure(v2Errorf("configuration_invalid", "v2 verification requires a context and claim store"));
+  // SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2 (configuration,
+  // including the claim store). No callback runs before both pass.
   let bundle: ProofBundleV2;
   try {
     bundle = decodeProofBundleV2(req.bundle);
   } catch (err) {
     return preflightFailure(err);
   }
+  if (!cb?.claimStore) return preflightFailure(v2Errorf("configuration_invalid", "v2 verification requires a context and claim store"));
   let preflight;
   try {
     validateV2VerifyConfiguration(req);

@@ -71,8 +71,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 51);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 283);
+  assert.equal(file.scenarios.length, 57);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 320);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -236,6 +236,23 @@ for (const sc of file.scenarios as Any[]) {
           }
           if (err) throw err;
           assert.equal(finalized ? "committed" : "identical", want.finalize_result, `step ${i} finalize result`);
+          break;
+        }
+        case "recover_direct": {
+          let recovered = false;
+          let err: unknown = null;
+          try {
+            recovered = await claimStore().recoverInterruptedV2Claim(claimIDs.get(step.request)!, unb64(step.terminal_b64), unb64(step.body_b64));
+          } catch (e) {
+            err = e;
+          }
+          if (want.error_class) {
+            assert.equal(recovered, false, `step ${i} recover_direct committed, want ${want.error_class}`);
+            assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} recover_direct class (${(err as Error)?.message})`);
+            break;
+          }
+          if (err) throw err;
+          assert.equal(recovered ? "committed" : "identical", want.finalize_result, `step ${i} recover_direct result`);
           break;
         }
         case "recover":

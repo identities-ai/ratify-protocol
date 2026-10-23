@@ -547,6 +547,9 @@ func runV2OrderingVector(t *testing.T, v v2OrderingVector, bundle []byte) {
 	claimedAt := v.Now + v.ClaimTimeOffset
 	store := &v2ScriptedClaimStore{mode: v.ClaimStore, claimedAt: claimedAt, finalizationAt: claimedAt + v.FinalizeTimeOffset, counts: counts}
 	cb.ClaimStore = store
+	if v.ClaimStore == "absent" {
+		cb.ClaimStore = nil
+	}
 
 	outcome, err := ratify.VerifyProofBundleV2(context.Background(), req, cb)
 	want := v.Expected

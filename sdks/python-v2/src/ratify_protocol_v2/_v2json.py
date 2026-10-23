@@ -185,7 +185,10 @@ def _walk(value: Any, depth: int, top_bytes: frozenset, top_text: frozenset) -> 
                     is_byte = key in WIRE_BYTE_FIELDS
                 if is_byte:
                     check_canonical_base64(key, item)
-            else:
+            elif key != "params":
+                # A params value is extension or audience params: application
+                # data where only the JSON value model applies (SPEC-v2 §2.1,
+                # §5.2), so member names inside it are not byte fields.
                 _walk(item, depth + 1, top_bytes, top_text)
     elif isinstance(value, list):
         for item in value:

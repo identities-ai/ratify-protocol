@@ -157,17 +157,18 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
 
     from .constraints_v2 import ConstraintContextV2
 
-    if not isinstance(ctx, context_v2.Context) or not isinstance(cb, V2VerifyCallbacks) or cb.claim_store is None:
-        return preflight_failure(V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 verification requires a context and claim store"))
     if not isinstance(req, V2VerifyRequest):
         return preflight_failure(V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 verification request has the wrong type"))
-    # SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2.
+    # SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2 (configuration,
+    # including the context and claim store). No callback runs before both pass.
     if not isinstance(req.bundle, (bytes, bytearray)):
         return preflight_failure(V2Error(V2ErrorClass.MALFORMED, "v2 proof bundle must be bytes"))
     try:
         bundle = decode_proof_bundle_v2(bytes(req.bundle))
     except Exception as exc:  # noqa: BLE001
         return preflight_failure(classify(V2ErrorClass.MALFORMED, exc))
+    if not isinstance(ctx, context_v2.Context) or not isinstance(cb, V2VerifyCallbacks) or cb.claim_store is None:
+        return preflight_failure(V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 verification requires a context and claim store"))
     request_context = req.context if req.context is not None else ConstraintContextV2()
     try:
         _validate_v2_verify_configuration(req, request_context)

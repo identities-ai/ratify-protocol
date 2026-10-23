@@ -389,7 +389,9 @@ def test_public_api_error_is_classified(name, want, run):
         assert got == want, f"{name}: class {got!r}, want {want!r}: {info.value!r}"
 
 
-def test_live_verifier_without_claim_store_is_configuration_invalid():
+def test_live_verifier_decodes_before_the_claim_store_check():
+    # Bounded decode precedes the claim-store check (SPEC-v2 §6.2), so an
+    # undecodable bundle without a claim store is malformed.
     outcome = verify_v2.verify_proof_bundle_v2(CTX, verify_v2.V2VerifyRequest(bundle=GARBAGE), verify_v2.V2VerifyCallbacks())
     assert outcome.stage == "preflight"
-    assert outcome.error_class == C.CONFIGURATION_INVALID
+    assert outcome.error_class == C.MALFORMED

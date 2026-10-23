@@ -554,7 +554,8 @@ void v2c_vector_callbacks(v2c_vector *v, const RatifyV2ClaimStoreCallbacks *clai
     v->binding_cb.check = binding_cb;
     const char *binding = v2c_vector_meta(v, "binding");
     const char *rate = v2c_vector_meta(v, "rate");
-    cb->claim_store = &v->claim_cb;
+    /* claim_store "absent": no claim store is configured. */
+    cb->claim_store = strcmp(v2c_vector_meta(v, "claim_store"), "absent") == 0 ? NULL : &v->claim_cb;
     cb->trust = &v->trust_cb;
     cb->status_evidence = &v->status_cb;
     cb->status_journal = strcmp(v->journal.mode, "absent") == 0 ? NULL : &v->journal_cb;

@@ -143,7 +143,10 @@ def run_v2_status_stage(ctx: Context, bundle, checks, req, cb, now: int) -> V2St
         )
         try:
             batch = call_v2_status_provider(ctx, provider, request)
-        except Exception:  # noqa: BLE001 - a provider error or exception is unavailable
+        except (KeyboardInterrupt, SystemExit):
+            # The caller's own cancellation propagates.
+            raise
+        except BaseException:  # noqa: BLE001 - any provider failure (Go: a recovered panic) is unavailable
             if ctx.err() is not None:
                 return V2StatusStageResult(cancelled=ctx.err(), queries=queries)
             continue
@@ -205,7 +208,8 @@ _run_v2_status_stage = run_v2_status_stage
 def call_v2_status_provider(ctx: Context, provider: Callable, request: V2StatusEvidenceRequest):
     """Call the provider. Any exception it raises (the Python counterpart of
     a Go error or panic) propagates to the caller, which treats the issuer as
-    unavailable."""
+    unavailable; KeyboardInterrupt and SystemExit propagate further, as the
+    caller's own cancellation."""
     return provider(ctx, request)
 
 

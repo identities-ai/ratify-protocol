@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from . import _ed25519_strict, _mldsa65, _native
 from .context_v2 import Context, require_context
-from .errors_v2 import V2Error, V2ErrorClass, classified, classify
+from .errors_v2 import V2Error, V2ErrorClass, V2ValueError, classified, classify
 from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
 
 DELEGATION_CERTIFICATE = 0x0001
@@ -77,8 +77,19 @@ def _bytes(value: object) -> bytes:
 
 
 def key_id_v2(pub: HybridPublicKey) -> str:
-    """Full 256-bit v2 key ID; raises ``ValueError`` on wrong component sizes
-    (Go ``keyIDV2``)."""
+    """Full 256-bit v2 key ID (Go ``KeyIDV2``). A key without both component
+    lengths exact raises a ``malformed`` :class:`V2Error` that is also a
+    ``ValueError``."""
+    try:
+        return _key_id_v2(pub)
+    except ValueError as exc:
+        raise V2ValueError(V2ErrorClass.MALFORMED, str(exc)) from exc
+
+
+def _key_id_v2(pub: HybridPublicKey) -> str:
+    """Go ``keyIDV2``: the full 256-bit v2 key ID; raises an unclassified
+    ``ValueError`` on wrong component sizes, so the calling function assigns
+    the class of its own row (SPEC-v2 §2.7)."""
     if not isinstance(pub, HybridPublicKey):
         raise ValueError("a HybridPublicKey is required")
     ed, ml = _bytes(pub.ed25519), _bytes(pub.ml_dsa_65)
@@ -90,12 +101,9 @@ def key_id_v2(pub: HybridPublicKey) -> str:
 
 
 def key_id_v2_classified(pub: HybridPublicKey) -> str:
-    """Go ``KeyIDV2``: the v2 key ID of a complete hybrid public key, failing
-    with the ``malformed`` class unless both components have exact lengths."""
-    try:
-        return key_id_v2(pub)
-    except ValueError as exc:
-        raise V2Error(V2ErrorClass.MALFORMED, str(exc)) from exc
+    """Go ``KeyIDV2``: the same as :func:`key_id_v2`, kept for callers that
+    already use this name."""
+    return key_id_v2(pub)
 
 
 def signing_message_v2(code: int, signable: bytes) -> bytes:
@@ -324,7 +332,7 @@ def _sign_v2_statement_with_signer(
         raise err
     message = signing_message_v2(code, signable)
     ml_context = mldsa_context_v2(code)
-    key_id = key_id_v2(pub)
+    key_id = _key_id_v2(pub)
     try:
         mode = SignerModeV2(signer.mode_v2())
     except ValueError as exc:

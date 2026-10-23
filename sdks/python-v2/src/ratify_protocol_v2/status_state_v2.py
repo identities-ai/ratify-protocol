@@ -129,9 +129,9 @@ def _wire():
 
 
 def _key_id_v2(pub: HybridPublicKey) -> str:
-    from .signing_v2 import key_id_v2
+    from .signing_v2 import _key_id_v2 as key_id
 
-    return key_id_v2(pub)
+    return key_id(pub)
 
 
 def _cert_ids(refs) -> list:

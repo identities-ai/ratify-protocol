@@ -245,7 +245,10 @@ def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[Expecte
     if hook is not None:
         try:
             hook(bundle, checked)
-        except Exception as exc:  # noqa: BLE001 - an application hook failure rejects
+        except (KeyboardInterrupt, SystemExit):
+            # The caller's own cancellation propagates.
+            raise
+        except BaseException as exc:  # noqa: BLE001 - any hook failure (Go: a recovered panic) rejects
             raise V2Error(V2ErrorClass.RECEIVER_BINDING_REJECTED,
                           f"v2 receiver-binding hook rejected the presentation: {exc}") from exc
     try:

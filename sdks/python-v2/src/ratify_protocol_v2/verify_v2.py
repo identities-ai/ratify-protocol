@@ -485,7 +485,10 @@ def _call_v2_trust_safely(ctx, trust: Optional[Callable], chain: list):
         return V2TrustResolution(), None
     try:
         return trust(ctx, chain), None
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        # The caller's own cancellation propagates.
+        raise
+    except BaseException as exc:  # noqa: BLE001 - any provider failure (Go: a recovered panic) fails closed
         return None, exc
 
 
@@ -494,5 +497,8 @@ def _call_v2_audience_safely(ctx, audience: Optional[Callable], deferred: list, 
         return None, None
     try:
         return audience(ctx, deferred, receiver_id), None
-    except Exception as exc:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        # The caller's own cancellation propagates.
+        raise
+    except BaseException as exc:  # noqa: BLE001 - any provider failure (Go: a recovered panic) fails closed
         return None, exc

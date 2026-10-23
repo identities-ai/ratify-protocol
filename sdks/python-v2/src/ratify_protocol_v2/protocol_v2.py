@@ -53,6 +53,7 @@ from .signing_v2 import (
     V2SigningError,
     _as_signer,
     equal_public_keys,
+    _key_id_v2,
     key_id_v2,
     _sign_v2_statement_with_signer,
     signer_public_key_v2,
@@ -336,8 +337,8 @@ def validate_delegation_cert_v2(c: DelegationCertV2) -> None:
         raise ValueError("cert_id must be non-empty and within the identifier byte limit")
     if not valid_v2_id(c.issuer_id) or not valid_v2_id(c.subject_id):
         raise ValueError("issuer_id and subject_id must be 64 lowercase hexadecimal characters")
-    issuer = key_id_v2(c.issuer_pub_key)
-    subject = key_id_v2(c.subject_pub_key)
+    issuer = _key_id_v2(c.issuer_pub_key)
+    subject = _key_id_v2(c.subject_pub_key)
     if c.issuer_id != issuer or c.subject_id != subject:
         raise V2Error(V2ErrorClass.KEY_ID_MISMATCH, "key ID does not match complete public key")
     if not isinstance(c.scope, list):
@@ -484,7 +485,7 @@ def sign_delegation_cert_v2_with_signer(ctx: Context, cert: DelegationCertV2, si
         raise V2SigningError("v2 delegation certificate is nil")
     _check_issuer_duties(cert)
     issuer_pub = signer_public_key_v2(signer)
-    issuer_id = key_id_v2(issuer_pub)
+    issuer_id = _key_id_v2(issuer_pub)
     if cert.issuer_id != issuer_id or not equal_public_keys(cert.issuer_pub_key, issuer_pub):
         raise V2SigningError("v2 issuer key does not match certificate issuer", V2ErrorClass.KEY_ID_MISMATCH)
     prepared = decode_delegation_cert_v2(encode_delegation_cert_v2(replace(cert, signature=placeholder_signature_v2())))
@@ -718,7 +719,7 @@ def sign_proof_bundle_v2_with_signer(ctx: Context, bundle: ProofBundleV2, signer
     if bundle is None:
         raise V2SigningError("v2 proof bundle is nil")
     agent_pub = signer_public_key_v2(signer)
-    agent_id = key_id_v2(agent_pub)
+    agent_id = _key_id_v2(agent_pub)
     if bundle.agent_id != agent_id or not equal_public_keys(bundle.agent_pub_key, agent_pub):
         raise V2SigningError("v2 agent key does not match proof bundle agent", V2ErrorClass.KEY_ID_MISMATCH)
     unsigned = replace(bundle, challenge_sig=placeholder_signature_v2(), delegation_digest=bytes(48))

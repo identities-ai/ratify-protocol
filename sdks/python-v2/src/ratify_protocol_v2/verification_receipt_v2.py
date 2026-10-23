@@ -38,7 +38,7 @@ from .signing_v2 import (
     SignerV2,
     V2SigningError,
     _as_signer,
-    key_id_v2,
+    _key_id_v2,
     _sign_v2_statement_with_signer,
     signer_public_key_v2,
     verify_v2_statement,
@@ -511,7 +511,7 @@ def sign_verification_receipt_v2_with_signer(ctx: Context, r: VerificationReceip
     equal verifier_id."""
     validate_verification_receipt_v2(r, False)
     verifier_public = signer_public_key_v2(signer)
-    if key_id_v2(verifier_public) != r.verifier_id:
+    if _key_id_v2(verifier_public) != r.verifier_id:
         raise V2SigningError("receipt verifier_id does not match signing key", V2ErrorClass.KEY_ID_MISMATCH)
     body = receipt_v2_signable_bytes(r)
     signature = _sign_v2_statement_with_signer(ctx, VERIFICATION_RECEIPT, body, signer, verifier_public)
@@ -535,7 +535,7 @@ def verify_verification_receipt_v2(r: VerificationReceiptV2, verifier_public: Hy
     if r.log_id != head.log_id or r.verifier_id != head.verifier_id:
         raise V2Error(V2ErrorClass.LOG_STATE_MISMATCH,
                       "receipt log ID or verifier identity does not match caller-authenticated state")
-    verifier_id = _run(V2ErrorClass.UNCLASSIFIED, lambda: key_id_v2(verifier_public))
+    verifier_id = _run(V2ErrorClass.UNCLASSIFIED, lambda: _key_id_v2(verifier_public))
     if r.verifier_id != verifier_id:
         raise V2Error(V2ErrorClass.LOG_STATE_MISMATCH, "receipt verifier_id does not match caller-authenticated key")
     verify_v2_statement(VERIFICATION_RECEIPT, receipt_v2_signable_bytes(r), r.signature, verifier_public)

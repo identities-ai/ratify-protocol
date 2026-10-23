@@ -39,6 +39,7 @@ from .signing_v2 import (
     _as_signer,
     clone_public_key,
     equal_public_keys,
+    _key_id_v2,
     key_id_v2,
     _sign_v2_statement_with_signer,
     signer_public_key_v2,
@@ -121,8 +122,8 @@ def validate_key_rotation_statement_v2(stmt: KeyRotationStatementV2, signatures:
         raise ValueError("wire v2: non-genesis rotation must link to a prior statement")
     if not valid_v2_id(stmt.old_key_id) or not valid_v2_id(stmt.new_key_id):
         raise ValueError("wire v2: old_key_id and new_key_id must be 64 lowercase hexadecimal characters")
-    old_id = key_id_v2(stmt.old_key)
-    new_id = key_id_v2(stmt.new_key)
+    old_id = _key_id_v2(stmt.old_key)
+    new_id = _key_id_v2(stmt.new_key)
     if old_id != stmt.old_key_id or new_id != stmt.new_key_id:
         raise V2Error(V2ErrorClass.KEY_ID_MISMATCH, "wire v2: rotation key IDs must match distinct complete keys")
     if old_id == new_id or equal_public_keys(stmt.old_key, stmt.new_key):

@@ -118,7 +118,7 @@ Each decoder compares the exact received byte length, including signatures and a
 | Transaction receipt | 5242880 (`MAX_TRANSACTION_RECEIPT_BYTES`) | `parties` at most 32 (`MAX_TRANSACTION_PARTIES`) |
 | Status evidence batch (§6.5) | 8388608 | at most 64 objects |
 | Checkpoint acknowledgement (§7.8) | 1024 | |
-| `SecurityJournalV2` snapshot (§6.6) | no wire limit; bounded by its inputs | |
+| `SecurityJournalV2` snapshot (§6.6) | 67108864 (`MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES`) | |
 
 These limits also apply to v2: `MAX_DELEGATION_CHAIN_DEPTH` 8, `MAX_SCOPES_PER_CERT` 128, `MAX_SCOPE_LENGTH_BYTES` 256, `MAX_CONSTRAINTS_PER_CERT` 32, `MAX_IDENTIFIER_LENGTH_BYTES` 512 (every `cert_id`, `resource_id`, receiver ID, trust-domain ID, and unregistered constraint `type`), and `MAX_JSON_NESTING_DEPTH` 16. A certificate inside a proof bundle or transaction receipt is bounded by its container. The revocation-list byte limit is a ceiling, not a promise that 10000 references of maximum length fit. Vectors cover every decoder at exactly its byte limit and at the limit plus one.
 

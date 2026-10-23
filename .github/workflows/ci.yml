@@ -488,6 +488,16 @@ jobs:
       - name: v2 C ABI smoke test (system C compiler)
         run: ./scripts/test-v2-c-abi.sh
 
+      # The v2 store, lifecycle, concurrency, status and cross-SDK suites
+      # (tests/v2c_*.rs) have no step of their own; run every test target.
+      - name: every test target (v1 and v2)
+        run: cargo test
+
+      - name: v2 C ABI under AddressSanitizer and UBSan
+        env:
+          SANITIZE: '1'
+        run: ./scripts/test-v2-c-abi.sh
+
   # The C v2 examples link the test-only reference stores. The external
   # signer example implements its signing provider with OpenSSL libcrypto,
   # which needs ML-DSA-65 support (OpenSSL 3.5 or later). Ubuntu runners

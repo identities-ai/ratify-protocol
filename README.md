@@ -36,7 +36,7 @@ JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec 
 
 **Status.** Two protocol lines live in this repository:
 
-- **Protocol v2** ([`SPEC-v2.md`](SPEC-v2.md)) is in prerelease toward its first beta. It is not backward compatible with v1. Every SDK runs the full shared `testvectors/v2` corpus (22 vector files plus cross-SDK fixtures from all five SDKs). Review so far is internal adversarial review; external independent review and outside interoperability are gates for `2.0.0`, so v2 carries no production security claim yet.
+- **Protocol v2** ([`SPEC-v2.md`](SPEC-v2.md)) is in prerelease toward its first beta. It is not backward compatible with v1. Every SDK runs the full shared `testvectors/v2` corpus (25 vector files plus cross-SDK fixtures from all five SDKs). Review so far is internal adversarial review; external independent review and outside interoperability are gates for `2.0.0`, so v2 carries no production security claim yet.
 - **Protocol v1** ([`SPEC.md`](SPEC.md)) is alpha, validated by 79 canonical test vectors in every SDK. It remains available and pinned; v1 support terms will be announced with v2 `2.0.0`.
 
 Counts and feature descriptions in this README describe `main` (the development branch). Install commands pin the versions prepared in this tree: `2.0.0-alpha.1` on the v2 line (Go, TypeScript, Rust, C/C++, and the separate `ratify-protocol-v2` Python distribution) and `1.0.0a21` for the v1 Python SDK. A pin installs only once its release appears on [Releases](https://github.com/identities-ai/ratify-protocol/releases), which also lists each release's notes and exact fixture set. The latest published v1 release is `v1.0.0-alpha.20`.

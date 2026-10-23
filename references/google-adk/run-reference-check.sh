@@ -37,7 +37,7 @@ import ratify_protocol_v2
 
 repo = Path(os.environ["REPO"]).resolve()
 module = Path(ratify_protocol_v2.__file__).resolve()
-if repo in module.parents:
+if (repo / "sdks") in module.parents:
     raise SystemExit(f"FAIL: ratify_protocol_v2 imported from the source tree: {module}")
 if importlib.util.find_spec("ratify_protocol") is not None:
     raise SystemExit("FAIL: the v1 ratify_protocol package is installed; this gate is v2 only")

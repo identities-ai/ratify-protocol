@@ -16,6 +16,7 @@
 //! an unclassified failure. A provider or store failure is always handled
 //! fail-closed.
 
+use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::os::raw::{c_char, c_void};
@@ -385,7 +386,9 @@ pub struct RatifyV2StatusObject {
     pub wire: RatifyV2Slice,
 }
 
-/// A provider's bounded batch for one issuer (empty is valid).
+/// A provider's bounded batch for one issuer (empty is valid). A batch over
+/// 64 objects or 8 MiB (SPEC-v2 §2.6, measured as the batch wire form) is
+/// refused before any object is copied, and the issuer is unavailable.
 #[repr(C)]
 pub struct RatifyV2StatusBatch {
     pub objects: *const RatifyV2StatusObject,
@@ -432,7 +435,9 @@ pub struct RatifyV2AudienceMembership {
     pub evidence_digest: *const c_char,
 }
 
-/// The memberships an audience provider returns.
+/// The memberships an audience provider returns. Only memberships for a
+/// deferred constraint are read, at most two per constraint (two already make
+/// that constraint unverifiable); the rest are ignored without being copied.
 #[repr(C)]
 pub struct RatifyV2AudienceResult {
     pub memberships: *const RatifyV2AudienceMembership,
@@ -1491,8 +1496,34 @@ pub(crate) fn status_provider(
                     "status callback returned a NULL batch",
                 ));
             }
+            // SPEC-v2 §2.6 batch bounds, checked before any object is
+            // copied: the verifier would reject the batch afterwards anyway,
+            // and an oversized answer must not cost its size in memory.
+            if out.count > MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 {
+                return Err(V2StatusProviderError::new(format!(
+                    "status callback returned {} objects; a batch holds at most {MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2}",
+                    out.count
+                )));
+            }
             // SAFETY: the callback reported `count` readable entries.
-            for o in unsafe { std::slice::from_raw_parts(out.objects, out.count) } {
+            let entries = unsafe { std::slice::from_raw_parts(out.objects, out.count) };
+            // The batch wire length with each object as received (Go
+            // `v2StatusEvidenceBatchEncodedLength`).
+            let encoded = entries.iter().enumerate().fold(2usize, |total, (i, o)| {
+                total
+                    .saturating_add(usize::from(i > 0))
+                    .saturating_add(r#"{"object":"#.len())
+                    .saturating_add(if o.wire.ptr.is_null() { 0 } else { o.wire.len })
+                    .saturating_add(r#","object_type_code":"#.len())
+                    .saturating_add(o.object_type.to_string().len())
+                    .saturating_add(1)
+            });
+            if encoded > MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 {
+                return Err(V2StatusProviderError::new(format!(
+                    "status callback returned a batch over {MAX_STATUS_EVIDENCE_BATCH_BYTES_V2} bytes"
+                )));
+            }
+            for o in entries {
                 objects.push(V2StatusEvidenceObject {
                     object_type: o.object_type,
                     // SAFETY: as above.
@@ -1567,8 +1598,21 @@ pub(crate) fn audience_provider(
                         "audience callback returned NULL memberships",
                     ));
                 }
+                // Copy only answers the verifier can use: a membership for a
+                // link that is not deferred is ignored, and two for the same
+                // link already make it unverifiable, so further ones change
+                // nothing. This bounds the copy by the deferred constraints,
+                // not by the provider's count.
+                let mut per_link: BTreeMap<(usize, usize), u8> = deferred
+                    .iter()
+                    .map(|d| ((d.delegation_index, d.constraint_index), 0))
+                    .collect();
                 // SAFETY: the callback reported `count` readable entries.
                 for m in unsafe { std::slice::from_raw_parts(out.memberships, out.count) } {
+                    match per_link.get_mut(&(m.delegation_index, m.constraint_index)) {
+                        Some(n) if *n < 2 => *n += 1,
+                        _ => continue,
+                    }
                     let mut domains = Vec::new();
                     if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
                         // SAFETY: as above.
@@ -2165,5 +2209,151 @@ mod nul_identifier_tests {
         assert!(audience_cb(&ctx, &deferred("x\0y"), "receiver").is_err());
         assert!(audience_cb(&ctx, &deferred("xy"), "recei\0ver").is_err());
         assert_eq!(called(), 0);
+    }
+}
+
+#[cfg(test)]
+mod provider_bound_tests {
+    //! Provider answers are bounded before the library copies them.
+
+    use super::*;
+
+    /// A status answer of `count` entries, every one aliasing `WIRE`.
+    struct StatusAnswer {
+        entries: Vec<RatifyV2StatusObject>,
+    }
+
+    static WIRE: [u8; 1 << 20] = [b' '; 1 << 20];
+
+    fn answer(count: usize, len: usize) -> StatusAnswer {
+        StatusAnswer {
+            entries: (0..count)
+                .map(|_| RatifyV2StatusObject {
+                    object_type: 3,
+                    wire: RatifyV2Slice {
+                        ptr: WIRE.as_ptr(),
+                        len,
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    unsafe extern "C" fn fetch(
+        user: *mut c_void,
+        _: *const RatifyV2StatusRequest,
+        out: *mut RatifyV2StatusBatch,
+    ) -> i32 {
+        let a = &*(user as *const StatusAnswer);
+        (*out).objects = a.entries.as_ptr();
+        (*out).count = a.entries.len();
+        0
+    }
+
+    fn status(a: &StatusAnswer) -> Result<V2StatusEvidenceBatch, V2StatusProviderError> {
+        let p = status_provider(
+            RatifyV2StatusEvidenceCallbacks {
+                user: a as *const StatusAnswer as *mut c_void,
+                fetch: Some(fetch),
+            },
+            Cancel(V2Context::background().with_cancel().1),
+        );
+        p(
+            &V2Context::background(),
+            &V2StatusEvidenceRequest {
+                issuer_id: "issuer".into(),
+                status_key_epoch: 1,
+                status_key_id: "key".into(),
+                refs: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn status_batch_object_count_is_bounded_before_copying() {
+        let at = answer(MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2, 16);
+        assert_eq!(status(&at).expect("64 objects").objects.len(), 64);
+        let over = answer(MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 + 1, 16);
+        assert!(status(&over).is_err(), "65 objects must be refused");
+        let huge = answer(100_000, 16);
+        assert!(status(&huge).is_err());
+    }
+
+    #[test]
+    fn status_batch_bytes_are_bounded_before_copying() {
+        // Nine aliases of a 1 MiB object exceed the 8 MiB batch limit.
+        let over = answer(9, 1 << 20);
+        assert!(status(&over).is_err(), "a batch over 8 MiB must be refused");
+        // The largest per-object length that keeps eight objects in bounds.
+        let overhead = 2 + 7 + 8 * (r#"{"object":"#.len() + r#","object_type_code":3}"#.len());
+        let len = (MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 - overhead) / 8;
+        assert!(len <= WIRE.len());
+        let at = answer(8, len);
+        assert_eq!(status(&at).expect("in bounds").objects.len(), 8);
+    }
+
+    struct AudienceAnswer {
+        receiver: CString,
+        digest: CString,
+        entries: Vec<RatifyV2AudienceMembership>,
+    }
+
+    unsafe extern "C" fn lookup(
+        user: *mut c_void,
+        _: *const RatifyV2DeferredConstraint,
+        _: usize,
+        _: *const c_char,
+        out: *mut RatifyV2AudienceResult,
+    ) -> i32 {
+        let a = &*(user as *const AudienceAnswer);
+        (*out).memberships = a.entries.as_ptr();
+        (*out).count = a.entries.len();
+        0
+    }
+
+    #[test]
+    fn audience_copies_only_answers_the_verifier_can_use() {
+        let mut a = AudienceAnswer {
+            receiver: CString::new("receiver").unwrap(),
+            digest: CString::new("sha256:00").unwrap(),
+            entries: vec![],
+        };
+        let membership = |a: &AudienceAnswer, d: usize, c: usize| RatifyV2AudienceMembership {
+            delegation_index: d,
+            constraint_index: c,
+            receiver_id: a.receiver.as_ptr(),
+            trust_domain_ids: std::ptr::null(),
+            trust_domain_ids_len: 0,
+            issued_at: 1,
+            expires_at: 2,
+            evidence_digest: a.digest.as_ptr(),
+        };
+        // 100000 answers for links that are not deferred, then three for
+        // the one deferred link.
+        let mut entries: Vec<_> = (0..100_000).map(|i| membership(&a, 9, i)).collect();
+        entries.extend((0..3).map(|_| membership(&a, 0, 1)));
+        a.entries = entries;
+        let p = audience_provider(
+            RatifyV2AudienceCallbacks {
+                user: &a as *const AudienceAnswer as *mut c_void,
+                lookup: Some(lookup),
+            },
+            Cancel(V2Context::background().with_cancel().1),
+        );
+        let deferred = [V2DeferredConstraint {
+            delegation_index: 0,
+            constraint_index: 1,
+            issuer_id: "issuer".into(),
+            cert_id: "cert".into(),
+            kind: "ratify.receiver_audience".into(),
+            canonical_json: vec![],
+        }];
+        let got = p(&V2Context::background(), &deferred, "receiver").expect("lookup");
+        // Two answers for the link are kept: that is already a duplicate,
+        // which the verifier treats as unverifiable, as it would all three.
+        assert_eq!(got.len(), 2);
+        assert!(got
+            .iter()
+            .all(|m| (m.delegation_index, m.constraint_index) == (0, 1)));
     }
 }

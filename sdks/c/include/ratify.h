@@ -1057,7 +1057,9 @@ typedef struct RatifyV2StatusObject {
     struct RatifyV2Slice wire;
 } RatifyV2StatusObject;
 
-// A provider's bounded batch for one issuer (empty is valid).
+// A provider's bounded batch for one issuer (empty is valid). A batch over
+// 64 objects or 8 MiB (SPEC-v2 §2.6, measured as the batch wire form) is
+// refused before any object is copied, and the issuer is unavailable.
 typedef struct RatifyV2StatusBatch {
     const struct RatifyV2StatusObject *objects;
     uintptr_t count;
@@ -1095,7 +1097,9 @@ typedef struct RatifyV2AudienceMembership {
     const char *evidence_digest;
 } RatifyV2AudienceMembership;
 
-// The memberships an audience provider returns.
+// The memberships an audience provider returns. Only memberships for a
+// deferred constraint are read, at most two per constraint (two already make
+// that constraint unverifiable); the rest are ignored without being copied.
 typedef struct RatifyV2AudienceResult {
     const struct RatifyV2AudienceMembership *memberships;
     uintptr_t count;

@@ -103,6 +103,12 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   build, but the header declared it unconditionally, so a default-build
   program that referenced it failed to link. The C ABI test now links every
   function the header declares by default against the default build.
+- **C: provider answers are bounded before they are copied.** A status
+  batch over 64 objects or 8 MiB is refused before any object is copied
+  (the verifier rejected it only after copying, so a large answer cost its
+  full size in memory). The audience adapter copies only memberships for a
+  deferred constraint, at most two per constraint, which leaves the result
+  unchanged.
 
 ### Not carried into v2
 

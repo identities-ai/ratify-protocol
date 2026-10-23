@@ -194,6 +194,9 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 // authorization decision.
 func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
+	if configuredReplayEpoch < 0 || configuredReplayEpoch > maxSafeInteger {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured replay epoch must be 0..%d", int64(maxSafeInteger))
+	}
 	if expected.ExpectedSessionContext != nil && len(expected.ExpectedSessionContext) != 32 {
 		return v2Errorf(V2ErrConfigurationInvalid, "v2 expected session context must be absent or exactly 32 bytes")
 	}

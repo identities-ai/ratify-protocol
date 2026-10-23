@@ -155,6 +155,14 @@ match before the beta.
   253402300799 or a future skew outside 0 through 300 is
   `configuration_invalid` (SPEC-v2 §2.5, §5.5); previously any skew up to
   2^53−1 was accepted.
+- **One future skew in transaction verification.** `VerifyTransactionReceiptV2`
+  rejects a status policy whose `clock_skew_seconds` differs from
+  `future_skew_seconds` with `configuration_invalid` (SPEC-v2 §5.7), as the
+  live verifier does. Vector: `transaction-verification.json`
+  `configuration_invalid_status_skew_differs`.
+- **Standalone preflight replay epoch.** `ValidateProofBundleV2Preflight` and
+  `PreflightProofBundleV2` report a configured replay epoch outside 0 through
+  2^53−1 as `configuration_invalid`, like `VerifyProofBundleV2`.
 - **Transaction receipt nested bundles** are strictly decoded, and must be
   canonical, before their hash is compared, so a malformed nested bundle is
   `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).

@@ -147,5 +147,7 @@ func (g *gen) txVerifyFile() any {
 		txVerifyExpectJSON{ErrorClass: "configuration_invalid"}, func(v *txVerifyVector) { v.Now = -1 })
 	add("configuration_invalid_skew", "a future skew above 300 seconds fails with configuration_invalid", def, "data:read",
 		txVerifyExpectJSON{ErrorClass: "configuration_invalid"}, func(v *txVerifyVector) { v.FutureSkewSeconds = 301 })
+	add("configuration_invalid_status_skew_differs", "a status policy clock skew that differs from future_skew_seconds fails with configuration_invalid: transaction verification has one future skew", def, "data:read",
+		txVerifyExpectJSON{ErrorClass: "configuration_invalid"}, func(v *txVerifyVector) { v.StatusPolicy.ClockSkewSeconds = 300 })
 	return f
 }

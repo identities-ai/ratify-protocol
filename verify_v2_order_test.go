@@ -68,3 +68,16 @@ func TestVerifyProofBundleV2ConfigurationRejectedAtStepTwo(t *testing.T) {
 		})
 	}
 }
+
+// The standalone preflight entry points apply the same §6.2 step 2 bound on
+// the configured replay epoch as VerifyProofBundleV2, so a caller that runs
+// preflight itself sees configuration_invalid, not stale_replay_epoch.
+func TestValidateProofBundleV2PreflightReplayEpochBound(t *testing.T) {
+	bundle := signedV2TestBundle(t)
+	for _, epoch := range []int64{-1, 1 << 53} {
+		err := ValidateProofBundleV2Preflight(bundle, ExpectedChallengeV2{ReplayEpoch: epoch}, "data:read", "ns", epoch, 1800000000, 60, 5)
+		if V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
+			t.Fatalf("epoch %d: %v", epoch, err)
+		}
+	}
+}

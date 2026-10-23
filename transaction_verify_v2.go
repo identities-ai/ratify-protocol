@@ -107,6 +107,9 @@ func validateV2TransactionVerifyConfiguration(req TransactionVerifyRequestV2, so
 	if req.FutureSkewSeconds < 0 || req.FutureSkewSeconds > V2MaxFutureSkewSeconds {
 		return v2Errorf(V2ErrConfigurationInvalid, "transaction verification future skew must be 0..%d seconds", V2MaxFutureSkewSeconds)
 	}
+	if sources.StatusPolicy.ClockSkewSeconds != req.FutureSkewSeconds {
+		return v2Errorf(V2ErrConfigurationInvalid, "status policy clock skew must equal the transaction verification future skew")
+	}
 	return validateV2StatusConfiguration(sources.StatusKeys, sources.StatusPolicy)
 }
 

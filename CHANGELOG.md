@@ -225,6 +225,14 @@ match before the beta.
   member-name case. Vectors: `objects.json`
   `delegation_extension_params_byte_field_names` and
   `proof_bundle_extension_params_byte_field_names`.
+- **Bounded decode runs before every configuration check** (all SDKs).
+  The verifier checked for a missing claim store before decoding the
+  bundle, so a malformed bundle with no claim store was
+  `configuration_invalid` instead of `malformed`, contrary to the SPEC-v2
+  §6.2 order. Decoding now runs first, and step 2 lists the claim store
+  among the configuration it checks; no callback runs in either case.
+  Vectors: `verifier-ordering.json` `pre_malformed_and_claim_store_absent`
+  and `pre_claim_store_absent`, with a new `claim_store` mode `absent`.
 
 ### Fixed
 

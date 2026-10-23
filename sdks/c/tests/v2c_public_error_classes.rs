@@ -1206,10 +1206,11 @@ fn v2c_public_api_errors_are_classified() {
     ];
 
     // The live verifier reports a listed class in its outcome, as Go's
-    // VerifyProofBundleV2 does for a request without a claim store.
+    // VerifyProofBundleV2 does for an undecodable bundle without a claim
+    // store: bounded decode precedes the claim-store check (SPEC-v2 §6.2).
     calls.push(call(
         "ratify_v2_verify_proof_bundle",
-        "configuration_invalid",
+        "malformed",
         move || {
             let mut outcome = RatifyV2VerifyOutcome {
                 stage: 0,

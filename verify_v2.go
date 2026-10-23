@@ -142,10 +142,10 @@ type v2EvaluationProgress struct {
 }
 
 // VerifyProofBundleV2 runs the live Protocol v2 decision path in the SPEC-v2
-// §6 order: configuration bounds; bounded strict decode and structure;
-// required-scope validation; key-ID/digest/linkage/duplicate checks; every
-// certificate and challenge signature; authenticated ExpectedChallenge
-// validation and freshness; the pure receiver-binding hook; the atomic
+// §6 order: bounded strict decode; configuration (context, claim store and
+// bounds); required-scope validation; key-ID/digest/linkage/duplicate
+// checks; every certificate and challenge signature; authenticated
+// ExpectedChallenge validation and freshness; the pure receiver-binding hook; the atomic
 // challenge claim (with stream sequence); and only then trust, local
 // authorization, authenticated status for every CertificateRef, receiver
 // audience, and max_rate reservation, followed by terminal finalization at a
@@ -161,14 +161,15 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 		err = v2Classify(V2ErrConfigurationInvalid, err)
 		return V2VerifyOutcome{Stage: V2StagePreflight, Error: err, ErrorClass: V2ErrorClassOf(err)}, nil
 	}
-	if ctx == nil || cb.ClaimStore == nil {
-		return preflightFailure(v2Errorf(V2ErrConfigurationInvalid, "v2 verification requires a context and claim store"))
-	}
 	// SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2
-	// (configuration bounds and supplied request context).
+	// (configuration: the context and claim store, the configured bounds and
+	// the supplied request context). No callback runs before both pass.
 	bundle, err := DecodeProofBundleV2(req.Bundle)
 	if err != nil {
 		return preflightFailure(err)
+	}
+	if ctx == nil || cb.ClaimStore == nil {
+		return preflightFailure(v2Errorf(V2ErrConfigurationInvalid, "v2 verification requires a context and claim store"))
 	}
 	if err := validateV2VerifyConfiguration(req); err != nil {
 		return preflightFailure(err)

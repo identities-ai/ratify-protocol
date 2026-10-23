@@ -123,7 +123,8 @@ fn run_vector(v: &Value, bundle: Vec<u8>) -> Vec<String> {
         final_body: Mutex::new(Vec::new()),
         expires_at: Mutex::new(0),
     });
-    cb.claim_store = Some(store.clone());
+    // claim_store "absent": no claim store is configured.
+    cb.claim_store = (s(&v["claim_store"]) != "absent").then(|| store.clone() as _);
 
     let outcome = verify_proof_bundle_v2(&V2Context::background(), &req, &cb);
     let want = &v["expected"];
@@ -281,18 +282,18 @@ fn v2_conformance_verifier_ordering() {
     }
     assert!(failures.is_empty(), "{} of {} vectors failed:\n{}", failures.len(), vectors.len(), failures.join("\n"));
     // Exact counts from the corpus and its README row.
-    assert_eq!(consumed.load(Ordering::SeqCst), 340);
-    assert_eq!(vectors.len(), 340);
+    assert_eq!(consumed.load(Ordering::SeqCst), 342);
+    assert_eq!(vectors.len(), 342);
     let want_stages = BTreeMap::from([
         ("committed".to_string(), 240),
         ("evaluating".to_string(), 2),
-        ("preflight".to_string(), 96),
+        ("preflight".to_string(), 98),
         ("replay".to_string(), 2),
     ]);
     assert_eq!(stages, want_stages);
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("340 end-to-end live-verifier cases (96 pre-claim, 2 replay, 240 committed, 2 evaluating"),
+        readme.contains("342 end-to-end live-verifier cases (98 pre-claim, 2 replay, 240 committed, 2 evaluating"),
         "README row: {readme}"
     );
     let custody = vectors.iter().filter(|v| s(&v["name"]).starts_with("custody_profile_")).count();

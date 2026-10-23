@@ -267,16 +267,18 @@ pub fn verify_proof_bundle_v2(ctx: &V2Context, req: &V2VerifyRequest, cb: &V2Ver
         claim: V2ChallengeClaim::default(),
         committed: None,
     };
+    // SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2
+    // (configuration, including the claim store). No callback runs before
+    // both pass.
+    let bundle = match decode_proof_bundle_v2(&req.bundle) {
+        Ok(b) => b,
+        Err(e) => return preflight_failure(e),
+    };
     let Some(store) = cb.claim_store.as_deref() else {
         return preflight_failure(V2Error::new(
             V2ErrorClass::ConfigurationInvalid,
             "v2 verification requires a context and claim store",
         ));
-    };
-    // SPEC-v2 §6.2 step 1 (bounded strict decode), then step 2.
-    let bundle = match decode_proof_bundle_v2(&req.bundle) {
-        Ok(b) => b,
-        Err(e) => return preflight_failure(e),
     };
     if let Err(e) = validate_v2_verify_configuration(req) {
         return preflight_failure(e);

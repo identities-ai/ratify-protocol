@@ -17,11 +17,11 @@ VECTORS = FILE["vectors"]
 
 
 def test_ordering_corpus_shape():
-    assert len(VECTORS) == 340
+    assert len(VECTORS) == 342
     stages = {}
     for v in VECTORS:
         stages[v["expected"]["stage"]] = stages.get(v["expected"]["stage"], 0) + 1
-    assert stages == {"preflight": 96, "replay": 2, "committed": 240, "evaluating": 2}
+    assert stages == {"preflight": 98, "replay": 2, "committed": 240, "evaluating": 2}
 
 
 @pytest.mark.parametrize("v", VECTORS, ids=[v["name"] for v in VECTORS])
@@ -31,7 +31,8 @@ def test_verifier_ordering(v):
     req, cb, rate = build_verify_request(v, bundle, counts)
     claimed_at = v["now"] + v.get("claim_time_offset", 0)
     store = ScriptedClaimStore(v.get("claim_store", ""), claimed_at, claimed_at + v.get("finalize_time_offset", 0), counts)
-    cb.claim_store = store
+    # claim_store "absent": no claim store is configured.
+    cb.claim_store = None if v.get("claim_store") == "absent" else store
 
     outcome = verify_proof_bundle_v2(BACKGROUND, req, cb)
     want = v["expected"]

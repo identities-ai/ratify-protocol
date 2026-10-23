@@ -38,7 +38,7 @@ __all__ = [
     "CommittedV2Outcome", "V2ReleasedDecision", "V2ReleaseResult", "V2ReleaseRecord", "V2TerminalClaimRecord",
     "V2ReleaseConfig", "V2ReceiptPublisher", "V2ReceiptCheckpoint", "V2ReleaseClaimStore",
     "V2CheckpointAcknowledgement", "AcknowledgementNotFoundErrorV2", "ReleaseStateMismatchErrorV2",
-    "receipt_outbox_digest_v2", "release_v2_decision",
+    "receipt_outbox_digest_v2", "release_v2_decision", "valid_v2_release_record_outcome",
     "V2_RELEASE_RELEASED", "V2_RELEASE_PENDING", "V2_RELEASE_WITHHELD", "V2_RELEASE_REJECTED",
 ]
 
@@ -153,7 +153,8 @@ class AcknowledgementNotFoundErrorV2(Exception):
 
 
 class ReleaseStateMismatchErrorV2(Exception):
-    """Go ``ErrV2ReleaseStateMismatch``: a different release record exists."""
+    """Go ``ErrV2ReleaseStateMismatch``: a different release or withheld
+    record already exists for the claim."""
 
     def __init__(self, message: str = "v2 claim already records a different release"):
         super().__init__(message)
@@ -182,11 +183,31 @@ class V2ReceiptCheckpoint(abc.ABC):
 
 @dataclass(frozen=True)
 class V2ReleaseRecord:
-    """The durable release record of §6.9 step 9."""
+    """The durable release record of SPEC-v2 §6.9: the release of step 9
+    (``outcome`` released, ``reason`` empty) or a withheld result of steps 7
+    and 8 (``outcome`` withheld, ``reason`` clock_regressed,
+    challenge_expired, or allow_horizon_passed). ``entry_hash`` and
+    ``ack_timestamp`` name the verified receipt entry and its
+    acknowledgement. The first record for a claim wins; a claim store raises
+    :class:`ReleaseStateMismatchErrorV2` for any different later record and
+    must persist and return every field unchanged."""
 
     claim_id: str
     entry_hash: bytes
     ack_timestamp: int
+    outcome: str = ""
+    reason: str = ""
+
+
+def valid_v2_release_record_outcome(outcome: str, reason: str) -> bool:
+    """Go ``ValidV2ReleaseRecordOutcome``: whether outcome and reason form a
+    release record: released with no reason, or withheld with one of the
+    reasons release steps 7 and 8 record."""
+    if outcome == V2_RELEASE_RELEASED:
+        return reason == ""
+    if outcome == V2_RELEASE_WITHHELD:
+        return reason in ("clock_regressed", "challenge_expired", "allow_horizon_passed")
+    return False
 
 
 @dataclass
@@ -419,6 +440,16 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
             or record.challenge_expires_at != challenge_expires_at or record.allow_horizon != allow_horizon
             or verifier_id is None or verifier_id != verifier_id_committed):
         return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
+    # A recorded withheld result is permanent for the claim and is returned
+    # before any other step. A record that is neither a valid withheld nor a
+    # valid released record for this claim is a state mismatch.
+    release = record.release
+    if release is not None:
+        if (not isinstance(release, V2ReleaseRecord) or release.claim_id != claim_id
+                or not valid_v2_release_record_outcome(release.outcome, release.reason)):
+            return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
+        if release.outcome == V2_RELEASE_WITHHELD:
+            return _result(V2_RELEASE_WITHHELD, release.reason)
     # 2. Receipt.
     if not signed_receipt:
         return _result(V2_RELEASE_PENDING, "receipt_not_appended")
@@ -442,8 +473,7 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         return _result(V2_RELEASE_REJECTED, "receipt_invalid")
     # 4. Prior release: the same receipt entry. A recorded release only
     # enforces sameness; it never substitutes for the acknowledgement.
-    release = record.release
-    if release is not None and (release.claim_id != claim_id or bytes(release.entry_hash) != entry_hash):
+    if release is not None and bytes(release.entry_hash) != entry_hash:
         return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
     # 5. Predecessor.
     if receipt.sequence > 1:
@@ -467,25 +497,44 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         return _result(V2_RELEASE_REJECTED, "acknowledgement_mismatch")
     if release is not None and release.ack_timestamp != ack.timestamp:
         return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
+
+    def withhold(reason: str) -> V2ReleaseResult:
+        # Release ends at step 7 or 8. With no release recorded it durably
+        # records the withheld result first, so it is permanent for the
+        # claim; if the store is unavailable this call is still withheld.
+        # With a release already recorded, that first record stands and this
+        # call alone is withheld.
+        if release is None:
+            try:
+                config.claim_store.record_v2_release(ctx, V2ReleaseRecord(
+                    claim_id=claim_id, entry_hash=entry_hash, ack_timestamp=ack.timestamp,
+                    outcome=V2_RELEASE_WITHHELD, reason=reason))
+            except ReleaseStateMismatchErrorV2:
+                return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
+            except Exception:  # noqa: BLE001
+                pass
+        return _result(V2_RELEASE_WITHHELD, reason)
+
     # 7. Clock.
     try:
         now = _read_v2_authoritative_time(ctx, config.claim_store)
     except Exception as exc:  # noqa: BLE001
         if error_class_of(exc) == V2ErrorClass.CLOCK_REGRESSED:
-            return _result(V2_RELEASE_WITHHELD, "clock_regressed")
+            return withhold("clock_regressed")
         return _result(V2_RELEASE_PENDING, "clock_unavailable")
     if not valid_v2_timestamp(ack.timestamp) or record.finalized_at > ack.timestamp or ack.timestamp > now:
-        return _result(V2_RELEASE_WITHHELD, "clock_regressed")
+        return withhold("clock_regressed")
     # 8. Deadlines.
     if ack.timestamp >= challenge_expires_at or now >= challenge_expires_at:
-        return _result(V2_RELEASE_WITHHELD, "challenge_expired")
+        return withhold("challenge_expired")
     if receipt.decision == "allow" and (allow_horizon <= 0 or ack.timestamp >= allow_horizon or now >= allow_horizon):
-        return _result(V2_RELEASE_WITHHELD, "allow_horizon_passed")
+        return withhold("allow_horizon_passed")
     # 9. Record.
     if release is None:
         try:
             config.claim_store.record_v2_release(ctx, V2ReleaseRecord(claim_id=claim_id, entry_hash=entry_hash,
-                                                                      ack_timestamp=ack.timestamp))
+                                                                      ack_timestamp=ack.timestamp,
+                                                                      outcome=V2_RELEASE_RELEASED))
         except ReleaseStateMismatchErrorV2:
             return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
         except Exception:  # noqa: BLE001

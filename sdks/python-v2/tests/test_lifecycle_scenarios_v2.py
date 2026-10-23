@@ -43,6 +43,7 @@ from ratify_protocol_v2.verification_receipt_v2 import (
     decode_verification_receipt_body_v2,
     decode_verification_receipt_v2,
     encode_verification_receipt_v2,
+    verification_receipt_v2_digest,
 )
 from ratify_protocol_v2.verify_v2 import (
     V2_STAGE_COMMITTED,
@@ -62,10 +63,10 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 32
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 162
+    assert len(SCENARIOS) == 48
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 271
     assert len(PROFILE_SCENARIOS) == 29
-    assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 279
+    assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}
     for s in PROFILE_SCENARIOS:
         profiles[s["profile"]] = profiles.get(s["profile"], 0) + 1
@@ -87,6 +88,23 @@ class WrongEntryCheckpoint(V2ReceiptCheckpoint):
         entry = bytearray(ack.entry_hash)
         entry[0] ^= 1
         return V2CheckpointAcknowledgement(log_id=ack.log_id, sequence=ack.sequence, entry_hash=bytes(entry), timestamp=ack.timestamp)
+
+
+class OwnerCapturingClaimStore:
+    """Records the evaluator owner token a claim store returns to the
+    creator, so a finalize step can call the store directly."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.owner = b""
+
+    def claim_v2(self, ctx, claim):
+        result = self.inner.claim_v2(ctx, claim)
+        self.owner = bytes(result.owner_token or b"")
+        return result
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
 
 
 def request_inputs(name: str) -> dict:
@@ -168,6 +186,7 @@ def test_lifecycle_scenario(sc):
     receipts: dict = {}
     claim_ids: dict = {}
     request_of: dict = {}
+    owners: dict = {}
     epoch_override = [0]
     config = V2ReleaseConfig(verifier_public_key=fx.pub[verifier_key], log_id=FILE["log_id"], claim_store=store, checkpoint=store)
     holder = {"store": store}
@@ -288,8 +307,9 @@ def test_lifecycle_scenario(sc):
 
             pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
                                             req.replay_epoch, now, req.max_challenge_age_seconds, req.future_skew_seconds)
+            capturing = OwnerCapturingClaimStore(claim_store())
             try:
-                claim, disposition, _ = claim_proof_bundle_v2(BACKGROUND, claim_store(), bundle, pre, req.verifier_namespace,
+                claim, disposition, _ = claim_proof_bundle_v2(BACKGROUND, capturing, bundle, pre, req.verifier_namespace,
                                                               req.replay_epoch, now)
                 err = None
             except Exception as exc:  # noqa: BLE001
@@ -297,6 +317,37 @@ def test_lifecycle_scenario(sc):
             assert error_class_of(err) == want.get("error_class", "") and disposition == want.get("disposition", ""), (i, err)
             claim_ids[step["request"]] = claim.claim_id
             request_of[claim.claim_id] = step["request"]
+            owners[step["request"]] = capturing.owner
+        elif op == "acknowledge":
+            receipt = decode_verification_receipt_v2(receipts[step["request"]])
+            entry = bytearray(verification_receipt_v2_digest(receipt))
+            if step["mode"] == "fork":
+                entry[0] ^= 1
+            elif step["mode"] != "exact":
+                raise AssertionError(f"unknown acknowledge mode {step['mode']}")
+            try:
+                ack, err = store.acknowledge_v2_receipt(BACKGROUND, receipt.log_id, receipt.sequence,
+                                                        receipt.previous_receipt_hash, bytes(entry)), None
+            except Exception as exc:  # noqa: BLE001
+                ack, err = None, exc
+            if want.get("failed"):
+                assert err is not None, (i, ack)
+                continue
+            assert err is None, (i, err)
+            assert (ack.timestamp, ack.sequence, bytes(ack.entry_hash)) == (want.get("ack_timestamp", 0), receipt.sequence,
+                                                                           bytes(entry)), (i, ack)
+        elif op == "finalize":
+            try:
+                finalized, err = claim_store().finalize_v2_claim(
+                    BACKGROUND, claim_ids[step["request"]], owners[step["request"]], b64(step.get("terminal_b64", "")),
+                    b64(step.get("body_b64", "")), step.get("allow_valid_until", 0)), None
+            except Exception as exc:  # noqa: BLE001
+                finalized, err = False, exc
+            if want.get("error_class"):
+                assert not finalized and error_class_of(err) == want["error_class"], (i, err)
+                continue
+            assert err is None, (i, err)
+            assert ("committed" if finalized else "identical") == want.get("finalize_result", ""), i
         elif op == "recover":
             recover_step(i, step["request"], want)
         elif op == "publish":
@@ -344,6 +395,8 @@ def test_lifecycle_scenario(sc):
             cfg = copy.copy(config)
             if step.get("checkpoint") == "wrong_entry":
                 cfg.checkpoint = WrongEntryCheckpoint(store)
+            if step.get("mode") == "no_receipt":
+                receipt = None
             if op == "release_forged":
                 c, receipt = object.__new__(CommittedV2Outcome), None
             check_release(i, release_v2_decision(BACKGROUND, c, receipt, cfg), want)

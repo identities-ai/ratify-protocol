@@ -42,6 +42,7 @@ from ..evaluation_progress_v2 import (
     validate_v2_evaluation_progress,
 )
 from ..release_v2 import (
+    V2_RELEASE_RELEASED,
     AcknowledgementNotFoundErrorV2,
     ReleaseStateMismatchErrorV2,
     V2ReceiptCheckpoint,
@@ -50,6 +51,7 @@ from ..release_v2 import (
     V2ReleaseRecord,
     V2TerminalClaimRecord,
     receipt_outbox_digest_v2,
+    valid_v2_release_record_outcome,
 )
 from ..signing_v2 import key_id_v2, public_key_of
 from ..stream_sequence_v2 import check_v2_stream_sequence
@@ -143,6 +145,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
         self._outbox: list = []
         self._ack_withheld = False
         self._log_frozen = False
+        self._checkpoint_frozen = False
         self._signer_failure = False
         self._rate_at_finalization = False
         self._rate_commits: dict = {}
@@ -167,6 +170,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
         out._verifier_key, out._verifier_id, out._log_id = self._verifier_key, self._verifier_id, self._log_id
         out._outbox = [copy.copy(e) for e in self._outbox]
         out._ack_withheld, out._log_frozen = self._ack_withheld, self._log_frozen
+        out._checkpoint_frozen = self._checkpoint_frozen
         out._signer_failure, out._rate_at_finalization = self._signer_failure, self._rate_at_finalization
         out._rate_commits = {k: list(v) for k, v in self._rate_commits.items()}
         out._owner_token_rand = self._owner_token_rand
@@ -217,13 +221,25 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
                 self._acknowledge_pending_locked()
 
     def _acknowledge_pending_locked(self) -> None:
+        """Submit every appended, unacknowledged entry to the reference
+        checkpoint in log order. Acknowledgements are timestamped by one
+        authoritative reading (SPEC-v2 §7.2), which advances the high-water
+        mark; while the clock is regressed nothing is acknowledged."""
+        if self._checkpoint_frozen:
+            return
+        now = None
         for i, entry in enumerate(self._outbox):
             if entry.wire is None:
                 return
             if entry.ack is not None:
                 continue
+            if now is None:
+                try:
+                    now = self._read_clock_locked()
+                except V2Error:
+                    return
             entry.ack = V2CheckpointAcknowledgement(log_id=self._log_id, sequence=i + 1, entry_hash=bytes(entry.digest),
-                                                    timestamp=self._now)
+                                                    timestamp=now)
 
     def log_length(self) -> int:
         with self._lock:
@@ -404,16 +420,26 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             return out
 
     def record_v2_release(self, ctx: context_v2.Context, release: V2ReleaseRecord) -> None:
+        """Record a release or a withheld result (SPEC-v2 §6.9): the first
+        record for a claim wins, an identical repeat is a no-op, and any
+        different record is :class:`ReleaseStateMismatchErrorV2`. A new record
+        is a durable security-state change, anchored like any other."""
         with self._lock:
+            if not valid_v2_release_record_outcome(release.outcome, release.reason):
+                raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
+                              f"v2reference: invalid release record outcome {release.outcome!r} reason {release.reason!r}")
             record = self._claims.get(release.claim_id)
             if record is None or record.state != _TERMINAL:
                 raise ReleaseStateMismatchErrorV2()
             if record.release is not None:
-                if bytes(record.release.entry_hash) == bytes(release.entry_hash) and record.release.ack_timestamp == release.ack_timestamp:
+                if (bytes(record.release.entry_hash) == bytes(release.entry_hash)
+                        and record.release.ack_timestamp == release.ack_timestamp
+                        and record.release.outcome == release.outcome and record.release.reason == release.reason):
                     return
                 raise ReleaseStateMismatchErrorV2()
             stored = V2ReleaseRecord(claim_id=release.claim_id, entry_hash=bytes(release.entry_hash),
-                                     ack_timestamp=release.ack_timestamp)
+                                     ack_timestamp=release.ack_timestamp, outcome=release.outcome,
+                                     reason=release.reason)
 
             def mutate():
                 record.release = stored
@@ -427,7 +453,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             record = self._claims.get(claim_id)
             if record is not None and record.outbox_index >= 0 and self._outbox[record.outbox_index].wire is not None:
                 record.release = V2ReleaseRecord(claim_id=claim_id, entry_hash=bytes(self._outbox[record.outbox_index].digest),
-                                                 ack_timestamp=ack_timestamp)
+                                                 ack_timestamp=ack_timestamp, outcome=V2_RELEASE_RELEASED)
 
     # -- publication and checkpoint ---------------------------------------
 
@@ -471,9 +497,25 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
 
     def acknowledge_v2_receipt(self, ctx: context_v2.Context, log_id: str, sequence: int, previous_entry_hash: bytes,
                                entry_hash: bytes) -> V2CheckpointAcknowledgement:
+        """Accept only the next appended entry of the log, linked by
+        ``previous_entry_hash``, and return the original acknowledgement for
+        an identical retry. A different entry hash at an acknowledged
+        sequence is a fork (SPEC-v2 §7.8): it is refused and freezes the log,
+        after which the checkpoint acknowledges nothing further for it,
+        neither here nor from the publisher's submissions. Identical retries
+        of acknowledgements made before the fork still return the original
+        acknowledgement."""
         with self._lock:
-            if (log_id != self._log_id or sequence < 1 or sequence > len(self._outbox)
-                    or self._outbox[sequence - 1].wire is None or self._outbox[sequence - 1].digest != bytes(entry_hash)):
+            if log_id != self._log_id or sequence < 1 or sequence > len(self._outbox):
+                raise NotAcknowledgedError()
+            acked = self._outbox[sequence - 1].ack
+            if acked is not None and bytes(acked.entry_hash) != bytes(entry_hash):
+                self._checkpoint_frozen = True
+                raise NotAcknowledgedError(f"v2reference: checkpoint refused the acknowledgement: a different entry hash "
+                                           f"at acknowledged sequence {sequence} is a fork; the log is frozen")
+            if self._checkpoint_frozen and acked is None:
+                raise NotAcknowledgedError("v2reference: checkpoint refused the acknowledgement: the log is frozen after a fork")
+            if self._outbox[sequence - 1].wire is None or self._outbox[sequence - 1].digest != bytes(entry_hash):
                 raise NotAcknowledgedError()
             previous = bytes(48)
             if sequence > 1:
@@ -484,8 +526,9 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
                 raise NotAcknowledgedError()
             entry = self._outbox[sequence - 1]
             if entry.ack is None:
+                now = self._read_clock_locked()
                 entry.ack = V2CheckpointAcknowledgement(log_id=log_id, sequence=sequence, entry_hash=bytes(entry_hash),
-                                                        timestamp=self._now)
+                                                        timestamp=now)
             return entry.ack
 
     def get_v2_acknowledgement(self, ctx: context_v2.Context, log_id: str, sequence: int) -> V2CheckpointAcknowledgement:
@@ -549,6 +592,9 @@ class RateAtFinalizationStore(V2RateAtFinalizationStore, V2ReleaseClaimStore, V2
         return None
 
     def reserve_v2_rate_batch(self, ctx, claim_id, owner_token, bundle_hash, batch) -> None:
+        """Exists only to satisfy the rate reservation interface. The
+        verifier never calls it for a store that admits at finalization, and
+        it always fails (SPEC-v2 §7.1, §7.6)."""
         raise ValueError("v2reference: provisional rate reservation is not used with admission at finalization")
 
     def authoritative_time_v2(self, ctx):

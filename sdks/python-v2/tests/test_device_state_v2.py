@@ -72,7 +72,8 @@ def load_case(case: dict) -> ds.DevicePrimaryTestOnly:
         release = None
         if c["release"] is not None:
             r = c["release"]
-            release = V2ReleaseRecord(claim_id=r["claim_id"], entry_hash=b64(r["entry_hash"]), ack_timestamp=r["ack_timestamp"])
+            release = V2ReleaseRecord(claim_id=r["claim_id"], entry_hash=b64(r["entry_hash"]), ack_timestamp=r["ack_timestamp"],
+                                      outcome=r["outcome"], reason=r["reason"] or "")
         store._claims[c["claim_id"]] = _ClaimRecord(
             claim=_sealed_claim(c["claim"]), owner_digest=b64(c["owner_digest"]), lease_expires_at=c["lease_expires_at"],
             state=c["state"], claimed_at=c["claimed_at"], progress=_progress(c["progress"]),
@@ -115,7 +116,8 @@ def test_device_state_corpus_shape():
     assert FILE["label"] == ds.DEVICE_STATE_LABEL.decode("ascii")
     assert FILE["version"] == ds.DEVICE_STATE_VERSION
     assert [c["name"] for c in CASES] == ["empty_primary", "evaluating_claim", "every_record_kind",
-                                         "every_record_kind_without_release", "abandoned_frozen_log"]
+                                         "every_record_kind_without_release", "every_record_kind_with_withheld_record",
+                                         "abandoned_frozen_log"]
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])

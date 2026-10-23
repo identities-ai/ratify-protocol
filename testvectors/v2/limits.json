@@ -622,6 +622,261 @@
       "size_gate": "pass"
     },
     {
+      "name": "status_evidence_batch/empty_array",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W10="
+      },
+      "length": 2,
+      "sha256_hex": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "an empty batch"
+    },
+    {
+      "name": "status_evidence_batch/nested_object_empty",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 36,
+      "sha256_hex": "e89c858295e16391723e1e013b87cb8d24362a03b68f17ff94cbd777cffc5eba",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "the nested object is opaque at decode; it fails authentication later"
+    },
+    {
+      "name": "status_evidence_batch/nested_null_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7ImEiOm51bGx9LCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 44,
+      "sha256_hex": "f90816103ed7c5bc137880cda93518e466cff78ca14af91a848fc51a948212c7",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a null inside the opaque nested object is not checked by the batch decoder"
+    },
+    {
+      "name": "status_evidence_batch/nested_null_nullable_name",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7InN0cmVhbV9pZCI6bnVsbH0sIm9iamVjdF90eXBlX2NvZGUiOjV9XQ=="
+      },
+      "length": 52,
+      "sha256_hex": "0ada92a95eaf4b3a0d3d07a63f775b949ce67f3dd6f47f3dda61ddc58f9b4582",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a null inside the opaque nested object is not checked by the batch decoder"
+    },
+    {
+      "name": "status_evidence_batch/nested_unknown_and_case_variant_members",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7Iklzc3Vlcl9JRCI6IngiLCJleHRyYSI6MX0sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 61,
+      "sha256_hex": "f56e217aa2452ad31ff82de74dc23b54d2e7228f63f37cb93e4322fbfb03188d",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "nested member names are checked when the object is authenticated, not here"
+    },
+    {
+      "name": "status_evidence_batch/code_does_not_match_object",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7Imlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJuZXh0X3VwZGF0ZSI6MTgwMDAwMzYwMCwicmV2b2tlZCI6W3siY2VydF9pZCI6ImNlcnQtYSJ9LHsiY2VydF9pZCI6ImNlcnQtYiJ9XSwic2VxdWVuY2UiOjcsInNpZ25hdHVyZSI6eyJlZDI1NTE5IjoiV3V5QU9pcm9SZDJGcnNkL0lUUWJINDFQSktNM3RWcFFMTFFHKzY5NmN5VzBERDZmMjVNdGQ3clFRZVhqWk9jbkJKZTFBeG0yZWs0MmQrQzM5RWZXQ1E9PSIsIm1sX2RzYV82NSI6Ijk5NUlONnMvdzlGdGpoVCs1bTg4Q01vV2ZPY3BCT05hcFZTMWZpZjA2RjVBeDlyZmZOSmxlWUI1QTJtQ1pxRGdndTRZWjRrUEViTFJhYXhxdytRT29JWU4vMWxKNUthaW1od1ZWNE1rZWdVa1NhOEJWZ2Z2ZnVDRUVUdm1VUXlxOXRGRVcybmE5RFJCbEYzcUFZU3kzb2RjYndVcThOeDdWT0dONXlGaityQ3g0U1VBeDMrOWR1d3cyOWZ4V0pzOHY2NGVYWXZjOWNpcEd1S2R1Vjd1WG5XODFJaHZsNGF0MGFjcG0xYlFCVEVVQ2NFWnhBZjFWbUhhZjhlaDlRTG14ZGdRVjUvRWlMRnRDdUtqeVJDNjFrak5MajVUM2xET3REZDJheWQ1Q0RGQmFJSi9qOEwxZjRyWEhIZmJGZDRTbG9ESkxXaThYVmFkeFQ5dnNyZU5LU1JpbjB4TnRJTEZFcHMydWE0djNzWWMzdjhubER3enRIOXpsV3JPb1k2L3ZuU1kyNldXZjVKZUE0aUxrS1ZYU01KR3VhemxoMzNvV01FMkJTWEUwU3VjV1lwRElhd25EcU0rb3Q0RmQwbjkrRWpDNUJCbG8zN3JLOU9vQU8zdlRaeUZUSzhuUUpad2VEN2V2c1NhcnA5SGo1WE9ibklpWDhaTElqSzJSVzUxajFqZittUnpIOVN0STZ2U0dQWmgwMWJvVDJ2d2R2MVhscVBOempLdTBsWVcwZUJDNUdXV3M3cU1iZDRuNHFpSUluZnEwRXdsdWlkZGNETS91S3lFaWxyU1E0YmFCdnZDWTluWitwT2ZWZWQ1dW1VMnFTTGpIUVdablRNb1dvbHY3SXNHT3lIaVZUWDFTMmRkSU5naDZwZXJqSFVBVTFHME9xanpDL1hsbUMrdHp6cVYxZ1JHb0lPZjZmbkxQcnVnQkpaUUlpbHZXVU14ejhtL3dZSkRaT1Z6S2FRMFZ5NUdSTFJoU2Y0V1RPamgrcGtUN09TdisvK2xwS3dFeU9qbGsrOW5taVlCbkVUdXMwSytGcGhZRFk1amUxaWdOaFhXYm9XVDdUelBRYWorL1NMMkloa0FTamNjRVE0cFNrVTBObEFhcHpnWmY5SVBYbmpuaTZLdFRwSStTNzV5MjVPeWd6aVoybFJEMnF4dUZ4aGxkYXJ6L2pDdTlhck1zYXpmeGlXZ0hSbEFuTndjWG93aVhVTU1HUWxoc29CWkRQakpKdXgxYllVTkovK2xCWFRJMXQwU2FOclNoOW95Q0FjQlNFeENxZ0FQVmR3SEpaUnpQSndPcHIrUXBHVGdML3FkakRiSEhsYURlWS8rQm5NWXZkNjdxcTZYWmNMLzF2dDB5dTV4U3FHWExITXc3RFFWYjlVUVVlM1J4S21zZGI1ZkplOE90T1pqT3ZWdDNPUkd0RlUwRFVZa3E3dkZlYS93ZzU0VzZvM2I0TWl5OXkyOE1ka0FYKzBNVzBVeEVaOGlxL1QrWmZhU1NrU0NQb2YvMWw4K2JsSG80TGJ1U1dZTHN4cTJlUm0zNU1SMHlOSEoxcXdxcmZtMWFzMjFEWmc5OWZGQ1pRNU5sdHM3TS9nbERKSTIvMTZBZGVpOU9YMWNETXkxT3R2TEJYWlVkbW11UmtvbW85ckhjVjNabzB1Q3ZkUFRKVFJxaGk0aTJabTZVK3ZYeEE2bVZQM3dBekt4QVlOL3hobERKWWZPYlp2OTl1cXNnb0VJZmhjSTR5cStFMnFLSUFqYWZHRDVQZlRVeW43QU8xb3FENFJZVCt6RUs3YzBha1V6QVlHbVJ6Z0lMaWRTZHpjd0V5UVIwUEdWTVQvN05HVU96M2o4eVM0a01MSFYrZGNmbkQ0L1hCeGFMeWZtT0F4akNQZXh5eGhHRzY3ck0reGYyOS9ENzcrSW1NZ0hqSVU2cEpSYS9ZWDdmdWFha1oxakJLOGI3cjZCV2lGNW9nT3hiM1dzSWFkWnZjZGNPM3ZhWTIzeUM2R3djTGk0REVFR0YyaEprSTNoT1B5bGFpelg5UlVKVGM5UzB6N2VxVVl0S3VvcnZmbHYwSGJCdWhNUUFQSERYMUF5NXJBWXgzRDQ3N2NaL1JuVis3SjI0RURBeVowVnBVUEYrUFp2V0lxWEQyZngwMUFRVVg1ck9HdjZydFhNdUp2c0l0ZngxVkJZenlVdHdwcnFlN2E1NUU5MjFPazFXV290QWtXc0owcWlhRXZzZXdZTWdqS0JqY2J1U3hJdGF3M3dadmZia3BPL2tlZkZERUFCeHlUaEhUT1RGWmx0L0tHbGtmOGk4VFNURDA3UTZHSmIzY1hnWXdhdUY1WVA3c1JwQkF5bWNGTk91REFmOGd1OWFQTXcvYUJVYmhXMktoTW12Nlo2M2h0MzdkUWR3Nzdub1lwbjVIUlphOWt1OExlRlBBTUkvQmM3Zno2NndzV09ubTBPT0Z5OEpVVUxDQlphUFBLc2VzQU00NkNuSDlKOTZvdUhUZ3g4OWo2NDNVZ2dCQTR0STkvbmtqMFpLR3FpOEFXZjFXRmJJSXZMTVZuM2RaWEY3aFNkcnIwUUhlc1VuT3VCNW5udmNIeW4yZ012czJCWkpUUUkvQndOK3dBL25USkJMQVI0SW1QaGx1SjA5QUNtdW1sempHOUJ2bDVva3hvMFUwRzJ1OXBMVEF0Zk01b0lVT2xRd0czNG9UcklnWFNPNGVmTENGdS9KZTBqaXlXZ0JVUk9YemlFcStlWVJDelFKVUJoWHJrU0U2VGdCdk8za1FZSCtWYW5kTUR1UVV3aUdyTjIwTGgzOGNQNWZWMEJrZzNWVXU0bjVVd2hFOG15K0FmOFVFUUNyTTVEc1l2UGdDb1lnVlNXeVgwY0JzSCtHYXhaUUxzdUxOSm5WMjIyL1FBTEcvc1Z1eEtQS0RnanBXczVtUmFzaVl6KzBNaUI5Ti9UQ1p0S1pUVC9wcTNLSnRmQklyOVpaQzc1R05XSkxMTVpPeXJzWDBRRDF0SWxSU0c1bWp5SjRKckZVYlhuT1EzdDZnUHBCTDMzbFJYekhnRnVxY21xRlU3SXYwckxoK05Pek5tcHJwMG5NOWt2QThFaytkVW1Qcm8ybVNyZGVPVDY2MUJLOStMeEpKTEs1a3VwbnVkYVNuc1pwWCt5K1RJL282Qk1LV1hBNnc5VmwwaURBLzhGdUVHdlFPWTZHSjI0aDFDUEtzYlFUdG9Nb05aZGYyMERXeUVjd2FwN1pDZ3M4d1U5QzNhYS9xamJ1UFJzNDVrMFBTWjk0aWFtdTBGRGM2SXQxSlNWL0MxNnlhUkVYY2VhN2tPWFhPTXB3K0hpY3NreStZbitBdHFteVNucVd5TE02ejJIUGdZbm1sbWRxRHFCWi9YSVVjS1Z3Rm9oWG9BWFcycGJ0Ung1elkvcjRHMHltOE1Vb3JHV2ZrWEJjYlQ4RFRCMmlwb1l4WjN2UnBsaXAyRTNwTDFzSGxtZGtERUgxSnJXUU9nd29WYVNOOG1zYk1ERSt3QnNkK1RwUGg2Mld6cFZOQmRwd0dJWFdqbnh6RnlMTkQrRnBBZFNlRW82QS92Vlhpc2FzczZNOTBNUHdERVl1Ynd0cHpKeHZuSjluUkFleTVQZnVkUXFlVHRoaXZERmhYUUVRMm5vSWdVUmpSNkpWODEwSGhYQ1NCb1VvaU1GazJXaWorS294RE1LekJQVHU5Z2d5Q3NQR09YeWlRMUNFMDIwVVlONVUxVThYRGJoQ3BmdVlaTjNSMHhvZnFxR01XWU1kRjVFTTZJOTkreWV0a2VhUnR1T3hMYzRlUVRJNzFrMG5TNitGRmxtckpsZXByRkJzeEJkTktkU3hYL3hmNHJyR2p4azE3K1dPRkg4N0pteHA0cXQycElJdGIrUElaYmlxVWtuYm15L0lidmhIdStTa21xNGFIbzVOeUFWVkpNTzdNZnVvYitPeFBrMEdRNkc1M1dkbEp5QXJBSXF4WHRmNlg0ZkdUUk0vbDNjVEVrN1ZsS2l2QVZ3K2NmNHM4UWxSd3lZVDYybGtKTE12RGJwNktpOHFnVElUbVhOM0FVTEQxM0R6R0NDM0szTit5TGo2TzNacEdRRC9tcGRLQnpEN2tsUWUwQ0IwU3lpQUcyNlcvWnNKS2RFQTNzbXdoL2xBOEdRRE0rekdTWjlkT0NLcERQTTJFemIyc1RyWE5wWS9oR0ZaS01NYjBRUmozVWtjNC92Q2NMVXZKTHBHNzhhL3lhSVpZQ3hKNXJZVnM2WlQ1ZG9BY3FJV0NMSEU4N1JaNE0yYnVWWDdGT1MrZlVCbElIQmlEaTBVcjRxWHRDT3MwOWtNdmlCaUprTnM2T1VNSFN5WWdJaGs2Y3l5dlNwN0dlUllRR3duRkwrRlNJeXFRMkdaK2U3MmsxMGhVTjh2M1hkQVZTTnBZcnBQL1RybXpiT2ZEQlJ2NVdkV2ZCaDVkS0d5Y25KM1VuMDRpWStrU1FWcXgrcFREZDdXM2hyTUxJQ0Vna2ZPQXE3d1FXdVluV2J6RFNYL0NEcUNEczVTS0d6WmNOdWw1dFJPaS9DQkRZbGs4MjFDaHcwaDVhNUI4V05UWEdJMmdFRmVMY3NLOEM2YjllNTNqQzFVdUhMTkVOQ1RNMkwvVnlablAyanNnLy9BYWZnS2ZwbFlaUjRURkt5MkJBR0paSkpxQXNLM3RUOVg0WDM4d1VyT29zT213WDZQSVUyL29zZXhQelFwTXJtWWs0alZEdXd1WENnbXRVTnRyRnZkb1hIL2JyOVlGZHN2V1VJL2QxRDRxSXVJY24wSGFTQjNmZW9WSE9udW5GMGowTmkxT3hFN3FBOE84K1RZRlkvRnhzdzlVMDd5U2YyZ042NmxBOWJmOVVsUVh5OURyNnZZaDlQT29LTzBGNElOZUhobXFjQWw0ejh2RmZWTFU0SnJJeVdrUWVmL3JxdzVxdjRac2UyamlzRVlyQWJLUlhaVjJtRkI2K0NSVjliWkllWG5yL1BrWDRTRWs4cVk5RjZmMTRvMnFjQ2lvNUtTbkh2M1BmcERnbDNiWlV3R3JvQjhDSmJTczFuT0VUdzRtZlVLVGZkOGxhVkpvK1o5UVE5eG13emlxc3NnQmVhT0d0TzRWOXpqdis3VHlEbTBZKzZwbCtwWnZ3VWJWcG1sc2xaWlhxTVJmRWtNdzZMS251Vm16TklmY1RMdmtBeW9ZZTZpd1RxR2pxTDA5R2J4MnVYL1dhTExPd01CMkNuTSt4MDZ3a3JYQ2V2aXVtQ1JFa05EWUdHVlFrbmVmRENPVTVrYmRCMDZJcE9SMGYyQWZyMjl5aSs3Vld0WForbW8reHhXemxKL0JtME1mbkhSSitEZFpsTEoxWFl6cWt3Wld4Vld3aTFnZ2xWMGhSWTNRa24ra3pLall0Uzl2S25qWG5HekhHVlcrOXkvTENSV2poU2Z5WGptMGRyY2IzOWFKdXZObFRGN0NxekJXQ1hCS0ZCVXZScmRxbTJOd01GUlM4YmxEalBaUjV5c1ZxTmpZUHFiZnJkY3U0RGdVb1ZIVSt3S3JITEQ3SW5KdkJEVGR4aThKeHAxQmI1V2thYnBLa256YVZyTnlCYTlpL3lDa3VPei9ybFRiOWVrYTNnaGJ4VWptQWNQL2orOW41dDBGclpMWGprM3hvNjJMbkFreWhOU0dDK1pOcEtQWXFXTE9hSVBmSmxYSmhzR2EvQ1puTW1HRVF5N2FFYUJMMjIzWFQ3TE14bUlRYnlNeUlTdC9JR1I0U2YvaVl3d01oNGpwYk9OVDF5eE1rUmlkb3FPMFNSbkFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUJRa05FaFVhIn0sInVwZGF0ZWRfYXQiOjE3OTk5OTk5NDAsInZlcnNpb24iOjJ9LCJvYmplY3RfdHlwZV9jb2RlIjo1fV0="
+      },
+      "length": 4784,
+      "sha256_hex": "cd5ed4786b493a9684263084790c2c1110c00d6fd2c4f12e81b8fac090267aa1",
+      "expected": "accept",
+      "size_gate": "pass",
+      "note": "a signed list labelled code 5; the label is checked when the object is authenticated"
+    },
+    {
+      "name": "status_evidence_batch/not_an_array",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "eyJvYmplY3QiOnt9LCJvYmplY3RfdHlwZV9jb2RlIjozfQ=="
+      },
+      "length": 34,
+      "sha256_hex": "f6eb6709400158e1364f91ee09134403ce3b9e00a9022630d63a46dd13dcfdf1",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/entry_null",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W251bGxd"
+      },
+      "length": 6,
+      "sha256_hex": "1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/object_null",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0IjpudWxsLCJvYmplY3RfdHlwZV9jb2RlIjozfV0="
+      },
+      "length": 38,
+      "sha256_hex": "e7e9a33da5092d052f375ff2fe5a9e209e8a74c1864ca3b1f325713b08f2b8de",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/object_array",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0IjpbXSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 36,
+      "sha256_hex": "825d4875cf4f3ae172b80ea754b9e0828873388d317aff830d838ad13ae7d681",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/object_missing",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 24,
+      "sha256_hex": "c256c2f986164f3a2a619420cad55c1b6589d84cd06d26a38ef469c4e7d34930",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/entry_extra_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3siZXh0cmEiOjEsIm9iamVjdCI6e30sIm9iamVjdF90eXBlX2NvZGUiOjN9XQ=="
+      },
+      "length": 46,
+      "sha256_hex": "12dc6ebe98ca74126989db9404d534706b8375267e92effa31c35e8bec43ce70",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/entry_case_variant_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3siT2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 36,
+      "sha256_hex": "9e087f9166383645dfdfa3be13c1a8133e21e2f0b364e1ecd08aa8acba35a0d7",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/entry_duplicate_member",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7fSwib2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6M31d"
+      },
+      "length": 48,
+      "sha256_hex": "d649b5ee0e094667dd0b6daf4889d3ad402fddfe2a1756941bcf45eaaa23c512",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/code_4",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6NH1d"
+      },
+      "length": 36,
+      "sha256_hex": "dda08f08fd9dd357b78b778f44d900a11e305acd7fbe786879b744fe24f0347d",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/code_string",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6IjMifV0="
+      },
+      "length": 38,
+      "sha256_hex": "5163caf7dd2d5bd93cdfa656f7777e66cd2ae1250af7aa16e2ece8e3296e0657",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
+      "name": "status_evidence_batch/code_fraction",
+      "kind": "status_evidence_batch",
+      "limit": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+      "limit_value": 64,
+      "construction": {
+        "method": "inline",
+        "wire_b64": "W3sib2JqZWN0Ijp7fSwib2JqZWN0X3R5cGVfY29kZSI6My4wfV0="
+      },
+      "length": 38,
+      "sha256_hex": "db4088738f6108893eed47b6ab89ea7b31a31b3a34fdad27e437001c1ee312f2",
+      "expected": "reject",
+      "expected_error_class": "malformed",
+      "size_gate": "pass"
+    },
+    {
       "name": "delegation_certificate/expires_at_at_limit",
       "kind": "delegation_certificate",
       "limit": "MAX_TIMESTAMP_SECONDS_V2",

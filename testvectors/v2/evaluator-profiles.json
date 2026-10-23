@@ -2,7 +2,7 @@
   "version": 1,
   "description": "Exhaustive semantics of the two standard extension evaluator profiles (SPEC-v2 §5.2): com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1. An SDK that claims either profile MUST return the listed outcome for every case. profile_digest is a profile identifier digest computed from the specification formula; matching it says which identifier was bound, not that two implementations behave alike. These cases are that evidence.",
   "semantics": {
-    "case": "invoke the profile's standard implementation with params (the canonical RatifyCanonicalJSON of params, or no params when params_absent is true) and the authenticated request context; the outcome is pass (with no horizon), denied, or unverifiable. Every params value here is inside the restricted value model, so a verifier would pass it to the evaluator after claim",
+    "case": "invoke the profile's standard implementation with params (the canonical RatifyCanonicalJSON of params, or no params when params_absent is true) and the authenticated request context; the outcome is pass (with no horizon), denied, or unverifiable. Every params value here is inside the restricted value model. A case with direct_api_only true has params that are not a JSON object: a certificate carrying them is malformed before claim (SPEC-v2 §5.2), so the case is reachable only by invoking the evaluator directly. Every other case can be carried by a certificate and reaches the evaluator after claim",
     "context": "extension_counts maps names to integers 0..2^53-1; extension_values maps names to valid UTF-8 of at most 512 bytes. A count is never read as a value or a value as a count",
     "context_bounds": "validate the extension request context before claim: error_class configuration_invalid, or none when it is within bounds (at most 64 counts and 64 values; names 1 to 128 bytes of a-z, 0-9, _, ., :, and -; counts 0..2^53-1; values valid UTF-8 of at most 512 bytes)",
     "order": "params are checked first: params outside the profile's exact shape are denied whatever the context holds; then a missing context entry is unverifiable; then the comparison decides"
@@ -191,6 +191,7 @@
             "nodes",
             10
           ],
+          "direct_api_only": true,
           "context": {
             "extension_counts": {
               "nodes": 5
@@ -201,6 +202,7 @@
         {
           "name": "params_string_denied",
           "params": "nodes",
+          "direct_api_only": true,
           "context": {
             "extension_counts": {
               "nodes": 5
@@ -211,6 +213,7 @@
         {
           "name": "params_integer_denied",
           "params": 10,
+          "direct_api_only": true,
           "context": {
             "extension_counts": {
               "nodes": 5
@@ -221,6 +224,7 @@
         {
           "name": "params_null_denied",
           "params": null,
+          "direct_api_only": true,
           "context": {
             "extension_counts": {
               "nodes": 5
@@ -744,6 +748,7 @@
             "us-east-1",
             "eu-west-1"
           ],
+          "direct_api_only": true,
           "context": {
             "extension_values": {
               "region": "eu-west-1"
@@ -754,6 +759,7 @@
         {
           "name": "params_null_denied",
           "params": null,
+          "direct_api_only": true,
           "context": {
             "extension_values": {
               "region": "eu-west-1"

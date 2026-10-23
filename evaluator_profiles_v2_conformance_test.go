@@ -29,11 +29,12 @@ func TestV2ConformanceEvaluatorProfiles(t *testing.T) {
 			Type          string `json:"type"`
 			ProfileDigest string `json:"profile_digest"`
 			Cases         []struct {
-				Name    string          `json:"name"`
-				Params  json.RawMessage `json:"params"`
-				Absent  bool            `json:"params_absent"`
-				Context contextJSON     `json:"context"`
-				Outcome string          `json:"outcome"`
+				Name          string          `json:"name"`
+				Params        json.RawMessage `json:"params"`
+				Absent        bool            `json:"params_absent"`
+				DirectAPIOnly bool            `json:"direct_api_only"`
+				Context       contextJSON     `json:"context"`
+				Outcome       string          `json:"outcome"`
 			} `json:"cases"`
 		} `json:"profiles"`
 		ContextBounds []struct {
@@ -77,6 +78,14 @@ func TestV2ConformanceEvaluatorProfiles(t *testing.T) {
 					}
 					if params, err = CanonicalJSON(value); err != nil {
 						t.Fatal(err)
+					}
+					// SPEC-v2 §5.2: a certificate can carry these params only
+					// when they are a JSON object; direct_api_only says not.
+					typeJSON, _ := json.Marshal(suite.Type)
+					var carried ConstraintV2
+					wireErr := json.Unmarshal([]byte(`{"params":`+string(params)+`,"type":`+string(typeJSON)+`}`), &carried)
+					if (wireErr != nil) != c.DirectAPIOnly {
+						t.Fatalf("direct_api_only %t, but a certificate constraint with these params decodes with error %v", c.DirectAPIOnly, wireErr)
 					}
 				}
 				ctx := ConstraintContextV2{ExtensionCounts: c.Context.ExtensionCounts, ExtensionValues: c.Context.ExtensionValues}

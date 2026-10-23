@@ -19,11 +19,15 @@ type profileContextJSON struct {
 }
 
 type profileCaseJSON struct {
-	Name    string             `json:"name"`
-	Params  json.RawMessage    `json:"params,omitempty"`
-	Absent  bool               `json:"params_absent,omitempty"`
-	Context profileContextJSON `json:"context"`
-	Outcome string             `json:"outcome"`
+	Name   string          `json:"name"`
+	Params json.RawMessage `json:"params,omitempty"`
+	Absent bool            `json:"params_absent,omitempty"`
+	// DirectAPIOnly marks params that are not a JSON object: a certificate
+	// carrying them is malformed before claim (SPEC-v2 §5.2), so only a
+	// direct call to the evaluator can reach the case.
+	DirectAPIOnly bool               `json:"direct_api_only,omitempty"`
+	Context       profileContextJSON `json:"context"`
+	Outcome       string             `json:"outcome"`
 }
 
 type profileSuiteJSON struct {
@@ -68,7 +72,8 @@ func (g *gen) evaluatorProfilesFile() any {
 	c := func(name string, params any, ctx profileContextJSON, outcome string) profileCaseJSON {
 		// params is always present here (JSON null included); params_absent
 		// cases are written separately.
-		return profileCaseJSON{Name: name, Params: canon(params), Context: ctx, Outcome: outcome}
+		_, object := params.(map[string]any)
+		return profileCaseJSON{Name: name, Params: canon(params), DirectAPIOnly: !object, Context: ctx, Outcome: outcome}
 	}
 	name128 := strings.Repeat("n", 128)
 	name129 := strings.Repeat("n", 129)
@@ -178,7 +183,7 @@ func (g *gen) evaluatorProfilesFile() any {
 		Version:     1,
 		Description: "Exhaustive semantics of the two standard extension evaluator profiles (SPEC-v2 §5.2): com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1. An SDK that claims either profile MUST return the listed outcome for every case. profile_digest is a profile identifier digest computed from the specification formula; matching it says which identifier was bound, not that two implementations behave alike. These cases are that evidence.",
 		Semantics: map[string]string{
-			"case":           "invoke the profile's standard implementation with params (the canonical RatifyCanonicalJSON of params, or no params when params_absent is true) and the authenticated request context; the outcome is pass (with no horizon), denied, or unverifiable. Every params value here is inside the restricted value model, so a verifier would pass it to the evaluator after claim",
+			"case":           "invoke the profile's standard implementation with params (the canonical RatifyCanonicalJSON of params, or no params when params_absent is true) and the authenticated request context; the outcome is pass (with no horizon), denied, or unverifiable. Every params value here is inside the restricted value model. A case with direct_api_only true has params that are not a JSON object: a certificate carrying them is malformed before claim (SPEC-v2 §5.2), so the case is reachable only by invoking the evaluator directly. Every other case can be carried by a certificate and reaches the evaluator after claim",
 			"order":          "params are checked first: params outside the profile's exact shape are denied whatever the context holds; then a missing context entry is unverifiable; then the comparison decides",
 			"context":        "extension_counts maps names to integers 0..2^53-1; extension_values maps names to valid UTF-8 of at most 512 bytes. A count is never read as a value or a value as a count",
 			"context_bounds": "validate the extension request context before claim: error_class configuration_invalid, or none when it is within bounds (at most 64 counts and 64 values; names 1 to 128 bytes of a-z, 0-9, _, ., :, and -; counts 0..2^53-1; values valid UTF-8 of at most 512 bytes)",

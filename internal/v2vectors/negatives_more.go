@@ -3,6 +3,7 @@ package v2vectors
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"strings"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -428,4 +429,47 @@ func (g *gen) receiptNegatives(n *negBuilder) {
 	issuerBody.StatusEvidence = toLibEvidence([]EvidenceJSON{g.evidence(g.statusFixtures()["root_current"])})
 	_, issuerWire, _ := g.receipt(verifier, &issuerBody, receiptLogA, 1, make([]byte, 48), 0)
 	bind("issuer_ids_mismatch", "receipt issuer_ids omit a chain issuer", issuerWire, bundleWire)
+}
+
+// canonicalOnlyNegatives covers the decoders SPEC-v2 §2.1 names as
+// canonical-only (witness entry, verification receipt, transaction receipt):
+// an equivalent but non-canonical spelling is malformed, even though a
+// semantic decoder would read the same signed value from it.
+func (g *gen) canonicalOnlyNegatives(n *negBuilder) {
+	verifier := g.k("verifier")
+	_, witnessWire, _ := g.witness(g.k("witness"), witnessLogA, 1, make([]byte, 48), "entry-1", Now-20, "", 0)
+	_, receiptWire, _ := g.receipt(verifier, g.receiptFixtureBody(), receiptLogA, 1, make([]byte, 48), 0)
+	for _, c := range []struct {
+		kind, stringMember string
+		base               []byte
+		verify             verifyContext
+	}{
+		{"witness_entry", "log_id", witnessWire, verifyContext{WitnessKey: "witness", Head: genesisHead(witnessLogA, "")}},
+		{"verification_receipt", "log_id", receiptWire, verifyContext{VerifierKey: "verifier", Head: genesisHead(receiptLogA, verifier.ID)}},
+		{"transaction_receipt", "transaction_id", g.txFixture().wire, verifyContext{}},
+	} {
+		add := func(name, mutation string, wire []byte) {
+			if bytes.Equal(wire, c.base) {
+				panic(c.kind + "/" + name + " did not change the canonical wire")
+			}
+			n.add("noncanonical_"+name, c.kind, mutation, wire, c.verify, "malformed")
+		}
+		// The top-level version member is the last "version" in each wire.
+		at := bytes.LastIndex(c.base, []byte(`,"version":2`))
+		if at < 0 {
+			panic(c.kind + " has no top-level version member after another member")
+		}
+		reordered := append([]byte(`{"version":2,`), c.base[1:at]...)
+		reordered = append(reordered, c.base[at+len(`,"version":2`):]...)
+		escapedName := append(bytes.Clone(c.base[:at+1]), []byte(`"versio\u006e"`)...)
+		escapedName = append(escapedName, c.base[at+1+len(`"version"`):]...)
+		value := bytes.Index(c.base, []byte(`"`+c.stringMember+`":"`)) + len(`"`+c.stringMember+`":"`)
+		escapedValue := append(bytes.Clone(c.base[:value]), []byte(fmt.Sprintf(`\u%04x`, c.base[value]))...)
+		escapedValue = append(escapedValue, c.base[value+1:]...)
+		add("trailing_newline", "the canonical wire followed by one newline byte", append(bytes.Clone(c.base), '\n'))
+		add("leading_space", "one space before the canonical wire", append([]byte(" "), c.base...))
+		add("members_reordered", "the top-level version member moved first", reordered)
+		add("escaped_member_name", "the top-level member name version spelled with a \\u006e escape", escapedName)
+		add("escaped_value", "the first character of "+c.stringMember+" spelled as a \\u escape", escapedValue)
+	}
 }

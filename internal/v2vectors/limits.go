@@ -267,6 +267,32 @@ func (g *gen) limitsFile() any {
 	}
 	add("objects_at_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2), "accept", "pass", "64 copies of one signed list entry")
 	add("objects_over_limit", "status_evidence_batch", "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2", ratify.MaxStatusEvidenceBatchObjectsV2, repeatEntry(ratify.MaxStatusEvidenceBatchObjectsV2+1), "reject", "pass", "")
+	// The batch decoder checks only the envelope (SPEC-v2 §2.1, §6.5 step 3):
+	// the array, exactly the two entry members, the code 3 or 5 as a JSON
+	// integer, a JSON object for each object, and the size and count. Each
+	// nested object stays opaque until it is authenticated (step 4), so its
+	// members, nulls, and agreement with the code are not checked here.
+	const envelope = "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2"
+	batchCase := func(name, wire, expected, note string) {
+		add(name, "status_evidence_batch", envelope, ratify.MaxStatusEvidenceBatchObjectsV2, LimitConstruction{Method: "inline", WireB64: b64([]byte(wire))}, expected, "pass", note)
+	}
+	batchCase("empty_array", `[]`, "accept", "an empty batch")
+	batchCase("nested_object_empty", `[{"object":{},"object_type_code":3}]`, "accept", "the nested object is opaque at decode; it fails authentication later")
+	batchCase("nested_null_member", `[{"object":{"a":null},"object_type_code":3}]`, "accept", "a null inside the opaque nested object is not checked by the batch decoder")
+	batchCase("nested_null_nullable_name", `[{"object":{"stream_id":null},"object_type_code":5}]`, "accept", "a null inside the opaque nested object is not checked by the batch decoder")
+	batchCase("nested_unknown_and_case_variant_members", `[{"object":{"Issuer_ID":"x","extra":1},"object_type_code":3}]`, "accept", "nested member names are checked when the object is authenticated, not here")
+	batchCase("code_does_not_match_object", `[{"object":`+string(listWire)+`,"object_type_code":5}]`, "accept", "a signed list labelled code 5; the label is checked when the object is authenticated")
+	batchCase("not_an_array", `{"object":{},"object_type_code":3}`, "reject", "")
+	batchCase("entry_null", `[null]`, "reject", "")
+	batchCase("object_null", `[{"object":null,"object_type_code":3}]`, "reject", "")
+	batchCase("object_array", `[{"object":[],"object_type_code":3}]`, "reject", "")
+	batchCase("object_missing", `[{"object_type_code":3}]`, "reject", "")
+	batchCase("entry_extra_member", `[{"extra":1,"object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("entry_case_variant_member", `[{"Object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("entry_duplicate_member", `[{"object":{},"object":{},"object_type_code":3}]`, "reject", "")
+	batchCase("code_4", `[{"object":{},"object_type_code":4}]`, "reject", "")
+	batchCase("code_string", `[{"object":{},"object_type_code":"3"}]`, "reject", "")
+	batchCase("code_fraction", `[{"object":{},"object_type_code":3.0}]`, "reject", "")
 	if !bytes.Equal(must(ratify.EncodeV2StatusEvidenceBatch(ratify.V2StatusEvidenceBatch{Objects: []ratify.V2StatusEvidenceObject{{ObjectType: 3, Wire: listWire}}})), append(append([]byte("["), entry...), ']')) {
 		panic("status evidence batch entry is not the canonical encoding")
 	}

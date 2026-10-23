@@ -579,6 +579,24 @@ func (g *gen) orderingCoverageScenarios() []scenario {
 		s.evidence[intermediateID] = evidenceBatch(g.object(st["intermediate_current"]), g.object(st["intermediate_current"]))
 	}))
 
+	// ---------------- Opaque batch objects (SPEC-v2 §6.5 steps 3 and 4): an
+	// object the batch decoder accepts but that does not decode under its
+	// code fails authentication, which rejects the whole batch, so that
+	// issuer is unavailable and no transition occurs.
+	opaque := func(name, desc string, objects ...evidenceObjectJSON) {
+		add(g.terminal(name, desc, def,
+			indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
+				s.evidence[intermediateID] = evidenceBatch(objects...)
+			}))
+	}
+	raw := func(code int, object string) evidenceObjectJSON {
+		return evidenceObjectJSON{ObjectTypeCode: code, WireB64: b64([]byte(object))}
+	}
+	opaque("batch_object_empty", "a batch entry whose object is {} fails authentication: the issuer is unavailable", raw(3, `{}`))
+	opaque("batch_object_nested_null", "a batch entry whose object is {\"a\":null} fails authentication: the issuer is unavailable", raw(3, `{"a":null}`))
+	opaque("batch_valid_list_and_empty_object", "one unauthenticated entry rejects the whole batch, including a valid current list", g.object(st["intermediate_current"]), raw(3, `{}`))
+	opaque("batch_list_labelled_push", "a valid signed list labelled code 5 does not decode as a push: the issuer is unavailable", evidenceObjectJSON{ObjectTypeCode: 5, WireB64: g.object(st["intermediate_current"]).WireB64})
+
 	// ---------------- Gap and status-policy lifetime bound.
 	p3 := mkPush(3, Now-30, "other-cert")
 	add(g.terminal("batch_push_gap", "a push two sequences past the accepted list is a gap: unavailable", def,

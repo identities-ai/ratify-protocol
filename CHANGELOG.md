@@ -84,6 +84,9 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   `constraint_unverifiable` instead of passing. Through the C ABI, a
   `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
   now fails closed the same way without calling the callback.
+- **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
+  A successful call that did not release left the output unwritten, so a
+  reused caller variable could still hold an earlier released handle.
 
 ### Not carried into v2
 

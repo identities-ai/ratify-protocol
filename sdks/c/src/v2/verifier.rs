@@ -393,7 +393,8 @@ pub enum RatifyV2ReleaseStatus {
 /// `log_id` are caller-authenticated configuration. Returns 0 with
 /// `*status_out` (a `RatifyV2ReleaseStatus`) and `*reason_out` (empty only
 /// when released; free with `ratify_v2_string_free`); `*released_out` is a
-/// new released-decision handle exactly when the status is released.
+/// new released-decision handle exactly when the status is released, and is
+/// set to NULL on entry, so it is NULL after every call that does not release.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_release_decision(
     committed: *const RatifyV2Committed,
@@ -415,6 +416,12 @@ pub unsafe extern "C" fn ratify_v2_release_decision(
             crate::guard::clear_ptr(released_out);
         },
         || {
+            // Clear the decision output first, so a caller variable that still
+            // holds an earlier handle (or garbage) never survives a call that
+            // does not release.
+            if !released_out.is_null() {
+                *released_out = std::ptr::null_mut();
+            }
             let c = handle(committed, "committed")?;
             let key = verifier_key
                 .as_ref()

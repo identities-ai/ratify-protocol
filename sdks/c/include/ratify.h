@@ -3260,7 +3260,8 @@ int32_t ratify_v2_committed_allow_horizon(const struct RatifyV2Committed *c,
 // `log_id` are caller-authenticated configuration. Returns 0 with
 // `*status_out` (a `RatifyV2ReleaseStatus`) and `*reason_out` (empty only
 // when released; free with `ratify_v2_string_free`); `*released_out` is a
-// new released-decision handle exactly when the status is released.
+// new released-decision handle exactly when the status is released, and is
+// set to NULL on entry, so it is NULL after every call that does not release.
 int32_t ratify_v2_release_decision(const struct RatifyV2Committed *committed,
                                    struct RatifyV2Slice signed_receipt,
                                    const struct RatifyV2PublicKey *verifier_key,

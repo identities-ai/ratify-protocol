@@ -151,7 +151,9 @@ enum RatifyV2Code
     // A required pointer argument was NULL.
     RatifyV2ErrNullPointer = -1,
     // A caller-supplied argument (length, UTF-8, JSON shape, enum value) was
-    // invalid at the ABI layer.
+    // invalid at the ABI layer. A byte input or count over `PTRDIFF_MAX`
+    // bytes in total is this code, except that an input with a SPEC-v2
+    // §2.6 byte limit is `malformed` over that limit.
     RatifyV2ErrBadArgument = -2,
     // An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
@@ -2298,10 +2300,12 @@ void ratify_v2_string_free(char *s);
 int32_t ratify_v2_evaluator_call_expired(const struct RatifyV2EvaluatorCall *call);
 
 // Strictly decode `wire` as `kind` (a `RatifyV2ObjectKind`), applying the
-// object's byte limit before parsing. When `canonical_out` is non-NULL the
-// canonical re-encoding is written there (it equals `wire` for every
-// conforming object). Signed objects 1..=8 are decoded with all their
-// structural checks; a transaction receipt also verifies its signatures.
+// object's byte limit before parsing: a `wire_len` over the limit, up to
+// `SIZE_MAX`, is `malformed` and `wire` is not read. When `canonical_out`
+// is non-NULL the canonical re-encoding is written there (it equals `wire`
+// for every conforming object). Signed objects 1..=8 are decoded with all
+// their structural checks; a transaction receipt also verifies its
+// signatures.
 // A status evidence batch (101) is decoded at the envelope only (SPEC-v2
 // §6.5 step 3): the strict JSON value model applies to the whole document,
 // but its nested objects are not decoded, and `canonical_out` carries each

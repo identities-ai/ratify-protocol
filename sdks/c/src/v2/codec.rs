@@ -11,9 +11,9 @@ use sha2::{Digest, Sha384};
 
 use super::marshal::{constraint_context, operation_context, session_inputs, to_bytes, Obj};
 use super::{
-    bad_arg, bytes, clear_buffer, cstr, json_bytes, null_arg, run, write_buffer, write_opt_buffer,
-    write_string, write_val, AbiResult, Failure, RatifyV2Buffer, RatifyV2Code, RatifyV2PublicKey,
-    RatifyV2Slice,
+    bad_arg, bytes, clear_buffer, cstr, json_bytes, null_arg, run, wire_arg, wire_limit,
+    write_buffer, write_opt_buffer, write_string, write_val, AbiResult, Failure, RatifyV2Buffer,
+    RatifyV2Code, RatifyV2PublicKey, RatifyV2Slice,
 };
 
 pub(crate) fn object_type(code: u32) -> AbiResult<V2ObjectType> {
@@ -106,10 +106,12 @@ pub(crate) fn signable(code: u32, wire: &[u8]) -> AbiResult<Vec<u8>> {
 }
 
 /// Strictly decode `wire` as `kind` (a `RatifyV2ObjectKind`), applying the
-/// object's byte limit before parsing. When `canonical_out` is non-NULL the
-/// canonical re-encoding is written there (it equals `wire` for every
-/// conforming object). Signed objects 1..=8 are decoded with all their
-/// structural checks; a transaction receipt also verifies its signatures.
+/// object's byte limit before parsing: a `wire_len` over the limit, up to
+/// `SIZE_MAX`, is `malformed` and `wire` is not read. When `canonical_out`
+/// is non-NULL the canonical re-encoding is written there (it equals `wire`
+/// for every conforming object). Signed objects 1..=8 are decoded with all
+/// their structural checks; a transaction receipt also verifies its
+/// signatures.
 /// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
 /// §6.5 step 3): the strict JSON value model applies to the whole document,
 /// but its nested objects are not decoded, and `canonical_out` carries each
@@ -126,7 +128,8 @@ pub unsafe extern "C" fn ratify_v2_object_decode(
         std::ptr::null_mut(),
         || clear_buffer(canonical_out),
         || {
-            let encoded = canonicalize(kind, bytes(wire, wire_len, "wire")?)?;
+            let wire = wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
+            let encoded = canonicalize(kind, &wire)?;
             write_opt_buffer(canonical_out, encoded)
         },
     )
@@ -151,7 +154,10 @@ pub unsafe extern "C" fn ratify_v2_signable_bytes(
         || {
             write_buffer(
                 out,
-                signable(object_type_code, bytes(wire, wire_len, "wire")?)?,
+                signable(
+                    object_type_code,
+                    &wire_arg(wire, wire_len, "wire", wire_limit(object_type_code.into()))?,
+                )?,
             )
         },
     )
@@ -278,7 +284,8 @@ pub unsafe extern "C" fn ratify_v2_delegation_digest(
         std::ptr::null_mut(),
         || clear_buffer(out),
         || {
-            let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
+            let b =
+                decode_proof_bundle_v2(&wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?)?;
             write_buffer(out, delegation_digest_v2(&b.delegations)?)
         },
     )
@@ -296,7 +303,8 @@ pub unsafe extern "C" fn ratify_v2_bundle_hash(
         std::ptr::null_mut(),
         || crate::guard::clear_ptr(out),
         || {
-            let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
+            let b =
+                decode_proof_bundle_v2(&wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?)?;
             write_string(out, &bundle_hash_v2(&b)?)
         },
     )
@@ -400,7 +408,7 @@ pub unsafe extern "C" fn ratify_v2_status_evidence_digest(
         std::ptr::null_mut(),
         || clear_buffer(out),
         || {
-            let wire = bytes(wire, wire_len, "wire")?;
+            let wire = &*wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let digest = match kind {
                 3 => status_evidence_digest_list_v2(&decode_revocation_list_v2(wire)?)?,
                 5 => status_evidence_digest_push_v2(&decode_revocation_push_v2(wire)?)?,
@@ -451,7 +459,7 @@ pub unsafe extern "C" fn ratify_v2_object_body_digest(
         std::ptr::null_mut(),
         || clear_buffer(out),
         || {
-            let wire = bytes(wire, wire_len, "wire")?;
+            let wire = &*wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
             let digest = match kind {
                 4 => key_rotation_statement_v2_digest(&decode_key_rotation_statement_v2(wire)?)?,
                 6 => witness_entry_v2_digest(&decode_witness_entry_v2(wire)?)?,
@@ -554,7 +562,12 @@ pub unsafe extern "C" fn ratify_v2_verification_receipt_body(
         std::ptr::null_mut(),
         || clear_buffer(out),
         || {
-            let r = decode_verification_receipt_v2(bytes(receipt, receipt_len, "receipt")?)?;
+            let r = decode_verification_receipt_v2(&wire_arg(
+                receipt,
+                receipt_len,
+                "receipt",
+                wire_limit(8),
+            )?)?;
             write_buffer(out, verification_receipt_v2_body(&r)?)
         },
     )

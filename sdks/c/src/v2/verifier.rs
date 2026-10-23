@@ -15,8 +15,9 @@ use super::marshal::{
 };
 use super::{
     bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run,
-    run_h, run_value, set_success_note, write_buffer, write_opt_buffer, write_opt_val,
-    write_string, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey, RatifyV2Slice,
+    run_h, run_value, set_success_note, wire_arg, wire_limit, write_buffer, write_opt_buffer,
+    write_opt_val, write_string, write_val, AbiResult, RatifyV2Buffer, RatifyV2PublicKey,
+    RatifyV2Slice,
 };
 
 /// Where a verification stopped (SPEC-v2 §2.7).
@@ -151,7 +152,7 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
             *committed_out = std::ptr::null_mut();
             clear_buffer(claim_record_out);
             let mut req = request(request_json, request_json_len)?;
-            req.bundle = bytes(bundle, bundle_len, "bundle")?.to_vec();
+            req.bundle = wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?.into_owned();
             req.constraint_evaluators = evaluator_registry(evaluators)?;
             let (ctx, cancel) = V2Context::background().with_cancel();
             let deps = build_callbacks(callbacks, &Cancel(cancel));
@@ -217,7 +218,8 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
                 .as_ref()
                 .ok_or_else(|| null_arg("claim_store"))?;
             let req = request(request_json, request_json_len)?;
-            let b = decode_proof_bundle_v2(bytes(bundle, bundle_len, "bundle")?)?;
+            let b =
+                decode_proof_bundle_v2(&wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?)?;
             let pre = preflight_proof_bundle_v2(
                 &b,
                 req.expected.as_ref(),
@@ -789,7 +791,7 @@ pub unsafe extern "C" fn ratify_v2_verify_transaction_receipt(
             let result = verify_transaction_receipt_v2(
                 &ctx,
                 &TransactionVerifyRequestV2 {
-                    receipt: bytes(receipt, receipt_len, "receipt")?.to_vec(),
+                    receipt: wire_arg(receipt, receipt_len, "receipt", wire_limit(7))?.into_owned(),
                     now,
                     future_skew_seconds,
                 },

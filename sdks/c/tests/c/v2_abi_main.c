@@ -15,6 +15,7 @@
  *                check; R requests a byte-identical re-encode check)
  *   limits.txt   <kind> <accept|reject> <class|-> <data> <pass|fail size gate>
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -187,7 +188,39 @@ int v2c_run_limits(void) {
     free(manifest);
     printf("limits: %d\n", n);
     if (n == 0) { fprintf(stderr, "empty limits manifest\n"); exit(1); }
-    return n;
+
+    /* A length larger than any object (SPEC-v2 §2.6): a one-byte buffer
+     * with a forged length is rejected by the size gate before parsing and
+     * is never read; a byte input with no size gate is bad_argument. */
+    static const unsigned char one[1] = {'{'};
+    static const int kinds[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 101, 102};
+    const size_t forged[] = {(size_t)PTRDIFF_MAX + 1, SIZE_MAX};
+    int nforged = 0;
+    for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; k++) {
+        for (size_t f = 0; f < 2; f++) {
+            RatifyV2Buffer out = {0};
+            int32_t rc = ratify_v2_object_decode(kinds[k], one, forged[f], &out);
+            const char *msg = ratify_v2_last_error_message();
+            char detail[512];
+            snprintf(detail, sizeof detail, "kind %d length %zu: got %s (%s)", kinds[k], forged[f], v2c_class(rc), msg);
+            v2c_check(strcmp(v2c_class(rc), "malformed") == 0 && strstr(msg, "rejected before parsing") != NULL,
+                      "forged length size gate", detail);
+            v2c_check(out.ptr == NULL && out.len == 0, "forged length output", detail);
+            ratify_v2_buffer_free(out);
+            nforged++;
+        }
+    }
+    for (size_t f = 0; f < 2; f++) {
+        RatifyV2Buffer out = {0};
+        int32_t rc = ratify_v2_canonical_json(one, forged[f], &out);
+        char detail[512];
+        snprintf(detail, sizeof detail, "length %zu: got %s (%s)", forged[f], v2c_class(rc), ratify_v2_last_error_message());
+        v2c_check(rc == RatifyV2ErrBadArgument, "forged length bad_argument", detail);
+        ratify_v2_buffer_free(out);
+        nforged++;
+    }
+    printf("forged lengths: %d\n", nforged);
+    return n + nforged;
 }
 
 int main(int argc, char **argv) {

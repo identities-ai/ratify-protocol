@@ -462,7 +462,13 @@ call on that thread and must not be freed. Messages are diagnostic only.
 
 **Ownership and lifetimes.** Input buffers are borrowed for the duration of
 the call; the library copies anything it keeps. A NULL input pointer is
-`null_pointer` even with a zero length. Outputs the library allocates belong to
+`null_pointer` even with a zero length. A length is checked before the
+library reads the bytes: an input with a SPEC-v2 §2.6 byte limit (every
+strict decoder input, including the bundle and receipt a verifier decodes)
+is `malformed` over that limit and is never read, and any other byte input
+or count over `PTRDIFF_MAX` bytes in total is `bad_argument`. A length that
+exceeds its allocation without exceeding these bounds is undefined
+behaviour, as for any C API. Outputs the library allocates belong to
 the caller and are released only through the matching function:
 `ratify_v2_buffer_free` for a `RatifyV2Buffer`, `ratify_v2_string_free` for a
 `char *`, and `ratify_v2_<handle>_free` for a handle. The library never frees
@@ -734,6 +740,9 @@ cargo test --test advanced
 
 # Protocol input bounds (max scopes, constraints, lengths, JSON nesting, bundle bytes; 7 tests)
 cargo test --test bounds
+
+# Forged lengths and counts up to SIZE_MAX at the v1 boundary (v2: v2c_forged_lengths)
+cargo test --test forged_lengths
 
 # Conformance tests (79/79 fixtures)
 cargo test --test conformance

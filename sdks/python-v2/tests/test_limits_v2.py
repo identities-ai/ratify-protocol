@@ -62,7 +62,7 @@ def test_limits_table_matches_the_sdk():
         if name == "MAX_TIMESTAMP_SECONDS_V2":
             continue
         assert getattr(limits_v2, name) == value, name
-    assert len(LIMITS["vectors"]) == 32
+    assert len(LIMITS["vectors"]) == 57
     assert set(LIMITS["procedure_by_kind"]) == set(DECODERS)
 
 

@@ -784,6 +784,8 @@ def _validate_revoked(refs: Optional[list[str]]) -> None:
     for ref in refs:
         if not isinstance(ref, str) or ref == "" or ref in seen:
             raise ValueError("v2 revoked cert IDs must be non-empty and unique")
+        if utf8_len(ref) > MAX_IDENTIFIER_LENGTH_BYTES:
+            raise ValueError(f"v2 revoked cert ID exceeds {MAX_IDENTIFIER_LENGTH_BYTES} bytes")
         seen.add(ref)
 
 

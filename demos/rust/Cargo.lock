@@ -372,6 +372,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sha3",
+ "zeroize",
 ]
 
 [[package]]

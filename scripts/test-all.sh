@@ -53,7 +53,7 @@ echo "==> Rust SDK"
 (cd sdks/rust && cargo build --all-targets && cargo test)
 
 echo "==> Rust narrative demo (standalone cargo project, not in the SDK workspace)"
-(cd demos/rust && RUSTFLAGS="-D warnings" cargo build)
+(cd demos/rust && RUSTFLAGS="-D warnings" cargo build --locked)
 
 echo "==> C/C++ SDK"
 (cd sdks/c && cargo clippy --all-targets -- -D warnings && cargo test)

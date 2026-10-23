@@ -87,6 +87,11 @@ implementation outside this repository, and a soak are gates for `2.0.0`
 - **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
   A successful call that did not release left the output unwritten, so a
   reused caller variable could still hold an earlier released handle.
+- **C: `ratify_v2_object_decode` decodes a status evidence batch at the
+  envelope only** (SPEC-v2 §6.5 step 3), as the Go, TypeScript, Python and
+  Rust batch decoders do. It used to decode and re-encode every nested
+  object, so it rejected batches the other SDKs accept. `canonical_out` now
+  keeps each object's received bytes.
 
 ### Not carried into v2
 

@@ -2243,6 +2243,10 @@ int32_t ratify_v2_evaluator_call_expired(const struct RatifyV2EvaluatorCall *cal
 // canonical re-encoding is written there (it equals `wire` for every
 // conforming object). Signed objects 1..=8 are decoded with all their
 // structural checks; a transaction receipt also verifies its signatures.
+// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
+// §6.5 step 3): its nested objects are not decoded, and `canonical_out`
+// carries each object's received bytes unchanged, with the entry members in
+// canonical order.
 int32_t ratify_v2_object_decode(int32_t kind,
                                 const uint8_t *wire,
                                 uintptr_t wire_len,

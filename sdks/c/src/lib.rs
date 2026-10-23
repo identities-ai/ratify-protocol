@@ -175,7 +175,9 @@ pub enum RatifyStatus {
 //   cert_id  — null-terminated hex string
 //   window_s — rolling window in seconds
 //   userdata — opaque pointer from RatifyVerifierContext.rate_userdata
-//   Returns: number of invocations of cert_id in the last window_s seconds
+//   Returns: number of invocations of cert_id in the last window_s seconds,
+//            or a negative value if the count is unavailable (fail-closed →
+//            constraint_unverifiable)
 
 // ============================================================================
 // VerifierContext — constraint evaluation inputs
@@ -216,6 +218,11 @@ pub struct RatifyVerifierContext {
     // --- Rate counter (required by max_rate) ---
     /// Returns how many times `cert_id` was exercised in the last `window_s`
     /// seconds. NULL = skip rate evaluation (constraint fails closed).
+    /// Return a negative value when the count is unavailable (for example a
+    /// storage error): `max_rate` then fails closed with
+    /// `constraint_unverifiable`. A `cert_id` containing U+0000 cannot be
+    /// passed as a C string; the callback is not called and `max_rate` fails
+    /// closed the same way.
     /// The `cert_id` pointer is only valid for the duration of the callback.
     pub rate_fn: Option<unsafe extern "C" fn(
         cert_id: *const c_char,
@@ -546,10 +553,12 @@ unsafe fn build_opts<'a>(
         let invocations: Option<ratify_protocol::InvocationCounter<'a>> = rate_fn.map(|f| {
             Box::new(move |cert_id: &str, window_s: i64| -> i64 {
                 // cert_id is stack-allocated; the closure must not store the pointer.
-                if let Ok(c) = CString::new(cert_id) {
-                    f(c.as_ptr(), window_s, rate_ud)
-                } else {
-                    0
+                // A cert_id containing U+0000 cannot cross into a C string, so the
+                // count is unavailable: return -1, which max_rate treats as
+                // constraint_unverifiable (fail closed), never as zero invocations.
+                match CString::new(cert_id) {
+                    Ok(c) => f(c.as_ptr(), window_s, rate_ud),
+                    Err(_) => -1,
                 }
             }) as Box<dyn Fn(&str, i64) -> i64 + 'a>
         });

@@ -262,6 +262,13 @@ fn evaluate_constraint(
                 return Err("malformed max_rate: count and window_s must be positive".into());
             }
             let got = counter(cert_id, c.window_s);
+            // A negative count is not a count: the counter could not answer.
+            // Fail closed rather than read it as "no invocations".
+            if got < 0 {
+                return Err(format!(
+                    "constraint_unverifiable: rate counter returned negative count {got}"
+                ));
+            }
             if got >= c.count {
                 return Err(format!(
                     "rate limit exceeded: {} invocations in last {}s (max {})",

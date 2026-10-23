@@ -97,6 +97,11 @@ typedef struct RatifyVerifierContext {
     int has_amount;
     // Returns how many times `cert_id` was exercised in the last `window_s`
     // seconds. NULL = skip rate evaluation (constraint fails closed).
+    // Return a negative value when the count is unavailable (for example a
+    // storage error): `max_rate` then fails closed with
+    // `constraint_unverifiable`. A `cert_id` containing U+0000 cannot be
+    // passed as a C string; the callback is not called and `max_rate` fails
+    // closed the same way.
     // The `cert_id` pointer is only valid for the duration of the callback.
     int64_t (*rate_fn)(const char *cert_id, int64_t window_s, void *userdata);
     // Passed back to `rate_fn`.

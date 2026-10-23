@@ -167,3 +167,25 @@ def test_release_store_failure_is_contained(method, exc_type):
 def test_release_store_cancellation_propagates(method, exc_type):
     with pytest.raises(exc_type):
         _release(method, exc_type)
+
+
+def _release_checkpoint(exc_type):
+    from test_release_withheld_v2 import release_fixture
+
+    store, committed, wire, config = release_fixture()
+    config.checkpoint = Failing(config.checkpoint, "get_v2_acknowledgement", exc_type)
+    result = release_v2_decision(BACKGROUND, committed, wire, config)
+    return result.status, result.reason
+
+
+@needs_native
+@pytest.mark.parametrize("exc_type", FAILURES)
+def test_release_checkpoint_failure_is_acknowledgement_unavailable(exc_type):
+    assert _release_checkpoint(exc_type) == ("pending", "acknowledgement_unavailable")
+
+
+@needs_native
+@pytest.mark.parametrize("exc_type", CANCELLATIONS)
+def test_release_checkpoint_cancellation_propagates(exc_type):
+    with pytest.raises(exc_type):
+        _release_checkpoint(exc_type)

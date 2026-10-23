@@ -356,7 +356,9 @@ class V2ReleasedDecision:
             return False
         try:
             now = _read_v2_authoritative_time(ctx, clock)
-        except Exception:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 - any clock failure answers False
             return False
         return now < st.challenge_expires_at and now < st.allow_horizon
 
@@ -483,7 +485,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
             previous = config.checkpoint.get_v2_acknowledgement(ctx, receipt.log_id, receipt.sequence - 1)
             if not isinstance(previous, V2CheckpointAcknowledgement):
                 raise ValueError("invalid acknowledgement")
-        except Exception:  # noqa: BLE001
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 - a checkpoint failure (Go: a recovered panic)
             return _result(V2_RELEASE_PENDING, "acknowledgement_unavailable")
         if (previous.log_id != receipt.log_id or previous.sequence != receipt.sequence - 1
                 or bytes(previous.entry_hash) != bytes(receipt.previous_receipt_hash)):
@@ -493,7 +497,9 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         ack = config.checkpoint.get_v2_acknowledgement(ctx, receipt.log_id, receipt.sequence)
         if not isinstance(ack, V2CheckpointAcknowledgement):
             raise ValueError("invalid acknowledgement")
-    except Exception:  # noqa: BLE001
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:  # noqa: BLE001 - a checkpoint failure (Go: a recovered panic)
         return _result(V2_RELEASE_PENDING, "acknowledgement_unavailable")
     if ack.log_id != receipt.log_id or ack.sequence != receipt.sequence or bytes(ack.entry_hash) != entry_hash:
         return _result(V2_RELEASE_REJECTED, "acknowledgement_mismatch")

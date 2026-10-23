@@ -233,7 +233,8 @@ export interface VerifierContext {
   requested_amount?: number;
   requested_currency?: string;
 
-  // Rate — required by max_rate.
+  // Rate — required by max_rate. A negative return means the count is
+  // unavailable; max_rate then fails closed with constraint_unverifiable.
   invocations_in_window?: (certID: string, windowS: number) => number;
 
   // Resource — required by resource_path (SPEC §5.16). The resource ID is

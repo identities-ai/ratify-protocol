@@ -266,6 +266,11 @@ function evaluateConstraint(
         return "malformed max_rate: count and window_s must be positive";
       }
       const got = ctx.invocations_in_window(certID, c.window_s);
+      // A negative count is not a count: the counter could not answer.
+      // Fail closed rather than read it as "no invocations".
+      if (typeof got !== "number" || Number.isNaN(got) || got < 0) {
+        return `constraint_unverifiable: rate counter returned negative count ${String(got)}`;
+      }
       if (got >= c.count) {
         return `rate limit exceeded: ${got} invocations in last ${c.window_s}s (max ${c.count})`;
       }

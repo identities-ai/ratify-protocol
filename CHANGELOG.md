@@ -214,6 +214,17 @@ match before the beta.
   recovery commits nothing (SPEC-v2 §7.5). The recovery helpers already
   built the canonical body and are unchanged. Vectors: 6 new
   `lifecycle-scenarios.json` scripts through a new `recover_direct` step.
+- **Extension `params` are application data at every depth** (all SDKs).
+  The strict wire check applied canonical-base64 validation to any string
+  member named like a protocol byte field (`challenge`, `ed25519`,
+  `session_context`, ...) at any depth, including inside a constraint's
+  `params` object, so a correctly signed certificate whose unregistered
+  constraint carried `params: {"challenge":"!"}` was `malformed` in every
+  SDK. Inside `params` only the JSON value model applies (SPEC-v2 §2.1,
+  §5.2; the text now says so explicitly), as it already did for nulls and
+  member-name case. Vectors: `objects.json`
+  `delegation_extension_params_byte_field_names` and
+  `proof_bundle_extension_params_byte_field_names`.
 
 ### Fixed
 

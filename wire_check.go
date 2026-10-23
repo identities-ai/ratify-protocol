@@ -93,7 +93,10 @@ func checkWireJSON(data []byte, topLevelByteFields map[string]bool, topLevelText
 }
 
 // checkWireJSONFields is checkWireJSON with byteFields, the member names
-// whose string values must be canonical base64 at any depth.
+// whose string values must be canonical base64 at any depth. Under strictV2
+// the value of a "params" member, at any depth below it, is extension or
+// audience params: application data where only the JSON value model applies
+// (SPEC-v2 §2.1, §5.2), so its member names are not byte fields.
 func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTextFields map[string]bool, strictV2 bool) error {
 	if !utf8.Valid(data) {
 		return fmt.Errorf("wire: invalid UTF-8")
@@ -114,6 +117,7 @@ func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTe
 		keys       map[string]bool
 		expectKey  bool
 		pendingKey string
+		params     bool // inside a "params" value (strictV2)
 	}
 	var stack []*frame
 	done := false // a complete top-level value has been consumed
@@ -122,6 +126,10 @@ func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTe
 			return nil
 		}
 		return stack[len(stack)-1]
+	}
+	inParams := func() bool {
+		f := top()
+		return strictV2 && f != nil && (f.params || f.keys != nil && f.pendingKey == "params")
 	}
 	valueSeen := func() {
 		if f := top(); f != nil && f.keys != nil {
@@ -149,12 +157,12 @@ func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTe
 				if len(stack) >= MaxJSONNestingDepth {
 					return fmt.Errorf("wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (%d)", MaxJSONNestingDepth)
 				}
-				stack = append(stack, &frame{keys: map[string]bool{}, expectKey: true})
+				stack = append(stack, &frame{keys: map[string]bool{}, expectKey: true, params: inParams()})
 			case '[':
 				if len(stack) >= MaxJSONNestingDepth {
 					return fmt.Errorf("wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (%d)", MaxJSONNestingDepth)
 				}
-				stack = append(stack, &frame{})
+				stack = append(stack, &frame{params: inParams()})
 			case '}', ']':
 				stack = stack[:len(stack)-1]
 				valueSeen()
@@ -170,7 +178,7 @@ func checkWireJSONFields(data []byte, byteFields, topLevelByteFields, topLevelTe
 				f.pendingKey = t
 				f.expectKey = false
 			} else {
-				if f := top(); f != nil && f.keys != nil && (byteFields[f.pendingKey] && !(len(stack) == 1 && topLevelTextFields[f.pendingKey]) || len(stack) == 1 && topLevelByteFields[f.pendingKey]) {
+				if f := top(); f != nil && f.keys != nil && !f.params && (byteFields[f.pendingKey] && !(len(stack) == 1 && topLevelTextFields[f.pendingKey]) || len(stack) == 1 && topLevelByteFields[f.pendingKey]) {
 					if err := checkCanonicalBase64(f.pendingKey, t); err != nil {
 						return err
 					}

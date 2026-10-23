@@ -102,7 +102,7 @@ fn seeds() -> &'static Vec<(String, Vec<u8>)> {
             }
             out.push((kind, wire));
         }
-        assert_eq!(out.iter().filter(|(k, _)| k != "constraint").count(), 13, "objects.json seeds");
+        assert_eq!(out.iter().filter(|(k, _)| k != "constraint").count(), 15, "objects.json seeds");
         out
     })
 }

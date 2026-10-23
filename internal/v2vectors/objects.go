@@ -288,6 +288,21 @@ func (g *gen) objectsFile() any {
 		Signatures: []sigVector{g.sigVec("signature", evSig)},
 		Digests: map[string]string{"statement_body_digest_hex": hex.EncodeToString(statementBodyDigest(codeReceipt, evSig.signable)),
 			"receipt_outbox_body_b64": b64(must(ratify.VerificationReceiptV2Body(evaluated)))}})
+	// Extension params are application data: inside a params object only the
+	// JSON value model applies (SPEC-v2 §2.1, §5.2), so member names that are
+	// protocol byte fields elsewhere carry any string.
+	paramsLeaf, paramsWire, paramsSig := g.cert(certSpec{issuer: inter, subject: agent, certID: "cert-leaf-params-byte-field-names", scope: []string{"data:read"},
+		constraints: []ratify.ConstraintV2{{Type: "com.example.opaque", Params: extensionParamsByteFieldNames()}}})
+	f.Objects = append(f.Objects, objectVector{Name: "delegation_extension_params_byte_field_names", Kind: "delegation_certificate",
+		Description: "An unregistered constraint whose params use protocol byte-field member names (challenge, ed25519, session_context, stream_id, mac, and a nested params) with string values that are not base64. Inside an extension params object only the JSON value model applies (SPEC-v2 §2.1, §5.2), so the certificate decodes, re-encodes to identical bytes and its signature verifies; evaluation fails closed as constraint_unknown.",
+		WireB64:     b64(paramsWire), Signatures: []sigVector{g.sigVec("signature", paramsSig)}, Digests: map[string]string{}})
+	paramsRoot, _, _ := g.cert(certSpec{issuer: root, subject: inter, certID: "cert-root", scope: []string{"data:read", "files:read", "identity:delegate"}})
+	paramsChain := []ratify.DelegationCertV2{paramsLeaf, paramsRoot}
+	_, pbWire, pbSig := g.bundle(bundleSpec{agent: agent, certs: paramsChain, session: g.fixtureSessionContext(agent)})
+	f.Objects = append(f.Objects, objectVector{Name: "proof_bundle_extension_params_byte_field_names", Kind: "proof_bundle",
+		Description: "A proof bundle whose leaf is delegation_extension_params_byte_field_names: the bundle decoder applies only the JSON value model inside the extension params object, so the bundle decodes and every signature verifies.",
+		WireB64:     b64(pbWire), Signatures: []sigVector{g.sigVec("challenge_sig", pbSig), g.sigVec("delegations[0].signature", signedCert(g, paramsChain[0], inter)), g.sigVec("delegations[1].signature", signedCert(g, paramsChain[1], root))},
+		Digests: map[string]string{"delegation_digest_hex": hex.EncodeToString(delegationDigest(paramsChain)), "bundle_hash_v2": bundleHash(pbWire)}})
 	return f
 }
 
@@ -303,4 +318,17 @@ func uint64be(v uint64) []byte {
 		v >>= 8
 	}
 	return out
+}
+
+// extensionParamsByteFieldNames is an extension params object whose member
+// names are protocol byte fields elsewhere, at the top of params and nested,
+// each with a string value that is not base64.
+func extensionParamsByteFieldNames() map[string]any {
+	return map[string]any{
+		"challenge":       "!",
+		"ed25519":         "not base64",
+		"session_context": "AB=",
+		"nested":          map[string]any{"stream_id": "*", "list": []any{map[string]any{"mac": "x y"}}},
+		"params":          map[string]any{"ml_dsa_65": "-"},
+	}
 }

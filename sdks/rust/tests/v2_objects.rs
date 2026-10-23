@@ -215,7 +215,7 @@ fn v2_objects() {
     for code in 1..=9u16 {
         t.check("codes", &format!("code {code}"), codes.contains(&code), || "no signature for code".into());
     }
-    t.finish(&[("re-encode", 11), ("verify", 11), ("signatures", 15), ("codes", 9)]);
+    t.finish(&[("re-encode", 13), ("verify", 13), ("signatures", 19), ("codes", 9)]);
 }
 
 #[test]

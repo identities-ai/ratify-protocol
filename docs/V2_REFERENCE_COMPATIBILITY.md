@@ -78,7 +78,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `limits.json` (76 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `object-negatives.json` (423 negatives) | Yes | Yes | Yes | Yes | Yes |
-| `objects.json` (11 objects) | Yes | Yes | Yes | Yes | Yes |
+| `objects.json` (13 objects) | Yes | Yes | Yes | Yes | Yes |
 | `operation-session-context.json` (context known answers) | Yes | Yes | Yes | Yes | Yes |
 | `rotation-sequences.json` (4 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `security-journal.json` (2 scenarios, 8 migrations, 20 import negatives, 6 transition negatives) | Yes | Yes | Yes | Yes | Yes |

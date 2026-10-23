@@ -420,7 +420,10 @@ export function base64DecodeCanonical(s: string): Uint8Array | null {
 
 /**
  * Go CheckWireJSON / checkWireJSONV2 / checkWireJSONV2WithTextTopLevel.
- * Returns the parsed tree for typed extraction.
+ * Returns the parsed tree for typed extraction. The value of a "params"
+ * member is extension or audience params: application data where only the
+ * JSON value model applies (SPEC-v2 §2.1, §5.2), so member names inside it
+ * are not byte fields.
  */
 export function checkWireJSONV2(
   data: Uint8Array,
@@ -440,7 +443,7 @@ export function checkWireJSONV2(
               throw new Error(`wire: field ${JSON.stringify(key)}: malformed or non-canonical base64`);
             }
           }
-        } else {
+        } else if (key !== "params") {
           walk(v, depth + 1);
         }
       }

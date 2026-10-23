@@ -215,6 +215,7 @@ type v2LifecycleExpect struct {
 	Abandoned         []string           `json:"abandoned"`
 	Recovered         *v2LifecycleExpect `json:"recovered"`
 	Outcomes          []string           `json:"outcomes"`
+	FinalizeResult    string             `json:"finalize_result"`
 }
 
 type v2LifecycleRequest struct {
@@ -229,6 +230,19 @@ type v2LifecycleRequest struct {
 		CallbackCounts v2Counts `json:"callback_counts"`
 	} `json:"expected"`
 	v2OrderingInputs
+}
+
+// v2OwnerCapturingClaimStore records the evaluator owner token a claim store
+// returns to the creator, so a finalize step can call the store directly.
+type v2OwnerCapturingClaimStore struct {
+	ratify.ClaimStoreV2
+	owner []byte
+}
+
+func (s *v2OwnerCapturingClaimStore) ClaimV2(ctx context.Context, claim ratify.V2ChallengeClaim) (ratify.V2ClaimResult, error) {
+	result, err := s.ClaimStoreV2.ClaimV2(ctx, claim)
+	s.owner = bytes.Clone(result.OwnerToken)
+	return result, err
 }
 
 // v2WrongEntryCheckpoint reports acknowledgements for a different entry hash.
@@ -264,17 +278,20 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 			StartTime          int64  `json:"start_time"`
 			RateAtFinalization bool   `json:"rate_at_finalization"`
 			Steps              []struct {
-				Op          string            `json:"op"`
-				Request     string            `json:"request"`
-				Requests    []string          `json:"requests"`
-				Time        int64             `json:"time"`
-				Withheld    *bool             `json:"withheld"`
-				Mode        string            `json:"mode"`
-				ReceiptOf   string            `json:"receipt_of"`
-				Checkpoint  string            `json:"checkpoint"`
-				ReplayEpoch int64             `json:"replay_epoch"`
-				LogID       string            `json:"log_id"`
-				Expect      v2LifecycleExpect `json:"expect"`
+				Op              string            `json:"op"`
+				Request         string            `json:"request"`
+				Requests        []string          `json:"requests"`
+				Time            int64             `json:"time"`
+				Withheld        *bool             `json:"withheld"`
+				Mode            string            `json:"mode"`
+				ReceiptOf       string            `json:"receipt_of"`
+				Checkpoint      string            `json:"checkpoint"`
+				ReplayEpoch     int64             `json:"replay_epoch"`
+				LogID           string            `json:"log_id"`
+				TerminalB64     string            `json:"terminal_b64"`
+				BodyB64         string            `json:"body_b64"`
+				AllowValidUntil int64             `json:"allow_valid_until"`
+				Expect          v2LifecycleExpect `json:"expect"`
 			} `json:"steps"`
 		} `json:"scenarios"`
 		// Profile scripts run in TestV2ConformanceProfileScenarios.
@@ -294,6 +311,7 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 			committed := map[string]*ratify.CommittedV2Outcome{}
 			receipts := map[string][]byte{}
 			claimIDs := map[string]string{}
+			owners := map[string][]byte{}
 			requestOf := map[string]string{}
 			var epochOverride int64
 			config := ratify.V2ReleaseConfig{VerifierPublicKey: fx.pub[f.VerifierKey], LogID: f.LogID, ClaimStore: store, Checkpoint: store}
@@ -437,11 +455,25 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					claim, disposition, _, err := ratify.ClaimProofBundleV2(ctx, claimStore(), bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
+					capturing := &v2OwnerCapturingClaimStore{ClaimStoreV2: claimStore()}
+					claim, disposition, _, err := ratify.ClaimProofBundleV2(ctx, capturing, bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
 					if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass || string(disposition) != want.Disposition {
 						t.Fatalf("step %d claim_only: disposition %s err %v, want %+v", i, disposition, err, want)
 					}
 					claimIDs[step.Request], requestOf[claim.ClaimID] = claim.ClaimID, step.Request
+					owners[step.Request] = capturing.owner
+				case "finalize":
+					finalized, err := claimStore().FinalizeV2Claim(ctx, claimIDs[step.Request], owners[step.Request], unb64(t, step.TerminalB64), unb64(t, step.BodyB64), step.AllowValidUntil)
+					if want.ErrorClass != "" {
+						if finalized || string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
+							t.Fatalf("step %d finalize: finalized=%t err=%v (class %s), want class %s", i, finalized, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
+						}
+						continue
+					}
+					got := map[bool]string{true: "committed", false: "identical"}[finalized]
+					if err != nil || got != want.FinalizeResult {
+						t.Fatalf("step %d finalize: %s (%v), want %s", i, got, err, want.FinalizeResult)
+					}
 				case "recover":
 					recoverStep(i, step.Request, want)
 				case "publish":

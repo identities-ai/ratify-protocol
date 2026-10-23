@@ -3,12 +3,13 @@
   "description": "Part B lifecycle scenarios (SPEC-v2 §6.9, §7). Replay each scenario against a fresh in-memory reference store whose authoritative clock starts at start_time, whose evaluator lease is lease_seconds, and whose receipt log log_id is signed by verifier_key. Requests use the verifier-ordering input schema; the request's now is always the store clock at the step.",
   "semantics": {
     "abandon": "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
-    "claim_only": "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class",
+    "claim_only": "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
     "corrupt_state": "alter one byte of the request's sealed terminal result in the primary store",
     "device_power_loss": "arm a power loss for the next submission only: before_commit records nothing; after_commit records the acknowledgement durably but loses the response",
     "device_resubmit": "retry the exact tuple for sequence; expect ack_time (the original acknowledgement time on an identical retry) or device_error",
     "device_startup": "before serving, check in order: a frozen component (checkpoint_frozen); fewer appended receipt-log entries than the component acknowledged (primary_behind: rollback or lost state); a recomputed complete-state digest that differs from the anchored one (state_digest_mismatch, including a rollback that kept the receipt-log prefix); otherwise ready",
     "device_submit": "submit, in log order, every appended entry of the primary that the component has not acknowledged with the same entry hash; expect acknowledged (the sequences acknowledged by this call) and device_error for the failure that stopped it: power_loss, storage_full, state_mismatch (the submission does not extend the head or its state is not the anchored state), frozen (a different entry at an acknowledged sequence; the component freezes), or clock_regressed",
+    "finalize": "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
     "ledger_execute": "atomically mark set (default: the last set opened) executed at the store clock; expect ledger_error incomplete, expired (an approval is no longer Allowed), already_executed, or none",
     "ledger_execute_concurrent": "count concurrent executions of the set; expect executed, the number that succeeded",
     "ledger_open": "open approval_set: agent_key and root_keys name keys.json fixture keys whose complete public keys the set pins (roots in slot order); request_hash_b64 is the action's operation-context hash. The ledger derives the expected session context from verifier_id, workspace_id, the agent key ID, session_id, invocation_id = id, and request_hash (§2.4); session_context_b64 is that derivation as a known answer and is never a ledger input. Expect ledger_error approval_set_invalid when the set is malformed or names one root key twice",
@@ -4706,6 +4707,398 @@
           "expect": {
             "stage": "preflight",
             "error_class": "challenge_not_fresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_verifier_id",
+      "description": "the claim store refuses to finalize a canonical receipt body whose verifier_id names another verifier key (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_agent_id",
+      "description": "the claim store refuses to finalize a canonical receipt body whose agent_id names another agent (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6Ijg5YjUyMDVhMWU3ZTc5MDZjMzg5MDJhODIzYzU0NGZjZDRjZTBjMjIwNThhMjM5ZDZkYTdkMGMxMDZjM2QyMmMiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_bundle_hash",
+      "description": "the claim store refuses to finalize a canonical receipt body whose bundle_hash names request B's proof bundle (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDpkNTllY2VkNWMzMTllMmNlNWY2NmYzNzQxYTliZDQ2NDhjNDI3ZWIxZDQ1OTk5OWExNWNmOTkzODlkYzRiY2Y2ZmU2YjA0MTM5NjQ0NjgxZDg4YTk2MDIwMjFlZDhhYjMiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_issuer_ids",
+      "description": "the claim store refuses to finalize a canonical receipt body whose issuer_ids omits one sealed issuer (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIl0sInJlcXVpcmVkX3Njb3BlIjoiZGF0YTpyZWFkIiwic3RhdHVzX2Fzc2Vzc21lbnQiOiJ1bmF2YWlsYWJsZSIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbXSwidHJ1c3RfYXNzZXNzbWVudCI6InRydXN0ZWQiLCJ2ZXJpZmllZF9hdCI6MTgwMDAwMDAwMCwidmVyaWZpZXJfaWQiOiJlYzRiZjE3YjVlNDMzYjE0YzU5N2FkYjc5MGQwNTZkMzZkMDkxMzlmNzNmMWNkNWYzZTdkNzAwMTEyNTcwYzJjIiwidmVyc2lvbiI6Mn0=",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_required_scope",
+      "description": "the claim store refuses to finalize a canonical receipt body whose required_scope is data:write while the claim sealed data:read (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6d3JpdGUiLCJzdGF0dXNfYXNzZXNzbWVudCI6InVuYXZhaWxhYmxlIiwic3RhdHVzX2V2aWRlbmNlX2RpZ2VzdHMiOltdLCJ0cnVzdF9hc3Nlc3NtZW50IjoidHJ1c3RlZCIsInZlcmlmaWVkX2F0IjoxODAwMDAwMDAwLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMiLCJ2ZXJzaW9uIjoyfQ==",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_context_policy_digest",
+      "description": "the claim store refuses to finalize a canonical receipt body whose context_policy_digest is another policy's digest (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDoxYmM1Y2Y4MjkwMzVmODQyOGFlZmU5Y2E2OTc4NmVkYmE1ZjU1ODUyOTEwNzY1NGIzOWNlY2NjODQ0Y2NkNmEzNTliZjM3MjUzNzQyYzBjNjBkOTBlYmMyZGVkNjhiZjIiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_constraint_evaluators",
+      "description": "the claim store refuses to finalize a canonical receipt body whose constraint_evaluators lists an evaluator the sealed snapshot does not contain (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb25zdHJhaW50X2V2YWx1YXRvcnMiOlt7InByb2ZpbGVfZGlnZXN0Ijoic2hhMzg0OjI3ZTZjNmIzNzg1NmNlNGVlZDRjMDkyMzY0MWQ0NWE1OWQwNmUxMzhiMzg4OTNkODUwZjhmMGYxMzU2MjAwMjg2ZmRiMmUyZThkMzZjYzY5ZTRiNTUwZjliMjQ0M2UyYiIsInR5cGUiOiJjb20ucmF0aWZ5cHJvdG9jb2wubWF4X2NvdW50In1dLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejects_body_with_other_terminal_decision",
+      "description": "the claim store refuses to finalize a canonical receipt body whose the terminal result is deny/delegation_revoked while the body is indeterminate/status_unavailable (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJkZWNpc2lvbl9yZWFzb24iOiJkZWxlZ2F0aW9uX3Jldm9rZWQiLCJpZGVudGl0eV9zdGF0dXMiOiJyZXZva2VkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "identical"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
           }
         }
       ]

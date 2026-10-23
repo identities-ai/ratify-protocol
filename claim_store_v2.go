@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"unicode/utf8"
@@ -57,6 +58,7 @@ type V2EvaluationToken struct {
 
 type v2EvaluationTokenState struct {
 	claimID             string
+	claim               V2ChallengeClaim
 	proofDigest         string
 	requiredScope       string
 	futureSkew          int64
@@ -268,7 +270,7 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 		// exclusive challenge deadlines; otherwise evaluation is interrupted.
 		claimTimeValid := v2ChallengeTimeCurrent(result.ClaimedAt, sealed.IssuedAt, sealed.ExpiresAt, maxAgeSeconds, futureSkewSeconds)
 		return claim, result.Disposition, &V2EvaluationToken{state: &v2EvaluationTokenState{
-			claimID: claim.ClaimID, proofDigest: claim.ProofDigest,
+			claimID: claim.ClaimID, claim: cloneV2ChallengeClaim(claim), proofDigest: claim.ProofDigest,
 			rateBatch:     append([]V2RateReservation{}, claim.RateBatch...),
 			requiredScope: requiredScope, futureSkew: futureSkewSeconds,
 			ownerToken:     append([]byte(nil), result.OwnerToken...),
@@ -327,6 +329,9 @@ func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *
 	if !terminalPayloadMatchesV2(terminalResult, receiptBody, decision, token.state.evaluationReason) {
 		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result does not match the completed local evaluation")
 	}
+	if err := ValidateV2FinalizationPayload(token.state.claim, terminalResult, receiptBody); err != nil {
+		return false, err
+	}
 	if decision == "allow" && token.state.allowValidUntil <= 0 || decision != "allow" && token.state.allowValidUntil != 0 {
 		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result lacks a valid allow freshness horizon")
 	}
@@ -352,6 +357,48 @@ func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *
 		}
 	}
 	return finalized, err
+}
+
+// ValidateV2FinalizationPayload checks that a terminal result and its
+// unsigned receipt outbox body belong to the sealed claim (SPEC-v2 §7.5).
+// The body must decode strictly as a canonical receipt body (malformed
+// otherwise). Its verifier_id, agent_id, bundle_hash, issuer_ids (the sorted,
+// distinct sealed issuer IDs), required_scope, a non-null
+// context_policy_digest, and constraint_evaluators must equal the sealed
+// claim's values, and the terminal result must be a JSON object whose
+// decision and decision_reason equal the body's; any difference is
+// configuration_invalid. FinalizeClaimProofBundleV2 applies it before the
+// store is called, and a claim store applies it inside its finalization
+// compare-and-set so that no caller can commit a body for another proof.
+func ValidateV2FinalizationPayload(claim V2ChallengeClaim, terminalResult, receiptBody []byte) (resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
+	body, err := DecodeVerificationReceiptBodyV2(receiptBody)
+	if err != nil {
+		return err
+	}
+	issuers := slices.Clone(claim.IssuerIDs)
+	slices.Sort(issuers)
+	issuers = slices.Compact(issuers)
+	switch {
+	case body.VerifierID != claim.VerifierID:
+		return fmt.Errorf("v2 receipt body verifier_id differs from the sealed claim")
+	case body.AgentID != claim.AgentID:
+		return fmt.Errorf("v2 receipt body agent_id differs from the sealed claim")
+	case body.BundleHash != claim.BundleHash:
+		return fmt.Errorf("v2 receipt body bundle_hash differs from the sealed claim")
+	case !slices.Equal(body.IssuerIDs, issuers):
+		return fmt.Errorf("v2 receipt body issuer_ids differ from the sealed claim")
+	case body.RequiredScope != claim.RequiredScope:
+		return fmt.Errorf("v2 receipt body required_scope differs from the sealed claim")
+	case body.ContextPolicyDigest != nil && *body.ContextPolicyDigest != claim.ContextPolicyDigest:
+		return fmt.Errorf("v2 receipt body context_policy_digest differs from the sealed claim")
+	case !slices.Equal(body.ConstraintEvaluators, claim.ConstraintEvaluators):
+		return fmt.Errorf("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")
+	}
+	if !terminalPayloadMatchesV2(terminalResult, receiptBody, body.Decision, body.DecisionReason) {
+		return fmt.Errorf("v2 terminal result decision or reason differs from the receipt body")
+	}
+	return nil
 }
 
 func terminalDecisionForV2Evaluation(status, reason string) (string, bool) {

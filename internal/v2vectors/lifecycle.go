@@ -6,7 +6,11 @@ package v2vectors
 // independent checkpoint). Expected outcomes are written from the spec rules
 // here, not read back from the Go reference.
 
-import ratify "github.com/identities-ai/ratify-protocol/v2"
+import (
+	"slices"
+
+	ratify "github.com/identities-ai/ratify-protocol/v2"
+)
 
 const (
 	lifecycleLogID        = "dddddddddddddddddddddddddddddd01"
@@ -36,20 +40,29 @@ type lifecycleExpectJSON struct {
 	Recovered *lifecycleExpectJSON `json:"recovered,omitempty"`
 	// Outcomes is the sorted multiset of verify_concurrent results.
 	Outcomes []string `json:"outcomes,omitempty"`
+	// FinalizeResult is the outcome of a successful finalize step:
+	// "committed" (the store committed the result) or "identical" (the same
+	// result was already committed).
+	FinalizeResult string `json:"finalize_result,omitempty"`
 }
 
 type lifecycleStepJSON struct {
-	Op          string              `json:"op"`
-	Request     string              `json:"request,omitempty"`
-	Requests    []string            `json:"requests,omitempty"`
-	Time        int64               `json:"time,omitempty"`
-	Withheld    *bool               `json:"withheld,omitempty"`
-	Mode        string              `json:"mode,omitempty"`
-	ReceiptOf   string              `json:"receipt_of,omitempty"`
-	Checkpoint  string              `json:"checkpoint,omitempty"`
-	ReplayEpoch int64               `json:"replay_epoch,omitempty"`
-	LogID       string              `json:"log_id,omitempty"`
-	Expect      lifecycleExpectJSON `json:"expect"`
+	Op          string   `json:"op"`
+	Request     string   `json:"request,omitempty"`
+	Requests    []string `json:"requests,omitempty"`
+	Time        int64    `json:"time,omitempty"`
+	Withheld    *bool    `json:"withheld,omitempty"`
+	Mode        string   `json:"mode,omitempty"`
+	ReceiptOf   string   `json:"receipt_of,omitempty"`
+	Checkpoint  string   `json:"checkpoint,omitempty"`
+	ReplayEpoch int64    `json:"replay_epoch,omitempty"`
+	LogID       string   `json:"log_id,omitempty"`
+	// TerminalB64, BodyB64 and AllowValidUntil are the exact arguments of a
+	// finalize step.
+	TerminalB64     string              `json:"terminal_b64,omitempty"`
+	BodyB64         string              `json:"body_b64,omitempty"`
+	AllowValidUntil int64               `json:"allow_valid_until,omitempty"`
+	Expect          lifecycleExpectJSON `json:"expect"`
 }
 
 type lifecycleScenarioJSON struct {
@@ -119,7 +132,8 @@ func (g *gen) lifecycleFile() any {
 			"set_time":               "set the authoritative clock (it may move backward to exercise clock regression)",
 			"set_ack_withheld":       "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
 			"verify":                 "VerifyProofBundleV2 against the store; expect stage, error_class, disposition; for committed, decision/decision_reason are read from the committed receipt body for the test only, and allow_horizon is the handoff value",
-			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class",
+			"claim_only":             "preflight and claim without evaluating (an evaluator that crashed after claiming); expect disposition or error_class. The harness keeps the evaluator owner token the claim store returned for a later finalize step",
+			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
 			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
@@ -143,6 +157,7 @@ func (g *gen) lifecycleFile() any {
 		s.epoch = fixtureReplayEpoch + 1
 		s.expected.ReplayEpoch = fixtureReplayEpoch + 1
 	}
+	bundles := map[string][]byte{}
 	for _, r := range []struct {
 		name      string
 		challenge byte
@@ -153,6 +168,7 @@ func (g *gen) lifecycleFile() any {
 	} {
 		v, bundle := g.lifecycleRequest(r.challenge, 0, r.edit)
 		add(r.name, v, bundle)
+		bundles[r.name] = bundle
 	}
 	// Rate requests: a leaf max_rate of 2 per 60 seconds.
 	rateChain := g.chain(chainSpec{leafCons: []ratify.ConstraintV2{{Type: ratify.ConstraintMaxRate, Count: 2, WindowS: 60}}})
@@ -338,6 +354,74 @@ func (g *gen) lifecycleFile() any {
 		publish("A", "ok", 1),
 		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "challenge_expired"}),
 		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "challenge_not_fresh"}))
+	g.finalizeBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f
+}
+
+// finalizeBindingScenarios pins SPEC-v2 §7.5: the claim store's finalize
+// binds the receipt outbox body to the sealed claim. Each scenario claims
+// request A, offers a body that differs from the sealed claim in exactly one
+// bound member (refused as configuration_invalid, committing nothing), and
+// then finalizes and retries the genuine body.
+func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJSON), bundles map[string][]byte) {
+	b := must(ratify.DecodeProofBundleV2(bundles["A"]))
+	issuers := []string{}
+	for _, c := range b.Delegations {
+		if !slices.Contains(issuers, c.IssuerID) {
+			issuers = append(issuers, c.IssuerID)
+		}
+	}
+	slices.Sort(issuers)
+	vp := policyDigest(verifyPolicy, true, verifyPolicyFields)
+	genuine := func() *ratify.VerificationReceiptV2 {
+		return &ratify.VerificationReceiptV2{
+			Version: 2, VerifierID: b.VerifierID, AgentID: b.AgentID, BundleHash: bundleHash(bundles["A"]), IssuerIDs: slices.Clone(issuers),
+			Decision: "indeterminate", DecisionReason: "status_unavailable", IdentityStatus: "authorization_unverified",
+			TrustAssessment: "trusted", StatusAssessment: "unavailable", ChallengeAssessment: "current",
+			ContextAssessment: "bound", ContextPolicyDigest: strp(vp), VerifiedAt: Now, RequiredScope: "data:read",
+			GrantedScope: []string{}, StatusEvidence: []ratify.StatusEvidenceEntryV2{},
+		}
+	}
+	terminal := func(decision, reason, identity string) string {
+		return b64(must(ratify.CanonicalJSON(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": identity})))
+	}
+	genuineTerminal := terminal("indeterminate", "status_unavailable", "authorization_unverified")
+	genuineBody := b64(must(ratify.VerificationReceiptV2Body(genuine())))
+	finalize := func(terminalB64, bodyB64 string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "finalize", Request: "A", TerminalB64: terminalB64, BodyB64: bodyB64, Expect: expect}
+	}
+	for _, m := range []struct {
+		name, member string
+		terminal     string
+		edit         func(*ratify.VerificationReceiptV2)
+	}{
+		{"verifier_id", "verifier_id names another verifier key", "", func(r *ratify.VerificationReceiptV2) { r.VerifierID = g.k("root").ID }},
+		{"agent_id", "agent_id names another agent", "", func(r *ratify.VerificationReceiptV2) { r.AgentID = g.k("intermediate").ID }},
+		{"bundle_hash", "bundle_hash names request B's proof bundle", "", func(r *ratify.VerificationReceiptV2) { r.BundleHash = bundleHash(bundles["B"]) }},
+		{"issuer_ids", "issuer_ids omits one sealed issuer", "", func(r *ratify.VerificationReceiptV2) { r.IssuerIDs = r.IssuerIDs[:len(r.IssuerIDs)-1] }},
+		{"required_scope", "required_scope is data:write while the claim sealed data:read", "", func(r *ratify.VerificationReceiptV2) { r.RequiredScope = "data:write" }},
+		{"context_policy_digest", "context_policy_digest is another policy's digest", "", func(r *ratify.VerificationReceiptV2) {
+			r.ContextPolicyDigest = strp(policyDigest(notRequiredPolicy, false, nil))
+		}},
+		{"constraint_evaluators", "constraint_evaluators lists an evaluator the sealed snapshot does not contain", "", func(r *ratify.VerificationReceiptV2) {
+			r.ConstraintEvaluators = []ratify.ConstraintEvaluatorRefV2{{Type: maxCountType, ProfileDigest: profileDigest(maxCountProfile, maxCountType)}}
+		}},
+		{"terminal_decision", "the terminal result is deny/delegation_revoked while the body is indeterminate/status_unavailable", terminal("deny", "delegation_revoked", "revoked"), nil},
+	} {
+		body := genuine()
+		if m.edit != nil {
+			m.edit(body)
+		}
+		mutatedTerminal := genuineTerminal
+		if m.terminal != "" {
+			mutatedTerminal = m.terminal
+		}
+		sc("finalize_rejects_body_with_other_"+m.name, "the claim store refuses to finalize a canonical receipt body whose "+m.member+" (configuration_invalid, SPEC-v2 §7.5) and commits nothing; the genuine body then finalizes once, an identical retry is a no-op, and an exact retry of the proof is a terminal replay",
+			lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+			finalize(mutatedTerminal, b64(must(ratify.VerificationReceiptV2Body(body))), lifecycleExpectJSON{ErrorClass: "configuration_invalid"}),
+			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
+			lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+	}
 }

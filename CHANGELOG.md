@@ -77,6 +77,20 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   external signer), with identical output checked in CI. They use the
   test-only in-memory reference stores.
 
+### Release and Part B store changes before the beta
+
+These change the Part B interfaces every SDK implements; SDKs are ported to
+match before the beta.
+
+- **Finalization binds the receipt body to the sealed claim** (SPEC-v2 §7.5).
+  The finalize helper and the reference claim store refuse a receipt body
+  whose `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids`,
+  `required_scope`, `context_policy_digest` or `constraint_evaluators`
+  differs from the sealed claim (`configuration_invalid`; `malformed` for a
+  body that does not decode). Go adds `ValidateV2FinalizationPayload` for
+  claim-store implementers. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_other_*`, with the new `finalize` step.
+
 ### Not carried into v2
 
 The no-expiry sentinel, an empty required scope, floating-point constraint

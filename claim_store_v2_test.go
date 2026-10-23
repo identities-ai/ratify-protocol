@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -593,8 +594,8 @@ func TestV2EvaluationTokenBindsContextPolicyDigest(t *testing.T) {
 	if assessment.Status != "authorization_unverified" || assessment.Reason != "evaluation_interrupted" || assessment.BundleHash != claim.BundleHash {
 		t.Fatalf("replacement context policy was evaluated for a claim made under another policy: %+v", assessment)
 	}
-	interrupted := []byte(`{"decision":"indeterminate","decision_reason":"evaluation_interrupted"}`)
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), claimStore, token, interrupted, interrupted); err != nil || !finalized {
+	interrupted, interruptedBody := v2TestTerminalPayload(t, bundle, token, assessment)
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), claimStore, token, interrupted, interruptedBody); err != nil || !finalized {
 		t.Fatalf("context-policy interruption could not be terminalized: finalized=%t err=%v", finalized, err)
 	}
 }
@@ -628,8 +629,8 @@ func TestAuthorizationAssessmentDoesNotExposeContextPolicyStorage(t *testing.T) 
 	if pre.state.ContextPolicyDigest != policy.digest || token.state.expected.ContextPolicyDigest != policy.digest {
 		t.Fatal("context-policy drift changed sealed preflight state")
 	}
-	interrupted := []byte(fmt.Sprintf(`{"decision":"indeterminate","decision_reason":%q}`, assessment.Reason))
-	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, interrupted, interrupted); err != nil || !finalized {
+	interrupted, interruptedBody := v2TestTerminalPayload(t, bundle, token, assessment)
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, interrupted, interruptedBody); err != nil || !finalized {
 		t.Fatalf("interrupted context-policy evaluation could not be terminalized: finalized=%t err=%v", finalized, err)
 	}
 }
@@ -679,10 +680,90 @@ func TestClaimProofBundleV2PreservesOwnerForInvalidStoreClaimTime(t *testing.T) 
 			if _, err := FinalizeClaimProofBundleV2(context.Background(), store, token, allow, allow); err == nil || store.finalizeCalls != 0 {
 				t.Fatal("invalid claim time capability finalized an allow")
 			}
-			interrupted := []byte(`{"decision":"indeterminate","decision_reason":"evaluation_interrupted"}`)
-			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, interrupted, interrupted); err != nil || !finalized {
+			interrupted, interruptedBody := v2TestTerminalPayload(t, bundle, token, assessment)
+			if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, interrupted, interruptedBody); err != nil || !finalized {
 				t.Fatalf("invalid claim time could not finalize as interrupted: finalized=%t err=%v", finalized, err)
 			}
 		})
+	}
+}
+
+// TestFinalizeClaimProofBundleV2BindsReceiptBodyToSealedClaim pins SPEC-v2
+// §7.5: a capability holder that changes any bound member of the receipt
+// body could otherwise get a signed, log-appended receipt naming another
+// proof, agent, or scope. Each mismatch is refused before the store is
+// called, and the genuine body still finalizes afterwards.
+func TestFinalizeClaimProofBundleV2BindsReceiptBodyToSealedClaim(t *testing.T) {
+	bundle := signedV2TestBundle(t)
+	policy := testUnboundContextPolicy(t)
+	expected := testExpectedContextChallenge(t, bundle, policy)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &recordingClaimStoreV2{disposition: V2ClaimCreated}
+	claim, _, token, err := ClaimProofBundleV2(context.Background(), store, bundle, pre, "test", 0, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherPolicy, err := NewV2ContextPolicy("ratify.test.other-context/v1", false, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := bundle.Delegations[len(bundle.Delegations)-1]
+	assessment := EvaluateProofBundleV2LocalAuthorization(bundle, V2LocalAuthorizationOptions{
+		TrustedRootID: root.IssuerID, TrustedRootKey: root.IssuerPubKey,
+		TrustConfigured: true, RequiredScope: "execute:tool", ContextPolicy: otherPolicy,
+		ExpectedChallenge: expected, ClaimToken: token,
+	})
+	if assessment.Reason != "evaluation_interrupted" {
+		t.Fatalf("setup did not reach a terminal local result: %+v", assessment)
+	}
+	terminal, genuine := v2TestTerminalPayload(t, bundle, token, assessment)
+	mutate := func(edit func(*VerificationReceiptV2)) []byte {
+		r, err := DecodeVerificationReceiptBodyV2(genuine)
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit(r)
+		body, err := VerificationReceiptV2Body(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+	otherID := root.IssuerID
+	if otherID == claim.VerifierID || otherID == claim.AgentID {
+		t.Fatal("fixture root ID collides with a sealed ID")
+	}
+	for name, edit := range map[string]func(*VerificationReceiptV2){
+		"verifier_id":    func(r *VerificationReceiptV2) { r.VerifierID = otherID },
+		"agent_id":       func(r *VerificationReceiptV2) { r.AgentID = otherID },
+		"bundle_hash":    func(r *VerificationReceiptV2) { r.BundleHash = "sha384:" + strings.Repeat("0", 96) },
+		"issuer_ids":     func(r *VerificationReceiptV2) { r.IssuerIDs = r.IssuerIDs[:len(r.IssuerIDs)-1] },
+		"required_scope": func(r *VerificationReceiptV2) { r.RequiredScope = "data:write" },
+		"context_policy_digest": func(r *VerificationReceiptV2) {
+			digest := otherPolicy.digest
+			r.TrustAssessment, r.ContextAssessment, r.ContextPolicyDigest = "trusted", "bound", &digest
+		},
+		"constraint_evaluators": func(r *VerificationReceiptV2) {
+			r.ConstraintEvaluators = []ConstraintEvaluatorRefV2{{Type: "com.ratifyprotocol.max_count", ProfileDigest: "sha384:" + strings.Repeat("1", 96)}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, mutate(edit))
+			if finalized || V2ErrorClassOf(err) != V2ErrConfigurationInvalid || store.finalizeCalls != 0 {
+				t.Fatalf("body with another %s: finalized=%t calls=%d err=%v (class %s)", name, finalized, store.finalizeCalls, err, V2ErrorClassOf(err))
+			}
+			if err := ValidateV2FinalizationPayload(claim, terminal, mutate(edit)); V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
+				t.Fatalf("ValidateV2FinalizationPayload accepted another %s: %v", name, err)
+			}
+		})
+	}
+	if _, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, []byte(`{"decision":"indeterminate","decision_reason":"evaluation_interrupted"}`)); V2ErrorClassOf(err) != V2ErrMalformed || store.finalizeCalls != 0 {
+		t.Fatalf("a non-receipt body was not malformed: %v", err)
+	}
+	if finalized, err := FinalizeClaimProofBundleV2(context.Background(), store, token, terminal, genuine); err != nil || !finalized || store.finalizeCalls != 1 {
+		t.Fatalf("the genuine body did not finalize after refused attempts: finalized=%t err=%v", finalized, err)
 	}
 }

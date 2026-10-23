@@ -391,7 +391,9 @@ func (s *Store) commitTerminalLocked(record *claimRecord, terminal, body []byte,
 
 // FinalizeV2Claim commits the evaluator's terminal result while its lease is
 // live, reading T_final inside the same critical section and recording it.
-// A regressed clock (below the high-water mark or below T_claim) fails with
+// The receipt body must bind the sealed claim (ratify.ValidateV2FinalizationPayload:
+// malformed or configuration_invalid otherwise, committing nothing). A
+// regressed clock (below the high-water mark or below T_claim) fails with
 // clock_regressed; an allow is rejected at or beyond its allow horizon or the
 // challenge expiry (SPEC-v2 §7.2, §7.5). With rate admission at finalization
 // enabled, an allow is admitted against the sealed rate batch here and fails
@@ -405,6 +407,9 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 		if record != nil && record.state == stateTerminal && bytes.Equal(record.terminal, terminalResult) && bytes.Equal(record.receiptBody, receiptBody) {
 			return false, nil
 		}
+		return false, err
+	}
+	if err := ratify.ValidateV2FinalizationPayload(record.claim, terminalResult, receiptBody); err != nil {
 		return false, err
 	}
 	if allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.ExpiresAt) {

@@ -12,7 +12,12 @@ import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
 import { recoverInterruptedClaimV2 } from "../../src/evaluation_progress_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { CommittedV2Outcome, releaseV2Decision, type V2ReceiptCheckpoint, type V2ReleaseConfig, type V2ReleasedDecision } from "../../src/release_v2.js";
-import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2, encodeVerificationReceiptV2 } from "../../src/verification_receipt_v2.js";
+import {
+  decodeVerificationReceiptBodyV2,
+  decodeVerificationReceiptV2,
+  encodeVerificationReceiptV2,
+  verificationReceiptV2Digest,
+} from "../../src/verification_receipt_v2.js";
 import { verifyProofBundleV2 } from "../../src/verify_v2.js";
 import { preflightProofBundleV2 } from "../../src/verify_v2_preflight.js";
 import {
@@ -21,7 +26,7 @@ import {
   ErrSignerUnavailableTestOnly,
   StoreTestOnly,
 } from "../../src/v2reference/store.js";
-import type { V2AuthoritativeClock } from "../../src/claim_store_v2.js";
+import type { V2AuthoritativeClock, V2ChallengeClaim, V2ClaimResult } from "../../src/claim_store_v2.js";
 import { type Any, corpusKeyPairs, load, unb64 } from "./helpers.js";
 import { buildVerifyRequest, zeroCounts } from "./verify_harness.js";
 import { checkCommitted, checkReleasedDecisionAllowed } from "./release_checks.js";
@@ -42,10 +47,32 @@ class WrongEntryCheckpoint implements V2ReceiptCheckpoint {
   }
 }
 
+/**
+ * Records the evaluator owner token a claim store returns to the creator, so
+ * a finalize step can call the store directly (Go v2OwnerCapturingClaimStore).
+ */
+function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () => Uint8Array | null } {
+  let owner: Uint8Array | null = null;
+  const store = new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === "claimV2") {
+        return async (claim: V2ChallengeClaim, signal?: AbortSignal): Promise<V2ClaimResult> => {
+          const result = await target.claimV2(claim, signal);
+          owner = result.ownerToken === null ? null : Uint8Array.from(result.ownerToken);
+          return result;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { store, owner: () => owner };
+}
+
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 32);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 162);
+  assert.equal(file.scenarios.length, 48);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 271);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -56,6 +83,7 @@ for (const sc of file.scenarios as Any[]) {
     const committed = new Map<string, CommittedV2Outcome>();
     const receipts = new Map<string, Uint8Array>();
     const claimIDs = new Map<string, string>();
+    const owners = new Map<string, Uint8Array | null>();
     const requestOf = new Map<string, string>();
     let epochOverride = 0;
     const config: V2ReleaseConfig = { verifierPublicKey: verifier.publicKey, logID: file.log_id, claimStore: store, checkpoint: store };
@@ -157,8 +185,10 @@ for (const sc of file.scenarios as Any[]) {
           let disposition = "";
           let cls = "";
           try {
-            const out = await claimProofBundleV2(claimStore(), bundle, pre, req.verifierNamespace, req.replayEpoch, now);
+            const capturing = ownerCapturing(claimStore());
+            const out = await claimProofBundleV2(capturing.store, bundle, pre, req.verifierNamespace, req.replayEpoch, now);
             disposition = out.disposition;
+            owners.set(step.request, capturing.owner());
             claimIDs.set(step.request, out.claim.claimID);
             requestOf.set(out.claim.claimID, step.request);
           } catch (err) {
@@ -166,6 +196,46 @@ for (const sc of file.scenarios as Any[]) {
           }
           assert.equal(cls, want.error_class ?? "", `step ${i} claim_only class`);
           assert.equal(disposition, want.disposition ?? "", `step ${i} claim_only disposition`);
+          break;
+        }
+        case "acknowledge": {
+          const receipt = decodeVerificationReceiptV2(receipts.get(step.request)!);
+          const entry = verificationReceiptV2Digest(receipt);
+          if (step.mode === "fork") entry[0]! ^= 1;
+          else if (step.mode !== "exact") throw new Error(`unknown acknowledge mode ${step.mode}`);
+          let ack = null;
+          let err: unknown = null;
+          try {
+            ack = await store.acknowledgeV2Receipt(receipt.log_id, receipt.sequence, receipt.previous_receipt_hash, entry);
+          } catch (e) {
+            err = e;
+          }
+          if (want.failed) {
+            assert.ok(err !== null, `step ${i} acknowledge ${step.mode}: acknowledged at ${ack?.timestamp}, want refusal`);
+            break;
+          }
+          if (err) throw err;
+          assert.equal(ack!.timestamp, want.ack_timestamp, `step ${i} acknowledge timestamp`);
+          assert.equal(ack!.sequence, receipt.sequence, `step ${i} acknowledge sequence`);
+          assert.deepEqual(ack!.entryHash, entry, `step ${i} acknowledge entry hash`);
+          break;
+        }
+        case "finalize": {
+          let finalized = false;
+          let err: unknown = null;
+          try {
+            finalized = await claimStore().finalizeV2Claim(claimIDs.get(step.request)!, owners.get(step.request) ?? new Uint8Array(0),
+              unb64(step.terminal_b64), unb64(step.body_b64), step.allow_valid_until ?? 0);
+          } catch (e) {
+            err = e;
+          }
+          if (want.error_class) {
+            assert.equal(finalized, false, `step ${i} finalize committed, want ${want.error_class}`);
+            assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} finalize class (${(err as Error)?.message})`);
+            break;
+          }
+          if (err) throw err;
+          assert.equal(finalized ? "committed" : "identical", want.finalize_result, `step ${i} finalize result`);
           break;
         }
         case "recover":
@@ -221,6 +291,7 @@ for (const sc of file.scenarios as Any[]) {
           let receipt: Uint8Array | null = receipts.get(step.receipt_of || step.request) ?? null;
           const cfg: V2ReleaseConfig = { ...config };
           if (step.checkpoint === "wrong_entry") cfg.checkpoint = new WrongEntryCheckpoint(store);
+          if (step.mode === "no_receipt") receipt = null;
           if (step.op === "release_forged") {
             c = Object.create(CommittedV2Outcome.prototype) as CommittedV2Outcome;
             receipt = null;

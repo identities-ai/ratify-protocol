@@ -167,10 +167,10 @@ export function expectedChallengeOf(e: Any): ExpectedChallengeV2 | null {
     value: unb64(e.value_b64), issuedAt: e.issued_at, expiresAt: e.expires_at, verifierNamespace: e.verifier_namespace,
     replayEpoch: e.replay_epoch, verifierID: e.verifier_id,
   };
-  if (e.expected_agent_id !== null && e.expected_agent_id !== undefined) {
-    exp.expectedAgentID = e.expected_agent_id;
-    exp.expectedAgentPublicKey = e.expected_agent_public_key ? keyOf(e.expected_agent_public_key) : null;
-  }
+  // The agent ID and key pass through independently, so a vector can
+  // configure either one alone (SPEC-v2 §6.2 step 7).
+  if (e.expected_agent_id !== null && e.expected_agent_id !== undefined) exp.expectedAgentID = e.expected_agent_id;
+  exp.expectedAgentPublicKey = e.expected_agent_public_key ? keyOf(e.expected_agent_public_key) : null;
   if (e.expected_receiver_id !== null && e.expected_receiver_id !== undefined) exp.expectedReceiverID = e.expected_receiver_id;
   if (e.expected_session_context_b64 !== null && e.expected_session_context_b64 !== undefined) exp.expectedSessionContext = unb64(e.expected_session_context_b64);
   return exp;

@@ -15,7 +15,8 @@ import { errorIs, v2ErrorClassOf, ErrV2ClaimProofConflict, ErrV2RateLimitExceede
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { preflightProofBundleV2 } from "../../src/verify_v2_preflight.js";
 import { canonicalJSONV2 } from "../../src/json_v2.js";
-import { recoverInterruptedClaimV2, initialV2EvaluationProgress } from "../../src/evaluation_progress_v2.js";
+import { recoverInterruptedClaimV2, initialV2EvaluationProgress, v2EvaluationInterruptedResult } from "../../src/evaluation_progress_v2.js";
+import { decodeVerificationReceiptBodyV2, verificationReceiptV2Body, type VerificationReceiptV2 } from "../../src/verification_receipt_v2.js";
 import { releaseV2Decision } from "../../src/release_v2.js";
 import { verifyProofBundleV2 } from "../../src/verify_v2.js";
 import { StoreTestOnly } from "../../src/v2reference/store.js";
@@ -42,10 +43,24 @@ function claimOf(n: number, extra: Partial<V2ChallengeClaim> = {}): V2ChallengeC
   };
 }
 
-const TERMINAL_DENY = canonicalJSONV2({ decision: "deny", decision_reason: "unauthorized", identity_status: "unauthorized" });
-const BODY_DENY = canonicalJSONV2({ decision: "deny", decision_reason: "unauthorized" });
-const TERMINAL_INT = canonicalJSONV2({ decision: "indeterminate", decision_reason: "evaluation_interrupted", identity_status: "authorization_unverified" });
-const BODY_INT = canonicalJSONV2({ decision: "indeterminate", decision_reason: "evaluation_interrupted" });
+/**
+ * A terminal result and a canonical receipt body bound to claim (SPEC-v2
+ * §7.5): the store refuses a body for any other claim. edit adjusts the
+ * interrupted body to another terminal decision.
+ */
+function payloadFor(claim: V2ChallengeClaim, identityStatus: string, edit: (r: VerificationReceiptV2) => void = () => {}): { terminal: Uint8Array; body: Uint8Array } {
+  const receipt = decodeVerificationReceiptBodyV2(v2EvaluationInterruptedResult(claim, START, initialV2EvaluationProgress()).receiptBody);
+  edit(receipt);
+  return {
+    terminal: canonicalJSONV2({ decision: receipt.decision, decision_reason: receipt.decision_reason, identity_status: identityStatus }),
+    body: verificationReceiptV2Body(receipt),
+  };
+}
+
+const denyFor = (claim: V2ChallengeClaim) => payloadFor(claim, "unauthorized", (r) => {
+  Object.assign(r, { decision: "deny", decision_reason: "unauthorized", identity_status: "unauthorized", trust_assessment: "untrusted" });
+});
+const interruptedFor = (claim: V2ChallengeClaim) => payloadFor(claim, "authorization_unverified");
 
 test("concurrency: concurrent end-to-end verifications of one challenge commit exactly once", async () => {
   const store = await newStore();
@@ -89,7 +104,8 @@ test("concurrency: concurrent stream advances accept exactly one per sequence", 
 test("concurrency: concurrent identical finalization commits exactly once", async () => {
   const store = await newStore();
   const { ownerToken } = await store.claimV2(claimOf(2));
-  const results = await Promise.all(Array.from({ length: 5 }, () => store.finalizeV2Claim(claimOf(2).claimID, ownerToken!, TERMINAL_DENY, BODY_DENY, 0)));
+  const deny = denyFor(claimOf(2));
+  const results = await Promise.all(Array.from({ length: 5 }, () => store.finalizeV2Claim(claimOf(2).claimID, ownerToken!, deny.terminal, deny.body, 0)));
   assert.deepEqual(results.sort(), [false, false, false, false, true]);
   assert.equal(store.outbox.length, 1);
 });
@@ -100,16 +116,18 @@ test("concurrency: finalization racing lease-expiry recovery yields one terminal
   const { ownerToken } = await store.claimV2(claim);
   await store.recordV2EvaluationProgress(claim.claimID, ownerToken!, initialV2EvaluationProgress());
   store.setTime(START + 30);
+  const deny = denyFor(claim);
+  const interrupted = interruptedFor(claim);
   const [finalized, recovered] = await Promise.allSettled([
-    store.finalizeV2Claim(claim.claimID, ownerToken!, TERMINAL_DENY, BODY_DENY, 0),
-    store.recoverInterruptedV2Claim(claim.claimID, TERMINAL_INT, BODY_INT),
+    store.finalizeV2Claim(claim.claimID, ownerToken!, deny.terminal, deny.body, 0),
+    store.recoverInterruptedV2Claim(claim.claimID, interrupted.terminal, interrupted.body),
   ]);
   assert.equal(finalized.status, "rejected");
   assert.equal(v2ErrorClassOf((finalized as PromiseRejectedResult).reason), "claim_lease_lost");
   assert.equal(recovered.status, "fulfilled");
   assert.equal(store.outbox.length, 1);
   // A late evaluator cannot replace the recovered result.
-  await assert.rejects(store.finalizeV2Claim(claim.claimID, ownerToken!, TERMINAL_DENY, BODY_DENY, 0), (e) => v2ErrorClassOf(e) === "claim_already_terminal");
+  await assert.rejects(store.finalizeV2Claim(claim.claimID, ownerToken!, deny.terminal, deny.body, 0), (e) => v2ErrorClassOf(e) === "claim_already_terminal");
 });
 
 test("concurrency: concurrent lease-expiry recovery of a verified claim commits once", async () => {
@@ -144,10 +162,14 @@ test("issuer collision: the same cert_id and window under two issuers use separa
   const atFinal = store.withRateAtFinalization();
   const batch = (issuerID: string): V2RateReservation[] => [{ issuerID, certID: "cert-shared", windowS: 60, limit: 1 }];
   const finalizeAllow = async (n: number, issuerID: string) => {
-    const claim = claimOf(n, { requiresRate: true, rateBatch: batch(issuerID) });
+    const claim = claimOf(n, { requiresRate: true, rateBatch: batch(issuerID), issuerIDs: [issuerID], contextPolicyDigest: "sha384:" + "7".repeat(96) });
     const { ownerToken } = await atFinal.claimV2(claim);
-    const terminal = canonicalJSONV2({ decision: "allow", decision_reason: "authorized", identity_status: "authorized_agent" });
-    const body = canonicalJSONV2({ decision: "allow", decision_reason: "authorized", n });
+    const { terminal, body } = payloadFor(claim, "authorized_agent", (r) => Object.assign(r, {
+      decision: "allow", decision_reason: "authorized", identity_status: "authorized_agent", trust_assessment: "trusted",
+      status_assessment: "current", context_assessment: "not_required", context_policy_digest: claim.contextPolicyDigest,
+      granted_scope: [claim.requiredScope],
+      status_evidence_digests: [{ digest: "sha384:" + "e".repeat(96), issuer_id: issuerID, object_type_code: 3, sequence: 1, status_key_id: "f".repeat(64) }],
+    }));
     return atFinal.finalizeV2Claim(claim.claimID, ownerToken!, terminal, body, START + 100);
   };
   assert.equal(await finalizeAllow(10, ISSUER_A), true);
@@ -182,14 +204,15 @@ test("finalization: a store's rate exhaustion keeps the sentinel and is claim_st
   const bundle = decodeProofBundleV2(wire);
   const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace,
     req.replayEpoch, START, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
-  const { token } = await claimProofBundleV2(store, bundle, pre, req.verifierNamespace, req.replayEpoch, START);
+  const { claim, token } = await claimProofBundleV2(store, bundle, pre, req.verifierNamespace, req.replayEpoch, START);
   const assessment = await evaluateProofBundleV2LocalAuthorization(bundle, {
     futureSkewSeconds: req.futureSkewSeconds, requiredScope: req.requiredScope, context: req.context, tzdbVersion: req.tzdbVersion,
     contextPolicy: req.contextPolicy, claimToken: token, trustConfigured: false,
   });
   assert.equal(assessment.reason, "trust_unavailable");
-  const terminal = canonicalJSONV2({ decision: "indeterminate", decision_reason: "trust_unavailable", identity_status: "authorization_unverified" });
-  const body = canonicalJSONV2({ decision: "indeterminate", decision_reason: "trust_unavailable" });
+  const { terminal, body } = payloadFor(claim, "authorization_unverified", (r) => Object.assign(r, {
+    decision_reason: "trust_unavailable", trust_assessment: "unavailable",
+  }));
   await assert.rejects(finalizeClaimProofBundleV2(store, token!, terminal, body), (e) => {
     assert.ok(errorIs(e, ErrV2RateLimitExceeded), "the sentinel stays matchable");
     assert.equal(v2ErrorClassOf(e), "claim_store_unavailable");

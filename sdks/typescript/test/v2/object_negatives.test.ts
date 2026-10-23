@@ -12,7 +12,7 @@ const file = load("object-negatives.json");
 test("object-negatives.json: every vector rejected with its class", async (t) => {
   const keys = await corpusKeyPairs();
   const kinds = new Map<string, number>();
-  assert.equal(file.vectors.length, 401);
+  assert.equal(file.vectors.length, 423);
   for (const v of file.vectors as Any[]) {
     kinds.set(v.kind, (kinds.get(v.kind) ?? 0) + 1);
     await t.test(v.name, async () => {

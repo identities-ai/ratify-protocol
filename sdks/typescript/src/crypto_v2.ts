@@ -55,7 +55,7 @@ export function deriveKeyIDV2(publicKey: HybridPublicKey): string {
   if (!publicKey || !(publicKey.ed25519 instanceof Uint8Array) ||
       !(publicKey.ml_dsa_65 instanceof Uint8Array) ||
       publicKey.ed25519.length !== 32 || publicKey.ml_dsa_65.length !== 1952) {
-    throw new Error("v2 hybrid public key has invalid component length");
+    throw v2Errorf("malformed", "v2 hybrid public key has invalid component length");
   }
   return encodeHex(sha256(concatBytes(KEY_ID_V2_DOMAIN, publicKey.ed25519, publicKey.ml_dsa_65)));
 }

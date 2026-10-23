@@ -402,14 +402,26 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       const p = typed[i]!;
       if (p.raw === undefined || p.raw.k !== "obj") throw new Error(`wire v2: party ${i} proof_bundle must be a JSON object`);
       const raw = rawSlice(data, p.raw);
-      if (p.proof_bundle_hash !== bundleHashOfBytesV2(raw)) {
-        throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);
-      }
+      // The nested bundle is decoded strictly, and must be in canonical form
+      // like the whole receipt, before its hash is compared, so a malformed
+      // bundle is malformed rather than bundle_hash_mismatch.
       let bundle: ProofBundleV2;
       try {
         bundle = decodeProofBundleV2(raw);
       } catch (err) {
         throw wrapError(`wire v2: party ${JSON.stringify(p.party_id)} proof bundle`, err);
+      }
+      let canonicalBundle: Uint8Array | null = null;
+      try {
+        canonicalBundle = encodeProofBundleV2(bundle);
+      } catch {
+        canonicalBundle = null;
+      }
+      if (canonicalBundle === null || !bytesEqual(canonicalBundle, raw)) {
+        throw new Error(`wire v2: party ${JSON.stringify(p.party_id)} proof bundle is not canonical JSON`);
+      }
+      if (p.proof_bundle_hash !== bundleHashOfBytesV2(raw)) {
+        throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);
       }
       const { raw: _raw, ...rest } = p;
       void _raw;

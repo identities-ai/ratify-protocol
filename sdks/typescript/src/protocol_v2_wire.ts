@@ -691,6 +691,9 @@ function validateRevokedCertsV2(refs: RevokedCertV2[] | null): void {
     if (!ref || ref.cert_id === "" || typeof ref.cert_id !== "string" || seen.has(ref.cert_id)) {
       throw new Error("v2 revoked cert IDs must be non-empty and unique");
     }
+    if (utf8Len(ref.cert_id) > MAX_IDENTIFIER_LENGTH_BYTES) {
+      throw new Error(`v2 revoked cert ID exceeds ${MAX_IDENTIFIER_LENGTH_BYTES} bytes`);
+    }
     seen.add(ref.cert_id);
   }
 }

@@ -9,10 +9,11 @@ import { v2ChallengeTimeCurrent } from "./clock_bounds_v2.js";
 import { CONSTRAINT_MAX_RATE_V2 } from "./constraints_v2.js";
 import { cloneConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
 import { classifiedAsync, errorIs, ErrV2RateLimitExceeded, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
-import { bytesEqual, concatBytes, hexOf, isValidUTF8, parseJSONV2, uint64BE } from "./json_v2.js";
+import { bytesEqual, compareStrings, concatBytes, hexOf, isValidUTF8, parseJSONV2, uint64BE } from "./json_v2.js";
 import { bundleHashV2, constraintCanonicalJSONV2, type ProofBundleV2 } from "./protocol_v2_wire.js";
 import type { V2LocalAuthorizationAssessment } from "./authorization_v2.js";
 import type { V2EvaluationProgress, V2InterruptedClaim } from "./evaluation_progress_v2.js";
+import { decodeVerificationReceiptBodyV2 } from "./verification_receipt_v2.js";
 import {
   cloneExpectedChallengeStateV2,
   preflightStateV2,
@@ -118,6 +119,7 @@ class AsyncMutex {
 /** @internal The single-use evaluator capability state (Go v2EvaluationTokenState). */
 export interface V2EvaluationTokenState {
   claimID: string;
+  claim: V2ChallengeClaim;
   proofDigest: string;
   requiredScope: string;
   futureSkew: number;
@@ -269,7 +271,7 @@ export async function claimProofBundleV2(
         }
         const claimTimeValid = v2ChallengeTimeCurrent(result.claimedAt, sealed.issuedAt, sealed.expiresAt, sealed.maxAge, sealed.futureSkew);
         const token = V2EvaluationToken.create({
-          claimID: claim.claimID, proofDigest: claim.proofDigest, requiredScope: sealed.requiredScope, futureSkew: sealed.futureSkew,
+          claimID: claim.claimID, claim: cloneV2ChallengeClaim(claim), proofDigest: claim.proofDigest, requiredScope: sealed.requiredScope, futureSkew: sealed.futureSkew,
           expected: sealed, used: false, evaluationComplete: false, mutex: new AsyncMutex(), finalizationDigest: null,
           finalizationStarted: false, claimTimeValid, claimedAt: result.claimedAt, evaluatedAt: 0,
           rateBatch: claim.rateBatch.map((r) => ({ ...r })), rateAtFinalization: false, allowValidUntil: 0,
@@ -334,6 +336,48 @@ export function terminalPayloadMatchesV2(terminalResult: Uint8Array, receiptBody
   return a !== null && b !== null && a[0] === wantDecision && b[0] === wantDecision && a[1] === wantReason && b[1] === wantReason;
 }
 
+/**
+ * Checks that a terminal result and its unsigned receipt outbox body belong
+ * to the sealed claim (SPEC-v2 §7.5; Go ValidateV2FinalizationPayload). The
+ * body must decode strictly as a canonical receipt body (malformed
+ * otherwise). Its verifier_id, agent_id, bundle_hash, issuer_ids (the sorted,
+ * distinct sealed issuer IDs), required_scope, a non-null
+ * context_policy_digest, and constraint_evaluators must equal the sealed
+ * claim's values, and the terminal result must be a JSON object whose
+ * decision and decision_reason equal the body's; any difference is
+ * configuration_invalid. finalizeClaimProofBundleV2 applies it before the
+ * store is called, and a claim store applies it inside its finalization
+ * compare-and-set so that no caller can commit a body for another proof.
+ */
+export function validateV2FinalizationPayload(claim: V2ChallengeClaim, terminalResult: Uint8Array, receiptBody: Uint8Array): void {
+  try {
+    const body = decodeVerificationReceiptBodyV2(receiptBody);
+    const issuers = [...new Set(claim.issuerIDs)].sort(compareStrings);
+    const bodyIssuers = body.issuer_ids ?? [];
+    const bodyEvaluators = body.constraint_evaluators ?? [];
+    const sealedEvaluators = claim.constraintEvaluators ?? [];
+    if (body.verifier_id !== claim.verifierID) throw new Error("v2 receipt body verifier_id differs from the sealed claim");
+    if (body.agent_id !== claim.agentID) throw new Error("v2 receipt body agent_id differs from the sealed claim");
+    if (body.bundle_hash !== claim.bundleHash) throw new Error("v2 receipt body bundle_hash differs from the sealed claim");
+    if (bodyIssuers.length !== issuers.length || bodyIssuers.some((id, i) => id !== issuers[i])) {
+      throw new Error("v2 receipt body issuer_ids differ from the sealed claim");
+    }
+    if (body.required_scope !== claim.requiredScope) throw new Error("v2 receipt body required_scope differs from the sealed claim");
+    if (body.context_policy_digest !== null && body.context_policy_digest !== claim.contextPolicyDigest) {
+      throw new Error("v2 receipt body context_policy_digest differs from the sealed claim");
+    }
+    if (bodyEvaluators.length !== sealedEvaluators.length ||
+        bodyEvaluators.some((e, i) => e.type !== sealedEvaluators[i]!.type || e.profile_digest !== sealedEvaluators[i]!.profile_digest)) {
+      throw new Error("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot");
+    }
+    if (!terminalPayloadMatchesV2(terminalResult, receiptBody, body.decision, body.decision_reason)) {
+      throw new Error("v2 terminal result decision or reason differs from the receipt body");
+    }
+  } catch (err) {
+    throw v2Classify("configuration_invalid", err);
+  }
+}
+
 function v2FinalizationPayloadDigest(terminalResult: Uint8Array, receiptBody: Uint8Array): Uint8Array {
   return sha256(concatBytes(uint64BE(terminalResult.length), terminalResult, uint64BE(receiptBody.length), receiptBody));
 }
@@ -365,6 +409,7 @@ export async function finalizeClaimProofBundleV2(
       if (!terminalPayloadMatchesV2(terminal, body, decision, state.evaluationReason)) {
         throw v2Errorf("configuration_invalid", "v2 terminal result does not match the completed local evaluation");
       }
+      validateV2FinalizationPayload(state.claim, terminal, body);
       if ((decision === "allow" && state.allowValidUntil <= 0) || (decision !== "allow" && state.allowValidUntil !== 0)) {
         throw v2Errorf("configuration_invalid", "v2 terminal result lacks a valid allow freshness horizon");
       }

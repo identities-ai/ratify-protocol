@@ -334,6 +334,7 @@ export {
 export {
   claimProofBundleV2,
   finalizeClaimProofBundleV2,
+  validateV2FinalizationPayload,
   challengeClaimTimeCurrentV2,
   V2EvaluationToken,
   type V2ChallengeClaim,
@@ -385,6 +386,7 @@ export {
   V2ReleasedDecision,
   receiptOutboxDigestV2,
   releaseV2Decision,
+  validV2ReleaseRecordOutcome,
   ErrV2AcknowledgementNotFound,
   ErrV2ReleaseStateMismatch,
   type V2ReceiptPublisher,

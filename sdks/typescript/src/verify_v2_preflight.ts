@@ -166,8 +166,14 @@ export async function validateProofBundleV2Preflight(
   futureSkewSeconds: number,
 ): Promise<void> {
   return classifiedAsync("configuration_invalid", async () => {
+    if (!Number.isSafeInteger(configuredReplayEpoch) || configuredReplayEpoch < 0 || configuredReplayEpoch > MAX_SAFE_INTEGER_V2) {
+      throw v2Errorf("configuration_invalid", `v2 configured replay epoch must be 0..${MAX_SAFE_INTEGER_V2}`);
+    }
     const policy = expected.contextPolicy ?? null;
     const expectedSession = sessionCtx(expected);
+    if (expectedSession !== null && expectedSession.length !== 32) {
+      throw v2Errorf("configuration_invalid", "v2 expected session context must be absent or exactly 32 bytes");
+    }
     if (policy !== null) {
       if (!isValidV2ContextPolicy(policy) || !validPrefixedDigestV2(policy.digest)) {
         throw v2Errorf("configuration_invalid", "v2 expected context policy is invalid");
@@ -222,7 +228,7 @@ export async function validateProofBundleV2Preflight(
       }
     }
     if (expectedSession !== null) {
-      if (expectedSession.length !== 32 || bundle.session_context === null || !bytesEqual(bundle.session_context, expectedSession)) {
+      if (bundle.session_context === null || !bytesEqual(bundle.session_context, expectedSession)) {
         throw v2Errorf("session_context_mismatch", "v2 presentation does not match expected session context");
       }
     }

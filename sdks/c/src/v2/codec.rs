@@ -958,6 +958,59 @@ pub extern "C" fn ratify_v2_check_stream_sequence(has_last: i32, last: i64, seq:
     )
 }
 
+/// The finalization binding of SPEC-v2 §7.5 for a claim store's `finalize`
+/// (Go `ValidateV2FinalizationPayload`). `claim_record` is the claim's
+/// `RatifyV2ClaimView.record` as the store persisted it. Returns 0 when the
+/// receipt body decodes strictly as a canonical receipt outbox body whose
+/// `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids` (the sorted,
+/// distinct sealed issuer IDs), `required_scope`, non-null
+/// `context_policy_digest` and `constraint_evaluators` equal the sealed
+/// claim's, and the terminal result is a JSON object whose `decision` and
+/// `decision_reason` equal the body's. Otherwise `malformed` (the body does
+/// not decode) or `configuration_invalid` (any difference); a store commits
+/// nothing in either case. A `claim_record` that is not a claim record is
+/// `bad_argument`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_validate_finalization_payload(
+    claim_record: *const u8,
+    claim_record_len: usize,
+    terminal_result: *const u8,
+    terminal_result_len: usize,
+    receipt_body: *const u8,
+    receipt_body_len: usize,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || {},
+        || {
+            let claim = super::marshal::claim_from_json(bytes(claim_record, claim_record_len, "claim_record")?)?;
+            let terminal = bytes(terminal_result, terminal_result_len, "terminal_result")?;
+            let body = bytes(receipt_body, receipt_body_len, "receipt_body")?;
+            validate_v2_finalization_payload(&claim, terminal, body)?;
+            Ok(())
+        },
+    )
+}
+
+/// Whether `outcome` (a `RatifyV2ReleaseStatus`) and `reason` form a release
+/// record (SPEC-v2 §6.9; Go `ValidV2ReleaseRecordOutcome`): released with
+/// the reason "" (or NULL), or withheld with "clock_regressed",
+/// "challenge_expired" or "allow_horizon_passed". Returns 1 or 0. For claim
+/// stores implementing `record_release`.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_valid_release_record_outcome(outcome: i32, reason: *const c_char) -> i32 {
+    crate::guard::ffi_guard(
+        || 0,
+        || {
+            let reason = super::callbacks::owned(reason);
+            i32::from(valid_v2_release_record_outcome(
+                super::verifier::release_status_from_c(outcome),
+                &reason,
+            ))
+        },
+    )
+}
+
 /// Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
 /// with the README procedure: strict decode, `sdk == expected_sdk`, key
 /// derivation from seeds, byte-identical re-encoding, every signature

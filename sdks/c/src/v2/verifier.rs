@@ -378,7 +378,9 @@ pub unsafe extern "C" fn ratify_v2_committed_allow_horizon(
     )
 }
 
-/// Release outcome classes (§6.9).
+/// Release outcome classes (§6.9). A release record's outcome
+/// (`RatifyV2ReleaseRecord.outcome`, `RatifyV2TerminalClaim.release_outcome`)
+/// is `RatifyV2ReleaseReleased` or `RatifyV2ReleaseWithheld`.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RatifyV2ReleaseStatus {
@@ -387,6 +389,29 @@ pub enum RatifyV2ReleaseStatus {
     RatifyV2ReleasePending = 2,
     RatifyV2ReleaseWithheld = 3,
     RatifyV2ReleaseRejected = 4,
+}
+
+/// The `RatifyV2ReleaseStatus` value of a Rust release status.
+pub(crate) fn release_status_to_c(status: V2ReleaseStatus) -> i32 {
+    (match status {
+        V2ReleaseStatus::Released => RatifyV2ReleaseStatus::RatifyV2ReleaseReleased,
+        V2ReleaseStatus::Pending => RatifyV2ReleaseStatus::RatifyV2ReleasePending,
+        V2ReleaseStatus::Withheld => RatifyV2ReleaseStatus::RatifyV2ReleaseWithheld,
+        V2ReleaseStatus::Rejected => RatifyV2ReleaseStatus::RatifyV2ReleaseRejected,
+    }) as i32
+}
+
+/// The release status a C release record names. Every value other than
+/// released, pending or withheld (including `RatifyV2ReleaseNone`) maps to
+/// rejected, which is never a valid record outcome, so release reports such
+/// a record as `release_state_mismatch` and the reference store refuses it.
+pub(crate) fn release_status_from_c(status: i32) -> V2ReleaseStatus {
+    match status {
+        1 => V2ReleaseStatus::Released,
+        2 => V2ReleaseStatus::Pending,
+        3 => V2ReleaseStatus::Withheld,
+        _ => V2ReleaseStatus::Rejected,
+    }
 }
 
 /// Run the release steps of SPEC-v2 §6.9 for a committed outcome.
@@ -463,12 +488,7 @@ pub unsafe extern "C" fn ratify_v2_release_decision(
                     checkpoint: &cp,
                 },
             );
-            let status = match result.status {
-                V2ReleaseStatus::Released => RatifyV2ReleaseStatus::RatifyV2ReleaseReleased,
-                V2ReleaseStatus::Pending => RatifyV2ReleaseStatus::RatifyV2ReleasePending,
-                V2ReleaseStatus::Withheld => RatifyV2ReleaseStatus::RatifyV2ReleaseWithheld,
-                V2ReleaseStatus::Rejected => RatifyV2ReleaseStatus::RatifyV2ReleaseRejected,
-            } as i32;
+            let status = release_status_to_c(result.status);
             write_string(reason_out, &result.reason)?;
             *status_out = status;
             if let Some(d) = result.into_decision() {

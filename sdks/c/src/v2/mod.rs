@@ -64,7 +64,7 @@ pub use verifier::*;
 
 /// Version of the `ratify_v2_*` C ABI. Bumped on any incompatible change to a
 /// `ratify_v2_*` signature, struct, or code value.
-pub const RATIFY_V2_ABI_VERSION: u32 = 2;
+pub const RATIFY_V2_ABI_VERSION: u32 = 3;
 
 /// Protocol major version implemented by the `ratify_v2_*` surface.
 pub const RATIFY_V2_PROTOCOL_VERSION: u32 = 2;

@@ -22,7 +22,7 @@
 
 // Version of the `ratify_v2_*` C ABI. Bumped on any incompatible change to a
 // `ratify_v2_*` signature, struct, or code value.
-#define RATIFY_V2_ABI_VERSION 2
+#define RATIFY_V2_ABI_VERSION 3
 
 // Protocol major version implemented by the `ratify_v2_*` surface.
 #define RATIFY_V2_PROTOCOL_VERSION 2
@@ -296,7 +296,9 @@ enum RatifyV2PublishOp
 typedef int32_t RatifyV2PublishOp;
 #endif // __cplusplus
 
-// Release outcome classes (§6.9).
+// Release outcome classes (§6.9). A release record's outcome
+// (`RatifyV2ReleaseRecord.outcome`, `RatifyV2TerminalClaim.release_outcome`)
+// is `RatifyV2ReleaseReleased` or `RatifyV2ReleaseWithheld`.
 enum RatifyV2ReleaseStatus
 #ifdef __cplusplus
   : int32_t
@@ -713,7 +715,9 @@ typedef int32_t (*RatifyV2ClaimFn)(void *user,
 
 // Commits a terminal result under the owner token and live lease, reading
 // T_final inside the compare-and-set. `*committed` is 1 when it commits, 0
-// for an identical repeat.
+// for an identical repeat. Inside the compare-and-set the store refuses a
+// receipt body that does not bind the sealed claim (SPEC-v2 §7.5; see
+// `ratify_v2_validate_finalization_payload`), committing nothing.
 typedef int32_t (*RatifyV2FinalizeFn)(void *user,
                                       const char *claim_id,
                                       struct RatifyV2Slice owner_token,
@@ -790,7 +794,15 @@ typedef struct RatifyV2RateCallbacks {
 
 // What the claim store returns to release (§7.3, §6.9).
 // `receipt_outbox_digest` is `ReceiptOutboxDigest` of the committed body
-// (see `ratify_v2_receipt_outbox_digest`) or "" when not terminal.
+// (see `ratify_v2_receipt_outbox_digest`) or "" when not terminal. With
+// `has_release` set, the `release_*` members are the claim's release record
+// exactly as `record_release` received it: `release_outcome` is
+// `RatifyV2ReleaseReleased` with `release_reason` "" (or NULL), or
+// `RatifyV2ReleaseWithheld` with the recorded withheld reason. A recorded
+// withheld result is returned by every later release right after the
+// committed-state step; any other outcome or reason (including
+// `RatifyV2ReleaseNone`, the zero value) is `rejected /
+// release_state_mismatch`.
 typedef struct RatifyV2TerminalClaim {
     int32_t terminal;
     const char *receipt_outbox_digest;
@@ -802,21 +814,35 @@ typedef struct RatifyV2TerminalClaim {
     const char *release_claim_id;
     struct RatifyV2Slice release_entry_hash;
     int64_t release_ack_timestamp;
+    int32_t release_outcome;
+    const char *release_reason;
 } RatifyV2TerminalClaim;
 
 typedef int32_t (*RatifyV2LoadTerminalFn)(void *user,
                                           const char *claim_id,
                                           struct RatifyV2TerminalClaim *out);
 
-// The durable release record of §6.9 step 9.
+// The durable release record of SPEC-v2 §6.9: the release of step 9
+// (`outcome` `RatifyV2ReleaseReleased`, `reason` "") or a withheld result of
+// steps 7 and 8 (`outcome` `RatifyV2ReleaseWithheld`, `reason`
+// "clock_regressed", "challenge_expired" or "allow_horizon_passed").
+// `entry_hash` and `ack_timestamp` name the verified receipt entry and its
+// acknowledgement. `reason` is never NULL. The first record for a claim
+// wins: the store persists every member and returns it unchanged through
+// `load_terminal`, an identical record is 0, and any different record is
+// `RatifyV2StoreReleaseStateMismatch`.
 typedef struct RatifyV2ReleaseRecord {
     const char *claim_id;
     struct RatifyV2Slice entry_hash;
     int64_t ack_timestamp;
+    int32_t outcome;
+    const char *reason;
 } RatifyV2ReleaseRecord;
 
-// Records a release; an identical repeat is 0, a different existing record
-// is `RatifyV2StoreReleaseStateMismatch`.
+// Records a release or withheld record; an identical repeat is 0, a
+// different existing record is `RatifyV2StoreReleaseStateMismatch`. When
+// recording a withheld result fails otherwise, that release call is still
+// withheld.
 typedef int32_t (*RatifyV2RecordReleaseFn)(void *user, const struct RatifyV2ReleaseRecord *record);
 
 // The claim-store view release needs, with its authoritative clock.
@@ -835,6 +861,12 @@ typedef struct RatifyV2Acknowledgement {
     int64_t timestamp;
 } RatifyV2Acknowledgement;
 
+// Acknowledges the next appended entry of a log, linked by
+// `previous_entry_hash`, and returns the original acknowledgement for an
+// identical retry (SPEC-v2 §7.8). A different entry hash at an acknowledged
+// sequence is a fork: the checkpoint refuses it and acknowledges nothing
+// further for that log, while `get` still returns acknowledgements given
+// before the fork.
 typedef int32_t (*RatifyV2AcknowledgeFn)(void *user,
                                          const char *log_id,
                                          int64_t sequence,
@@ -2507,6 +2539,32 @@ int32_t ratify_v2_challenge_time_current(int64_t issued_at,
 // presented sequence. Returns 0 to accept or `stream_sequence_mismatch` /
 // `malformed`.
 int32_t ratify_v2_check_stream_sequence(int32_t has_last, int64_t last, int64_t seq);
+
+// The finalization binding of SPEC-v2 §7.5 for a claim store's `finalize`
+// (Go `ValidateV2FinalizationPayload`). `claim_record` is the claim's
+// `RatifyV2ClaimView.record` as the store persisted it. Returns 0 when the
+// receipt body decodes strictly as a canonical receipt outbox body whose
+// `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids` (the sorted,
+// distinct sealed issuer IDs), `required_scope`, non-null
+// `context_policy_digest` and `constraint_evaluators` equal the sealed
+// claim's, and the terminal result is a JSON object whose `decision` and
+// `decision_reason` equal the body's. Otherwise `malformed` (the body does
+// not decode) or `configuration_invalid` (any difference); a store commits
+// nothing in either case. A `claim_record` that is not a claim record is
+// `bad_argument`.
+int32_t ratify_v2_validate_finalization_payload(const uint8_t *claim_record,
+                                                uintptr_t claim_record_len,
+                                                const uint8_t *terminal_result,
+                                                uintptr_t terminal_result_len,
+                                                const uint8_t *receipt_body,
+                                                uintptr_t receipt_body_len);
+
+// Whether `outcome` (a `RatifyV2ReleaseStatus`) and `reason` form a release
+// record (SPEC-v2 §6.9; Go `ValidV2ReleaseRecordOutcome`): released with
+// the reason "" (or NULL), or withheld with "clock_regressed",
+// "challenge_expired" or "allow_horizon_passed". Returns 1 or 0. For claim
+// stores implementing `record_release`.
+int32_t ratify_v2_valid_release_record_outcome(int32_t outcome, const char *reason);
 
 // Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
 // with the README procedure: strict decode, `sdk == expected_sdk`, key

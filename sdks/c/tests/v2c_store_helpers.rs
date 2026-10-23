@@ -1,9 +1,13 @@
 //! `ratify_v2_challenge_time_current`, the freshness recheck a C claim store
 //! runs over a sealed claim: the documented formula with exclusive deadlines,
 //! and 0 (fail closed) for a maximum age or skew outside the SPEC-v2 §2.5
-//! configuration bounds, which no verifier seals into a claim.
+//! configuration bounds, which no verifier seals into a claim. Also
+//! `ratify_v2_valid_release_record_outcome`, the release-record rule of
+//! SPEC-v2 §6.9 a C release store applies.
 
-use ratify_c::ratify_v2_challenge_time_current;
+use std::ffi::CString;
+
+use ratify_c::{ratify_v2_challenge_time_current, ratify_v2_valid_release_record_outcome, RatifyV2ReleaseStatus};
 
 const MAX_AGE: i64 = 300;
 const MAX_SKEW: i64 = 300;
@@ -58,4 +62,26 @@ fn out_of_range_configuration_fails_closed() {
         assert!(!current(t, expires, 60, 0, now));
         assert!(!current(issued, expires, 60, 0, t));
     }
+}
+
+#[test]
+fn release_record_outcomes() {
+    use RatifyV2ReleaseStatus::*;
+    let valid = |outcome: RatifyV2ReleaseStatus, reason: &str| {
+        let reason = CString::new(reason).unwrap();
+        unsafe { ratify_v2_valid_release_record_outcome(outcome as i32, reason.as_ptr()) == 1 }
+    };
+    assert!(valid(RatifyV2ReleaseReleased, ""));
+    assert!(unsafe { ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased as i32, std::ptr::null()) } == 1);
+    for reason in ["clock_regressed", "challenge_expired", "allow_horizon_passed"] {
+        assert!(valid(RatifyV2ReleaseWithheld, reason), "withheld {reason}");
+        assert!(!valid(RatifyV2ReleaseReleased, reason), "released with {reason}");
+    }
+    for reason in ["", "receipt_abandoned", "receipt_invalid"] {
+        assert!(!valid(RatifyV2ReleaseWithheld, reason), "withheld {reason:?}");
+    }
+    for outcome in [RatifyV2ReleaseNone, RatifyV2ReleasePending, RatifyV2ReleaseRejected] {
+        assert!(!valid(outcome, ""), "{outcome:?}");
+    }
+    assert_eq!(unsafe { ratify_v2_valid_release_record_outcome(99, std::ptr::null()) }, 0);
 }

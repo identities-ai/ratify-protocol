@@ -24,7 +24,7 @@ use super::marshal::{
     claim_from_json, claim_json, expected_challenge, expected_challenge_json, progress_from_json,
     progress_json, public_key, to_bytes, Obj,
 };
-use super::verifier::RatifyV2Released;
+use super::verifier::{release_status_from_c, release_status_to_c, RatifyV2Released};
 use super::{
     bad_arg, bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable,
     run, run_h, store_failure, write_buffer, write_val, AbiResult, RatifyV2Buffer, RatifyV2Code,
@@ -285,7 +285,18 @@ unsafe extern "C" fn br_load_terminal(
         b.target.release(&mut |s| {
             code = match s.load_v2_terminal_claim(&ctx(), &id) {
                 Ok(r) => {
-                    let release = r.release.clone().unwrap_or_default();
+                    let release = r.release.clone();
+                    let (release_claim_id, release_entry_hash, release_ack_timestamp, release_outcome, release_reason) =
+                        match &release {
+                            Some(rel) => (
+                                scratch_str(&rel.claim_id),
+                                scratch_bytes(rel.entry_hash.clone()),
+                                rel.ack_timestamp,
+                                release_status_to_c(rel.outcome),
+                                scratch_str(&rel.reason),
+                            ),
+                            None => (std::ptr::null(), RatifyV2Slice::empty(), 0, 0, std::ptr::null()),
+                        };
                     *out = RatifyV2TerminalClaim {
                         terminal: i32::from(r.terminal),
                         receipt_outbox_digest: scratch_str(&r.receipt_outbox_digest),
@@ -293,10 +304,12 @@ unsafe extern "C" fn br_load_terminal(
                         allow_horizon: r.allow_horizon,
                         finalized_at: r.finalized_at,
                         receipt_abandoned: i32::from(r.receipt_abandoned),
-                        has_release: i32::from(r.release.is_some()),
-                        release_claim_id: scratch_str(&release.claim_id),
-                        release_entry_hash: scratch_bytes(release.entry_hash),
-                        release_ack_timestamp: release.ack_timestamp,
+                        has_release: i32::from(release.is_some()),
+                        release_claim_id,
+                        release_entry_hash,
+                        release_ack_timestamp,
+                        release_outcome,
+                        release_reason,
                     };
                     0
                 }
@@ -319,6 +332,8 @@ unsafe extern "C" fn br_record_release(
             claim_id: owned(r.claim_id),
             entry_hash: slice_vec(r.entry_hash),
             ack_timestamp: r.ack_timestamp,
+            outcome: release_status_from_c(r.outcome),
+            reason: owned(r.reason),
         };
         let mut code = not_served();
         b.target.release(&mut |s| {

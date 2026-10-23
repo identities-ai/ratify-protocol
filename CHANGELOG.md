@@ -116,6 +116,11 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   configuration.** A maximum age outside 1 to 300 seconds or a skew outside
   0 to 300 seconds returns 0. Inside those bounds the result matches the
   documented formula; with a negative skew it used to contradict it.
+- **C: documentation corrections.** `RatifyV2ErrCancelled` and the README
+  now give its effect per callback (it is not always
+  `evaluation_cancelled`); callback output pointers must stay valid until
+  the library copies them, never on the callback's stack; the claim store's
+  `now` is not called during verification.
 
 ### Not carried into v2
 

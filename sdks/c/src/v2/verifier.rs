@@ -109,11 +109,13 @@ unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
 /// `claim_record_out` is non-NULL the claim record (the
 /// `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 /// exists. A malformed request or evaluator registry fails the call itself
-/// (`bad_argument` or its class) without running the verifier. A callback
-/// returning `RatifyV2ErrCancelled` after the claim yields
+/// (`bad_argument` or its class) without running the verifier. A provider
+/// or store callback returning `RatifyV2ErrCancelled` after the claim yields
 /// `evaluation_cancelled` and commits nothing; the receiver-binding hook
 /// returning it cancels before the claim, so the outcome is a preflight
-/// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
+/// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11). The
+/// `claim` callback and constraint evaluators are the exceptions: see
+/// `RatifyV2ErrCancelled`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
     bundle: *const u8,

@@ -6,13 +6,16 @@
 //! returns and is never retained afterwards, constraint evaluators included
 //! (see `RatifyV2EvaluatorRegistration`). Buffers the
 //! library passes in are valid only until the callback returns. Pointers a
-//! callback writes into an output struct must stay valid until the callback
-//! returns; the library copies them immediately after it returns.
+//! callback writes into an output struct are read after it returns, so they
+//! must stay valid after the callback returns until the library has copied
+//! them (before the ABI call returns); they must never point into the
+//! callback's own stack frame.
 //!
 //! A callback returns 0 on success; a positive SPEC-v2 §2.7 code for a
 //! classified failure (for example `RatifyV2ClockRegressed`); a store
 //! sentinel (`RatifyV2Store*`); or `RatifyV2ErrCancelled`, which the library
-//! treats as a provider cancellation under SPEC-v2 §6.11. Any other value is
+//! treats as a provider cancellation under SPEC-v2 §6.11 (its effect per
+//! callback is documented on `RatifyV2ErrCancelled`). Any other value is
 //! an unclassified failure. A provider or store failure is always handled
 //! fail-closed.
 
@@ -162,6 +165,9 @@ pub type RatifyV2RecoverFn = Option<
 >;
 
 /// The claim store (SPEC-v2 §7.2, §7.3, §7.5) with its authoritative clock.
+/// Verification, claim and recovery do not call `now`: the store reads
+/// T_claim and T_final itself inside `claim` and `finalize` (§7.2). Release
+/// reads time through `RatifyV2ReleaseStoreCallbacks.now`.
 /// Set `rate_at_finalization` to 1 when `finalize` admits the sealed rate
 /// batch atomically (§7.6); it may then return
 /// `RatifyV2StoreRateLimitExceeded` after a definitive rollback.

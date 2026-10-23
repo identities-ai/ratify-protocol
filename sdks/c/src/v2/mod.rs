@@ -29,7 +29,7 @@
 //! See the C README. In short: inputs are borrowed for the duration of the
 //! call; library outputs are owned by the caller and released only through the
 //! matching `ratify_v2_*_free` function; callbacks run on the calling thread
-//! (constraint evaluators excepted, see `RatifyV2EvaluatorRegistration`) and
+//! (constraint evaluators included, see `RatifyV2EvaluatorRegistration`) and
 //! are never retained after the call returns; a panic is caught at every
 //! export and poisons any handle in use.
 
@@ -167,7 +167,16 @@ pub enum RatifyV2Code {
     /// An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     /// Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    /// §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
+    /// §6.11). The effect depends on the callback: from the receiver-binding
+    /// hook, verification stops before the claim with
+    /// `RatifyV2EvaluationCancelled` and consumes nothing; from a trust,
+    /// status, journal, audience, rate, progress or finalize callback after
+    /// the claim, it reports `RatifyV2EvaluationCancelled` and commits
+    /// nothing. From the `claim` callback it is a claim-store failure
+    /// (`RatifyV2ClaimStoreUnavailable`); from a constraint evaluator it is
+    /// a provider failure, so the constraint is `constraint_unverifiable` and
+    /// the result is committed; from a release-store or checkpoint callback
+    /// the release status is pending.
     RatifyV2ErrCancelled = -4,
     /// Store sentinel: an unclassified store, provider, or clock failure. The
     /// verifier assigns the class SPEC-v2 names for that step.

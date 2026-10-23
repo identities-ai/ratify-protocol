@@ -156,7 +156,16 @@ enum RatifyV2Code
     // An internal failure (a caught panic, or a poisoned handle).
     RatifyV2ErrInternal = -3,
     // Cancellation. A callback returns it to cancel the operation (SPEC-v2
-    // §6.11); the operation then reports `RatifyV2EvaluationCancelled`.
+    // §6.11). The effect depends on the callback: from the receiver-binding
+    // hook, verification stops before the claim with
+    // `RatifyV2EvaluationCancelled` and consumes nothing; from a trust,
+    // status, journal, audience, rate, progress or finalize callback after
+    // the claim, it reports `RatifyV2EvaluationCancelled` and commits
+    // nothing. From the `claim` callback it is a claim-store failure
+    // (`RatifyV2ClaimStoreUnavailable`); from a constraint evaluator it is
+    // a provider failure, so the constraint is `constraint_unverifiable` and
+    // the result is committed; from a release-store or checkpoint callback
+    // the release status is pending.
     RatifyV2ErrCancelled = -4,
     // Store sentinel: an unclassified store, provider, or clock failure. The
     // verifier assigns the class SPEC-v2 names for that step.
@@ -743,6 +752,9 @@ typedef int32_t (*RatifyV2RecoverFn)(void *user,
                                      int32_t *committed);
 
 // The claim store (SPEC-v2 §7.2, §7.3, §7.5) with its authoritative clock.
+// Verification, claim and recovery do not call `now`: the store reads
+// T_claim and T_final itself inside `claim` and `finalize` (§7.2). Release
+// reads time through `RatifyV2ReleaseStoreCallbacks.now`.
 // Set `rate_at_finalization` to 1 when `finalize` admits the sealed rate
 // batch atomically (§7.6); it may then return
 // `RatifyV2StoreRateLimitExceeded` after a definitive rollback.
@@ -3219,11 +3231,13 @@ int32_t ratify_v2_archival_verify(int32_t kind,
 // `claim_record_out` is non-NULL the claim record (the
 // `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 // exists. A malformed request or evaluator registry fails the call itself
-// (`bad_argument` or its class) without running the verifier. A callback
-// returning `RatifyV2ErrCancelled` after the claim yields
+// (`bad_argument` or its class) without running the verifier. A provider
+// or store callback returning `RatifyV2ErrCancelled` after the claim yields
 // `evaluation_cancelled` and commits nothing; the receiver-binding hook
 // returning it cancels before the claim, so the outcome is a preflight
-// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11).
+// `evaluation_cancelled` and nothing is consumed (SPEC-v2 §6.11). The
+// `claim` callback and constraint evaluators are the exceptions: see
+// `RatifyV2ErrCancelled`.
 int32_t ratify_v2_verify_proof_bundle(const uint8_t *bundle,
                                       uintptr_t bundle_len,
                                       const uint8_t *request_json,

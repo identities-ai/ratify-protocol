@@ -451,9 +451,11 @@ batches, security journal store, audience provider, rate store (or rate
 admission at finalization), receiver-binding hook, release store, checkpoint,
 issuance store, and random source. A callback runs on the calling thread
 before the ABI function returns and is never retained afterwards. Buffers the
-library passes in are valid only until the callback returns; pointers a
-callback writes into an output struct must stay valid until it returns, and
-the library copies them immediately. A callback returns `0`, a positive class
+library passes in are valid only until the callback returns. Pointers a
+callback writes into an output struct are read after it returns, so they must
+stay valid after the callback returns until the library has copied them
+(before the ABI call returns), and must never point into the callback's own
+stack frame. A callback returns `0`, a positive class
 (for example `RatifyV2ClockRegressed`), a store sentinel, or
 `RatifyV2ErrCancelled`. A callback failure is always handled fail-closed.
 Identifiers reach callbacks as NUL-terminated C strings, so the library
@@ -473,11 +475,17 @@ The two standard profiles (`com.ratifyprotocol.max_count/v1`,
 
 **Cancellation.** A callback cancels an operation by returning
 `RatifyV2ErrCancelled`; the library treats it as a provider cancellation
-under SPEC-v2 §6.11 (after the claim this yields `evaluation_cancelled` and
-commits nothing). The receiver-binding hook is the only callback before the
-claim; returning `RatifyV2ErrCancelled` from it cancels before the claim, so
-verification stops with `evaluation_cancelled` and consumes nothing. There is
-no other asynchronous cancellation.
+under SPEC-v2 §6.11. Its effect depends on the callback:
+
+| Callback returning `RatifyV2ErrCancelled` | Result |
+| --- | --- |
+| receiver-binding hook (the only callback before the claim) | preflight `evaluation_cancelled`; nothing consumed |
+| trust, status, journal, audience, rate, progress, finalize | `evaluation_cancelled`; nothing committed |
+| `claim` | preflight `claim_store_unavailable`; nothing claimed |
+| constraint evaluator | a provider failure: the constraint is `constraint_unverifiable` and the result is committed |
+| release store or checkpoint (during release) | release status `pending` |
+
+There is no other asynchronous cancellation.
 
 **Decisions.** `ratify_v2_verify_proof_bundle` reports a stage (`preflight`,
 `replay`, `evaluating`, `committed`) and never a decision. A committed

@@ -363,9 +363,10 @@ fn v2c_decoder_inputs_classify_forged_lengths_as_oversized() {
             ratify_v2_claim_proof_bundle(p, l, b"{}".as_ptr(), 2, &store, &mut disposition, o)
         })
     }));
-    // The live verifiers keep their own ordering: a request with no claim
-    // store, or a transaction configuration with no sources, is reported
-    // before the oversized object, as for a real oversized input.
+    // Each verifier keeps its own ordering, as for a real oversized input:
+    // transaction verification validates its configuration first (SPEC-v2
+    // §5.7), while the live verifier decodes the bundle before it checks its
+    // configuration (§6.2), so a request with no claim store is malformed.
     f.extend(gated(
         "verify_transaction_receipt",
         TRANSACTION,
@@ -390,7 +391,7 @@ fn v2c_decoder_inputs_classify_forged_lengths_as_oversized() {
     f.extend(gated(
         "verify_proof_bundle",
         BUNDLE,
-        "configuration_invalid",
+        "malformed",
         |p, l| {
             let mut outcome = RatifyV2VerifyOutcome {
                 stage: 0,

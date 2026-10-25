@@ -404,7 +404,23 @@ const WIRE_BYTE_FIELDS = new Set([
   "mac", "ml_dsa_65", "prev_hash", "session_context", "stream_id", "terms_canonical_json",
 ]);
 
-const B64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+/**
+ * Padded standard-alphabet shape: a multiple of four characters, at most two
+ * trailing "=". A single linear scan, so the check cannot exhaust the stack
+ * on a value near the largest object limit, as a backtracking pattern does.
+ */
+function isPaddedBase64Shape(s: string): boolean {
+  if (s.length % 4 !== 0) return false;
+  let end = s.length;
+  if (end > 0 && s.charCodeAt(end - 1) === 0x3d) end--;
+  if (end > 0 && s.charCodeAt(end - 1) === 0x3d) end--;
+  for (let i = 0; i < end; i++) {
+    const c = s.charCodeAt(i);
+    const ok = (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a) || (c >= 0x30 && c <= 0x39) || c === 0x2b || c === 0x2f;
+    if (!ok) return false;
+  }
+  return true;
+}
 
 export function base64Encode(bytes: Uint8Array): string {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
@@ -412,7 +428,7 @@ export function base64Encode(bytes: Uint8Array): string {
 
 /** Canonical (Go StdEncoding.Strict + re-encode) base64 decode, or null. */
 export function base64DecodeCanonical(s: string): Uint8Array | null {
-  if (!B64_RE.test(s)) return null;
+  if (!isPaddedBase64Shape(s)) return null;
   const out = new Uint8Array(Buffer.from(s, "base64"));
   if (base64Encode(out) !== s) return null;
   return out;

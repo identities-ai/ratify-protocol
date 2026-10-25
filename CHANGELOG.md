@@ -342,6 +342,11 @@ match before the beta.
   verifier returns that error in `V2VerifyOutcome.error`, so a caller could
   change the stored allow horizon or abandonment of a committed claim
   (SPEC-v2 §7.3). The error is now a plain classified error.
+- **TypeScript: large byte fields no longer exhaust the stack.** The
+  canonical base64 check used a backtracking pattern that overflowed the V8
+  stack at about 4.47 million characters, so a valid transaction receipt
+  with terms over about 3.35 MB was `malformed` in TypeScript only. The
+  check is now a linear scan with the same accepted shapes.
 
 ### Not carried into v2
 

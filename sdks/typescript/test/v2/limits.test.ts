@@ -10,12 +10,16 @@ import { v2ErrorClassOf } from "../../src/errors_v2.js";
 import { decodeKeyRotationStatementV2 } from "../../src/key_rotation_v2.js";
 import * as limits from "../../src/limits_v2.js";
 import { V2_MAX_TIMESTAMP_SECONDS } from "../../src/clock_bounds_v2.js";
-import { decodeDelegationCertV2, decodeProofBundleV2, decodeRevocationListV2, decodeRevocationPushV2 } from "../../src/protocol_v2_wire.js";
-import { decodeTransactionReceiptV2 } from "../../src/transaction_receipt_v2.js";
+import { base64DecodeCanonical } from "../../src/json_v2.js";
+import { bundleHashV2, decodeDelegationCertV2, decodeProofBundleV2, decodeRevocationListV2, decodeRevocationPushV2, signProofBundleV2 } from "../../src/protocol_v2_wire.js";
+import {
+  decodeTransactionReceiptV2, encodeTransactionReceiptV2, signTransactionReceiptPartyV2, transactionContextHashV2, transactionPartyRequestHashV2,
+} from "../../src/transaction_receipt_v2.js";
+import { buildSessionContextV2 } from "../../src/operation_context_v2.js";
 import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2 } from "../../src/verification_receipt_v2.js";
 import { decodeWitnessEntryV2 } from "../../src/witness_v2.js";
 import { MAX_IDENTIFIER_LENGTH_BYTES } from "../../src/types.js";
-import { load, type Any } from "./helpers.js";
+import { corpusKeyPairs, load, unb64, type Any } from "./helpers.js";
 
 const file = load("limits.json");
 
@@ -128,5 +132,46 @@ test("limits.json: byte, count and timestamp boundaries", async (t) => {
       const gateFailed = message.includes(`exceeds ${v.limit} (`) && message.includes("rejected before parsing");
       assert.equal(gateFailed, v.size_gate === "fail", `size gate ${v.size_gate}, error ${message}`);
     });
+  }
+});
+
+test("limits: a valid transaction receipt near MAX_TRANSACTION_RECEIPT_BYTES_V2 decodes", async () => {
+  // SPEC-v2 §2.6 admits a transaction receipt up to 5 MiB, so a byte field
+  // holding most of that budget is valid. The canonical base64 check must
+  // stay linear in the field length; a backtracking pattern exhausted the
+  // stack at about 4.47 million characters and made this receipt malformed.
+  const keys = await corpusKeyPairs();
+  const signers = new Map([["party-a", keys.get("agent")!], ["party-b", keys.get("party_b_agent")!]]);
+  const objects = load("objects.json").objects as Any[];
+  const base = await decodeTransactionReceiptV2(unb64(objects.find((o) => o.name === "transaction_receipt_two_parties").wire_b64));
+  const build = async (n: number): Promise<Uint8Array> => {
+    const r = { ...base, terms_canonical_json: new TextEncoder().encode(`{"pad":"${"y".repeat(n)}"}`) };
+    const transactionHash = transactionContextHashV2(r);
+    r.parties = await Promise.all(base.parties.map(async (p) => {
+      const session_context = buildSessionContextV2({
+        verifier_id: p.verifier_id, workspace_id: p.workspace_id, agent_id: p.agent_id, session_id: p.session_id,
+        invocation_id: p.invocation_id, request_hash: transactionPartyRequestHashV2(transactionHash, p.required_scope),
+      });
+      const proof_bundle = await signProofBundleV2({ ...p.proof_bundle, session_context }, signers.get(p.party_id)!, { deterministic: true });
+      return { ...p, proof_bundle, proof_bundle_hash: bundleHashV2(proof_bundle) };
+    }));
+    r.party_signatures = await Promise.all(r.parties.map((p) => signTransactionReceiptPartyV2(r, p.party_id, signers.get(p.party_id)!, { deterministic: true })));
+    return encodeTransactionReceiptV2(r);
+  };
+  const overhead = (await build(0)).length;
+  const limit = limits.MAX_TRANSACTION_RECEIPT_BYTES_V2;
+  const n = Math.floor((limit - overhead) / 4) * 3;
+  const wire = await build(n);
+  assert.ok(wire.length <= limit && wire.length > limit - 4, `receipt is ${wire.length} bytes`);
+  const decoded = await decodeTransactionReceiptV2(wire);
+  assert.equal(decoded.terms_canonical_json.length, n + 10);
+});
+
+test("limits: the canonical base64 check keeps its padded-alphabet shape", () => {
+  // The linear check replaced a pattern; it accepts and rejects exactly the
+  // same shapes (SPEC-v2 §2.1).
+  for (const ok of ["", "AA==", "AAA=", "AAAA", "+/+/", "QUJD"]) assert.ok(base64DecodeCanonical(ok) !== null, ok);
+  for (const bad of ["A", "AA=", "A===", "====", "AA=A", "AB==CD==", "AAA-", "AAA_", "AA\n=", "QUI=QUI=", "AB=="]) {
+    assert.equal(base64DecodeCanonical(bad), null, JSON.stringify(bad));
   }
 });

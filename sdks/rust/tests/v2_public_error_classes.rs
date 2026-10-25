@@ -255,6 +255,7 @@ fn claimed_token(store: &Store) -> (ProofBundleV2, V2PreflightResult, V2VerifyRe
         &req.required_scope,
         &req.verifier_namespace,
         req.replay_epoch,
+        &req.verifier_id,
         req.now,
         req.max_challenge_age_seconds,
         req.future_skew_seconds,
@@ -709,7 +710,7 @@ fn v2_public_api_errors_are_classified() {
         (
             "PreflightProofBundleV2",
             None,
-            class(preflight_proof_bundle_v2(&zero_bundle(), None, None, "data:read", "ns", 0, 0, 0, 0)),
+            class(preflight_proof_bundle_v2(&zero_bundle(), None, None, "data:read", "ns", 0, "", 0, 0, 0)),
         ),
         (
             "ValidateProofBundleV2Preflight",
@@ -720,6 +721,7 @@ fn v2_public_api_errors_are_classified() {
                 "data:read",
                 "ns",
                 0,
+                "",
                 0,
                 0,
                 0,

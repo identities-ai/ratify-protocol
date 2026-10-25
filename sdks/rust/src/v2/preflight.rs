@@ -161,6 +161,7 @@ pub fn preflight_proof_bundle_v2(
     required_scope: &str,
     configured_namespace: &str,
     configured_replay_epoch: i64,
+    configured_verifier_id: &str,
     now: i64,
     max_age_seconds: i64,
     future_skew_seconds: i64,
@@ -175,6 +176,7 @@ pub fn preflight_proof_bundle_v2(
         required_scope,
         configured_namespace,
         configured_replay_epoch,
+        configured_verifier_id,
         now,
         max_age_seconds,
         future_skew_seconds,
@@ -193,6 +195,7 @@ pub(crate) fn preflight_proof_bundle_v2_inner(
     required_scope: &str,
     configured_namespace: &str,
     configured_replay_epoch: i64,
+    configured_verifier_id: &str,
     now: i64,
     max_age_seconds: i64,
     future_skew_seconds: i64,
@@ -248,6 +251,7 @@ pub(crate) fn preflight_proof_bundle_v2_inner(
         required_scope,
         configured_namespace,
         configured_replay_epoch,
+        configured_verifier_id,
         now,
         max_age_seconds,
         future_skew_seconds,
@@ -305,17 +309,13 @@ pub fn validate_proof_bundle_v2_preflight(
     required_scope: &str,
     configured_namespace: &str,
     configured_replay_epoch: i64,
+    configured_verifier_id: &str,
     now: i64,
     max_age_seconds: i64,
     future_skew_seconds: i64,
 ) -> V2Result<()> {
     use V2ErrorClass::*;
-    if !(0..=MAX_SAFE).contains(&configured_replay_epoch) {
-        return err(
-            ConfigurationInvalid,
-            format!("v2 configured replay epoch must be 0..{MAX_SAFE}"),
-        );
-    }
+    validate_v2_verifier_identity_configuration(configured_namespace, configured_replay_epoch, configured_verifier_id)?;
     if expected.expected_session_context.as_ref().is_some_and(|c| c.len() != 32) {
         return err(
             ConfigurationInvalid,
@@ -344,7 +344,7 @@ pub fn validate_proof_bundle_v2_preflight(
         return err(InvalidRequiredScope, format!("v2 request scope: {}", e.message));
     }
     verify_proof_bundle_v2_signatures(bundle).map_err(|e| e.context("v2 cryptographic preflight"))?;
-    if configured_namespace.is_empty() || expected.verifier_namespace != configured_namespace {
+    if expected.verifier_namespace != configured_namespace {
         return err(NamespaceMismatch, "v2 challenge verifier namespace mismatch");
     }
     if !(0..=MAX_SAFE).contains(&configured_replay_epoch)
@@ -353,11 +353,11 @@ pub fn validate_proof_bundle_v2_preflight(
     {
         return err(StaleReplayEpoch, "v2 challenge replay epoch is stale");
     }
-    if expected.verifier_id.is_empty()
-        || expected.verifier_id != bundle.verifier_id
-        || !valid_v2_id(&expected.verifier_id)
-    {
-        return err(VerifierIdMismatch, "v2 challenge verifier ID mismatch");
+    if expected.verifier_id != configured_verifier_id || bundle.verifier_id != configured_verifier_id {
+        return err(
+            VerifierIdMismatch,
+            "v2 challenge or proof verifier ID differs from the configured verifier key ID",
+        );
     }
     if expected.value.len() != 32
         || bundle.challenge != expected.value
@@ -419,6 +419,34 @@ pub fn validate_proof_bundle_v2_preflight(
         }
     }
     check_exact_receiver_audience_v2(bundle, &expected.expected_receiver_id)
+}
+
+/// Go `validateV2VerifierIdentityConfiguration`: the caller-authenticated
+/// verifier identity of SPEC-v2 §6.1, checked at §6.2 step 2. A non-empty
+/// namespace, a replay epoch of 0 through 2^53-1, and the verifier key ID as
+/// a canonical v2 key ID; any violation is `configuration_invalid`.
+pub(crate) fn validate_v2_verifier_identity_configuration(
+    namespace: &str,
+    replay_epoch: i64,
+    verifier_id: &str,
+) -> V2Result<()> {
+    use V2ErrorClass::ConfigurationInvalid;
+    if namespace.is_empty() {
+        return err(ConfigurationInvalid, "v2 configured verifier namespace must not be empty");
+    }
+    if !(0..=MAX_SAFE).contains(&replay_epoch) {
+        return err(
+            ConfigurationInvalid,
+            format!("v2 configured replay epoch must be 0..{MAX_SAFE}"),
+        );
+    }
+    if !valid_v2_id(verifier_id) {
+        return err(
+            ConfigurationInvalid,
+            "v2 configured verifier key ID must be a canonical v2 key ID",
+        );
+    }
+    Ok(())
 }
 
 fn check_exact_receiver_audience_v2(bundle: &ProofBundleV2, receiver_id: &str) -> V2Result<()> {

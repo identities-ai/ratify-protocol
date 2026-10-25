@@ -195,6 +195,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 required_scope: "data:read".into(),
                 verifier_namespace: NAMESPACE.into(),
                 replay_epoch: EPOCH,
+                verifier_id: verifier_id.clone(),
                 now: store.now(),
                 max_challenge_age_seconds: 300,
                 future_skew_seconds: 5,

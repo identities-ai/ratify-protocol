@@ -171,9 +171,12 @@ pub struct V2TerminalClaimRecord {
     pub release: Option<V2ReleaseRecord>,
 }
 
-/// The claim-store view release needs. `record_v2_release` returns
-/// [`V2StoreError::ReleaseStateMismatch`] when a different release or
-/// withheld record already exists for the claim.
+/// The claim-store view release needs. `load_v2_terminal_claim` reports a
+/// claim the store does not hold with a `claim_not_found` error, which
+/// release answers with `rejected / release_state_mismatch`; any other error
+/// is store unavailability (`pending / claim_store_unavailable`).
+/// `record_v2_release` returns [`V2StoreError::ReleaseStateMismatch`] when a
+/// different release or withheld record already exists for the claim.
 pub trait V2ReleaseClaimStore: V2AuthoritativeClock {
     fn load_v2_terminal_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError>;
     fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError>;
@@ -361,6 +364,12 @@ pub fn release_v2_decision(
         config.claim_store.load_v2_terminal_claim(ctx, &committed.claim_id)
     })) {
         Ok(Ok(r)) => r,
+        // Only an unavailable store is retryable. A store that answers that
+        // it holds no such claim (claim_not_found) did not produce this
+        // handoff: a state mismatch, never pending.
+        Ok(Err(e)) if e.class() == Some(V2ErrorClass::ClaimNotFound) => {
+            return release_result_v2(Rejected, "release_state_mismatch")
+        }
         _ => return release_result_v2(Pending, "claim_store_unavailable"),
     };
     if record.receipt_abandoned {

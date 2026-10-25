@@ -130,6 +130,32 @@ test("concurrency: finalization racing lease-expiry recovery yields one terminal
   await assert.rejects(store.finalizeV2Claim(claim.claimID, ownerToken!, deny.terminal, deny.body, 0), (e) => v2ErrorClassOf(e) === "claim_already_terminal");
 });
 
+test("store: a claim_already_terminal error exposes no live store state", async () => {
+  // SPEC-v2 §7.3: a committed claim, its release record and its abandonment
+  // are immutable. A late evaluator receives the error through the verify
+  // outcome, so nothing reachable from the error may alias the store's
+  // record, or a caller could rewrite the horizon or abandonment that
+  // release later reads.
+  const store = await newStore(30);
+  const claim = claimOf(7);
+  const { ownerToken } = await store.claimV2(claim);
+  store.setTime(START + 31);
+  await recoverInterruptedClaimV2(store, claim.claimID);
+  const before = await store.loadV2TerminalClaim(claim.claimID);
+  const deny = denyFor(claim);
+  const late = [
+    () => store.recordV2EvaluationProgress(claim.claimID, ownerToken!, initialV2EvaluationProgress()),
+    () => store.finalizeV2Claim(claim.claimID, ownerToken!, deny.terminal, deny.body, 0),
+  ];
+  for (const write of late) {
+    const err = await write().then(() => assert.fail("a late write must be refused"), (e: unknown) => e);
+    assert.equal(v2ErrorClassOf(err), "claim_already_terminal");
+    const leaked = (err as { record?: { abandoned: boolean; allowHorizon: number; state: string } }).record;
+    if (leaked) Object.assign(leaked, { abandoned: true, allowHorizon: 4102444800, state: "evaluating" });
+    assert.deepEqual(await store.loadV2TerminalClaim(claim.claimID), before);
+  }
+});
+
 test("concurrency: concurrent lease-expiry recovery of a verified claim commits once", async () => {
   const store = await newStore(30);
   const claim = claimOf(4);

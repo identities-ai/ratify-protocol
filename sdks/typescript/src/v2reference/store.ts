@@ -365,7 +365,9 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     const record = this.claims.get(claimID);
     if (!record) throw storeError("claim_not_found", "v2reference: unknown claim");
     if (!constantTimeEqual(sha256(ownerToken), record.ownerDigest)) throw storeError("claim_lease_lost", "v2reference: evaluator owner mismatch");
-    if (record.state === "terminal") throw Object.assign(storeError("claim_already_terminal", "v2reference: claim already terminal"), { record });
+    // The error carries no store state: it reaches callers through the
+    // verify outcome, and the committed record is immutable (SPEC-v2 §7.3).
+    if (record.state === "terminal") throw storeError("claim_already_terminal", "v2reference: claim already terminal");
     const now = this.readClock();
     if (now < record.claimedAt) throw storeError("clock_regressed", `v2reference: clock ${now} is before T_claim ${record.claimedAt}`);
     if (now >= record.leaseExpiresAt) throw storeError("claim_lease_lost", "v2reference: evaluator lease expired");
@@ -388,7 +390,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       try {
         owned = this.owner(claimID, ownerToken);
       } catch (err) {
-        const record = (err as { record?: ClaimRecord }).record;
+        const record = err instanceof V2Error && err.v2Class === "claim_already_terminal" ? this.claims.get(claimID) : undefined;
         if (record && record.state === "terminal" && bytesEqual(record.terminal, terminalResult) && bytesEqual(record.receiptBody, receiptBody)) return false;
         throw err;
       }

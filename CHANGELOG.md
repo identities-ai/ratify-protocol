@@ -337,6 +337,11 @@ match before the beta.
   `evaluation_cancelled`); callback output pointers must stay valid until
   the library copies them, never on the callback's stack; the claim store's
   `now` is not called during verification.
+- **TypeScript: a `claim_already_terminal` error carries no store state.**
+  The reference store attached its live claim record to the error, and the
+  verifier returns that error in `V2VerifyOutcome.error`, so a caller could
+  change the stored allow horizon or abandonment of a committed claim
+  (SPEC-v2 §7.3). The error is now a plain classified error.
 
 ### Not carried into v2
 

@@ -204,18 +204,21 @@ def _check_expected_types(expected: ExpectedChallengeV2) -> None:
 @classified(V2ErrorClass.CONFIGURATION_INVALID)
 def preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[ExpectedChallengeV2], policy: Optional[V2ContextPolicy],
                               required_scope: str, configured_namespace: str, configured_replay_epoch: int,
-                              now_unix: int, max_age_seconds: int, future_skew_seconds: int) -> V2PreflightResult:
+                              configured_verifier_id: str, now_unix: int, max_age_seconds: int,
+                              future_skew_seconds: int) -> V2PreflightResult:
     """Go ``PreflightProofBundleV2``: binds the challenge's expected context to
     the same immutable policy used by terminal evaluation. It seals no
     extension evaluator profile."""
     return _preflight_proof_bundle_v2(bundle, expected, policy, False, None, None, required_scope, configured_namespace,
-                                      configured_replay_epoch, now_unix, max_age_seconds, future_skew_seconds)
+                                      configured_replay_epoch, configured_verifier_id, now_unix, max_age_seconds,
+                                      future_skew_seconds)
 
 
 def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[ExpectedChallengeV2], policy: Optional[V2ContextPolicy],
                                allow_no_policy: bool, hook: Optional[Callable], evaluators,
                                required_scope: str, configured_namespace: str, configured_replay_epoch: int,
-                               now_unix: int, max_age_seconds: int, future_skew_seconds: int) -> V2PreflightResult:
+                               configured_verifier_id: str, now_unix: int, max_age_seconds: int,
+                               future_skew_seconds: int) -> V2PreflightResult:
     from .constraint_evaluator_v2 import snapshot_constraint_evaluators_v2
 
     if expected is None:
@@ -241,7 +244,7 @@ def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[Expecte
     checked = copy.copy(expected)
     checked.context_policy = policy
     validate_proof_bundle_v2_preflight(bundle, checked, required_scope, configured_namespace, configured_replay_epoch,
-                                       now_unix, max_age_seconds, future_skew_seconds)
+                                       configured_verifier_id, now_unix, max_age_seconds, future_skew_seconds)
     if hook is not None:
         try:
             hook(bundle, checked)
@@ -264,7 +267,8 @@ def _preflight_proof_bundle_v2(bundle: ProofBundleV2, expected: Optional[Expecte
 
 @classified(V2ErrorClass.CONFIGURATION_INVALID)
 def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: ExpectedChallengeV2, required_scope: str,
-                                       configured_namespace: str, configured_replay_epoch: int, now_unix: int,
+                                       configured_namespace: str, configured_replay_epoch: int,
+                                       configured_verifier_id: str, now_unix: int,
                                        max_age_seconds: int, future_skew_seconds: int) -> None:
     """Go ``ValidateProofBundleV2Preflight``: the pure pre-claim checks."""
     if not isinstance(expected, ExpectedChallengeV2):
@@ -275,10 +279,7 @@ def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: Expected
     for value in (configured_replay_epoch, now_unix, max_age_seconds, future_skew_seconds):
         if not is_int(value):
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 preflight configuration must be integers")
-    if not isinstance(configured_namespace, str):
-        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 configured namespace must be a string")
-    if configured_replay_epoch < 0 or configured_replay_epoch > MAX_SAFE_INTEGER:
-        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 configured replay epoch must be 0..{MAX_SAFE_INTEGER}")
+    _validate_v2_verifier_identity_configuration(configured_namespace, configured_replay_epoch, configured_verifier_id)
     if expected.expected_session_context is not None and len(expected.expected_session_context) != 32:
         raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 expected session context must be absent or exactly 32 bytes")
     policy = expected.context_policy
@@ -298,13 +299,14 @@ def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: Expected
     except ValueError as exc:
         raise V2Error(V2ErrorClass.INVALID_REQUIRED_SCOPE, f"v2 request scope: {exc}") from exc
     verify_proof_bundle_v2_signatures(bundle)
-    if configured_namespace == "" or expected.verifier_namespace != configured_namespace:
+    if expected.verifier_namespace != configured_namespace:
         raise V2Error(V2ErrorClass.NAMESPACE_MISMATCH, "v2 challenge verifier namespace mismatch")
     if (configured_replay_epoch < 0 or configured_replay_epoch > MAX_SAFE_INTEGER or expected.replay_epoch < 0
             or expected.replay_epoch > MAX_SAFE_INTEGER or expected.replay_epoch != configured_replay_epoch):
         raise V2Error(V2ErrorClass.STALE_REPLAY_EPOCH, "v2 challenge replay epoch is stale")
-    if expected.verifier_id == "" or expected.verifier_id != bundle.verifier_id or not valid_v2_id(expected.verifier_id):
-        raise V2Error(V2ErrorClass.VERIFIER_ID_MISMATCH, "v2 challenge verifier ID mismatch")
+    if expected.verifier_id != configured_verifier_id or bundle.verifier_id != configured_verifier_id:
+        raise V2Error(V2ErrorClass.VERIFIER_ID_MISMATCH,
+                      "v2 challenge or proof verifier ID differs from the configured verifier key ID")
     if len(expected.value) != 32 or bytes(bundle.challenge) != bytes(expected.value) or bundle.challenge_at != expected.issued_at:
         raise V2Error(V2ErrorClass.CHALLENGE_MISMATCH, "v2 proof does not match authenticated challenge issuance")
     from .clock_bounds_v2 import valid_v2_timestamp
@@ -327,6 +329,19 @@ def validate_proof_bundle_v2_preflight(bundle: ProofBundleV2, expected: Expected
         if bundle.session_context is None or bytes(bundle.session_context) != bytes(expected.expected_session_context):
             raise V2Error(V2ErrorClass.SESSION_CONTEXT_MISMATCH, "v2 presentation does not match expected session context")
     _check_exact_receiver_audience_v2(bundle, expected.expected_receiver_id)
+
+
+def _validate_v2_verifier_identity_configuration(namespace: object, replay_epoch: object, verifier_id: object) -> None:
+    """Go ``validateV2VerifierIdentityConfiguration``: the caller-authenticated
+    verifier identity of SPEC-v2 §6.1 at §6.2 step 2. A non-empty namespace, a
+    replay epoch of 0 through 2^53-1, and the verifier key ID as a canonical
+    v2 key ID; any violation is configuration_invalid."""
+    if not isinstance(namespace, str) or namespace == "":
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 configured verifier namespace must be a non-empty string")
+    if not is_int(replay_epoch) or replay_epoch < 0 or replay_epoch > MAX_SAFE_INTEGER:
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 configured replay epoch must be 0..{MAX_SAFE_INTEGER}")
+    if not isinstance(verifier_id, str) or not valid_v2_id(verifier_id):
+        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2 configured verifier key ID must be a canonical v2 key ID")
 
 
 def _check_exact_receiver_audience_v2(bundle: ProofBundleV2, receiver_id: str) -> None:

@@ -224,7 +224,10 @@ class V2TerminalClaimRecord:
 
 
 class V2ReleaseClaimStore(V2AuthoritativeClock):
-    """The claim-store view release needs."""
+    """The claim-store view release needs. ``load_v2_terminal_claim`` reports
+    a claim the store does not hold with a ``claim_not_found`` error, which
+    release answers with rejected / release_state_mismatch; any other error is
+    store unavailability (pending / claim_store_unavailable)."""
 
     @abc.abstractmethod
     def load_v2_terminal_claim(self, ctx: context_v2.Context, claim_id: str) -> V2TerminalClaimRecord:
@@ -432,7 +435,11 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
             raise ValueError("claim store returned an invalid terminal record")
     except (KeyboardInterrupt, SystemExit):
         raise
-    except BaseException:  # noqa: BLE001 - a store failure (Go: a recovered panic)
+    except BaseException as exc:  # noqa: BLE001 - a store failure (Go: a recovered panic)
+        # Only an unavailable store is retryable. A store that answers that it
+        # holds no such claim (claim_not_found) did not produce this handoff.
+        if error_class_of(exc) == V2ErrorClass.CLAIM_NOT_FOUND:
+            return _result(V2_RELEASE_REJECTED, "release_state_mismatch")
         return _result(V2_RELEASE_PENDING, "claim_store_unavailable")
     if record.receipt_abandoned:
         return _result(V2_RELEASE_WITHHELD, "receipt_abandoned")

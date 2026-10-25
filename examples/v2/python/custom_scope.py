@@ -128,7 +128,7 @@ def main() -> None:
         outcome = verify_proof_bundle_v2(ctx, V2VerifyRequest(
             bundle=encode_proof_bundle_v2(bundle), expected=expected,
             context_policy=new_v2_context_policy("example.custom-scope/v1", False, [], None),
-            required_scope=CUSTOM_SCOPE, verifier_namespace=NAMESPACE, replay_epoch=EPOCH, now=store.now(),
+            required_scope=CUSTOM_SCOPE, verifier_namespace=NAMESPACE, replay_epoch=EPOCH, verifier_id=verifier_id, now=store.now(),
             max_challenge_age_seconds=300, future_skew_seconds=5, tzdb_version=TZDB_VERSION_V2,
             # The requested quantity comes from the authenticated request,
             # never from the proof.

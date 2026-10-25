@@ -71,7 +71,8 @@ def present_issued(issuance, claims, wire: bytes, now: int) -> str:
     else:
         policy = new_v2_context_policy("ratify.conformance.context-not-required/v1", False, [], None)
     try:
-        preflight = preflight_proof_bundle_v2(bundle, expected, policy, "data:read", NAMESPACE, EPOCH, now, 300, 5)
+        preflight = preflight_proof_bundle_v2(bundle, expected, policy, "data:read", NAMESPACE, EPOCH, expected.verifier_id, now, 300,
+                                              5)
     except Exception as exc:  # noqa: BLE001
         return "preflight:" + error_class_of(exc)
     try:

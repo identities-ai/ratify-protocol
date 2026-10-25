@@ -53,6 +53,7 @@ from .signing_v2 import (
     verify_v2_statement,
 )
 from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
+from .types_v2 import valid_prefixed_digest_v2
 _WORKSPACE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -236,6 +237,9 @@ def validate_transaction_receipt_v2(receipt: TransactionReceiptV2, require_signa
             raise V2Error(V2ErrorClass.KEY_ID_MISMATCH,
                           f"wire v2: party {party.party_id!r} agent ID does not match its complete public key")
         bundle = party.proof_bundle
+        if not valid_prefixed_digest_v2(party.proof_bundle_hash):
+            raise V2Error(V2ErrorClass.MALFORMED, f"wire v2: party {party.party_id!r} proof_bundle_hash is not sha384: "
+                          "followed by 96 lowercase hex characters")
         try:
             bundle_hash = bundle_hash_v2(bundle)
         except (ValueError, V2Error):
@@ -423,6 +427,11 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
                 canonical_bundle = None
             if canonical_bundle != raw_bundle:
                 raise ValueError(f"wire v2: party {party_id!r} proof bundle is not canonical JSON")
+            # The hash field's shape is checked before it is compared (SPEC-v2
+            # §5.7, §2.7): a misshapen value is malformed, not a mismatch.
+            if not valid_prefixed_digest_v2(fields["proof_bundle_hash"]):
+                raise V2Error(V2ErrorClass.MALFORMED, f"wire v2: party {party_id!r} proof_bundle_hash is not sha384: "
+                              "followed by 96 lowercase hex characters")
             actual = "sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + raw_bundle).hexdigest()
             if fields["proof_bundle_hash"] != actual:
                 raise V2Error(V2ErrorClass.BUNDLE_HASH_MISMATCH,

@@ -175,7 +175,8 @@ class ModalJournalStore:
 
 def populate_status_journal(store, inputs: dict) -> None:
     """Go v2PopulateStatusJournal: configure status keys in ascending issuer
-    order, then apply the journal preload."""
+    order, then apply the journal preload; or, when journal.setup is present,
+    exactly those steps in order."""
     from ratify_protocol_v2.protocol_v2 import decode_revocation_list_v2, decode_revocation_push_v2
     from ratify_protocol_v2.security_journal_v2 import (
         apply_revocation_list_to_journal_v2,
@@ -183,20 +184,37 @@ def populate_status_journal(store, inputs: dict) -> None:
         configure_status_key_epoch_v2,
     )
 
+    policy = status_policy(inputs.get("status_policy"))
+
+    def apply(issuer: str, code: int, wire_b64: str, epoch: int, key: dict, now: int) -> None:
+        wire = b64(wire_b64)
+        if code == 3:
+            apply_revocation_list_to_journal_v2(BACKGROUND, store, decode_revocation_list_v2(wire), issuer, epoch,
+                                                pubkey(key), policy, now)
+        elif code == 5:
+            apply_revocation_push_to_journal_v2(BACKGROUND, store, decode_revocation_push_v2(wire), issuer, epoch,
+                                                pubkey(key), policy, now)
+        else:
+            raise AssertionError(f"unknown journal object type code {code}")
+
+    setup = (inputs.get("journal") or {}).get("setup")
+    if setup is not None:
+        for step in setup:
+            if step["op"] == "configure_status_key":
+                configure_status_key_epoch_v2(BACKGROUND, store, step["issuer_id"], step["epoch"], pubkey(step["public_key"]))
+            elif step["op"] == "apply":
+                apply(step["issuer_id"], step["object_type_code"], step["wire_b64"], step["epoch"], step["public_key"],
+                      step["now"])
+            else:
+                raise AssertionError(f"unknown journal setup op {step['op']!r}")
+        return
     status_keys = inputs.get("status_keys") or {}
     for issuer in sorted(status_keys, key=lambda s: s.encode("utf-8")):
         key = status_keys[issuer]
         configure_status_key_epoch_v2(BACKGROUND, store, issuer, key["epoch"], pubkey(key["public_key"]))
-    policy = status_policy(inputs.get("status_policy"))
     for p in (inputs.get("journal") or {}).get("preload") or []:
         key = status_keys[p["issuer_id"]]
-        wire = b64(p["wire_b64"])
-        if p["object_type_code"] == 3:
-            apply_revocation_list_to_journal_v2(BACKGROUND, store, decode_revocation_list_v2(wire), p["issuer_id"],
-                                                key["epoch"], pubkey(key["public_key"]), policy, p["now"])
-        elif p["object_type_code"] == 5:
-            apply_revocation_push_to_journal_v2(BACKGROUND, store, decode_revocation_push_v2(wire), p["issuer_id"],
-                                                key["epoch"], pubkey(key["public_key"]), policy, p["now"])
+        apply(p["issuer_id"], p["object_type_code"], p["wire_b64"], key["epoch"], key["public_key"], p["now"])
 
 
 def build_status_journal(inputs: dict):
@@ -258,7 +276,7 @@ def build_verify_request(inputs: dict, bundle: Optional[bytes], counts: Counts):
     req = V2VerifyRequest(
         bundle=bundle or b"", required_scope=inputs.get("required_scope", ""),
         verifier_namespace=inputs.get("configured_namespace", ""), replay_epoch=inputs.get("configured_replay_epoch", 0),
-        now=inputs.get("now", 0), max_challenge_age_seconds=inputs.get("max_challenge_age_seconds", 0),
+        verifier_id=inputs.get("configured_verifier_id", ""), now=inputs.get("now", 0), max_challenge_age_seconds=inputs.get("max_challenge_age_seconds", 0),
         future_skew_seconds=inputs.get("future_skew_seconds", 0), status_policy=status_policy(inputs.get("status_policy")),
         status_keys={}, tzdb_version=inputs.get("tzdb_version", ""), context=ConstraintContextV2(),
     )

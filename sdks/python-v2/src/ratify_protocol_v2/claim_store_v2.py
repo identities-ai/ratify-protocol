@@ -276,7 +276,8 @@ def claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2, bundle: 
     )
     try:
         validate_proof_bundle_v2_preflight(bundle, expected, sealed.required_scope, configured_namespace,
-                                           configured_replay_epoch, now_unix, sealed.max_age, sealed.future_skew)
+                                           configured_replay_epoch, sealed.verifier_id, now_unix, sealed.max_age,
+                                           sealed.future_skew)
     except V2Error as exc:
         raise V2Error(exc.error_class, f"v2 claim-time preflight: {exc}") from exc
     required_scope, max_age_seconds, future_skew_seconds = sealed.required_scope, sealed.max_age, sealed.future_skew

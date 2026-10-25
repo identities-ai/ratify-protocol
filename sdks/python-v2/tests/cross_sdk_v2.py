@@ -476,7 +476,8 @@ def replay_scenario(cfg: dict, sc: dict, pub: dict, verifier_priv: HybridPrivate
     p = cfg["status_policy"]
     req = V2VerifyRequest(
         bundle=b64d(sc["bundle_b64"]), required_scope=sc["required_scope"], verifier_namespace=cfg["verifier_namespace"],
-        replay_epoch=cfg["replay_epoch"], now=sc["verify_time"], max_challenge_age_seconds=cfg["max_challenge_age_seconds"],
+        replay_epoch=cfg["replay_epoch"], verifier_id=key_id_v2(pub[cfg["verifier_key"]]), now=sc["verify_time"],
+        max_challenge_age_seconds=cfg["max_challenge_age_seconds"],
         future_skew_seconds=cfg["future_skew_seconds"], tzdb_version=cfg["tzdb_version"], status_keys={},
         status_policy=RevocationStatusPolicyV2(p["max_list_lifetime_seconds"], p["max_status_age_seconds"], p["clock_skew_seconds"]),
     )

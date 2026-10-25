@@ -50,7 +50,12 @@ from .release_v2 import CommittedV2Outcome, _new_committed_v2_outcome
 from .signing_v2 import key_id_v2
 from .types import HybridPublicKey
 from .types_v2 import MAX_SAFE_INTEGER, is_int, valid_v2_id
-from .verify_v2_preflight import ExpectedChallengeV2, _preflight_proof_bundle_v2, equal_hybrid_public_keys
+from .verify_v2_preflight import (
+    ExpectedChallengeV2,
+    _preflight_proof_bundle_v2,
+    _validate_v2_verifier_identity_configuration,
+    equal_hybrid_public_keys,
+)
 
 V2_TRUST_TRUSTED = "trusted"
 V2_TRUST_UNTRUSTED = "untrusted"
@@ -114,6 +119,11 @@ class V2VerifyRequest:
     required_scope: str = ""
     verifier_namespace: str = ""
     replay_epoch: int = 0
+    # The caller-authenticated verifier key ID (SPEC-v2 §2.4, §6.1). Required:
+    # an empty or non-canonical value is configuration_invalid before the
+    # ExpectedChallenge is examined, and both the ExpectedChallenge and the
+    # proof bundle must name it (verifier_id_mismatch otherwise).
+    verifier_id: str = ""
     now: int = 0
     max_challenge_age_seconds: int = 0
     future_skew_seconds: int = 0
@@ -174,7 +184,7 @@ def verify_proof_bundle_v2(ctx: context_v2.Context, req: V2VerifyRequest, cb: V2
         _validate_v2_verify_configuration(req, request_context)
         preflight = _preflight_proof_bundle_v2(
             bundle, req.expected, req.context_policy, True, _safe_v2_receiver_binding(cb.receiver_binding),
-            req.constraint_evaluators, req.required_scope, req.verifier_namespace, req.replay_epoch, req.now,
+            req.constraint_evaluators, req.required_scope, req.verifier_namespace, req.replay_epoch, req.verifier_id, req.now,
             req.max_challenge_age_seconds, req.future_skew_seconds)
     except Exception as exc:  # noqa: BLE001
         return preflight_failure(exc if isinstance(exc, V2Error) else V2Error(V2ErrorClass.UNCLASSIFIED, str(exc)))
@@ -344,12 +354,11 @@ def _validate_v2_verify_configuration(req: V2VerifyRequest, request_context) -> 
     for name in ("replay_epoch", "now", "max_challenge_age_seconds", "future_skew_seconds"):
         if not is_int(getattr(req, name)):
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 request {name} must be an integer")
-    for name in ("required_scope", "verifier_namespace", "tzdb_version"):
+    for name in ("required_scope", "verifier_namespace", "verifier_id", "tzdb_version"):
         if not isinstance(getattr(req, name), str):
             raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 request {name} must be a string")
     validate_v2_freshness_configuration(req.now, req.max_challenge_age_seconds, req.future_skew_seconds)
-    if req.replay_epoch < 0 or req.replay_epoch > MAX_SAFE_INTEGER:
-        raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, f"v2 configured replay epoch must be 0..{MAX_SAFE_INTEGER}")
+    _validate_v2_verifier_identity_configuration(req.verifier_namespace, req.replay_epoch, req.verifier_id)
     # The live verifier has one future skew (SPEC-v2 §6.1): status freshness
     # uses future_skew_seconds, so a status policy carrying another skew is a
     # configuration error rather than a second, silently different bound.

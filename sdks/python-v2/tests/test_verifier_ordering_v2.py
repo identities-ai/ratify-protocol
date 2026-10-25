@@ -17,11 +17,11 @@ VECTORS = FILE["vectors"]
 
 
 def test_ordering_corpus_shape():
-    assert len(VECTORS) == 342
+    assert len(VECTORS) == 484
     stages = {}
     for v in VECTORS:
         stages[v["expected"]["stage"]] = stages.get(v["expected"]["stage"], 0) + 1
-    assert stages == {"preflight": 98, "replay": 2, "committed": 240, "evaluating": 2}
+    assert stages == {"preflight": 134, "replay": 2, "committed": 346, "evaluating": 2}
 
 
 @pytest.mark.parametrize("v", VECTORS, ids=[v["name"] for v in VECTORS])

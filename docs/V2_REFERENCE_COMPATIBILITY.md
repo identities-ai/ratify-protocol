@@ -74,7 +74,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
 | `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
-| `lifecycle-scenarios.json` (57 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (59 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
 | `limits.json` (76 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `object-negatives.json` (423 negatives) | Yes | Yes | Yes | Yes | Yes |

@@ -39,6 +39,7 @@ import {
 } from "../release_v2.js";
 import { checkV2StreamSequence } from "../stream_sequence_v2.js";
 import {
+  decodeVerificationReceiptBodyV2,
   encodeVerificationReceiptV2,
   signPreparedVerificationReceiptV2,
   verificationReceiptV2Digest,
@@ -392,6 +393,12 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       }
       const { record, now: finalAt } = owned;
       validateV2FinalizationPayload(record.claim, terminalResult, receiptBody);
+      // SPEC-v2 §6.8: an allow carries a positive allow horizon and every
+      // other decision carries none, so the horizon and the rate admission
+      // below always apply to exactly the allows.
+      if ((decodeVerificationReceiptBodyV2(receiptBody).decision === "allow") !== allowValidUntil > 0) {
+        throw storeError("configuration_invalid", "v2reference: the allow horizon does not match the decision");
+      }
       if (allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.expiresAt)) {
         throw storeError("allow_horizon_passed", "v2reference: allow is at or beyond its horizon");
       }

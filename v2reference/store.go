@@ -429,6 +429,12 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 	if err := ratify.ValidateV2FinalizationPayload(record.claim, terminalResult, receiptBody); err != nil {
 		return false, err
 	}
+	// SPEC-v2 §6.8: an allow carries a positive allow horizon and every other
+	// decision carries none, so the horizon and the rate admission below
+	// always apply to exactly the allows.
+	if body, err := ratify.DecodeVerificationReceiptBodyV2(receiptBody); err != nil || (body.Decision == "allow") != (allowValidUntil > 0) {
+		return false, &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: the allow horizon does not match the decision")}
+	}
 	if allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.ExpiresAt) {
 		return false, &ratify.V2Error{Class: ratify.V2ErrAllowHorizonPassed, Err: fmt.Errorf("v2reference: allow is at or beyond its horizon")}
 	}

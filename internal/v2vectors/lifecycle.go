@@ -524,6 +524,27 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 			lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
 	}
+	// The allow horizon matches the decision (SPEC-v2 §6.8): an allow carries
+	// a positive horizon and every other decision carries none, so a store
+	// never commits an allow that skipped its horizon and rate admission, or
+	// counts a non-allow against a rate limit.
+	allow := genuine()
+	allow.Decision, allow.DecisionReason, allow.IdentityStatus = "allow", "authorized", "authorized_agent"
+	st := g.statusFixtures()
+	allow.StatusAssessment, allow.GrantedScope = "current", []string{"data:read"}
+	allow.StatusEvidence = toLibEvidence(sortEvidence([]EvidenceJSON{g.evidence(st["root_current"]), g.evidence(st["intermediate_current"])}))
+	sc("finalize_rejects_allow_without_allow_horizon", "a canonical allow receipt body finalized with allow_valid_until 0 is refused (configuration_invalid, SPEC-v2 §6.8, §7.5) and commits nothing; the genuine body then finalizes once",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		finalize(terminal("allow", "authorized", "authorized_agent"), b64(must(ratify.VerificationReceiptV2Body(allow))), lifecycleExpectJSON{ErrorClass: "configuration_invalid"}),
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+	withHorizon := finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{ErrorClass: "configuration_invalid"})
+	withHorizon.AllowValidUntil = Now + 60
+	sc("finalize_rejects_allow_horizon_on_non_allow", "an indeterminate receipt body finalized with a positive allow_valid_until is refused (configuration_invalid, SPEC-v2 §6.8, §7.5) and commits nothing; the same body with no horizon then finalizes once",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		withHorizon,
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
 	// A non-null digest with context not_evaluated is never a receipt body
 	// (SPEC-v2 §5.8), so it fails the strict body decode before binding.
 	interrupted := genuine()

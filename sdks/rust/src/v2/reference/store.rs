@@ -573,6 +573,16 @@ impl ClaimStoreV2 for Store {
             return Err(classified(V2ErrorClass::ClaimNotFound, "v2reference: unknown claim"));
         };
         validate_v2_finalization_payload(&record.claim, terminal_result, receipt_body)?;
+        // SPEC-v2 §6.8: an allow carries a positive allow horizon and every
+        // other decision carries none, so the horizon and the rate admission
+        // below always apply to exactly the allows.
+        let is_allow = crate::v2::receipt::decode_verification_receipt_body_v2(receipt_body)?.decision == "allow";
+        if is_allow != (allow_valid_until > 0) {
+            return Err(classified(
+                V2ErrorClass::ConfigurationInvalid,
+                "v2reference: the allow horizon does not match the decision",
+            ));
+        }
         if allow_valid_until > 0 && (final_at >= allow_valid_until || final_at >= record.claim.expires_at) {
             return Err(classified(
                 V2ErrorClass::AllowHorizonPassed,

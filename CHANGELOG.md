@@ -199,6 +199,15 @@ match before the beta.
   non-canonical base64; such a batch now decodes and the object fails
   authentication instead, with the same `unavailable` status result.
   Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **The allow horizon matches the decision at finalization** (all SDKs).
+  A reference claim store refuses an `allow` receipt body finalized without
+  a positive `allow_valid_until`, and any other decision finalized with one,
+  as `configuration_invalid` (SPEC-v2 §6.8, §7.5). Before, an allow with no
+  horizon skipped the horizon check and `max_rate` admission (release then
+  withheld it), and a non-allow with a horizon was counted against the rate
+  limit. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_allow_without_allow_horizon` and
+  `finalize_rejects_allow_horizon_on_non_allow`.
 - **Lease-expiry recovery validates what it commits** (all SDKs). Every
   reference claim store's recovery operation accepted any terminal result
   whose decision and reason were `indeterminate / evaluation_interrupted`,

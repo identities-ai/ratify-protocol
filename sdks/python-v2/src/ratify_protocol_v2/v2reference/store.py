@@ -56,6 +56,7 @@ from ..release_v2 import (
 from ..signing_v2 import key_id_v2, public_key_of
 from ..stream_sequence_v2 import check_v2_stream_sequence
 from ..types_v2 import V2CheckpointAcknowledgement
+from ..verification_receipt_v2 import decode_verification_receipt_body_v2
 
 
 class NotAcknowledgedError(Exception):
@@ -334,6 +335,11 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
                     return False
                 raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal") from None
             validate_v2_finalization_payload(record.claim, terminal_result, receipt_body)
+            # SPEC-v2 §6.8: an allow carries a positive allow horizon and every
+            # other decision carries none, so the horizon and the rate admission
+            # below always apply to exactly the allows.
+            if (decode_verification_receipt_body_v2(bytes(receipt_body)).decision == "allow") != (allow_valid_until > 0):
+                raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2reference: the allow horizon does not match the decision")
             if allow_valid_until > 0 and (final_at >= allow_valid_until or final_at >= record.claim.expires_at):
                 raise V2Error(V2ErrorClass.ALLOW_HORIZON_PASSED, "v2reference: allow is at or beyond its horizon")
             admit_rate = allow_valid_until > 0 and self._rate_at_finalization and len(record.claim.rate_batch) != 0

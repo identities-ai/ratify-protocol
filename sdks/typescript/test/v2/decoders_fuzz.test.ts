@@ -1,7 +1,8 @@
 // Property tests for every v2 decoder (SPEC-v2 §8.1 item 2). Arbitrary
 // bytes, arbitrary JSON, and mutated valid encodings must either decode or
 // fail with a closed §2.7 class (never unclassified), within a time bound;
-// inputs past a byte limit fail at the size gate before parsing.
+// inputs past a byte limit fail at the size gate before parsing. The
+// SecurityJournalV2 snapshot importer has its own property at the end.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,6 +16,7 @@ import { decodeDelegationCertV2, decodeProofBundleV2, decodeRevocationListV2, de
 import { decodeTransactionReceiptV2 } from "../../src/transaction_receipt_v2.js";
 import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2, verificationReceiptV2Body } from "../../src/verification_receipt_v2.js";
 import { decodeWitnessEntryV2 } from "../../src/witness_v2.js";
+import { exportSecurityJournalSnapshotV2, importSecurityJournalSnapshotV2, MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES, securityJournalSnapshotDigestV2 } from "../../src/security_journal_snapshot_v2.js";
 import { load, unb64, type Any } from "./helpers.js";
 
 type Decoder = (b: Uint8Array) => unknown;
@@ -186,4 +188,37 @@ test("checkpoint acknowledgement: canonical round trip and strictness", () => {
   ]) {
     assert.throws(() => decodeV2CheckpointAcknowledgement(new TextEncoder().encode(variant)), (e: unknown) => v2ErrorClassOf(e) === "malformed", variant);
   }
+});
+
+// The SecurityJournalV2 snapshot importer (SPEC-v2 §8.1 item 2). The head is
+// derived from the input, so most failures reach the decoder itself; an
+// import that succeeds must re-export the identical bytes.
+test("security journal snapshot: arbitrary and mutated input imports exactly or fails closed", async () => {
+  const journal = load("security-journal.json");
+  const sample = unb64(journal.scenarios.find((s: Any) => s.name === "status_reducer_transitions").steps[8].expect_snapshot_b64);
+  const generation = JSON.parse(new TextDecoder().decode(sample)).generation as number;
+  const target: Target = {
+    name: "security journal snapshot",
+    decode: (b) => {
+      const got = importSecurityJournalSnapshotV2(b, { generation, digest: securityJournalSnapshotDigestV2(b) });
+      assert.deepEqual(exportSecurityJournalSnapshotV2(got), b, "an imported snapshot must re-export identically");
+      return got;
+    },
+    limit: MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES, sample, allowed: new Set(["malformed", "log_state_mismatch"]), runs: 300,
+  };
+  assert.equal(await outcome(target, sample), "", "the sample must import");
+  await fc.assert(fc.asyncProperty(fc.uint8Array({ maxLength: 512 }), async (data) => {
+    const cls = await outcome(target, data);
+    if (cls !== "") assert.ok(target.allowed.has(cls), `unexpected class ${cls}`);
+  }), { numRuns: 300 });
+  await fc.assert(fc.asyncProperty(fc.jsonValue({ maxDepth: 6 }), async (value) => {
+    const cls = await outcome(target, new TextEncoder().encode(JSON.stringify(value)));
+    if (cls !== "") assert.ok(target.allowed.has(cls), `unexpected class ${cls}`);
+  }), { numRuns: 300 });
+  await fc.assert(fc.asyncProperty(fc.array(mutation(sample.length), { minLength: 1, maxLength: 3 }), async (ms) => {
+    const cls = await outcome(target, applyMutations(sample, ms));
+    if (cls !== "") assert.ok(target.allowed.has(cls), `unexpected class ${cls}`);
+  }), { numRuns: target.runs });
+  assert.equal(await outcome(target, new TextEncoder().encode("[".repeat(10000) + "]".repeat(10000))), "malformed");
+  assert.equal(await outcome(target, new Uint8Array(target.limit + 1).fill(0x7b)), "malformed");
 });

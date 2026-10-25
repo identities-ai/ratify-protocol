@@ -4,7 +4,8 @@ For arbitrary bytes, arbitrary JSON, and single-byte mutations of valid
 corpus objects, a decoder either returns an object that re-encodes to a
 stable canonical form or raises a classified ``V2Error``; it never raises any
 other exception, never accepts input past its byte limit, and never reads a
-non-integer number."""
+non-integer number. The SecurityJournalV2 snapshot importer has its own
+properties at the end: an import that succeeds re-exports the identical bytes."""
 from __future__ import annotations
 
 import base64
@@ -18,11 +19,13 @@ from ratify_protocol_v2 import _v2json, limits_v2
 from ratify_protocol_v2 import checkpoint_ack_v2 as ck
 from ratify_protocol_v2 import key_rotation_v2 as kr
 from ratify_protocol_v2 import protocol_v2 as pv2
+from ratify_protocol_v2 import security_journal_snapshot_v2 as sj
 from ratify_protocol_v2 import status_batch_v2 as sb
 from ratify_protocol_v2 import transaction_receipt_v2 as txv2
 from ratify_protocol_v2 import verification_receipt_v2 as vrv2
 from ratify_protocol_v2 import witness_v2 as wv2
 from ratify_protocol_v2.errors_v2 import ALL_ERROR_CLASSES, V2Error
+from ratify_protocol_v2.security_journal_v2 import SecurityJournalHeadV2
 
 OBJECTS = load("objects.json")["objects"]
 
@@ -191,3 +194,57 @@ def test_every_decoder_has_a_seed_that_decodes():
         assert SEEDS[name], name
         for seed in SEEDS[name]:
             assert _attempt(name, seed) is not None, name
+
+
+_JOURNAL_STEP = next(s for s in load("security-journal.json")["scenarios"] if s["name"] == "status_reducer_transitions")["steps"][8]
+SNAPSHOT_SEED = b64(_JOURNAL_STEP["expect_snapshot_b64"])
+_SNAPSHOT_GENERATION = json.loads(SNAPSHOT_SEED)["generation"]
+
+
+def _attempt_snapshot(data: bytes):
+    # The head is derived from the input, so most failures reach the decoder.
+    head = SecurityJournalHeadV2(generation=_SNAPSHOT_GENERATION, digest=sj.security_journal_snapshot_digest_v2(data))
+    try:
+        journal = sj.import_security_journal_snapshot_v2(data, head)
+    except V2Error as exc:
+        assert exc.error_class in ("malformed", "log_state_mismatch"), (exc.error_class, exc)
+        return None
+    assert sj.export_security_journal_snapshot_v2(journal) == data
+    return journal
+
+
+def test_security_journal_snapshot_seed_imports():
+    assert _attempt_snapshot(SNAPSHOT_SEED) is not None
+
+
+@PROFILE
+@given(data=st.binary(max_size=512))
+def test_security_journal_snapshot_arbitrary_bytes_are_classified(data):
+    _attempt_snapshot(data)
+
+
+@PROFILE
+@given(value=JSON_VALUES)
+def test_security_journal_snapshot_arbitrary_json_is_classified(value):
+    _attempt_snapshot(json.dumps(value).encode("utf-8"))
+
+
+@settings(max_examples=300, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(data=st.data())
+def test_security_journal_snapshot_mutations_are_classified(data):
+    position = data.draw(st.integers(min_value=0, max_value=len(SNAPSHOT_SEED) - 1))
+    action = data.draw(st.sampled_from(["flip", "delete", "insert", "replace_digit"]))
+    if action == "flip":
+        mutated = SNAPSHOT_SEED[:position] + bytes([SNAPSHOT_SEED[position] ^ data.draw(st.integers(1, 255))]) + SNAPSHOT_SEED[position + 1:]
+    elif action == "delete":
+        mutated = SNAPSHOT_SEED[:position] + SNAPSHOT_SEED[position + 1:]
+    elif action == "insert":
+        mutated = SNAPSHOT_SEED[:position] + data.draw(st.binary(min_size=1, max_size=4)) + SNAPSHOT_SEED[position:]
+    else:
+        mutated = SNAPSHOT_SEED[:position] + data.draw(st.sampled_from([b"-0", b"1.0", b"1e3", b"9007199254740992", b"\\ud800"])) + SNAPSHOT_SEED[position:]
+    _attempt_snapshot(mutated)
+
+
+def test_security_journal_snapshot_size_and_depth_limits():
+    assert _attempt_snapshot(b"{" * (sj.MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES + 1)) is None
+    assert _attempt_snapshot(b"[" * 10000 + b"]" * 10000) is None

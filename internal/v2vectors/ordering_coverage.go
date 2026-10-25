@@ -68,6 +68,10 @@ func (g *gen) orderingCoverageScenarios() []scenario {
 	}))
 	add(std("pre_malformed_and_now_invalid", "step 1 decode precedes the now bound", bundle[:len(bundle)/2], "malformed", func(s *scenario) { s.now = -1 }))
 	add(std("pre_malformed_and_claim_store_absent", "step 1 decode precedes step 2 configuration, including the claim-store presence check: a truncated bundle with no claim store configured is malformed and calls nothing", []byte("{"), "malformed", func(s *scenario) { s.claim = "absent" }))
+	add(std("pre_malformed_and_nul_namespace", "step 1 decode precedes step 2 configuration: a truncated bundle with a configured and expected namespace containing U+0000 is malformed and calls nothing (an SDK that cannot pass U+0000 to its stores reports that at step 2, never before decode)", []byte("{"), "malformed", func(s *scenario) {
+		s.namespace = "verify\u0000test"
+		s.expected.VerifierNamespace = "verify\u0000test"
+	}))
 	add(std("pre_claim_store_absent", "a valid bundle with no claim store configured fails step 2 configuration before any callback", bundle, "configuration_invalid", func(s *scenario) { s.claim = "absent" }))
 	otherSession := append([]byte(nil), session...)
 	otherSession[0] ^= 1

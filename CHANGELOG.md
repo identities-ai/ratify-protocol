@@ -322,7 +322,7 @@ match before the beta.
 - **Transaction terms are one JSON object** (SPEC-v2 §5.7), as every SDK
   already required. Text, plus vectors
   `object-negatives.json` `transaction_receipt/terms_not_object_*`.
-- **More verifier ordering cases** (`verifier-ordering.json`, 342 to 484
+- **More verifier ordering cases** (`verifier-ordering.json`, 342 to 485
   cases): status-key epoch transitions through the live verifier, with a
   new optional `journal.setup` member that lists explicit journal setup
   steps; paired pre-claim and post-claim failures; status journal

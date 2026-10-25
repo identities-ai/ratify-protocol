@@ -85,7 +85,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `status-publisher.json` (13 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `status-sequences.json` (22 scenarios, 63 body digest checks) | Yes | Yes | Yes | Yes | Yes |
 | `transaction-verification.json` (13 vectors) | Yes | Yes | Yes | Yes | Yes |
-| `verifier-ordering.json` (484 cases) | Yes | Yes | Yes | Yes | Yes |
+| `verifier-ordering.json` (485 cases) | Yes | Yes | Yes | Yes | Yes |
 
 Go, TypeScript, Python v2, Rust, and the C ABI all run the full stateful
 verifier against the ordering vectors, including stage, error class, terminal

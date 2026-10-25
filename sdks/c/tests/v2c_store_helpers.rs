@@ -72,7 +72,14 @@ fn release_record_outcomes() {
         unsafe { ratify_v2_valid_release_record_outcome(outcome as i32, reason.as_ptr()) == 1 }
     };
     assert!(valid(RatifyV2ReleaseReleased, ""));
-    assert!(unsafe { ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased as i32, std::ptr::null()) } == 1);
+    // SPEC-v2 §1.3: a predicate fails closed, so a NULL or non-UTF-8 reason
+    // is never a release record.
+    assert_eq!(unsafe { ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased as i32, std::ptr::null()) }, 0);
+    let not_utf8 = [0xffu8, 0];
+    assert_eq!(
+        unsafe { ratify_v2_valid_release_record_outcome(RatifyV2ReleaseReleased as i32, not_utf8.as_ptr().cast()) },
+        0
+    );
     for reason in ["clock_regressed", "challenge_expired", "allow_horizon_passed"] {
         assert!(valid(RatifyV2ReleaseWithheld, reason), "withheld {reason}");
         assert!(!valid(RatifyV2ReleaseReleased, reason), "released with {reason}");

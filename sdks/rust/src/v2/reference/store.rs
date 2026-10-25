@@ -29,7 +29,6 @@ use crate::v2::evaluation_progress::{
     initial_v2_evaluation_progress, validate_v2_evaluation_progress_inner, V2EvaluationProgress,
     V2InterruptedClaim,
 };
-use crate::v2::json::{parse_json, JV};
 use crate::v2::rate_reservation::V2RateReservation;
 use crate::v2::receipt::{
     encode_verification_receipt_v2, sign_prepared_verification_receipt_v2, verification_receipt_v2_digest,
@@ -576,8 +575,13 @@ impl ClaimStoreV2 for Store {
         // SPEC-v2 §6.8: an allow carries a positive allow horizon and every
         // other decision carries none, so the horizon and the rate admission
         // below always apply to exactly the allows.
-        let is_allow = crate::v2::receipt::decode_verification_receipt_body_v2(receipt_body)?.decision == "allow";
-        if is_allow != (allow_valid_until > 0) {
+        let decision = crate::v2::receipt::decode_verification_receipt_body_v2(receipt_body)?.decision;
+        let horizon_ok = if decision == "allow" {
+            allow_valid_until > 0 && allow_valid_until <= crate::v2::limits::V2_MAX_TIMESTAMP_SECONDS
+        } else {
+            allow_valid_until == 0
+        };
+        if !horizon_ok {
             return Err(classified(
                 V2ErrorClass::ConfigurationInvalid,
                 "v2reference: the allow horizon does not match the decision",
@@ -694,7 +698,10 @@ impl ClaimStoreV2 for Store {
             return Err(classified(V2ErrorClass::ClaimNotFound, "v2reference: unknown claim"));
         };
         validate_v2_finalization_payload(&record.claim, terminal_result, receipt_body)?;
-        if !is_interrupted_terminal(terminal_result) {
+        // The payload check above binds the terminal result's decision and
+        // reason to the strictly decoded body, so the body names them.
+        let body = crate::v2::receipt::decode_verification_receipt_body_v2(receipt_body)?;
+        if body.decision != "indeterminate" || body.decision_reason != "evaluation_interrupted" {
             return Err(classified(
                 V2ErrorClass::ConfigurationInvalid,
                 "v2reference: recovery may commit only indeterminate/evaluation_interrupted",
@@ -703,32 +710,6 @@ impl ClaimStoreV2 for Store {
         s.change_locked(|s| s.commit_terminal_locked(claim_id, terminal_result, receipt_body, 0, now))?;
         Ok(true)
     }
-}
-
-/// Go `json.Unmarshal(terminalResult, &map[string]string)` with the
-/// decision and reason of an interrupted result.
-fn is_interrupted_terminal(terminal_result: &[u8]) -> bool {
-    let Ok(root) = parse_json(terminal_result) else {
-        return false;
-    };
-    let JV::Obj(fields) = &root.v else {
-        return false;
-    };
-    let mut decision = None;
-    let mut reason = None;
-    for (k, v) in fields {
-        let value = match &v.v {
-            JV::Str(s) => s.as_str(),
-            JV::Null => "",
-            _ => return false,
-        };
-        match k.as_str() {
-            "decision" => decision = Some(value),
-            "decision_reason" => reason = Some(value),
-            _ => {}
-        }
-    }
-    decision == Some("indeterminate") && reason == Some("evaluation_interrupted")
 }
 
 impl V2ReleaseClaimStore for Store {

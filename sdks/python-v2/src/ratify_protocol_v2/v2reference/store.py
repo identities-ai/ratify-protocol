@@ -55,6 +55,7 @@ from ..release_v2 import (
 )
 from ..signing_v2 import key_id_v2, public_key_of
 from ..stream_sequence_v2 import check_v2_stream_sequence
+from ..clock_bounds_v2 import V2_MAX_TIMESTAMP_SECONDS
 from ..types_v2 import V2CheckpointAcknowledgement
 from ..verification_receipt_v2 import decode_verification_receipt_body_v2
 
@@ -338,7 +339,8 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             # SPEC-v2 §6.8: an allow carries a positive allow horizon and every
             # other decision carries none, so the horizon and the rate admission
             # below always apply to exactly the allows.
-            if (decode_verification_receipt_body_v2(bytes(receipt_body)).decision == "allow") != (allow_valid_until > 0):
+            decision = decode_verification_receipt_body_v2(bytes(receipt_body)).decision
+            if not (0 < allow_valid_until <= V2_MAX_TIMESTAMP_SECONDS if decision == "allow" else allow_valid_until == 0):
                 raise V2Error(V2ErrorClass.CONFIGURATION_INVALID, "v2reference: the allow horizon does not match the decision")
             if allow_valid_until > 0 and (final_at >= allow_valid_until or final_at >= record.claim.expires_at):
                 raise V2Error(V2ErrorClass.ALLOW_HORIZON_PASSED, "v2reference: allow is at or beyond its horizon")

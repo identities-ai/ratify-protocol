@@ -432,7 +432,7 @@ func (s *Store) FinalizeV2Claim(_ context.Context, claimID string, ownerToken, t
 	// SPEC-v2 §6.8: an allow carries a positive allow horizon and every other
 	// decision carries none, so the horizon and the rate admission below
 	// always apply to exactly the allows.
-	if body, err := ratify.DecodeVerificationReceiptBodyV2(receiptBody); err != nil || (body.Decision == "allow") != (allowValidUntil > 0) {
+	if body, err := ratify.DecodeVerificationReceiptBodyV2(receiptBody); err != nil || !allowHorizonMatches(body.Decision, allowValidUntil) {
 		return false, &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: the allow horizon does not match the decision")}
 	}
 	if allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.ExpiresAt) {
@@ -555,8 +555,9 @@ func (s *Store) RecoverInterruptedV2Claim(_ context.Context, claimID string, ter
 	if err := ratify.ValidateV2FinalizationPayload(record.claim, terminalResult, receiptBody); err != nil {
 		return false, err
 	}
-	var fields map[string]string
-	if json.Unmarshal(terminalResult, &fields) != nil || fields["decision"] != "indeterminate" || fields["decision_reason"] != "evaluation_interrupted" {
+	// The payload check above binds the terminal result's decision and
+	// reason to the strictly decoded body, so the body names them.
+	if body, err := ratify.DecodeVerificationReceiptBodyV2(receiptBody); err != nil || body.Decision != "indeterminate" || body.DecisionReason != "evaluation_interrupted" {
 		return false, &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: recovery may commit only indeterminate/evaluation_interrupted")}
 	}
 	if err := s.changeLocked(func() { s.commitTerminalLocked(record, terminalResult, receiptBody, 0, now) }); err != nil {
@@ -780,4 +781,13 @@ func (*RateAtFinalizationStore) AdmitsV2RateAtFinalization() {}
 // it always fails (SPEC-v2 §7.1, §7.6).
 func (*RateAtFinalizationStore) ReserveV2RateBatch(context.Context, string, []byte, string, []ratify.V2RateReservation) error {
 	return fmt.Errorf("v2reference: provisional rate reservation is not used with admission at finalization")
+}
+
+// allowHorizonMatches is SPEC-v2 §6.8 at finalization: an allow carries an
+// allow horizon in the timestamp domain and every other decision carries 0.
+func allowHorizonMatches(decision string, allowValidUntil int64) bool {
+	if decision == "allow" {
+		return allowValidUntil > 0 && allowValidUntil <= ratify.V2MaxTimestampSeconds
+	}
+	return allowValidUntil == 0
 }

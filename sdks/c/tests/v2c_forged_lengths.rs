@@ -929,3 +929,35 @@ fn v2c_issuance_and_journal_answers_with_forged_lengths_fail_closed() {
     assert_eq!(class_of(&r), "status_object_rejected", "{}", last_error());
     assert!(last_error().contains("isize::MAX"), "{}", last_error());
 }
+
+unsafe extern "C" fn non_utf8_journal_load(_: *mut c_void, out: *mut RatifyV2JournalSnapshot) -> i32 {
+    static DIGEST: [u8; 3] = [0xc3, 0x28, 0];
+    (*out).snapshot = RatifyV2Slice { ptr: ptr::null(), len: 0 };
+    (*out).digest = DIGEST.as_ptr().cast();
+    0
+}
+
+/// A string a callback answers with must be valid UTF-8: a journal digest
+/// that is not is no answer and fails closed, never a lossy copy compared
+/// against the anchored head.
+#[test]
+fn v2c_callback_text_that_is_not_utf8_fails_closed() {
+    let journal = RatifyV2JournalStoreCallbacks {
+        user: ptr::null_mut(),
+        load: Some(non_utf8_journal_load),
+        compare_and_swap: None,
+    };
+    let kp = Kp::generate().0;
+    let pk = kp.public();
+    let (issuer, cert) = (cs(&kp.id()), cs("c1"));
+    let policy = RatifyV2StatusPolicy {
+        max_list_lifetime_seconds: 3600,
+        max_status_age_seconds: 3600,
+        clock_skew_seconds: 5,
+    };
+    let r = buf(|o| unsafe {
+        ratify_v2_journal_status(&journal, issuer.as_ptr(), cert.as_ptr(), 1, &pk, &policy, 150, o)
+    });
+    assert_eq!(class_of(&r), "status_object_rejected", "{}", last_error());
+    assert!(last_error().contains("not valid UTF-8"), "{}", last_error());
+}

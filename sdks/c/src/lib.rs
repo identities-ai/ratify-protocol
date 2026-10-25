@@ -1582,7 +1582,9 @@ pub unsafe extern "C" fn ratify_string_free(s: *mut c_char) {
     )
 }
 
-/// Free an error string written to an `err_out` parameter.
+/// Free an error string written to an `err_out` parameter, by a v1 or a v2
+/// (`ratify_v2_*`) function. Each such string is heap-allocated and owned by
+/// the caller until freed here.
 /// Safe to call with NULL.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_error_free(s: *mut c_char) {

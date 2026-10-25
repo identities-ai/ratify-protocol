@@ -63,6 +63,9 @@ fn class(e: &V2StoreError) -> Option<V2ErrorClass> {
 fn racing_finalizations_commit_exactly_once() {
     let store = new_store();
     let ctx = V2Context::background();
+    // The bound body is an allow, which carries an allow horizon inside the
+    // claim's lifetime (SPEC-v2 §6.8).
+    const HORIZON: i64 = NOW + 60;
     let mut claim = claim_for("c", "proof", None);
     // Bodies that differ only in verified_at, each bound to the claim.
     let payloads: Vec<(Vec<u8>, Vec<u8>)> =
@@ -72,7 +75,7 @@ fn racing_finalizations_commit_exactly_once() {
     // Conflicting payloads: one commits, every other is claim_already_terminal.
     let results = race(WORKERS, |i| {
         let (terminal, body) = &payloads[i];
-        store.finalize_v2_claim(&ctx, "c", &owner, terminal, body, 0)
+        store.finalize_v2_claim(&ctx, "c", &owner, terminal, body, HORIZON)
     });
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1, "{results:?}");
     for r in results.iter().filter(|r| **r != Ok(true)) {
@@ -86,12 +89,12 @@ fn racing_finalizations_commit_exactly_once() {
     let (terminal, body) = bind_claim_to_receipt_body(&mut claim, NOW);
     let created = store.claim_v2(&ctx, claim).expect("claim");
     let owner = created.owner_token;
-    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, "d", &owner, &terminal, &body, 0));
+    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, "d", &owner, &terminal, &body, HORIZON));
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1);
     assert_eq!(results.iter().filter(|r| **r == Ok(false)).count(), WORKERS - 1);
 
     // A different owner never finalizes.
-    let lost = store.finalize_v2_claim(&ctx, "d", &[9; 32], &terminal, &body, 0).expect_err("owner");
+    let lost = store.finalize_v2_claim(&ctx, "d", &[9; 32], &terminal, &body, HORIZON).expect_err("owner");
     assert_eq!(class(&lost), Some(V2ErrorClass::ClaimLeaseLost));
 }
 

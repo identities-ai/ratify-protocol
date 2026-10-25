@@ -540,6 +540,18 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
 	withHorizon := finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{ErrorClass: "configuration_invalid"})
 	withHorizon.AllowValidUntil = Now + 60
+	negative := finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{ErrorClass: "configuration_invalid"})
+	negative.AllowValidUntil = -1
+	sc("finalize_rejects_negative_allow_horizon_on_non_allow", "an indeterminate receipt body finalized with allow_valid_until -1 is refused (configuration_invalid, SPEC-v2 §6.8): a non-allow carries exactly 0; the same body with 0 then finalizes once",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		negative,
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}))
+	beyond := finalize(terminal("allow", "authorized", "authorized_agent"), b64(must(ratify.VerificationReceiptV2Body(allow))), lifecycleExpectJSON{ErrorClass: "configuration_invalid"})
+	beyond.AllowValidUntil = ratify.V2MaxTimestampSeconds + 1
+	sc("finalize_rejects_allow_horizon_beyond_timestamp_domain", "an allow receipt body finalized with allow_valid_until 253402300800 is refused (configuration_invalid, SPEC-v2 §2.5, §6.8): every horizon is clamped to 253402300799; the genuine indeterminate body then finalizes once",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		beyond,
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}))
 	sc("finalize_rejects_allow_horizon_on_non_allow", "an indeterminate receipt body finalized with a positive allow_valid_until is refused (configuration_invalid, SPEC-v2 §6.8, §7.5) and commits nothing; the same body with no horizon then finalizes once",
 		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
 		withHorizon,
@@ -637,4 +649,14 @@ func (g *gen) recoveryBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
 			thenRecover[0], thenRecover[1], thenRecover[2])...)
+	// Recovery validates exactly as finalization does (SPEC-v2 §7.5): the
+	// terminal result is a JSON object whose decision and decision_reason
+	// match the body, and its other members are the store's own, so every SDK
+	// accepts a member of any JSON type.
+	extended := b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "evaluation_interrupted",
+		"identity_status": "authorization_unverified", "x": 1, "y": map[string]any{"z": true}})))
+	sc("recover_direct_accepts_terminal_result_with_other_members", "a terminal result whose decision and decision_reason match the canonical interrupted body, with further members of any JSON type, is committed by the claim store's recovery operation exactly as finalization would commit it; an identical repeat is a no-op",
+		append(slices.Clone(claimAndExpire),
+			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}))...)
 }

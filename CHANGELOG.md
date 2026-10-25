@@ -290,8 +290,11 @@ match before the beta.
 - **C: `ratify_v2_object_decode` decodes a status evidence batch at the
   envelope only** (SPEC-v2 §6.5 step 3), as the Go, TypeScript, Python and
   Rust batch decoders do. It used to decode and re-encode every nested
-  object, so it rejected batches the other SDKs accept. `canonical_out` now
-  keeps each object's received bytes.
+  object, so it rejected batches the other SDKs accept. A non-NULL
+  `canonical_out` is the §6.5 canonical batch encoding, byte for byte what
+  the other SDKs' batch encoders produce: each nested object is decoded and
+  re-encoded, and one that does not decode under its code makes the call
+  `malformed`.
 - **C: identifiers containing U+0000 are never stripped before a
   callback.** The callback adapters removed the NUL, so a C store keyed
   `"lab\0x"` and `"labx"` (or rate counters for `"x\0y"` and `"xy"`) to the

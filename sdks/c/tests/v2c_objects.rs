@@ -1655,57 +1655,58 @@ fn v2c_rotation_refuses_mixed_local_and_external_signers() {
 
 /// SPEC-v2 §6.5 step 3: the status evidence batch decoder checks the
 /// envelope only (a JSON array of exact two-member entries, code 3 or 5,
-/// size and count limits) and keeps each object's received bytes. Nested
-/// objects are decoded strictly later, when they are authenticated, so
-/// `ratify_v2_object_decode` must accept exactly what the Go, TypeScript,
-/// Python and Rust batch decoders accept (every input below) and must not
-/// decode or re-encode the nested objects.
+/// size and count limits). Nested objects are decoded strictly later, when
+/// they are authenticated, so `ratify_v2_object_decode` without
+/// `canonical_out` must accept exactly what the Go, TypeScript, Python and
+/// Rust batch decoders accept (every input below). `canonical_out` is the
+/// §6.5 canonical batch encoding, which writes each object's canonical
+/// encoding: it must be byte for byte what those SDKs' batch encoders
+/// produce, and `malformed` where they refuse, so a C caller never holds
+/// "canonical" bytes no other SDK would produce.
 #[test]
 fn v2c_status_batch_decode_is_envelope_only() {
     let kind = kind_code("status_evidence_batch");
     let list = b64(&object_by_kind(&load("objects.json"), "revocation_list")["wire_b64"]);
-    let canonical_batch = [
-        br#"[{"object":"#.as_slice(),
-        &list,
-        br#","object_type_code":3}]"#,
-    ]
-    .concat();
-    let accepted: [(&[u8], &[u8]); 6] = [
+    let spaced_list = serde_json::to_vec_pretty(&parse(&list)).unwrap();
+    assert_ne!(spaced_list, list);
+    let batch_of = |object: &[u8], code: &str| {
+        [br#"[{"object":"#.as_slice(), object, br#","object_type_code":"#, code.as_bytes(), b"}]"].concat()
+    };
+    let canonical_batch = batch_of(&list, "3");
+    // (wire, canonical_out, or None where the Go, TypeScript, Python and
+    // Rust batch encoders are malformed)
+    let accepted: [(Vec<u8>, Option<Vec<u8>>); 8] = [
         // A conforming batch is unchanged.
-        (&canonical_batch, &canonical_batch),
-        (b"[]", b"[]"),
-        // Nested objects the batch decoder does not inspect.
+        (canonical_batch.clone(), Some(canonical_batch.clone())),
+        (b"[]".to_vec(), Some(b"[]".to_vec())),
+        // Entry members in canonical order and each object re-encoded.
         (
-            br#"[{"object":{},"object_type_code":3}]"#,
-            br#"[{"object":{},"object_type_code":3}]"#,
+            [br#" [ {"object_type_code":3, "object":"#.as_slice(), &spaced_list, b" } ] "].concat(),
+            Some(canonical_batch.clone()),
         ),
-        (
-            br#"[{"object":{"stream_id":null},"object_type_code":5}]"#,
-            br#"[{"object":{"stream_id":null},"object_type_code":5}]"#,
-        ),
-        // A list labelled as a push, an unknown and a case-variant member.
-        (
-            &[br#"[{"object":"#.as_slice(), &list, br#","object_type_code":5}]"#].concat(),
-            &[br#"[{"object":"#.as_slice(), &list, br#","object_type_code":5}]"#].concat(),
-        ),
-        // Entry members are put in canonical order; the object keeps its
-        // received bytes, including its inner spelling.
-        (
-            br#" [ {"object_type_code":3, "object":{ "Version" : 1 ,"zz":[1, 2]} } ] "#,
-            br#"[{"object":{ "Version" : 1 ,"zz":[1, 2]},"object_type_code":3}]"#,
-        ),
+        (batch_of(&spaced_list, "3"), Some(canonical_batch.clone())),
+        // Nested objects the batch decoder does not inspect, which have no
+        // canonical encoding.
+        (br#"[{"object":{},"object_type_code":3}]"#.to_vec(), None),
+        (br#"[{"object":{ },"object_type_code":3}]"#.to_vec(), None),
+        (br#"[{"object":{"stream_id":null},"object_type_code":5}]"#.to_vec(), None),
+        // A list labelled as a push.
+        (batch_of(&list, "5"), None),
     ];
     for (wire, want) in accepted {
-        let shown = String::from_utf8_lossy(wire);
-        let got = canonicalize(kind, wire).unwrap_or_else(|e| panic!("C rejects {shown}: {e:?}"));
-        assert_eq!(
-            String::from_utf8_lossy(&got),
-            String::from_utf8_lossy(want),
-            "canonical_out for {shown}"
-        );
-        // A NULL canonical_out decodes the same way.
-        check(unsafe { ratify_v2_object_decode(kind, ptr_of(wire), wire.len(), ptr::null_mut()) })
+        let shown = String::from_utf8_lossy(&wire);
+        // Without canonical_out the call is the envelope decode.
+        check(unsafe { ratify_v2_object_decode(kind, ptr_of(&wire), wire.len(), ptr::null_mut()) })
             .unwrap_or_else(|e| panic!("C rejects {shown} without canonical_out: {e:?}"));
+        let got = canonicalize(kind, &wire);
+        match &want {
+            Some(want) => assert_eq!(
+                String::from_utf8_lossy(&got.unwrap_or_else(|e| panic!("C rejects {shown}: {e:?}"))),
+                String::from_utf8_lossy(want),
+                "canonical_out for {shown}"
+            ),
+            None => assert_eq!(class_of(&got), "malformed", "canonical_out for {shown}"),
+        }
     }
     // The envelope itself is still strict.
     for wire in [

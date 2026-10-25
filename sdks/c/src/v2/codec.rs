@@ -49,30 +49,10 @@ pub(crate) fn canonicalize(kind: i32, wire: &[u8]) -> AbiResult<Vec<u8>> {
         7 => encode_transaction_receipt_v2(&decode_transaction_receipt_v2(wire)?)?,
         8 => encode_verification_receipt_v2(&decode_verification_receipt_v2(wire)?)?,
         100 => verification_receipt_v2_body(&decode_verification_receipt_body_v2(wire)?)?,
-        101 => status_batch_envelope(&decode_v2_status_evidence_batch(wire)?),
+        101 => encode_v2_status_evidence_batch(&decode_v2_status_evidence_batch(wire)?)?,
         102 => encode_v2_checkpoint_acknowledgement(&decode_v2_checkpoint_acknowledgement(wire)?)?,
         other => return Err(unsupported_kind(other)),
     })
-}
-
-/// A status evidence batch in its envelope form: entry members in canonical
-/// order, each object's received bytes unchanged. SPEC-v2 §6.5 step 3 decodes
-/// only the envelope; each object is decoded strictly when it is
-/// authenticated, so the batch decode must not decode or re-encode it.
-fn status_batch_envelope(batch: &V2StatusEvidenceBatch) -> Vec<u8> {
-    let mut buf = vec![b'['];
-    for (i, object) in batch.objects.iter().enumerate() {
-        if i > 0 {
-            buf.push(b',');
-        }
-        buf.extend_from_slice(br#"{"object":"#);
-        buf.extend_from_slice(&object.wire);
-        buf.extend_from_slice(br#","object_type_code":"#);
-        buf.extend_from_slice(object.object_type.to_string().as_bytes());
-        buf.push(b'}');
-    }
-    buf.push(b']');
-    buf
 }
 
 /// The exact signable projection of `wire` for signature code `code`.
@@ -114,9 +94,11 @@ pub(crate) fn signable(code: u32, wire: &[u8]) -> AbiResult<Vec<u8>> {
 /// signatures.
 /// A status evidence batch (101) is decoded at the envelope only (SPEC-v2
 /// §6.5 step 3): the strict JSON value model applies to the whole document,
-/// but its nested objects are not decoded, and `canonical_out` carries each
-/// object's received bytes unchanged, with the entry members in canonical
-/// order.
+/// but its nested objects are not decoded. A non-NULL `canonical_out` asks
+/// for the §6.5 canonical batch encoding, which writes each object's
+/// canonical encoding, so the call then also decodes every nested object
+/// under its code and is `malformed` when one does not decode, as the other
+/// SDKs' batch encoders are.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_object_decode(
     kind: i32,
@@ -129,6 +111,10 @@ pub unsafe extern "C" fn ratify_v2_object_decode(
         || clear_buffer(canonical_out),
         || {
             let wire = wire_arg(wire, wire_len, "wire", wire_limit(kind.into()))?;
+            if kind == 101 && canonical_out.is_null() {
+                decode_v2_status_evidence_batch(&wire)?;
+                return Ok(());
+            }
             let encoded = canonicalize(kind, &wire)?;
             write_opt_buffer(canonical_out, encoded)
         },

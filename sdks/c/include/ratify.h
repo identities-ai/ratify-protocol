@@ -2316,9 +2316,11 @@ int32_t ratify_v2_evaluator_call_expired(const struct RatifyV2EvaluatorCall *cal
 // signatures.
 // A status evidence batch (101) is decoded at the envelope only (SPEC-v2
 // §6.5 step 3): the strict JSON value model applies to the whole document,
-// but its nested objects are not decoded, and `canonical_out` carries each
-// object's received bytes unchanged, with the entry members in canonical
-// order.
+// but its nested objects are not decoded. A non-NULL `canonical_out` asks
+// for the §6.5 canonical batch encoding, which writes each object's
+// canonical encoding, so the call then also decodes every nested object
+// under its code and is `malformed` when one does not decode, as the other
+// SDKs' batch encoders are.
 int32_t ratify_v2_object_decode(int32_t kind,
                                 const uint8_t *wire,
                                 uintptr_t wire_len,

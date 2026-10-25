@@ -457,6 +457,10 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
     # 2. Receipt.
     if not signed_receipt:
         return _result(V2_RELEASE_PENDING, "receipt_not_appended")
+    # Only bytes-like values are signed receipt bytes; bytes() would raise on
+    # a str and turn an int into that many zero bytes.
+    if not isinstance(signed_receipt, (bytes, bytearray, memoryview)):
+        return _result(V2_RELEASE_REJECTED, "receipt_invalid")
     signed_receipt = bytes(signed_receipt)
     try:
         receipt = _verify_published_v2_receipt(signed_receipt, config)

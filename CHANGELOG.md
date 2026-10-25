@@ -359,6 +359,11 @@ match before the beta.
   SDKs: `configuration_invalid`, or `expected_challenge_unavailable` for
   such a policy without a challenge record. No callback runs.
   `ratify_v2_claim_proof_bundle` also decodes first.
+- **Python: `release_v2_decision` classifies a receipt that is not bytes.**
+  A `str` or other non-bytes signed receipt raised `TypeError` from
+  release step 2; it is now `rejected / receipt_invalid`, as in the other
+  SDKs. An `int`, which `bytes()` turned into zero bytes, gets the same
+  result without being converted.
 
 ### Not carried into v2
 

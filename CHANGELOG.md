@@ -341,6 +341,11 @@ match before the beta.
   spellings; audience membership shapes; scope wildcards; and the
   configured verifier identity above. Every SDK harness, including the
   plain C program, runs them.
+- **Journal snapshot fuzzing in TypeScript and Python.** The randomized
+  decoder suites now cover the `SecurityJournalV2` snapshot importer (SPEC-v2
+  §8.1 item 2) with arbitrary bytes, arbitrary JSON, mutations of a populated
+  snapshot and the size and depth limits; an import that succeeds must
+  re-export the identical bytes. Go and Rust already fuzzed it.
 
 ### Fixed
 

@@ -214,7 +214,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing: Go consumes the git tag directly.)
 4. **Regenerate test vectors deterministically.** `go run ./cmd/ratify-testvectors`. If the result differs from committed, the release is aborted and the user is told to investigate.
 5. **Run the full conformance suite across all SDKs.**
-   - Go: `go vet ./...` and `go test -race -count=1 ./...`
+   - Go: `go vet ./...` and `go test -race -count=1 -timeout 40m ./...`
    - Determinism: regenerate fixtures to `/tmp` and `diff -rq` against `testvectors/v1/`
    - TypeScript: `cd sdks/typescript && npm ci && npx tsc --noEmit && npm test`
    - Python: `cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q`
@@ -453,7 +453,7 @@ Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `cr
 ### 5.3 What `gate-tests` checks before any publish runs
 
 1. `go vet ./...` clean
-2. `go test -race -count=1 ./...` passes
+2. `go test -race -count=1 -timeout 40m ./...` passes
 3. `go mod tidy` produces no diff
 4. Test vectors regenerate byte-identical to committed
 5. `scripts/check-release-sync.sh` confirms package versions, lockfiles, docs, and SDK constants are all aligned

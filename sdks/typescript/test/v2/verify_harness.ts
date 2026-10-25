@@ -137,21 +137,42 @@ export class ModalJournalStore implements SecurityJournalStoreV2 {
   }
 }
 
-/** Go v2PopulateStatusJournal: status keys in ascending issuer order, then preload. */
+/**
+ * Go v2PopulateStatusJournal: status keys in ascending issuer order, then
+ * preload; or, when journal.setup is present, exactly those steps in order.
+ */
 export async function populateStatusJournal(store: SecurityJournalStoreV2, inputs: Any): Promise<void> {
+  const policy = statusPolicyOf(inputs.status_policy);
+  const apply = async (issuer: string, code: number, wireB64: string, epoch: number, key: Any, now: number): Promise<void> => {
+    const wire = unb64(wireB64);
+    if (code === 3) {
+      await applyRevocationListToJournalV2(store, decodeRevocationListV2(wire), issuer, epoch, keyOf(key), policy, now);
+    } else if (code === 5) {
+      await applyRevocationPushToJournalV2(store, decodeRevocationPushV2(wire), issuer, epoch, keyOf(key), policy, now);
+    } else {
+      throw new Error(`unknown journal object type code ${code}`);
+    }
+  };
+  const setup = inputs.journal?.setup;
+  if (setup) {
+    for (const step of setup) {
+      if (step.op === "configure_status_key") {
+        await configureStatusKeyEpochV2(store, step.issuer_id, step.epoch, keyOf(step.public_key));
+      } else if (step.op === "apply") {
+        await apply(step.issuer_id, step.object_type_code, step.wire_b64, step.epoch, step.public_key, step.now);
+      } else {
+        throw new Error(`unknown journal setup op ${step.op}`);
+      }
+    }
+    return;
+  }
   const keys = inputs.status_keys ?? {};
   for (const issuer of Object.keys(keys).sort(compareStrings)) {
     await configureStatusKeyEpochV2(store, issuer, keys[issuer].epoch, keyOf(keys[issuer].public_key));
   }
-  const policy = statusPolicyOf(inputs.status_policy);
   for (const p of inputs.journal?.preload ?? []) {
     const key = keys[p.issuer_id];
-    const wire = unb64(p.wire_b64);
-    if (p.object_type_code === 3) {
-      await applyRevocationListToJournalV2(store, decodeRevocationListV2(wire), p.issuer_id, key.epoch, keyOf(key.public_key), policy, p.now);
-    } else {
-      await applyRevocationPushToJournalV2(store, decodeRevocationPushV2(wire), p.issuer_id, key.epoch, keyOf(key.public_key), policy, p.now);
-    }
+    await apply(p.issuer_id, p.object_type_code, p.wire_b64, key.epoch, key.public_key, p.now);
   }
 }
 
@@ -233,7 +254,7 @@ export async function buildVerifyRequest(inputs: Any, bundle: Uint8Array, counts
   }
   const req: V2VerifyRequest = {
     bundle, expected: expectedChallengeOf(inputs.expected_challenge), contextPolicy, requiredScope: inputs.required_scope,
-    verifierNamespace: inputs.configured_namespace, replayEpoch: inputs.configured_replay_epoch, now: inputs.now,
+    verifierNamespace: inputs.configured_namespace, replayEpoch: inputs.configured_replay_epoch, verifierID: inputs.configured_verifier_id, now: inputs.now,
     maxChallengeAgeSeconds: inputs.max_challenge_age_seconds, futureSkewSeconds: inputs.future_skew_seconds,
     statusPolicy: statusPolicyOf(inputs.status_policy), statusKeys, tzdbVersion: inputs.tzdb_version ?? "",
   };

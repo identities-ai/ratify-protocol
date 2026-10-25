@@ -173,7 +173,12 @@ export interface V2TerminalClaimRecord {
 /** Thrown by recordV2Release when a different release or withheld record already exists. */
 export const ErrV2ReleaseStateMismatch = new V2SentinelError("v2 claim already records a different release");
 
-/** The claim-store view release needs. */
+/**
+ * The claim-store view release needs. loadV2TerminalClaim reports a claim
+ * the store does not hold with an error of class claim_not_found, which
+ * release answers with rejected / release_state_mismatch; any other error is
+ * store unavailability (pending / claim_store_unavailable).
+ */
 export interface V2ReleaseClaimStore extends V2AuthoritativeClock {
   loadV2TerminalClaim(claimID: string, signal?: AbortSignal): Promise<V2TerminalClaimRecord>;
   recordV2Release(record: V2ReleaseRecord, signal?: AbortSignal): Promise<void>;
@@ -329,7 +334,10 @@ export async function releaseV2Decision(
   let record: V2TerminalClaimRecord;
   try {
     record = await config.claimStore.loadV2TerminalClaim(c.claimID, signal);
-  } catch {
+  } catch (err) {
+    // Only an unavailable store is retryable. A store that answers that it
+    // holds no such claim (claim_not_found) did not produce this handoff.
+    if (v2ErrorClassOf(err) === "claim_not_found") return result("rejected", "release_state_mismatch");
     return result("pending", "claim_store_unavailable");
   }
   if (record.receiptAbandoned) return result("withheld", "receipt_abandoned");

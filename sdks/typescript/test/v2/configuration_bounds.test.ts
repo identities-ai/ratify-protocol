@@ -123,7 +123,7 @@ test("verify: inconsistent skew, replay epoch and session context are rejected a
   const request = lifecycle.requests.A;
   const base = (): V2VerifyRequest => ({
     bundle: unb64(lifecycle.bundles_b64[request.bundle]), expected: null, contextPolicy: null, requiredScope: "", verifierNamespace: "ns",
-    replayEpoch: 0, now: 1800000000, maxChallengeAgeSeconds: 60, futureSkewSeconds: 5,
+    replayEpoch: 0, verifierID: "a".repeat(64), now: 1800000000, maxChallengeAgeSeconds: 60, futureSkewSeconds: 5,
     statusPolicy: { maxListLifetimeSeconds: 3600, maxStatusAgeSeconds: 3600, clockSkewSeconds: 5 },
   });
   const expectedWith = (session: Uint8Array) => ({
@@ -158,7 +158,7 @@ test("preflight: configured replay epoch bound", async () => {
   const bundle = decodeProofBundleV2(unb64(lifecycle.bundles_b64[lifecycle.requests.A.bundle]));
   for (const epoch of [-1, 2 ** 53]) {
     const expected = { value: new Uint8Array(32), issuedAt: 0, expiresAt: 1, verifierNamespace: "ns", replayEpoch: epoch, verifierID: "" };
-    assert.equal(await classOf(() => validateProofBundleV2Preflight(bundle, expected, "data:read", "ns", epoch, 1800000000, 60, 5)),
+    assert.equal(await classOf(() => validateProofBundleV2Preflight(bundle, expected, "data:read", "ns", epoch, bundle.verifier_id, 1800000000, 60, 5)),
       "configuration_invalid", `epoch ${epoch}`);
   }
 });

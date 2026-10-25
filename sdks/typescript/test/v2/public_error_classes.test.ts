@@ -366,10 +366,10 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     { name: "newConstraintEvaluatorRegistryV2", want: "configuration_invalid", run: () => newConstraintEvaluatorRegistryV2(-1000) },
     { name: "constraintProfileDigestV2", want: "configuration_invalid", run: () => constraintProfileDigestV2({ profile: "", type: "" }) },
     { name: "evaluateReceiverAudienceV2", want: "configuration_invalid", run: () => evaluateReceiverAudienceV2(nil, "", null, -1, 0) },
-    { name: "preflightProofBundleV2", want: "", run: () => preflightProofBundleV2(zeroBundle(), null, null, "data:read", "ns", 0, 0, 0, 0) },
+    { name: "preflightProofBundleV2", want: "", run: () => preflightProofBundleV2(zeroBundle(), null, null, "data:read", "ns", 0, "", 0, 0, 0) },
     {
       name: "validateProofBundleV2Preflight", want: "",
-      run: () => validateProofBundleV2Preflight(zeroBundle(), { value: empty(), issuedAt: 0, expiresAt: 0, verifierNamespace: "", replayEpoch: 0, verifierID: "" }, "data:read", "ns", 0, 0, 0, 0),
+      run: () => validateProofBundleV2Preflight(zeroBundle(), { value: empty(), issuedAt: 0, expiresAt: 0, verifierNamespace: "", replayEpoch: 0, verifierID: "" }, "data:read", "ns", 0, "", 0, 0, 0),
     },
     { name: "claimProofBundleV2", want: "configuration_invalid", run: () => claimProofBundleV2(nil, zeroBundle(), nil, "ns", 0, 0) },
     { name: "finalizeClaimProofBundleV2", want: "configuration_invalid", run: () => finalizeClaimProofBundleV2(nil, nil, nil, nil) },
@@ -418,7 +418,7 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
 
   await t.test("verifyProofBundleV2 without a claim store", async () => {
     const outcome = await verifyProofBundleV2({
-      bundle: garbage, expected: null, contextPolicy: null, requiredScope: "", verifierNamespace: "", replayEpoch: 0, now: 0,
+      bundle: garbage, expected: null, contextPolicy: null, requiredScope: "", verifierNamespace: "", replayEpoch: 0, verifierID: "", now: 0,
       maxChallengeAgeSeconds: 0, futureSkewSeconds: 0, statusPolicy: policy,
     }, { claimStore: nil });
     // Bounded decode precedes the claim-store check (SPEC-v2 §6.2).

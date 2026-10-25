@@ -38,7 +38,7 @@ async function presentIssued(issuance: V2ChallengeIssuanceStore, claims: ClaimSt
     : newV2ContextPolicy("ratify.conformance.context-not-required/v1", false, [], null);
   let preflight;
   try {
-    preflight = await preflightProofBundleV2(bundle, expected, policy, "data:read", NAMESPACE, EPOCH, now, 300, 5);
+    preflight = await preflightProofBundleV2(bundle, expected, policy, "data:read", NAMESPACE, EPOCH, expected.verifierID, now, 300, 5);
   } catch (err) {
     return "preflight:" + v2ErrorClassOf(err);
   }

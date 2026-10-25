@@ -236,7 +236,7 @@ export async function claimProofBundleV2(
         expectedAgentID: sealed.expectedAgentID, expectedAgentPublicKey: sealed.expectedAgentPublicKey,
         expectedReceiverID: sealed.expectedReceiverID, expectedSessionContext: sealed.expectedSessionContext,
         contextPolicy: sealed.contextPolicy,
-      }, sealed.requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, sealed.maxAge, sealed.futureSkew);
+      }, sealed.requiredScope, configuredNamespace, configuredReplayEpoch, sealed.verifierID, nowUnix, sealed.maxAge, sealed.futureSkew);
     } catch (err) {
       throw wrapError("v2 claim-time preflight", err);
     }

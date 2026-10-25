@@ -12,6 +12,18 @@
 //! `tests/panic_containment.rs` checks that every exported function goes
 //! through one of these guards; a new export that skips them fails that test.
 //!
+//! ## Outputs are written last
+//!
+//! The panic path clears outputs; it does not free them, because it cannot
+//! tell a value this call allocated from the caller's uninitialized storage.
+//! Every body therefore writes its library-owned outputs (handles, buffers,
+//! strings) only as its final steps, after all fallible work, with nothing
+//! that can panic in between: a caught panic in a release build never follows
+//! an output write, so no allocation is stranded. Keep it that way in new
+//! exports. The `panic-test-hook` feature's after-body injection point fires
+//! after those writes to test containment; in that test-only build a caught
+//! panic leaks the outputs the body already wrote.
+//!
 //! ## Unwind safety
 //!
 //! The guards wrap bodies in `AssertUnwindSafe`. That is sound here because a

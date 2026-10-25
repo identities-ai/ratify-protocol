@@ -452,7 +452,7 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 						t.Fatal(err)
 					}
 					req, _, _ := v2BuildVerifyRequest(t, request.v2OrderingInputs, nil, &v2Counts{})
-					pre, err := ratify.PreflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, req.RequiredScope, req.VerifierNamespace, req.ReplayEpoch, now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds)
+					pre, err := ratify.PreflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, req.RequiredScope, req.VerifierNamespace, req.ReplayEpoch, req.VerifierID, now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds)
 					if err != nil {
 						t.Fatal(err)
 					}

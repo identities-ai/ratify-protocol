@@ -188,11 +188,40 @@ impl SecurityJournalStoreV2 for ModalJournalStore {
 }
 
 /// Go `v2PopulateStatusJournal`: every status key configured at its epoch
-/// in ascending issuer order, then each preload object applied at its time.
+/// in ascending issuer order, then each preload object applied at its time;
+/// or, when `journal.setup` is present, exactly those steps in order.
 pub fn populate_status_journal(store: &dyn SecurityJournalStoreV2, inputs: &Value) {
     let ctx = V2Context::background();
-    let keys = inputs["status_keys"].as_object().cloned().unwrap_or_default();
     let policy = status_policy(&inputs["status_policy"]);
+    let apply = |issuer: &str, code: u64, wire: &[u8], epoch: u64, public: &HybridPublicKey, now: i64| match code {
+        3 => {
+            let list = decode_revocation_list_v2(wire).unwrap();
+            apply_revocation_list_to_journal_v2(&ctx, store, &list, issuer, epoch, public, &policy, now)
+                .unwrap_or_else(|e| panic!("journal list: {e}"));
+        }
+        5 => {
+            let push = decode_revocation_push_v2(wire).unwrap();
+            apply_revocation_push_to_journal_v2(&ctx, store, &push, issuer, epoch, public, &policy, now)
+                .unwrap_or_else(|e| panic!("journal push: {e}"));
+        }
+        other => panic!("unknown journal object type {other}"),
+    };
+    if let Some(setup) = inputs["journal"]["setup"].as_array() {
+        for step in setup {
+            let issuer = s(&step["issuer_id"]);
+            let (epoch, public) = (u(&step["epoch"]), public_key_json(&step["public_key"]));
+            match s(&step["op"]).as_str() {
+                "configure_status_key" => {
+                    configure_status_key_epoch_v2(&ctx, store, &issuer, epoch, &public)
+                        .unwrap_or_else(|e| panic!("setup configure {issuer} epoch {epoch}: {e}"));
+                }
+                "apply" => apply(&issuer, u(&step["object_type_code"]), &unb64(&step["wire_b64"]), epoch, &public, i(&step["now"])),
+                other => panic!("unknown journal setup op {other}"),
+            }
+        }
+        return;
+    }
+    let keys = inputs["status_keys"].as_object().cloned().unwrap_or_default();
     // serde_json maps iterate in ascending key order.
     for (issuer, key) in &keys {
         configure_status_key_epoch_v2(&ctx, store, issuer, u(&key["epoch"]), &public_key_json(&key["public_key"]))
@@ -201,21 +230,7 @@ pub fn populate_status_journal(store: &dyn SecurityJournalStoreV2, inputs: &Valu
     for p in arr(&inputs["journal"]["preload"]) {
         let issuer = s(&p["issuer_id"]);
         let key = &keys[&issuer];
-        let (epoch, public) = (u(&key["epoch"]), public_key_json(&key["public_key"]));
-        let wire = unb64(&p["wire_b64"]);
-        match u(&p["object_type_code"]) {
-            3 => {
-                let list = decode_revocation_list_v2(&wire).unwrap();
-                apply_revocation_list_to_journal_v2(&ctx, store, &list, &issuer, epoch, &public, &policy, i(&p["now"]))
-                    .unwrap_or_else(|e| panic!("preload list: {e}"));
-            }
-            5 => {
-                let push = decode_revocation_push_v2(&wire).unwrap();
-                apply_revocation_push_to_journal_v2(&ctx, store, &push, &issuer, epoch, &public, &policy, i(&p["now"]))
-                    .unwrap_or_else(|e| panic!("preload push: {e}"));
-            }
-            other => panic!("unknown preload object type {other}"),
-        }
+        apply(&issuer, u(&p["object_type_code"]), &unb64(&p["wire_b64"]), u(&key["epoch"]), &public_key_json(&key["public_key"]), i(&p["now"]));
     }
 }
 
@@ -295,6 +310,7 @@ pub fn build_verify_request(
         required_scope: s(&inputs["required_scope"]),
         verifier_namespace: s(&inputs["configured_namespace"]),
         replay_epoch: i(&inputs["configured_replay_epoch"]),
+        verifier_id: s(&inputs["configured_verifier_id"]),
         now: i(&inputs["now"]),
         max_challenge_age_seconds: i(&inputs["max_challenge_age_seconds"]),
         future_skew_seconds: i(&inputs["future_skew_seconds"]),

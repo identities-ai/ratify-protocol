@@ -153,7 +153,7 @@ test("finalization: the receipt body is bound to the sealed claim", async () => 
   const { req } = await buildVerifyRequest(request, wire, zeroCounts());
   const bundle = decodeProofBundleV2(wire);
   const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace,
-    req.replayEpoch, request.now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
+    req.replayEpoch, req.verifierID, request.now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
   const { claim, token } = await claimProofBundleV2(store, bundle, pre, req.verifierNamespace, req.replayEpoch, request.now);
   const assessment = await evaluateProofBundleV2LocalAuthorization(bundle, {
     futureSkewSeconds: req.futureSkewSeconds, requiredScope: req.requiredScope, context: req.context, tzdbVersion: req.tzdbVersion,

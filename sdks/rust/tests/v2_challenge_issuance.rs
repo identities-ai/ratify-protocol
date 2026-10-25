@@ -51,6 +51,7 @@ fn present_issued(issuance: &dyn V2ChallengeIssuanceStore, claims: &dyn ClaimSto
         "data:read",
         NAMESPACE,
         EPOCH,
+        &expected.verifier_id,
         now,
         300,
         5,

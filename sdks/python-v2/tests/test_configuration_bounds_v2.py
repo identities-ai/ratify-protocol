@@ -47,6 +47,7 @@ class CountingClaimStore:
 
 def _base_request() -> V2VerifyRequest:
     return V2VerifyRequest(bundle=BUNDLE_WIRE, now=1800000000, max_challenge_age_seconds=60, future_skew_seconds=5,
+                           verifier_namespace="ns", verifier_id="a" * 64,
                            status_policy=RevocationStatusPolicyV2(max_list_lifetime_seconds=3600,
                                                                   max_status_age_seconds=3600, clock_skew_seconds=5))
 
@@ -100,7 +101,7 @@ def test_standalone_preflight_replay_epoch_bound(epoch):
     bundle = pv2.decode_proof_bundle_v2(BUNDLE_WIRE)
     with pytest.raises(Exception) as raised:
         validate_proof_bundle_v2_preflight(bundle, ExpectedChallengeV2(replay_epoch=epoch), "data:read", "ns", epoch,
-                                           1800000000, 60, 5)
+                                           bundle.verifier_id, 1800000000, 60, 5)
     assert error_class_of(raised.value) == V2ErrorClass.CONFIGURATION_INVALID, raised.value
 
 

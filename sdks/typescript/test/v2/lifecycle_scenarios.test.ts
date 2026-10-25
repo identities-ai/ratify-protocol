@@ -71,8 +71,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 62);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 338);
+  assert.equal(file.scenarios.length, 63);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 342);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -181,7 +181,7 @@ for (const sc of file.scenarios as Any[]) {
         case "claim_only": {
           const bundle = decodeProofBundleV2(unb64(file.bundles_b64[request.bundle]));
           const { req } = await buildVerifyRequest(request, new Uint8Array(0), zeroCounts());
-          const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace, req.replayEpoch, now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
+          const pre = await preflightProofBundleV2(bundle, req.expected, req.contextPolicy, req.requiredScope, req.verifierNamespace, req.replayEpoch, req.verifierID, now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
           let disposition = "";
           let cls = "";
           try {

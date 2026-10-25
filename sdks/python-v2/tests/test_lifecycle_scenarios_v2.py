@@ -63,8 +63,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 62
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 338
+    assert len(SCENARIOS) == 63
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 342
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}
@@ -306,7 +306,7 @@ def test_lifecycle_scenario(sc):
             from ratify_protocol_v2.verify_v2_preflight import preflight_proof_bundle_v2
 
             pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
-                                            req.replay_epoch, now, req.max_challenge_age_seconds, req.future_skew_seconds)
+                                            req.replay_epoch, req.verifier_id, now, req.max_challenge_age_seconds, req.future_skew_seconds)
             capturing = OwnerCapturingClaimStore(claim_store())
             try:
                 claim, disposition, _ = claim_proof_bundle_v2(BACKGROUND, capturing, bundle, pre, req.verifier_namespace,

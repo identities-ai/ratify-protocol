@@ -123,18 +123,18 @@ func TestZeroValueContextPolicyRejectedByBothPreflightPaths(t *testing.T) {
 		ExpectedSessionContext: bytes.Clone(context),
 	}
 	verifyExpected := base
-	if _, err := PreflightProofBundleV2(bundle, &verifyExpected, validPolicy, "data:read", "test", 0, 15, 10, 0); err != nil {
+	if _, err := PreflightProofBundleV2(bundle, &verifyExpected, validPolicy, "data:read", "test", 0, verifyExpected.VerifierID, 15, 10, 0); err != nil {
 		t.Fatalf("valid Verify policy failed its preflight control: %v", err)
 	}
 	genericExpected := base
 	genericExpected.ContextPolicy = cloneV2ContextPolicy(validPolicy)
-	if err := ValidateProofBundleV2Preflight(bundle, genericExpected, "data:read", "test", 0, 15, 10, 0); err != nil {
+	if err := ValidateProofBundleV2Preflight(bundle, genericExpected, "data:read", "test", 0, genericExpected.VerifierID, 15, 10, 0); err != nil {
 		t.Fatalf("valid carried policy failed its generic preflight control: %v", err)
 	}
 	invalidPolicy := cloneV2ContextPolicy(validPolicy)
 	invalidPolicy.valid = false
 	invalidVerifyExpected := base
-	if _, err := PreflightProofBundleV2(bundle, &invalidVerifyExpected, invalidPolicy, "data:read", "test", 0, 15, 10, 0); err == nil || !strings.Contains(err.Error(), "missing or invalid") {
+	if _, err := PreflightProofBundleV2(bundle, &invalidVerifyExpected, invalidPolicy, "data:read", "test", 0, invalidVerifyExpected.VerifierID, 15, 10, 0); err == nil || !strings.Contains(err.Error(), "missing or invalid") {
 		t.Fatal("Verify preflight accepted an otherwise valid policy with valid=false")
 	}
 	if invalidVerifyExpected.ContextPolicy != nil {
@@ -142,7 +142,7 @@ func TestZeroValueContextPolicyRejectedByBothPreflightPaths(t *testing.T) {
 	}
 	invalidGenericExpected := base
 	invalidGenericExpected.ContextPolicy = cloneV2ContextPolicy(invalidPolicy)
-	if err := ValidateProofBundleV2Preflight(bundle, invalidGenericExpected, "data:read", "test", 0, 15, 10, 0); err == nil || !strings.Contains(err.Error(), "expected context policy is invalid") {
+	if err := ValidateProofBundleV2Preflight(bundle, invalidGenericExpected, "data:read", "test", 0, invalidGenericExpected.VerifierID, 15, 10, 0); err == nil || !strings.Contains(err.Error(), "expected context policy is invalid") {
 		t.Fatal("generic preflight accepted an otherwise valid carried policy with valid=false")
 	}
 }
@@ -239,7 +239,7 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pre, err := PreflightProofBundleV2(&positive, &expected, verifyPolicy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(&positive, &expected, verifyPolicy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatalf("matching Verify session context failed preflight: %v", err)
 	}
@@ -311,13 +311,13 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	*verifyPolicy = *originalVerifyPolicy
 	issuedWithDifferentPolicy := expected
 	issuedWithDifferentPolicy.ContextPolicy = testBoundContextPolicy(t, bytes.Repeat([]byte{0x14}, 32))
-	if _, err := PreflightProofBundleV2(&positive, &issuedWithDifferentPolicy, verifyPolicy, "data:read", "test", 0, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("does not match the issued policy")) {
+	if _, err := PreflightProofBundleV2(&positive, &issuedWithDifferentPolicy, verifyPolicy, "data:read", "test", 0, issuedWithDifferentPolicy.VerifierID, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("does not match the issued policy")) {
 		t.Fatal("Verify preflight replaced a different policy from authenticated issuance state")
 	}
-	if _, err := PreflightProofBundleV2(bundle, &expected, verifyPolicy, "data:read", "test", 0, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("expected session context")) {
+	if _, err := PreflightProofBundleV2(bundle, &expected, verifyPolicy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("expected session context")) {
 		t.Fatal("Verify expected-session mismatch passed preflight and could be claimed")
 	}
-	if _, err := PreflightProofBundleV2(&positive, &expected, nil, "data:read", "test", 0, 15, 10, 0); err == nil {
+	if _, err := PreflightProofBundleV2(&positive, &expected, nil, "data:read", "test", 0, expected.VerifierID, 15, 10, 0); err == nil {
 		t.Fatal("preflight accepted a missing context policy")
 	}
 	divergent := expected
@@ -333,12 +333,12 @@ func TestVerifyContextPolicyDigestAndPreclaimMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := PreflightProofBundleV2(&divergentProof, &divergent, verifyPolicy, "data:read", "test", 0, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("challenge context does not match")) {
+	if _, err := PreflightProofBundleV2(&divergentProof, &divergent, verifyPolicy, "data:read", "test", 0, divergent.VerifierID, 15, 10, 0); err == nil || !bytes.Contains([]byte(err.Error()), []byte("challenge context does not match")) {
 		t.Fatal("preflight accepted challenge context that diverged from the configured policy")
 	}
 	freshExpected := expected
 	freshExpected.ContextPolicy = nil
-	if _, err := PreflightProofBundleV2(&divergentProof, &freshExpected, verifyPolicy, "data:read", "test", 0, 15, 10, 0); err == nil || freshExpected.ContextPolicy != nil {
+	if _, err := PreflightProofBundleV2(&divergentProof, &freshExpected, verifyPolicy, "data:read", "test", 0, freshExpected.VerifierID, 15, 10, 0); err == nil || freshExpected.ContextPolicy != nil {
 		t.Fatal("failed preflight mutated issuance state with an unvalidated context policy")
 	}
 	for _, fields := range [][]string{nil, append(append([]string(nil), verifySessionContextFieldsV2...), "unbound_override")} {
@@ -373,7 +373,7 @@ func TestVerifyAuthorizationRequiresExactPreflightPolicy(t *testing.T) {
 		ExpectedAgentID: bundle.AgentID, ExpectedAgentPublicKey: &leaf.SubjectPubKey,
 		ExpectedSessionContext: bytes.Clone(context),
 	}
-	pre, err := PreflightProofBundleV2(bundle, expected, verifyPolicy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, verifyPolicy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatalf("setup Verify preflight failed: %v", err)
 	}
@@ -432,10 +432,10 @@ func TestInvalidOrMismatchedFutureSkewInterruptsPostClaimEvaluation(t *testing.T
 		t.Fatal(err)
 	}
 	expected := &ExpectedChallengeV2{Value: bundle.Challenge, IssuedAt: bundle.ChallengeAt, ExpiresAt: 30, VerifierNamespace: "test", VerifierID: bundle.VerifierID}
-	if _, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, -1); err == nil || expected.ContextPolicy != nil {
+	if _, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, -1); err == nil || expected.ContextPolicy != nil {
 		t.Fatal("preflight accepted invalid verifier freshness configuration or sealed it as validated")
 	}
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatalf("valid zero-skew preflight failed: %v", err)
 	}

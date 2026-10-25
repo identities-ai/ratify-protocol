@@ -152,7 +152,7 @@ def test_evaluator_capability_is_single_use_under_races():
     bundle = decode_proof_bundle_v2(b64(LIFECYCLE["bundles_b64"][request["bundle"]]))
     req, _, _ = build_verify_request(request, None, Counts())
     pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
-                                    req.replay_epoch, START, req.max_challenge_age_seconds, req.future_skew_seconds)
+                                    req.replay_epoch, req.verifier_id, START, req.max_challenge_age_seconds, req.future_skew_seconds)
     _, disposition, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, START)
     assert disposition == V2_CLAIM_CREATED
     opts = V2LocalAuthorizationOptions(future_skew_seconds=req.future_skew_seconds, required_scope=req.required_scope,
@@ -177,7 +177,7 @@ def test_finalization_rate_exhaustion_is_claim_store_unavailable():
     bundle = decode_proof_bundle_v2(b64(LIFECYCLE["bundles_b64"][request["bundle"]]))
     req, _, _ = build_verify_request(request, None, Counts())
     pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
-                                    req.replay_epoch, START, req.max_challenge_age_seconds, req.future_skew_seconds)
+                                    req.replay_epoch, req.verifier_id, START, req.max_challenge_age_seconds, req.future_skew_seconds)
     claim, _, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, START)
     opts = V2LocalAuthorizationOptions(future_skew_seconds=req.future_skew_seconds, required_scope=req.required_scope,
                                        context=req.context, tzdb_version=req.tzdb_version, context_policy=req.context_policy,

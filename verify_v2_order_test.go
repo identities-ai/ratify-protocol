@@ -30,12 +30,13 @@ func TestVerifyProofBundleV2DecodeFailurePrecedesConfiguration(t *testing.T) {
 // internally inconsistent is configuration_invalid before any later
 // pre-claim step and before the claim store is consulted.
 func TestVerifyProofBundleV2ConfigurationRejectedAtStepTwo(t *testing.T) {
-	wire, err := EncodeProofBundleV2(signedV2TestBundle(t))
+	bundle := signedV2TestBundle(t)
+	wire, err := EncodeProofBundleV2(bundle)
 	if err != nil {
 		t.Fatal(err)
 	}
 	base := func() V2VerifyRequest {
-		return V2VerifyRequest{Bundle: wire, Now: 1800000000, MaxChallengeAgeSeconds: 60, FutureSkewSeconds: 5,
+		return V2VerifyRequest{Bundle: wire, Now: 1800000000, MaxChallengeAgeSeconds: 60, FutureSkewSeconds: 5, VerifierNamespace: "ns", VerifierID: bundle.VerifierID,
 			StatusPolicy: RevocationStatusPolicyV2{MaxListLifetimeSeconds: 3600, MaxStatusAgeSeconds: 3600, ClockSkewSeconds: 5}}
 	}
 	cases := []struct {
@@ -75,7 +76,7 @@ func TestVerifyProofBundleV2ConfigurationRejectedAtStepTwo(t *testing.T) {
 func TestValidateProofBundleV2PreflightReplayEpochBound(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	for _, epoch := range []int64{-1, 1 << 53} {
-		err := ValidateProofBundleV2Preflight(bundle, ExpectedChallengeV2{ReplayEpoch: epoch}, "data:read", "ns", epoch, 1800000000, 60, 5)
+		err := ValidateProofBundleV2Preflight(bundle, ExpectedChallengeV2{ReplayEpoch: epoch}, "data:read", "ns", epoch, bundle.VerifierID, 1800000000, 60, 5)
 		if V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
 			t.Fatalf("epoch %d: %v", epoch, err)
 		}

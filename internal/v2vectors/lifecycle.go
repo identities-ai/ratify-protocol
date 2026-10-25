@@ -356,6 +356,10 @@ func (g *gen) lifecycleFile() any {
 		lifecycleStepJSON{Op: "restore", Mode: "lost_state_epoch_bump", ReplayEpoch: fixtureReplayEpoch + 1, LogID: "dddddddddddddddddddddddddddddd02"},
 		step("verify", "A", lifecycleExpectJSON{Stage: "preflight", ErrorClass: "stale_replay_epoch"}),
 		step("verify", "E2", committedAllow), publish("E2", "ok", 1), release("E2", released(Now, 1)))
+	sc("release_of_claim_the_store_does_not_hold", "after a restore that lost claim state, the configured claim store answers that it holds no claim for the earlier handoff (claim_not_found): release rejects it as release_state_mismatch rather than reporting a retryable pending (SPEC-v2 §6.9 step 1)",
+		step("verify", "A", committedAllow), publish("A", "ok", 1),
+		lifecycleStepJSON{Op: "restore", Mode: "lost_state_epoch_bump", ReplayEpoch: fixtureReplayEpoch + 1, LogID: "dddddddddddddddddddddddddddddd02"},
+		release("A", lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}))
 	sc("rate_admission_at_finalization", "with max_rate admitted inside the finalization compare-and-set, two allows fill a 2-per-60-second counter; the third finalizes once as constraint_denied; a request 60 seconds later is admitted again",
 		step("verify", "R1", committedAllow), step("verify", "R2", committedAllow),
 		step("verify", "R3", lifecycleExpectJSON{Stage: "committed", Decision: "deny", DecisionReason: "constraint_denied"}),

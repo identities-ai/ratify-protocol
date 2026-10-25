@@ -191,7 +191,7 @@ func v2PresentIssued(ctx context.Context, issuance ratify.V2ChallengeIssuanceSto
 	if err != nil {
 		return fmt.Sprintf("policy error: %v", err)
 	}
-	preflight, err := ratify.PreflightProofBundleV2(bundle, expected, policy, "data:read", v2IssuanceNamespace, v2IssuanceEpoch, now, 300, 5)
+	preflight, err := ratify.PreflightProofBundleV2(bundle, expected, policy, "data:read", v2IssuanceNamespace, v2IssuanceEpoch, expected.VerifierID, now, 300, 5)
 	if err != nil {
 		return "preflight:" + string(ratify.V2ErrorClassOf(err))
 	}

@@ -124,16 +124,16 @@ func matchesExpectedChallengeV2(expected *ExpectedChallengeV2, state *expectedCh
 // VerifyProofBundleV2 accepts a ConstraintEvaluatorRegistryV2.
 // Verify callers use this entry point so a missing or divergent policy value
 // cannot consume the challenge before context validation.
-func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (_ *V2PreflightResult, resultErr error) {
+func PreflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, requiredScope, configuredNamespace string, configuredReplayEpoch int64, configuredVerifierID string, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (_ *V2PreflightResult, resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
-	return preflightProofBundleV2(bundle, expected, policy, false, nil, nil, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds)
+	return preflightProofBundleV2(bundle, expected, policy, false, nil, nil, requiredScope, configuredNamespace, configuredReplayEpoch, configuredVerifierID, nowUnix, maxAgeSeconds, futureSkewSeconds)
 }
 
 // preflightProofBundleV2 is the ordered pre-claim pipeline. allowNoPolicy is
 // used only by VerifyProofBundleV2 for a generic verifier that explicitly has
 // no context policy. hook is the application's pure receiver-binding check; it
 // runs only after every built-in pre-claim check has passed.
-func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, allowNoPolicy bool, hook func(*ProofBundleV2, ExpectedChallengeV2) error, evaluators *ConstraintEvaluatorRegistryV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
+func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, allowNoPolicy bool, hook func(*ProofBundleV2, ExpectedChallengeV2) error, evaluators *ConstraintEvaluatorRegistryV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, configuredVerifierID string, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (*V2PreflightResult, error) {
 	if expected == nil {
 		return nil, v2Errorf(V2ErrExpectedChallengeMissing, "v2 expected challenge is unavailable")
 	}
@@ -160,7 +160,7 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 	}
 	checked := *expected
 	checked.ContextPolicy = policy
-	if err := ValidateProofBundleV2Preflight(bundle, checked, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds); err != nil {
+	if err := ValidateProofBundleV2Preflight(bundle, checked, requiredScope, configuredNamespace, configuredReplayEpoch, configuredVerifierID, nowUnix, maxAgeSeconds, futureSkewSeconds); err != nil {
 		return nil, err
 	}
 	if hook != nil {
@@ -192,10 +192,10 @@ func preflightProofBundleV2(bundle *ProofBundleV2, expected *ExpectedChallengeV2
 // the requested canonical scope, then proof/challenge bindings. It performs
 // no trust, status, policy, billing, or other external calls and issues no
 // authorization decision.
-func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (resultErr error) {
+func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChallengeV2, requiredScope, configuredNamespace string, configuredReplayEpoch int64, configuredVerifierID string, nowUnix, maxAgeSeconds, futureSkewSeconds int64) (resultErr error) {
 	defer func() { resultErr = v2Classify(V2ErrConfigurationInvalid, resultErr) }()
-	if configuredReplayEpoch < 0 || configuredReplayEpoch > maxSafeInteger {
-		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured replay epoch must be 0..%d", int64(maxSafeInteger))
+	if err := validateV2VerifierIdentityConfiguration(configuredNamespace, configuredReplayEpoch, configuredVerifierID); err != nil {
+		return err
 	}
 	if expected.ExpectedSessionContext != nil && len(expected.ExpectedSessionContext) != 32 {
 		return v2Errorf(V2ErrConfigurationInvalid, "v2 expected session context must be absent or exactly 32 bytes")
@@ -217,14 +217,14 @@ func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChal
 	if err := VerifyProofBundleV2Signatures(bundle); err != nil {
 		return fmt.Errorf("v2 cryptographic preflight: %w", err)
 	}
-	if configuredNamespace == "" || expected.VerifierNamespace != configuredNamespace {
+	if expected.VerifierNamespace != configuredNamespace {
 		return v2Errorf(V2ErrNamespaceMismatch, "v2 challenge verifier namespace mismatch")
 	}
 	if configuredReplayEpoch < 0 || configuredReplayEpoch > maxSafeInteger || expected.ReplayEpoch < 0 || expected.ReplayEpoch > maxSafeInteger || expected.ReplayEpoch != configuredReplayEpoch {
 		return v2Errorf(V2ErrStaleReplayEpoch, "v2 challenge replay epoch is stale")
 	}
-	if expected.VerifierID == "" || expected.VerifierID != bundle.VerifierID || !validV2ID(expected.VerifierID) {
-		return v2Errorf(V2ErrVerifierIDMismatch, "v2 challenge verifier ID mismatch")
+	if expected.VerifierID != configuredVerifierID || bundle.VerifierID != configuredVerifierID {
+		return v2Errorf(V2ErrVerifierIDMismatch, "v2 challenge or proof verifier ID differs from the configured verifier key ID")
 	}
 	if len(expected.Value) != 32 || !bytes.Equal(bundle.Challenge, expected.Value) || bundle.ChallengeAt != expected.IssuedAt {
 		return v2Errorf(V2ErrChallengeMismatch, "v2 proof does not match authenticated challenge issuance")
@@ -256,6 +256,23 @@ func ValidateProofBundleV2Preflight(bundle *ProofBundleV2, expected ExpectedChal
 		}
 	}
 	return checkExactReceiverAudienceV2(bundle, expected.ExpectedReceiverID)
+}
+
+// validateV2VerifierIdentityConfiguration checks the caller-authenticated
+// verifier identity of SPEC-v2 §6.1 at §6.2 step 2: a non-empty verifier
+// namespace, a replay epoch of 0 through 2^53-1, and the verifier key ID as a
+// canonical v2 key ID. Any violation is configuration_invalid.
+func validateV2VerifierIdentityConfiguration(namespace string, replayEpoch int64, verifierID string) error {
+	if namespace == "" {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured verifier namespace must not be empty")
+	}
+	if replayEpoch < 0 || replayEpoch > maxSafeInteger {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured replay epoch must be 0..%d", int64(maxSafeInteger))
+	}
+	if !validV2ID(verifierID) {
+		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured verifier key ID must be a canonical v2 key ID")
+	}
+	return nil
 }
 
 func equalHybridPublicKeys(a, b HybridPublicKey) bool {

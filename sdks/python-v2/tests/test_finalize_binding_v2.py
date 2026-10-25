@@ -52,7 +52,7 @@ def interrupted_fixture():
     bundle = decode_proof_bundle_v2(b64(LIFECYCLE["bundles_b64"][request["bundle"]]))
     req, _, _ = build_verify_request(request, None, Counts())
     pre = preflight_proof_bundle_v2(bundle, req.expected, req.context_policy, req.required_scope, req.verifier_namespace,
-                                    req.replay_epoch, now, req.max_challenge_age_seconds, req.future_skew_seconds)
+                                    req.replay_epoch, req.verifier_id, now, req.max_challenge_age_seconds, req.future_skew_seconds)
     store = RecordingClaimStore()
     claim, _, token = claim_proof_bundle_v2(BACKGROUND, store, bundle, pre, req.verifier_namespace, req.replay_epoch, now)
     # A context policy other than the sealed one interrupts the evaluation.

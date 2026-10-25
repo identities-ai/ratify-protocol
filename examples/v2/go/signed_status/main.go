@@ -157,7 +157,7 @@ func run() error {
 		}
 		outcome, err := ratify.VerifyProofBundleV2(ctx, ratify.V2VerifyRequest{
 			Bundle: wire, Expected: expected, ContextPolicy: contextPolicy, RequiredScope: "data:read",
-			VerifierNamespace: namespace, ReplayEpoch: epoch, Now: store.Now(),
+			VerifierNamespace: namespace, ReplayEpoch: epoch, VerifierID: verifierID, Now: store.Now(),
 			MaxChallengeAgeSeconds: 300, FutureSkewSeconds: 5, TZDBVersion: ratify.TZDBVersionV2,
 			StatusKeys:   map[string]ratify.V2StatusKeyConfig{rootID: {Epoch: 1, Key: statusPub}},
 			StatusPolicy: policy,

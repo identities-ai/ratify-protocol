@@ -109,7 +109,7 @@ COUNTS = ["receiver_binding", "claim", "trust", "status", "audience", "rate", "f
 
 def request_json(v):
     r = {k: v.get(src) for k, src in [("required_scope", "required_scope"), ("verifier_namespace", "configured_namespace"),
-         ("replay_epoch", "configured_replay_epoch"), ("now", "now"), ("max_challenge_age_seconds", "max_challenge_age_seconds"),
+         ("replay_epoch", "configured_replay_epoch"), ("verifier_id", "configured_verifier_id"), ("now", "now"), ("max_challenge_age_seconds", "max_challenge_age_seconds"),
          ("future_skew_seconds", "future_skew_seconds"), ("tzdb_version", "tzdb_version"), ("status_policy", "status_policy")]}
     r["status_keys"] = {i: {"epoch": k["epoch"], "public_key": k["public_key"]} for i, k in (v.get("status_keys") or {}).items()}
     e = v.get("expected_challenge")
@@ -191,7 +191,22 @@ def vector_dir(rel, v, bundle):
         write(f"{rel}/sk_{issuer[:12]}.ed", b64d(k["ed25519"]))
         write(f"{rel}/sk_{issuer[:12]}.ml", b64d(k["ml_dsa_65"]))
         pl.append(f"key {issuer} {skeys[issuer]['epoch']} sk_{issuer[:12]}.ed sk_{issuer[:12]}.ml")
-    for n, p in enumerate(v["journal"].get("preload") or []):
+    setup = v["journal"].get("setup")
+    if setup is not None:
+        # journal.setup replaces the default configure-then-preload steps;
+        # every step names its own epoch and key.
+        pl = pl[:1]
+        for n, st in enumerate(setup):
+            k = st["public_key"]
+            ed, ml = write(f"{rel}/su_{n}.ed", b64d(k["ed25519"])).split("/", 2)[-1], write(f"{rel}/su_{n}.ml", b64d(k["ml_dsa_65"])).split("/", 2)[-1]
+            if st["op"] == "configure_status_key":
+                pl.append(f"key {st['issuer_id']} {st['epoch']} {ed} {ml}")
+            elif st["op"] == "apply":
+                f = write(f"{rel}/su_{n}.bin", b64d(st["wire_b64"])).split("/", 2)[-1]
+                pl.append(f"apply {st['issuer_id']} {st['object_type_code']} {f} {st['now']} {ed} {ml} {st['epoch']}")
+            else:
+                raise SystemExit(f"unknown journal setup op {st['op']}")
+    for n, p in enumerate(v["journal"].get("preload") or [] if setup is None else []):
         f = write(f"{rel}/pre_{n}.bin", b64d(p["wire_b64"])).split("/", 2)[-1]
         i = p["issuer_id"]
         pl.append(f"apply {i} {p['object_type_code']} {f} {p['now']} sk_{i[:12]}.ed sk_{i[:12]}.ml")

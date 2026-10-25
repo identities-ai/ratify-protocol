@@ -161,14 +161,13 @@ export async function validateProofBundleV2Preflight(
   requiredScope: string,
   configuredNamespace: string,
   configuredReplayEpoch: number,
+  configuredVerifierID: string,
   nowUnix: number,
   maxAgeSeconds: number,
   futureSkewSeconds: number,
 ): Promise<void> {
   return classifiedAsync("configuration_invalid", async () => {
-    if (!Number.isSafeInteger(configuredReplayEpoch) || configuredReplayEpoch < 0 || configuredReplayEpoch > MAX_SAFE_INTEGER_V2) {
-      throw v2Errorf("configuration_invalid", `v2 configured replay epoch must be 0..${MAX_SAFE_INTEGER_V2}`);
-    }
+    validateV2VerifierIdentityConfiguration(configuredNamespace, configuredReplayEpoch, configuredVerifierID);
     const policy = expected.contextPolicy ?? null;
     const expectedSession = sessionCtx(expected);
     if (expectedSession !== null && expectedSession.length !== 32) {
@@ -192,15 +191,15 @@ export async function validateProofBundleV2Preflight(
     } catch (err) {
       throw wrapError("v2 cryptographic preflight", err);
     }
-    if (configuredNamespace === "" || expected.verifierNamespace !== configuredNamespace) {
+    if (expected.verifierNamespace !== configuredNamespace) {
       throw v2Errorf("namespace_mismatch", "v2 challenge verifier namespace mismatch");
     }
     const epochOK = (n: number) => Number.isSafeInteger(n) && n >= 0 && n <= MAX_SAFE_INTEGER_V2;
     if (!epochOK(configuredReplayEpoch) || !epochOK(expected.replayEpoch) || expected.replayEpoch !== configuredReplayEpoch) {
       throw v2Errorf("stale_replay_epoch", "v2 challenge replay epoch is stale");
     }
-    if (!expected.verifierID || expected.verifierID !== bundle.verifier_id || !validV2ID(expected.verifierID)) {
-      throw v2Errorf("verifier_id_mismatch", "v2 challenge verifier ID mismatch");
+    if (expected.verifierID !== configuredVerifierID || bundle.verifier_id !== configuredVerifierID) {
+      throw v2Errorf("verifier_id_mismatch", "v2 challenge or proof verifier ID differs from the configured verifier key ID");
     }
     if (expected.value?.length !== 32 || !bytesEqual(bundle.challenge, expected.value) || bundle.challenge_at !== expected.issuedAt) {
       throw v2Errorf("challenge_mismatch", "v2 proof does not match authenticated challenge issuance");
@@ -236,6 +235,24 @@ export async function validateProofBundleV2Preflight(
   });
 }
 
+/**
+ * The caller-authenticated verifier identity of SPEC-v2 §6.1, checked at
+ * §6.2 step 2 (Go validateV2VerifierIdentityConfiguration): a non-empty
+ * namespace, a replay epoch of 0 through 2^53-1, and the verifier key ID as
+ * a canonical v2 key ID. Any violation is configuration_invalid.
+ */
+export function validateV2VerifierIdentityConfiguration(namespace: string, replayEpoch: number, verifierID: string): void {
+  if (typeof namespace !== "string" || namespace === "") {
+    throw v2Errorf("configuration_invalid", "v2 configured verifier namespace must not be empty");
+  }
+  if (!Number.isSafeInteger(replayEpoch) || replayEpoch < 0 || replayEpoch > MAX_SAFE_INTEGER_V2) {
+    throw v2Errorf("configuration_invalid", `v2 configured replay epoch must be 0..${MAX_SAFE_INTEGER_V2}`);
+  }
+  if (typeof verifierID !== "string" || !validV2ID(verifierID)) {
+    throw v2Errorf("configuration_invalid", "v2 configured verifier key ID must be a canonical v2 key ID");
+  }
+}
+
 /** The application's pure pre-consumption receiver-binding hook. Throw to reject. */
 export type V2ReceiverBindingHook = (bundle: ProofBundleV2, expected: ExpectedChallengeV2) => void;
 
@@ -250,6 +267,7 @@ export async function preflightProofBundleV2Internal(
   requiredScope: string,
   configuredNamespace: string,
   configuredReplayEpoch: number,
+  configuredVerifierID: string,
   nowUnix: number,
   maxAgeSeconds: number,
   futureSkewSeconds: number,
@@ -280,7 +298,7 @@ export async function preflightProofBundleV2Internal(
     }
   }
   const checked: ExpectedChallengeV2 = { ...expected, contextPolicy: pol };
-  await validateProofBundleV2Preflight(bundle, checked, requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds);
+  await validateProofBundleV2Preflight(bundle, checked, requiredScope, configuredNamespace, configuredReplayEpoch, configuredVerifierID, nowUnix, maxAgeSeconds, futureSkewSeconds);
   if (hook) {
     try {
       hook(bundle, cloneExpectedChallengeV2(checked));
@@ -321,10 +339,11 @@ export function preflightProofBundleV2(
   requiredScope: string,
   configuredNamespace: string,
   configuredReplayEpoch: number,
+  configuredVerifierID: string,
   nowUnix: number,
   maxAgeSeconds: number,
   futureSkewSeconds: number,
 ): Promise<V2PreflightResult> {
   return classifiedAsync("configuration_invalid", () => preflightProofBundleV2Internal(bundle, expected, policy, false, null, null,
-    requiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, maxAgeSeconds, futureSkewSeconds));
+    requiredScope, configuredNamespace, configuredReplayEpoch, configuredVerifierID, nowUnix, maxAgeSeconds, futureSkewSeconds));
 }

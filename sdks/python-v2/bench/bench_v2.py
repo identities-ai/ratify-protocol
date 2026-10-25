@@ -172,7 +172,7 @@ class Flow:
         expected = load_expected_challenge_v2(ctx, self.issuance, self.namespace, EPOCH, challenge)
         req = V2VerifyRequest(
             bundle=wire, expected=expected, context_policy=self.policy,
-            required_scope=SCOPE, verifier_namespace=self.namespace, replay_epoch=EPOCH,
+            required_scope=SCOPE, verifier_namespace=self.namespace, replay_epoch=EPOCH, verifier_id=self.verifier_id,
             now=store.now(), max_challenge_age_seconds=300, future_skew_seconds=5,
             context=ConstraintContextV2(has_amount=True, requested_amount_micros=12_500_000, requested_currency="USD"),
             tzdb_version=TZDB_VERSION_V2,

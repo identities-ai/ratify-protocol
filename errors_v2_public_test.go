@@ -233,10 +233,10 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 		{"ConstraintProfileDigestV2", V2ErrConfigurationInvalid, func() error { return first(ConstraintProfileDigestV2(ConstraintProfileDescriptorV2{})) }},
 		{"EvaluateReceiverAudienceV2", V2ErrConfigurationInvalid, func() error { return first(EvaluateReceiverAudienceV2(nil, "", nil, -1, 0)) }},
 		{"PreflightProofBundleV2", "", func() error {
-			return first(PreflightProofBundleV2(&ProofBundleV2{}, nil, nil, "data:read", "ns", 0, 0, 0, 0))
+			return first(PreflightProofBundleV2(&ProofBundleV2{}, nil, nil, "data:read", "ns", 0, "", 0, 0, 0))
 		}},
 		{"ValidateProofBundleV2Preflight", "", func() error {
-			return ValidateProofBundleV2Preflight(&ProofBundleV2{}, ExpectedChallengeV2{}, "data:read", "ns", 0, 0, 0, 0)
+			return ValidateProofBundleV2Preflight(&ProofBundleV2{}, ExpectedChallengeV2{}, "data:read", "ns", 0, "", 0, 0, 0)
 		}},
 		{"ClaimProofBundleV2", V2ErrConfigurationInvalid, func() error {
 			_, _, _, err := ClaimProofBundleV2(ctx, nil, &ProofBundleV2{}, nil, "ns", 0, 0)

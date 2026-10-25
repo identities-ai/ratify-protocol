@@ -94,14 +94,14 @@ static void verify_and_release(const deployment *d, const char *label) {
     int64_t now;
     CHECK(ratify_v2_ref_store_time(d->store, &now));
     char *request = format(
-        "{\"required_scope\":\"data:read\",\"verifier_namespace\":\"%s\",\"replay_epoch\":%d,\"now\":%lld,"
+        "{\"required_scope\":\"data:read\",\"verifier_namespace\":\"%s\",\"replay_epoch\":%d,\"verifier_id\":\"%s\",\"now\":%lld,"
         "\"max_challenge_age_seconds\":300,\"future_skew_seconds\":5,\"tzdb_version\":\"%s\","
         "\"status_keys\":{\"%s\":{\"epoch\":1,\"public_key\":%s}},"
         "\"status_policy\":{\"max_list_lifetime_seconds\":3600,\"max_status_age_seconds\":3600,\"clock_skew_seconds\":5},"
         "\"expected_challenge\":%s,"
         "\"context_policy\":{\"profile\":\"example.signed-status/v1\",\"require_bound\":false,\"required_fields\":[],"
         "\"expected_session_context_b64\":null}}",
-        NAMESPACE, EPOCH, (long long)now, TZDB_VERSION, d->root_id, d->status_json, expected);
+        NAMESPACE, EPOCH, d->verifier_id, (long long)now, TZDB_VERSION, d->root_id, d->status_json, expected);
     RatifyV2VerifyOutcome outcome;
     RatifyV2Committed *committed = NULL;
     CHECK(ratify_v2_verify_proof_bundle(bundle.ptr, bundle.len, (const uint8_t *)request, strlen(request), NULL,

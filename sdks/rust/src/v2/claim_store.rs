@@ -422,6 +422,7 @@ pub(crate) fn claim_proof_bundle_v2_inner(
         &sealed.required_scope,
         configured_namespace,
         configured_replay_epoch,
+        &sealed.verifier_id,
         now,
         sealed.max_age,
         sealed.future_skew,

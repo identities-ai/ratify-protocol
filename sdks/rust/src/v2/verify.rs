@@ -29,7 +29,9 @@ use super::evaluation_progress::{
 use super::evaluator::{validate_v2_request_context, ConstraintEvaluatorRegistryV2};
 use super::journal::SecurityJournalStoreV2;
 use super::limits::{validate_v2_freshness_configuration, V2_MAX_FUTURE_SKEW_SECONDS, V2_MAX_STATUS_LIFETIME_SECONDS};
-use super::preflight::{preflight_proof_bundle_v2_inner, ExpectedChallengeV2};
+use super::preflight::{
+    preflight_proof_bundle_v2_inner, validate_v2_verifier_identity_configuration, ExpectedChallengeV2,
+};
 use super::receipt::verification_receipt_v2_body;
 use super::release::CommittedV2Outcome;
 use super::status::RevocationStatusPolicyV2;
@@ -188,6 +190,12 @@ pub struct V2VerifyRequest {
     pub required_scope: String,
     pub verifier_namespace: String,
     pub replay_epoch: i64,
+    /// The caller-authenticated verifier key ID (SPEC-v2 §2.4, §6.1).
+    /// Required: an empty or non-canonical value is `configuration_invalid`
+    /// before the ExpectedChallenge is examined, and both the
+    /// ExpectedChallenge and the proof bundle must name it
+    /// (`verifier_id_mismatch` otherwise).
+    pub verifier_id: String,
     pub now: i64,
     pub max_challenge_age_seconds: i64,
     pub future_skew_seconds: i64,
@@ -293,6 +301,7 @@ pub fn verify_proof_bundle_v2(ctx: &V2Context, req: &V2VerifyRequest, cb: &V2Ver
         &req.required_scope,
         &req.verifier_namespace,
         req.replay_epoch,
+        &req.verifier_id,
         req.now,
         req.max_challenge_age_seconds,
         req.future_skew_seconds,
@@ -550,12 +559,7 @@ pub fn verify_proof_bundle_v2(ctx: &V2Context, req: &V2VerifyRequest, cb: &V2Ver
 /// invalid supplied request context are rejected before claim.
 fn validate_v2_verify_configuration(req: &V2VerifyRequest) -> V2Result<()> {
     validate_v2_freshness_configuration(req.now, req.max_challenge_age_seconds, req.future_skew_seconds)?;
-    if !(0..=MAX_SAFE).contains(&req.replay_epoch) {
-        return err(
-            V2ErrorClass::ConfigurationInvalid,
-            format!("v2 configured replay epoch must be 0..{MAX_SAFE}"),
-        );
-    }
+    validate_v2_verifier_identity_configuration(&req.verifier_namespace, req.replay_epoch, &req.verifier_id)?;
     // The live verifier has one future skew (SPEC-v2 §6.1): status freshness
     // uses future_skew_seconds, so a status policy carrying another skew is a
     // configuration error rather than a second, silently different bound.

@@ -61,7 +61,8 @@ export async function replayCrossScenario(cfg: Any, sc: Any, keys: Map<string, H
   for (const [issuer, objects] of Object.entries<Any>(sc.status_evidence)) statusEvidence[issuer] = { mode: "ok", objects };
   const inputs = {
     required_scope: sc.required_scope, expected_challenge: sc.expected_challenge, context_policy: sc.context_policy,
-    configured_namespace: cfg.verifier_namespace, configured_replay_epoch: cfg.replay_epoch, now: sc.verify_time,
+    configured_namespace: cfg.verifier_namespace, configured_replay_epoch: cfg.replay_epoch,
+    configured_verifier_id: deriveKeyIDV2(key(cfg.verifier_key).publicKey), now: sc.verify_time,
     max_challenge_age_seconds: cfg.max_challenge_age_seconds, future_skew_seconds: cfg.future_skew_seconds, tzdb_version: cfg.tzdb_version,
     receiver_binding_hook: "absent", status_keys: statusKeys, status_policy: cfg.status_policy, journal: { mode: "anchored" },
     audience_mode: "ok", rate: "absent", trust: { mode: "ok", outcome: "trusted", root_public_key: pubJSON(key(sc.trust_root_key)) },

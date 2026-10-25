@@ -106,7 +106,7 @@ async function verify(): Promise<V2VerifyOutcome> {
   const expected = await loadExpectedChallengeV2(issuance, namespace, epoch, bundle.challenge);
   return verifyProofBundleV2({
     bundle: bundleWire, expected, contextPolicy: newV2ContextPolicy("example.quickstart/v1", false, null, null),
-    requiredScope: "payments:send", verifierNamespace: namespace, replayEpoch: epoch,
+    requiredScope: "payments:send", verifierNamespace: namespace, replayEpoch: epoch, verifierID,
     now: store.now(), maxChallengeAgeSeconds: 300, futureSkewSeconds: 5,
     context: { hasAmount: true, requestedAmountMicros: 12_500_000, requestedCurrency: "USD" },
     tzdbVersion: TZDB_VERSION_V2,

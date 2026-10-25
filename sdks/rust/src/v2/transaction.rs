@@ -3,7 +3,7 @@
 
 use super::context::V2Context;
 use super::crypto::{
-    equal_keys, key_id_v2, lp, sha256, sha384, valid_v2_id, verify_v2_statement, V2ObjectType,
+    equal_keys, key_id_v2, lp, sha256, sha384, valid_prefixed_digest, valid_v2_id, verify_v2_statement, V2ObjectType,
 };
 use super::errors::{V2Error, V2SignError, V2SignResult};
 use super::limits::{check_v2_wire_size, valid_v2_timestamp, MAX_TRANSACTION_RECEIPT_BYTES_V2};
@@ -224,6 +224,15 @@ fn validate(r: &TransactionReceiptV2, require_signatures: bool) -> V2Result<()> 
                 KeyIdMismatch,
                 format!(
                     "wire v2: party {:?} agent ID does not match its complete public key",
+                    p.party_id
+                ),
+            );
+        }
+        if !valid_prefixed_digest(&p.proof_bundle_hash) {
+            return err(
+                Malformed,
+                format!(
+                    "wire v2: party {:?} proof_bundle_hash is not sha384: followed by 96 lowercase hex characters",
                     p.party_id
                 ),
             );
@@ -536,6 +545,17 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
                 decode_proof_bundle_v2(raw).map_err(|e| e.context(format!("wire v2: party {:?} proof bundle", p.party_id)))?;
             if !encode_proof_bundle_v2(&bundle).is_ok_and(|canonical| canonical == raw) {
                 return plain(format!("wire v2: party {:?} proof bundle is not canonical JSON", p.party_id));
+            }
+            // The hash field's shape is checked before it is compared (SPEC-v2
+            // §5.7, §2.7): a misshapen value is malformed, not a mismatch.
+            if !valid_prefixed_digest(&p.proof_bundle_hash) {
+                return err(
+                    V2ErrorClass::Malformed,
+                    format!(
+                        "wire v2: party {:?} proof_bundle_hash is not sha384: followed by 96 lowercase hex characters",
+                        p.party_id
+                    ),
+                );
             }
             if p.proof_bundle_hash != bundle_hash_of_bytes(raw) {
                 return err(

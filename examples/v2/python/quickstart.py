@@ -125,7 +125,7 @@ def main() -> None:
         req = V2VerifyRequest(
             bundle=bundle_wire, expected=expected,
             context_policy=new_v2_context_policy("example.quickstart/v1", False, [], None),
-            required_scope="payments:send", verifier_namespace=NAMESPACE, replay_epoch=EPOCH,
+            required_scope="payments:send", verifier_namespace=NAMESPACE, replay_epoch=EPOCH, verifier_id=verifier_id,
             now=store.now(), max_challenge_age_seconds=300, future_skew_seconds=5,
             context=ConstraintContextV2(has_amount=True, requested_amount_micros=12_500_000, requested_currency="USD"),
             tzdb_version=TZDB_VERSION_V2,

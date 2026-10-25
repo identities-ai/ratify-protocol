@@ -48,7 +48,7 @@ func TestV2PreflightDoesNotRaceOnSharedIssuance(t *testing.T) {
 	for range workers {
 		go func() {
 			<-start
-			_, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+			_, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 			results <- err
 		}()
 	}
@@ -87,7 +87,7 @@ func TestClaimProofBundleV2AmbiguousCreateErrorRecoversWithoutOwnership(t *testi
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestEvaluateProofBundleV2LocalAuthorizationAllowsOneConcurrentEvaluator(t *
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestClaimProofBundleV2RevalidatesAndPassesSealedClaim(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +345,7 @@ func TestClaimProofBundleV2RejectsInvalidStoreOwnerCapabilities(t *testing.T) {
 			bundle := signedV2TestBundle(t)
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
-			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -367,7 +367,7 @@ func TestFinalizeClaimProofBundleV2BlocksDeferredExternalChecks(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +407,7 @@ func TestClaimProofBundleV2RejectsBeforeStoreOnBindingOrFreshnessFailure(t *test
 			bundle := signedV2TestBundle(t)
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
-			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -429,7 +429,7 @@ func TestClaimProofBundleV2RetriesNeverReevaluate(t *testing.T) {
 			bundle := signedV2TestBundle(t)
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
-			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -450,7 +450,7 @@ func TestV2EvaluationTokenCannotStartASecondEvaluation(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func TestV2EvaluationTokenSealsClaimAgainstLaterPreflight(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -488,7 +488,7 @@ func TestV2EvaluationTokenSealsClaimAgainstLaterPreflight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 9, 0)
+	_, err = PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 9, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -515,7 +515,7 @@ func TestV2EvaluationUsesAuthoritativeClaimTimeFloor(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,7 +538,7 @@ func TestV2EvaluationUsesSealedChallengeWhenCallerOmitsIssuance(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +567,7 @@ func TestV2EvaluationTokenBindsContextPolicyDigest(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +581,7 @@ func TestV2EvaluationTokenBindsContextPolicyDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherExpected := testExpectedContextChallenge(t, bundle, otherPolicy)
-	_, err = PreflightProofBundleV2(bundle, otherExpected, otherPolicy, "execute:tool", "test", 0, 15, 10, 0)
+	_, err = PreflightProofBundleV2(bundle, otherExpected, otherPolicy, "execute:tool", "test", 0, otherExpected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,7 +604,7 @@ func TestAuthorizationAssessmentDoesNotExposeContextPolicyStorage(t *testing.T) 
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +639,7 @@ func TestClaimProofBundleV2UsesSealedFreshnessConfiguration(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +658,7 @@ func TestClaimProofBundleV2PreservesOwnerForInvalidStoreClaimTime(t *testing.T) 
 			bundle := signedV2TestBundle(t)
 			policy := testUnboundContextPolicy(t)
 			expected := testExpectedContextChallenge(t, bundle, policy)
-			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 10, 0)
+			pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 10, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -697,7 +697,7 @@ func TestFinalizeClaimProofBundleV2BindsReceiptBodyToSealedClaim(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "execute:tool", "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

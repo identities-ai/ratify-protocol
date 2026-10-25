@@ -143,7 +143,7 @@ func replayCrossScenario(cfg crossScenarioConfigJSON, sc crossScenarioJSON, pub 
 	}
 	sort.Strings(issuers)
 	req := ratify.V2VerifyRequest{
-		Bundle: must(b64d(sc.BundleB64)), RequiredScope: sc.RequiredScope, VerifierNamespace: cfg.VerifierNamespace, ReplayEpoch: cfg.ReplayEpoch,
+		Bundle: must(b64d(sc.BundleB64)), RequiredScope: sc.RequiredScope, VerifierNamespace: cfg.VerifierNamespace, ReplayEpoch: cfg.ReplayEpoch, VerifierID: must(ratify.KeyIDV2(pub[cfg.VerifierKey])),
 		Now: sc.VerifyTime, MaxChallengeAgeSeconds: cfg.MaxChallengeAgeSeconds, FutureSkewSeconds: cfg.FutureSkewSeconds, TZDBVersion: cfg.TZDBVersion,
 		StatusKeys: map[string]ratify.V2StatusKeyConfig{},
 		StatusPolicy: ratify.RevocationStatusPolicyV2{MaxListLifetimeSeconds: cfg.StatusPolicy.MaxListLifetimeSeconds, MaxStatusAgeSeconds: cfg.StatusPolicy.MaxStatusAgeSeconds,

@@ -49,6 +49,7 @@ import {
   type ProofBundleV2,
 } from "./protocol_v2_wire.js";
 import { validateRequiredScopeV2 } from "./scope_v2.js";
+import { validPrefixedDigestV2 } from "./verification_receipt_v2.js";
 import type { HybridPublicKey, HybridSignature } from "./types.js";
 
 export const MAX_TRANSACTION_RECEIPT_BYTES = 5 << 20;
@@ -196,6 +197,9 @@ async function validateTransactionReceiptV2(r: TransactionReceiptV2, requireSign
     }
     if (keyID === "" || keyID !== p.agent_id) {
       throw v2Errorf("key_id_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} agent ID does not match its complete public key`);
+    }
+    if (!validPrefixedDigestV2(p.proof_bundle_hash)) {
+      throw v2Errorf("malformed", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash is not sha384: followed by 96 lowercase hex characters`);
     }
     let bundleHash = "";
     try {
@@ -419,6 +423,11 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       }
       if (canonicalBundle === null || !bytesEqual(canonicalBundle, raw)) {
         throw new Error(`wire v2: party ${JSON.stringify(p.party_id)} proof bundle is not canonical JSON`);
+      }
+      // The hash field's shape is checked before it is compared (SPEC-v2
+      // §5.7, §2.7): a misshapen value is malformed, not a mismatch.
+      if (!validPrefixedDigestV2(p.proof_bundle_hash)) {
+        throw v2Errorf("malformed", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash is not sha384: followed by 96 lowercase hex characters`);
       }
       if (p.proof_bundle_hash !== bundleHashOfBytesV2(raw)) {
         throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);

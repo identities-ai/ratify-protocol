@@ -46,7 +46,7 @@ import type { RevocationStatusPolicyV2 } from "./status_state_v2.js";
 import { runV2StatusStage, type V2StatusEvidenceBatch, type V2StatusEvidenceRequest, type V2StatusKeyConfig } from "./status_provenance_v2.js";
 import { MAX_IDENTIFIER_LENGTH_BYTES, type HybridPublicKey } from "./types.js";
 import { verificationReceiptV2Body, type StatusEvidenceEntryV2, type VerificationReceiptV2 } from "./verification_receipt_v2.js";
-import { preflightProofBundleV2Internal, type ExpectedChallengeV2, type V2ReceiverBindingHook } from "./verify_v2_preflight.js";
+import { preflightProofBundleV2Internal, validateV2VerifierIdentityConfiguration, type ExpectedChallengeV2, type V2ReceiverBindingHook } from "./verify_v2_preflight.js";
 
 /** A trust provider's answer for one verified chain (SPEC-v2 §6.1). */
 export type V2TrustOutcome = "trusted" | "untrusted" | "unavailable" | "ambiguous";
@@ -93,6 +93,13 @@ export interface V2VerifyRequest {
   requiredScope: string;
   verifierNamespace: string;
   replayEpoch: number;
+  /**
+   * The caller-authenticated verifier key ID (SPEC-v2 §2.4, §6.1). Required:
+   * an empty or non-canonical value is configuration_invalid before the
+   * ExpectedChallenge is examined, and both the ExpectedChallenge and the
+   * proof bundle must name it (verifier_id_mismatch otherwise).
+   */
+  verifierID: string;
   now: number;
   maxChallengeAgeSeconds: number;
   futureSkewSeconds: number;
@@ -160,7 +167,7 @@ export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCall
   try {
     validateV2VerifyConfiguration(req);
     preflight = await preflightProofBundleV2Internal(bundle, req.expected, req.contextPolicy, true, cb.receiverBinding ?? null,
-      req.constraintEvaluators ?? null, req.requiredScope, req.verifierNamespace, req.replayEpoch, req.now,
+      req.constraintEvaluators ?? null, req.requiredScope, req.verifierNamespace, req.replayEpoch, req.verifierID, req.now,
       req.maxChallengeAgeSeconds, req.futureSkewSeconds);
   } catch (err) {
     return preflightFailure(err);
@@ -340,9 +347,7 @@ export async function verifyProofBundleV2(req: V2VerifyRequest, cb: V2VerifyCall
 /** Out-of-bounds configuration and invalid request context (Go validateV2VerifyConfiguration). */
 export function validateV2VerifyConfiguration(req: V2VerifyRequest): void {
   validateV2FreshnessConfiguration(req.now, req.maxChallengeAgeSeconds, req.futureSkewSeconds);
-  if (!Number.isSafeInteger(req.replayEpoch) || req.replayEpoch < 0 || req.replayEpoch > MAX_SAFE_INTEGER_V2) {
-    throw v2Errorf("configuration_invalid", `v2 configured replay epoch must be 0..${MAX_SAFE_INTEGER_V2}`);
-  }
+  validateV2VerifierIdentityConfiguration(req.verifierNamespace, req.replayEpoch, req.verifierID);
   // The live verifier has one future skew (SPEC-v2 §6.1): status freshness
   // uses future_skew_seconds, so a status policy carrying another skew is a
   // configuration error rather than a second, silently different bound.

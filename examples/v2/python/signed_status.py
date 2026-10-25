@@ -133,7 +133,7 @@ def main() -> None:
         outcome = verify_proof_bundle_v2(ctx, V2VerifyRequest(
             bundle=encode_proof_bundle_v2(bundle), expected=expected,
             context_policy=new_v2_context_policy("example.signed-status/v1", False, [], None),
-            required_scope="data:read", verifier_namespace=NAMESPACE, replay_epoch=EPOCH, now=store.now(),
+            required_scope="data:read", verifier_namespace=NAMESPACE, replay_epoch=EPOCH, verifier_id=verifier_id, now=store.now(),
             max_challenge_age_seconds=300, future_skew_seconds=5, tzdb_version=TZDB_VERSION_V2,
             status_keys={root_id: V2StatusKeyConfig(epoch=1, key=status_pub)}, status_policy=policy,
         ), V2VerifyCallbacks(claim_store=store, trust=trust, status_evidence=status_evidence, status_journal=journal))

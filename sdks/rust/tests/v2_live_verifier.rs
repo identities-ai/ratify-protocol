@@ -477,6 +477,7 @@ fn preflight_and_claim(
         &req.required_scope,
         &req.verifier_namespace,
         req.replay_epoch,
+        &req.verifier_id,
         req.now,
         req.max_challenge_age_seconds,
         req.future_skew_seconds,
@@ -835,6 +836,8 @@ fn configuration_rejected_at_step_two() {
     let (_, bundle) = case("pre_agent_key_without_id");
     let base = || V2VerifyRequest {
         bundle: bundle.clone(),
+        verifier_namespace: "ns".into(),
+        verifier_id: "a".repeat(64),
         now: 1_800_000_000,
         max_challenge_age_seconds: 60,
         future_skew_seconds: 5,
@@ -888,7 +891,17 @@ fn standalone_preflight_replay_epoch_bound() {
             replay_epoch: epoch,
             ..Default::default()
         };
-        let got = validate_proof_bundle_v2_preflight(&bundle, &expected, "data:read", "ns", epoch, 1_800_000_000, 60, 5);
+        let got = validate_proof_bundle_v2_preflight(
+            &bundle,
+            &expected,
+            "data:read",
+            "ns",
+            epoch,
+            &bundle.verifier_id,
+            1_800_000_000,
+            60,
+            5,
+        );
         assert_eq!(v2_error_class_of(&got), Some(V2ErrorClass::ConfigurationInvalid), "epoch {epoch}: {got:?}");
     }
 }

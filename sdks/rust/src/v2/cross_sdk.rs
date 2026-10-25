@@ -1592,6 +1592,7 @@ fn replay_scenario(
         required_scope: sc.required_scope.clone(),
         verifier_namespace: cfg.verifier_namespace.clone(),
         replay_epoch: cfg.replay_epoch,
+        verifier_id: key_id_v2(&key(&cfg.verifier_key)?)?,
         now: sc.verify_time,
         max_challenge_age_seconds: cfg.max_challenge_age_seconds,
         future_skew_seconds: cfg.future_skew_seconds,

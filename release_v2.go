@@ -146,6 +146,10 @@ type V2TerminalClaimRecord struct {
 var ErrV2ReleaseStateMismatch = errors.New("v2 claim already records a different release")
 
 // V2ReleaseClaimStore is the claim-store view release needs.
+// LoadV2TerminalClaim reports a claim the store does not hold with an error
+// of class claim_not_found, which release answers with rejected /
+// release_state_mismatch; any other error is store unavailability (pending /
+// claim_store_unavailable).
 type V2ReleaseClaimStore interface {
 	V2AuthoritativeClock
 	LoadV2TerminalClaim(ctx context.Context, claimID string) (V2TerminalClaimRecord, error)
@@ -317,6 +321,12 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	// 1. Committed state.
 	record, err := loadV2TerminalClaimSafely(ctx, config.ClaimStore, committed.claimID)
 	if err != nil {
+		// Only an unavailable store is retryable. A store that answers that
+		// it holds no such claim (claim_not_found) did not produce this
+		// handoff: a state mismatch, never pending.
+		if V2ErrorClassOf(err) == V2ErrClaimNotFound {
+			return releaseResultV2(V2ReleaseRejected, "release_state_mismatch")
+		}
 		return releaseResultV2(V2ReleasePending, "claim_store_unavailable")
 	}
 	if record.ReceiptAbandoned {

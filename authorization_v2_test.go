@@ -98,7 +98,7 @@ func (s *recordingV2AtomicRateStore) FinalizeV2Claim(ctx context.Context, claimI
 
 func testEvaluationTokenForTest(t testing.TB, bundle *ProofBundleV2, expected *ExpectedChallengeV2, policy *V2ContextPolicy, scope string) *V2EvaluationToken {
 	t.Helper()
-	preflight, err := PreflightProofBundleV2(bundle, expected, policy, scope, "test", 0, 15, 10, 0)
+	preflight, err := PreflightProofBundleV2(bundle, expected, policy, scope, "test", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -722,7 +722,7 @@ func TestV2DeferredConstraintsPreservePositionAndSignedParameters(t *testing.T) 
 	policy := testUnboundContextPolicy(t)
 	expected := testExpectedContextChallenge(t, bundle, policy)
 	expected.ExpectedReceiverID = "service-1"
-	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, 15, 15, 0)
+	pre, err := PreflightProofBundleV2(bundle, expected, policy, "data:read", "test", 0, expected.VerifierID, 15, 15, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

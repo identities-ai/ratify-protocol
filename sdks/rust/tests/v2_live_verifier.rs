@@ -787,23 +787,16 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
         window_s: 60,
         limit: 5,
     };
-    // Each prior claim seals the values of a genuine receipt body, which the
-    // reference store's finalization requires (SPEC-v2 §7.5).
-    let (body, sealed) = untrusted_receipt_body("rate_reserved");
-    let terminal = br#"{"decision":"indeterminate","decision_reason":"trust_unavailable"}"#;
+    // Five prior allows fill the counter. Each prior claim seals the values of
+    // a genuine allow receipt body, which the reference store's finalization
+    // requires (SPEC-v2 §7.5), and carries an allow horizon (§6.8); only an
+    // allow is counted.
     for n in 0..5 {
         let id = format!("prior-{n}");
-        let claim = V2ChallengeClaim {
+        let mut claim = V2ChallengeClaim {
             claim_id: id.clone(),
             namespace: "ns".into(),
             proof_digest: id.clone(),
-            verifier_id: sealed.verifier_id.clone(),
-            agent_id: sealed.agent_id.clone(),
-            bundle_hash: sealed.bundle_hash.clone(),
-            issuer_ids: sealed.issuer_ids.clone(),
-            required_scope: sealed.required_scope.clone(),
-            context_policy_digest: sealed.context_policy_digest.clone().unwrap_or_default(),
-            constraint_evaluators: sealed.constraint_evaluators.clone(),
             issued_at: 1_799_999_990,
             expires_at: 1_800_000_290,
             max_age_seconds: 300,
@@ -811,8 +804,9 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
             requires_rate: true,
             ..Default::default()
         };
+        let (terminal, body) = bind_claim_to_receipt_body(&mut claim, 1_800_000_000);
         let created = view.claim_v2(&ctx, claim).expect("claim");
-        let finalized = view.finalize_v2_claim(&ctx, &id, &created.owner_token, terminal, &body, 1_800_000_100);
+        let finalized = view.finalize_v2_claim(&ctx, &id, &created.owner_token, &terminal, &body, 1_800_000_100);
         assert_eq!(finalized, Ok(true));
     }
     let (v, bundle) = case("rate_reserved");

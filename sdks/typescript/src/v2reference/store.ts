@@ -37,6 +37,7 @@ import {
   type V2ReleaseRecord,
   type V2TerminalClaimRecord,
 } from "../release_v2.js";
+import { V2_MAX_TIMESTAMP_SECONDS } from "../clock_bounds_v2.js";
 import { checkV2StreamSequence } from "../stream_sequence_v2.js";
 import {
   decodeVerificationReceiptBodyV2,
@@ -396,7 +397,8 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       // SPEC-v2 §6.8: an allow carries a positive allow horizon and every
       // other decision carries none, so the horizon and the rate admission
       // below always apply to exactly the allows.
-      if ((decodeVerificationReceiptBodyV2(receiptBody).decision === "allow") !== allowValidUntil > 0) {
+      const decision = decodeVerificationReceiptBodyV2(receiptBody).decision;
+      if (decision === "allow" ? !(allowValidUntil > 0 && allowValidUntil <= V2_MAX_TIMESTAMP_SECONDS) : allowValidUntil !== 0) {
         throw storeError("configuration_invalid", "v2reference: the allow horizon does not match the decision");
       }
       if (allowValidUntil > 0 && (finalAt >= allowValidUntil || finalAt >= record.claim.expiresAt)) {

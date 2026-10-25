@@ -212,9 +212,19 @@ match before the beta.
   as `configuration_invalid` (SPEC-v2 §6.8, §7.5). Before, an allow with no
   horizon skipped the horizon check and `max_rate` admission (release then
   withheld it), and a non-allow with a horizon was counted against the rate
-  limit. Vectors: `lifecycle-scenarios.json`
-  `finalize_rejects_allow_without_allow_horizon` and
-  `finalize_rejects_allow_horizon_on_non_allow`.
+  limit. A non-allow must carry exactly 0 and an allow a horizon no later
+  than 253402300799. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_allow_without_allow_horizon`,
+  `finalize_rejects_allow_horizon_on_non_allow`,
+  `finalize_rejects_negative_allow_horizon_on_non_allow` and
+  `finalize_rejects_allow_horizon_beyond_timestamp_domain`.
+- **Recovery accepts what finalization accepts** (Go, Rust, C). The Go and
+  Rust reference stores required the recovered terminal result to hold only
+  string members, which finalization does not require, so the same bytes
+  committed through finalize but not through recovery. Recovery now reads
+  the decision and reason from the validated receipt body, as TypeScript and
+  Python already did (SPEC-v2 §7.5). Vector:
+  `recover_direct_accepts_terminal_result_with_other_members`.
 - **Lease-expiry recovery validates what it commits** (all SDKs). Every
   reference claim store's recovery operation accepted any terminal result
   whose decision and reason were `indeterminate / evaluation_interrupted`,

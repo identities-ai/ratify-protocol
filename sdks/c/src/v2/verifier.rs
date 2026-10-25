@@ -220,7 +220,12 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
 /// The claim stage alone: pre-claim checks (`request_json` as for
 /// `ratify_v2_verify_proof_bundle`; a context policy is required) then the
 /// atomic claim at `now`. The bundle is decoded before the request's
-/// configuration is checked (SPEC-v2 §6.2). The evaluator capability is
+/// configuration is checked (SPEC-v2 §6.2). Like the standalone preflight
+/// helper in every SDK (Go `PreflightProofBundleV2`), it requires the
+/// expected challenge record first, so a request with no `expected_challenge`
+/// is `expected_challenge_unavailable` even when another configuration member
+/// is also invalid; `ratify_v2_verify_proof_bundle` checks the configured
+/// bounds first and reports `configuration_invalid`. The evaluator capability is
 /// never exposed, so a created claim stays in progress until lease-expiry
 /// recovery. Returns 0 with `*disposition_out` and the claim ID, or the
 /// failure class.

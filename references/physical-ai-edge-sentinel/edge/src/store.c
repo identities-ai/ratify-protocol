@@ -488,6 +488,22 @@ static void seal(store *s, claim_rec *r, RatifyV2Slice terminal, RatifyV2Slice b
     r->log_sequence = e->seq;
 }
 
+/* Whether the canonical encoding of a receipt outbox body holds `member`
+ * (for example "\"decision\":\"allow\""). In canonical JSON every quote inside
+ * a string value is escaped, and a receipt body has one decision and one
+ * decision_reason member, so an exact match is that member. */
+static int body_has(RatifyV2Slice body, const char *member)
+{
+    RatifyV2Buffer canonical = {0};
+    if (ratify_v2_object_decode(RatifyV2KindVerificationReceiptBody, body.ptr, body.len, &canonical) != 0) return 0;
+    size_t n = strlen(member);
+    int found = 0;
+    for (size_t i = 0; !found && canonical.len >= n && i <= canonical.len - n; i++)
+        found = memcmp(canonical.ptr + i, member, n) == 0;
+    ratify_v2_buffer_free(canonical);
+    return found;
+}
+
 static int32_t cb_finalize(void *user, const char *id, RatifyV2Slice token, RatifyV2Slice terminal, RatifyV2Slice body,
                            int64_t allow_valid_until, int32_t *committed)
 {
@@ -507,6 +523,11 @@ static int32_t cb_finalize(void *user, const char *id, RatifyV2Slice token, Rati
      * commits nothing. */
     rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
     if (rc) return rc;
+    /* SPEC-v2 §6.8: an allow carries a horizon in the timestamp domain and
+     * every other decision carries none. */
+    int allow = body_has(body, "\"decision\":\"allow\"");
+    if (allow ? (allow_valid_until <= 0 || allow_valid_until > 253402300799LL) : allow_valid_until != 0)
+        return RatifyV2ConfigurationInvalid;
     if (allow_valid_until > 0 && (now >= allow_valid_until || now >= r->expires_at)) return RatifyV2AllowHorizonPassed;
     seal(s, r, terminal, body, allow_valid_until, now);
     if (commit(s) != 0) return RatifyV2StoreUnavailable;
@@ -560,6 +581,12 @@ static int32_t cb_recover(void *user, const char *id, RatifyV2Slice terminal, Ra
     int32_t rc = store_now(s, &now);
     if (rc) return rc;
     if (now < r->lease_expires_at) return RatifyV2ClaimLeaseLive;
+    /* SPEC-v2 §7.5: recovery validates exactly as finalization does and
+     * commits only indeterminate / evaluation_interrupted. */
+    rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
+    if (rc) return rc;
+    if (!body_has(body, "\"decision\":\"indeterminate\"") || !body_has(body, "\"decision_reason\":\"evaluation_interrupted\""))
+        return RatifyV2ConfigurationInvalid;
     seal(s, r, terminal, body, 0, now);
     if (commit(s) != 0) return RatifyV2StoreUnavailable;
     *committed = 1;

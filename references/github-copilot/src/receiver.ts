@@ -196,6 +196,7 @@ export class ProtectedDeployReceiver {
       contextPolicy: newV2ContextPolicy(CONTEXT_PROFILE, true, CONTEXT_FIELDS, binding.sessionContext),
       requiredScope: REQUIRED_SCOPE,
       verifierNamespace: VERIFIER_NAMESPACE,
+      verifierID: this.verifierID,
       replayEpoch: REPLAY_EPOCH,
       now: this.store.now(),
       maxChallengeAgeSeconds: CHALLENGE_LIFETIME_SECONDS,

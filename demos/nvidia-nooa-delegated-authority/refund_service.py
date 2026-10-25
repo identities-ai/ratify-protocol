@@ -486,6 +486,7 @@ class RefundService:
                     # phase-1 record. None of it is read from the request body.
                     required_scope=record.required_scope,
                     verifier_namespace=VERIFIER_NAMESPACE,
+                    verifier_id=self.verifier_id,
                     replay_epoch=REPLAY_EPOCH,
                     now=self.store.now(),
                     max_challenge_age_seconds=CHALLENGE_TTL_SECONDS,

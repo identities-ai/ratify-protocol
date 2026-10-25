@@ -634,6 +634,7 @@ class InfrastructureReceiver:
             ),
             required_scope=INFRA_SCOPE,
             verifier_namespace=NAMESPACE,
+            verifier_id=self.verifier_id,
             replay_epoch=REPLAY_EPOCH,
             now=self.store.now(),
             max_challenge_age_seconds=300,

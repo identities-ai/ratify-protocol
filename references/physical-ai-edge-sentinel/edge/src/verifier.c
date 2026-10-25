@@ -384,7 +384,7 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle, size_t bundle_len, c
     char sc_b64[64];
     session_context_b64(ctx, action, sc_b64);
     char *request = xformat(
-        "{\"required_scope\":\"%s\",\"verifier_namespace\":\"%s\",\"replay_epoch\":%lld,\"now\":%lld,"
+        "{\"required_scope\":\"%s\",\"verifier_namespace\":\"%s\",\"verifier_id\":\"%s\",\"replay_epoch\":%lld,\"now\":%lld,"
         "\"max_challenge_age_seconds\":%lld,\"future_skew_seconds\":%d,\"tzdb_version\":\"%s\","
         "\"status_keys\":{\"%s\":{\"epoch\":%llu,\"public_key\":%s}},"
         "\"status_policy\":{\"max_list_lifetime_seconds\":%lld,\"max_status_age_seconds\":%lld,"
@@ -395,7 +395,7 @@ void sentinel_decide(sentinel_ctx *ctx, const char *bundle, size_t bundle_len, c
         "\"expected_session_context_b64\":\"%s\"},"
         "\"context\":{\"has_resource\":true,\"requested_resource_id\":\"%s\",\"requested_path\":\"/%s\","
         "\"extension_counts\":{\"%s\":%d}}}",
-        action->scope, TRUST_NAMESPACE, (long long)store_replay_epoch(ctx->st), (long long)now,
+        action->scope, TRUST_NAMESPACE, store_verifier_id(ctx->st), (long long)store_replay_epoch(ctx->st), (long long)now,
         (long long)ctx->trust.max_challenge_age_s, FUTURE_SKEW_S, ratify_v2_tzdb_version(), ctx->trust.root_id,
         (unsigned long long)ctx->trust.status_epoch, ctx->trust.status_json, (long long)ctx->status_policy.max_list_lifetime_seconds,
         (long long)ctx->status_policy.max_status_age_seconds, STATUS_SKEW_S, expected, ACTX_CONTEXT_PROFILE, sc_b64,

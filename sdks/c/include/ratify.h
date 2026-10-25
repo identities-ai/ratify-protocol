@@ -1413,7 +1413,9 @@ void ratify_verify_result_free(struct RatifyVerifyResult *handle);
 // Safe to call with NULL.
 void ratify_string_free(char *s);
 
-// Free an error string written to an `err_out` parameter.
+// Free an error string written to an `err_out` parameter, by a v1 or a v2
+// (`ratify_v2_*`) function. Each such string is heap-allocated and owned by
+// the caller until freed here.
 // Safe to call with NULL.
 void ratify_error_free(char *s);
 
@@ -2571,9 +2573,10 @@ int32_t ratify_v2_validate_finalization_payload(const uint8_t *claim_record,
 
 // Whether `outcome` (a `RatifyV2ReleaseStatus`) and `reason` form a release
 // record (SPEC-v2 §6.9; Go `ValidV2ReleaseRecordOutcome`): released with
-// the reason "" (or NULL), or withheld with "clock_regressed",
-// "challenge_expired" or "allow_horizon_passed". Returns 1 or 0. For claim
-// stores implementing `record_release`.
+// the reason "", or withheld with "clock_regressed", "challenge_expired" or
+// "allow_horizon_passed". Returns 1 or 0; a NULL or non-UTF-8 `reason` is 0
+// (SPEC-v2 §1.3: a predicate fails closed). For claim stores implementing
+// `record_release`.
 int32_t ratify_v2_valid_release_record_outcome(int32_t outcome, const char *reason);
 
 // Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)

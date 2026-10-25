@@ -679,7 +679,21 @@ pub unsafe extern "C" fn ratify_v2_evaluator_call_expired(
 // ---------------------------------------------------------------------------
 // Adapters
 
-/// Copy a C string the callback returned ("" for NULL).
+/// Copy a C string that a callback answered with ("" for NULL). Text that is
+/// not valid UTF-8 is no answer, so the caller fails closed as that provider
+/// or store being unavailable rather than comparing a lossy copy.
+pub(crate) unsafe fn try_owned(p: *const c_char, name: &str) -> Result<String, String> {
+    if p.is_null() {
+        return Ok(String::new());
+    }
+    CStr::from_ptr(p)
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|_| format!("{name} is not valid UTF-8"))
+}
+
+/// Copy a C string the callback returned ("" for NULL), replacing text that is
+/// not valid UTF-8. Only for diagnostics that never decide a result.
 pub(crate) unsafe fn owned(p: *const c_char) -> String {
     if p.is_null() {
         String::new()
@@ -1173,20 +1187,24 @@ impl V2ReleaseClaimStore for CReleaseStore {
         let entry_hash = unsafe { try_slice_vec(out.release_entry_hash, "release_entry_hash") }
             .map_err(V2StoreError::Unavailable)?;
         // SAFETY: as above.
-        unsafe {
+        let text = |p, name| unsafe { try_owned(p, name) }.map_err(V2StoreError::Unavailable);
+        let receipt_outbox_digest = text(out.receipt_outbox_digest, "receipt_outbox_digest")?;
+        let release_claim_id = text(out.release_claim_id, "release_claim_id")?;
+        let release_reason = text(out.release_reason, "release_reason")?;
+        {
             Ok(V2TerminalClaimRecord {
                 terminal: out.terminal != 0,
-                receipt_outbox_digest: owned(out.receipt_outbox_digest),
+                receipt_outbox_digest,
                 challenge_expires_at: out.challenge_expires_at,
                 allow_horizon: out.allow_horizon,
                 finalized_at: out.finalized_at,
                 receipt_abandoned: out.receipt_abandoned != 0,
                 release: (out.has_release != 0).then(|| V2ReleaseRecord {
-                    claim_id: owned(out.release_claim_id),
+                    claim_id: release_claim_id,
                     entry_hash,
                     ack_timestamp: out.release_ack_timestamp,
                     outcome: super::verifier::release_status_from_c(out.release_outcome),
-                    reason: owned(out.release_reason),
+                    reason: release_reason,
                 }),
             })
         }
@@ -1239,7 +1257,7 @@ fn empty_ack() -> RatifyV2Acknowledgement {
 
 unsafe fn ack_of(a: &RatifyV2Acknowledgement) -> Result<V2CheckpointAcknowledgement, V2StoreError> {
     Ok(V2CheckpointAcknowledgement {
-        log_id: owned(a.log_id),
+        log_id: try_owned(a.log_id, "log_id").map_err(V2StoreError::Unavailable)?,
         sequence: a.sequence,
         entry_hash: try_slice_vec(a.entry_hash, "entry_hash").map_err(V2StoreError::Unavailable)?,
         timestamp: a.timestamp,
@@ -1339,7 +1357,7 @@ impl SecurityJournalStoreV2 for CJournal {
             (
                 try_slice_vec(out.snapshot, "journal snapshot")
                     .map_err(|e| V2Error::new(V2ErrorClass::StatusObjectRejected, e))?,
-                owned(out.digest),
+                try_owned(out.digest, "journal digest").map_err(|e| V2Error::new(V2ErrorClass::StatusObjectRejected, e))?,
             )
         };
         let own = SecurityJournalHeadV2 {
@@ -1706,19 +1724,19 @@ pub(crate) fn audience_provider(
                                 })?;
                         for d in ids {
                             // SAFETY: as above.
-                            domains.push(unsafe { owned(*d) });
+                            domains.push(unsafe { try_owned(*d, "audience trust_domain_id") }.map_err(V2ProviderError::new)?);
                         }
                     }
                     memberships.push(V2AudienceMembership {
                         delegation_index: m.delegation_index,
                         constraint_index: m.constraint_index,
                         // SAFETY: as above.
-                        receiver_id: unsafe { owned(m.receiver_id) },
+                        receiver_id: unsafe { try_owned(m.receiver_id, "audience receiver_id") }.map_err(V2ProviderError::new)?,
                         trust_domain_ids: domains,
                         issued_at: m.issued_at,
                         expires_at: m.expires_at,
                         // SAFETY: as above.
-                        evidence_digest: unsafe { owned(m.evidence_digest) },
+                        evidence_digest: unsafe { try_owned(m.evidence_digest, "audience evidence_digest") }.map_err(V2ProviderError::new)?,
                     });
                 }
             }

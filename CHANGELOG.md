@@ -199,6 +199,13 @@ match before the beta.
   non-canonical base64; such a batch now decodes and the object fails
   authentication instead, with the same `unavailable` status result.
   Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **C: callback text must be valid UTF-8, and the release-record predicate
+  fails closed.** A string a callback answers with (a claim ID, log ID,
+  digest, reason, receiver or trust-domain ID) that is not valid UTF-8 now
+  fails that provider or store closed instead of being compared as a lossy
+  copy. `ratify_v2_valid_release_record_outcome` returns 0 for a NULL or
+  non-UTF-8 reason (SPEC-v2 §1.3). `ratify_error_free` documents that it
+  frees every v1 and v2 `err_out` string.
 - **The allow horizon matches the decision at finalization** (all SDKs).
   A reference claim store refuses an `allow` receipt body finalized without
   a positive `allow_valid_until`, and any other decision finalized with one,

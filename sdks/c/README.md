@@ -492,7 +492,9 @@ stack frame. A callback returns `0`, a positive class
 `RatifyV2ErrCancelled`. A callback failure is always handled fail-closed,
 and so is an answer whose length or count is over `PTRDIFF_MAX` bytes in
 total: the library never reads it, and treats it as that provider or store
-failing (an audience answer is `constraint_unverifiable`).
+failing (an audience answer is `constraint_unverifiable`). A string a
+callback answers with (an identifier, digest or reason) must be valid UTF-8;
+one that is not is treated the same way, never compared as a lossy copy.
 Identifiers reach callbacks as NUL-terminated C strings, so the library
 never passes one that contains U+0000 (and never strips the NUL): a
 configured `verifier_namespace` containing U+0000 is `configuration_invalid`

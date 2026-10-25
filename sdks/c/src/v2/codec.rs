@@ -1009,15 +1009,21 @@ pub unsafe extern "C" fn ratify_v2_validate_finalization_payload(
 
 /// Whether `outcome` (a `RatifyV2ReleaseStatus`) and `reason` form a release
 /// record (SPEC-v2 §6.9; Go `ValidV2ReleaseRecordOutcome`): released with
-/// the reason "" (or NULL), or withheld with "clock_regressed",
-/// "challenge_expired" or "allow_horizon_passed". Returns 1 or 0. For claim
-/// stores implementing `record_release`.
+/// the reason "", or withheld with "clock_regressed", "challenge_expired" or
+/// "allow_horizon_passed". Returns 1 or 0; a NULL or non-UTF-8 `reason` is 0
+/// (SPEC-v2 §1.3: a predicate fails closed). For claim stores implementing
+/// `record_release`.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_valid_release_record_outcome(outcome: i32, reason: *const c_char) -> i32 {
     crate::guard::ffi_guard(
         || 0,
         || {
-            let reason = super::callbacks::owned(reason);
+            if reason.is_null() {
+                return 0;
+            }
+            let Ok(reason) = super::callbacks::try_owned(reason, "reason") else {
+                return 0;
+            };
             i32::from(valid_v2_release_record_outcome(
                 super::verifier::release_status_from_c(outcome),
                 &reason,

@@ -16,14 +16,19 @@ use super::{bad_arg, AbiResult};
 /// namespace containing one is `configuration_invalid` before any callback.
 fn configured_namespace(o: &Obj, k: &str) -> AbiResult<String> {
     let ns = o.str(k)?;
-    if ns.contains('\0') {
-        return Err(V2Error::new(
+    match namespace_error(o, k, &ns) {
+        Some(e) => Err(e.into()),
+        None => Ok(ns),
+    }
+}
+
+fn namespace_error(o: &Obj, k: &str, ns: &str) -> Option<V2Error> {
+    ns.contains('\0').then(|| {
+        V2Error::new(
             V2ErrorClass::ConfigurationInvalid,
             format!("{}.{k} contains U+0000", o.name),
         )
-        .into());
-    }
-    Ok(ns)
+    })
 }
 
 pub(crate) fn b64(data: &[u8]) -> String {
@@ -489,13 +494,42 @@ pub(crate) const REQUEST_FIELDS: &[&str] = &[
 ];
 
 /// A verification request (everything but the bundle, the evaluator
-/// registry, and the callbacks). A context-policy construction failure is a
-/// Protocol failure returned in the inner result.
-pub(crate) fn verify_request(v: &Value) -> AbiResult<V2Result<V2VerifyRequest>> {
+/// registry, and the callbacks), with the SPEC-v2 §6.2 step-2 failures found
+/// while reading it. Step 1 (bundle decode) comes first, so the caller
+/// reports these only for a bundle that decodes, as a preflight outcome.
+pub(crate) struct ParsedVerifyRequest {
+    pub(crate) req: V2VerifyRequest,
+    /// The configured namespace contains U+0000, which no callback can
+    /// receive (a configured bound; `verifier_namespace` keeps the value).
+    pub(crate) namespace_error: Option<V2Error>,
+    /// The context policy failed construction (`context_policy` is `None`).
+    pub(crate) policy_error: Option<V2Error>,
+}
+
+impl ParsedVerifyRequest {
+    /// The step-2 failure to report in place of
+    /// `expected_challenge_unavailable` from a verification run without the
+    /// challenge record. The configured bounds precede the challenge record
+    /// in step 2, and the context policy follows it.
+    pub(crate) fn step2_failure(&self) -> Option<V2Error> {
+        if let Some(e) = &self.namespace_error {
+            return Some(e.clone());
+        }
+        self.policy_error.clone().filter(|_| self.req.expected.is_some())
+    }
+
+    pub(crate) fn has_step2_failure(&self) -> bool {
+        self.namespace_error.is_some() || self.policy_error.is_some()
+    }
+}
+
+pub(crate) fn verify_request(v: &Value) -> AbiResult<ParsedVerifyRequest> {
     let o = Obj::new(v, "request", REQUEST_FIELDS)?;
+    let namespace = o.str("verifier_namespace")?;
+    let namespace_error = namespace_error(&o, "verifier_namespace", &namespace);
     let mut req = V2VerifyRequest {
         required_scope: o.str("required_scope")?,
-        verifier_namespace: configured_namespace(&o, "verifier_namespace")?,
+        verifier_namespace: namespace,
         replay_epoch: o.i64("replay_epoch")?,
         now: o.i64("now")?,
         max_challenge_age_seconds: o.i64("max_challenge_age_seconds")?,
@@ -513,13 +547,18 @@ pub(crate) fn verify_request(v: &Value) -> AbiResult<V2Result<V2VerifyRequest>> 
     if let Some(c) = o.object("context") {
         req.context = constraint_context(c)?;
     }
+    let mut policy_error = None;
     if let Some(p) = o.object("context_policy") {
         match context_policy(p)? {
             Ok(policy) => req.context_policy = Some(policy),
-            Err(e) => return Ok(Err(e)),
+            Err(e) => policy_error = Some(e),
         }
     }
-    Ok(Ok(req))
+    Ok(ParsedVerifyRequest {
+        req,
+        namespace_error,
+        policy_error,
+    })
 }
 
 pub(crate) fn evidence_json(e: &StatusEvidenceEntryV2) -> Value {

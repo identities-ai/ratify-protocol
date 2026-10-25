@@ -347,6 +347,15 @@ match before the beta.
   stack at about 4.47 million characters, so a valid transaction receipt
   with terms over about 3.35 MB was `malformed` in TypeScript only. The
   check is now a linear scan with the same accepted shapes.
+- **C: request configuration failures are reported after the bundle
+  decodes** (SPEC-v2 §6.2). A configured `verifier_namespace` containing
+  U+0000, or a `context_policy` that cannot be built, failed
+  `ratify_v2_verify_proof_bundle` as a call before the bundle was decoded,
+  so a malformed bundle reported `configuration_invalid` with no outcome.
+  Both are now a preflight outcome at step 2, after decode, as in the other
+  SDKs: `configuration_invalid`, or `expected_challenge_unavailable` for
+  such a policy without a challenge record. No callback runs.
+  `ratify_v2_claim_proof_bundle` also decodes first.
 
 ### Not carried into v2
 

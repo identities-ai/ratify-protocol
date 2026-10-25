@@ -88,7 +88,9 @@ typedef enum RatifyStatus {
 // status key IDs, constraint types) to callbacks as NUL-terminated C
 // strings, which cannot carry U+0000. It never strips the NUL, which would
 // merge distinct identifiers. A configured `verifier_namespace` containing
-// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs. Any
+// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs; in
+// verification that is a preflight outcome reported after the bundle
+// decodes (SPEC-v2 §6.2 step 2), so an undecodable bundle is `malformed`. Any
 // other such identifier is not passed: the callback is not called and the
 // call fails closed exactly as if that provider or store were unavailable
 // (for example `RatifyV2ClaimStoreUnavailable` for the claim store, or a
@@ -3302,7 +3304,12 @@ int32_t ratify_v2_archival_verify(int32_t kind,
 // `claim_record_out` is non-NULL the claim record (the
 // `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 // exists. A malformed request or evaluator registry fails the call itself
-// (`bad_argument` or its class) without running the verifier. A provider
+// (`bad_argument` or its class) without running the verifier. A
+// `verifier_namespace` containing U+0000 or a `context_policy` that cannot
+// be built is not a call failure: it is a preflight outcome at SPEC-v2 §6.2
+// step 2 (`configuration_invalid`, or `expected_challenge_unavailable` for
+// such a policy without a challenge record), reported only after the
+// bundle decodes, and no callback runs. A provider
 // or store callback returning `RatifyV2ErrCancelled` after the claim yields
 // `evaluation_cancelled` and commits nothing; the receiver-binding hook
 // returning it cancels before the claim, so the outcome is a preflight
@@ -3321,9 +3328,11 @@ int32_t ratify_v2_verify_proof_bundle(const uint8_t *bundle,
 
 // The claim stage alone: pre-claim checks (`request_json` as for
 // `ratify_v2_verify_proof_bundle`; a context policy is required) then the
-// atomic claim at `now`. The evaluator capability is never exposed, so a
-// created claim stays in progress until lease-expiry recovery. Returns 0
-// with `*disposition_out` and the claim ID, or the failure class.
+// atomic claim at `now`. The bundle is decoded before the request's
+// configuration is checked (SPEC-v2 §6.2). The evaluator capability is
+// never exposed, so a created claim stays in progress until lease-expiry
+// recovery. Returns 0 with `*disposition_out` and the claim ID, or the
+// failure class.
 int32_t ratify_v2_claim_proof_bundle(const uint8_t *bundle,
                                      uintptr_t bundle_len,
                                      const uint8_t *request_json,

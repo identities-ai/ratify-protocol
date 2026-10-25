@@ -361,6 +361,58 @@ fn v2c_verifier_ordering_builtin_standard_profiles() {
 /// never polls `ratify_v2_evaluator_call_expired` and answers pass only after
 /// the deadline must still produce the `extension_evaluator_timeout`
 /// outcome (constraint_unverifiable), or a slow evaluator could allow.
+/// SPEC-v2 §6.2 reports the first failing step, and bounded decode (step 1)
+/// comes before configuration (step 2). The C ABI cannot hand a namespace
+/// containing U+0000 to its callbacks, and it builds the context policy from
+/// the request, so both are step-2 failures it detects while reading the
+/// request. They must still be preflight outcomes reported after decode,
+/// never a failed call, and no callback may run.
+#[test]
+fn v2c_request_configuration_failures_are_reported_after_decode() {
+    let f = load("verifier-ordering.json");
+    let base = arr(&f["vectors"])
+        .into_iter()
+        .find(|v| s(&v["name"]) == "allow_bound_context")
+        .expect("allow_bound_context");
+    let valid = b64(&f["bundles_b64"][s(&base["bundle"])]);
+    let truncated = b"{".to_vec();
+    let nul_namespace = |v: &mut Value| {
+        v["configured_namespace"] = "verify\u{0}test".into();
+        v["expected_challenge"]["verifier_namespace"] = "verify\u{0}test".into();
+    };
+    let bad_policy = |v: &mut Value| v["context_policy"]["profile"] = "".into();
+    let no_challenge = |v: &mut Value| v["expected_challenge"] = Value::Null;
+    type Edit<'a> = &'a dyn Fn(&mut Value);
+    let cases: [(&str, Vec<Edit>, &[u8], &str); 7] = [
+        ("nul namespace, malformed bundle", vec![&nul_namespace], &truncated, "malformed"),
+        ("nul namespace", vec![&nul_namespace], &valid, "configuration_invalid"),
+        // A configured bound precedes the challenge record within step 2.
+        ("nul namespace, no challenge", vec![&nul_namespace, &no_challenge], &valid, "configuration_invalid"),
+        ("invalid policy, malformed bundle", vec![&bad_policy], &truncated, "malformed"),
+        ("invalid policy", vec![&bad_policy], &valid, "configuration_invalid"),
+        // The challenge record precedes the context policy within step 2.
+        ("invalid policy, no challenge", vec![&bad_policy, &no_challenge], &valid, "expected_challenge_unavailable"),
+        ("nul namespace and invalid policy", vec![&nul_namespace, &bad_policy], &valid, "configuration_invalid"),
+    ];
+    let mut failures = Vec::new();
+    for (name, edits, bundle, class) in cases {
+        let mut v = base.clone();
+        for edit in &edits {
+            edit(&mut v);
+        }
+        v["expected"] = serde_json::json!({
+            "stage": "preflight",
+            "error_class": class,
+            "callback_counts": {},
+        });
+        let result = run_vector(&v, bundle, false);
+        if !result.is_empty() {
+            failures.push(format!("{name}:\n  {}", result.join("\n  ")));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 #[test]
 fn v2c_evaluators_run_on_the_calling_thread_and_late_answers_time_out() {
     let f = load("verifier-ordering.json");

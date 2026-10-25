@@ -22099,12 +22099,27 @@ var WIRE_BYTE_FIELDS = /* @__PURE__ */ new Set([
   "stream_id",
   "terms_canonical_json"
 ]);
-var B64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+function isPaddedBase64Shape(s) {
+  if (s.length % 4 !== 0)
+    return false;
+  let end = s.length;
+  if (end > 0 && s.charCodeAt(end - 1) === 61)
+    end--;
+  if (end > 0 && s.charCodeAt(end - 1) === 61)
+    end--;
+  for (let i = 0; i < end; i++) {
+    const c = s.charCodeAt(i);
+    const ok = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57 || c === 43 || c === 47;
+    if (!ok)
+      return false;
+  }
+  return true;
+}
 function base64Encode(bytes) {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
 }
 function base64DecodeCanonical(s) {
-  if (!B64_RE.test(s))
+  if (!isPaddedBase64Shape(s))
     return null;
   const out = new Uint8Array(Buffer.from(s, "base64"));
   if (base64Encode(out) !== s)
@@ -22125,7 +22140,7 @@ function checkWireJSONV2(data, topLevelByteFields = [], topLevelTextFields = [])
               throw new Error(`wire: field ${JSON.stringify(key)}: malformed or non-canonical base64`);
             }
           }
-        } else {
+        } else if (key !== "params") {
           walk(v, depth + 1);
         }
       }

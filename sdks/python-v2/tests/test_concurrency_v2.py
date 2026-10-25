@@ -140,6 +140,38 @@ def test_competing_finalizations_one_wins():
     assert all(error_class_of(r[1]) == V2ErrorClass.CLAIM_ALREADY_TERMINAL for r in losers)
 
 
+def test_claim_already_terminal_error_exposes_no_store_state():
+    # SPEC-v2 §7.3: a committed claim is immutable. A late finalize or
+    # progress write fails with claim_already_terminal, and nothing reachable
+    # from that error (its cause, context or attributes) is the store's record.
+    from ratify_protocol_v2.evaluation_progress_v2 import initial_v2_evaluation_progress
+
+    store = _store()
+    claim = _bound_claim("late")
+    created = store.claim_v2(BACKGROUND, claim)
+    assert store.finalize_v2_claim(BACKGROUND, "late", created.owner_token, _UNAUTHORIZED_TERMINAL, _unauthorized_body(claim), 0)
+    record = store._claims["late"]
+    calls = [
+        lambda: store.finalize_v2_claim(BACKGROUND, "late", created.owner_token, _UNAUTHORIZED_TERMINAL,
+                                        _unauthorized_body(claim, START + 1), 0),
+        lambda: store.record_v2_evaluation_progress(BACKGROUND, "late", created.owner_token,
+                                                    initial_v2_evaluation_progress()),
+    ]
+    for call in calls:
+        with pytest.raises(Exception) as err:
+            call()
+        assert error_class_of(err.value) == V2ErrorClass.CLAIM_ALREADY_TERMINAL
+        seen, todo = set(), [err.value]
+        while todo:
+            e = todo.pop()
+            if e is None or id(e) in seen:
+                continue
+            seen.add(id(e))
+            assert all(v is not record for v in vars(e).values())
+            todo += [e.__cause__, e.__context__]
+        assert err.value.__context__ is None and err.value.__cause__ is None
+
+
 def _request(name="A"):
     request = copy.deepcopy(LIFECYCLE["requests"][name])
     request["now"] = START

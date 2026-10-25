@@ -199,6 +199,17 @@ match before the beta.
   non-canonical base64; such a batch now decodes and the object fails
   authentication instead, with the same `unavailable` status result.
   Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **Python: claim_already_terminal carries no store state.** The Python
+  reference store re-raised `claim_already_terminal` from inside the handler
+  of an internal exception that held the live claim record, so the error's
+  `__context__` reached it. The error is now raised with no chained
+  exception, as in the other SDKs (SPEC-v2 §7.3).
+- **Edge sentinel reference: recovery validates what it commits.** The
+  reference's own C claim store committed any lease-expiry recovery result;
+  it now validates the result and body as its finalization does and accepts
+  only `indeterminate / evaluation_interrupted` (SPEC-v2 §7.5). Its
+  finalization also refuses an allow horizon that does not match the
+  decision (§6.8).
 - **C: callback text must be valid UTF-8, and the release-record predicate
   fails closed.** A string a callback answers with (a claim ID, log ID,
   digest, reason, receiver or trust-domain ID) that is not valid UTF-8 now

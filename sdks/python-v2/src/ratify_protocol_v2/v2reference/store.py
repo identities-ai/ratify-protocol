@@ -309,7 +309,7 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
         if not hmac.compare_digest(hashlib.sha256(bytes(owner_token)).digest(), record.owner_digest):
             raise V2Error(V2ErrorClass.CLAIM_LEASE_LOST, "v2reference: evaluator owner mismatch")
         if record.state == _TERMINAL:
-            raise _TerminalOwner(record)
+            raise _TerminalOwner()
         now = self._read_clock_locked()
         if now < record.claimed_at:
             raise V2Error(V2ErrorClass.CLOCK_REGRESSED, f"v2reference: clock {now} is before T_claim {record.claimed_at}")
@@ -330,11 +330,18 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
         with self._lock:
             try:
                 record, final_at = self._owner_locked(claim_id, owner_token)
-            except _TerminalOwner as terminal:
-                r = terminal.record
-                if r.terminal == bytes(terminal_result) and r.receipt_body == bytes(receipt_body):
+            except _TerminalOwner:
+                # Read the committed record under the lock; no error carries
+                # store state (an exception's context would expose it).
+                r = self._claims[claim_id]
+                identical = r.terminal == bytes(terminal_result) and r.receipt_body == bytes(receipt_body)
+                terminal_error = True
+            else:
+                terminal_error = False
+            if terminal_error:
+                if identical:
                     return False
-                raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal") from None
+                raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal")
             validate_v2_finalization_payload(record.claim, terminal_result, receipt_body)
             # SPEC-v2 §6.8: an allow carries a positive allow horizon and every
             # other decision carries none, so the horizon and the rate admission
@@ -367,7 +374,11 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             try:
                 record, _ = self._owner_locked(claim_id, owner_token)
             except _TerminalOwner:
-                raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal") from None
+                terminal_error = True
+            else:
+                terminal_error = False
+            if terminal_error:
+                raise V2Error(V2ErrorClass.CLAIM_ALREADY_TERMINAL, "v2reference: claim already terminal")
             try:
                 validate_v2_evaluation_progress(progress)
             except ValueError as exc:
@@ -577,9 +588,10 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
 
 
 class _TerminalOwner(Exception):
-    def __init__(self, record: _ClaimRecord):
+    """The claim is already terminal. Carries no store state."""
+
+    def __init__(self):
         super().__init__("v2reference: claim already terminal")
-        self.record = record
 
 
 def _clone_record(record: _ClaimRecord) -> _ClaimRecord:

@@ -1018,6 +1018,29 @@ pub unsafe extern "C" fn ratify_v2_valid_release_record_outcome(outcome: i32, re
     )
 }
 
+/// Whether `progress` is a valid evaluation progress record (SPEC-v2 §7.5;
+/// Go `ValidateV2EvaluationProgress`): the JSON object the
+/// `record_progress` callback receives, with no other member and valid
+/// values. Returns 1 or 0; NULL with a nonzero length, invalid JSON
+/// and an invalid record are 0 (SPEC-v2 §1.3: a predicate fails closed). A
+/// claim store implementing `record_progress` rejects a record for which
+/// this is 0 as `RatifyV2Malformed` and stores nothing.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_valid_evaluation_progress(progress: *const u8, progress_len: usize) -> i32 {
+    crate::guard::ffi_guard(
+        || 0,
+        || {
+            let Ok(data) = bytes(progress, progress_len, "progress") else {
+                return 0;
+            };
+            match super::marshal::progress_from_json(data) {
+                Ok(p) => i32::from(validate_v2_evaluation_progress(&p).is_ok()),
+                Err(_) => 0,
+            }
+        },
+    )
+}
+
 /// Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
 /// with the README procedure: strict decode, `sdk == expected_sdk`, key
 /// derivation from seeds, byte-identical re-encoding, every signature

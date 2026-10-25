@@ -37,6 +37,7 @@ import {
   type V2ReleaseRecord,
   type V2TerminalClaimRecord,
 } from "../release_v2.js";
+import { protocolClaimIDFromDigestV2 } from "../challenge_claim_v2.js";
 import { V2_MAX_TIMESTAMP_SECONDS } from "../clock_bounds_v2.js";
 import { checkV2StreamSequence } from "../stream_sequence_v2.js";
 import {
@@ -104,6 +105,23 @@ export class MutexTestOnly {
 }
 
 const storeError = (cls: V2Error["v2Class"], message: string, cause?: unknown) => new V2Error(cls, message, cause);
+
+/**
+ * Whether the claim ID is the stable claim ID of the claim's (namespace,
+ * replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). The store is
+ * keyed by claim ID, so a supplied ID that is not derived from that key could
+ * create a second claim for one challenge.
+ */
+function claimIDMatchesKey(claim: V2ChallengeClaim | null | undefined): boolean {
+  const match = /^sha384:([0-9a-f]{96})$/.exec(typeof claim?.challengeDigest === "string" ? claim.challengeDigest : "");
+  if (!claim || !match) return false;
+  const digest = Uint8Array.from(match[1]!.match(/../g)!, (h) => parseInt(h, 16));
+  try {
+    return protocolClaimIDFromDigestV2(claim.namespace, claim.replayEpoch, digest) === claim.claimID;
+  } catch {
+    return false;
+  }
+}
 
 function cloneClaim(c: V2ChallengeClaim): V2ChallengeClaim {
   return {
@@ -318,7 +336,9 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   async claimV2(claim: V2ChallengeClaim): Promise<V2ClaimResult> {
     return this.mutex.run(() => {
-      if (!claim?.claimID) throw new Error("v2reference: claim ID is required");
+      if (!claimIDMatchesKey(claim)) {
+        throw storeError("configuration_invalid", "v2reference: claim ID is not derived from the claim's namespace, replay epoch and challenge digest");
+      }
       let now: number;
       try {
         now = this.readClock();

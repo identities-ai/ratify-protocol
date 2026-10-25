@@ -20,7 +20,7 @@ import { decodeVerificationReceiptBodyV2, verificationReceiptV2Body, type Verifi
 import { releaseV2Decision } from "../../src/release_v2.js";
 import { verifyProofBundleV2 } from "../../src/verify_v2.js";
 import { StoreTestOnly } from "../../src/v2reference/store.js";
-import { corpusKeyPairs, load, unb64 } from "./helpers.js";
+import { corpusKeyPairs, keyedClaim, load, unb64 } from "./helpers.js";
 import { buildVerifyRequest, zeroCounts } from "./verify_harness.js";
 
 const lifecycle = load("lifecycle-scenarios.json");
@@ -35,12 +35,12 @@ async function newStore(lease = 60): Promise<StoreTestOnly> {
 
 function claimOf(n: number, extra: Partial<V2ChallengeClaim> = {}): V2ChallengeClaim {
   const hex = n.toString(16).padStart(64, "0");
-  return {
+  return keyedClaim({
     claimID: hex, namespace: "verify-test", replayEpoch: 3, challengeDigest: "sha384:" + hex.padEnd(96, "0"), proofDigest: "sha384:" + "1".repeat(96),
     bundleHash: "sha384:" + "1".repeat(96), issuerIDs: [ISSUER_A], requiredScope: "data:read", contextPolicyDigest: "", verifierID: "c".repeat(64),
     agentID: "d".repeat(64), requiresRate: false, rateBatch: [], issuedAt: START - 10, expiresAt: START + 290, maxAgeSeconds: 300,
     clockSkewSeconds: 5, streamID: null, streamSeq: null, constraintEvaluators: [], ...extra,
-  };
+  });
 }
 
 /**
@@ -259,4 +259,20 @@ test("reference store: now() reads the clock without an authoritative reading", 
   assert.equal(store.now(), START + 5);
   assert.equal(store.highWater, START + 10);
   await assert.rejects(() => store.authoritativeTimeV2(), (e: unknown) => v2ErrorClassOf(e) === "clock_regressed");
+});
+
+test("store: a claim ID not derived from its replay key is refused and creates nothing", async () => {
+  // SPEC-v2 §7.3: the store is unique by (namespace, replay_epoch,
+  // ChallengeClaimDigest), so no caller can open a second claim for one
+  // challenge by choosing another ID.
+  const store = await newStore();
+  const claim = claimOf(30);
+  await assert.rejects(store.claimV2({ ...claim, claimID: "f".repeat(64) }), (e: unknown) => v2ErrorClassOf(e) === "configuration_invalid");
+  assert.equal((await store.claimV2(claim)).disposition, "created");
+  const race = claimOf(31);
+  const results = await Promise.allSettled(Array.from({ length: 128 }, (_, i) =>
+    store.claimV2(i % 2 ? { ...race, claimID: i.toString(16).padStart(64, "0") } : race)));
+  const created = results.filter((r) => r.status === "fulfilled" && r.value.disposition === "created").length;
+  const refused = results.filter((r) => r.status === "rejected" && v2ErrorClassOf(r.reason) === "configuration_invalid").length;
+  assert.deepEqual({ created, refused }, { created: 1, refused: 64 });
 });

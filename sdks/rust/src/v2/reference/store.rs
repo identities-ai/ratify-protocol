@@ -38,6 +38,7 @@ use crate::v2::release::{
     receipt_outbox_digest_v2, valid_v2_release_record_outcome, V2ReceiptCheckpoint, V2ReceiptPublisher,
     V2ReleaseClaimStore, V2ReleaseRecord, V2ReleaseStatus, V2TerminalClaimRecord,
 };
+use crate::v2::operation_context::protocol_claim_id_from_digest_v2;
 use crate::v2::stream_sequence::check_v2_stream_sequence;
 
 /// The message of the reference checkpoint's refusal (Go
@@ -450,14 +451,19 @@ impl V2AuthoritativeClock for Store {
 }
 
 impl ClaimStoreV2 for Store {
-    /// The atomic claim: authoritative clock reading (a regressed clock
+    /// The atomic claim: a claim ID not derived from its replay key is
+    /// `configuration_invalid` and creates nothing; then the authoritative
+    /// clock reading (a regressed clock
     /// creates nothing and fails with `claim_store_unavailable`), replay key
     /// check, authoritative freshness recheck, stream-sequence advance, and
     /// insertion, all under one lock.
     fn claim_v2(&self, _ctx: &V2Context, claim: V2ChallengeClaim) -> Result<V2ClaimResult, V2StoreError> {
         let mut s = self.lock();
-        if claim.claim_id.is_empty() {
-            return Err(V2StoreError::Unavailable("v2reference: claim ID is required".into()));
+        if !claim_id_matches_key(&claim) {
+            return Err(classified(
+                V2ErrorClass::ConfigurationInvalid,
+                "v2reference: claim ID is not derived from the claim's namespace, replay epoch and challenge digest",
+            ));
         }
         let now = s
             .read_clock_locked()
@@ -1002,6 +1008,23 @@ impl V2ReleaseClaimStore for RateAtFinalizationStore {
     fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError> {
         self.0.record_v2_release(ctx, record)
     }
+}
+
+/// Whether the claim ID is the stable claim ID of the claim's (namespace,
+/// replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). The store is
+/// keyed by claim ID, so a supplied ID that is not derived from that key
+/// could create a second claim for one challenge.
+fn claim_id_matches_key(claim: &V2ChallengeClaim) -> bool {
+    let Some(encoded) = claim.challenge_digest.strip_prefix("sha384:") else {
+        return false;
+    };
+    if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return false;
+    }
+    let Ok(digest) = hex::decode(encoded) else {
+        return false;
+    };
+    protocol_claim_id_from_digest_v2(&claim.namespace, claim.replay_epoch, &digest).is_ok_and(|id| id == claim.claim_id)
 }
 
 #[cfg(test)]

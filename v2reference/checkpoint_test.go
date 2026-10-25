@@ -32,11 +32,12 @@ func committedReceiptStore(t *testing.T, n int) (*v2reference.Store, []string) {
 	ids := []string{}
 	for i := range n {
 		claim := ratify.V2ChallengeClaim{
-			ClaimID: "claim-" + string(rune('a'+i)), Namespace: "ns", AgentID: strings.Repeat("a", 64), ProofDigest: "sha384:" + strings.Repeat("0", 95) + string(rune('1'+i)),
+			Namespace: "ns", AgentID: strings.Repeat("a", 64), ProofDigest: "sha384:" + strings.Repeat("0", 95) + string(rune('1'+i)),
 			IssuerIDs: []string{strings.Repeat("b", 64)}, RequiredScope: "data:read", VerifierID: verifierID,
 			IssuedAt: now - 10, ExpiresAt: now + 290, MaxAgeSeconds: 300, ClockSkewSeconds: 5,
 		}
 		claim.BundleHash = claim.ProofDigest
+		claim = v2reference.KeyedClaimForTest("claim-"+string(rune('a'+i)), claim)
 		if _, err := store.ClaimV2(ctx, claim); err != nil {
 			t.Fatal(err)
 		}

@@ -23,8 +23,7 @@ fn new_store() -> Arc<Store> {
 
 /// Go `claimFor`.
 fn claim_for(id: &str, proof: &str, seq: Option<i64>) -> V2ChallengeClaim {
-    V2ChallengeClaim {
-        claim_id: id.into(),
+    keyed(V2ChallengeClaim {
         namespace: "ns".into(),
         agent_id: "agent".into(),
         proof_digest: proof.into(),
@@ -35,7 +34,7 @@ fn claim_for(id: &str, proof: &str, seq: Option<i64>) -> V2ChallengeClaim {
         stream_id: seq.map(|_| vec![0; 32]),
         stream_seq: seq,
         ..Default::default()
-    }
+    }, id)
 }
 
 /// Run `f(i)` on `n` threads released together.
@@ -67,6 +66,7 @@ fn racing_finalizations_commit_exactly_once() {
     // claim's lifetime (SPEC-v2 §6.8).
     const HORIZON: i64 = NOW + 60;
     let mut claim = claim_for("c", "proof", None);
+    let id = claim.claim_id.clone();
     // Bodies that differ only in verified_at, each bound to the claim.
     let payloads: Vec<(Vec<u8>, Vec<u8>)> =
         (0..WORKERS).map(|i| bind_claim_to_receipt_body(&mut claim, NOW + i as i64)).collect();
@@ -75,7 +75,7 @@ fn racing_finalizations_commit_exactly_once() {
     // Conflicting payloads: one commits, every other is claim_already_terminal.
     let results = race(WORKERS, |i| {
         let (terminal, body) = &payloads[i];
-        store.finalize_v2_claim(&ctx, "c", &owner, terminal, body, HORIZON)
+        store.finalize_v2_claim(&ctx, &id, &owner, terminal, body, HORIZON)
     });
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1, "{results:?}");
     for r in results.iter().filter(|r| **r != Ok(true)) {
@@ -86,15 +86,16 @@ fn racing_finalizations_commit_exactly_once() {
     // Identical payloads: one commits, every repeat is an idempotent false.
     let store = new_store();
     let mut claim = claim_for("d", "proof", None);
+    let id = claim.claim_id.clone();
     let (terminal, body) = bind_claim_to_receipt_body(&mut claim, NOW);
     let created = store.claim_v2(&ctx, claim).expect("claim");
     let owner = created.owner_token;
-    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, "d", &owner, &terminal, &body, HORIZON));
+    let results = race(WORKERS, |_| store.finalize_v2_claim(&ctx, &id, &owner, &terminal, &body, HORIZON));
     assert_eq!(results.iter().filter(|r| **r == Ok(true)).count(), 1);
     assert_eq!(results.iter().filter(|r| **r == Ok(false)).count(), WORKERS - 1);
 
     // A different owner never finalizes.
-    let lost = store.finalize_v2_claim(&ctx, "d", &[9; 32], &terminal, &body, HORIZON).expect_err("owner");
+    let lost = store.finalize_v2_claim(&ctx, &id, &[9; 32], &terminal, &body, HORIZON).expect_err("owner");
     assert_eq!(class(&lost), Some(V2ErrorClass::ClaimLeaseLost));
 }
 
@@ -187,4 +188,32 @@ fn stream_sequence_rule() {
         check_v2_stream_sequence(true, 9_007_199_254_740_991, 1).unwrap_err().class,
         V2ErrorClass::StreamSequenceMismatch
     );
+}
+
+/// SPEC-v2 §7.3: the store is unique by (namespace, replay_epoch,
+/// ChallengeClaimDigest), so no caller can open a second claim for one
+/// challenge by choosing another ID.
+#[test]
+fn claim_id_not_derived_from_its_replay_key_is_refused() {
+    let store = new_store();
+    let ctx = V2Context::background();
+    let claim = claim_for("key", "proof", None);
+    let forged = V2ChallengeClaim { claim_id: "f".repeat(64), ..claim.clone() };
+    let e = store.claim_v2(&ctx, forged).expect_err("forged ID");
+    assert_eq!(e.class(), Some(V2ErrorClass::ConfigurationInvalid), "{e:?}");
+    assert_eq!(store.claim_v2(&ctx, claim).expect("claim").disposition, V2ClaimDisposition::Created);
+    let race_claim = claim_for("race", "proof", None);
+    let results = race(128, |i| {
+        let mut c = race_claim.clone();
+        if i % 2 == 1 {
+            c.claim_id = format!("{i:064x}");
+        }
+        store.claim_v2(&ctx, c)
+    });
+    let created = results.iter().filter(|r| matches!(r, Ok(c) if c.disposition == V2ClaimDisposition::Created)).count();
+    let refused = results
+        .iter()
+        .filter(|r| matches!(r, Err(e) if e.class() == Some(V2ErrorClass::ConfigurationInvalid)))
+        .count();
+    assert_eq!((created, refused), (1, 64));
 }

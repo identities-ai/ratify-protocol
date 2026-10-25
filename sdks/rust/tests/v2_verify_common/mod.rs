@@ -553,3 +553,15 @@ pub fn bind_claim_to_receipt_body(claim: &mut V2ChallengeClaim, verified_at: i64
     );
     (terminal.into_bytes(), verification_receipt_v2_body(&body).expect("body"))
 }
+
+/// A hand-built test claim with the challenge digest of `label` and the claim
+/// ID derived from its replay key (SPEC-v2 §2.4); the reference store refuses
+/// any other ID (§7.3).
+#[allow(dead_code)]
+pub fn keyed(mut claim: V2ChallengeClaim, label: &str) -> V2ChallengeClaim {
+    use sha2::{Digest, Sha384};
+    let digest = Sha384::digest(label.as_bytes());
+    claim.challenge_digest = format!("sha384:{}", hex::encode(digest));
+    claim.claim_id = protocol_claim_id_from_digest_v2(&claim.namespace, claim.replay_epoch, &digest).expect("claim id");
+    claim
+}

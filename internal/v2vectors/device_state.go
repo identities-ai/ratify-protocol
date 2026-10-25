@@ -143,6 +143,17 @@ func (g *gen) deviceStateFile() any {
 		return b64(canon(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": status}))
 	}
 
+	// claimID is the stable claim ID (§2.4) of a labelled test claim: its
+	// sealed challenge digest is digest(challenge ^ 0xff) in namespace
+	// device-ns, epoch 3, so the projected state is one a store can hold.
+	challenges := map[string]byte{"claim-a": 0xa1, "claim-b": 0xb2, "claim-c": 0xc3, "claim-d": 0xd4, "claim-e": 0xe5}
+	claimID := func(label string) string {
+		id, err := ratify.ProtocolClaimIDFromDigestV2("device-ns", 3, rep(challenges[label]^0xff, 48))
+		if err != nil {
+			panic(err)
+		}
+		return id
+	}
 	// sealed builds the sealed claim object (§6.3, §7.3) of the projection.
 	sealed := func(id string, challenge byte, streamID []byte, streamSeq *int64) map[string]any {
 		var sid, seq any
@@ -150,7 +161,7 @@ func (g *gen) deviceStateFile() any {
 			sid, seq = b64(streamID), *streamSeq
 		}
 		return map[string]any{
-			"agent_id": agentID, "bundle_hash": digest(challenge), "challenge_digest": digest(challenge ^ 0xff), "claim_id": id,
+			"agent_id": agentID, "bundle_hash": digest(challenge), "challenge_digest": digest(challenge ^ 0xff), "claim_id": claimID(id),
 			"clock_skew_seconds": int64(5), "constraint_evaluators": []any{}, "context_policy_digest": nil, "expires_at": Now + 300,
 			"issued_at": Now - 10, "issuer_ids": []any{rootID}, "max_age_seconds": int64(300), "namespace": "device-ns",
 			"proof_digest": digest(challenge), "rate_batch": []any{}, "replay_epoch": int64(3),
@@ -171,7 +182,7 @@ func (g *gen) deviceStateFile() any {
 	// which the projection replaces by their SHA-384.
 	claim := func(id string, sealedClaim, progress map[string]any) map[string]any {
 		return map[string]any{
-			"abandoned": false, "allow_horizon": int64(0), "claim": sealedClaim, "claim_id": id, "claimed_at": Now, "finalized_at": int64(0),
+			"abandoned": false, "allow_horizon": int64(0), "claim": sealedClaim, "claim_id": claimID(id), "claimed_at": Now, "finalized_at": int64(0),
 			"lease_expires_at": Now + 30, "log_sequence": nil, "owner_digest": b64(rep(id[len(id)-1], 32)), "progress": progress,
 			"receipt_body_b64": nil, "release": nil, "state": "evaluating", "terminal_b64": nil,
 		}
@@ -243,8 +254,8 @@ func (g *gen) deviceStateFile() any {
 				map[string]any{"cert_id": "cert-leaf", "commits": []any{Now + 2}, "issuer_id": interID, "window_s": int64(10)},
 			},
 			[]any{
-				map[string]any{"body_b64": b64([]byte(bodyA)), "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48))},
-				map[string]any{"body_b64": b64([]byte(bodyB)), "claim_id": "claim-b", "entry_hash": nil},
+				map[string]any{"body_b64": b64([]byte(bodyA)), "claim_id": claimID("claim-a"), "entry_hash": b64(rep(0x5e, 48))},
+				map[string]any{"body_b64": b64([]byte(bodyB)), "claim_id": claimID("claim-b"), "entry_hash": nil},
 			}, 4, staged)
 	}
 
@@ -258,13 +269,13 @@ func (g *gen) deviceStateFile() any {
 			State: state(3, false, []any{claim("claim-e", sealed("claim-e", 0xe5, rep(0x5a, 32), i64(1)), initialProgress())}, []any{stream("device-ns", 0x5a, 1)},
 				[]any{issuanceRecord("device-ns", 3, 0xe5)}, []any{}, []any{}, 0, genesis)},
 		{Name: "every_record_kind", Description: "every record kind, listed out of order: a released allow with a rate batch, evaluator snapshot, two issuer IDs, and an appended receipt; a committed deny whose receipt is not yet appended (entry_hash null); a claim interrupted after lease expiry with recorded progress; streams whose namespaces order differently in UTF-8 and UTF-16; issuance records with a bound and an unbound context policy, a full expected agent key, and a namespace containing U+2028; rate counters ordered by issuer, certificate, and window",
-			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48)), "outcome": "released", "reason": nil})},
+			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": claimID("claim-a"), "entry_hash": b64(rep(0x5e, 48)), "outcome": "released", "reason": nil})},
 		{Name: "every_record_kind_without_release", Description: "every_record_kind with the release record of claim-a absent: only the claims member and the complete-state digest change",
 			State: full(nil)},
 		{Name: "every_record_kind_with_withheld_record", Description: "every_record_kind with claim-a's record a recorded withheld result (outcome withheld, reason allow_horizon_passed, SPEC-v2 §6.9) instead of a release: only the claims member and the complete-state digest change",
-			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": "claim-a", "entry_hash": b64(rep(0x5e, 48)), "outcome": "withheld", "reason": "allow_horizon_passed"})},
+			State: full(map[string]any{"ack_timestamp": Now + 3, "claim_id": claimID("claim-a"), "entry_hash": b64(rep(0x5e, 48)), "outcome": "withheld", "reason": "allow_horizon_passed"})},
 		{Name: "abandoned_frozen_log", Description: "a terminal claim whose receipt was abandoned before it was appended, in a frozen receipt log, at the maximum safe replay epoch and journal generation",
-			State: state(9007199254740991, true, []any{abandoned}, []any{}, []any{}, []any{}, []any{map[string]any{"body_b64": b64([]byte(`{"receipt":"d"}`)), "claim_id": "claim-d", "entry_hash": nil}},
+			State: state(9007199254740991, true, []any{abandoned}, []any{}, []any{}, []any{}, []any{map[string]any{"body_b64": b64([]byte(`{"receipt":"d"}`)), "claim_id": claimID("claim-d"), "entry_hash": nil}},
 				9007199254740991, staged)},
 	}
 	for i := range cases {

@@ -794,8 +794,7 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
     // allow is counted.
     for n in 0..5 {
         let id = format!("prior-{n}");
-        let mut claim = V2ChallengeClaim {
-            claim_id: id.clone(),
+        let mut claim = keyed(V2ChallengeClaim {
             namespace: "ns".into(),
             proof_digest: id.clone(),
             issued_at: 1_799_999_990,
@@ -804,7 +803,8 @@ fn rate_exhaustion_at_finalization_commits_constraint_denied() {
             rate_batch: vec![item.clone()],
             requires_rate: true,
             ..Default::default()
-        };
+        }, &id);
+        let id = claim.claim_id.clone();
         let (terminal, body) = bind_claim_to_receipt_body(&mut claim, 1_800_000_000);
         let created = view.claim_v2(&ctx, claim).expect("claim");
         let finalized = view.finalize_v2_claim(&ctx, &id, &created.owner_token, &terminal, &body, 1_800_000_100);

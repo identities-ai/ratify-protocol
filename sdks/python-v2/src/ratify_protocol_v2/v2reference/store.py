@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from .. import context_v2
+from ..challenge_claim_v2 import protocol_claim_id_from_digest_v2
 from ..claim_store_v2 import (
     V2_CLAIM_CREATED,
     V2_CLAIM_IN_PROGRESS,
@@ -120,6 +121,23 @@ class _OutboxEntry:
 
 def _stream_key(claim: V2ChallengeClaim) -> tuple[str, str, bytes]:
     return (claim.namespace, claim.agent_id, bytes(claim.stream_id or b""))
+
+
+def _claim_id_matches_key(claim) -> bool:
+    """Whether the claim ID is the stable claim ID of the claim's (namespace,
+    replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). The store is
+    keyed by claim ID, so a supplied ID that is not derived from that key
+    could create a second claim for one challenge."""
+    digest = getattr(claim, "challenge_digest", None)
+    if not isinstance(digest, str) or not digest.startswith("sha384:"):
+        return False
+    encoded = digest[len("sha384:"):]
+    if len(encoded) != 96 or any(c not in "0123456789abcdef" for c in encoded):
+        return False
+    try:
+        return protocol_claim_id_from_digest_v2(claim.namespace, claim.replay_epoch, bytes.fromhex(encoded)) == claim.claim_id
+    except Exception:  # noqa: BLE001 - an underivable key is not a match
+        return False
 
 
 def _same_immutable_claim(a: V2ChallengeClaim, b: V2ChallengeClaim) -> bool:
@@ -265,8 +283,9 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
 
     def claim_v2(self, ctx: context_v2.Context, claim: V2ChallengeClaim) -> V2ClaimResult:
         with self._lock:
-            if not claim.claim_id:
-                raise ValueError("v2reference: claim ID is required")
+            if not _claim_id_matches_key(claim):
+                raise V2Error(V2ErrorClass.CONFIGURATION_INVALID,
+                              "v2reference: claim ID is not derived from the claim's namespace, replay epoch and challenge digest")
             try:
                 now = self._read_clock_locked()
             except V2Error as exc:

@@ -70,8 +70,7 @@ fn rate_batches_are_issuer_scoped() {
     );
     let view = store.with_rate_at_finalization();
     let ctx = V2Context::background();
-    let claim = |id: &str, item: &V2RateReservation| V2ChallengeClaim {
-        claim_id: id.into(),
+    let claim = |id: &str, item: &V2RateReservation| keyed(V2ChallengeClaim {
         namespace: "ns".into(),
         proof_digest: id.into(),
         issued_at: 1_799_999_990,
@@ -80,12 +79,13 @@ fn rate_batches_are_issuer_scoped() {
         rate_batch: vec![V2RateReservation { limit: 1, ..item.clone() }],
         requires_rate: true,
         ..Default::default()
-    };
+    }, id);
     let admit = |id: &str, item: &V2RateReservation| {
         let mut sealed = claim(id, item);
         let (terminal, body) = bind_claim_to_receipt_body(&mut sealed, 1_800_000_000);
+        let id = sealed.claim_id.clone();
         let created = view.claim_v2(&ctx, sealed).expect("claim");
-        view.finalize_v2_claim(&ctx, id, &created.owner_token, &terminal, &body, 1_800_000_100)
+        view.finalize_v2_claim(&ctx, &id, &created.owner_token, &terminal, &body, 1_800_000_100)
     };
     assert_eq!(admit("a1", &batch[0]), Ok(true));
     assert_eq!(admit("b1", &batch[1]), Ok(true), "another issuer's counter is independent");

@@ -385,3 +385,17 @@ class FixedClock:
 
     def authoritative_time_v2(self, ctx):
         return self.now
+
+
+def keyed_claim(claim, label: str):
+    """Give a hand-built test claim the challenge digest of ``label`` and the
+    claim ID derived from its replay key (SPEC-v2 §2.4); the reference store
+    refuses any other ID (§7.3)."""
+    import dataclasses
+    import hashlib
+
+    from ratify_protocol_v2.challenge_claim_v2 import protocol_claim_id_from_digest_v2
+
+    digest = hashlib.sha384(label.encode()).digest()
+    return dataclasses.replace(claim, challenge_digest="sha384:" + digest.hex(),
+                               claim_id=protocol_claim_id_from_digest_v2(claim.namespace, claim.replay_epoch, digest))

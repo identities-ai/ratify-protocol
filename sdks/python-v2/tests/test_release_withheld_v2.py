@@ -8,7 +8,7 @@ import copy
 import pytest
 
 from corpus import b64, load
-from v2_harness import BACKGROUND, Counts, build_verify_request, keys
+from v2_harness import BACKGROUND, Counts, build_verify_request, keyed_claim, keys
 
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2.claim_store_v2 import V2ChallengeClaim
@@ -161,10 +161,11 @@ def committed_receipt_store(n: int):
     ids = []
     for i in range(n):
         digest = "sha384:" + "0" * 95 + chr(ord("1") + i)
-        claim = V2ChallengeClaim(claim_id="claim-" + chr(ord("a") + i), namespace="ns", agent_id="a" * 64,
+        claim = V2ChallengeClaim(claim_id="", namespace="ns", agent_id="a" * 64,
                                  proof_digest=digest, bundle_hash=digest, issuer_ids=["b" * 64],
                                  required_scope="data:read", verifier_id=verifier_id, issued_at=NOW - 10,
                                  expires_at=NOW + 290, max_age_seconds=300, clock_skew_seconds=5)
+        claim = keyed_claim(claim, "claim-" + chr(ord("a") + i))
         store.claim_v2(BACKGROUND, claim)
         ids.append(claim.claim_id)
     store.set_time(NOW + 30)

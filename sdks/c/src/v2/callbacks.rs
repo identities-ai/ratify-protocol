@@ -137,6 +137,8 @@ pub type RatifyV2FinalizeFn = Option<
     ) -> i32,
 >;
 /// Persists an evaluation progress record under the owner token.
+/// A record for which `ratify_v2_valid_evaluation_progress` is 0 is
+/// `RatifyV2Malformed` and is not stored (SPEC-v2 §7.5).
 pub type RatifyV2RecordProgressFn = Option<
     unsafe extern "C" fn(
         user: *mut c_void,

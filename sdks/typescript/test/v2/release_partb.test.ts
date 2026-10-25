@@ -32,7 +32,7 @@ import { verifyProofBundleV2 } from "../../src/verify_v2.js";
 import { preflightProofBundleV2 } from "../../src/verify_v2_preflight.js";
 import { ErrNotAcknowledgedTestOnly, StoreTestOnly } from "../../src/v2reference/store.js";
 import { keyIDV2 } from "../../src/crypto_v2.js";
-import { corpusKeyPairs, load, unb64 } from "./helpers.js";
+import { corpusKeyPairs, keyedClaim, load, unb64 } from "./helpers.js";
 import { buildVerifyRequest, zeroCounts } from "./verify_harness.js";
 
 const lifecycle = load("lifecycle-scenarios.json");
@@ -212,12 +212,12 @@ async function committedReceiptStore(n: number): Promise<{ store: StoreTestOnly;
   const claims: V2ChallengeClaim[] = [];
   for (let i = 0; i < n; i++) {
     const digest = "sha384:" + "0".repeat(95) + String(i + 1);
-    const claim: V2ChallengeClaim = {
-      claimID: "claim-" + String.fromCharCode(97 + i), namespace: "ns", replayEpoch: 0, challengeDigest: "sha384:" + "9".repeat(96),
+    const claim: V2ChallengeClaim = keyedClaim({
+      claimID: "", namespace: "ns", replayEpoch: 0, challengeDigest: "sha384:" + "9".repeat(95) + String(i + 1),
       proofDigest: digest, bundleHash: digest, issuerIDs: ["b".repeat(64)], requiredScope: "data:read", contextPolicyDigest: "",
       verifierID, agentID: "a".repeat(64), requiresRate: false, rateBatch: [], issuedAt: now - 10, expiresAt: now + 290,
       maxAgeSeconds: 300, clockSkewSeconds: 5, streamID: null, streamSeq: null, constraintEvaluators: [],
-    };
+    });
     await store.claimV2(claim);
     claims.push(claim);
   }

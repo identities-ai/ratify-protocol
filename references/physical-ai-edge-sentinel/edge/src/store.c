@@ -542,6 +542,9 @@ static int32_t cb_progress(void *user, const char *id, RatifyV2Slice token, Rati
     int64_t now = 0;
     int32_t rc = owner(s, id, token, &r, &now);
     if (rc) return rc;
+    /* SPEC-v2 §7.5: an invalid progress record is malformed and not stored,
+     * so recovery never reads a record it cannot seal. */
+    if (!ratify_v2_valid_evaluation_progress(progress.ptr, progress.len)) return RatifyV2Malformed;
     free(r->progress);
     r->progress = dup_bytes(progress.ptr, progress.len);
     r->progress_len = progress.len;

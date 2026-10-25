@@ -3,11 +3,16 @@
 //! and 0 (fail closed) for a maximum age or skew outside the SPEC-v2 §2.5
 //! configuration bounds, which no verifier seals into a claim. Also
 //! `ratify_v2_valid_release_record_outcome`, the release-record rule of
-//! SPEC-v2 §6.9 a C release store applies.
+//! SPEC-v2 §6.9 a C release store applies, and
+//! `ratify_v2_valid_evaluation_progress`, the progress-record check of §7.5
+//! a C claim store applies before storing a record.
 
 use std::ffi::CString;
 
-use ratify_c::{ratify_v2_challenge_time_current, ratify_v2_valid_release_record_outcome, RatifyV2ReleaseStatus};
+use ratify_c::{
+    ratify_v2_challenge_time_current, ratify_v2_valid_evaluation_progress, ratify_v2_valid_release_record_outcome,
+    RatifyV2ReleaseStatus,
+};
 
 const MAX_AGE: i64 = 300;
 const MAX_SKEW: i64 = 300;
@@ -91,4 +96,27 @@ fn release_record_outcomes() {
         assert!(!valid(outcome, ""), "{outcome:?}");
     }
     assert_eq!(unsafe { ratify_v2_valid_release_record_outcome(99, std::ptr::null()) }, 0);
+}
+
+#[test]
+fn evaluation_progress_predicate_accepts_only_a_valid_record() {
+    let valid = |record: &[u8]| unsafe { ratify_v2_valid_evaluation_progress(record.as_ptr(), record.len()) == 1 };
+    let initial = br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"not_evaluated"}"#;
+    assert!(valid(initial));
+    assert!(valid(br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted"}"#));
+    // A store that kept any of these would hand recovery a record it cannot
+    // seal (SPEC-v2 §7.5), stranding the claim instead of interrupting it.
+    for bad in [
+        &b"{}"[..],
+        b"",
+        b"null",
+        b"[]",
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"maybe"}"#,
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted","extra":1}"#,
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted","trust_assessment":"trusted"}"#,
+        &[0xff, 0xfe],
+    ] {
+        assert!(!valid(bad), "{}", String::from_utf8_lossy(bad));
+    }
+    assert_eq!(unsafe { ratify_v2_valid_evaluation_progress(std::ptr::null(), 5) }, 0);
 }

@@ -3,7 +3,9 @@ package v2reference_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -35,11 +37,11 @@ func newStore(t *testing.T) *v2reference.Store {
 
 func claimFor(id string, seq int64) ratify.V2ChallengeClaim {
 	streamID := make([]byte, 32)
-	return ratify.V2ChallengeClaim{
-		ClaimID: id, Namespace: "ns", AgentID: "agent", ProofDigest: "proof-" + id,
+	return v2reference.KeyedClaimForTest(id, ratify.V2ChallengeClaim{
+		Namespace: "ns", AgentID: "agent", ProofDigest: "proof-" + id,
 		IssuedAt: now - 10, ExpiresAt: now + 290, MaxAgeSeconds: 300, ClockSkewSeconds: 5,
 		StreamID: streamID, StreamSeq: &seq,
-	}
+	})
 }
 
 // Of many concurrent claims carrying the same stream sequence for one stream
@@ -142,5 +144,49 @@ func TestRateAtFinalizationStoreNeverReservesProvisionally(t *testing.T) {
 	err := store.ReserveV2RateBatch(context.Background(), "claim", make([]byte, 32), "sha384:x", []ratify.V2RateReservation{{IssuerID: "i", CertID: "c", WindowS: 60, Limit: 1}})
 	if err == nil {
 		t.Fatal("the reference provisional reservation reported capacity")
+	}
+}
+
+// The store is unique by (namespace, replay_epoch, ChallengeClaimDigest)
+// (SPEC-v2 §7.3). A claim whose supplied ID is not the ID derived from that
+// key is configuration_invalid and creates nothing, so no caller can open a
+// second claim for one challenge by choosing another ID.
+func TestStoreRefusesClaimIDNotDerivedFromItsKey(t *testing.T) {
+	store := newStore(t)
+	claim := claimFor("key", 1)
+	forged := claim
+	forged.ClaimID = strings.Repeat("f", 64)
+	if _, err := store.ClaimV2(context.Background(), forged); ratify.V2ErrorClassOf(err) != ratify.V2ErrConfigurationInvalid {
+		t.Fatalf("forged claim ID: got %v, want configuration_invalid", err)
+	}
+	if result, err := store.ClaimV2(context.Background(), claim); err != nil || result.Disposition != ratify.V2ClaimCreated {
+		t.Fatalf("the refused claim consumed state: %+v %v", result, err)
+	}
+	const workers = 128
+	var created, refused atomic.Int64
+	var wg sync.WaitGroup
+	race := claimFor("race", 1)
+	race.StreamID = nil
+	race.StreamSeq = nil
+	for i := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c := race
+			if i%2 == 1 {
+				c.ClaimID = fmt.Sprintf("%064x", i)
+			}
+			result, err := store.ClaimV2(context.Background(), c)
+			switch {
+			case err == nil && result.Disposition == ratify.V2ClaimCreated:
+				created.Add(1)
+			case ratify.V2ErrorClassOf(err) == ratify.V2ErrConfigurationInvalid:
+				refused.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if created.Load() != 1 || refused.Load() != workers/2 {
+		t.Fatalf("created=%d refused=%d, want 1 and %d", created.Load(), refused.Load(), workers/2)
 	}
 }

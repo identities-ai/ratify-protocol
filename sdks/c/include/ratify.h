@@ -731,6 +731,8 @@ typedef int32_t (*RatifyV2FinalizeFn)(void *user,
                                       int32_t *committed);
 
 // Persists an evaluation progress record under the owner token.
+// A record for which `ratify_v2_valid_evaluation_progress` is 0 is
+// `RatifyV2Malformed` and is not stored (SPEC-v2 §7.5).
 typedef int32_t (*RatifyV2RecordProgressFn)(void *user,
                                             const char *claim_id,
                                             struct RatifyV2Slice owner_token,
@@ -2582,6 +2584,15 @@ int32_t ratify_v2_validate_finalization_payload(const uint8_t *claim_record,
 // (SPEC-v2 §1.3: a predicate fails closed). For claim stores implementing
 // `record_release`.
 int32_t ratify_v2_valid_release_record_outcome(int32_t outcome, const char *reason);
+
+// Whether `progress` is a valid evaluation progress record (SPEC-v2 §7.5;
+// Go `ValidateV2EvaluationProgress`): the JSON object the
+// `record_progress` callback receives, with no other member and valid
+// values. Returns 1 or 0; NULL with a nonzero length, invalid JSON
+// and an invalid record are 0 (SPEC-v2 §1.3: a predicate fails closed). A
+// claim store implementing `record_progress` rejects a record for which
+// this is 0 as `RatifyV2Malformed` and stores nothing.
+int32_t ratify_v2_valid_evaluation_progress(const uint8_t *progress, uintptr_t progress_len);
 
 // Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
 // with the README procedure: strict decode, `sdk == expected_sdk`, key

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { protocolClaimIDFromDigestV2 } from "../../src/challenge_claim_v2.js";
 import { hybridKeypairFromSeeds } from "../../src/crypto.js";
 import type { HybridKeyPairV2 } from "../../src/crypto_v2.js";
 import { base64Encode } from "../../src/json_v2.js";
@@ -64,4 +65,13 @@ export async function classOfAsync(fn: () => Promise<unknown>): Promise<string> 
   } catch (err) {
     return v2ErrorClassOf(err);
   }
+}
+
+/**
+ * A hand-built test claim with the claim ID derived from its replay key
+ * (SPEC-v2 §2.4); the reference store refuses any other ID (§7.3).
+ */
+export function keyedClaim<T extends { claimID: string; namespace: string; replayEpoch: number; challengeDigest: string }>(claim: T): T {
+  const digest = Uint8Array.from(claim.challengeDigest.slice("sha384:".length).match(/../g)!, (h) => parseInt(h, 16));
+  return { ...claim, claimID: protocolClaimIDFromDigestV2(claim.namespace, claim.replayEpoch, digest) };
 }

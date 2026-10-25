@@ -899,9 +899,13 @@ mod tests {
         }
     }
 
-    fn test_claim(id: &str) -> V2ChallengeClaim {
+    /// A test claim with the challenge digest of `label` and the claim ID
+    /// derived from its replay key, as the store requires (SPEC-v2 §7.3).
+    fn test_claim(label: &str) -> V2ChallengeClaim {
+        let digest = sha2::Sha384::digest(label.as_bytes());
         V2ChallengeClaim {
-            claim_id: id.into(),
+            claim_id: crate::v2::operation_context::protocol_claim_id_from_digest_v2("device-ns", 3, &digest).unwrap(),
+            challenge_digest: format!("sha384:{}", hex::encode(digest)),
             namespace: "device-ns".into(),
             replay_epoch: 3,
             issued_at: 990,
@@ -911,9 +915,13 @@ mod tests {
         }
     }
 
+    fn claim_1_id() -> String {
+        test_claim("claim-1").claim_id
+    }
+
     fn release_record(entry: u8, at: i64) -> V2ReleaseRecord {
         V2ReleaseRecord {
-            claim_id: "claim-1".into(),
+            claim_id: claim_1_id(),
             entry_hash: vec![entry; 48],
             ack_timestamp: at,
             outcome: V2ReleaseStatus::Released,
@@ -929,7 +937,7 @@ mod tests {
     }
 
     fn claim_1(s: &mut StoreState) -> &mut super::super::store::ClaimRecord {
-        s.claims.get_mut("claim-1").unwrap()
+        s.claims.get_mut(&claim_1_id()).unwrap()
     }
 
     // Every member of the complete-state projection changes the digest on its
@@ -946,7 +954,7 @@ mod tests {
             ("claim lease", with_store(&primary, |s| claim_1(s).lease_expires_at += 1)),
             ("claim progress", with_store(&primary, |s| claim_1(s).progress.trust_assessment = "trusted".into())),
             ("claim abandoned", with_store(&primary, |s| claim_1(s).abandoned = true)),
-            ("claim removed", with_store(&primary, |s| drop(s.claims.remove("claim-1")))),
+            ("claim removed", with_store(&primary, |s| drop(s.claims.remove(&claim_1_id())))),
             ("release record", with_store(&primary, |s| claim_1(s).release = Some(release_record(1, 1_000)))),
             ("stream sequence", with_store(&primary, |s| {
                 s.streams.insert(("ns".into(), "agent".into(), vec![7; 32]), 2);
@@ -959,7 +967,7 @@ mod tests {
                 "outbox entry",
                 with_store(&primary, |s| {
                     s.outbox.push(OutboxEntry {
-                        claim_id: "claim-1".into(),
+                        claim_id: claim_1_id(),
                         body: b"{}".to_vec(),
                         wire: None,
                         digest: Vec::new(),

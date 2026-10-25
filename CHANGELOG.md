@@ -349,6 +349,23 @@ match before the beta.
 
 ### Fixed
 
+- **Reference claim stores refuse a claim ID that is not derived from its
+  replay key** (Go, TypeScript, Python and Rust, and the C reference store
+  over Rust). SPEC-v2 §7.3 makes the claim store unique by namespace, replay
+  epoch and challenge digest; the stores keyed their records by the supplied
+  claim ID without checking it, so a caller that called the store directly
+  with another ID could create a second claim for one challenge. The verifier
+  always derives the ID and was not affected. A mismatched ID, or a challenge
+  digest that is not a `sha384:` digest, is now `configuration_invalid` and
+  creates nothing. The `device-state.json` projections now carry derived
+  claim IDs, so every vector state is one a store can hold.
+- **C: evaluation progress records are validated before they are stored.**
+  The new predicate `ratify_v2_valid_evaluation_progress` is the check the
+  Go, TypeScript, Python and Rust reference stores apply (SPEC-v2 §7.5). The
+  plain C test store and the edge sentinel reference store now reject an
+  invalid record as `RatifyV2Malformed`; the edge store used to keep it, and
+  lease-expiry recovery of that claim then failed instead of committing
+  `evaluation_interrupted`.
 - **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,
   C, TypeScript and Python). A negative count from the invocation counter is now
   `constraint_unverifiable` instead of passing. Through the C ABI, a

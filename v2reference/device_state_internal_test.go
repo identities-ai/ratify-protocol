@@ -55,7 +55,7 @@ func testChallengeRecord(b byte) ratify.ExpectedChallengeV2 {
 func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 	ctx := context.Background()
 	primary, _, _ := newTestDevice(t)
-	if _, err := primary.Store.ClaimV2(ctx, ratify.V2ChallengeClaim{ClaimID: "claim-1", Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300}); err != nil {
+	if _, err := primary.Store.ClaimV2(ctx, KeyedClaimForTest("claim-1", ratify.V2ChallengeClaim{Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300})); err != nil {
 		t.Fatal(err)
 	}
 	base, err := primary.CompleteStateDigestTestOnly()
@@ -63,20 +63,20 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*DevicePrimaryTestOnly){
-		"claim state":     func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].state = stateTerminal },
-		"claim lease":     func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].leaseExpiresAt++ },
-		"claim progress":  func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].progress.TrustAssessment = "trusted" },
-		"claim abandoned": func(p *DevicePrimaryTestOnly) { p.Store.claims["claim-1"].abandoned = true },
-		"claim removed":   func(p *DevicePrimaryTestOnly) { delete(p.Store.claims, "claim-1") },
+		"claim state":     func(p *DevicePrimaryTestOnly) { p.Store.claims[claim1ID].state = stateTerminal },
+		"claim lease":     func(p *DevicePrimaryTestOnly) { p.Store.claims[claim1ID].leaseExpiresAt++ },
+		"claim progress":  func(p *DevicePrimaryTestOnly) { p.Store.claims[claim1ID].progress.TrustAssessment = "trusted" },
+		"claim abandoned": func(p *DevicePrimaryTestOnly) { p.Store.claims[claim1ID].abandoned = true },
+		"claim removed":   func(p *DevicePrimaryTestOnly) { delete(p.Store.claims, claim1ID) },
 		"release record": func(p *DevicePrimaryTestOnly) {
-			p.Store.claims["claim-1"].release = &ratify.V2ReleaseRecord{ClaimID: "claim-1", EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000, Outcome: ratify.V2ReleaseReleased}
+			p.Store.claims[claim1ID].release = &ratify.V2ReleaseRecord{ClaimID: claim1ID, EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000, Outcome: ratify.V2ReleaseReleased}
 		},
 		"stream sequence": func(p *DevicePrimaryTestOnly) {
 			p.Store.streams[streamKeyV2{namespace: "device-ns", agentID: "agent", streamID: "stream"}] = 2
 		},
 		"rate counter": func(p *DevicePrimaryTestOnly) { p.Store.rateCommits[rateKey{"issuer", "cert", 60}] = []int64{1_000} },
 		"outbox entry": func(p *DevicePrimaryTestOnly) {
-			p.Store.outbox = append(p.Store.outbox, outboxEntry{claimID: "claim-1", body: []byte("{}")})
+			p.Store.outbox = append(p.Store.outbox, outboxEntry{claimID: claim1ID, body: []byte("{}")})
 		},
 		"log frozen":   func(p *DevicePrimaryTestOnly) { p.Store.logFrozen = true },
 		"replay epoch": func(p *DevicePrimaryTestOnly) { p.replayEpoch++ },
@@ -104,7 +104,7 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 	}
 	// Every field of a release record is covered, not only its presence.
 	released := primary.Clone()
-	released.Store.claims["claim-1"].release = &ratify.V2ReleaseRecord{ClaimID: "claim-1", EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000, Outcome: ratify.V2ReleaseReleased}
+	released.Store.claims[claim1ID].release = &ratify.V2ReleaseRecord{ClaimID: claim1ID, EntryHash: bytes.Repeat([]byte{1}, 48), AckTimestamp: 1_000, Outcome: ratify.V2ReleaseReleased}
 	withRelease, _ := released.CompleteStateDigestTestOnly()
 	for name, alter := range map[string]func(*ratify.V2ReleaseRecord){
 		"release entry hash":    func(r *ratify.V2ReleaseRecord) { r.EntryHash = bytes.Repeat([]byte{2}, 48) },
@@ -114,7 +114,7 @@ func TestDeviceStateDigestCoversEveryMember(t *testing.T) {
 		},
 	} {
 		mutated := released.Clone()
-		alter(mutated.Store.claims["claim-1"].release)
+		alter(mutated.Store.claims[claim1ID].release)
 		if digest, _ := mutated.CompleteStateDigestTestOnly(); bytes.Equal(digest, withRelease) {
 			t.Errorf("changing the %s does not change the complete-state digest", name)
 		}
@@ -228,7 +228,7 @@ func TestDeviceAcknowledgementRacingClaimsNeverMismatches(t *testing.T) {
 				defer wg.Done()
 				for n := range claimsPerRound {
 					id := fmt.Sprintf("claim-%d-%d-%d", sequence, worker, n)
-					if _, err := store.ClaimV2(ctx, ratify.V2ChallengeClaim{ClaimID: id, Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300}); err != nil {
+					if _, err := store.ClaimV2(ctx, KeyedClaimForTest(id, ratify.V2ChallengeClaim{Namespace: "device-ns", ReplayEpoch: 3, IssuedAt: 990, ExpiresAt: 1_290, MaxAgeSeconds: 300})); err != nil {
 						t.Errorf("claim %s: %v", id, err)
 					}
 				}
@@ -269,3 +269,6 @@ func TestDeviceStateCoversIssuanceContextPolicy(t *testing.T) {
 		t.Fatal("changing an issuance record's context policy does not change the complete-state digest")
 	}
 }
+
+// claim1ID is the derived claim ID of the "claim-1" test claim.
+var claim1ID = KeyedClaimForTest("claim-1", ratify.V2ChallengeClaim{Namespace: "device-ns", ReplayEpoch: 3}).ClaimID

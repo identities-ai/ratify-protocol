@@ -8,7 +8,7 @@ import copy
 import threading
 
 from corpus import b64, load
-from v2_harness import BACKGROUND, Counts, build_verify_request, keys
+from v2_harness import BACKGROUND, Counts, build_verify_request, keyed_claim, keys
 
 from ratify_protocol_v2.authorization_v2 import V2LocalAuthorizationOptions, evaluate_proof_bundle_v2_local_authorization
 from ratify_protocol_v2.claim_store_v2 import (
@@ -17,7 +17,7 @@ from ratify_protocol_v2.claim_store_v2 import (
     claim_proof_bundle_v2,
     finalize_claim_proof_bundle_v2,
 )
-from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
+from ratify_protocol_v2.errors_v2 import V2Error, V2ErrorClass, error_class_of
 from ratify_protocol_v2.evaluation_progress_v2 import initial_v2_evaluation_progress
 from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
 from ratify_protocol_v2.rate_reservation_v2 import V2RateLimitExceededError
@@ -60,10 +60,10 @@ def _store():
 
 
 def _claim(claim_id: str, stream_seq=None, stream_id=None) -> V2ChallengeClaim:
-    return V2ChallengeClaim(claim_id=claim_id, namespace="verify-test", replay_epoch=3, challenge_digest="d", proof_digest="p",
+    return keyed_claim(V2ChallengeClaim(claim_id="", namespace="verify-test", replay_epoch=3, challenge_digest="", proof_digest="p",
                             bundle_hash="b", issuer_ids=[], required_scope="data:read", verifier_id="v", agent_id="a" * 64,
                             issued_at=START - 10, expires_at=START + 290, max_age_seconds=300, clock_skew_seconds=5,
-                            stream_id=stream_id, stream_seq=stream_seq)
+                            stream_id=stream_id, stream_seq=stream_seq), claim_id)
 
 
 def test_identical_claims_create_exactly_once():
@@ -117,7 +117,7 @@ def test_identical_finalization_commits_once():
     created = store.claim_v2(BACKGROUND, claim)
     terminal = _UNAUTHORIZED_TERMINAL
     body = _unauthorized_body(claim)
-    results = _race(THREADS, lambda i: store.finalize_v2_claim(BACKGROUND, "fin", created.owner_token, terminal, body, 0))
+    results = _race(THREADS, lambda i: store.finalize_v2_claim(BACKGROUND, claim.claim_id, created.owner_token, terminal, body, 0))
     assert all(r[0] == "ok" for r in results)
     assert [r[1] for r in results].count(True) == 1
     assert store.log_length() == 0 and len(store._outbox) == 1
@@ -131,7 +131,7 @@ def test_competing_finalizations_one_wins():
     def finalize(i):
         # Every payload binds the sealed claim; they differ in verified_at.
         body = _unauthorized_body(claim, START + i)
-        return store.finalize_v2_claim(BACKGROUND, "compete", created.owner_token, _UNAUTHORIZED_TERMINAL, body, 0)
+        return store.finalize_v2_claim(BACKGROUND, claim.claim_id, created.owner_token, _UNAUTHORIZED_TERMINAL, body, 0)
 
     results = _race(THREADS, finalize)
     winners = [r for r in results if r[0] == "ok" and r[1] is True]
@@ -149,12 +149,12 @@ def test_claim_already_terminal_error_exposes_no_store_state():
     store = _store()
     claim = _bound_claim("late")
     created = store.claim_v2(BACKGROUND, claim)
-    assert store.finalize_v2_claim(BACKGROUND, "late", created.owner_token, _UNAUTHORIZED_TERMINAL, _unauthorized_body(claim), 0)
-    record = store._claims["late"]
+    assert store.finalize_v2_claim(BACKGROUND, claim.claim_id, created.owner_token, _UNAUTHORIZED_TERMINAL, _unauthorized_body(claim), 0)
+    record = store._claims[claim.claim_id]
     calls = [
-        lambda: store.finalize_v2_claim(BACKGROUND, "late", created.owner_token, _UNAUTHORIZED_TERMINAL,
+        lambda: store.finalize_v2_claim(BACKGROUND, claim.claim_id, created.owner_token, _UNAUTHORIZED_TERMINAL,
                                         _unauthorized_body(claim, START + 1), 0),
-        lambda: store.record_v2_evaluation_progress(BACKGROUND, "late", created.owner_token,
+        lambda: store.record_v2_evaluation_progress(BACKGROUND, claim.claim_id, created.owner_token,
                                                     initial_v2_evaluation_progress()),
     ]
     for call in calls:
@@ -240,3 +240,25 @@ def test_racing_identical_verifications_commit_once():
     assert stages.count("committed") == 1
     assert all(stage in ("committed", "replay") for stage in stages)
     assert len(store._outbox) == 1
+
+
+def test_claim_id_not_derived_from_its_replay_key_is_refused():
+    # SPEC-v2 §7.3: the store is unique by (namespace, replay_epoch,
+    # ChallengeClaimDigest), so no caller can open a second claim for one
+    # challenge by choosing another ID.
+    store = _store()
+    claim = _claim("key")
+    with pytest.raises(V2Error) as err:
+        store.claim_v2(BACKGROUND, _with_id(claim, "f" * 64))
+    assert err.value.error_class == V2ErrorClass.CONFIGURATION_INVALID
+    assert store.claim_v2(BACKGROUND, claim).disposition == V2_CLAIM_CREATED
+    race = _claim("race")
+    results = _race(128, lambda i: store.claim_v2(BACKGROUND, _with_id(race, f"{i:064x}") if i % 2 else race))
+    created = sum(1 for r in results if r[0] == "ok" and r[1].disposition == V2_CLAIM_CREATED)
+    refused = sum(1 for r in results if r[0] == "err" and error_class_of(r[1]) == V2ErrorClass.CONFIGURATION_INVALID)
+    assert (created, refused) == (1, 64)
+
+
+def _with_id(claim: V2ChallengeClaim, claim_id: str) -> V2ChallengeClaim:
+    import dataclasses
+    return dataclasses.replace(claim, claim_id=claim_id)

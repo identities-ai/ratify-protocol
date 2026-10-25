@@ -18,11 +18,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -301,6 +303,23 @@ func streamKey(claim ratify.V2ChallengeClaim) streamKeyV2 {
 	return streamKeyV2{namespace: claim.Namespace, agentID: claim.AgentID, streamID: string(claim.StreamID)}
 }
 
+// claimIDMatchesKey reports whether the claim ID is the stable claim ID of
+// the claim's (namespace, replay_epoch, ChallengeClaimDigest) key (SPEC-v2
+// §2.4, §7.3). The store is keyed by claim ID, so a supplied ID that is not
+// derived from that key could create a second claim for one challenge.
+func claimIDMatchesKey(claim ratify.V2ChallengeClaim) bool {
+	encoded, ok := strings.CutPrefix(claim.ChallengeDigest, "sha384:")
+	if !ok || len(encoded) != 96 || encoded != strings.ToLower(encoded) {
+		return false
+	}
+	digest, err := hex.DecodeString(encoded)
+	if err != nil {
+		return false
+	}
+	id, err := ratify.ProtocolClaimIDFromDigestV2(claim.Namespace, claim.ReplayEpoch, digest)
+	return err == nil && id == claim.ClaimID
+}
+
 func sameImmutableClaim(a, b ratify.V2ChallengeClaim) bool {
 	left, err1 := json.Marshal(a)
 	right, err2 := json.Marshal(b)
@@ -310,7 +329,9 @@ func sameImmutableClaim(a, b ratify.V2ChallengeClaim) bool {
 // ClaimV2 implements the atomic claim: authoritative clock reading (a
 // regressed clock creates nothing and fails with claim_store_unavailable),
 // replay key check, authoritative freshness recheck, stream-sequence
-// advance, and insertion, all under one lock. Order: (1) an existing claim
+// advance, and insertion, all under one lock. Order: (0) a claim ID not
+// derived from the claim's replay key is configuration_invalid and creates
+// nothing; (1) an existing claim
 // with identical immutable fields is an exact retry (in_progress or
 // terminal_replay, no owner token; receipt_abandoned if its receipt was
 // abandoned); a different proof or field set is ErrV2ClaimProofConflict;
@@ -319,8 +340,8 @@ func sameImmutableClaim(a, b ratify.V2ChallengeClaim) bool {
 func (s *Store) ClaimV2(_ context.Context, claim ratify.V2ChallengeClaim) (ratify.V2ClaimResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if claim.ClaimID == "" {
-		return ratify.V2ClaimResult{}, fmt.Errorf("v2reference: claim ID is required")
+	if !claimIDMatchesKey(claim) {
+		return ratify.V2ClaimResult{}, &ratify.V2Error{Class: ratify.V2ErrConfigurationInvalid, Err: fmt.Errorf("v2reference: claim ID is not derived from the claim's namespace, replay epoch and challenge digest")}
 	}
 	now, err := s.readClockLocked()
 	if err != nil {

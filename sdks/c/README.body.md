@@ -408,7 +408,7 @@ independent implementation. Check `ratify_v2_abi_version()` against
 | Stateless verification | `ratify_v2_verify_object`, `ratify_v2_proof_bundle_verify_signatures`, `ratify_v2_receipt_bundle_binding_check`, `ratify_v2_archival_verify` |
 | Live verifier | `ratify_v2_verify_proof_bundle`, `ratify_v2_claim_proof_bundle`, `ratify_v2_recover_interrupted_claim`, `ratify_v2_issue_challenge`, `ratify_v2_load_expected_challenge`, `ratify_v2_verify_transaction_receipt` |
 | Release | `ratify_v2_release_decision`, `ratify_v2_released_allowed` and the `ratify_v2_committed_*` / `ratify_v2_released_*` accessors |
-| Store helpers | `ratify_v2_challenge_time_current`, `ratify_v2_check_stream_sequence`, `ratify_v2_validate_finalization_payload`, `ratify_v2_valid_release_record_outcome` |
+| Store helpers | `ratify_v2_challenge_time_current`, `ratify_v2_check_stream_sequence`, `ratify_v2_validate_finalization_payload`, `ratify_v2_valid_release_record_outcome`, `ratify_v2_valid_evaluation_progress` |
 | State machines | status reducer (`ratify_v2_status_state_*`), `SecurityJournalV2` (`ratify_v2_journal_*`), status publisher (`ratify_v2_status_publish`), rotation journal (`ratify_v2_rotation_journal_*`), witness and receipt logs (`ratify_v2_witness_entry_append`, `ratify_v2_verification_receipt_append`) |
 
 No function signs caller-selected bytes, codes, contexts, or prehash modes.

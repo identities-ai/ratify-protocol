@@ -183,6 +183,8 @@ static int32_t st_progress(void *user, const char *id, RatifyV2Slice token, Rati
     int64_t now = 0;
     int32_t rc = owner(s, id, token, &r, &now);
     if (rc) return rc;
+    /* SPEC-v2 §7.5: an invalid progress record is malformed and not stored. */
+    if (!ratify_v2_valid_evaluation_progress(progress.ptr, progress.len)) return RatifyV2Malformed;
     free(r->progress);
     r->progress = dup_slice(progress, &r->progress_len);
     return 0;
@@ -480,6 +482,15 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
                   !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseNone, ""),
               "release record outcomes", "");
     checks += 4;
+    {
+        static const char ok[] = "{\"context_assessment\":\"not_evaluated\",\"context_policy_digest\":null,"
+                                 "\"status_assessment\":\"not_evaluated\",\"status_evidence\":[],\"trust_assessment\":\"trusted\"}";
+        v2c_check(ratify_v2_valid_evaluation_progress((const uint8_t *)ok, sizeof ok - 1) &&
+                      !ratify_v2_valid_evaluation_progress((const uint8_t *)"{}", 2) &&
+                      !ratify_v2_valid_evaluation_progress(NULL, 2),
+                  "progress record validity", "");
+        checks += 1;
+    }
 
     uint8_t *wire = NULL;
     size_t wire_len = 0;

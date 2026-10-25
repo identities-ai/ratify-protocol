@@ -2,7 +2,9 @@
 //! callbacks as a C string, which cannot carry U+0000. Stripping the NUL
 //! would key `"lab\0x"` and `"labx"` to the same store records, so a
 //! configured namespace containing U+0000 is `configuration_invalid` before
-//! any callback runs.
+//! any callback runs. In verification it is a SPEC-v2 §6.2 step-2 failure, so
+//! a bundle that does not decode reports `malformed` first; the decoded case
+//! is in `v2c_verifier.rs`.
 
 mod v2c_common;
 
@@ -76,7 +78,7 @@ fn issue_challenge_refuses_nul_in_configured_namespace() {
 }
 
 #[test]
-fn verify_refuses_nul_in_configured_namespace() {
+fn verify_reports_decode_before_a_nul_configured_namespace() {
     let req = json_bytes(&json!({"verifier_namespace": "lab\u{0}x"}));
     let bundle = b"{}";
     // SAFETY: every member of the callback struct is a nullable pointer.
@@ -101,7 +103,32 @@ fn verify_refuses_nul_in_configured_namespace() {
         )
     };
     let message = last_error();
-    assert_eq!(class(code), "configuration_invalid", "{message}");
-    assert!(message.contains("U+0000"), "{message}");
+    assert_eq!(code, 0, "{message}");
+    assert_eq!(stage_name(outcome.stage), "preflight");
+    assert_eq!(class(outcome.error_code), "malformed", "{message}");
     assert!(committed.is_null());
+}
+
+#[test]
+fn claim_stage_reports_decode_before_a_nul_configured_namespace() {
+    let req = json_bytes(&json!({"verifier_namespace": "lab\u{0}x"}));
+    // SAFETY: every member of the callback struct is a nullable pointer; the
+    // store is never called because the bundle does not decode.
+    let store: RatifyV2ClaimStoreCallbacks = unsafe { std::mem::zeroed() };
+    let mut disposition = 0;
+    let mut claim_id = ptr::null_mut();
+    let code = unsafe {
+        ratify_v2_claim_proof_bundle(
+            b"{".as_ptr(),
+            1,
+            req.as_ptr(),
+            req.len(),
+            &store,
+            &mut disposition,
+            &mut claim_id,
+        )
+    };
+    let message = last_error();
+    assert_eq!(class(code), "malformed", "{message}");
+    assert!(claim_id.is_null());
 }

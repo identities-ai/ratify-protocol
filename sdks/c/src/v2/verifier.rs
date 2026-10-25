@@ -11,7 +11,7 @@ use ratify_protocol::v2::*;
 use super::callbacks::*;
 use super::marshal::{
     claim_json, expected_challenge_json, issue_request, status_keys, status_policy, to_bytes,
-    transaction_result_json, verify_request, Obj,
+    transaction_result_json, verify_request, Obj, ParsedVerifyRequest,
 };
 use super::{
     bytes, class_code, clear_buffer, cstr, flag, handle, json_bytes, null_arg, poisonable, run,
@@ -84,9 +84,9 @@ fn stage_code(s: V2VerifyStage) -> i32 {
     }) as i32
 }
 
-unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
+unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<ParsedVerifyRequest> {
     let v = json_bytes(ptr, len, "request_json")?;
-    Ok(verify_request(&v)??)
+    verify_request(&v)
 }
 
 /// Run the live v2 decision path (SPEC-v2 §6) in the specified order.
@@ -110,7 +110,12 @@ unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
 /// `claim_record_out` is non-NULL the claim record (the
 /// `RatifyV2ClaimView.record` encoding) is written there whenever a claim
 /// exists. A malformed request or evaluator registry fails the call itself
-/// (`bad_argument` or its class) without running the verifier. A provider
+/// (`bad_argument` or its class) without running the verifier. A
+/// `verifier_namespace` containing U+0000 or a `context_policy` that cannot
+/// be built is not a call failure: it is a preflight outcome at SPEC-v2 §6.2
+/// step 2 (`configuration_invalid`, or `expected_challenge_unavailable` for
+/// such a policy without a challenge record), reported only after the
+/// bundle decodes, and no callback runs. A provider
 /// or store callback returning `RatifyV2ErrCancelled` after the claim yields
 /// `evaluation_cancelled` and commits nothing; the receiver-binding hook
 /// returning it cancels before the claim, so the outcome is a preflight
@@ -151,12 +156,28 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
             }
             *committed_out = std::ptr::null_mut();
             clear_buffer(claim_record_out);
-            let mut req = request(request_json, request_json_len)?;
+            let parsed = request(request_json, request_json_len)?;
+            let deferred = parsed.has_step2_failure();
+            let step2_failure = parsed.step2_failure();
+            let mut req = parsed.req;
+            if deferred {
+                // SPEC-v2 §6.2: a step-2 failure found while reading the
+                // request is reported only after step 1 (decode). Without
+                // the challenge record the verifier stops at step 2 at the
+                // latest, before any callback runs.
+                req.expected = None;
+            }
             req.bundle = wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?.into_owned();
             req.constraint_evaluators = evaluator_registry(evaluators)?;
             let (ctx, cancel) = V2Context::background().with_cancel();
             let deps = build_callbacks(callbacks, &Cancel(cancel));
             let mut result = verify_proof_bundle_v2(&ctx, &req, &deps.callbacks);
+            if deferred && result.error_class == Some(V2ErrorClass::ExpectedChallengeUnavailable) {
+                if let Some(e) = step2_failure {
+                    result.error_class = Some(e.class);
+                    result.error = Some(e);
+                }
+            }
             // The receiver-binding hook is the only callback before the
             // claim; its cancellation is the caller's cancellation there.
             if result.stage == V2VerifyStage::Preflight
@@ -194,9 +215,11 @@ pub unsafe extern "C" fn ratify_v2_verify_proof_bundle(
 
 /// The claim stage alone: pre-claim checks (`request_json` as for
 /// `ratify_v2_verify_proof_bundle`; a context policy is required) then the
-/// atomic claim at `now`. The evaluator capability is never exposed, so a
-/// created claim stays in progress until lease-expiry recovery. Returns 0
-/// with `*disposition_out` and the claim ID, or the failure class.
+/// atomic claim at `now`. The bundle is decoded before the request's
+/// configuration is checked (SPEC-v2 §6.2). The evaluator capability is
+/// never exposed, so a created claim stays in progress until lease-expiry
+/// recovery. Returns 0 with `*disposition_out` and the claim ID, or the
+/// failure class.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
     bundle: *const u8,
@@ -217,9 +240,14 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
             let cb = claim_store
                 .as_ref()
                 .ok_or_else(|| null_arg("claim_store"))?;
-            let req = request(request_json, request_json_len)?;
+            let parsed = request(request_json, request_json_len)?;
             let b =
                 decode_proof_bundle_v2(&wire_arg(bundle, bundle_len, "bundle", wire_limit(2))?)?;
+            // SPEC-v2 §6.2: decode (step 1) before configuration (step 2).
+            if let Some(e) = parsed.step2_failure() {
+                return Err(e.into());
+            }
+            let req = parsed.req;
             let pre = preflight_proof_bundle_v2(
                 &b,
                 req.expected.as_ref(),

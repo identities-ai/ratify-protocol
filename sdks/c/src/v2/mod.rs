@@ -108,7 +108,9 @@ pub const RATIFY_V2_ERROR_CLASS_COUNT: u32 = 49;
 /// status key IDs, constraint types) to callbacks as NUL-terminated C
 /// strings, which cannot carry U+0000. It never strips the NUL, which would
 /// merge distinct identifiers. A configured `verifier_namespace` containing
-/// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs. Any
+/// U+0000 is `RatifyV2ConfigurationInvalid` before any callback runs; in
+/// verification that is a preflight outcome reported after the bundle
+/// decodes (SPEC-v2 §6.2 step 2), so an undecodable bundle is `malformed`. Any
 /// other such identifier is not passed: the callback is not called and the
 /// call fails closed exactly as if that provider or store were unavailable
 /// (for example `RatifyV2ClaimStoreUnavailable` for the claim store, or a

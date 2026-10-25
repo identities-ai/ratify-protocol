@@ -290,8 +290,11 @@ match before the beta.
 - **C: `ratify_v2_object_decode` decodes a status evidence batch at the
   envelope only** (SPEC-v2 §6.5 step 3), as the Go, TypeScript, Python and
   Rust batch decoders do. It used to decode and re-encode every nested
-  object, so it rejected batches the other SDKs accept. `canonical_out` now
-  keeps each object's received bytes.
+  object, so it rejected batches the other SDKs accept. A non-NULL
+  `canonical_out` is the §6.5 canonical batch encoding, byte for byte what
+  the other SDKs' batch encoders produce: each nested object is decoded and
+  re-encoded, and one that does not decode under its code makes the call
+  `malformed`.
 - **C: identifiers containing U+0000 are never stripped before a
   callback.** The callback adapters removed the NUL, so a C store keyed
   `"lab\0x"` and `"labx"` (or rate counters for `"x\0y"` and `"xy"`) to the
@@ -337,6 +340,30 @@ match before the beta.
   `evaluation_cancelled`); callback output pointers must stay valid until
   the library copies them, never on the callback's stack; the claim store's
   `now` is not called during verification.
+- **TypeScript: a `claim_already_terminal` error carries no store state.**
+  The reference store attached its live claim record to the error, and the
+  verifier returns that error in `V2VerifyOutcome.error`, so a caller could
+  change the stored allow horizon or abandonment of a committed claim
+  (SPEC-v2 §7.3). The error is now a plain classified error.
+- **TypeScript: large byte fields no longer exhaust the stack.** The
+  canonical base64 check used a backtracking pattern that overflowed the V8
+  stack at about 4.47 million characters, so a valid transaction receipt
+  with terms over about 3.35 MB was `malformed` in TypeScript only. The
+  check is now a linear scan with the same accepted shapes.
+- **C: request configuration failures are reported after the bundle
+  decodes** (SPEC-v2 §6.2). A configured `verifier_namespace` containing
+  U+0000, or a `context_policy` that cannot be built, failed
+  `ratify_v2_verify_proof_bundle` as a call before the bundle was decoded,
+  so a malformed bundle reported `configuration_invalid` with no outcome.
+  Both are now a preflight outcome at step 2, after decode, as in the other
+  SDKs: `configuration_invalid`, or `expected_challenge_unavailable` for
+  such a policy without a challenge record. No callback runs.
+  `ratify_v2_claim_proof_bundle` also decodes first.
+- **Python: `release_v2_decision` classifies a receipt that is not bytes.**
+  A `str` or other non-bytes signed receipt raised `TypeError` from
+  release step 2; it is now `rejected / receipt_invalid`, as in the other
+  SDKs. An `int`, which `bytes()` turned into zero bytes, gets the same
+  result without being converted.
 
 ### Not carried into v2
 

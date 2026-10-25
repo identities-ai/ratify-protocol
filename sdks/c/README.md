@@ -498,8 +498,10 @@ one that is not is treated the same way, never compared as a lossy copy.
 Identifiers reach callbacks as NUL-terminated C strings, so the library
 never passes one that contains U+0000 (and never strips the NUL): a
 configured `verifier_namespace` containing U+0000 is `configuration_invalid`
-before any callback runs, and any other such identifier fails the call
-closed as that provider or store being unavailable, without calling it.
+before any callback runs (in verification, a preflight outcome reported
+after the bundle decodes, so an undecodable bundle is `malformed`), and any
+other such identifier fails the call closed as that provider or store being
+unavailable, without calling it.
 
 Constraint evaluators also run on the calling thread (SPEC-v2 §1.3). The
 registry timeout is enforced by elapsed time, not by interrupting the call:

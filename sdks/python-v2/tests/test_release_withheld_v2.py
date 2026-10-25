@@ -227,3 +227,21 @@ def test_rate_at_finalization_store_never_reserves_provisionally():
     with pytest.raises(Exception):
         rate_store.reserve_v2_rate_batch(BACKGROUND, "claim", bytes(32), "sha384:x",
                                          [V2RateReservation(issuer_id="i", cert_id="c", window_s=60, limit=1)])
+
+
+@pytest.mark.parametrize("receipt", ["not bytes", 5, [0, 1], object()])
+def test_a_receipt_that_is_not_bytes_is_receipt_invalid(receipt):
+    # SPEC-v2 §6.9 step 2: a receipt that does not verify is
+    # rejected / receipt_invalid, as the other SDKs return for any value
+    # that is not the signed receipt bytes. It must never raise, and a value
+    # bytes() would accept (an int is that many zero bytes) is not a receipt.
+    store, committed, _, config = release_fixture()
+    result = release_v2_decision(BACKGROUND, committed, receipt, config)
+    assert (result.status, result.reason, result.decision) == (V2_RELEASE_REJECTED, "receipt_invalid", None)
+    assert store.load_v2_terminal_claim(BACKGROUND, committed.claim_id()).release is None
+
+
+def test_a_bytes_like_receipt_still_releases():
+    store, committed, wire, config = release_fixture()
+    result = release_v2_decision(BACKGROUND, committed, memoryview(bytearray(wire)), config)
+    assert result.status == V2_RELEASE_RELEASED, (result.status, result.reason)

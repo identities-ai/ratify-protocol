@@ -1235,6 +1235,10 @@ pub fn request_json(inputs: &Value) -> Value {
         "replay_epoch".into(),
         inputs["configured_replay_epoch"].clone(),
     );
+    r.insert(
+        "verifier_id".into(),
+        inputs["configured_verifier_id"].clone(),
+    );
     r.insert("now".into(), inputs["now"].clone());
     r.insert(
         "max_challenge_age_seconds".into(),
@@ -1297,13 +1301,47 @@ pub fn request_json(inputs: &Value) -> Value {
 }
 
 /// Configure every status key and apply every preload object through the
-/// journal callbacks (Go `v2PopulateStatusJournal`).
+/// journal callbacks (Go `v2PopulateStatusJournal`); or, when
+/// `journal.setup` is present, exactly those steps in order.
 pub fn populate_status_journal(journal: &RatifyV2JournalStoreCallbacks, inputs: &Value) {
     let keys = inputs["status_keys"]
         .as_object()
         .cloned()
         .unwrap_or_default();
     let policy = status_policy_struct(&inputs["status_policy"]);
+    if let Some(setup) = inputs["journal"]["setup"].as_array() {
+        for step in setup {
+            let issuer = s(&step["issuer_id"]);
+            let id = cs(&issuer);
+            let k = key_struct(&step["public_key"]);
+            let epoch = u(&step["epoch"]);
+            match s(&step["op"]).as_str() {
+                "configure_status_key" => check(unsafe {
+                    ratify_v2_journal_configure_status_key(journal, id.as_ptr(), epoch, &k)
+                })
+                .unwrap_or_else(|e| panic!("setup configure {issuer} epoch {epoch}: {e:?}")),
+                "apply" => {
+                    let wire = b64(&step["wire_b64"]);
+                    check(unsafe {
+                        ratify_v2_journal_apply(
+                            journal,
+                            u(&step["object_type_code"]) as i32,
+                            ptr_of(&wire),
+                            wire.len(),
+                            id.as_ptr(),
+                            epoch,
+                            &k,
+                            &policy,
+                            i(&step["now"]),
+                        )
+                    })
+                    .unwrap_or_else(|e| panic!("setup apply: {e:?}"))
+                }
+                other => panic!("unknown journal setup op {other}"),
+            }
+        }
+        return;
+    }
     for (issuer, key) in &keys {
         let id = cs(issuer);
         let k = key_struct(&key["public_key"]);

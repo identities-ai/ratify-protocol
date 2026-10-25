@@ -1576,6 +1576,7 @@ fn replay_scenario(
         "context_policy": sc.context_policy,
         "configured_namespace": cfg.verifier_namespace,
         "configured_replay_epoch": cfg.replay_epoch,
+        "configured_verifier_id": verifier.id(),
         "now": sc.verify_time,
         "max_challenge_age_seconds": cfg.max_challenge_age_seconds,
         "future_skew_seconds": cfg.future_skew_seconds,

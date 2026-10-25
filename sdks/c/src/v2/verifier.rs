@@ -93,13 +93,17 @@ unsafe fn request(ptr: *const u8, len: usize) -> AbiResult<V2VerifyRequest> {
 ///
 /// - `bundle`: the proof bundle wire bytes.
 /// - `request_json`: `{"required_scope", "verifier_namespace",
-///   "replay_epoch", "now", "max_challenge_age_seconds",
+///   "replay_epoch", "verifier_id", "now", "max_challenge_age_seconds",
 ///   "future_skew_seconds", "tzdb_version", "status_keys": {"<issuer>":
 ///   {"epoch", "public_key"}}, "status_policy": {...}, "expected_challenge":
 ///   {...}|null, "context_policy": {...}|null, "context": {...}}`. `now` is
 ///   used only for the pre-claim freshness check; every post-claim time
 ///   comes from the claim store's clock. A null `context_policy` means none
-///   is configured, so the result can never be allow.
+///   is configured, so the result can never be allow. `verifier_id` is the
+///   caller-authenticated verifier key ID and is required (SPEC-v2 §6.1): an
+///   absent or non-canonical value is a preflight `configuration_invalid`,
+///   and an expected challenge or proof naming another verifier is a
+///   preflight `verifier_id_mismatch`.
 /// - `evaluators`: the extension evaluator registry, or NULL for none.
 /// - `callbacks`: the providers and stores (`claim_store` is required).
 ///
@@ -227,6 +231,7 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
                 &req.required_scope,
                 &req.verifier_namespace,
                 req.replay_epoch,
+                &req.verifier_id,
                 req.now,
                 req.max_challenge_age_seconds,
                 req.future_skew_seconds,

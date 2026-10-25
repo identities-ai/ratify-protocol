@@ -50,6 +50,7 @@ typedef struct {
     const RatifyV2IssuanceStoreCallbacks *issuance;
     const RatifyV2VerifyCallbacks *callbacks;
     const char *root_id;
+    const char *verifier_id;
     const char *status_json;
     RatifyV2Slice bundle;
     const uint8_t *challenge;
@@ -64,7 +65,7 @@ static RatifyV2VerifyOutcome verify(const verifier_config *v, RatifyV2Committed 
     int64_t now;
     CHECK(ratify_v2_ref_store_time(v->store, &now));
     char *request = format(
-        "{\"required_scope\":\"payments:send\",\"verifier_namespace\":\"%s\",\"replay_epoch\":%d,\"now\":%lld,"
+        "{\"required_scope\":\"payments:send\",\"verifier_namespace\":\"%s\",\"replay_epoch\":%d,\"verifier_id\":\"%s\",\"now\":%lld,"
         "\"max_challenge_age_seconds\":300,\"future_skew_seconds\":5,\"tzdb_version\":\"%s\","
         "\"status_keys\":{\"%s\":{\"epoch\":1,\"public_key\":%s}},"
         "\"status_policy\":{\"max_list_lifetime_seconds\":3600,\"max_status_age_seconds\":3600,\"clock_skew_seconds\":5},"
@@ -72,7 +73,7 @@ static RatifyV2VerifyOutcome verify(const verifier_config *v, RatifyV2Committed 
         "\"context_policy\":{\"profile\":\"example.quickstart/v1\",\"require_bound\":false,\"required_fields\":[],"
         "\"expected_session_context_b64\":null},"
         "\"context\":{\"has_amount\":true,\"requested_amount_micros\":12500000,\"requested_currency\":\"USD\"}}",
-        NAMESPACE, EPOCH, (long long)now, TZDB_VERSION, v->root_id, v->status_json, expected);
+        NAMESPACE, EPOCH, v->verifier_id, (long long)now, TZDB_VERSION, v->root_id, v->status_json, expected);
     RatifyV2VerifyOutcome outcome;
     *committed = NULL;
     CHECK(ratify_v2_verify_proof_bundle(v->bundle.ptr, v->bundle.len, (const uint8_t *)request, strlen(request), NULL,
@@ -184,7 +185,7 @@ int main(void) {
     RatifyV2TrustCallbacks trust = {&trust_user, resolve_trust};
     RatifyV2StatusEvidenceCallbacks evidence = {&status_object, fetch_status};
     RatifyV2VerifyCallbacks callbacks = {&claim_cb, &trust, &evidence, &journal, NULL, NULL, NULL};
-    verifier_config v = {store, &issuance, &callbacks, root_id, status_json, {bundle.ptr, bundle.len}, challenge_bytes};
+    verifier_config v = {store, &issuance, &callbacks, root_id, verifier_id, status_json, {bundle.ptr, bundle.len}, challenge_bytes};
     RatifyV2Committed *committed;
     RatifyV2VerifyOutcome outcome = verify(&v, &committed);
     if (outcome.stage != RatifyV2StageCommitted) fail("verify did not commit");

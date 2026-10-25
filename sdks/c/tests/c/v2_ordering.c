@@ -11,7 +11,8 @@
  *                 binding, rate, audience modes, expectations)
  *   status.txt    "<issuer> mode <ok|error|panic>" / "<issuer> obj <code> <file>"
  *   preload.txt   "policy <lifetime> <age> <skew>", "key <issuer> <epoch> <ed> <ml>",
- *                 "apply <issuer> <code> <file> <now>"
+ *                 "apply <issuer> <code> <file> <now> <ed> <ml> [<epoch>]", in order;
+ *                 without <epoch> the issuer's configured epoch_<issuer> is used
  *   audience.txt  "m <di> <ci> <receiver|-> <issued> <expires> <digest|-> <n> <domain>..."
  *   evaluators.txt "e <type> <profile> <implementation> <valid_until>"
  */
@@ -493,6 +494,7 @@ v2c_vector *v2c_vector_load(const char *subdir) {
         save = NULL;
         for (char *l = strtok_r(pl, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
             long long x, y, z;
+            int n;
             if (sscanf(l, "policy %lld %lld %lld", &x, &y, &z) == 3) {
                 policy.max_list_lifetime_seconds = x;
                 policy.max_status_age_seconds = y;
@@ -502,16 +504,19 @@ v2c_vector *v2c_vector_load(const char *subdir) {
                 v2c_load_key(path(v, b), path(v, c), &k);
                 int32_t rc = ratify_v2_journal_configure_status_key(&jc, a, (uint64_t)x, &k);
                 v2c_check(rc == 0, "configure status key", ratify_v2_last_error_message());
-            } else if (sscanf(l, "apply %255s %lld %255s %lld %255s %255s", a, &x, b, &y, c, e) == 6) {
-                /* apply <issuer> <code> <file> <now> <ed> <ml> with the issuer's key */
+            } else if ((n = sscanf(l, "apply %255s %lld %255s %lld %255s %255s %lld", a, &x, b, &y, c, e, &z)) >= 6) {
+                /* apply <issuer> <code> <file> <now> <ed> <ml> [<epoch>] with
+                 * the given key; without an epoch, the issuer's configured one */
                 size_t len;
                 uint8_t *w = v2c_read(path(v, b), &len);
                 RatifyV2PublicKey k;
                 v2c_load_key(path(v, c), path(v, e), &k);
-                long long epoch = 0;
-                char key_line[64];
-                snprintf(key_line, sizeof key_line, "epoch_%s", a);
-                epoch = strtoll(v2c_vector_meta(v, key_line), NULL, 10);
+                long long epoch = z;
+                if (n == 6) {
+                    char key_line[64];
+                    snprintf(key_line, sizeof key_line, "epoch_%s", a);
+                    epoch = strtoll(v2c_vector_meta(v, key_line), NULL, 10);
+                }
                 int32_t rc = ratify_v2_journal_apply(&jc, (int32_t)x, w, len, a, (uint64_t)epoch, &k, &policy, y);
                 v2c_check(rc == 0, "journal preload", ratify_v2_last_error_message());
                 free(w);

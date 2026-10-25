@@ -96,6 +96,7 @@ fn present_issued(stores: &Stores, wire: &[u8], now: i64) -> String {
         "required_scope": "data:read",
         "verifier_namespace": NAMESPACE,
         "replay_epoch": EPOCH,
+        "verifier_id": expected["verifier_id"],
         "now": now,
         "max_challenge_age_seconds": 300,
         "future_skew_seconds": 5,

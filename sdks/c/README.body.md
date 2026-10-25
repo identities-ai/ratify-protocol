@@ -499,7 +499,13 @@ under SPEC-v2 §6.11. Its effect depends on the callback:
 
 There is no other asynchronous cancellation.
 
-**Decisions.** `ratify_v2_verify_proof_bundle` reports a stage (`preflight`,
+**Decisions.** The `request_json` of `ratify_v2_verify_proof_bundle` and
+`ratify_v2_claim_proof_bundle` carries the caller-authenticated `verifier_id`
+(the verifier key ID) beside `verifier_namespace` and `replay_epoch`. It is
+required (SPEC-v2 §6.1): an absent or non-canonical value is a preflight
+`configuration_invalid`, and an expected challenge or proof naming another
+verifier is a preflight `verifier_id_mismatch`, before any claim.
+`ratify_v2_verify_proof_bundle` reports a stage (`preflight`,
 `replay`, `evaluating`, `committed`) and never a decision. A committed
 outcome is an opaque `RatifyV2Committed` handle that is not actionable.
 `ratify_v2_release_decision` is the only constructor of a

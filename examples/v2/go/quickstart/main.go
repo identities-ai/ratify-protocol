@@ -156,7 +156,7 @@ func run() error {
 		}
 		req := ratify.V2VerifyRequest{
 			Bundle: bundleWire, Expected: expected, ContextPolicy: policy,
-			RequiredScope: "payments:send", VerifierNamespace: namespace, ReplayEpoch: epoch,
+			RequiredScope: "payments:send", VerifierNamespace: namespace, ReplayEpoch: epoch, VerifierID: verifierID,
 			Now: store.Now(), MaxChallengeAgeSeconds: 300, FutureSkewSeconds: 5,
 			Context:      ratify.ConstraintContextV2{HasAmount: true, RequestedAmountMicros: 12_500_000, RequestedCurrency: "USD"},
 			TZDBVersion:  ratify.TZDBVersionV2,

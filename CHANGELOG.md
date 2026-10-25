@@ -268,6 +268,68 @@ match before the beta.
   predicates return their fail-closed value, and free functions return
   nothing (a NULL pointer is a no-op and a poisoned handle is still freed).
   Text only; the library already behaved this way.
+- **The live verifier takes the configured verifier key ID** (all SDKs).
+  SPEC-v2 §2.4 and §6.1 require the ExpectedChallenge and the proof bundle
+  to name the caller-authenticated verifier key ID, but no SDK took that
+  value, so a proof and an ExpectedChallenge that both named another
+  verifier committed an `allow` (release then refused it). The value is now
+  required configuration: an empty or non-canonical verifier key ID is
+  `configuration_invalid` at §6.2 step 2, and an ExpectedChallenge or proof
+  naming another verifier is `verifier_id_mismatch` at step 6, before claim.
+  API changes: Go `V2VerifyRequest.VerifierID`, and a `configuredVerifierID`
+  parameter after `configuredReplayEpoch` in `PreflightProofBundleV2` and
+  `ValidateProofBundleV2Preflight`; TypeScript `V2VerifyRequest.verifierID`
+  and the same parameter in `preflightProofBundleV2` and
+  `validateProofBundleV2Preflight`; Python `V2VerifyRequest.verifier_id` and
+  a `configured_verifier_id` parameter in `preflight_proof_bundle_v2` and
+  `validate_proof_bundle_v2_preflight`; Rust `V2VerifyRequest::verifier_id`
+  and a `configured_verifier_id: &str` parameter in
+  `preflight_proof_bundle_v2` and `validate_proof_bundle_v2_preflight`; C:
+  the `request_json` of `ratify_v2_verify_proof_bundle` and
+  `ratify_v2_claim_proof_bundle` gains the required member `verifier_id`
+  (no C struct or signature changes, so `RATIFY_V2_ABI_VERSION` stays 3; a
+  request without it is now a preflight `configuration_invalid`). Vectors:
+  `verifier-ordering.json` `configured_verifier_id` in every case,
+  `pre_verifier_id_*`, `pre_namespace_before_verifier_id` and
+  `config_verifier_id_*`.
+- **An empty configured namespace is `configuration_invalid`** at §6.2 step 2
+  (all SDKs); it was reported as `namespace_mismatch` at step 6. The vector
+  formerly named `pre_empty_configured_namespace` emptied the
+  ExpectedChallenge namespace, not the configured one, and is renamed
+  `pre_empty_expected_namespace`. Vectors: `config_namespace_empty` and
+  `config_namespace_empty_before_expected_challenge`.
+- **Release of a handoff whose claim the store does not hold is rejected**
+  (all SDKs). Release step 1 returned `pending / claim_store_unavailable`
+  for every load failure, so a claim the store answered it did not hold
+  (`claim_not_found`) was reported as retryable forever. It is now
+  `rejected / release_state_mismatch`; only an unavailable store is
+  `pending` (SPEC-v2 §6.9). Vector: `lifecycle-scenarios.json`
+  `release_of_claim_the_store_does_not_hold`.
+- **`issued_at < expires_at` for challenge records and membership
+  evidence** is stated in SPEC-v2 §2.5, §5.2 and §6.2 step 6, as every SDK
+  already enforced it: an ExpectedChallenge that violates it is
+  `configuration_invalid` before claim even when each freshness inequality
+  holds, and audience membership evidence that violates it is
+  `constraint_unverifiable`. Vectors:
+  `pre_expires_before_issued_within_skew`,
+  `aud_membership_expires_before_issued` and
+  `aud_membership_expires_equals_issued`.
+- **Transaction receipt party `proof_bundle_hash` shape** (all SDKs). A value
+  that is not `sha384:` followed by 96 lowercase hex characters (for example
+  uppercase hex) is `malformed` at decode, before the hash is compared; it
+  was `bundle_hash_mismatch` (SPEC-v2 §5.7, §2.7). Vectors:
+  `object-negatives.json` `transaction_receipt/party_bundle_hash_*`.
+- **Transaction terms are one JSON object** (SPEC-v2 §5.7), as every SDK
+  already required. Text, plus vectors
+  `object-negatives.json` `transaction_receipt/terms_not_object_*`.
+- **More verifier ordering cases** (`verifier-ordering.json`, 342 to 484
+  cases): status-key epoch transitions through the live verifier, with a
+  new optional `journal.setup` member that lists explicit journal setup
+  steps; paired pre-claim and post-claim failures; status journal
+  sequences; `tz` names in and out of tzdata `2025c`; `resource_path`
+  spellings; audience membership shapes; scope wildcards; and the
+  configured verifier identity above. Every SDK harness, including the
+  plain C program, runs them.
 
 ### Fixed
 

@@ -613,7 +613,7 @@ func (g *gen) orderingCoverageScenarios() []scenario {
 		indeterminate("status_unavailable", "trusted", "unavailable", "bound", strp(vp), []EvidenceJSON{g.evidence(longList), g.evidence(st["root_current"])}, allowCounts), func(s *scenario) {
 			s.evidence[intermediateID] = evidenceBatch(g.object(longList))
 		}))
-	add(std("pre_empty_configured_namespace", "an empty configured namespace never matches", bundle, "namespace_mismatch", func(s *scenario) {
+	add(std("pre_empty_expected_namespace", "an ExpectedChallenge with an empty namespace never matches the configured namespace", bundle, "namespace_mismatch", func(s *scenario) {
 		s.namespace = "x"
 		s.expected.VerifierNamespace = ""
 	}))

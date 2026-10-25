@@ -79,12 +79,18 @@ type V2VerifyCallbacks struct {
 // authoritative time: the time returned with the claim for evaluation, a
 // fresh reading at finalization, and a fresh reading at release.
 type V2VerifyRequest struct {
-	Bundle                 []byte
-	Expected               *ExpectedChallengeV2
-	ContextPolicy          *V2ContextPolicy
-	RequiredScope          string
-	VerifierNamespace      string
-	ReplayEpoch            int64
+	Bundle            []byte
+	Expected          *ExpectedChallengeV2
+	ContextPolicy     *V2ContextPolicy
+	RequiredScope     string
+	VerifierNamespace string
+	ReplayEpoch       int64
+	// VerifierID is the caller-authenticated verifier key ID (SPEC-v2 §2.4,
+	// §6.1). It is required: an empty or non-canonical value is
+	// configuration_invalid before the ExpectedChallenge is examined, and
+	// both the ExpectedChallenge and the proof bundle must name it
+	// (verifier_id_mismatch otherwise).
+	VerifierID             string
 	Now                    int64
 	MaxChallengeAgeSeconds int64
 	FutureSkewSeconds      int64
@@ -175,7 +181,7 @@ func VerifyProofBundleV2(ctx context.Context, req V2VerifyRequest, cb V2VerifyCa
 		return preflightFailure(err)
 	}
 	preflight, err := preflightProofBundleV2(bundle, req.Expected, req.ContextPolicy, true, safeV2ReceiverBinding(cb.ReceiverBinding), req.ConstraintEvaluators,
-		req.RequiredScope, req.VerifierNamespace, req.ReplayEpoch, req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds)
+		req.RequiredScope, req.VerifierNamespace, req.ReplayEpoch, req.VerifierID, req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds)
 	if err != nil {
 		return preflightFailure(err)
 	}
@@ -361,8 +367,8 @@ func validateV2VerifyConfiguration(req V2VerifyRequest) error {
 	if err := validateV2FreshnessConfiguration(req.Now, req.MaxChallengeAgeSeconds, req.FutureSkewSeconds); err != nil {
 		return err
 	}
-	if req.ReplayEpoch < 0 || req.ReplayEpoch > maxSafeInteger {
-		return v2Errorf(V2ErrConfigurationInvalid, "v2 configured replay epoch must be 0..%d", maxSafeInteger)
+	if err := validateV2VerifierIdentityConfiguration(req.VerifierNamespace, req.ReplayEpoch, req.VerifierID); err != nil {
+		return err
 	}
 	// The live verifier has one future skew (SPEC-v2 §6.1): status freshness
 	// uses future_skew_seconds, so a status policy carrying another skew is a

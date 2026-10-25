@@ -258,6 +258,42 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	m("terms_noncanonical", "terms_canonical_json contains insignificant whitespace", "malformed", func(o map[string]any) {
 		o["terms_canonical_json"] = b64([]byte(`{"amount": 100,"currency":"USD","item":"widget"}`))
 	})
+	// SPEC-v2 §5.7: the terms are one JSON object. A canonical value of any
+	// other kind is malformed at decode, before any context binding.
+	for _, t := range []struct{ name, terms string }{
+		{"integer", `1`}, {"string", `"x"`}, {"null", `null`}, {"boolean", `true`}, {"array", `[1,2]`}, {"empty_array", `[]`},
+	} {
+		m("terms_not_object_"+t.name, "terms_canonical_json is the canonical JSON "+t.name+" "+t.terms+", not an object", "malformed", func(o map[string]any) {
+			o["terms_canonical_json"] = b64([]byte(t.terms))
+		})
+	}
+	// SPEC-v2 §5.7, §2.7: a party proof_bundle_hash that is not sha384:
+	// followed by 96 lowercase hex characters is a shape failure (malformed),
+	// checked before the hash is compared. Both party signatures are
+	// recomputed over the altered value, so only the shape is at fault.
+	resigned := func(name, mutation string, edit func(hash string) string) {
+		o := parse(base).(map[string]any)
+		pa := party(o, 0)
+		pa["proof_bundle_hash"] = edit(pa["proof_bundle_hash"].(string))
+		signable := mutate(canon(o), func(v map[string]any) {
+			delete(v, "party_signatures")
+			for _, p := range arr(v["parties"]) {
+				delete(obj(p), "proof_bundle")
+			}
+		})
+		for i, signer := range []*Key{g.k("agent"), g.k("party_b_agent")} {
+			obj(arr(o["party_signatures"])[i])["signature"] = sigJSON(signDet(signer, codeParty, signable))
+		}
+		n.add(name, kind, mutation, canon(o), v, "malformed")
+	}
+	resigned("party_bundle_hash_uppercase_hex", "parties[0].proof_bundle_hash with its hex digits uppercased; party signatures recomputed", func(h string) string {
+		return "sha384:" + strings.ToUpper(strings.TrimPrefix(h, "sha384:"))
+	})
+	resigned("party_bundle_hash_uppercase_prefix", "parties[0].proof_bundle_hash with the prefix spelled SHA384:; party signatures recomputed", func(h string) string {
+		return "SHA384:" + strings.TrimPrefix(h, "sha384:")
+	})
+	resigned("party_bundle_hash_short", "parties[0].proof_bundle_hash with 95 hex characters; party signatures recomputed", func(h string) string { return h[:len(h)-1] })
+	resigned("party_bundle_hash_non_hex", "parties[0].proof_bundle_hash whose last character is g; party signatures recomputed", func(h string) string { return h[:len(h)-1] + "g" })
 	m("terms_schema_changed", "terms_schema_uri changed", "transaction_context_mismatch", func(o map[string]any) { o["terms_schema_uri"] = "https://example.com/terms/purchase/v2" })
 	m("created_at_changed", "created_at+1", "invalid_signature", func(o map[string]any) { o["created_at"] = addNum(o["created_at"], 1) })
 	m("party_role_changed", "parties[0].role changed", "invalid_signature", func(o map[string]any) { party(o, 0)["role"] = "approver" })

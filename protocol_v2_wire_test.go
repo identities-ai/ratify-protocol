@@ -291,17 +291,17 @@ func TestV2AuthenticatedChallengePreflight(t *testing.T) {
 	bundle := signedV2TestBundle(t)
 	leaf := bundle.Delegations[0]
 	expected := ExpectedChallengeV2{Value: bundle.Challenge, IssuedAt: bundle.ChallengeAt, ExpiresAt: 20, VerifierNamespace: "local-verifier", ReplayEpoch: 4, VerifierID: bundle.VerifierID, ExpectedAgentID: bundle.AgentID, ExpectedAgentPublicKey: &leaf.SubjectPubKey}
-	if err := ValidateProofBundleV2Preflight(bundle, expected, "execute:tool", "local-verifier", 4, 15, 10, 0); err != nil {
+	if err := ValidateProofBundleV2Preflight(bundle, expected, "execute:tool", "local-verifier", 4, expected.VerifierID, 15, 10, 0); err != nil {
 		t.Fatalf("valid expected challenge rejected: %v", err)
 	}
 	maxAgeBoundary := expected
 	maxAgeBoundary.ExpiresAt = 30
 	// The maximum-age deadline is exclusive (SPEC-v2 §2.5): one second before
 	// issued_at+max_age is current, the deadline itself is not.
-	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 19, 10, 0); err != nil {
+	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, maxAgeBoundary.VerifierID, 19, 10, 0); err != nil {
 		t.Fatalf("challenge one second before the maximum-age deadline rejected: %v", err)
 	}
-	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, 20, 10, 0); err == nil {
+	if err := ValidateProofBundleV2Preflight(bundle, maxAgeBoundary, "execute:tool", "local-verifier", 4, maxAgeBoundary.VerifierID, 20, 10, 0); err == nil {
 		t.Fatal("accepted challenge at the exclusive maximum-age deadline")
 	}
 	for name, mutate := range map[string]func(*ExpectedChallengeV2, *ProofBundleV2, *int64){
@@ -317,12 +317,12 @@ func TestV2AuthenticatedChallengePreflight(t *testing.T) {
 		e, now := expected, int64(15)
 		b := bundle
 		mutate(&e, b, &now)
-		if err := ValidateProofBundleV2Preflight(b, e, "execute:tool", "local-verifier", 4, now, 10, 0); err == nil {
+		if err := ValidateProofBundleV2Preflight(b, e, "execute:tool", "local-verifier", 4, e.VerifierID, now, 10, 0); err == nil {
 			t.Errorf("accepted invalid %s", name)
 		}
 	}
 	for _, invalid := range []string{"", "custom:", "custom:*", "data:*"} {
-		if err := ValidateProofBundleV2Preflight(bundle, expected, invalid, "local-verifier", 4, 15, 10, 0); err == nil {
+		if err := ValidateProofBundleV2Preflight(bundle, expected, invalid, "local-verifier", 4, expected.VerifierID, 15, 10, 0); err == nil {
 			t.Errorf("accepted invalid required scope %q", invalid)
 		}
 	}
@@ -347,7 +347,7 @@ func TestV2CertificateScopeRegistryFailureIsDeferredUntilAuthorization(t *testin
 		Value: decoded.Challenge, IssuedAt: decoded.ChallengeAt, ExpiresAt: decoded.ChallengeAt + 30,
 		VerifierNamespace: "local-verifier", VerifierID: decoded.VerifierID,
 	}
-	pre, err := PreflightProofBundleV2(decoded, expected, policy, "execute:tool", "local-verifier", 0, 15, 10, 0)
+	pre, err := PreflightProofBundleV2(decoded, expected, policy, "execute:tool", "local-verifier", 0, expected.VerifierID, 15, 10, 0)
 	if err != nil {
 		t.Fatalf("signed invalid-scope proof failed structural preflight: %v", err)
 	}
@@ -378,7 +378,7 @@ func FuzzDecodeProofBundleV2NeverPanics(f *testing.F) {
 			_ = VerifyProofBundleV2Signatures(bundle)
 			if bundle.ChallengeAt < maxSafeInteger {
 				expected := ExpectedChallengeV2{Value: bundle.Challenge, IssuedAt: bundle.ChallengeAt, ExpiresAt: bundle.ChallengeAt + 1, VerifierNamespace: "fuzz", ReplayEpoch: 0, VerifierID: bundle.VerifierID}
-				_ = ValidateProofBundleV2Preflight(bundle, expected, "execute:tool", "fuzz", 0, bundle.ChallengeAt, 1, 0)
+				_ = ValidateProofBundleV2Preflight(bundle, expected, "execute:tool", "fuzz", 0, expected.VerifierID, bundle.ChallengeAt, 1, 0)
 			}
 		}
 	})

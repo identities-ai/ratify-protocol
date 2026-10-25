@@ -188,7 +188,7 @@ func (f *flow) decide(p presentation) {
 	must(err)
 	req := ratify.V2VerifyRequest{
 		Bundle: p.wire, Expected: expected, ContextPolicy: f.policy,
-		RequiredScope: scope, VerifierNamespace: f.namespace, ReplayEpoch: epoch,
+		RequiredScope: scope, VerifierNamespace: f.namespace, ReplayEpoch: epoch, VerifierID: f.verifierID,
 		Now: store.Now(), MaxChallengeAgeSeconds: 300, FutureSkewSeconds: 5,
 		Context:      ratify.ConstraintContextV2{HasAmount: true, RequestedAmountMicros: 12_500_000, RequestedCurrency: "USD"},
 		TZDBVersion:  ratify.TZDBVersionV2,

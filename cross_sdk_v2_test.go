@@ -95,7 +95,7 @@ func v2CheckCrossScenarios(t *testing.T, fx v2Fixture, f v2CrossSDKFile) {
 		t.Run("scenario/"+sc.Name, func(t *testing.T) {
 			in := v2OrderingInputs{
 				RequiredScope: sc.RequiredScope, ExpectedChallenge: sc.ExpectedChallenge, ContextPolicy: sc.ContextPolicy,
-				ConfiguredNamespace: cfg.VerifierNamespace, ConfiguredReplayEpoch: cfg.ReplayEpoch, Now: sc.VerifyTime,
+				ConfiguredNamespace: cfg.VerifierNamespace, ConfiguredReplayEpoch: cfg.ReplayEpoch, ConfiguredVerifierID: v2MustKeyID(t, fx.pub[cfg.VerifierKey]), Now: sc.VerifyTime,
 				MaxChallengeAgeSeconds: cfg.MaxChallengeAgeSeconds, FutureSkewSeconds: cfg.FutureSkewSeconds, TZDBVersion: cfg.TZDBVersion,
 				ReceiverBindingHook: "absent", StatusKeys: map[string]v2StatusKeyJSON{}, StatusPolicy: cfg.StatusPolicy,
 				Journal: v2JournalJSON{Mode: "anchored"}, AudienceMode: "ok", Rate: "absent",
@@ -273,4 +273,13 @@ func v2CheckCrossSDKFile(t *testing.T, path, name string) {
 		t.Error("no verification receipt carries constraint_evaluators")
 	}
 	t.Run("scenarios", func(t *testing.T) { v2CheckCrossScenarios(t, fx, f) })
+}
+
+func v2MustKeyID(t *testing.T, key ratify.HybridPublicKey) string {
+	t.Helper()
+	id, err := ratify.KeyIDV2(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

@@ -65,9 +65,24 @@ type journalPreloadJSON struct {
 	Now            int64  `json:"now"`
 }
 
+// journalSetupJSON is one explicit journal setup step: configure_status_key
+// runs ConfigureStatusKeyEpoch for issuer_id at epoch with public_key; apply
+// applies the object (code 3 list, 5 push) under epoch and public_key at now.
+type journalSetupJSON struct {
+	Op             string         `json:"op"`
+	IssuerID       string         `json:"issuer_id"`
+	Epoch          uint64         `json:"epoch"`
+	PublicKey      map[string]any `json:"public_key"`
+	ObjectTypeCode int            `json:"object_type_code,omitempty"`
+	WireB64        string         `json:"wire_b64,omitempty"`
+	Now            int64          `json:"now,omitempty"`
+}
+
 type journalJSON struct {
 	Mode    string               `json:"mode"`
 	Preload []journalPreloadJSON `json:"preload"`
+	// Setup, when present, replaces the default setup after genesis.
+	Setup []journalSetupJSON `json:"setup,omitempty"`
 }
 
 type membershipJSON struct {
@@ -151,6 +166,7 @@ type orderingVector struct {
 	ContextPolicy          *contextPolicyJSON            `json:"context_policy"`
 	ConfiguredNamespace    string                        `json:"configured_namespace"`
 	ConfiguredReplayEpoch  int64                         `json:"configured_replay_epoch"`
+	ConfiguredVerifierID   string                        `json:"configured_verifier_id"`
 	Now                    int64                         `json:"now"`
 	MaxChallengeAgeSeconds int64                         `json:"max_challenge_age_seconds"`
 	FutureSkewSeconds      int64                         `json:"future_skew_seconds"`
@@ -182,34 +198,38 @@ type orderingFile struct {
 
 // scenario is the generator-side description of one ordering case.
 type scenario struct {
-	name, desc  string
-	bundle      []byte
-	certs       []ratify.DelegationCertV2
-	agent       *Key
-	scope       string
-	expected    *expectedChallengeJSON
-	policy      *contextPolicyJSON
-	namespace   string
-	epoch       int64
-	now         int64
-	maxAge      int64
-	skew        int64
-	reqCtx      *requestContextJSON
-	tzdb        *string // nil = the embedded release ratify.TZDBVersionV2
-	hook        string
-	claim       string
-	claimOffset int64
-	finOffset   int64
-	trust       *trustJSON
-	statusKeys  map[string]statusKeyJSON
-	policy2     *statusPolicyJSON
-	journal     journalJSON
-	evidence    map[string]statusProviderJSON
-	audience    string
-	memberships []membershipJSON
-	rate        string
-	evaluators  []evaluatorJSON
-	out         outcomeJSON
+	name, desc string
+	bundle     []byte
+	certs      []ratify.DelegationCertV2
+	agent      *Key
+	scope      string
+	expected   *expectedChallengeJSON
+	policy     *contextPolicyJSON
+	namespace  string
+	epoch      int64
+	// verifierID is the configured verifier key ID; nil means the fixture
+	// verifier key's ID. emptyNamespace configures an empty namespace.
+	verifierID     *string
+	emptyNamespace bool
+	now            int64
+	maxAge         int64
+	skew           int64
+	reqCtx         *requestContextJSON
+	tzdb           *string // nil = the embedded release ratify.TZDBVersionV2
+	hook           string
+	claim          string
+	claimOffset    int64
+	finOffset      int64
+	trust          *trustJSON
+	statusKeys     map[string]statusKeyJSON
+	policy2        *statusPolicyJSON
+	journal        journalJSON
+	evidence       map[string]statusProviderJSON
+	audience       string
+	memberships    []membershipJSON
+	rate           string
+	evaluators     []evaluatorJSON
+	out            outcomeJSON
 }
 
 func strp(s string) *string { return &s }
@@ -296,8 +316,12 @@ func (g *gen) finish(s scenario) orderingVector {
 	if s.agent == nil {
 		s.agent = g.k("agent")
 	}
-	if s.namespace == "" {
+	if s.namespace == "" && !s.emptyNamespace {
 		s.namespace = fixtureNamespace
+	}
+	verifierID := g.k("verifier").ID
+	if s.verifierID != nil {
+		verifierID = *s.verifierID
 	}
 	if s.epoch == 0 {
 		s.epoch = fixtureReplayEpoch
@@ -397,7 +421,7 @@ func (g *gen) finish(s scenario) orderingVector {
 	}
 	return orderingVector{
 		Name: s.name, Description: s.desc, Bundle: bundleName(s.bundle), RequiredScope: s.scope, ExpectedChallenge: s.expected,
-		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, Now: s.now,
+		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, ConfiguredVerifierID: verifierID, Now: s.now,
 		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, TZDBVersion: tzdb, ReceiverBindingHook: s.hook,
 		ClaimStore: s.claim, ClaimTimeOffset: s.claimOffset, FinalizeTimeOffset: s.finOffset, Trust: s.trust, StatusKeys: s.statusKeys,
 		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
@@ -416,14 +440,15 @@ func (g *gen) orderingFile() any {
 		Semantics: map[string]string{
 			"bundle":                           "key into bundles_b64; the exact presented proof bundle bytes",
 			"stage":                            "preflight = rejected before claim (no receipt, nothing consumed); replay = claim already existed (no result disclosed, no evaluation); evaluating = claim created but nothing committed (error_class says why; lease-expiry recovery commits evaluation_interrupted later); committed = a terminal Protocol result was committed with receipt_body_b64 (not actionable until released)",
-			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, configured_replay_epoch (0..2^53-1), status_policy and status_keys are validated against the SPEC-v2 §2.5 bounds, together with the supplied request context (§5.2), after the bundle decodes (§6.2 step 2). The live verifier has one future skew: status_policy.clock_skew_seconds must equal future_skew_seconds, or the request is configuration_invalid. An expected_session_context_b64 that is not exactly 32 bytes is configuration_invalid at the same step",
+			"configuration":                    "now, max_challenge_age_seconds, future_skew_seconds, configured_namespace (non-empty), configured_replay_epoch (0..2^53-1), configured_verifier_id (required: the caller-authenticated verifier key ID, a canonical 64-character lowercase hex v2 key ID), status_policy and status_keys are validated against the SPEC-v2 §2.5 bounds, together with the supplied request context (§5.2), after the bundle decodes (§6.2 step 2). The live verifier has one future skew: status_policy.clock_skew_seconds must equal future_skew_seconds, or the request is configuration_invalid. An expected_session_context_b64 that is not exactly 32 bytes is configuration_invalid at the same step",
 			"tzdb_version":                     "the configured IANA tzdata release required for time_window (SPEC-v2 §5.2); empty = not configured. The corpus assumes the pinned release named in SPEC-v2 §5.2; any other value makes every time_window constraint_unverifiable",
 			"receiver_binding_hook":            "absent = no application hook; accept/reject = the pure application hook, invoked only after every built-in pre-claim check passed",
 			"claim_store":                      "absent = no claim store is configured (a step 2 configuration failure, after bounded decode); create = atomic claim succeeds with ClaimedAt = now + claim_time_offset; proof_conflict = challenge already claimed by a different proof digest; in_progress = exact retry while evaluating; terminal_replay = exact retry after commit; unavailable = store error. The claim store's finalization compare-and-set reads T_final = now + claim_time_offset + finalize_time_offset inside the compare-and-set: T_final < T_claim fails with clock_regressed, and an allow commits only while T_final < its allow horizon and T_final < the challenge expiry, else allow_horizon_passed; either failure commits nothing",
 			"trust":                            "null = provider returns unavailable; mode ok returns outcome (trusted with root_public_key, untrusted, unavailable, ambiguous); mode error returns an error; mode panic panics; mode registry = the SDK's reference candidate-record trust registry (SPEC-v2 §6.1) holding the complete public keys of registry in order: a record is a candidate when its key ID equals the chain's terminal issuer ID or either component equals the terminal issuer key's component; no candidate is untrusted, more than one (including the same key twice) is ambiguous and never a first match, exactly one is trusted with that record's key",
 			"status_keys":                      "caller-authenticated status key per issuer_id (epoch and complete public key)",
 			"status_policy":                    "configured status freshness bounds",
-			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict; cas_conflict_once = the 1st, 3rd, 5th, ... CompareAndSwap calls report a conflict and the others proceed. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy",
+			"journal":                          "anchored = reference anchored store; absent = no store configured; unanchored = Load returns a head that does not match the record; load_error = Load fails; cas_conflict = every CompareAndSwap reports a conflict; cas_conflict_once = the 1st, 3rd, 5th, ... CompareAndSwap calls report a conflict and the others proceed. Setup: genesis, then ConfigureStatusKeyEpoch for every status_keys entry in ascending issuer_id order, then each preload object applied at its now under status_policy. When journal.setup is present it replaces that default after genesis: each step runs in order, configure_status_key = ConfigureStatusKeyEpoch(issuer_id, epoch, public_key) and apply = apply the object (object_type_code 3 list, 5 push; wire_b64) for issuer_id under (epoch, public_key) at now with status_policy",
+			"configured_verifier_id":           "the caller-authenticated verifier key ID (SPEC-v2 §2.4, §6.1). An empty or non-canonical value is configuration_invalid at §6.2 step 2. At step 6, after the namespace and replay epoch, the ExpectedChallenge verifier_id and the proof bundle verifier_id must each equal it, or verifier_id_mismatch",
 			"status_evidence":                  "per issuer_id provider response: mode ok returns objects (each object_type_code and exact wire bytes); error returns an error; panic panics. An issuer absent from the map returns an empty batch",
 			"audience_mode":                    "ok returns audience_memberships; error returns an error; panic panics",
 			"audience_memberships":             "caller-authenticated membership results returned by the audience provider",
@@ -441,7 +466,7 @@ func (g *gen) orderingFile() any {
 		},
 	}
 	f.Bundles = map[string]string{}
-	for _, s := range append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...) {
+	for _, s := range append(append(append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...), g.orderingProbeScenarios()...), g.statusKeyEpochScenarios()...) {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}

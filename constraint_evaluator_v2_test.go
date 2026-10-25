@@ -76,7 +76,7 @@ func TestConstraintEvaluatorRegistryV2RejectsBadConfiguration(t *testing.T) {
 		t.Fatalf("refs are not sorted by type: %+v", refs)
 	}
 	// A registry not built by the constructor is rejected before claim.
-	if err := validateV2VerifyConfiguration(V2VerifyRequest{Now: 1, MaxChallengeAgeSeconds: 1, ConstraintEvaluators: &ConstraintEvaluatorRegistryV2{},
+	if err := validateV2VerifyConfiguration(V2VerifyRequest{Now: 1, MaxChallengeAgeSeconds: 1, VerifierNamespace: "ns", VerifierID: strings.Repeat("a", 64), ConstraintEvaluators: &ConstraintEvaluatorRegistryV2{},
 		StatusPolicy: RevocationStatusPolicyV2{MaxListLifetimeSeconds: 1, MaxStatusAgeSeconds: 1}}); V2ErrorClassOf(err) != V2ErrConfigurationInvalid {
 		t.Fatalf("zero-value registry: %v", err)
 	}

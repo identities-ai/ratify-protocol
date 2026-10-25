@@ -87,6 +87,17 @@ type v2JournalJSON struct {
 		WireB64        string `json:"wire_b64"`
 		Now            int64  `json:"now"`
 	} `json:"preload"`
+	// Setup, when present, replaces the default configure-then-preload
+	// setup after genesis with these steps in order.
+	Setup []struct {
+		Op             string                 `json:"op"`
+		IssuerID       string                 `json:"issuer_id"`
+		Epoch          uint64                 `json:"epoch"`
+		PublicKey      ratify.HybridPublicKey `json:"public_key"`
+		ObjectTypeCode uint16                 `json:"object_type_code"`
+		WireB64        string                 `json:"wire_b64"`
+		Now            int64                  `json:"now"`
+	} `json:"setup"`
 }
 
 type v2MembershipJSON struct {
@@ -104,6 +115,7 @@ type v2OrderingInputs struct {
 	ExpectedChallenge      *v2ExpectedChallengeJSON `json:"expected_challenge"`
 	ContextPolicy          *v2ContextPolicyJSON     `json:"context_policy"`
 	ConfiguredNamespace    string                   `json:"configured_namespace"`
+	ConfiguredVerifierID   string                   `json:"configured_verifier_id"`
 	ConfiguredReplayEpoch  int64                    `json:"configured_replay_epoch"`
 	Now                    int64                    `json:"now"`
 	MaxChallengeAgeSeconds int64                    `json:"max_challenge_age_seconds"`
@@ -301,6 +313,21 @@ func v2BuildStatusJournal(t *testing.T, in v2OrderingInputs) *v2reference.Journa
 func v2PopulateStatusJournal(t *testing.T, store ratify.SecurityJournalStoreV2, in v2OrderingInputs) {
 	t.Helper()
 	ctx := context.Background()
+	if in.Journal.Setup != nil {
+		for _, step := range in.Journal.Setup {
+			switch step.Op {
+			case "configure_status_key":
+				if _, err := ratify.ConfigureStatusKeyEpochV2(ctx, store, step.IssuerID, step.Epoch, step.PublicKey); err != nil {
+					t.Fatalf("setup configure %s epoch %d: %v", step.IssuerID, step.Epoch, err)
+				}
+			case "apply":
+				v2ApplyJournalObject(t, store, step.IssuerID, step.ObjectTypeCode, unb64(t, step.WireB64), step.Epoch, step.PublicKey, in.StatusPolicy.lib(), step.Now)
+			default:
+				t.Fatalf("unknown journal setup op %q", step.Op)
+			}
+		}
+		return
+	}
 	issuers := make([]string, 0, len(in.StatusKeys))
 	for issuer := range in.StatusKeys {
 		issuers = append(issuers, issuer)
@@ -314,25 +341,34 @@ func v2PopulateStatusJournal(t *testing.T, store ratify.SecurityJournalStoreV2, 
 	}
 	for _, p := range in.Journal.Preload {
 		key := in.StatusKeys[p.IssuerID]
-		wire := unb64(t, p.WireB64)
-		switch p.ObjectTypeCode {
-		case 3:
-			list, err := ratify.DecodeRevocationListV2(wire)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := ratify.ApplyRevocationListToJournalV2(ctx, store, list, p.IssuerID, key.Epoch, key.PublicKey, in.StatusPolicy.lib(), p.Now); err != nil {
-				t.Fatalf("preload list: %v", err)
-			}
-		case 5:
-			push, err := ratify.DecodeRevocationPushV2(wire)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := ratify.ApplyRevocationPushToJournalV2(ctx, store, push, p.IssuerID, key.Epoch, key.PublicKey, in.StatusPolicy.lib(), p.Now); err != nil {
-				t.Fatalf("preload push: %v", err)
-			}
+		v2ApplyJournalObject(t, store, p.IssuerID, p.ObjectTypeCode, unb64(t, p.WireB64), key.Epoch, key.PublicKey, in.StatusPolicy.lib(), p.Now)
+	}
+}
+
+// v2ApplyJournalObject applies one revocation list (code 3) or push (code 5)
+// to store under the given status-key epoch and key.
+func v2ApplyJournalObject(t *testing.T, store ratify.SecurityJournalStoreV2, issuerID string, code uint16, wire []byte, epoch uint64, key ratify.HybridPublicKey, policy ratify.RevocationStatusPolicyV2, now int64) {
+	t.Helper()
+	ctx := context.Background()
+	switch code {
+	case 3:
+		list, err := ratify.DecodeRevocationListV2(wire)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if _, err := ratify.ApplyRevocationListToJournalV2(ctx, store, list, issuerID, epoch, key, policy, now); err != nil {
+			t.Fatalf("journal list: %v", err)
+		}
+	case 5:
+		push, err := ratify.DecodeRevocationPushV2(wire)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ratify.ApplyRevocationPushToJournalV2(ctx, store, push, issuerID, epoch, key, policy, now); err != nil {
+			t.Fatalf("journal push: %v", err)
+		}
+	default:
+		t.Fatalf("unknown journal object type code %d", code)
 	}
 }
 
@@ -342,7 +378,7 @@ func v2BuildVerifyRequest(t *testing.T, in v2OrderingInputs, bundle []byte, coun
 	t.Helper()
 	req := ratify.V2VerifyRequest{
 		Bundle: bundle, RequiredScope: in.RequiredScope, VerifierNamespace: in.ConfiguredNamespace,
-		ReplayEpoch: in.ConfiguredReplayEpoch, Now: in.Now, MaxChallengeAgeSeconds: in.MaxChallengeAgeSeconds, FutureSkewSeconds: in.FutureSkewSeconds,
+		ReplayEpoch: in.ConfiguredReplayEpoch, VerifierID: in.ConfiguredVerifierID, Now: in.Now, MaxChallengeAgeSeconds: in.MaxChallengeAgeSeconds, FutureSkewSeconds: in.FutureSkewSeconds,
 		StatusPolicy: in.StatusPolicy.lib(), StatusKeys: map[string]ratify.V2StatusKeyConfig{}, TZDBVersion: in.TZDBVersion,
 	}
 	for issuer, key := range in.StatusKeys {

@@ -217,7 +217,7 @@ func ClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, bundle *ProofBu
 		ExpectedAgentID: sealed.ExpectedAgentID, ExpectedAgentPublicKey: sealed.ExpectedAgentPublicKey,
 		ExpectedReceiverID: sealed.ExpectedReceiverID, ExpectedSessionContext: sealed.ExpectedSessionContext,
 		ContextPolicy: sealed.ContextPolicy}
-	if err := ValidateProofBundleV2Preflight(bundle, expected, sealed.RequiredScope, configuredNamespace, configuredReplayEpoch, nowUnix, sealed.MaxAge, sealed.FutureSkew); err != nil {
+	if err := ValidateProofBundleV2Preflight(bundle, expected, sealed.RequiredScope, configuredNamespace, configuredReplayEpoch, sealed.VerifierID, nowUnix, sealed.MaxAge, sealed.FutureSkew); err != nil {
 		return zero, "", nil, fmt.Errorf("v2 claim-time preflight: %w", err)
 	}
 	requiredScope, maxAgeSeconds, futureSkewSeconds := sealed.RequiredScope, sealed.MaxAge, sealed.FutureSkew

@@ -266,6 +266,9 @@ func validateTransactionReceiptV2(receipt *TransactionReceiptV2, requireSignatur
 			return v2Errorf(V2ErrKeyIDMismatch, "wire v2: party %q agent ID does not match its complete public key", party.PartyID)
 		}
 		bundle := party.ProofBundle
+		if !validPrefixedDigestV2(party.ProofBundleHash) {
+			return v2Errorf(V2ErrMalformed, "wire v2: party %q proof_bundle_hash is not sha384: followed by 96 lowercase hex characters", party.PartyID)
+		}
 		bundleHash, err := BundleHashV2(bundle)
 		if err != nil || bundleHash != party.ProofBundleHash {
 			return v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its bundle", party.PartyID)
@@ -575,6 +578,11 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		}
 		if canonicalBundle, err := EncodeProofBundleV2(bundle); err != nil || !bytes.Equal(canonicalBundle, party.ProofBundle) {
 			return nil, fmt.Errorf("wire v2: party %q proof bundle is not canonical JSON", party.PartyID)
+		}
+		// The hash field's shape is checked before it is compared (SPEC-v2
+		// §5.7, §2.7): a misshapen value is malformed, not a mismatch.
+		if !validPrefixedDigestV2(party.ProofBundleHash) {
+			return nil, v2Errorf(V2ErrMalformed, "wire v2: party %q proof_bundle_hash is not sha384: followed by 96 lowercase hex characters", party.PartyID)
 		}
 		hash := sha512.New384()
 		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))

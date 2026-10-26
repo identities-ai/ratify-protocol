@@ -318,8 +318,17 @@ entry = data(call(f"GET {n()} {log} {seq}"))["entry_hash_b64"]
 zero, other = base64.b64encode(bytes(48)).decode(), base64.b64encode(b"\x07" * 48).decode()
 prev = data(call(f"GET {n()} {log} {seq - 1}"))["entry_hash_b64"] if seq > 1 else zero
 ack = lambda e, q=seq, p=prev: call(f"ACK {n()} {log} {q} {p} {e} {state}").split(" ")
-r = [ack(entry), ack(entry, seq, other), ack(other), ack(entry), ack(other, seq + 1, entry)]
-print(seq, r[0][0], " ".join(r[2]), r[3][0], r[3][-1] == r[0][-1], " ".join(r[4]), " ".join(r[1]))
+first = ack(entry)
+# An identical retry needs no time: it is answered with the clock past the
+# timestamp domain.
+clock = os.environ["SENTINEL_TEST_CLOCK_FILE"]
+kept = open(clock).read()
+open(clock, "w").write("253402300800\n")
+late = ack(entry)
+open(clock, "w").write(kept)
+r = [first, ack(entry, seq, other), ack(other), ack(entry), ack(other, seq + 1, entry)]
+print(seq, r[0][0], " ".join(r[2]), r[3][0], r[3][-1] == r[0][-1], " ".join(r[4]), " ".join(r[1]),
+      late[0], late[-1] == first[-1])
 PY
 echo 253402300800 > clock
 out_of_range=$(python3 ckpt_probe.py "$SOCK" head)
@@ -329,8 +338,9 @@ at 500
 probe=$(python3 ckpt_probe.py "$SOCK" fork)
 set -- $probe
 if [ "$1" -ge 1 ] && [ "$2" = OK ] && [ "$4" = log_fork ] && [ "$5" = OK ] && [ "$6" = True ] && [ "$8" = frozen ] &&
-    [ "${10}" = previous_entry_mismatch ]; then
-    record "checkpoint: fork freezes; identical retry still answered" PASS "head=$1 fork=$4 retry=$5 next=$8 wrong_previous=${10}"
+    [ "${10}" = previous_entry_mismatch ] && [ "${11}" = OK ] && [ "${12}" = True ]; then
+    record "checkpoint: fork freezes; identical retry still answered" PASS \
+        "head=$1 fork=$4 retry=$5 next=$8 wrong_previous=${10} late_retry=${11}"
 else
     record "checkpoint: fork freezes; identical retry still answered" FAIL "$probe"
 fi

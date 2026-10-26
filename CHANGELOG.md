@@ -397,7 +397,9 @@ match before the beta.
   253402300799 is refused as `claim_store_unavailable` instead of returned.
   The plain C test store's evaluator capability is now random, and the edge
   sentinel checkpoint answers a retry only when its predecessor hash matches
-  as well.
+  as well. The edge checkpoint answers an acknowledged sequence before it
+  reads its clock, so an identical retry returns the original acknowledgement
+  even when the current time is unusable.
 - **Reference checkpoints keep every acknowledgement in the timestamp domain**
   (Go, TypeScript, Python, Rust, and the edge sentinel). A reference
   checkpoint whose clock was past 253402300799 still acknowledged an entry

@@ -231,6 +231,30 @@ static int is_hex(const char *s, size_t n)
     return 1;
 }
 
+/* An ACK for an already acknowledged sequence needs no time (SPEC-v2 §7.8):
+ * an identical retry of (log, sequence, previous entry, entry) returns the
+ * original acknowledgement, and a different entry is a fork that freezes the
+ * log. Returns the answer, or NULL when the request is not such an ACK. */
+static char *ack_acknowledged(ckpt *c, const char *line)
+{
+    char log_id[40], prev_b64[100], entry_b64[100], state[120];
+    long long seq;
+    uint8_t prev[48], entry[48], zero[48] = {0};
+    if (sscanf(line, "ACK %*s %39s %lld %99s %99s %119s", log_id, &seq, prev_b64, entry_b64, state) != 5 ||
+        b64_decode(prev_b64, prev, 48) != 48 || b64_decode(entry_b64, entry, 48) != 48 || !is_hex(state, 96) ||
+        strcmp(log_id, c->primary_log) != 0 || seq < 1 || seq > c->nacks)
+        return NULL;
+    ack_rec *r = &c->acks[seq - 1];
+    if (memcmp(r->entry_hash, entry, 48) != 0) {
+        c->frozen = 1; /* a different entry at an acknowledged sequence is a fork */
+        if (save_state(c) != 0) load_state(c);
+        return xformat("ERR log_fork");
+    }
+    if (memcmp(prev, seq > 1 ? c->acks[seq - 2].entry_hash : zero, 48) != 0)
+        return xformat("ERR previous_entry_mismatch");
+    return xformat("OK %s", r->witness_b64);
+}
+
 /* Handle one request line. Returns a malloc'd answer line (no newline). The
  * state is persisted before any OK is returned; on a persistence failure
  * the in-memory state is reloaded and the request refused. */
@@ -247,6 +271,11 @@ static char *handle(ckpt *c, char *line)
         if (sscanf(line, "GET %*s %39s %lld", log_id, &seq) != 2) return xformat("ERR bad_request");
         if (strcmp(log_id, c->primary_log) != 0 || seq < 1 || seq > c->nacks) return xformat("NOTFOUND");
         return xformat("OK %s", c->acks[seq - 1].witness_b64);
+    }
+
+    if (strcmp(cmd, "ACK") == 0) {
+        char *answer = ack_acknowledged(c, line);
+        if (answer) return answer;
     }
 
     if (read_clock(c, &now, &why) != 0) return xformat("ERR %s", why);
@@ -283,21 +312,9 @@ static char *handle(ckpt *c, char *line)
             return xformat("ERR bad_request");
         if (strcmp(log_id, c->primary_log) != 0) return xformat("ERR unknown_log");
         uint8_t zero[48] = {0};
-        if (seq >= 1 && seq <= c->nacks) {
-            ack_rec *r = &c->acks[seq - 1];
-            /* SPEC-v2 §7.8: only an identical retry, predecessor included,
-             * returns the original acknowledgement. */
-            if (memcmp(r->entry_hash, entry, 48) == 0) {
-                if (memcmp(prev, seq > 1 ? c->acks[seq - 2].entry_hash : zero, 48) != 0)
-                    return xformat("ERR previous_entry_mismatch");
-                return xformat("OK %s", r->witness_b64);
-            }
-            c->frozen = 1; /* a different entry at an acknowledged sequence is a fork */
-            if (save_state(c) != 0) load_state(c);
-            return xformat("ERR log_fork");
-        }
-        /* SPEC-v2 §7.8: after a fork only identical retries of earlier
-         * acknowledgements are answered. */
+        /* An acknowledged sequence was answered before the clock read. After
+         * a fork only identical retries of earlier acknowledgements are
+         * answered (SPEC-v2 §7.8). */
         if (c->frozen) return xformat("ERR frozen");
         if (seq != c->nacks + 1) return xformat("ERR log_gap");
         if (memcmp(prev, c->nacks ? c->acks[c->nacks - 1].entry_hash : zero, 48) != 0)

@@ -74,6 +74,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_validate_finalization_payload",
     "ratify_v2_valid_release_record_outcome",
     "ratify_v2_valid_evaluation_progress",
+    "ratify_v2_claim_id_matches_key",
     "ratify_v2_cross_sdk_fixture_verify",
     "ratify_v2_keypair_from_seeds",
     "ratify_v2_keypair_generate",
@@ -482,6 +483,13 @@ fn every_v2_export_contains_a_panic() {
         unsafe { ratify_v2_valid_evaluation_progress(z(), z()) },
         0,
         "ratify_v2_valid_evaluation_progress"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_claim_id_matches_key(z()) },
+        0,
+        "ratify_v2_claim_id_matches_key"
     );
     fired();
     arm_before_body();

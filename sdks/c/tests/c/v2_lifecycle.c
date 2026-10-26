@@ -89,6 +89,9 @@ static int32_t st_now(void *user, int64_t *out) { return read_clock(user, out); 
 
 static int32_t st_claim(void *user, const RatifyV2ClaimView *view, RatifyV2ClaimResult *out) {
     c_store *s = user;
+    /* SPEC-v2 §7.3: the store is keyed by claim ID, so an ID not derived
+     * from the replay key could open a second claim for one challenge. */
+    if (!ratify_v2_claim_id_matches_key(view)) return RatifyV2ConfigurationInvalid;
     int64_t now;
     if (read_clock(s, &now) != 0) return RatifyV2ClaimStoreUnavailable;
     claim_rec *r = find(s, view->claim_id);
@@ -453,6 +456,9 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
     reset_store(s);
     v2c_vector *a = v2c_vector_load(allow_dir);
     s->now = s->high_water = strtoll(v2c_vector_meta(a, "now"), NULL, 10);
+    char ns[256];
+    snprintf(ns, sizeof ns, "%s", v2c_vector_meta(a, "namespace"));
+    int64_t epoch = strtoll(v2c_vector_meta(a, "replay_epoch"), NULL, 10);
     RatifyV2VerifyOutcome out;
     RatifyV2Committed *c = NULL;
     run_verify(s, a, 0, claim, &out, &c);
@@ -482,10 +488,45 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
                   !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseNone, ""),
               "release record outcomes", "");
     checks += 4;
+    if (r) {
+        /* A direct store call cannot open a second claim for the sealed
+         * challenge (SPEC-v2 §7.3): neither under a forged ID beside the
+         * real record, nor with the forged ID written into the record. */
+        char forged[65];
+        memset(forged, 'a', 64);
+        forged[64] = '\0';
+        size_t len = r->record_len;
+        uint8_t *rewritten = malloc(len);
+        memcpy(rewritten, r->record, len);
+        char *at = strstr((char *)rewritten, claim_id);
+        if (at) memcpy(at, forged, 64);
+        RatifyV2ClaimView v;
+        memset(&v, 0, sizeof v);
+        v.claim_id = claim_id;
+        v.verifier_namespace = ns;
+        v.replay_epoch = epoch;
+        v.record.ptr = r->record;
+        v.record.len = len;
+        int keyed = ratify_v2_claim_id_matches_key(&v);
+        int before = s->nclaims;
+        RatifyV2ClaimResult res;
+        v.claim_id = forged;
+        int32_t beside = st_claim(s, &v, &res);
+        v.record.ptr = rewritten;
+        int32_t inside = st_claim(s, &v, &res);
+        v2c_check(keyed && at && beside == RatifyV2ConfigurationInvalid && inside == RatifyV2ConfigurationInvalid &&
+                      s->nclaims == before,
+                  "forged claim id", "a claim ID not derived from its replay key was accepted");
+        free(rewritten);
+        checks += 1;
+    }
     {
         static const char ok[] = "{\"context_assessment\":\"not_evaluated\",\"context_policy_digest\":null,"
-                                 "\"status_assessment\":\"not_evaluated\",\"status_evidence\":[],\"trust_assessment\":\"trusted\"}";
+                                 "\"status_assessment\":\"not_evaluated\",\"status_evidence_digests\":[],\"trust_assessment\":\"trusted\"}";
+        static const char renamed[] = "{\"context_assessment\":\"not_evaluated\",\"context_policy_digest\":null,"
+                                      "\"status_assessment\":\"not_evaluated\",\"status_evidence\":[],\"trust_assessment\":\"trusted\"}";
         v2c_check(ratify_v2_valid_evaluation_progress((const uint8_t *)ok, sizeof ok - 1) &&
+                      !ratify_v2_valid_evaluation_progress((const uint8_t *)renamed, sizeof renamed - 1) &&
                       !ratify_v2_valid_evaluation_progress((const uint8_t *)"{}", 2) &&
                       !ratify_v2_valid_evaluation_progress(NULL, 2),
                   "progress record validity", "");

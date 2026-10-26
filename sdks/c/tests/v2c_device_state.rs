@@ -95,3 +95,36 @@ fn v2c_device_state_projection_rejects_and_binds() {
     let null = buf(|o| unsafe { ratify_v2_ref_device_state_projection(std::ptr::null(), 0, o) });
     assert_eq!(class_of(&null), "null_pointer");
 }
+
+// Every progress record the shared vectors persist is a record a C store
+// accepts: the C ABI's progress encoding has the §7.5 member names and the
+// RatifyCanonicalJSON form the other SDKs write.
+#[test]
+fn v2c_device_state_progress_records_are_valid_c_progress() {
+    fn collect(v: &serde_json::Value, out: &mut Vec<serde_json::Value>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m {
+                    if k == "progress" && x.is_object() {
+                        out.push(x.clone());
+                    }
+                    collect(x, out);
+                }
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|x| collect(x, out)),
+            _ => {}
+        }
+    }
+    let mut records = Vec::new();
+    collect(&load("device-state.json"), &mut records);
+    assert!(records.iter().any(|p| !arr(&p["status_evidence_digests"]).is_empty()));
+    for p in &records {
+        let bytes = json_bytes(p);
+        assert_eq!(
+            unsafe { ratify_v2_valid_evaluation_progress(bytes.as_ptr(), bytes.len()) },
+            1,
+            "{}",
+            String::from_utf8_lossy(&bytes)
+        );
+    }
+}

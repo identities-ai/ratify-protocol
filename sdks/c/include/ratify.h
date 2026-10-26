@@ -668,10 +668,6 @@ typedef struct RatifyV2Slice {
     uintptr_t len;
 } RatifyV2Slice;
 
-// Reads an authoritative clock (integer Unix seconds). A reading below the
-// greatest reading already returned must fail with `RatifyV2ClockRegressed`.
-typedef int32_t (*RatifyV2NowFn)(void *user, int64_t *now_out);
-
 // One sealed `max_rate` counter of a claim.
 typedef struct RatifyV2RateReservation {
     const char *issuer_id;
@@ -703,6 +699,10 @@ typedef struct RatifyV2ClaimView {
     uintptr_t rate_batch_len;
     struct RatifyV2Slice record;
 } RatifyV2ClaimView;
+
+// Reads an authoritative clock (integer Unix seconds). A reading below the
+// greatest reading already returned must fail with `RatifyV2ClockRegressed`.
+typedef int32_t (*RatifyV2NowFn)(void *user, int64_t *now_out);
 
 // A claim store's answer. `owner_token` (32 random bytes) is set only for
 // `RatifyV2DispositionCreated`; store only its one-way hash.
@@ -2586,13 +2586,26 @@ int32_t ratify_v2_validate_finalization_payload(const uint8_t *claim_record,
 int32_t ratify_v2_valid_release_record_outcome(int32_t outcome, const char *reason);
 
 // Whether `progress` is a valid evaluation progress record (SPEC-v2 §7.5;
-// Go `ValidateV2EvaluationProgress`): the JSON object the
-// `record_progress` callback receives, with no other member and valid
-// values. Returns 1 or 0; NULL with a nonzero length, invalid JSON
-// and an invalid record are 0 (SPEC-v2 §1.3: a predicate fails closed). A
+// Go `ValidateV2EvaluationProgress`): the RatifyCanonicalJSON object the
+// `record_progress` callback receives, with exactly the members
+// `context_assessment`, `context_policy_digest` (a digest or null),
+// `status_assessment`, `status_evidence_digests` and `trust_assessment`
+// and valid values. Returns 1 or 0; NULL with a nonzero length, invalid
+// JSON, a non-canonical encoding and an invalid record are 0 (SPEC-v2
+// §1.3: a predicate fails closed). A
 // claim store implementing `record_progress` rejects a record for which
 // this is 0 as `RatifyV2Malformed` and stores nothing.
 int32_t ratify_v2_valid_evaluation_progress(const uint8_t *progress, uintptr_t progress_len);
+
+// Whether `claim` is keyed by its replay key (SPEC-v2 §2.4, §7.3): its
+// `record` is a claim record whose `claim_id`, `namespace` and
+// `replay_epoch` equal the view's, and `claim_id` is the stable claim ID
+// derived from that namespace, epoch and the record's `sha384:` challenge
+// digest. Returns 1 or 0; NULL and any undecodable view are 0 (SPEC-v2
+// §1.3). A claim store keyed by claim ID refuses a claim for which this is
+// 0 as `RatifyV2ConfigurationInvalid` and creates nothing, so a supplied ID
+// cannot open a second claim for one challenge.
+int32_t ratify_v2_claim_id_matches_key(const struct RatifyV2ClaimView *claim);
 
 // Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)
 // with the README procedure: strict decode, `sdk == expected_sdk`, key

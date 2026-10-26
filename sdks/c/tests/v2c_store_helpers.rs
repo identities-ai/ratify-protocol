@@ -5,14 +5,18 @@
 //! `ratify_v2_valid_release_record_outcome`, the release-record rule of
 //! SPEC-v2 §6.9 a C release store applies, and
 //! `ratify_v2_valid_evaluation_progress`, the progress-record check of §7.5
-//! a C claim store applies before storing a record.
+//! a C claim store applies before storing a record, and
+//! `ratify_v2_claim_id_matches_key`, the §7.3 replay-key check a C claim
+//! store keyed by claim ID applies before creating a claim.
 
 use std::ffi::CString;
 
 use ratify_c::{
-    ratify_v2_challenge_time_current, ratify_v2_valid_evaluation_progress, ratify_v2_valid_release_record_outcome,
-    RatifyV2ReleaseStatus,
+    ratify_v2_challenge_time_current, ratify_v2_claim_id_from_digest, ratify_v2_claim_id_matches_key,
+    ratify_v2_string_free, ratify_v2_valid_evaluation_progress,
+    ratify_v2_valid_release_record_outcome, RatifyV2ClaimView, RatifyV2ReleaseStatus, RatifyV2Slice,
 };
+use serde_json::json;
 
 const MAX_AGE: i64 = 300;
 const MAX_SKEW: i64 = 300;
@@ -101,9 +105,18 @@ fn release_record_outcomes() {
 #[test]
 fn evaluation_progress_predicate_accepts_only_a_valid_record() {
     let valid = |record: &[u8]| unsafe { ratify_v2_valid_evaluation_progress(record.as_ptr(), record.len()) == 1 };
-    let initial = br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"not_evaluated"}"#;
+    let initial = br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"not_evaluated"}"#;
     assert!(valid(initial));
-    assert!(valid(br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted"}"#));
+    assert!(valid(br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"trusted"}"#));
+    // A completed status stage, in the RatifyCanonicalJSON form every SDK
+    // writes (TypeScript encodeV2EvaluationProgress gives these bytes).
+    let digest = format!("sha384:{}", "c".repeat(96));
+    let complete = format!(
+        r#"{{"context_assessment":"bound","context_policy_digest":"{digest}","status_assessment":"current","status_evidence_digests":[{{"digest":"{digest}","issuer_id":"{a}","object_type_code":3,"sequence":1,"status_key_id":"{b}"}}],"trust_assessment":"trusted"}}"#,
+        a = "a".repeat(64),
+        b = "b".repeat(64),
+    );
+    assert!(valid(complete.as_bytes()));
     // A store that kept any of these would hand recovery a record it cannot
     // seal (SPEC-v2 §7.5), stranding the claim instead of interrupting it.
     for bad in [
@@ -111,12 +124,82 @@ fn evaluation_progress_predicate_accepts_only_a_valid_record() {
         b"",
         b"null",
         b"[]",
-        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"maybe"}"#,
-        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted","extra":1}"#,
-        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted","trust_assessment":"trusted"}"#,
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"maybe"}"#,
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"trusted","extra":1}"#,
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"trusted","trust_assessment":"trusted"}"#,
+        // context_policy_digest is a required member, null or a digest.
+        br#"{"context_assessment":"not_evaluated","status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"trusted"}"#,
+        // Not RatifyCanonicalJSON: whitespace, then member order.
+        br#"{"context_assessment": "not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[],"trust_assessment":"trusted"}"#,
+        br#"{"trust_assessment":"trusted","context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence_digests":[]}"#,
+        // The pre-fix C member name; §7.5 names it status_evidence_digests.
+        br#"{"context_assessment":"not_evaluated","context_policy_digest":null,"status_assessment":"not_evaluated","status_evidence":[],"trust_assessment":"trusted"}"#,
         &[0xff, 0xfe],
     ] {
         assert!(!valid(bad), "{}", String::from_utf8_lossy(bad));
     }
     assert_eq!(unsafe { ratify_v2_valid_evaluation_progress(std::ptr::null(), 5) }, 0);
+}
+
+// A store keyed by claim ID holds one claim per replay key only if every ID
+// it accepts is derived from that key (SPEC-v2 §2.4, §7.3).
+#[test]
+fn claim_id_matches_key_accepts_only_the_derived_id() {
+    let (ns, epoch) = ("device-ns", 3i64);
+    let digest = [0x5au8; 48];
+    let derived = unsafe {
+        let mut out: *mut std::os::raw::c_char = std::ptr::null_mut();
+        assert_eq!(ratify_v2_claim_id_from_digest(ns.as_ptr(), ns.len(), epoch, digest.as_ptr(), digest.len(), &mut out), 0);
+        let id = std::ffi::CStr::from_ptr(out).to_str().unwrap().to_owned();
+        ratify_v2_string_free(out);
+        id
+    };
+    let record = |id: &str, digest: String| {
+        serde_json::to_vec(&json!({
+            "claim_id": id, "namespace": ns, "replay_epoch": epoch, "challenge_digest": digest,
+            "proof_digest": format!("sha384:{}", "1".repeat(96)), "bundle_hash": format!("sha384:{}", "2".repeat(96)),
+            "issuer_ids": ["a".repeat(64)], "required_scope": "meeting:attend",
+            "context_policy_digest": format!("sha384:{}", "3".repeat(96)), "verifier_id": "b".repeat(64),
+            "agent_id": "c".repeat(64), "requires_rate": false, "rate_batch": [], "issued_at": 1_800_000_000i64,
+            "expires_at": 1_800_000_300i64, "max_age_seconds": 300, "clock_skew_seconds": 5,
+            "stream_id_b64": null, "stream_seq": null, "constraint_evaluators": [],
+        }))
+        .unwrap()
+    };
+    let hex_digest = format!("sha384:{}", "5a".repeat(48));
+    let keyed = |view_id: &str, view_ns: &str, view_epoch: i64, rec: &[u8]| {
+        let id = CString::new(view_id).unwrap();
+        let ns = CString::new(view_ns).unwrap();
+        let view = RatifyV2ClaimView {
+            claim_id: id.as_ptr(),
+            verifier_namespace: ns.as_ptr(),
+            replay_epoch: view_epoch,
+            agent_id: std::ptr::null(),
+            issued_at: 0,
+            expires_at: 0,
+            max_age_seconds: 0,
+            clock_skew_seconds: 0,
+            has_stream_id: 0,
+            stream_id: RatifyV2Slice { ptr: std::ptr::null(), len: 0 },
+            has_stream_seq: 0,
+            stream_seq: 0,
+            rate_batch: std::ptr::null(),
+            rate_batch_len: 0,
+            record: RatifyV2Slice { ptr: rec.as_ptr(), len: rec.len() },
+        };
+        unsafe { ratify_v2_claim_id_matches_key(&view) == 1 }
+    };
+    let forged = "f".repeat(64);
+    assert!(keyed(&derived, ns, epoch, &record(&derived, hex_digest.clone())));
+    // A forged ID beside the real record, or written into the record.
+    assert!(!keyed(&forged, ns, epoch, &record(&derived, hex_digest.clone())));
+    assert!(!keyed(&forged, ns, epoch, &record(&forged, hex_digest.clone())));
+    // The view's namespace or epoch differs from the sealed record's.
+    assert!(!keyed(&derived, "other-ns", epoch, &record(&derived, hex_digest.clone())));
+    assert!(!keyed(&derived, ns, epoch + 1, &record(&derived, hex_digest.clone())));
+    // The challenge digest is not a lowercase sha384: digest.
+    assert!(!keyed(&derived, ns, epoch, &record(&derived, hex_digest.to_uppercase())));
+    assert!(!keyed(&derived, ns, epoch, &record(&derived, "5a".repeat(48))));
+    assert!(!keyed(&derived, ns, epoch, b"{}"));
+    assert_eq!(unsafe { ratify_v2_claim_id_matches_key(std::ptr::null()) }, 0);
 }

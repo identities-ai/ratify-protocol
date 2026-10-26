@@ -1019,10 +1019,13 @@ pub unsafe extern "C" fn ratify_v2_valid_release_record_outcome(outcome: i32, re
 }
 
 /// Whether `progress` is a valid evaluation progress record (SPEC-v2 §7.5;
-/// Go `ValidateV2EvaluationProgress`): the JSON object the
-/// `record_progress` callback receives, with no other member and valid
-/// values. Returns 1 or 0; NULL with a nonzero length, invalid JSON
-/// and an invalid record are 0 (SPEC-v2 §1.3: a predicate fails closed). A
+/// Go `ValidateV2EvaluationProgress`): the RatifyCanonicalJSON object the
+/// `record_progress` callback receives, with exactly the members
+/// `context_assessment`, `context_policy_digest` (a digest or null),
+/// `status_assessment`, `status_evidence_digests` and `trust_assessment`
+/// and valid values. Returns 1 or 0; NULL with a nonzero length, invalid
+/// JSON, a non-canonical encoding and an invalid record are 0 (SPEC-v2
+/// §1.3: a predicate fails closed). A
 /// claim store implementing `record_progress` rejects a record for which
 /// this is 0 as `RatifyV2Malformed` and stores nothing.
 #[no_mangle]
@@ -1034,9 +1037,57 @@ pub unsafe extern "C" fn ratify_v2_valid_evaluation_progress(progress: *const u8
                 return 0;
             };
             match super::marshal::progress_from_json(data) {
-                Ok(p) => i32::from(validate_v2_evaluation_progress(&p).is_ok()),
+                Ok(p) => i32::from(
+                    validate_v2_evaluation_progress(&p).is_ok() && super::marshal::progress_json(&p) == data,
+                ),
                 Err(_) => 0,
             }
+        },
+    )
+}
+
+/// Whether `claim` is keyed by its replay key (SPEC-v2 §2.4, §7.3): its
+/// `record` is a claim record whose `claim_id`, `namespace` and
+/// `replay_epoch` equal the view's, and `claim_id` is the stable claim ID
+/// derived from that namespace, epoch and the record's `sha384:` challenge
+/// digest. Returns 1 or 0; NULL and any undecodable view are 0 (SPEC-v2
+/// §1.3). A claim store keyed by claim ID refuses a claim for which this is
+/// 0 as `RatifyV2ConfigurationInvalid` and creates nothing, so a supplied ID
+/// cannot open a second claim for one challenge.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_claim_id_matches_key(claim: *const super::callbacks::RatifyV2ClaimView) -> i32 {
+    crate::guard::ffi_guard(
+        || 0,
+        || {
+            let Some(view) = claim.as_ref() else {
+                return 0;
+            };
+            let (Ok(id), Ok(namespace), Ok(record)) = (
+                cstr(view.claim_id, "claim_id"),
+                cstr(view.verifier_namespace, "verifier_namespace"),
+                view.record.bytes("record"),
+            ) else {
+                return 0;
+            };
+            let Ok(c) = super::marshal::claim_from_json(record) else {
+                return 0;
+            };
+            if c.claim_id != id || c.namespace != namespace || c.replay_epoch != view.replay_epoch {
+                return 0;
+            }
+            let Some(encoded) = c.challenge_digest.strip_prefix("sha384:") else {
+                return 0;
+            };
+            if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+                return 0;
+            }
+            let digest: Vec<u8> = (0..48)
+                .map(|i| u8::from_str_radix(&encoded[2 * i..2 * i + 2], 16).unwrap_or(0))
+                .collect();
+            i32::from(
+                ratify_protocol::protocol_claim_id_from_digest_v2(&c.namespace, c.replay_epoch, &digest)
+                    .is_ok_and(|derived| derived == c.claim_id),
+            )
         },
     )
 }

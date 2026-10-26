@@ -722,14 +722,14 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
 
 /// The evaluation progress record: `{"trust_assessment",
 /// "status_assessment", "context_assessment", "context_policy_digest":
-/// <str>|null, "status_evidence": [<evidence>]}`.
+/// <str>|null, "status_evidence_digests": [<evidence>]}`.
 pub(crate) fn progress_json(p: &V2EvaluationProgress) -> Vec<u8> {
     let v = json!({
         "trust_assessment": p.trust_assessment,
         "status_assessment": p.status_assessment,
         "context_assessment": p.context_assessment,
         "context_policy_digest": opt_json(&p.context_policy_digest),
-        "status_evidence": p.status_evidence.iter().map(evidence_json).collect::<Vec<_>>(),
+        "status_evidence_digests": p.status_evidence.iter().map(evidence_json).collect::<Vec<_>>(),
     });
     serde_json::to_vec(&v).unwrap_or_default()
 }
@@ -745,7 +745,7 @@ pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress>
             "status_assessment",
             "context_assessment",
             "context_policy_digest",
-            "status_evidence",
+            "status_evidence_digests",
         ],
     )?;
     Ok(V2EvaluationProgress {
@@ -758,7 +758,7 @@ pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress>
             None
         },
         status_evidence: o
-            .array("status_evidence")?
+            .array("status_evidence_digests")?
             .into_iter()
             .map(evidence)
             .collect::<AbiResult<_>>()?,

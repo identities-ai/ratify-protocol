@@ -43,6 +43,7 @@ const NOT_FALLIBLE: &[&str] = &[
     "ratify_v2_challenge_time_current",
     "ratify_v2_valid_release_record_outcome",
     "ratify_v2_valid_evaluation_progress",
+    "ratify_v2_claim_id_matches_key",
     "ratify_v2_released_allowed",
 ];
 

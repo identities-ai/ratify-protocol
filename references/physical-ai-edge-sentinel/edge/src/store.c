@@ -419,6 +419,9 @@ static void owner_digest(const uint8_t *token, size_t len, char out[97])
 static int32_t cb_claim(void *user, const RatifyV2ClaimView *view, RatifyV2ClaimResult *out)
 {
     store *s = user;
+    /* SPEC-v2 §7.3: claims are keyed by claim ID, so an ID not derived from
+     * the replay key could open a second claim for one challenge. */
+    if (!ratify_v2_claim_id_matches_key(view)) return RatifyV2ConfigurationInvalid;
     int64_t now;
     if (s->recovering || store_now(s, &now) != 0) return RatifyV2ClaimStoreUnavailable;
     claim_rec *r = find_claim(s, view->claim_id);

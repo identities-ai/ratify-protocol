@@ -128,3 +128,45 @@ fn v2c_device_state_progress_records_are_valid_c_progress() {
         );
     }
 }
+
+// Every sealed claim object in the shared vectors (SPEC-v2 §7.13) is a claim
+// record the C ABI accepts unchanged and keys by its replay key: the record
+// a C claim store persists is exactly that object.
+#[test]
+fn v2c_device_state_sealed_claims_are_c_claim_records() {
+    let f = load("device-state.json");
+    let mut n = 0;
+    for c in arr(&f["cases"]) {
+        for rec in arr(&c["state"]["claims"]) {
+            let claim = &rec["claim"];
+            let bytes = json_bytes(claim);
+            let id = std::ffi::CString::new(s(&claim["claim_id"])).unwrap();
+            let ns = std::ffi::CString::new(s(&claim["namespace"])).unwrap();
+            let view = RatifyV2ClaimView {
+                claim_id: id.as_ptr(),
+                verifier_namespace: ns.as_ptr(),
+                replay_epoch: i(&claim["replay_epoch"]),
+                agent_id: std::ptr::null(),
+                issued_at: 0,
+                expires_at: 0,
+                max_age_seconds: 0,
+                clock_skew_seconds: 0,
+                has_stream_id: 0,
+                stream_id: RatifyV2Slice { ptr: std::ptr::null(), len: 0 },
+                has_stream_seq: 0,
+                stream_seq: 0,
+                rate_batch: std::ptr::null(),
+                rate_batch_len: 0,
+                record: RatifyV2Slice { ptr: bytes.as_ptr(), len: bytes.len() },
+            };
+            assert_eq!(
+                unsafe { ratify_v2_claim_id_matches_key(&view) },
+                1,
+                "{}",
+                String::from_utf8_lossy(&bytes)
+            );
+            n += 1;
+        }
+    }
+    assert!(n > 0);
+}

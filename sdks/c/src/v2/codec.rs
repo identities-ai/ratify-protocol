@@ -1036,12 +1036,7 @@ pub unsafe extern "C" fn ratify_v2_valid_evaluation_progress(progress: *const u8
             let Ok(data) = bytes(progress, progress_len, "progress") else {
                 return 0;
             };
-            match super::marshal::progress_from_json(data) {
-                Ok(p) => i32::from(
-                    validate_v2_evaluation_progress(&p).is_ok() && super::marshal::progress_json(&p) == data,
-                ),
-                Err(_) => 0,
-            }
+            i32::from(super::marshal::progress_from_json(data).is_ok())
         },
     )
 }

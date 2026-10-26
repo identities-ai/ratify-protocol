@@ -162,7 +162,7 @@ fn claim_id_matches_key_accepts_only_the_derived_id() {
             "context_policy_digest": format!("sha384:{}", "3".repeat(96)), "verifier_id": "b".repeat(64),
             "agent_id": "c".repeat(64), "requires_rate": false, "rate_batch": [], "issued_at": 1_800_000_000i64,
             "expires_at": 1_800_000_300i64, "max_age_seconds": 300, "clock_skew_seconds": 5,
-            "stream_id_b64": null, "stream_seq": null, "constraint_evaluators": [],
+            "stream_id": null, "stream_seq": null, "constraint_evaluators": [],
         }))
         .unwrap()
     };

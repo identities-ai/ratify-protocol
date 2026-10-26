@@ -560,6 +560,17 @@ persisted `record`, and a checkpoint that sees a different entry hash at an
 acknowledged sequence refuses it and acknowledges nothing further for that
 log (§7.8).
 
+**Store records.** The claim `record` a claim store receives is the
+RatifyCanonicalJSON sealed claim object of SPEC-v2 §7.13, and a progress
+record is the five-member canonical object of §7.5. Persist both unchanged:
+`load_interrupted` must return the same bytes, and recovery refuses a record
+that is not canonical or not valid as `RatifyV2Malformed`, committing
+nothing. Before creating a claim, a store keyed by claim ID checks
+`ratify_v2_claim_id_matches_key`. Expected challenges cross the issuance
+store in the ABI's request encoding (`value_b64`,
+`expected_session_context_b64`, absent optional members omitted), the same
+form `request_json` takes.
+
 **Thread safety.** Functions that take no handle are safe to call
 concurrently. A handle is used by one thread at a time; serialize concurrent
 use of one handle yourself. The status reducer handle

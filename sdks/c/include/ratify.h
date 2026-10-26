@@ -677,8 +677,8 @@ typedef struct RatifyV2RateReservation {
 } RatifyV2RateReservation;
 
 // The claim a verifier asks a claim store to create (SPEC-v2 §7.3). The
-// scalar fields are the ones a store's rules read; `record` is a
-// deterministic encoding of every immutable claim field: an exact retry has
+// scalar fields are the ones a store's rules read; `record` is the
+// RatifyCanonicalJSON sealed claim object of SPEC-v2 §7.13: an exact retry has
 // byte-identical `record`, and any difference for the same `claim_id` is a
 // different proof (`RatifyV2StoreClaimProofConflict`). Persist `record`
 // unchanged; `load_interrupted` returns it.
@@ -748,7 +748,10 @@ typedef struct RatifyV2InterruptedClaim {
 } RatifyV2InterruptedClaim;
 
 // Loads an interrupted claim (fails with `RatifyV2ClaimLeaseLive` while the
-// lease is live).
+// lease is live). The returned `record` and `progress` must be the bytes
+// the store was given (`progress` empty when none was recorded); a record
+// that is not canonical or not valid is `RatifyV2Malformed` and recovery
+// commits nothing.
 typedef int32_t (*RatifyV2LoadInterruptedFn)(void *user,
                                              const char *claim_id,
                                              struct RatifyV2InterruptedClaim *out);

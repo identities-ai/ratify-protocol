@@ -618,7 +618,11 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
         "bundle_hash": c.bundle_hash,
         "issuer_ids": c.issuer_ids,
         "required_scope": c.required_scope,
-        "context_policy_digest": c.context_policy_digest,
+        "context_policy_digest": if c.context_policy_digest.is_empty() {
+            Value::Null
+        } else {
+            json!(c.context_policy_digest)
+        },
         "verifier_id": c.verifier_id,
         "agent_id": c.agent_id,
         "requires_rate": c.requires_rate,
@@ -629,7 +633,7 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
         "expires_at": c.expires_at,
         "max_age_seconds": c.max_age_seconds,
         "clock_skew_seconds": c.clock_skew_seconds,
-        "stream_id_b64": opt_json(&c.stream_id.as_ref().map(|s| b64(s))),
+        "stream_id": opt_json(&c.stream_id.as_ref().map(|s| b64(s))),
         "stream_seq": opt_json(&c.stream_seq),
         "constraint_evaluators": c.constraint_evaluators.iter().map(|e| json!({
             "type": e.kind, "profile_digest": e.profile_digest,
@@ -638,7 +642,18 @@ pub(crate) fn claim_json(c: &V2ChallengeClaim) -> Vec<u8> {
     serde_json::to_vec(&v).unwrap_or_default()
 }
 
+/// The sealed claim from its record, which must be exactly the
+/// RatifyCanonicalJSON sealed claim object of SPEC-v2 §7.13 that
+/// `claim_json` writes: a store persists the record unchanged.
 pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
+    let c = parse_claim(data)?;
+    if claim_json(&c) != data {
+        return Err(bad_arg("claim record is not the canonical sealed claim object"));
+    }
+    Ok(c)
+}
+
+fn parse_claim(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     let v: Value = super::strict_json(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
     let o = Obj::new(
         &v,
@@ -661,7 +676,7 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
             "expires_at",
             "max_age_seconds",
             "clock_skew_seconds",
-            "stream_id_b64",
+            "stream_id",
             "stream_seq",
             "constraint_evaluators",
         ],
@@ -701,7 +716,12 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
         bundle_hash: o.str("bundle_hash")?,
         issuer_ids: o.strings("issuer_ids")?,
         required_scope: o.str("required_scope")?,
-        context_policy_digest: o.str("context_policy_digest")?,
+        // null for a policy-less evaluation (SPEC-v2 §7.13).
+        context_policy_digest: if o.has("context_policy_digest") {
+            o.str("context_policy_digest")?
+        } else {
+            String::new()
+        },
         verifier_id: o.str("verifier_id")?,
         agent_id: o.str("agent_id")?,
         requires_rate: o.bool("requires_rate")?,
@@ -710,7 +730,7 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
         expires_at: o.i64("expires_at")?,
         max_age_seconds: o.i64("max_age_seconds")?,
         clock_skew_seconds: o.i64("clock_skew_seconds")?,
-        stream_id: o.opt_b64("stream_id_b64")?,
+        stream_id: o.opt_b64("stream_id")?,
         stream_seq: if o.has("stream_seq") {
             Some(o.i64("stream_seq")?)
         } else {
@@ -720,9 +740,10 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     })
 }
 
-/// The evaluation progress record: `{"trust_assessment",
-/// "status_assessment", "context_assessment", "context_policy_digest":
-/// <str>|null, "status_evidence_digests": [<evidence>]}`.
+/// The evaluation progress record (SPEC-v2 §7.5): the RatifyCanonicalJSON
+/// object `{"context_assessment", "context_policy_digest": <str>|null,
+/// "status_assessment", "status_evidence_digests": [<evidence>],
+/// "trust_assessment"}`.
 pub(crate) fn progress_json(p: &V2EvaluationProgress) -> Vec<u8> {
     let v = json!({
         "trust_assessment": p.trust_assessment,
@@ -734,7 +755,20 @@ pub(crate) fn progress_json(p: &V2EvaluationProgress) -> Vec<u8> {
     serde_json::to_vec(&v).unwrap_or_default()
 }
 
+/// A progress record crossing the store boundary, in either direction: it
+/// must be a valid record (SPEC-v2 §7.5) in exactly its canonical form, so
+/// a record missing a member or encoded differently is rejected, never
+/// reinterpreted.
 pub(crate) fn progress_from_json(data: &[u8]) -> AbiResult<V2EvaluationProgress> {
+    let p = parse_progress(data)?;
+    validate_v2_evaluation_progress(&p).map_err(|e| bad_arg(format!("progress record: {e}")))?;
+    if progress_json(&p) != data {
+        return Err(bad_arg("progress record is not in its canonical form"));
+    }
+    Ok(p)
+}
+
+fn parse_progress(data: &[u8]) -> AbiResult<V2EvaluationProgress> {
     let v: Value =
         super::strict_json(data).map_err(|e| bad_arg(format!("progress record: {e}")))?;
     let o = Obj::new(

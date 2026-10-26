@@ -633,6 +633,28 @@ int v2c_run_lifecycle(void) {
     int32_t rc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &recovered);
     v2c_check(rc == RatifyV2ClaimLeaseLive && recovered == NULL, "recover during lease", v2c_class(rc));
     s.now += s.lease;
+    {
+        /* SPEC-v2 §7.5: recovery seals only a valid canonical progress record;
+         * one a store returns without context_policy_digest is malformed. */
+        claim_rec *r = find(&s, cancel_id);
+        static const char partial[] = "{\"context_assessment\":\"not_evaluated\",\"status_assessment\":\"not_evaluated\","
+                                      "\"status_evidence_digests\":[],\"trust_assessment\":\"not_evaluated\"}";
+        uint8_t *kept = r ? r->progress : NULL;
+        size_t kept_len = r ? r->progress_len : 0;
+        if (r) {
+            r->progress = (uint8_t *)partial;
+            r->progress_len = sizeof partial - 1;
+        }
+        RatifyV2Committed *bad = NULL;
+        int32_t brc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &bad);
+        if (r) {
+            r->progress = kept;
+            r->progress_len = kept_len;
+        }
+        v2c_check(r && brc == RatifyV2Malformed && bad == NULL && !r->terminal, "recover malformed progress", v2c_class(brc));
+        ratify_v2_committed_free(bad);
+        checks++;
+    }
     rc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &recovered);
     v2c_check(rc == 0 && recovered != NULL, "recover after lease", ratify_v2_last_error_message());
     checks += 3;

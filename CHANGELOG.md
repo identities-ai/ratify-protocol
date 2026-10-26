@@ -371,7 +371,12 @@ match before the beta.
   `status_evidence`; a progress record now carries `status_evidence_digests`
   as §7.5 requires, and the predicate accepts only the RatifyCanonicalJSON
   form with all five members, so a record without `context_policy_digest`
-  or with another encoding is malformed.
+  or with another encoding is malformed. Lease-expiry recovery applies the
+  same check to the progress and claim records a C store returns, so a
+  record the store altered is refused as `RatifyV2Malformed` instead of
+  being sealed. The C claim record is now exactly the §7.13 sealed claim
+  object (`stream_id`, and `null` for a policy-less
+  `context_policy_digest`).
 - **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,
   C, TypeScript and Python). A negative count from the invocation counter is now
   `constraint_unverifiable` instead of passing. Through the C ABI, a

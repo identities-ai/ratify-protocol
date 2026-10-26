@@ -1,10 +1,10 @@
 # LangChain reference evidence (Protocol v2)
 
-**Evidence date:** 2026-10-22 (run started 2026-10-22T15:56:47Z)
+**Evidence date:** 2026-10-26 (run started 2026-10-26T23:21:06Z)
 
-**Branch:** `ref-v2-adk-langchain`, based on `feat/verify-federation-v2` at `a1e5b5e`
+**Branch:** `feat/verify-federation-v2`
 
-**Code commit:** `bb48e57` (`bb48e576af918d02e277840ae649b767007df317`)
+**Code commit:** `d62bed2`
 
 **Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build 2.0.0a1
 
@@ -37,7 +37,7 @@ The recorded run set `RATIFY_REFERENCE_VENV` to a fresh directory outside the
 repository. The gate builds the native extension, installs both v2 packages
 from this repository into that environment, asserts that the SDK does not
 import from the source tree and that the v1 `ratify_protocol` package is
-absent, checks every pin, runs the suite, and requires exactly 33 passing
+absent, checks every pin, runs the suite, and requires exactly 34 passing
 tests with none skipped.
 
 ## Recorded result
@@ -49,14 +49,18 @@ is shortened.
 ```text
 installed Ratify v2 SDK: .../site-packages/ratify_protocol_v2/__init__.py
 langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol-v2==2.0.0a1 ratify-protocol-native-v2==2.0.0a1
-.................................                                        [100%]
-33 passed in 70.32s (0:01:10)
-gate: 33/33 passed; zero skipped, xfailed, failed, or errored
+..................................                                       [100%]
+34 passed in 9.25s
+gate: 34/34 passed; zero skipped, xfailed, failed, or errored
 ```
 
-Zero tests were skipped or marked xfail. The run took longer than an
-uncontended run because a separate benchmark process was running on the same
-host.
+Zero tests were skipped or marked xfail.
+
+The previous run (2026-10-22, code commit `bb48e57`) passed 33/33. The
+34th test was added with the fix for an intermittent `400` from the receiver:
+a signed presentation header of about 38 KB exceeded the HTTP parser's
+default 16 KiB buffer for incomplete headers when the headers arrived in
+several reads.
 
 ## Evidence covered
 
@@ -85,6 +89,8 @@ host.
   business values never reach verification, and pending state is bounded;
 - unauthenticated HTTP cannot reach the MCP receiver, and duplicate or
   oversized security headers fail before MCP dispatch;
+- a maximum-size presentation header sent in small pieces is parsed and
+  reaches the boundary;
 - the model-visible schema excludes proof material, the public MCP interceptor
   injects the proof after tool selection, and the real `create_agent`
   LangGraph loop executes the gated HTTP MCP tool; and

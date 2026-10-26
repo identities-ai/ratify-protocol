@@ -6,7 +6,7 @@ partnership, LangChain-approved integration, or LangChain reference architecture
 - **Protocol line:** v2 (2.0.0-beta.1)
 - **Tested against:** the in-tree Python v2 SDK (`ratify-protocol-v2` and
   `ratify-protocol-native-v2` 2.0.0a1, built from this repository) until
-  2.0.0-beta.1 is published. The deterministic gate is 33/33 green; see
+  2.0.0-beta.1 is published. The deterministic gate is 34/34 green; see
   [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 - **Protocol v1 history:** the v1 version of this reference (Ratify
   `1.0.0a19`, 28/28 gate) is kept unchanged in [`v1/`](v1/README.md).
@@ -148,7 +148,7 @@ additional test. See [`evidence/reference-evidence.md`](evidence/reference-evide
 **Release pin.** The SDK dependency moves to the published
 `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (2.0.0-beta.1)
 when they are released; the lines to change are marked `RATIFY_V2_PIN` in
-`requirements.txt` and `run-reference-check.sh`. The 33/33 result has not yet
+`requirements.txt` and `run-reference-check.sh`. The 34/34 result has not yet
 been reproduced against the published packages.
 
 ## Boundary

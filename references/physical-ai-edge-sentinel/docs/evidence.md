@@ -6,7 +6,7 @@ port is kept below as dated history; it is not v2 evidence.
 ## Protocol v2: local gate
 
 - Validation date: 2026-10-26
-- Reference source revision: `112e8a4` (the 32-row matrix; the 30-row matrix of 2026-10-22 ran at `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`)
+- Reference source revision: `c800022` (the 32-row matrix, plain and sanitized; the reference is unchanged since `1c14464`; the 30-row matrix of 2026-10-22 ran at `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`)
 - Host: macOS development machine (Apple Silicon), not the ARMv7 target
 - SDK: Ratify C SDK `2.0.0-alpha.1` (`ratify_v2_*` ABI version 2), built from `sdks/c` at the same revision, static library, no test-reference stores
 - Command: `RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh`
@@ -58,7 +58,25 @@ Not exercised by the matrix: lease-expiry recovery of an interrupted claim,
 promotion of an anchored `state.next` after a crash between anchoring and
 rename, and the checkpoint refusing when its capacity is used.
 
-## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix
+## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix, 32 rows (2026-10-26)
+
+The ARMv7 test builds of the 32-row matrix were copied to the Pi in a new
+bundle directory, its `SHA256SUMS` manifest was verified there, and the
+deterministic matrix was run with `./run-matrix.sh` on 2026-10-26. No serial or
+GPIO output was produced.
+
+- Target: Raspberry Pi 2 Model B Rev 1.1, armv7l, Raspbian GNU/Linux 13 (trixie), glibc 2.41; `edge` links only libc and libarmmem
+- Build: C SDK cross-compiled with `cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36` at `bb55039`; binaries cross-compiled with `zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7` (zig 0.16.0), not stripped, Ratify library linked statically, glibc linked dynamically
+- SDK SHA-256: `ratify.h` `800fa7f17483009b65d9557fb355fc6bcaa469a7dbf771664b95cbf9516a623c`, `libratify_c.a` (armv7) `93d683255f2a918462d3f8a2df6fe1692aff5f0255171f47eac7c91b79e33375`
+- Source revision: `bb55039`; the C SDK and this reference are unchanged from `2be537f` and `1c14464` respectively
+- Binary SHA-256: `edge` `d097f6e2c3e5cbf1af22bdc35dee4cde4ec0ccc2b75e30cf01f32a7013a60e82`, `edge-checkpoint` `d3da0ec5e2e5843d3f92143e3249500431eed6f949dfc2887c48cef1052f891a`, `edge-test` `8e02fe48ac9bf28ffe62f3045fb257bdeaa5d18909ba2a2b17bf553ac1cd130e`, `edge-checkpoint-test` `04c88528a7bb21b13e98cd47db281b01ee9a3f705a5f9d997f4497cf36c8e14d`, `controller` `08f4e8bf723b61c0671a83597265280fe4fe422296206f25207dc25de6bd9182`
+- Deterministic matrix on the Pi (mock actuator): `ALL ROWS PASSED (32/32)`, no `UNEXPECTED` lines
+- Actuator: mock only; 5 invocations in total, 0 hardware writes
+- Matrix wall time on the Pi: 126 s
+
+The production hardware run below was not repeated with these binaries.
+
+## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix, 30 rows (2026-10-22)
 
 The ARMv7 bundle built from the revision below was copied to the Pi, its
 `SHA256SUMS` manifest was verified there, and the deterministic matrix was run

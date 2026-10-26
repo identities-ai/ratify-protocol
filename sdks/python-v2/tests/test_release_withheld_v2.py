@@ -13,7 +13,7 @@ from v2_harness import BACKGROUND, Counts, build_verify_request, keyed_claim, ke
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2.claim_store_v2 import V2ChallengeClaim
 from ratify_protocol_v2.clock_bounds_v2 import V2_MAX_TIMESTAMP_SECONDS
-from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
+from ratify_protocol_v2.errors_v2 import V2Error, V2ErrorClass, error_class_of
 from ratify_protocol_v2.evaluation_progress_v2 import v2_evaluation_interrupted_result
 from ratify_protocol_v2.rate_reservation_v2 import V2RateReservation
 from ratify_protocol_v2.release_v2 import (
@@ -89,6 +89,32 @@ def test_withheld_record_conflict_is_rejected():
     store.set_time(committed.challenge_expires_at())
     result = release_v2_decision(BACKGROUND, committed, wire, config)
     assert (result.status, result.reason) == (V2_RELEASE_REJECTED, "release_state_mismatch")
+
+
+class FinalizedAtStore:
+    """The reference store answering load_v2_terminal_claim with
+    ``finalized_at`` in place of the recorded finalization time."""
+
+    def __init__(self, inner: Store, finalized_at: int):
+        self.inner, self.finalized_at = inner, finalized_at
+
+    def load_v2_terminal_claim(self, ctx, claim_id):
+        record = copy.copy(self.inner.load_v2_terminal_claim(ctx, claim_id))
+        record.finalized_at = self.finalized_at
+        return record
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+def test_finalization_time_outside_domain_is_withheld():
+    # T_final is a timestamp (SPEC-v2 §2.5, §6.9 step 7). A negative
+    # finalization time still satisfies T_final <= ack.timestamp, so without
+    # the domain check a store answering one would release the committed allow.
+    store, committed, wire, config = release_fixture()
+    config.claim_store = FinalizedAtStore(store, -1)
+    result = release_v2_decision(BACKGROUND, committed, wire, config)
+    assert (result.status, result.reason, result.decision) == (V2_RELEASE_WITHHELD, "clock_regressed", None)
 
 
 def test_recorded_withheld_is_answered_first():
@@ -231,8 +257,13 @@ def test_checkpoint_refuses_timestamp_outside_domain():
     ack = store.acknowledge_v2_receipt(BACKGROUND, first.log_id, 1, first.previous_receipt_hash, first_entry)
     assert ack.timestamp == V2_MAX_TIMESTAMP_SECONDS
     store.set_time(V2_MAX_TIMESTAMP_SECONDS + 1)
-    with pytest.raises(NotAcknowledgedError):
+    with pytest.raises(V2Error) as exc:
+        store.authoritative_time_v2(BACKGROUND)
+    assert error_class_of(exc.value) == V2ErrorClass.CLAIM_STORE_UNAVAILABLE
+    with pytest.raises(V2Error):
         store.acknowledge_v2_receipt(BACKGROUND, second.log_id, 2, first_entry, second_entry)
+    with pytest.raises(AcknowledgementNotFoundErrorV2):
+        store.get_v2_acknowledgement(BACKGROUND, second.log_id, 2)
 
 
 def test_rate_at_finalization_store_never_reserves_provisionally():

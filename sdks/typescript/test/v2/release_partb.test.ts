@@ -92,6 +92,24 @@ test("release: a conflicting record while withholding is rejected", async () => 
   assert.deepEqual([result.status, result.reason], ["rejected", "release_state_mismatch"]);
 });
 
+// T_final is a timestamp (SPEC-v2 §2.5, §6.9 step 7). A negative finalization
+// time still satisfies T_final <= ack.timestamp, so without the domain check a
+// store answering one would release the committed allow.
+test("release: a finalization time outside the domain is withheld", async () => {
+  const { store, committed, wire, config } = await releaseFixture();
+  const view = new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop === "loadV2TerminalClaim") {
+        return async (claimID: string, signal?: AbortSignal) => ({ ...(await target.loadV2TerminalClaim(claimID, signal)), finalizedAt: -1 });
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const result = await releaseV2Decision(committed, wire, { ...config, claimStore: view });
+  assert.deepEqual([result.status, result.reason, result.decision], ["withheld", "clock_regressed", null]);
+});
+
 // A recorded withheld result is returned right after the committed-state
 // step, before any receipt or acknowledgement is consulted.
 test("release: a recorded withheld result answers before the receipt step", async () => {
@@ -285,8 +303,12 @@ test("reference checkpoint: refuses a timestamp outside the domain", async () =>
   const ack = await store.acknowledgeV2Receipt(first.receipt.log_id, 1, first.receipt.previous_receipt_hash, first.entry);
   assert.equal(ack.timestamp, V2_MAX_TIMESTAMP_SECONDS, "acknowledgement at the domain end");
   store.setTime(V2_MAX_TIMESTAMP_SECONDS + 1);
+  await assert.rejects(store.authoritativeTimeV2(), (e) => v2ErrorClassOf(e) === "claim_store_unavailable",
+    "authoritative reading outside the timestamp domain");
   await assert.rejects(store.acknowledgeV2Receipt(second.receipt.log_id, 2, first.entry, second.entry),
-    (e) => errorIs(e, ErrNotAcknowledgedTestOnly), "acknowledged at a time outside the timestamp domain");
+    undefined, "acknowledged at a time outside the timestamp domain");
+  await assert.rejects(store.getV2Acknowledgement(second.receipt.log_id, 2), (e) => errorIs(e, ErrV2AcknowledgementNotFound),
+    "an acknowledgement outside the timestamp domain was kept");
 });
 
 // The reference store admits max_rate inside its terminal compare-and-set

@@ -48,7 +48,7 @@ port is kept below as dated history; it is not v2 evidence.
 | 29 | actuator invocations across all runs | 5, as expected | 5 mock |
 | 30 | no hardware output | 0 serial or GPIO writes | none |
 | 31 | checkpoint clock past the timestamp domain | checkpoint refuses, `clock_out_of_range` | not applicable |
-| 32 | checkpoint fork | fork refused (`log_fork`), the log freezes: an identical retry of an earlier acknowledgement still returns it, a new entry is refused (`frozen`) | not applicable |
+| 32 | checkpoint fork | a retry with a different predecessor is refused (`previous_entry_mismatch`); a fork is refused (`log_fork`) and the log freezes: an identical retry of an earlier acknowledgement still returns it, a new entry is refused (`frozen`) | not applicable |
 
 Preflight classes are recorded in the receiver's decision log. The HTTP answer
 for a preflight rejection is deliberately the same for every class, so that

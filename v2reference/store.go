@@ -281,6 +281,10 @@ func (s *Store) readClockLocked() (int64, error) {
 	if s.now < s.highWater {
 		return 0, &ratify.V2Error{Class: ratify.V2ErrClockRegressed, Err: fmt.Errorf("v2reference: authoritative clock %d is below its high-water mark %d", s.now, s.highWater)}
 	}
+	// SPEC-v2 §2.5, §7.2: every authoritative reading is in the timestamp domain.
+	if s.now < 0 || s.now > ratify.V2MaxTimestampSeconds {
+		return 0, &ratify.V2Error{Class: ratify.V2ErrClaimStoreUnavailable, Err: fmt.Errorf("v2reference: authoritative clock %d is outside the timestamp domain", s.now)}
+	}
 	s.highWater = s.now
 	return s.now, nil
 }
@@ -736,9 +740,6 @@ func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence i
 		now, err := s.readClockLocked()
 		if err != nil {
 			return ratify.V2CheckpointAcknowledgement{}, err
-		}
-		if now < 0 || now > ratify.V2MaxTimestampSeconds {
-			return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: checkpoint time %d is outside the timestamp domain", ErrNotAcknowledged, now)
 		}
 		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: now}
 	}

@@ -437,7 +437,7 @@ export async function releaseV2Decision(
     if (v2ErrorClassOf(err) === "clock_regressed") return withhold("clock_regressed");
     return result("pending", "clock_unavailable");
   }
-  if (!validV2Timestamp(ack.timestamp) || record.finalizedAt > ack.timestamp || ack.timestamp > now) {
+  if (!validV2Timestamp(record.finalizedAt) || !validV2Timestamp(ack.timestamp) || record.finalizedAt > ack.timestamp || ack.timestamp > now) {
     return withhold("clock_regressed");
   }
   // 8. Deadlines.

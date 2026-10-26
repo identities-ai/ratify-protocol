@@ -545,7 +545,8 @@ def _release_steps(ctx: context_v2.Context, committed: CommittedV2Outcome, signe
         if error_class_of(exc) == V2ErrorClass.CLOCK_REGRESSED:
             return withhold("clock_regressed")
         return _result(V2_RELEASE_PENDING, "clock_unavailable")
-    if not valid_v2_timestamp(ack.timestamp) or record.finalized_at > ack.timestamp or ack.timestamp > now:
+    if (not valid_v2_timestamp(record.finalized_at) or not valid_v2_timestamp(ack.timestamp)
+            or record.finalized_at > ack.timestamp or ack.timestamp > now):
         return withhold("clock_regressed")
     # 8. Deadlines.
     if ack.timestamp >= challenge_expires_at or now >= challenge_expires_at:

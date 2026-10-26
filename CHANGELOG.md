@@ -385,6 +385,19 @@ match before the beta.
   empty; recovery used to seal the initial progress for it. The C claim record is now exactly the §7.13 sealed claim
   object (`stream_id`, and `null` for a policy-less
   `context_policy_digest`).
+- **Release withholds a finalization time outside the timestamp domain**
+  (Go, TypeScript, Python, Rust, and C through Rust). Step 7 required
+  `T_final <= ack.timestamp <= T_release` but never checked that `T_final`
+  was a timestamp, so a claim store answering a negative finalization time
+  for a committed allow had it released. Release now returns
+  `withheld / clock_regressed` (SPEC-v2 §6.9 step 7 states the domain
+  requirement for `T_final` and `ack.timestamp`).
+- **Reference authoritative clocks stay in the timestamp domain** (Go,
+  TypeScript, Python, Rust, and the plain C test store). A reading past
+  253402300799 is refused as `claim_store_unavailable` instead of returned.
+  The plain C test store's evaluator capability is now random, and the edge
+  sentinel checkpoint answers a retry only when its predecessor hash matches
+  as well.
 - **Reference checkpoints keep every acknowledgement in the timestamp domain**
   (Go, TypeScript, Python, Rust, and the edge sentinel). A reference
   checkpoint whose clock was past 253402300799 still acknowledged an entry

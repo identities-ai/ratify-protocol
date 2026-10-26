@@ -114,6 +114,41 @@ fn withheld_record_conflict_is_rejected() {
     assert_eq!(got, (V2ReleaseStatus::Rejected, "release_state_mismatch".into(), false));
 }
 
+/// Answers `load_v2_terminal_claim` with `finalized_at` in place of the
+/// recorded finalization time.
+struct FinalizedAtStore {
+    inner: Arc<Store>,
+    finalized_at: i64,
+}
+
+impl V2AuthoritativeClock for FinalizedAtStore {
+    fn authoritative_time_v2(&self, ctx: &V2Context) -> Result<i64, V2StoreError> {
+        self.inner.authoritative_time_v2(ctx)
+    }
+}
+
+impl V2ReleaseClaimStore for FinalizedAtStore {
+    fn load_v2_terminal_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError> {
+        let mut record = self.inner.load_v2_terminal_claim(ctx, claim_id)?;
+        record.finalized_at = self.finalized_at;
+        Ok(record)
+    }
+    fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError> {
+        self.inner.record_v2_release(ctx, record)
+    }
+}
+
+// T_final is a timestamp (SPEC-v2 §2.5, §6.9 step 7). A negative finalization
+// time still satisfies T_final <= ack.timestamp, so without the domain check a
+// store answering one would release the committed allow.
+#[test]
+fn finalization_time_outside_domain_is_withheld() {
+    let (store, committed, wire, public, log_id) = fixture();
+    let skewed = FinalizedAtStore { inner: store.clone(), finalized_at: -1 };
+    let got = release(&committed, Some(&wire), &public, &log_id, &skewed, store.as_ref());
+    assert_eq!(got, (V2ReleaseStatus::Withheld, "clock_regressed".into(), false));
+}
+
 // A recorded withheld result is returned right after the committed-state
 // step, before any receipt or acknowledgement is consulted.
 #[test]
@@ -210,6 +245,8 @@ fn reference_checkpoint_refuses_timestamp_outside_domain() {
     let receipt = decode_verification_receipt_v2(&wire).expect("receipt");
     let entry = verification_receipt_v2_digest(&receipt).expect("digest");
     store.set_time(V2_MAX_TIMESTAMP_SECONDS + 1);
+    let reading = store.authoritative_time_v2(&ctx).expect_err("reading outside the timestamp domain");
+    assert!(matches!(reading, V2StoreError::Classified(ref e) if e.class == V2ErrorClass::ClaimStoreUnavailable));
     assert!(
         store.acknowledge_v2_receipt(&ctx, &log_id, receipt.sequence, &receipt.previous_receipt_hash, &entry).is_err(),
         "acknowledged at a time outside the timestamp domain"

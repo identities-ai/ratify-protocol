@@ -272,6 +272,10 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
         if self._now < self._high_water:
             raise V2Error(V2ErrorClass.CLOCK_REGRESSED,
                           f"v2reference: authoritative clock {self._now} is below its high-water mark {self._high_water}")
+        # SPEC-v2 §2.5, §7.2: every authoritative reading is in the timestamp domain.
+        if not 0 <= self._now <= V2_MAX_TIMESTAMP_SECONDS:
+            raise V2Error(V2ErrorClass.CLAIM_STORE_UNAVAILABLE,
+                          f"v2reference: authoritative clock {self._now} is outside the timestamp domain")
         self._high_water = self._now
         return self._now
 
@@ -569,8 +573,6 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             entry = self._outbox[sequence - 1]
             if entry.ack is None:
                 now = self._read_clock_locked()
-                if not 0 <= now <= V2_MAX_TIMESTAMP_SECONDS:
-                    raise NotAcknowledgedError(f"v2reference: checkpoint time {now} is outside the timestamp domain")
                 entry.ack = V2CheckpointAcknowledgement(log_id=log_id, sequence=sequence, entry_hash=bytes(entry_hash),
                                                         timestamp=now)
             return entry.ack

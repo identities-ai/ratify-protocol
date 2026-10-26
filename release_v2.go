@@ -414,7 +414,7 @@ func ReleaseV2Decision(ctx context.Context, committed *CommittedV2Outcome, signe
 	if err != nil {
 		return releaseResultV2(V2ReleasePending, "clock_unavailable")
 	}
-	if !validV2Timestamp(ack.Timestamp) || record.FinalizedAt > ack.Timestamp || ack.Timestamp > now {
+	if !validV2Timestamp(record.FinalizedAt) || !validV2Timestamp(ack.Timestamp) || record.FinalizedAt > ack.Timestamp || ack.Timestamp > now {
 		return withhold("clock_regressed")
 	}
 	// 8. Deadlines.

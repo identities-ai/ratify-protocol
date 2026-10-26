@@ -60,7 +60,6 @@ typedef struct {
     RatifyV2KeyPair *verifier;
     char verifier_id[RATIFY_V2_KEY_ID_BUF_LEN];
     char log_id[64];
-    unsigned token_counter;
 } c_store;
 
 static uint8_t *dup_slice(RatifyV2Slice s, size_t *len) {
@@ -83,6 +82,8 @@ static claim_rec *find(c_store *s, const char *id) {
 /* One authoritative reading; below the high-water mark is a regression. */
 static int32_t read_clock(c_store *s, int64_t *now) {
     if (s->now < s->high_water) return RatifyV2ClockRegressed;
+    /* SPEC-v2 §2.5, §7.2: every reading is in the timestamp domain. */
+    if (s->now < 0 || s->now > 253402300799LL) return RatifyV2ClaimStoreUnavailable;
     s->high_water = s->now;
     *now = s->now;
     return 0;
@@ -111,13 +112,18 @@ static int32_t st_claim(void *user, const RatifyV2ClaimView *view, RatifyV2Claim
         return RatifyV2ChallengeNotFresh;
     if (view->has_stream_id || view->has_stream_seq) return RatifyV2Malformed; /* streams not used here */
     if (s->nclaims == MAX_CLAIMS) return RatifyV2StoreUnavailable;
+    /* SPEC-v2 §7.5: the evaluator capability is unpredictable. */
+    uint8_t token[32];
+    FILE *urandom = fopen("/dev/urandom", "rb");
+    size_t got = urandom ? fread(token, 1, sizeof token, urandom) : 0;
+    if (urandom) fclose(urandom);
+    if (got != sizeof token) return RatifyV2ClaimStoreUnavailable;
     r = &s->claims[s->nclaims++];
     memset(r, 0, sizeof *r);
     snprintf(r->claim_id, sizeof r->claim_id, "%s", view->claim_id);
     r->record = dup_slice(view->record, &r->record_len);
     r->token_len = 32;
-    for (size_t i = 0; i < r->token_len; i++) r->token[i] = (uint8_t)(s->token_counter * 31u + i * 7u + 1u);
-    s->token_counter++;
+    memcpy(r->token, token, sizeof token);
     r->claimed_at = now;
     r->lease_expires_at = now + s->lease;
     r->expires_at = view->expires_at;
@@ -342,7 +348,6 @@ static int32_t st_acknowledge(void *user, const char *log_id, int64_t sequence, 
         int64_t now;
         int32_t rc = read_clock(s, &now);
         if (rc) return rc;
-        if (now < 0 || now > 253402300799LL) return RatifyV2StoreUnavailable; /* §2.5 domain */
         e->acked = 1;
         e->ack_ts = now;
     }
@@ -425,6 +430,19 @@ static char *released_string(const RatifyV2Released *d, int32_t field) {
     return out;
 }
 
+/* A terminal record answered with a finalization time outside the timestamp
+ * domain, and a store that cannot record, so nothing is kept. */
+static int32_t skewed_load_terminal(void *user, const char *id, RatifyV2TerminalClaim *out) {
+    int32_t rc = st_load_terminal(user, id, out);
+    out->finalized_at = -1;
+    return rc;
+}
+static int32_t refuse_record(void *user, const RatifyV2ReleaseRecord *rec) {
+    (void)user;
+    (void)rec;
+    return RatifyV2StoreUnavailable;
+}
+
 static int release(c_store *s, const RatifyV2Committed *c, const RatifyV2PublicKey *vk, const char *want_decision,
                    RatifyV2ReleaseStoreCallbacks *rs, RatifyV2CheckpointCallbacks *cp) {
     char *claim_id = NULL;
@@ -437,7 +455,18 @@ static int release(c_store *s, const RatifyV2Committed *c, const RatifyV2PublicK
     int32_t status = 0;
     char *reason = NULL;
     RatifyV2Released *d = NULL;
-    int32_t rc = ratify_v2_release_decision(c, receipt, vk, s->log_id, rs, cp, &status, &reason, &d);
+    /* SPEC-v2 §2.5, §6.9 step 7: T_final is a timestamp. A negative one still
+     * satisfies T_final <= ack.timestamp, and must be withheld, not released. */
+    RatifyV2ReleaseStoreCallbacks skewed = {s, st_now, skewed_load_terminal, refuse_record};
+    int32_t rc = ratify_v2_release_decision(c, receipt, vk, s->log_id, &skewed, cp, &status, &reason, &d);
+    v2c_check(rc == 0 && status == RatifyV2ReleaseWithheld && d == NULL && reason && strcmp(reason, "clock_regressed") == 0,
+              "release finalized_at outside domain", reason ? reason : ratify_v2_last_error_message());
+    checks++;
+    ratify_v2_string_free(reason);
+    ratify_v2_released_free(d);
+    reason = NULL;
+    d = NULL;
+    rc = ratify_v2_release_decision(c, receipt, vk, s->log_id, rs, cp, &status, &reason, &d);
     v2c_check(rc == 0 && status == RatifyV2ReleaseReleased && d != NULL, "release", reason ? reason : ratify_v2_last_error_message());
     checks++;
     if (d) {

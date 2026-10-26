@@ -326,6 +326,10 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
     if (this.nowSeconds < this.highWater) {
       throw storeError("clock_regressed", `v2reference: authoritative clock ${this.nowSeconds} is below its high-water mark ${this.highWater}`);
     }
+    // SPEC-v2 §2.5, §7.2: every authoritative reading is in the timestamp domain.
+    if (this.nowSeconds < 0 || this.nowSeconds > V2_MAX_TIMESTAMP_SECONDS) {
+      throw storeError("claim_store_unavailable", `v2reference: authoritative clock ${this.nowSeconds} is outside the timestamp domain`);
+    }
     this.highWater = this.nowSeconds;
     return this.nowSeconds;
   }
@@ -626,13 +630,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         if (prior.ack === null) throw ErrNotAcknowledgedTestOnly;
       }
       if (!bytesEqual(previous, previousEntryHash)) throw ErrNotAcknowledgedTestOnly;
-      if (entry.ack === null) {
-        const now = this.readClock();
-        if (now < 0 || now > V2_MAX_TIMESTAMP_SECONDS) {
-          throw new Error(`v2reference: checkpoint time ${now} is outside the timestamp domain`, { cause: ErrNotAcknowledgedTestOnly });
-        }
-        entry.ack = { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: now };
-      }
+      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.readClock() };
       return { ...entry.ack, entryHash: Uint8Array.from(entry.ack.entryHash) };
     });
   }

@@ -282,9 +282,16 @@ static char *handle(ckpt *c, char *line)
             b64_decode(prev_b64, prev, 48) != 48 || b64_decode(entry_b64, entry, 48) != 48 || !is_hex(state, 96))
             return xformat("ERR bad_request");
         if (strcmp(log_id, c->primary_log) != 0) return xformat("ERR unknown_log");
+        uint8_t zero[48] = {0};
         if (seq >= 1 && seq <= c->nacks) {
             ack_rec *r = &c->acks[seq - 1];
-            if (memcmp(r->entry_hash, entry, 48) == 0) return xformat("OK %s", r->witness_b64);
+            /* SPEC-v2 §7.8: only an identical retry, predecessor included,
+             * returns the original acknowledgement. */
+            if (memcmp(r->entry_hash, entry, 48) == 0) {
+                if (memcmp(prev, seq > 1 ? c->acks[seq - 2].entry_hash : zero, 48) != 0)
+                    return xformat("ERR previous_entry_mismatch");
+                return xformat("OK %s", r->witness_b64);
+            }
             c->frozen = 1; /* a different entry at an acknowledged sequence is a fork */
             if (save_state(c) != 0) load_state(c);
             return xformat("ERR log_fork");
@@ -293,7 +300,6 @@ static char *handle(ckpt *c, char *line)
          * acknowledgements are answered. */
         if (c->frozen) return xformat("ERR frozen");
         if (seq != c->nacks + 1) return xformat("ERR log_gap");
-        uint8_t zero[48] = {0};
         if (memcmp(prev, c->nacks ? c->acks[c->nacks - 1].entry_hash : zero, 48) != 0)
             return xformat("ERR previous_entry_mismatch");
         if (strcmp(state, c->anchored) != 0) return xformat("ERR state_digest_mismatch");

@@ -147,3 +147,28 @@ func TestReferenceStoreRecordsWithheldFirstWins(t *testing.T) {
 		t.Fatalf("stored record: %+v %v", loaded.Release, err)
 	}
 }
+
+// v2FinalizedAtStore answers LoadV2TerminalClaim with finalizedAt in place of
+// the recorded finalization time.
+type v2FinalizedAtStore struct {
+	*v2reference.Store
+	finalizedAt int64
+}
+
+func (s *v2FinalizedAtStore) LoadV2TerminalClaim(ctx context.Context, claimID string) (ratify.V2TerminalClaimRecord, error) {
+	record, err := s.Store.LoadV2TerminalClaim(ctx, claimID)
+	record.FinalizedAt = s.finalizedAt
+	return record, err
+}
+
+// T_final is a timestamp (SPEC-v2 §2.5, §6.9 step 7). A negative finalization
+// time still satisfies T_final <= ack.timestamp, so without the domain check a
+// store answering one would release the committed allow.
+func TestReleaseV2DecisionWithholdsFinalizationTimeOutsideDomain(t *testing.T) {
+	store, committed, wire, config := v2ReleaseFixture(t)
+	config.ClaimStore = &v2FinalizedAtStore{Store: store, finalizedAt: -1}
+	result := ratify.ReleaseV2Decision(context.Background(), committed, wire, config)
+	if result.Status != ratify.V2ReleaseWithheld || result.Reason != "clock_regressed" || result.Decision != nil {
+		t.Fatalf("release with finalized_at -1: %+v", result)
+	}
+}

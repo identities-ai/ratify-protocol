@@ -148,7 +148,13 @@ func TestCheckpointRefusesTimestampOutsideDomain(t *testing.T) {
 		t.Fatalf("acknowledgement at the domain end: %+v %v", ack, err)
 	}
 	store.SetTime(ratify.V2MaxTimestampSeconds + 1)
-	if _, err := store.AcknowledgeV2Receipt(ctx, second.LogID, 2, firstEntry, secondEntry); !errors.Is(err, v2reference.ErrNotAcknowledged) {
-		t.Fatalf("acknowledged at a time outside the timestamp domain: %v", err)
+	if _, err := store.AuthoritativeTimeV2(ctx); ratify.V2ErrorClassOf(err) != ratify.V2ErrClaimStoreUnavailable {
+		t.Fatalf("authoritative reading outside the timestamp domain: %v", err)
+	}
+	if _, err := store.AcknowledgeV2Receipt(ctx, second.LogID, 2, firstEntry, secondEntry); err == nil {
+		t.Fatal("acknowledged at a time outside the timestamp domain")
+	}
+	if _, err := store.GetV2Acknowledgement(ctx, second.LogID, 2); !errors.Is(err, ratify.ErrV2AcknowledgementNotFound) {
+		t.Fatalf("an acknowledgement outside the timestamp domain was kept: %v", err)
 	}
 }

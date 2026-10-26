@@ -466,7 +466,11 @@ pub fn release_v2_decision(
         Err(e) if e.class == V2ErrorClass::ClockRegressed && e.is_classified() => return withhold("clock_regressed"),
         Err(_) => return release_result_v2(Pending, "clock_unavailable"),
     };
-    if !valid_v2_timestamp(ack.timestamp) || record.finalized_at > ack.timestamp || ack.timestamp > now {
+    if !valid_v2_timestamp(record.finalized_at)
+        || !valid_v2_timestamp(ack.timestamp)
+        || record.finalized_at > ack.timestamp
+        || ack.timestamp > now
+    {
         return withhold("clock_regressed");
     }
     // 8. Deadlines.

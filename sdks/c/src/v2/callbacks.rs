@@ -1730,7 +1730,15 @@ pub(crate) fn audience_provider(
                         _ => continue,
                     }
                     let mut domains = Vec::new();
-                    if m.trust_domain_ids_len > 0 && !m.trust_domain_ids.is_null() {
+                    // A NULL list with a non-zero length is a malformed
+                    // answer, a provider failure (SPEC-v2 §6.11), not an
+                    // empty list.
+                    if m.trust_domain_ids_len > 0 && m.trust_domain_ids.is_null() {
+                        return Err(V2ProviderError::new(
+                            "audience callback returned NULL trust_domain_ids with a non-zero length",
+                        ));
+                    }
+                    if m.trust_domain_ids_len > 0 {
                         // SAFETY: as above.
                         let ids =
                             unsafe { crate::raw_slice(m.trust_domain_ids, m.trust_domain_ids_len) }

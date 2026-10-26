@@ -557,6 +557,15 @@ unsafe extern "C" fn forged_audience_domains(
 /// Run the `audience_domain_match` vector (an allow with the scripted
 /// membership) with `lookup` as the audience provider.
 fn audience_outcome(lookup: RatifyV2AudienceFn) -> Value {
+    audience_outcome_with(|_| RatifyV2AudienceCallbacks {
+        user: ptr::null_mut(),
+        lookup,
+    })
+}
+
+/// [`audience_outcome`] with the audience callbacks `wrap` derives from the
+/// vector's scripted provider.
+fn audience_outcome_with(wrap: impl FnOnce(RatifyV2AudienceCallbacks) -> RatifyV2AudienceCallbacks) -> Value {
     let f = load("verifier-ordering.json");
     let v = arr(&f["vectors"])
         .into_iter()
@@ -577,10 +586,8 @@ fn audience_outcome(lookup: RatifyV2AudienceFn) -> Value {
         token: vec![7; 32],
     };
     setup.claim_cb = Some(st.callbacks());
-    setup.set_audience(RatifyV2AudienceCallbacks {
-        user: ptr::null_mut(),
-        lookup,
-    });
+    let scripted = setup.audience.callbacks();
+    setup.set_audience(wrap(scripted));
     let outcome = verify(&setup, &bundle).expect("verification runs");
     assert_eq!(outcome.stage, "committed", "{}", outcome.message);
     body_json(&outcome.committed.expect("committed").body())
@@ -610,6 +617,40 @@ fn v2c_audience_answers_with_forged_counts_are_unverifiable() {
             "{name}: {r}"
         );
     }
+}
+
+/// The scripted provider's answer with every membership's domain list set
+/// to NULL while its length stays non-zero.
+unsafe extern "C" fn null_domains_of_scripted(
+    user: *mut c_void,
+    deferred: *const RatifyV2DeferredConstraint,
+    len: usize,
+    receiver: *const c_char,
+    out: *mut RatifyV2AudienceResult,
+) -> i32 {
+    let inner = &*(user as *const RatifyV2AudienceCallbacks);
+    let rc = (inner.lookup.expect("scripted lookup"))(inner.user, deferred, len, receiver, out);
+    let answer = &*out;
+    for n in 0..answer.count {
+        let m = answer.memberships.add(n) as *mut RatifyV2AudienceMembership;
+        assert!((*m).trust_domain_ids_len > 0, "the vector's membership names its domains");
+        (*m).trust_domain_ids = ptr::null();
+    }
+    rc
+}
+
+/// SPEC-v2 §6.11: a malformed provider answer is a provider failure. A
+/// valid membership whose domain list is NULL with a non-zero length is
+/// `constraint_unverifiable`; read as an empty list it would deny as
+/// `constraint_denied` instead.
+#[test]
+fn v2c_audience_null_domain_list_is_unverifiable() {
+    let r = audience_outcome_with(|scripted| RatifyV2AudienceCallbacks {
+        user: Box::leak(Box::new(scripted)) as *mut RatifyV2AudienceCallbacks as *mut c_void,
+        lookup: Some(null_domains_of_scripted),
+    });
+    assert_eq!(s(&r["decision"]), "deny", "{r}");
+    assert_eq!(s(&r["decision_reason"]), "constraint_unverifiable", "{r}");
 }
 
 /// An evaluator registry count over the §5.2 maximum (32 profiles) is

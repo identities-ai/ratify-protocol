@@ -382,7 +382,10 @@ match before the beta.
   store's freshness rule cannot read a later expiry than the claim carries
   and create an expired claim. A slice a C callback returns with a NULL
   pointer and a non-zero length is now refused instead of being read as
-  empty; recovery used to seal the initial progress for it. The C claim record is now exactly the §7.13 sealed claim
+  empty; recovery used to seal the initial progress for it. The same holds
+  for an audience membership's `trust_domain_ids`: a NULL list with a
+  non-zero length is a provider failure (`constraint_unverifiable`), not an
+  empty list (`constraint_denied`). The C claim record is now exactly the §7.13 sealed claim
   object (`stream_id`, and `null` for a policy-less
   `context_policy_digest`).
 - **Release withholds a finalization time outside the timestamp domain**

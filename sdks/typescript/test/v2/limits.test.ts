@@ -152,7 +152,7 @@ test("limits: a valid transaction receipt near MAX_TRANSACTION_RECEIPT_BYTES_V2 
         verifier_id: p.verifier_id, workspace_id: p.workspace_id, agent_id: p.agent_id, session_id: p.session_id,
         invocation_id: p.invocation_id, request_hash: transactionPartyRequestHashV2(transactionHash, p.required_scope),
       });
-      const proof_bundle = await signProofBundleV2({ ...p.proof_bundle, session_context }, signers.get(p.party_id)!, { deterministic: true });
+      const proof_bundle = await signProofBundleV2({ ...p.proof_bundle, session_context } as Parameters<typeof signProofBundleV2>[0], signers.get(p.party_id)!, { deterministic: true });
       return { ...p, proof_bundle, proof_bundle_hash: bundleHashV2(proof_bundle) };
     }));
     r.party_signatures = await Promise.all(r.parties.map((p) => signTransactionReceiptPartyV2(r, p.party_id, signers.get(p.party_id)!, { deterministic: true })));

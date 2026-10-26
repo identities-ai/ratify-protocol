@@ -100,7 +100,7 @@ test("release: a finalization time outside the domain is withheld", async () => 
   const view = new Proxy(store, {
     get(target, prop, receiver) {
       if (prop === "loadV2TerminalClaim") {
-        return async (claimID: string, signal?: AbortSignal) => ({ ...(await target.loadV2TerminalClaim(claimID, signal)), finalizedAt: -1 });
+        return async (claimID: string) => ({ ...(await target.loadV2TerminalClaim(claimID)), finalizedAt: -1 });
       }
       const value = Reflect.get(target, prop, receiver);
       return typeof value === "function" ? value.bind(target) : value;
@@ -306,7 +306,7 @@ test("reference checkpoint: refuses a timestamp outside the domain", async () =>
   await assert.rejects(store.authoritativeTimeV2(), (e) => v2ErrorClassOf(e) === "claim_store_unavailable",
     "authoritative reading outside the timestamp domain");
   await assert.rejects(store.acknowledgeV2Receipt(second.receipt.log_id, 2, first.entry, second.entry),
-    undefined, "acknowledged at a time outside the timestamp domain");
+    (e) => v2ErrorClassOf(e) === "claim_store_unavailable", "acknowledged at a time outside the timestamp domain");
   await assert.rejects(store.getV2Acknowledgement(second.receipt.log_id, 2), (e) => errorIs(e, ErrV2AcknowledgementNotFound),
     "an acknowledgement outside the timestamp domain was kept");
 });

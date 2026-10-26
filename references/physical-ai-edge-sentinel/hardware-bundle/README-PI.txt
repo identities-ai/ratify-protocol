@@ -12,7 +12,7 @@ Unix socket path, for example ~/edge-v2) and run everything from inside it.
 1. Deterministic scenario matrix (NO hardware output)
      ./run-matrix.sh
    Uses the test builds, a fixture clock, the mock actuator, and port 8197.
-   It never passes --serial or --gpio. Expect "ALL ROWS PASSED (30/30)",
+   It never passes --serial or --gpio. Expect "ALL ROWS PASSED (32/32)",
    "mock actuator invocations: 5", and no "UNEXPECTED" line. Record the wall
    time it prints. Output: matrix-<timestamp>.out and matrix-<timestamp>/.
 

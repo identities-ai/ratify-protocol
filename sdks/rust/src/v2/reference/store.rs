@@ -894,6 +894,11 @@ impl V2ReceiptCheckpoint for Store {
         }
         if s.outbox[index].ack.is_none() {
             let now = s.read_clock_locked()?;
+            if !(0..=crate::v2::limits::V2_MAX_TIMESTAMP_SECONDS).contains(&now) {
+                return Err(V2StoreError::Unavailable(format!(
+                    "{ERR_NOT_ACKNOWLEDGED}: checkpoint time {now} is outside the timestamp domain"
+                )));
+            }
             let entry = s.outbox.get_mut(index).ok_or_else(refused)?;
             entry.ack = Some(V2CheckpointAcknowledgement {
                 log_id: log_id.to_string(),

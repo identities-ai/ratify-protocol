@@ -174,6 +174,11 @@ static int read_clock(ckpt *c, int64_t *now, const char **why)
         *why = "clock_regressed";
         return -1;
     }
+    /* SPEC-v2 §2.5, §7.8: every checkpoint timestamp is in the timestamp domain. */
+    if (*now < 0 || *now > 253402300799LL) {
+        *why = "clock_out_of_range";
+        return -1;
+    }
     c->clock_hw = *now;
     return 0;
 }
@@ -249,7 +254,7 @@ static char *handle(ckpt *c, char *line)
 
     if (strcmp(cmd, "HEAD") == 0) {
         wire = sign_event(c, "head", nonce, c->primary_log, 0, NULL, "", now);
-    } else if (c->frozen) {
+    } else if (c->frozen && strcmp(cmd, "ACK") != 0) {
         return xformat("ERR frozen");
     } else if (strcmp(cmd, "PROVISION") == 0) {
         char log_id[40], digest[120];
@@ -284,6 +289,9 @@ static char *handle(ckpt *c, char *line)
             if (save_state(c) != 0) load_state(c);
             return xformat("ERR log_fork");
         }
+        /* SPEC-v2 §7.8: after a fork only identical retries of earlier
+         * acknowledgements are answered. */
+        if (c->frozen) return xformat("ERR frozen");
         if (seq != c->nacks + 1) return xformat("ERR log_gap");
         uint8_t zero[48] = {0};
         if (memcmp(prev, c->nacks ? c->acks[c->nacks - 1].entry_hash : zero, 48) != 0)

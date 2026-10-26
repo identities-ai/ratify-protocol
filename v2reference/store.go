@@ -737,6 +737,9 @@ func (s *Store) AcknowledgeV2Receipt(_ context.Context, logID string, sequence i
 		if err != nil {
 			return ratify.V2CheckpointAcknowledgement{}, err
 		}
+		if now < 0 || now > ratify.V2MaxTimestampSeconds {
+			return ratify.V2CheckpointAcknowledgement{}, fmt.Errorf("%w: checkpoint time %d is outside the timestamp domain", ErrNotAcknowledged, now)
+		}
 		s.outbox[sequence-1].ack = &ratify.V2CheckpointAcknowledgement{LogID: logID, Sequence: sequence, EntryHash: bytes.Clone(entryHash), Timestamp: now}
 	}
 	ack := *s.outbox[sequence-1].ack

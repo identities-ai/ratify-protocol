@@ -187,3 +187,32 @@ fn release_record_outcome_validity() {
     assert!(!valid_v2_release_record_outcome(Rejected, ""));
     assert!(!valid_v2_release_record_outcome(Pending, ""));
 }
+
+/// An acknowledgement timestamp is within the timestamp domain (SPEC-v2
+/// §2.5, §7.8): a checkpoint whose clock is past it acknowledges nothing.
+#[test]
+fn reference_checkpoint_refuses_timestamp_outside_domain() {
+    let f = load_v2_vector("lifecycle-scenarios.json");
+    let keys = v2_status_common::load_v2_keys();
+    let request = &f["requests"]["A"];
+    let log_id = s(&f["log_id"]);
+    let store = Arc::new(
+        Store::new(i(&request["now"]), i(&f["lease_seconds"]), &log_id, &keys.private[&s(&f["verifier_key"])])
+            .expect("store"),
+    );
+    let bundle = unb64(&f["bundles_b64"][s(&request["bundle"])]);
+    let (req, mut cb, _) = build_verify_request(request, bundle, &Arc::new(Counts::default()));
+    cb.claim_store = Some(store.clone());
+    let committed = verify_proof_bundle_v2(&V2Context::background(), &req, &cb).committed.expect("commit");
+    store.set_acknowledgement_withheld(true);
+    let ctx = V2Context::background();
+    let wire = store.publish_v2_receipt(&ctx, &committed.claim_id(), &committed.receipt_body()).expect("publish");
+    let receipt = decode_verification_receipt_v2(&wire).expect("receipt");
+    let entry = verification_receipt_v2_digest(&receipt).expect("digest");
+    store.set_time(V2_MAX_TIMESTAMP_SECONDS + 1);
+    assert!(
+        store.acknowledge_v2_receipt(&ctx, &log_id, receipt.sequence, &receipt.previous_receipt_hash, &entry).is_err(),
+        "acknowledged at a time outside the timestamp domain"
+    );
+    assert!(store.get_v2_acknowledgement(&ctx, &log_id, receipt.sequence).is_err());
+}

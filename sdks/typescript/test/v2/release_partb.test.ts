@@ -11,6 +11,7 @@ import { evaluateProofBundleV2LocalAuthorization } from "../../src/authorization
 import { claimProofBundleV2, finalizeClaimProofBundleV2, validateV2FinalizationPayload, type V2ChallengeClaim } from "../../src/claim_store_v2.js";
 import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
 import { initialV2EvaluationProgress, v2EvaluationInterruptedResult } from "../../src/evaluation_progress_v2.js";
+import { V2_MAX_TIMESTAMP_SECONDS } from "../../src/clock_bounds_v2.js";
 import { canonicalJSONV2 } from "../../src/json_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import {
@@ -271,6 +272,21 @@ test("reference checkpoint: a refusal without a fork does not freeze the log", a
   await assert.rejects(store.acknowledgeV2Receipt(second.receipt.log_id, 2, first.entry, second.entry));
   await store.acknowledgeV2Receipt(first.receipt.log_id, 1, first.receipt.previous_receipt_hash, first.entry);
   await store.acknowledgeV2Receipt(second.receipt.log_id, 2, first.entry, second.entry);
+});
+
+// An acknowledgement timestamp is within the timestamp domain (SPEC-v2 §2.5,
+// §7.8): a checkpoint whose clock is past it acknowledges nothing.
+test("reference checkpoint: refuses a timestamp outside the domain", async () => {
+  const { store, claims } = await committedReceiptStore(2);
+  store.setAcknowledgementWithheld(true);
+  const first = await publishedTuple(store, claims[0]!.claimID);
+  const second = await publishedTuple(store, claims[1]!.claimID);
+  store.setTime(V2_MAX_TIMESTAMP_SECONDS);
+  const ack = await store.acknowledgeV2Receipt(first.receipt.log_id, 1, first.receipt.previous_receipt_hash, first.entry);
+  assert.equal(ack.timestamp, V2_MAX_TIMESTAMP_SECONDS, "acknowledgement at the domain end");
+  store.setTime(V2_MAX_TIMESTAMP_SECONDS + 1);
+  await assert.rejects(store.acknowledgeV2Receipt(second.receipt.log_id, 2, first.entry, second.entry),
+    (e) => errorIs(e, ErrNotAcknowledgedTestOnly), "acknowledged at a time outside the timestamp domain");
 });
 
 // The reference store admits max_rate inside its terminal compare-and-set

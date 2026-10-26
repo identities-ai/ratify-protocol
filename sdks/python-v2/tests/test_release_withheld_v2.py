@@ -12,6 +12,7 @@ from v2_harness import BACKGROUND, Counts, build_verify_request, keyed_claim, ke
 
 from ratify_protocol_v2 import _native
 from ratify_protocol_v2.claim_store_v2 import V2ChallengeClaim
+from ratify_protocol_v2.clock_bounds_v2 import V2_MAX_TIMESTAMP_SECONDS
 from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
 from ratify_protocol_v2.evaluation_progress_v2 import v2_evaluation_interrupted_result
 from ratify_protocol_v2.rate_reservation_v2 import V2RateReservation
@@ -217,6 +218,21 @@ def test_checkpoint_refusal_without_fork_does_not_freeze():
         store.acknowledge_v2_receipt(BACKGROUND, second.log_id, 2, first_entry, second_entry)
     store.acknowledge_v2_receipt(BACKGROUND, first.log_id, 1, first.previous_receipt_hash, first_entry)
     store.acknowledge_v2_receipt(BACKGROUND, second.log_id, 2, first_entry, second_entry)
+
+
+def test_checkpoint_refuses_timestamp_outside_domain():
+    # An acknowledgement timestamp is within the timestamp domain (SPEC-v2
+    # §2.5, §7.8): a checkpoint whose clock is past it acknowledges nothing.
+    store, ids = committed_receipt_store(2)
+    store.set_acknowledgement_withheld(True)
+    first, first_entry = published_tuple(store, ids[0])
+    second, second_entry = published_tuple(store, ids[1])
+    store.set_time(V2_MAX_TIMESTAMP_SECONDS)
+    ack = store.acknowledge_v2_receipt(BACKGROUND, first.log_id, 1, first.previous_receipt_hash, first_entry)
+    assert ack.timestamp == V2_MAX_TIMESTAMP_SECONDS
+    store.set_time(V2_MAX_TIMESTAMP_SECONDS + 1)
+    with pytest.raises(NotAcknowledgedError):
+        store.acknowledge_v2_receipt(BACKGROUND, second.log_id, 2, first_entry, second_entry)
 
 
 def test_rate_at_finalization_store_never_reserves_provisionally():

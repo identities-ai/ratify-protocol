@@ -385,6 +385,14 @@ match before the beta.
   empty; recovery used to seal the initial progress for it. The C claim record is now exactly the §7.13 sealed claim
   object (`stream_id`, and `null` for a policy-less
   `context_policy_digest`).
+- **Reference checkpoints keep every acknowledgement in the timestamp domain**
+  (Go, TypeScript, Python, Rust, and the edge sentinel). A reference
+  checkpoint whose clock was past 253402300799 still acknowledged an entry
+  with that time; it now refuses, as SPEC-v2 §7.8 requires. Release already
+  refused such an acknowledgement. The edge sentinel checkpoint also refused
+  an identical retry of an earlier acknowledgement once a fork had frozen
+  the log; it now returns the original acknowledgement, and the plain C
+  test store's checkpoint acknowledges in order only and freezes on a fork.
 - **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,
   C, TypeScript and Python). A negative count from the invocation counter is now
   `constraint_unverifiable` instead of passing. Through the C ABI, a

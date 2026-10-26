@@ -56,6 +56,7 @@ typedef struct {
     int nclaims;
     outbox_entry outbox[MAX_CLAIMS];
     int noutbox;
+    int checkpoint_frozen; /* a fork was refused (SPEC-v2 §7.8) */
     RatifyV2KeyPair *verifier;
     char verifier_id[RATIFY_V2_KEY_ID_BUF_LEN];
     char log_id[64];
@@ -322,11 +323,29 @@ static int32_t st_acknowledge(void *user, const char *log_id, int64_t sequence, 
     c_store *s = user;
     if (strcmp(log_id, s->log_id) != 0 || sequence < 1 || sequence > s->noutbox) return RatifyV2StoreUnavailable;
     outbox_entry *e = &s->outbox[sequence - 1];
-    /* The entry extends the log head: its predecessor's digest, or zero. */
+    /* SPEC-v2 §7.8: an identical retry returns the original acknowledgement;
+     * a different entry at an acknowledged sequence is a fork, which freezes
+     * the log; after it nothing new is acknowledged. */
+    if (e->acked && !same(e->digest, sizeof e->digest, entry)) {
+        s->checkpoint_frozen = 1;
+        return RatifyV2StoreUnavailable;
+    }
+    if (s->checkpoint_frozen && !e->acked) return RatifyV2StoreUnavailable;
+    if (!e->wire || !same(e->digest, sizeof e->digest, entry)) return RatifyV2StoreUnavailable;
+    /* Only the next sequence: the predecessor is acknowledged and this entry
+     * extends it (its digest, or zero for the first). */
     static const uint8_t zero[48] = {0};
+    if (sequence > 1 && !s->outbox[sequence - 2].acked) return RatifyV2StoreUnavailable;
     const uint8_t *head = sequence > 1 ? s->outbox[sequence - 2].digest : zero;
-    if (!e->wire || !same(e->digest, sizeof e->digest, entry) || !same(head, 48, previous)) return RatifyV2StoreUnavailable;
-    if (!e->acked) { e->acked = 1; e->ack_ts = s->now; }
+    if (!same(head, 48, previous)) return RatifyV2StoreUnavailable;
+    if (!e->acked) {
+        int64_t now;
+        int32_t rc = read_clock(s, &now);
+        if (rc) return rc;
+        if (now < 0 || now > 253402300799LL) return RatifyV2StoreUnavailable; /* §2.5 domain */
+        e->acked = 1;
+        e->ack_ts = now;
+    }
     return st_get_ack(user, log_id, sequence, out);
 }
 
@@ -365,8 +384,11 @@ static int publish(c_store *s, const char *claim_id, uint8_t **wire, size_t *wir
         v2c_check(rc == 0 && dl == 48, "publish digest", ratify_v2_last_error_message());
         memcpy(e->digest, digest, 48);
         free(digest);
-        e->acked = 1;
-        e->ack_ts = s->now;
+        /* The checkpoint acknowledges it under its own rules (§7.8). */
+        RatifyV2Slice previous = {r->outbox_index ? s->outbox[r->outbox_index - 1].digest : zero, 48};
+        RatifyV2Slice entry = {e->digest, 48};
+        RatifyV2Acknowledgement ack;
+        st_acknowledge(s, s->log_id, r->outbox_index + 1, previous, entry, &ack);
     }
     *wire = e->wire;
     *wire_len = e->wire_len;
@@ -460,6 +482,51 @@ static int release(c_store *s, const RatifyV2Committed *c, const RatifyV2PublicK
     return checks + 2;
 }
 
+/* SPEC-v2 §7.8 at the checkpoint callback, on two published entries:
+ * acknowledgement in order only, a fork freezes the log, an identical retry
+ * keeps its original timestamp, and every timestamp is in the §2.5 domain. */
+static int checkpoint_rules(void) {
+    static c_store t;
+    memset(&t, 0, sizeof t);
+    snprintf(t.log_id, sizeof t.log_id, "%s", "00112233445566778899aabbccddeeff");
+    t.now = t.high_water = 1800000000;
+    uint8_t wire = 1, zero[48] = {0}, other[48];
+    memset(other, 9, sizeof other);
+    for (int i = 0; i < 2; i++) {
+        t.outbox[i].wire = &wire;
+        memset(t.outbox[i].digest, i + 1, 48);
+    }
+    t.noutbox = 2;
+    RatifyV2Slice z = {zero, 48}, d1 = {t.outbox[0].digest, 48}, d2 = {t.outbox[1].digest, 48}, o = {other, 48};
+    RatifyV2Acknowledgement a;
+    int32_t early = st_acknowledge(&t, t.log_id, 2, d1, d2, &a);
+    int early_acked = t.outbox[1].acked;
+    int32_t first = st_acknowledge(&t, t.log_id, 1, z, d1, &a);
+    int64_t first_ts = a.timestamp;
+    t.now += 5;
+    int32_t fork = st_acknowledge(&t, t.log_id, 1, z, o, &a);
+    int32_t retry = st_acknowledge(&t, t.log_id, 1, z, d1, &a);
+    int64_t retry_ts = a.timestamp;
+    int32_t next = st_acknowledge(&t, t.log_id, 2, d1, d2, &a);
+    v2c_check(early != 0 && !early_acked && first == 0 && fork != 0 && t.checkpoint_frozen && retry == 0 &&
+                  retry_ts == first_ts && next != 0 && !t.outbox[1].acked,
+              "checkpoint order and fork", "an acknowledgement broke SPEC-v2 §7.8 ordering or the fork freeze");
+
+    t.checkpoint_frozen = 0;
+    t.outbox[0].acked = 0;
+    t.now = t.high_water = 253402300800LL;
+    int32_t beyond = st_acknowledge(&t, t.log_id, 1, z, d1, &a);
+    v2c_check(beyond != 0 && !t.outbox[0].acked, "checkpoint timestamp domain",
+              "an acknowledgement was timestamped beyond the timestamp domain");
+
+    t.now = 1800000000;
+    t.high_water = 1800000100;
+    int32_t regressed = st_acknowledge(&t, t.log_id, 1, z, d1, &a);
+    v2c_check(regressed == RatifyV2ClockRegressed && !t.outbox[0].acked, "checkpoint clock regression",
+              "an acknowledgement used a regressed clock");
+    return 3;
+}
+
 static void reset_store(c_store *s) {
     for (int i = 0; i < s->nclaims; i++) {
         claim_rec *r = &s->claims[i];
@@ -467,6 +534,7 @@ static void reset_store(c_store *s) {
     }
     for (int i = 0; i < s->noutbox; i++) free(s->outbox[i].wire);
     s->nclaims = s->noutbox = 0;
+    s->checkpoint_frozen = 0;
 }
 
 static int release_status(c_store *s, const RatifyV2Committed *c, RatifyV2Slice receipt, const RatifyV2PublicKey *vk,
@@ -834,6 +902,7 @@ int v2c_run_lifecycle(void) {
      *    later call is withheld with the recorded reason right after the
      *    committed-state step, even without a receipt. */
     checks += withheld_is_permanent(&s, allow_dir, &claim, &vk, &rs, &cp);
+    checks += checkpoint_rules();
 
     /* 5. A regressed clock fails closed at the store. */
     s.now -= 10;

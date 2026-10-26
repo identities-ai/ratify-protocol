@@ -626,7 +626,13 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
         if (prior.ack === null) throw ErrNotAcknowledgedTestOnly;
       }
       if (!bytesEqual(previous, previousEntryHash)) throw ErrNotAcknowledgedTestOnly;
-      entry.ack ??= { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: this.readClock() };
+      if (entry.ack === null) {
+        const now = this.readClock();
+        if (now < 0 || now > V2_MAX_TIMESTAMP_SECONDS) {
+          throw new Error(`v2reference: checkpoint time ${now} is outside the timestamp domain`, { cause: ErrNotAcknowledgedTestOnly });
+        }
+        entry.ack = { logID, sequence, entryHash: Uint8Array.from(entryHash), timestamp: now };
+      }
       return { ...entry.ack, entryHash: Uint8Array.from(entry.ack.entryHash) };
     });
   }

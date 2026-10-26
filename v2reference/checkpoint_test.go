@@ -134,3 +134,21 @@ func TestCheckpointRefusalWithoutForkDoesNotFreeze(t *testing.T) {
 		t.Fatalf("log froze without a fork: %v", err)
 	}
 }
+
+// An acknowledgement timestamp is within the timestamp domain (SPEC-v2 §2.5,
+// §7.8): a checkpoint whose clock is past it acknowledges nothing.
+func TestCheckpointRefusesTimestampOutsideDomain(t *testing.T) {
+	store, ids := committedReceiptStore(t, 2)
+	ctx := context.Background()
+	store.SetAcknowledgementWithheld(true)
+	first, firstEntry := publishedTuple(t, store, ids[0])
+	second, secondEntry := publishedTuple(t, store, ids[1])
+	store.SetTime(ratify.V2MaxTimestampSeconds)
+	if ack, err := store.AcknowledgeV2Receipt(ctx, first.LogID, 1, first.PreviousReceiptHash, firstEntry); err != nil || ack.Timestamp != ratify.V2MaxTimestampSeconds {
+		t.Fatalf("acknowledgement at the domain end: %+v %v", ack, err)
+	}
+	store.SetTime(ratify.V2MaxTimestampSeconds + 1)
+	if _, err := store.AcknowledgeV2Receipt(ctx, second.LogID, 2, firstEntry, secondEntry); !errors.Is(err, v2reference.ErrNotAcknowledged) {
+		t.Fatalf("acknowledged at a time outside the timestamp domain: %v", err)
+	}
+}

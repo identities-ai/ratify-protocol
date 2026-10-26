@@ -288,6 +288,51 @@ serial_writes=$(cat edge.*.log | grep -c "actuator: FIRE .*(serial" || true)
 [ "$serial_writes" = 0 ] && record "no serial or GPIO output (mock actuator)" PASS "0 hardware writes" ||
     record "no serial or GPIO output (mock actuator)" FAIL "$serial_writes"
 
+# SPEC-v2 §7.8 at the checkpoint itself, through its socket: timestamps stay in
+# the §2.5 domain; a fork freezes the log; afterwards only identical retries of
+# earlier acknowledgements are answered.
+cat > ckpt_probe.py <<'PY'
+import base64, json, os, re, socket, sys
+def call(line):
+    s = socket.socket(socket.AF_UNIX)
+    s.connect(sys.argv[1])
+    s.sendall((line + "\n").encode())
+    buf = b""
+    while b"\n" not in buf:
+        d = s.recv(65536)
+        if not d:
+            break
+        buf += d
+    return buf.split(b"\n")[0].decode()
+def data(answer):
+    wire = base64.b64decode(answer[3:])
+    return json.loads(base64.b64decode(re.search(rb'"entry_data":"([^"]+)"', wire).group(1)))
+n = lambda: os.urandom(16).hex()
+if sys.argv[2] == "head":
+    a = call("HEAD " + n())
+    print(a[4:] if a.startswith("ERR ") else "OK")
+    sys.exit(0)
+h = data(call("HEAD " + n()))
+log, seq, state = h["log_id"], h["ack_head"], h["anchored_digest"]
+entry = data(call(f"GET {n()} {log} {seq}"))["entry_hash_b64"]
+zero, other = base64.b64encode(bytes(48)).decode(), base64.b64encode(b"\x07" * 48).decode()
+ack = lambda e, q=seq, p=zero: call(f"ACK {n()} {log} {q} {p} {e} {state}").split(" ")
+r = [ack(entry), ack(other), ack(entry), ack(other, seq + 1, entry)]
+print(seq, r[0][0], " ".join(r[1]), r[2][0], r[2][-1] == r[0][-1], " ".join(r[3]))
+PY
+echo 253402300800 > clock
+out_of_range=$(python3 ckpt_probe.py "$SOCK" head)
+at 500
+[ "$out_of_range" = "clock_out_of_range" ] && record "checkpoint: timestamp beyond the domain refused" PASS "$out_of_range" ||
+    record "checkpoint: timestamp beyond the domain refused" FAIL "$out_of_range"
+probe=$(python3 ckpt_probe.py "$SOCK" fork)
+set -- $probe
+if [ "$1" -ge 1 ] && [ "$2" = OK ] && [ "$4" = log_fork ] && [ "$5" = OK ] && [ "$6" = True ] && [ "$8" = frozen ]; then
+    record "checkpoint: fork freezes; identical retry still answered" PASS "head=$1 fork=$4 retry=$5 next=$8"
+else
+    record "checkpoint: fork freezes; identical retry still answered" FAIL "$probe"
+fi
+
 echo
 if [ "$fails" = 0 ]; then
     echo "ALL ROWS PASSED ($rows/$rows)"

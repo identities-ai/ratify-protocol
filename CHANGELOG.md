@@ -377,7 +377,12 @@ match before the beta.
   being sealed; that includes a claim record whose `claim_id` no longer
   derives from its challenge digest. The plain C test store's recovery now
   validates the result as its finalization does, so an invalid recovery
-  payload commits nothing. The C claim record is now exactly the §7.13 sealed claim
+  payload commits nothing. `ratify_v2_claim_id_matches_key` also requires
+  every scalar field of the claim view to equal the sealed record's, so a
+  store's freshness rule cannot read a later expiry than the claim carries
+  and create an expired claim. A slice a C callback returns with a NULL
+  pointer and a non-zero length is now refused instead of being read as
+  empty; recovery used to seal the initial progress for it. The C claim record is now exactly the §7.13 sealed claim
   object (`stream_id`, and `null` for a policy-less
   `context_policy_digest`).
 - **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,

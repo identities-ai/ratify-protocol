@@ -14,7 +14,7 @@ use std::ffi::CString;
 use ratify_c::{
     ratify_v2_challenge_time_current, ratify_v2_claim_id_from_digest, ratify_v2_claim_id_matches_key,
     ratify_v2_string_free, ratify_v2_valid_evaluation_progress,
-    ratify_v2_valid_release_record_outcome, RatifyV2ClaimView, RatifyV2ReleaseStatus, RatifyV2Slice,
+    ratify_v2_valid_release_record_outcome, RatifyV2ClaimView, RatifyV2RateReservation, RatifyV2ReleaseStatus, RatifyV2Slice,
 };
 use serde_json::json;
 
@@ -154,52 +154,91 @@ fn claim_id_matches_key_accepts_only_the_derived_id() {
         ratify_v2_string_free(out);
         id
     };
+    // A sealed record with a stream and one rate counter, so every view field
+    // has a value to disagree with.
     let record = |id: &str, digest: String| {
         serde_json::to_vec(&json!({
             "claim_id": id, "namespace": ns, "replay_epoch": epoch, "challenge_digest": digest,
             "proof_digest": format!("sha384:{}", "1".repeat(96)), "bundle_hash": format!("sha384:{}", "2".repeat(96)),
             "issuer_ids": ["a".repeat(64)], "required_scope": "meeting:attend",
             "context_policy_digest": format!("sha384:{}", "3".repeat(96)), "verifier_id": "b".repeat(64),
-            "agent_id": "c".repeat(64), "requires_rate": false, "rate_batch": [], "issued_at": 1_800_000_000i64,
-            "expires_at": 1_800_000_300i64, "max_age_seconds": 300, "clock_skew_seconds": 5,
-            "stream_id": null, "stream_seq": null, "constraint_evaluators": [],
+            "agent_id": "c".repeat(64), "requires_rate": true,
+            "rate_batch": [{"issuer_id": "a".repeat(64), "cert_id": "cert-1", "window_s": 60, "limit": 10}],
+            "issued_at": 1_800_000_000i64, "expires_at": 1_800_000_300i64, "max_age_seconds": 300,
+            "clock_skew_seconds": 5, "stream_id": "BwcHBwcHBwcHBwcHBwcHBw==", "stream_seq": 4,
+            "constraint_evaluators": [],
         }))
         .unwrap()
     };
     let hex_digest = format!("sha384:{}", "5a".repeat(48));
-    let keyed = |view_id: &str, view_ns: &str, view_epoch: i64, rec: &[u8]| {
+    let (agent, issuer, cert, stream) =
+        (CString::new("c".repeat(64)).unwrap(), CString::new("a".repeat(64)).unwrap(), CString::new("cert-1").unwrap(), [7u8; 16]);
+    let rate = [RatifyV2RateReservation { issuer_id: issuer.as_ptr(), cert_id: cert.as_ptr(), window_s: 60, limit: 10 }];
+    // The view of `rec` that a verifier builds, changed by `tweak`.
+    let keyed_with = |view_id: &str, view_ns: &str, view_epoch: i64, rec: &[u8], tweak: &dyn Fn(&mut RatifyV2ClaimView)| {
         let id = CString::new(view_id).unwrap();
         let ns = CString::new(view_ns).unwrap();
-        let view = RatifyV2ClaimView {
+        let mut view = RatifyV2ClaimView {
             claim_id: id.as_ptr(),
             verifier_namespace: ns.as_ptr(),
             replay_epoch: view_epoch,
-            agent_id: std::ptr::null(),
-            issued_at: 0,
-            expires_at: 0,
-            max_age_seconds: 0,
-            clock_skew_seconds: 0,
-            has_stream_id: 0,
-            stream_id: RatifyV2Slice { ptr: std::ptr::null(), len: 0 },
-            has_stream_seq: 0,
-            stream_seq: 0,
-            rate_batch: std::ptr::null(),
-            rate_batch_len: 0,
+            agent_id: agent.as_ptr(),
+            issued_at: 1_800_000_000,
+            expires_at: 1_800_000_300,
+            max_age_seconds: 300,
+            clock_skew_seconds: 5,
+            has_stream_id: 1,
+            stream_id: RatifyV2Slice { ptr: stream.as_ptr(), len: stream.len() },
+            has_stream_seq: 1,
+            stream_seq: 4,
+            rate_batch: rate.as_ptr(),
+            rate_batch_len: rate.len(),
             record: RatifyV2Slice { ptr: rec.as_ptr(), len: rec.len() },
         };
+        tweak(&mut view);
         unsafe { ratify_v2_claim_id_matches_key(&view) == 1 }
     };
+    let keyed = |view_id: &str, view_ns: &str, view_epoch: i64, rec: &[u8]| keyed_with(view_id, view_ns, view_epoch, rec, &|_| {});
     let forged = "f".repeat(64);
-    assert!(keyed(&derived, ns, epoch, &record(&derived, hex_digest.clone())));
+    let good = record(&derived, hex_digest.clone());
+    assert!(keyed(&derived, ns, epoch, &good));
     // A forged ID beside the real record, or written into the record.
-    assert!(!keyed(&forged, ns, epoch, &record(&derived, hex_digest.clone())));
+    assert!(!keyed(&forged, ns, epoch, &good));
     assert!(!keyed(&forged, ns, epoch, &record(&forged, hex_digest.clone())));
     // The view's namespace or epoch differs from the sealed record's.
-    assert!(!keyed(&derived, "other-ns", epoch, &record(&derived, hex_digest.clone())));
-    assert!(!keyed(&derived, ns, epoch + 1, &record(&derived, hex_digest.clone())));
+    assert!(!keyed(&derived, "other-ns", epoch, &good));
+    assert!(!keyed(&derived, ns, epoch + 1, &good));
     // The challenge digest is not a lowercase sha384: digest.
     assert!(!keyed(&derived, ns, epoch, &record(&derived, hex_digest.to_uppercase())));
     assert!(!keyed(&derived, ns, epoch, &record(&derived, "5a".repeat(48))));
     assert!(!keyed(&derived, ns, epoch, b"{}"));
+    // A view field a store's rules read differs from the sealed record's: a
+    // store would otherwise check freshness, stream or rate against values
+    // the claim does not carry (an expired claim with a later view expiry).
+    let other_agent = CString::new("d".repeat(64)).unwrap();
+    let other_cert = CString::new("cert-2").unwrap();
+    let other_rate = [RatifyV2RateReservation { issuer_id: issuer.as_ptr(), cert_id: other_cert.as_ptr(), window_s: 60, limit: 10 }];
+    let other_limit = [RatifyV2RateReservation { issuer_id: issuer.as_ptr(), cert_id: cert.as_ptr(), window_s: 60, limit: 11 }];
+    type Tweak<'a> = (&'a str, &'a dyn Fn(&mut RatifyV2ClaimView));
+    let tweaks: [Tweak; 15] = [
+        ("expires_at", &|v| v.expires_at += 1),
+        ("issued_at", &|v| v.issued_at -= 1),
+        ("max_age_seconds", &|v| v.max_age_seconds += 1),
+        ("clock_skew_seconds", &|v| v.clock_skew_seconds += 1),
+        ("agent_id", &|v| v.agent_id = other_agent.as_ptr()),
+        ("agent_id NULL", &|v| v.agent_id = std::ptr::null()),
+        ("has_stream_id", &|v| v.has_stream_id = 0),
+        ("stream_id", &|v| v.stream_id.len -= 1),
+        ("has_stream_seq", &|v| v.has_stream_seq = 0),
+        ("stream_seq", &|v| v.stream_seq += 1),
+        ("rate_batch_len", &|v| v.rate_batch_len = 0),
+        ("rate_batch NULL", &|v| v.rate_batch = std::ptr::null()),
+        ("rate cert_id", &|v| v.rate_batch = other_rate.as_ptr()),
+        ("rate limit", &|v| v.rate_batch = other_limit.as_ptr()),
+        ("record NULL", &|v| v.record.ptr = std::ptr::null()),
+    ];
+    for (name, tweak) in tweaks {
+        assert!(!keyed_with(&derived, ns, epoch, &good, tweak), "{name}");
+    }
     assert_eq!(unsafe { ratify_v2_claim_id_matches_key(std::ptr::null()) }, 0);
 }

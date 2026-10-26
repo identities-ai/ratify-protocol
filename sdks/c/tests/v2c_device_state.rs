@@ -142,21 +142,37 @@ fn v2c_device_state_sealed_claims_are_c_claim_records() {
             let bytes = json_bytes(claim);
             let id = std::ffi::CString::new(s(&claim["claim_id"])).unwrap();
             let ns = std::ffi::CString::new(s(&claim["namespace"])).unwrap();
+            let agent = std::ffi::CString::new(s(&claim["agent_id"])).unwrap();
+            let stream = (!claim["stream_id"].is_null()).then(|| b64(&claim["stream_id"]));
+            let rate_strings: Vec<_> = arr(&claim["rate_batch"])
+                .iter()
+                .map(|r| (cs(&s(&r["issuer_id"])), cs(&s(&r["cert_id"])), i(&r["window_s"]), i(&r["limit"])))
+                .collect();
+            let rate: Vec<RatifyV2RateReservation> = rate_strings
+                .iter()
+                .map(|(issuer, cert, window_s, limit)| RatifyV2RateReservation {
+                    issuer_id: issuer.as_ptr(),
+                    cert_id: cert.as_ptr(),
+                    window_s: *window_s,
+                    limit: *limit,
+                })
+                .collect();
+            // The view a verifier builds from the sealed claim.
             let view = RatifyV2ClaimView {
                 claim_id: id.as_ptr(),
                 verifier_namespace: ns.as_ptr(),
                 replay_epoch: i(&claim["replay_epoch"]),
-                agent_id: std::ptr::null(),
-                issued_at: 0,
-                expires_at: 0,
-                max_age_seconds: 0,
-                clock_skew_seconds: 0,
-                has_stream_id: 0,
-                stream_id: RatifyV2Slice { ptr: std::ptr::null(), len: 0 },
-                has_stream_seq: 0,
-                stream_seq: 0,
-                rate_batch: std::ptr::null(),
-                rate_batch_len: 0,
+                agent_id: agent.as_ptr(),
+                issued_at: i(&claim["issued_at"]),
+                expires_at: i(&claim["expires_at"]),
+                max_age_seconds: i(&claim["max_age_seconds"]),
+                clock_skew_seconds: i(&claim["clock_skew_seconds"]),
+                has_stream_id: i32::from(stream.is_some()),
+                stream_id: stream.as_deref().map_or_else(null_slice, slice),
+                has_stream_seq: i32::from(!claim["stream_seq"].is_null()),
+                stream_seq: if claim["stream_seq"].is_null() { 0 } else { i(&claim["stream_seq"]) },
+                rate_batch: if rate.is_empty() { std::ptr::null() } else { rate.as_ptr() },
+                rate_batch_len: rate.len(),
                 record: RatifyV2Slice { ptr: bytes.as_ptr(), len: bytes.len() },
             };
             assert_eq!(

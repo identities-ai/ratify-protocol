@@ -708,11 +708,15 @@ pub(crate) unsafe fn owned(p: *const c_char) -> String {
     }
 }
 
-/// A copy of the bytes a callback answered with (NULL or empty is empty), or
-/// the diagnostic for a length over `isize::MAX`, which no answer can have.
+/// A copy of the bytes a callback answered with (a zero length is empty), or
+/// the diagnostic for NULL with a non-zero length or a length over
+/// `isize::MAX`, which no answer can have.
 pub(crate) unsafe fn try_slice_vec(s: RatifyV2Slice, name: &str) -> Result<Vec<u8>, String> {
-    if s.ptr.is_null() || s.len == 0 {
+    if s.len == 0 {
         return Ok(Vec::new());
+    }
+    if s.ptr.is_null() {
+        return Err(format!("{name} is NULL with a non-zero length"));
     }
     crate::raw_slice(s.ptr, s.len)
         .map(<[u8]>::to_vec)

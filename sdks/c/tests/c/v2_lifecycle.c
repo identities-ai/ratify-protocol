@@ -27,6 +27,8 @@ typedef struct {
     size_t token_len;
     int terminal;
     int64_t claimed_at, lease_expires_at, expires_at, allow_horizon, finalized_at;
+    char agent_id[160];
+    int64_t issued_at, max_age_seconds, clock_skew_seconds; /* the view's, for tests */
     uint8_t *progress, *terminal_result, *body;
     size_t progress_len, terminal_len, body_len;
     char outbox_digest[128];
@@ -118,6 +120,10 @@ static int32_t st_claim(void *user, const RatifyV2ClaimView *view, RatifyV2Claim
     r->claimed_at = now;
     r->lease_expires_at = now + s->lease;
     r->expires_at = view->expires_at;
+    snprintf(r->agent_id, sizeof r->agent_id, "%s", view->agent_id);
+    r->issued_at = view->issued_at;
+    r->max_age_seconds = view->max_age_seconds;
+    r->clock_skew_seconds = view->clock_skew_seconds;
     r->outbox_index = -1;
     out->disposition = RatifyV2DispositionCreated;
     out->claimed_at = now;
@@ -519,6 +525,11 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
         v.claim_id = claim_id;
         v.verifier_namespace = ns;
         v.replay_epoch = epoch;
+        v.agent_id = r->agent_id;
+        v.issued_at = r->issued_at;
+        v.expires_at = r->expires_at;
+        v.max_age_seconds = r->max_age_seconds;
+        v.clock_skew_seconds = r->clock_skew_seconds;
         v.record.ptr = r->record;
         v.record.len = len;
         int keyed = ratify_v2_claim_id_matches_key(&v);
@@ -532,6 +543,26 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
                       s->nclaims == before,
                   "forged claim id", "a claim ID not derived from its replay key was accepted");
         free(rewritten);
+        checks += 1;
+
+        /* SPEC-v2 §7.3: the store's freshness rule reads the view, so a view
+         * whose expiry is later than the sealed claim's cannot create the
+         * expired claim. The sealed claim is first made unknown to the store. */
+        v.claim_id = claim_id;
+        v.record.ptr = r->record;
+        char kept_id[sizeof r->claim_id];
+        memcpy(kept_id, r->claim_id, sizeof kept_id);
+        r->claim_id[0] = '\0';
+        int64_t kept_now = s->now, kept_high = s->high_water;
+        s->now = s->high_water = r->expires_at + 1;
+        int32_t current = st_claim(s, &v, &res);
+        v.expires_at = s->now + 100;
+        int32_t later = st_claim(s, &v, &res);
+        s->now = kept_now;
+        s->high_water = kept_high;
+        memcpy(r->claim_id, kept_id, sizeof kept_id);
+        v2c_check(current == RatifyV2ChallengeNotFresh && later == RatifyV2ConfigurationInvalid && s->nclaims == before,
+                  "claim view expiry", "a view expiry later than the sealed claim's created an expired claim");
         checks += 1;
     }
     {
@@ -666,6 +697,22 @@ int v2c_run_lifecycle(void) {
             r->progress_len = kept_len;
         }
         v2c_check(r && brc == RatifyV2Malformed && bad == NULL && !r->terminal, "recover malformed progress", v2c_class(brc));
+        ratify_v2_committed_free(bad);
+        checks++;
+
+        /* A NULL slice with a non-zero length is no record at all, not an
+         * empty one: recovery must not seal the initial progress for it. */
+        if (r) {
+            r->progress = NULL;
+            r->progress_len = 5;
+        }
+        bad = NULL;
+        brc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &bad);
+        if (r) {
+            r->progress = kept;
+            r->progress_len = kept_len;
+        }
+        v2c_check(r && brc != 0 && bad == NULL && !r->terminal, "recover NULL progress slice", v2c_class(brc));
         ratify_v2_committed_free(bad);
         checks++;
     }

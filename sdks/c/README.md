@@ -568,7 +568,11 @@ that is not canonical or not valid, or a claim record whose `claim_id` does
 not derive from its replay key, as `RatifyV2Malformed`, committing nothing.
 A store's own `recover` validates the result as `finalize` does, through
 `ratify_v2_validate_finalization_payload`. Before creating a claim, a store keyed by claim ID checks
-`ratify_v2_claim_id_matches_key`. Expected challenges cross the issuance
+`ratify_v2_claim_id_matches_key`, which also requires every scalar field of
+the view (agent, issuance, expiry, maximum age, clock skew, stream and rate
+batch) to equal the sealed record's, so the store's freshness, stream and
+rate rules read the claim it persists. A callback answer whose slice is NULL
+with a non-zero length is refused, never read as empty. Expected challenges cross the issuance
 store in the ABI's request encoding (`value_b64`,
 `expected_session_context_b64`, absent optional members omitted), the same
 form `request_json` takes.

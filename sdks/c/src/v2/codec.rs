@@ -1045,7 +1045,10 @@ pub unsafe extern "C" fn ratify_v2_valid_evaluation_progress(progress: *const u8
 /// `record` is a claim record whose `claim_id`, `namespace` and
 /// `replay_epoch` equal the view's, and `claim_id` is the stable claim ID
 /// derived from that namespace, epoch and the record's `sha384:` challenge
-/// digest. Returns 1 or 0; NULL and any undecodable view are 0 (SPEC-v2
+/// digest. Every other scalar field of the view (agent, issuance, expiry,
+/// maximum age, clock skew, stream and rate batch) must also equal the
+/// record's, so a store's freshness, stream and rate rules read the sealed
+/// claim. Returns 1 or 0; NULL and any undecodable view are 0 (SPEC-v2
 /// §1.3). A claim store keyed by claim ID refuses a claim for which this is
 /// 0 as `RatifyV2ConfigurationInvalid` and creates nothing, so a supplied ID
 /// cannot open a second claim for one challenge.
@@ -1071,10 +1074,55 @@ pub unsafe extern "C" fn ratify_v2_claim_id_matches_key(claim: *const super::cal
                 c.claim_id == id
                     && c.namespace == namespace
                     && c.replay_epoch == view.replay_epoch
-                    && super::marshal::claim_keyed_by_digest(&c),
+                    && super::marshal::claim_keyed_by_digest(&c)
+                    && view_fields_match(view, &c),
             )
         },
     )
+}
+
+/// Whether every scalar field of `view` a store's rules read is the sealed
+/// claim's own, so the freshness, stream and rate checks a store applies are
+/// the ones the record carries.
+unsafe fn view_fields_match(view: &super::callbacks::RatifyV2ClaimView, c: &V2ChallengeClaim) -> bool {
+    let (Ok(agent), Ok(stream_id)) = (cstr(view.agent_id, "agent_id"), view.stream_id.bytes("stream_id")) else {
+        return false;
+    };
+    let stream_ok = match &c.stream_id {
+        Some(s) => view.has_stream_id == 1 && stream_id == s.as_slice(),
+        None => view.has_stream_id == 0 && stream_id.is_empty(),
+    };
+    let seq_ok = match c.stream_seq {
+        Some(n) => view.has_stream_seq == 1 && view.stream_seq == n,
+        None => view.has_stream_seq == 0 && view.stream_seq == 0,
+    };
+    if !(agent == c.agent_id
+        && view.issued_at == c.issued_at
+        && view.expires_at == c.expires_at
+        && view.max_age_seconds == c.max_age_seconds
+        && view.clock_skew_seconds == c.clock_skew_seconds
+        && stream_ok
+        && seq_ok
+        && view.rate_batch_len == c.rate_batch.len())
+    {
+        return false;
+    }
+    if c.rate_batch.is_empty() {
+        return true;
+    }
+    if view.rate_batch.is_null() {
+        return false;
+    }
+    let Some(batch) = crate::raw_slice(view.rate_batch, view.rate_batch_len) else {
+        return false;
+    };
+    batch.iter().zip(&c.rate_batch).all(|(v, r)| {
+        matches!(
+            (cstr(v.issuer_id, "issuer_id"), cstr(v.cert_id, "cert_id")),
+            (Ok(i), Ok(cert)) if i == r.issuer_id && cert == r.cert_id
+        ) && v.window_s == r.window_s
+            && v.limit == r.limit
+    })
 }
 
 /// Verify one cross-SDK fixture file (`testvectors/v2/cross-sdk/<sdk>.json`)

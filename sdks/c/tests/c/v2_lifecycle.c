@@ -162,6 +162,20 @@ static void commit(c_store *s, claim_rec *r, RatifyV2Slice terminal, RatifyV2Sli
     e->claim = (int)(r - s->claims);
 }
 
+/* Whether the canonical encoding of a receipt outbox body holds `member`
+ * (for example "\"decision\":\"allow\""). Every quote inside a canonical
+ * string value is escaped, so an exact match is that member. */
+static int body_has(RatifyV2Slice body, const char *member) {
+    RatifyV2Buffer canonical = {0};
+    if (ratify_v2_object_decode(RatifyV2KindVerificationReceiptBody, body.ptr, body.len, &canonical) != 0) return 0;
+    size_t n = strlen(member);
+    int found = 0;
+    for (size_t i = 0; !found && canonical.len >= n && i <= canonical.len - n; i++)
+        found = memcmp(canonical.ptr + i, member, n) == 0;
+    ratify_v2_buffer_free(canonical);
+    return found;
+}
+
 static int32_t st_finalize(void *user, const char *id, RatifyV2Slice token, RatifyV2Slice terminal, RatifyV2Slice body,
                            int64_t allow_valid_until, int32_t *committed) {
     c_store *s = user;
@@ -180,6 +194,11 @@ static int32_t st_finalize(void *user, const char *id, RatifyV2Slice token, Rati
      * body commits nothing. */
     rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
     if (rc) return rc;
+    /* SPEC-v2 §6.8: an allow carries a horizon in the timestamp domain and
+     * every other decision carries none. */
+    int allow = body_has(body, "\"decision\":\"allow\"");
+    if (allow ? (allow_valid_until <= 0 || allow_valid_until > 253402300799LL) : allow_valid_until != 0)
+        return RatifyV2ConfigurationInvalid;
     if (allow_valid_until > 0 && (now >= allow_valid_until || now >= r->expires_at)) return RatifyV2AllowHorizonPassed;
     commit(s, r, terminal, body, allow_valid_until, now);
     *committed = 1;
@@ -215,14 +234,6 @@ static int32_t st_load(void *user, const char *id, RatifyV2InterruptedClaim *out
     return 0;
 }
 
-/* Whether the bytes contain needle. */
-static int slice_has(RatifyV2Slice b, const char *needle) {
-    size_t n = strlen(needle);
-    for (size_t i = 0; b.ptr && n <= b.len && i <= b.len - n; i++)
-        if (memcmp(b.ptr + i, needle, n) == 0) return 1;
-    return 0;
-}
-
 static int32_t st_recover(void *user, const char *id, RatifyV2Slice terminal, RatifyV2Slice body, int32_t *committed) {
     c_store *s = user;
     claim_rec *r = find(s, id);
@@ -242,7 +253,7 @@ static int32_t st_recover(void *user, const char *id, RatifyV2Slice terminal, Ra
      * commits only indeterminate / evaluation_interrupted. */
     rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
     if (rc) return rc;
-    if (!slice_has(body, "\"decision\":\"indeterminate\"") || !slice_has(body, "\"decision_reason\":\"evaluation_interrupted\""))
+    if (!body_has(body, "\"decision\":\"indeterminate\"") || !body_has(body, "\"decision_reason\":\"evaluation_interrupted\""))
         return RatifyV2ConfigurationInvalid;
     commit(s, r, terminal, body, 0, now);
     *committed = 1;
@@ -282,7 +293,7 @@ static int32_t st_record_release(void *user, const RatifyV2ReleaseRecord *rec) {
                    ? 0
                    : RatifyV2StoreReleaseStateMismatch;
     }
-    if (rec->entry_hash.len > sizeof r->release_hash || strlen(rec->reason) >= sizeof r->release_reason)
+    if (rec->entry_hash.len != 48 || strlen(rec->reason) >= sizeof r->release_reason)
         return RatifyV2StoreReleaseStateMismatch;
     memcpy(r->release_hash, rec->entry_hash.ptr, rec->entry_hash.len);
     r->release_hash_len = rec->entry_hash.len;
@@ -308,11 +319,13 @@ static int32_t st_get_ack(void *user, const char *log_id, int64_t sequence, Rati
 
 static int32_t st_acknowledge(void *user, const char *log_id, int64_t sequence, RatifyV2Slice previous,
                               RatifyV2Slice entry, RatifyV2Acknowledgement *out) {
-    (void)previous;
     c_store *s = user;
     if (strcmp(log_id, s->log_id) != 0 || sequence < 1 || sequence > s->noutbox) return RatifyV2StoreUnavailable;
     outbox_entry *e = &s->outbox[sequence - 1];
-    if (!e->wire || !same(e->digest, sizeof e->digest, entry)) return RatifyV2StoreUnavailable;
+    /* The entry extends the log head: its predecessor's digest, or zero. */
+    static const uint8_t zero[48] = {0};
+    const uint8_t *head = sequence > 1 ? s->outbox[sequence - 2].digest : zero;
+    if (!e->wire || !same(e->digest, sizeof e->digest, entry) || !same(head, 48, previous)) return RatifyV2StoreUnavailable;
     if (!e->acked) { e->acked = 1; e->ack_ts = s->now; }
     return st_get_ack(user, log_id, sequence, out);
 }
@@ -508,6 +521,54 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
                   !ratify_v2_valid_release_record_outcome(RatifyV2ReleaseNone, ""),
               "release record outcomes", "");
     checks += 4;
+    if (r && r->terminal && !r->has_release) {
+        /* SPEC-v2 §6.8: a store's finalize commits an allow only with a horizon
+         * in the timestamp domain. The committed allow is made live again for
+         * direct calls, then restored. */
+        int outbox = s->noutbox;
+        r->terminal = 0;
+        int32_t committed = 0;
+        RatifyV2Slice tok = {r->token, r->token_len};
+        RatifyV2Slice term = {r->terminal_result, r->terminal_len}, body = {r->body, r->body_len};
+        int32_t none = st_finalize(s, r->claim_id, tok, term, body, 0, &committed);
+        int32_t beyond = st_finalize(s, r->claim_id, tok, term, body, 253402300800LL, &committed);
+        v2c_check(none == RatifyV2ConfigurationInvalid && beyond == RatifyV2ConfigurationInvalid && committed == 0 &&
+                      !r->terminal && s->noutbox == outbox,
+                  "finalize allow horizon", "an allow without a horizon in the timestamp domain was committed");
+        r->terminal = 1;
+        /* A release record's entry hash is a 48-byte SHA-384 digest. */
+        uint8_t short_hash[32] = {0};
+        RatifyV2ReleaseRecord rec = {r->claim_id, {short_hash, sizeof short_hash}, s->now, RatifyV2ReleaseReleased, ""};
+        v2c_check(st_record_release(s, &rec) == RatifyV2StoreReleaseStateMismatch && !r->has_release,
+                  "release entry hash length", "a release record with a 32-byte entry hash was stored");
+        /* An acknowledgement must extend the log head: a wrong predecessor
+         * digest acknowledges nothing. */
+        if (r->outbox_index >= 0) {
+            int64_t seq = r->outbox_index + 1;
+            outbox_entry *e = &s->outbox[r->outbox_index];
+            /* The entry is not published yet: stand in a wire, then restore. */
+            uint8_t *kept_wire = e->wire;
+            int kept_acked = e->acked;
+            int64_t kept_ts = e->ack_ts;
+            uint8_t placeholder = 0, wrong[48], zero[48] = {0};
+            if (!kept_wire) e->wire = &placeholder;
+            memset(wrong, 0x5a, sizeof wrong);
+            const uint8_t *head = seq > 1 ? s->outbox[seq - 2].digest : zero;
+            RatifyV2Acknowledgement ack;
+            RatifyV2Slice bad = {wrong, sizeof wrong}, good = {head, 48}, entry = {e->digest, sizeof e->digest};
+            int32_t refused = st_acknowledge(s, s->log_id, seq, bad, entry, &ack);
+            int acked_after_refusal = e->acked;
+            e->acked = 0;
+            int32_t accepted = st_acknowledge(s, s->log_id, seq, good, entry, &ack);
+            e->wire = kept_wire;
+            e->acked = kept_acked;
+            e->ack_ts = kept_ts;
+            v2c_check(refused == RatifyV2StoreUnavailable && !acked_after_refusal && accepted == 0,
+                      "acknowledge log head", "an acknowledgement ignored the log head");
+            checks++;
+        }
+        checks += 2;
+    }
     if (r) {
         /* A direct store call cannot open a second claim for the sealed
          * challenge (SPEC-v2 §7.3): neither under a forged ID beside the

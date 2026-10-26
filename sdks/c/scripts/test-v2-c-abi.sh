@@ -237,6 +237,13 @@ a = life["requests"]["A"]
 vector_dir("lifecycle/A", dict(a, name="lifecycle A"), b64d(life["bundles_b64"][a["bundle"]]))
 write("lifecycle/meta.txt", f"verifier_seeds lifecycle/verifier.ed lifecycle/verifier.ml\nlog_id {life['log_id']}\n"
       f"lease {life['lease_seconds']}\nallow lifecycle/A\ncancel lifecycle/A\n")
+# Every lifecycle request (two path components, as vector_dir expects), for
+# the multi-threaded stress program (scripts/test-v2-c-stress.sh).
+reqs = sorted(life["requests"])
+for name in reqs:
+    r = life["requests"][name]
+    vector_dir(f"lifereq/{name}", dict(r, name=f"lifecycle {name}"), b64d(life["bundles_b64"][r["bundle"]]))
+write("lifereq/index.txt", "".join(f"{n} lifereq/{n}\n" for n in reqs))
 
 # ---- cross-SDK fixtures ----------------------------------------------------------
 lines = []

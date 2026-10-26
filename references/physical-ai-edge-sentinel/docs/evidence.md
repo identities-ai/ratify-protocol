@@ -5,12 +5,12 @@ port is kept below as dated history; it is not v2 evidence.
 
 ## Protocol v2: local gate
 
-- Validation date: 2026-10-22
-- Reference source revision: `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`
+- Validation date: 2026-10-26
+- Reference source revision: `112e8a4` (the 32-row matrix; the 30-row matrix of 2026-10-22 ran at `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`)
 - Host: macOS development machine (Apple Silicon), not the ARMv7 target
 - SDK: Ratify C SDK `2.0.0-alpha.1` (`ratify_v2_*` ABI version 2), built from `sdks/c` at the same revision, static library, no test-reference stores
 - Command: `RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh`
-- Result: 30 passed, 0 failed, 0 skipped
+- Result: 32 passed, 0 failed, 0 skipped
 - Actuator: mock only; 5 invocations in total, 0 serial or GPIO writes
 - Sanitizers: the same matrix passed with AddressSanitizer and UndefinedBehaviorSanitizer, with no reports
 - Clock: fixture clock from the test builds; every decision recorded `clock_trusted=false`
@@ -47,6 +47,8 @@ port is kept below as dated history; it is not v2 evidence.
 | 28 | replay after resuming | replay, `terminal_replay` | not fired |
 | 29 | actuator invocations across all runs | 5, as expected | 5 mock |
 | 30 | no hardware output | 0 serial or GPIO writes | none |
+| 31 | checkpoint clock past the timestamp domain | checkpoint refuses, `clock_out_of_range` | not applicable |
+| 32 | checkpoint fork | fork refused (`log_fork`), the log freezes: an identical retry of an earlier acknowledgement still returns it, a new entry is refused (`frozen`) | not applicable |
 
 Preflight classes are recorded in the receiver's decision log. The HTTP answer
 for a preflight rejection is deliberately the same for every class, so that
@@ -54,8 +56,7 @@ issuance and consumption state are not an oracle (SPEC-v2 §7.3).
 
 Not exercised by the matrix: lease-expiry recovery of an interrupted claim,
 promotion of an anchored `state.next` after a crash between anchoring and
-rename, the checkpoint freezing on a forked acknowledgement, and the
-checkpoint refusing when its capacity is used.
+rename, and the checkpoint refusing when its capacity is used.
 
 ## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix
 

@@ -115,7 +115,7 @@ The deterministic gate runs a 30-row scenario matrix against the test builds wit
 | receiver state restored from an earlier copy | receiver stays recovering, refuses everything | not fired |
 | root key reused as the status key | publisher and receiver both refuse | not applicable |
 
-The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evidence.md). The local gate result is **30 passed, 0 failed, 0 skipped**, with 5 actuator invocations in total, all to the mock.
+The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evidence.md). The local gate result is **32 passed, 0 failed, 0 skipped**, with 5 actuator invocations in total, all to the mock.
 
 ## Use it now
 
@@ -194,7 +194,7 @@ Not bound: the receiver's local policy file, its reading of the RTC, and the Ard
 
 ## Evidence, security status, and limitations
 
-v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The same day the ARMv7 test build ran on the Raspberry Pi 2 and passed all 30 rows with the mock actuator (5 mock invocations, 74 s). The v2 production run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, also passed on 2026-10-22: every decision used the RTC as trusted time with no clock override, one authorized 500 ms pulse was observed by the owner, every other request was refused, and the receiver made exactly one actuator call. Replaying the same proof was refused as `terminal_replay`, and a replay after a receiver restart was rejected at preflight as `challenge_not_fresh`. That run used one device on one day; it does not establish behavior through power loss or under the limits below.
+v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-26 the 32-row matrix, which adds two checkpoint rows, passed locally on macOS with and without AddressSanitizer and UndefinedBehaviorSanitizer. On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The same day the ARMv7 test build ran on the Raspberry Pi 2 and passed all 30 rows with the mock actuator (5 mock invocations, 74 s). The v2 production run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, also passed on 2026-10-22: every decision used the RTC as trusted time with no clock override, one authorized 500 ms pulse was observed by the owner, every other request was refused, and the receiver made exactly one actuator call. Replaying the same proof was refused as `terminal_replay`, and a replay after a receiver restart was rejected at preflight as `challenge_not_fresh`. That run used one device on one day; it does not establish behavior through power loss or under the limits below.
 
 Earlier hardware evidence is v1 only and kept as dated history: on 2026-10-11 the alpha.20 C SDK and v1 production receiver ran on the Pi 2 with the DS3231 RTC, allowed one 500 ms LED action, and denied a captured proof's replay without another actuator call.
 

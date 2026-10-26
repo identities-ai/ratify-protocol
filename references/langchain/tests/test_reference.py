@@ -407,6 +407,31 @@ async def test_http_mcp_denial_does_not_increment_counter():
         assert result_object(denied)["tool_invocations"] == 1
 
 
+def test_large_presentation_header_parses_when_split_across_reads():
+    # A signed presentation header is larger than the HTTP parser's default
+    # header buffer. Under load the headers arrive in several reads, and the
+    # receiver answered 400 before its own boundary saw the request.
+    authority = issue_authority()
+    with running_receiver(authority) as (url, token, _):
+        port = int(url.rsplit(":", 1)[1].split("/", 1)[0])
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "split-header", "version": "0"}}}).encode()
+        request = (
+            f"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+            "Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\n"
+            f"X-Ratify-Transport-Token: {token}\r\n"
+            f"X-Ratify-Presentation: {'p' * MAX_PRESENTATION_HEADER_BYTES}\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n"
+        ).encode() + body
+        with socket.create_connection(("127.0.0.1", port), timeout=10) as connection:
+            for start in range(0, len(request), 4096):
+                connection.sendall(request[start:start + 4096])
+                time.sleep(.01)
+            status_line = connection.recv(4096).split(b"\r\n", 1)[0]
+        assert status_line == b"HTTP/1.1 200 OK"
+
+
 @pytest.mark.asyncio
 async def test_signed_revocation_reaches_the_receiver_through_the_local_status_feed():
     authority = issue_authority()

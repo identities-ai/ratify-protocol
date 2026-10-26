@@ -12,7 +12,7 @@ set -euo pipefail
 DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DEMO/../.." && pwd)"
 VENV="${RATIFY_REFERENCE_VENV:-$DEMO/.venv}"
-EXPECTED_TESTS=33
+EXPECTED_TESTS=34
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 PIP=(--disable-pip-version-check -q)

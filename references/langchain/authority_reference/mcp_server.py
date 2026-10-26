@@ -22,6 +22,11 @@ _request_headers: ContextVar[dict[bytes, bytes]] = ContextVar("request_headers",
 _TRANSPORT_HEADER = b"x-ratify-transport-token"
 _PRESENTATION_HEADER = b"x-ratify-presentation"
 MAX_PRESENTATION_HEADER_BYTES = 64 * 1024
+# h11 refuses a request with 400 once more than its incomplete-event limit
+# (16 KiB by default) of headers is buffered. A signed presentation alone is
+# larger, so whether it parsed depended on how the headers were split across
+# reads. Allow every header the boundary admits, plus the other headers.
+MAX_REQUEST_HEADER_BYTES = MAX_PRESENTATION_HEADER_BYTES + 16 * 1024
 
 
 def _unique_header(headers: list[tuple[bytes, bytes]], name: bytes) -> bytes | None:
@@ -123,7 +128,8 @@ def main():
     receiver, agent_public_key, token = load_receiver(args.trust_config)
     server = create_server(receiver, agent_public_key, host, args.port)
     uvicorn.run(HeaderBoundary(server.streamable_http_app(), token), host=host,
-                port=args.port, log_level="error")
+                port=args.port, log_level="error",
+                h11_max_incomplete_event_size=MAX_REQUEST_HEADER_BYTES)
 
 
 if __name__ == "__main__":

@@ -349,6 +349,16 @@ match before the beta.
 
 ### Fixed
 
+- **LangChain reference: the receiver parses a signed presentation header
+  however it arrives.** The presentation travels in one HTTP header of about
+  38 KB, larger than the 16 KiB of incomplete headers the server's HTTP
+  parser buffers by default. When the headers arrived in several reads, as
+  under heavy load, the receiver answered `400` before its own boundary saw
+  the request; this was the intermittent gate failure. The parser now
+  buffers every header the boundary admits (64 KiB for the presentation)
+  plus the other headers, and a test sends a maximum-size header in small
+  pieces. The v1 copy under `references/langchain/v1/` is dated history
+  and is unchanged.
 - **Reference claim stores refuse a claim ID that is not derived from its
   replay key** (Go, TypeScript, Python and Rust, the C reference store
   over Rust, the plain C test store and the edge sentinel store). SPEC-v2 §7.3 makes the claim store unique by namespace, replay

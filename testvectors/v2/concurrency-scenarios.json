@@ -20,7 +20,7 @@
     "claim_only": "preflight and claim request without evaluating, as the lifecycle claim_only step",
     "committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify or recover outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
     "finalize": "the claim store's finalize operation for request's claim, with the owner token its setup claim_only step returned, terminal_b64, body_b64 and allow_valid_until (0 when absent)",
-    "participants": "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store",
+    "participants": "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store. A request's claim is always the claim ID ProtocolClaimID(verifier namespace, replay epoch, challenge) of the request's expected challenge, as for the lifecycle recover step, whichever step or participant created it",
     "recover": "RecoverInterruptedClaim for request's claim",
     "recover_direct": "the claim store's recovery operation for request's claim with terminal_b64 and body_b64",
     "release": "ReleaseV2Decision of request's committed outcome with its last published receipt and the reference checkpoint, as the lifecycle release step",
@@ -357,6 +357,73 @@
           "expect": {
             "stage": "replay",
             "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recovery_races_after_owner_committed",
+      "description": "the evaluator of request A committed an allow; after its lease would have expired, 4 direct recoveries and 2 recoveries through RecoverInterruptedClaim run concurrently (SPEC-v2 §7.5): every one is claim_already_terminal, so recovery never replaces a committed result and nothing reaches the receipt outbox twice",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        }
+      ],
+      "participants": [
+        {
+          "group": "recoverers",
+          "count": 4,
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "helpers",
+          "count": 2,
+          "op": "recover",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "error/claim_already_terminal"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
           }
         }
       ]

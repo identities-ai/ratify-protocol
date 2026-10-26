@@ -174,7 +174,7 @@ func (g *gen) concurrencyFile() any {
 		},
 		Operations: map[string]string{
 			"setup and after":   "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
-			"participants":      "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store",
+			"participants":      "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store. A request's claim is always the claim ID ProtocolClaimID(verifier namespace, replay epoch, challenge) of the request's expected challenge, as for the lifecycle recover step, whichever step or participant created it",
 			"verify":            "VerifyProofBundleV2 for request against the store at the store clock read when the participant starts, as a lifecycle verify step with mode \"\". A verify whose group is the target of a cancel participant runs with a cancellable caller context",
 			"claim_only":        "preflight and claim request without evaluating, as the lifecycle claim_only step",
 			"finalize":          "the claim store's finalize operation for request's claim, with the owner token its setup claim_only step returned, terminal_b64, body_b64 and allow_valid_until (0 when absent)",
@@ -265,6 +265,16 @@ func (g *gen) concurrencyFile() any {
 					"error/claim_already_terminal": recoveredA,
 				}}},
 			after("verify", "A", replayTerminal)},
+	})
+	sc(concurrencyScenarioJSON{
+		Name:         "recovery_races_after_owner_committed",
+		Description:  "the evaluator of request A committed an allow; after its lease would have expired, 4 direct recoveries and 2 recoveries through RecoverInterruptedClaim run concurrently (SPEC-v2 §7.5): every one is claim_already_terminal, so recovery never replaces a committed result and nothing reaches the receipt outbox twice",
+		Setup:        []lifecycleStepJSON{step("verify", "A", committedAllow), setTime(Now + lifecycleLeaseSeconds)},
+		Participants: []concurrencyParticipantJSON{recoverDirect(4), {Group: "helpers", Count: 2, Op: "recover", Request: "A"}},
+		Invariants: []concurrencyInvariantJSON{
+			allowed([]string{"error/claim_already_terminal"}), contiguous,
+		},
+		After: []concurrencyStepJSON{after("verify", "A", replayTerminal), {lifecycleStepJSON: publish("A", 1)}},
 	})
 	sc(concurrencyScenarioJSON{
 		Name:         "late_worker_finalize_after_recovery",

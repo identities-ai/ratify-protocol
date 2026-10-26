@@ -100,7 +100,6 @@ type v2RaceIteration struct {
 	mu         sync.Mutex
 	committed  map[string]*ratify.CommittedV2Outcome
 	receipts   map[string][]byte
-	claimIDs   map[string]string
 	owners     map[string][]byte
 	recorded   map[string][]byte // claim ID -> committed receipt body
 	recordedAt []string          // claim IDs in first-recorded order
@@ -111,6 +110,17 @@ func (it *v2RaceIteration) claimStore() ratify.ClaimStoreV2 {
 		return it.store.WithRateAtFinalization()
 	}
 	return it.store
+}
+
+// claimID is the protocol claim ID of request: ProtocolClaimID of its
+// verifier namespace, replay epoch and challenge, claimed or not.
+func (it *v2RaceIteration) claimID(request string) string {
+	e := it.in.Requests[request].ExpectedChallenge
+	id, err := ratify.ProtocolClaimIDV2(e.VerifierNamespace, e.ReplayEpoch, unb64(it.t, e.ValueB64))
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 func (it *v2RaceIteration) record(claimID string, body []byte) {
@@ -214,9 +224,12 @@ func (it *v2RaceIteration) step(ctx context.Context, i int, s v2ConcurrencyStep,
 		if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass || string(disposition) != want.Disposition {
 			t.Fatalf("step %d claim_only: disposition %s err %v, want %+v", i, disposition, err, want)
 		}
-		it.claimIDs[s.Request], it.owners[s.Request] = claim.ClaimID, capturing.owner
+		if claim.ClaimID != it.claimID(s.Request) {
+			t.Fatalf("step %d claim_only: claim ID %s is not the request's protocol claim ID", i, claim.ClaimID)
+		}
+		it.owners[s.Request] = capturing.owner
 	case "recover":
-		outcome, err := ratify.RecoverInterruptedClaimV2(ctx, it.store, it.claimIDs[s.Request])
+		outcome, err := ratify.RecoverInterruptedClaimV2(ctx, it.store, it.claimID(s.Request))
 		if want.ErrorClass != "" {
 			if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
 				t.Fatalf("step %d recover: %v, want %s", i, err, want.ErrorClass)
@@ -272,17 +285,14 @@ func (it *v2RaceIteration) participant(p v2ConcurrencyParticipant, prepared func
 		if err != nil {
 			return "preflight/" + string(ratify.V2ErrorClassOf(err))
 		}
-		claim, disposition, _, err := ratify.ClaimProofBundleV2(ctx, it.claimStore(), bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
+		_, disposition, _, err := ratify.ClaimProofBundleV2(ctx, it.claimStore(), bundle, pre, req.VerifierNamespace, req.ReplayEpoch, now)
 		if err != nil {
 			return v2ErrorLabel(err)
 		}
-		it.mu.Lock()
-		it.claimIDs[p.Request] = claim.ClaimID
-		it.mu.Unlock()
 		return string(disposition)
 	case "finalize", "recover_direct":
 		it.mu.Lock()
-		claimID, owner := it.claimIDs[p.Request], it.owners[p.Request]
+		claimID, owner := it.claimID(p.Request), it.owners[p.Request]
 		it.mu.Unlock()
 		body := unb64(it.t, p.BodyB64)
 		var ok bool
@@ -302,10 +312,7 @@ func (it *v2RaceIteration) participant(p v2ConcurrencyParticipant, prepared func
 			return "identical"
 		}
 	case "recover":
-		it.mu.Lock()
-		claimID := it.claimIDs[p.Request]
-		it.mu.Unlock()
-		outcome, err := ratify.RecoverInterruptedClaimV2(ctx, it.store, claimID)
+		outcome, err := ratify.RecoverInterruptedClaimV2(ctx, it.store, it.claimID(p.Request))
 		if err != nil {
 			return v2ErrorLabel(err)
 		}
@@ -412,7 +419,13 @@ func v2CheckConcurrencyInvariant(inv v2ConcurrencyInvariant, labels map[string][
 			}
 		}
 		if inv.Equals != nil && n != *inv.Equals || inv.AtMost != nil && n > *inv.AtMost {
-			return fmt.Errorf("%d outcomes of %v are in %v, want equals %v at most %v", n, inv.Groups, inv.Outcomes, inv.Equals, inv.AtMost)
+			bound := func(p *int) string {
+				if p == nil {
+					return "-"
+				}
+				return strconv.Itoa(*p)
+			}
+			return fmt.Errorf("%d outcomes of %v are in %v, want equals %s, at most %s", n, inv.Groups, inv.Outcomes, bound(inv.Equals), bound(inv.AtMost))
 		}
 	case "all_equal":
 		got := of(inv.Groups)
@@ -512,7 +525,7 @@ func TestV2ConformanceConcurrencyScenarios(t *testing.T) {
 					t.Fatal(err)
 				}
 				it := &v2RaceIteration{t: t, in: &in.v2LifecycleInputs, fx: fx, store: store, rateStore: sc.RateAtFinalization,
-					committed: map[string]*ratify.CommittedV2Outcome{}, receipts: map[string][]byte{}, claimIDs: map[string]string{},
+					committed: map[string]*ratify.CommittedV2Outcome{}, receipts: map[string][]byte{},
 					owners: map[string][]byte{}, recorded: map[string][]byte{}}
 				ctx := context.Background()
 				for i, s := range sc.Setup {

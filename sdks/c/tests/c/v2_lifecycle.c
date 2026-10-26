@@ -209,6 +209,14 @@ static int32_t st_load(void *user, const char *id, RatifyV2InterruptedClaim *out
     return 0;
 }
 
+/* Whether the bytes contain needle. */
+static int slice_has(RatifyV2Slice b, const char *needle) {
+    size_t n = strlen(needle);
+    for (size_t i = 0; b.ptr && n <= b.len && i <= b.len - n; i++)
+        if (memcmp(b.ptr + i, needle, n) == 0) return 1;
+    return 0;
+}
+
 static int32_t st_recover(void *user, const char *id, RatifyV2Slice terminal, RatifyV2Slice body, int32_t *committed) {
     c_store *s = user;
     claim_rec *r = find(s, id);
@@ -224,6 +232,12 @@ static int32_t st_recover(void *user, const char *id, RatifyV2Slice terminal, Ra
     int32_t rc = read_clock(s, &now);
     if (rc) return rc;
     if (now < r->lease_expires_at) return RatifyV2ClaimLeaseLive;
+    /* SPEC-v2 §7.5: recovery validates exactly as finalization does and
+     * commits only indeterminate / evaluation_interrupted. */
+    rc = ratify_v2_validate_finalization_payload(r->record, r->record_len, terminal.ptr, terminal.len, body.ptr, body.len);
+    if (rc) return rc;
+    if (!slice_has(body, "\"decision\":\"indeterminate\"") || !slice_has(body, "\"decision_reason\":\"evaluation_interrupted\""))
+        return RatifyV2ConfigurationInvalid;
     commit(s, r, terminal, body, 0, now);
     *committed = 1;
     return 0;
@@ -653,6 +667,44 @@ int v2c_run_lifecycle(void) {
         }
         v2c_check(r && brc == RatifyV2Malformed && bad == NULL && !r->terminal, "recover malformed progress", v2c_class(brc));
         ratify_v2_committed_free(bad);
+        checks++;
+    }
+    {
+        /* SPEC-v2 §7.3: a returned claim record whose challenge digest no
+         * longer derives its claim ID was altered; recovery commits nothing. */
+        claim_rec *r = find(&s, cancel_id);
+        uint8_t *kept = r ? r->record : NULL;
+        size_t kept_len = r ? r->record_len : 0;
+        uint8_t *altered = r ? malloc(kept_len) : NULL;
+        uint8_t *hex = NULL;
+        if (altered) {
+            memcpy(altered, kept, kept_len);
+            static const char key[] = "\"challenge_digest\":\"sha384:";
+            size_t n = sizeof key - 1;
+            for (size_t i = 0; !hex && i + n < kept_len; i++)
+                if (memcmp(altered + i, key, n) == 0) hex = altered + i + n;
+        }
+        if (hex) {
+            *hex = *hex == '0' ? '1' : '0'; /* still canonical lowercase hex */
+            r->record = altered;
+        }
+        RatifyV2Committed *bad = NULL;
+        int32_t brc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &bad);
+        if (r) r->record = kept;
+        r = find(&s, cancel_id);
+        v2c_check(hex && r && r->record_len == kept_len && brc == RatifyV2Malformed && bad == NULL && !r->terminal,
+                  "recover altered claim key", v2c_class(brc));
+        ratify_v2_committed_free(bad);
+        free(altered);
+        checks++;
+
+        /* SPEC-v2 §7.5: the store's own recovery validates as finalization
+         * does, so an invalid direct payload commits nothing. */
+        static const char empty[] = "{}";
+        RatifyV2Slice e = {(const uint8_t *)empty, sizeof empty - 1};
+        int32_t committed = 0;
+        int32_t drc = st_recover(&s, cancel_id, e, e, &committed);
+        v2c_check(drc != 0 && committed == 0 && r && !r->terminal, "direct recover invalid payload", v2c_class(drc));
         checks++;
     }
     rc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &recovered);

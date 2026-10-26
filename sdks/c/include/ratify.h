@@ -750,7 +750,8 @@ typedef struct RatifyV2InterruptedClaim {
 // Loads an interrupted claim (fails with `RatifyV2ClaimLeaseLive` while the
 // lease is live). The returned `record` and `progress` must be the bytes
 // the store was given (`progress` empty when none was recorded); a record
-// that is not canonical or not valid is `RatifyV2Malformed` and recovery
+// that is not canonical or not valid, or a claim record whose `claim_id`
+// does not derive from its replay key, is `RatifyV2Malformed` and recovery
 // commits nothing.
 typedef int32_t (*RatifyV2LoadInterruptedFn)(void *user,
                                              const char *claim_id,

@@ -653,6 +653,23 @@ pub(crate) fn claim_from_json(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     Ok(c)
 }
 
+/// Whether the claim's `claim_id` is the stable claim ID of SPEC-v2 §2.4
+/// derived from its namespace, replay epoch and `sha384:` challenge digest
+/// (lowercase hex), the replay key of §7.3.
+pub(crate) fn claim_keyed_by_digest(c: &V2ChallengeClaim) -> bool {
+    let Some(encoded) = c.challenge_digest.strip_prefix("sha384:") else {
+        return false;
+    };
+    if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return false;
+    }
+    let digest: Vec<u8> = (0..48)
+        .map(|i| u8::from_str_radix(&encoded[2 * i..2 * i + 2], 16).unwrap_or(0))
+        .collect();
+    ratify_protocol::protocol_claim_id_from_digest_v2(&c.namespace, c.replay_epoch, &digest)
+        .is_ok_and(|derived| derived == c.claim_id)
+}
+
 fn parse_claim(data: &[u8]) -> AbiResult<V2ChallengeClaim> {
     let v: Value = super::strict_json(data).map_err(|e| bad_arg(format!("claim record: {e}")))?;
     let o = Obj::new(

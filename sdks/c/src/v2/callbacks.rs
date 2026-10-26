@@ -30,8 +30,8 @@ use ratify_protocol::v2::*;
 use ratify_protocol::HybridPublicKey;
 
 use super::marshal::{
-    claim_from_json, claim_json, constraint_context_json, expected_challenge,
-    expected_challenge_json, progress_from_json, progress_json, to_bytes,
+    claim_from_json, claim_json, claim_keyed_by_digest, constraint_context_json,
+    expected_challenge, expected_challenge_json, progress_from_json, progress_json, to_bytes,
 };
 use super::{
     code_class, code_str, AbiResult, Failure, RatifyV2Code, RatifyV2PublicKey, RatifyV2Slice,
@@ -150,7 +150,8 @@ pub type RatifyV2RecordProgressFn = Option<
 /// Loads an interrupted claim (fails with `RatifyV2ClaimLeaseLive` while the
 /// lease is live). The returned `record` and `progress` must be the bytes
 /// the store was given (`progress` empty when none was recorded); a record
-/// that is not canonical or not valid is `RatifyV2Malformed` and recovery
+/// that is not canonical or not valid, or a claim record whose `claim_id`
+/// does not derive from its replay key, is `RatifyV2Malformed` and recovery
 /// commits nothing.
 pub type RatifyV2LoadInterruptedFn = Option<
     unsafe extern "C" fn(
@@ -1000,6 +1001,14 @@ impl ClaimStoreV2 for CClaimStore {
         let claim = claim_from_json(&record).map_err(|f| {
             V2StoreError::Classified(V2Error::new(V2ErrorClass::Malformed, f.message))
         })?;
+        // SPEC-v2 §7.3: a returned record keyed other than by its replay key
+        // was altered; recovery seals nothing from it.
+        if !claim_keyed_by_digest(&claim) {
+            return Err(V2StoreError::Classified(V2Error::new(
+                V2ErrorClass::Malformed,
+                "claim record is not keyed by its replay key",
+            )));
+        }
         let progress = if progress.is_empty() {
             initial_v2_evaluation_progress()
         } else {

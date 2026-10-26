@@ -1067,21 +1067,11 @@ pub unsafe extern "C" fn ratify_v2_claim_id_matches_key(claim: *const super::cal
             let Ok(c) = super::marshal::claim_from_json(record) else {
                 return 0;
             };
-            if c.claim_id != id || c.namespace != namespace || c.replay_epoch != view.replay_epoch {
-                return 0;
-            }
-            let Some(encoded) = c.challenge_digest.strip_prefix("sha384:") else {
-                return 0;
-            };
-            if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
-                return 0;
-            }
-            let digest: Vec<u8> = (0..48)
-                .map(|i| u8::from_str_radix(&encoded[2 * i..2 * i + 2], 16).unwrap_or(0))
-                .collect();
             i32::from(
-                ratify_protocol::protocol_claim_id_from_digest_v2(&c.namespace, c.replay_epoch, &digest)
-                    .is_ok_and(|derived| derived == c.claim_id),
+                c.claim_id == id
+                    && c.namespace == namespace
+                    && c.replay_epoch == view.replay_epoch
+                    && super::marshal::claim_keyed_by_digest(&c),
             )
         },
     )

@@ -374,7 +374,10 @@ match before the beta.
   or with another encoding is malformed. Lease-expiry recovery applies the
   same check to the progress and claim records a C store returns, so a
   record the store altered is refused as `RatifyV2Malformed` instead of
-  being sealed. The C claim record is now exactly the §7.13 sealed claim
+  being sealed; that includes a claim record whose `claim_id` no longer
+  derives from its challenge digest. The plain C test store's recovery now
+  validates the result as its finalization does, so an invalid recovery
+  payload commits nothing. The C claim record is now exactly the §7.13 sealed claim
   object (`stream_id`, and `null` for a policy-less
   `context_policy_digest`).
 - **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,

@@ -23,7 +23,7 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 79/79 fixtures |
 | **Python (v2)** | `ratify-protocol-v2` (PyPI name reserved for v2, not yet published) | `sdks/python-v2/` | ✅ full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
-| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 1331 checks, 0 failures, 2026-10-25) |
+| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 1345 checks, 0 failures, 2026-10-26) |
 | Swift | n/a | planned (mobile wallet) | n/a |
 | Java / Kotlin | n/a | planned (Android / JVM) | n/a |
 

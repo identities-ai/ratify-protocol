@@ -56,6 +56,7 @@ var Files = []string{
 	archivalFile,
 	externalSignerFile,
 	digestFunctionsFile,
+	concurrencyFile,
 }
 
 // Generate returns the exact bytes of every generated vector file.
@@ -84,6 +85,7 @@ func Generate() (map[string][]byte, error) {
 		archivalFile:                    g.archivalFile,
 		externalSignerFile:              g.externalSignerFile,
 		digestFunctionsFile:             g.digestFunctionsFile,
+		concurrencyFile:                 g.concurrencyFile,
 	}
 	for _, name := range Files {
 		var value any

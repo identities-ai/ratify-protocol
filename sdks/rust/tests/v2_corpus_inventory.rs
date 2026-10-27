@@ -16,6 +16,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("archival.json", "v2_archival_signer.rs", "archival.json"),
     ("challenge-claim.json", "challenge_claim_v2.rs", "challenge-claim.json"),
     ("challenge-issuance.json", "v2_challenge_issuance.rs", "challenge-issuance.json"),
+    ("concurrency-scenarios.json", "v2_concurrency_scenarios.rs", "concurrency-scenarios.json"),
     ("cross-sdk", "v2_cross_sdk.rs", "\"cross-sdk\""),
     ("delegation-signature.json", "v2_crypto.rs", "delegation-signature.json"),
     ("device-state.json", "v2_device_state.rs", "device-state.json"),

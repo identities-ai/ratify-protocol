@@ -28,6 +28,11 @@ const CONSUMED: &[(&str, &str, &str)] = &[
         "v2c_issuance.rs",
         "\"challenge-issuance.json\"",
     ),
+    (
+        "concurrency-scenarios.json",
+        "v2c_concurrency_scenarios.rs",
+        "\"concurrency-scenarios.json\"",
+    ),
     ("cross-sdk", "v2c_cross_sdk.rs", "\"cross-sdk\""),
     (
         "delegation-signature.json",

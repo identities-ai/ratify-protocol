@@ -184,6 +184,11 @@ def vector_dir(rel, v, bundle):
         for n, o in enumerate(script.get("objects") or []):
             st.append(f"{issuer} obj {o['object_type_code']} " + write(f"{rel}/s_{issuer[:8]}_{n}.bin", b64d(o["wire_b64"])).split("/", 2)[-1])
     write(f"{rel}/status.txt", "".join(l + "\n" for l in st))
+    # Every expected status-provider request, in call order (SPEC-v2 §6.5 step 3).
+    if "status_requests" in exp:
+        write(f"{rel}/expect_status.txt", "".join(
+            f"{r['issuer_id']} {r['status_key_epoch']} {r['status_key_id']}" + "".join(f" {x['issuer_id']}/{x['cert_id']}" for x in r["refs"]) + "\n"
+            for r in exp["status_requests"]))
     pol = v.get("status_policy") or {}
     pl = [f"policy {pol.get('max_list_lifetime_seconds', 0)} {pol.get('max_status_age_seconds', 0)} {pol.get('clock_skew_seconds', 0)}"]
     for issuer in sorted(skeys):

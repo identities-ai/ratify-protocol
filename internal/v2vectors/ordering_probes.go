@@ -580,6 +580,10 @@ func (g *gen) statusKeyEpochScenarios() []scenario {
 			s.statusKeys = map[string]statusKeyJSON{interID: {Epoch: 1, StatusKeyID: g.k("status_intermediate").ID, PublicKey: pubJSON(g.k("status_intermediate").Pub)}, rootID: rootKey}
 			s.evidence[rootID] = rootBatch
 			s.journal.Setup = setup
+			if rootKey.Epoch == 1 {
+				// The stale binding of §6.5 step 1: the root's provider is not called.
+				s.statusIssuers = []string{interID}
+			}
 		}))
 	}
 	allow := func(evidence ...EvidenceJSON) outcomeJSON {

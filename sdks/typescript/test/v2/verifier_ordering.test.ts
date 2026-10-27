@@ -23,6 +23,15 @@ for (const v of file.vectors as Any[]) {
     assert.ok(bundleB64, `unknown bundle ${v.bundle}`);
     const counts = zeroCounts();
     const { req, cb, rate } = await buildVerifyRequest(v, unb64(bundleB64), counts);
+    // Record every status-provider request in call order (SPEC-v2 §6.5 step 3).
+    const requests: Any[] = [];
+    const provider = cb.statusEvidence;
+    if (provider) {
+      cb.statusEvidence = (r, signal) => {
+        requests.push({ issuer_id: r.issuerID, status_key_epoch: r.statusKeyEpoch, status_key_id: r.statusKeyID, refs: r.refs.map((x) => ({ issuer_id: x.issuer_id, cert_id: x.cert_id })) });
+        return provider(r, signal);
+      };
+    }
     const claimedAt = v.now + (v.claim_time_offset ?? 0);
     const store = new ScriptedClaimStore(v.claim_store, claimedAt, claimedAt + (v.finalize_time_offset ?? 0), counts);
     // claim_store "absent": no claim store is configured.
@@ -32,6 +41,8 @@ for (const v of file.vectors as Any[]) {
     assert.equal(outcome.errorClass, want.error_class ?? "", `error class (${outcome.error?.message})`);
     if (want.disposition) assert.equal(outcome.disposition, want.disposition);
     assert.deepEqual(counts, { ...zeroCounts(), ...want.callback_counts }, "callback counts");
+    assert.ok(Array.isArray(want.status_requests), "vector has no expected status_requests");
+    assert.deepEqual(requests, want.status_requests, "status requests");
     if (want.stage !== "committed") {
       assert.equal(outcome.committed, null);
       return;

@@ -15,6 +15,8 @@
  *                 without <epoch> the issuer's configured epoch_<issuer> is used
  *   audience.txt  "m <di> <ci> <receiver|-> <issued> <expires> <digest|-> <n> <domain>..."
  *   evaluators.txt "e <type> <profile> <implementation> <valid_until>"
+ *   expect_status.txt one line per expected status-provider request, in call
+ *                 order: "<issuer> <epoch> <status_key_id> <issuer>/<cert_id>..."
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -96,6 +98,9 @@ struct v2c_vector {
     status_script status[MAX_ISSUERS];
     int nstatus;
     int cancel_status;
+    /* every status-provider request of the current call, in expect_status.txt form */
+    char status_log[8192];
+    int status_log_overflow;
     member members[MAX_MEMBERS];
     int nmembers;
     RatifyV2AudienceMembership member_views[MAX_MEMBERS];
@@ -260,9 +265,23 @@ static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, i
     return 0;
 }
 
+static void status_log_append(v2c_vector *v, const char *text) {
+    size_t used = strlen(v->status_log), n = strlen(text);
+    if (used + n >= sizeof v->status_log) { v->status_log_overflow = 1; return; }
+    memcpy(v->status_log + used, text, n + 1);
+}
+
 static int32_t status_cb(void *user, const RatifyV2StatusRequest *req, RatifyV2StatusBatch *out) {
     v2c_vector *v = user;
     bump(v, C_STATUS);
+    char item[600];
+    snprintf(item, sizeof item, "%s %llu %s", req->issuer_id, (unsigned long long)req->status_key_epoch, req->status_key_id);
+    status_log_append(v, item);
+    for (size_t i = 0; i < req->refs_len; i++) {
+        snprintf(item, sizeof item, " %s/%s", req->refs[i].issuer_id, req->refs[i].cert_id);
+        status_log_append(v, item);
+    }
+    status_log_append(v, "\n");
     out->objects = NULL;
     out->count = 0;
     for (int i = 0; i < v->nstatus; i++) {
@@ -569,6 +588,8 @@ void v2c_vector_callbacks(v2c_vector *v, const RatifyV2ClaimStoreCallbacks *clai
     RatifyV2ClaimStoreCallbacks scripted = {v, 0, sc_now, sc_claim, sc_finalize, sc_progress, sc_load, sc_recover};
     v->claim_cb = claim ? *claim : scripted;
     v->cancel_status = cancel_status;
+    v->status_log[0] = 0;
+    v->status_log_overflow = 0;
     v->trust_cb.user = v;
     v->trust_cb.resolve = trust_cb;
     v->status_cb.user = v;
@@ -654,6 +675,10 @@ static int run_vector(const char *subdir) {
     snprintf(detail, sizeof detail, "%s: counts %s want %s (%s)", name, counts, v2c_vector_meta(v, "expect_counts"),
              COUNT_NAMES[0]);
     v2c_check(strcmp(counts, v2c_vector_meta(v, "expect_counts")) == 0, "ordering callback counts", detail);
+    char *want_status = (char *)v2c_read(path(v, "expect_status.txt"), NULL);
+    snprintf(detail, sizeof detail, "%s: status requests\n%s want\n%s", name, v->status_log, want_status);
+    v2c_check(!v->status_log_overflow && strcmp(v->status_log, want_status) == 0, "ordering status requests", detail);
+    free(want_status);
     if (strcmp(want_stage, "committed") == 0) {
         v2c_check(committed != NULL, "ordering committed", name);
         if (committed) {

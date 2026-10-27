@@ -156,7 +156,7 @@ func (g *gen) concurrencyFile() any {
 
 	f := concurrencyFileJSON{
 		Version: 1,
-		Description: "Shared concurrency scenarios for the Part B reference store (SPEC-v2 §6.9, §6.11, §7.3 to §7.8). Every SDK runs every scenario default_iterations times (a runner may take a different count from its environment), each iteration on a fresh in-memory reference store built exactly as for lifecycle-scenarios.json (inputs): its requests, bundles_b64, verifier_key, log_id and lease_seconds, the store clock starting at start_time, and rate_at_finalization with the same meaning. " +
+		Description: "Shared concurrency scenarios for the Part B reference store (SPEC-v2 §6.9, §6.11, §7.3 to §7.8). Every SDK runs every scenario default_iterations times (a runner may take another count from its environment, and a runner whose build or runtime makes that count slow may default to fewer iterations, documented in the runner), each iteration on a fresh in-memory reference store built exactly as for lifecycle-scenarios.json (inputs): its requests, bundles_b64, verifier_key, log_id and lease_seconds, the store clock starting at start_time, and rate_at_finalization with the same meaning. " +
 			"An iteration runs setup sequentially, then starts every participant at once with the runtime's real concurrency and waits for all of them, then checks every invariant, then runs after sequentially. " +
 			"Thread interleavings differ by runtime, so invariants constrain only outcomes: which labels occur, how many times, and what the store holds afterwards.",
 		Inputs:            "lifecycle-scenarios.json",

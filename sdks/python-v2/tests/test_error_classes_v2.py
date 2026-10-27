@@ -341,6 +341,7 @@ def _calls():
         ("v2_evaluation_interrupted_result", C.CONFIGURATION_INVALID,
          lambda: ep.v2_evaluation_interrupted_result(cs.V2ChallengeClaim(), -1, ep.V2EvaluationProgress())),
         ("recover_interrupted_claim_v2", C.CONFIGURATION_INVALID, lambda: ep.recover_interrupted_claim_v2(CTX, None, "")),
+        ("resume_committed_claim_v2", C.CONFIGURATION_INVALID, lambda: ep.resume_committed_claim_v2(CTX, None, "")),
         ("issue_challenge_v2", C.CONFIGURATION_INVALID,
          lambda: ci.V2ChallengeIssuer().issue_challenge_v2(CTX, ci.V2ChallengeIssueRequest())),
         ("load_expected_challenge_v2", C.CONFIGURATION_INVALID,
@@ -373,9 +374,9 @@ CALLS = _calls() if _native.AVAILABLE else []
 
 
 def test_call_list_matches_the_reference():
-    # Go TestV2PublicAPIErrorsAreClassified calls 117 entry points and the
+    # Go TestV2PublicAPIErrorsAreClassified calls 118 entry points and the
     # live verifier (below).
-    assert len(CALLS) == 117
+    assert len(CALLS) == 118
     assert len({name for name, _, _ in CALLS}) == len(CALLS)
 
 

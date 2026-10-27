@@ -192,6 +192,44 @@ pub struct RatifyV2ClaimStoreCallbacks {
     pub recover: RatifyV2RecoverFn,
 }
 
+/// What a claim store returns to resumption (SPEC-v2 §7.11): a terminal
+/// claim exactly as its terminal compare-and-set persisted it. `record` is
+/// the stored claim record (the bytes `load_interrupted` returns),
+/// `terminal_result` and `receipt_body` the committed bytes, and
+/// `allow_horizon` the committed horizon (0 unless the result is an allow).
+#[repr(C)]
+pub struct RatifyV2CommittedClaim {
+    pub record: RatifyV2Slice,
+    pub terminal_result: RatifyV2Slice,
+    pub receipt_body: RatifyV2Slice,
+    pub allow_horizon: i64,
+}
+
+/// Loads a terminal claim's persisted record for resumption (SPEC-v2
+/// §7.11). Fails with `RatifyV2ClaimNotFound` for a claim the store does not
+/// hold, `RatifyV2ClaimLeaseLive` for a claim still evaluating under a live
+/// lease, and `RatifyV2ClaimLeaseLost` for a claim still evaluating after its
+/// lease expired (lease-expiry recovery runs first). The returned slices
+/// must be the bytes the store committed; a record that is not canonical or
+/// not valid, a claim record whose `claim_id` does not derive from its
+/// replay key, or a result that fails the terminal commit's checks is
+/// `RatifyV2ClaimStoreUnavailable`, and no handoff is returned.
+pub type RatifyV2LoadCommittedFn = Option<
+    unsafe extern "C" fn(
+        user: *mut c_void,
+        claim_id: *const c_char,
+        out: *mut RatifyV2CommittedClaim,
+    ) -> i32,
+>;
+
+/// The claim store's resumption view (SPEC-v2 §7.11).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RatifyV2CommittedStoreCallbacks {
+    pub user: *mut c_void,
+    pub load_committed: RatifyV2LoadCommittedFn,
+}
+
 /// Reserves a complete sealed rate batch. Return 0 (every counter held),
 /// `RatifyV2StoreRateLimitExceeded` (definitive exhaustion), or another code
 /// (unavailable; never authorizes).
@@ -1052,6 +1090,62 @@ impl ClaimStoreV2 for CClaimStore {
 
     fn rate_at_finalization_view(&self) -> Option<&dyn V2RateAtFinalizationStore> {
         (self.cb.rate_at_finalization != 0).then_some(self as &dyn V2RateAtFinalizationStore)
+    }
+}
+
+/// A C claim store's resumption view.
+pub(crate) struct CCommittedStore {
+    pub cb: RatifyV2CommittedStoreCallbacks,
+    pub cancel: Cancel,
+}
+
+impl V2CommittedClaimStore for CCommittedStore {
+    fn load_v2_committed_claim(
+        &self,
+        _ctx: &V2Context,
+        claim_id: &str,
+    ) -> Result<V2CommittedClaim, V2StoreError> {
+        let f = self
+            .cb
+            .load_committed
+            .ok_or_else(|| missing("load_committed"))?;
+        let id = cs(claim_id, "claim_id").map_err(V2StoreError::Unavailable)?;
+        let mut out = RatifyV2CommittedClaim {
+            record: RatifyV2Slice::empty(),
+            terminal_result: RatifyV2Slice::empty(),
+            receipt_body: RatifyV2Slice::empty(),
+            allow_horizon: 0,
+        };
+        // SAFETY: caller-supplied callback.
+        let code = unsafe { f(self.cb.user, id.as_ptr(), &mut out) };
+        if code != 0 {
+            return Err(store_error(code, &self.cancel, "load_committed"));
+        }
+        // SAFETY: output pointers valid until copied.
+        let (record, terminal_result, receipt_body) = unsafe {
+            (
+                try_slice_vec(out.record, "record").map_err(V2StoreError::Unavailable)?,
+                try_slice_vec(out.terminal_result, "terminal_result")
+                    .map_err(V2StoreError::Unavailable)?,
+                try_slice_vec(out.receipt_body, "receipt_body")
+                    .map_err(V2StoreError::Unavailable)?,
+            )
+        };
+        // A stored record that is not the canonical sealed claim, or is keyed
+        // other than by its replay key (SPEC-v2 §7.3), was altered: it is the
+        // store's failure (§7.11), and nothing is resumed from it.
+        let claim = claim_from_json(&record).map_err(|f| V2StoreError::Unavailable(f.message))?;
+        if !claim_keyed_by_digest(&claim) {
+            return Err(V2StoreError::Unavailable(
+                "claim record is not keyed by its replay key".into(),
+            ));
+        }
+        Ok(V2CommittedClaim {
+            claim,
+            terminal_result,
+            receipt_body,
+            allow_horizon: out.allow_horizon,
+        })
     }
 }
 

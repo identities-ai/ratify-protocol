@@ -43,6 +43,9 @@ trait Target: Send + Sync {
     fn release(&self, _f: &mut dyn FnMut(&dyn V2ReleaseClaimStore)) -> bool {
         false
     }
+    fn committed(&self, _f: &mut dyn FnMut(&dyn V2CommittedClaimStore)) -> bool {
+        false
+    }
     fn checkpoint(&self, _f: &mut dyn FnMut(&dyn V2ReceiptCheckpoint)) -> bool {
         false
     }
@@ -228,6 +231,32 @@ unsafe extern "C" fn br_load_interrupted(
                         record: scratch_bytes(claim_json(&c.claim)),
                         claimed_at: c.claimed_at,
                         progress: scratch_bytes(progress_json(&c.progress)),
+                    };
+                    0
+                }
+                Err(e) => store_code(e),
+            }
+        });
+        code
+    })
+}
+
+unsafe extern "C" fn br_load_committed(
+    user: *mut c_void,
+    claim_id: *const c_char,
+    out: *mut RatifyV2CommittedClaim,
+) -> i32 {
+    enter(user, |b| {
+        let id = owned(claim_id);
+        let mut code = not_served();
+        b.target.committed(&mut |s| {
+            code = match s.load_v2_committed_claim(&ctx(), &id) {
+                Ok(c) => {
+                    *out = RatifyV2CommittedClaim {
+                        record: scratch_bytes(claim_json(&c.claim)),
+                        terminal_result: scratch_bytes(c.terminal_result),
+                        receipt_body: scratch_bytes(c.receipt_body),
+                        allow_horizon: c.allow_horizon,
                     };
                     0
                 }
@@ -560,6 +589,10 @@ impl Target for StoreTarget {
         f(self.0.as_ref());
         true
     }
+    fn committed(&self, f: &mut dyn FnMut(&dyn V2CommittedClaimStore)) -> bool {
+        f(self.0.as_ref());
+        true
+    }
     fn checkpoint(&self, f: &mut dyn FnMut(&dyn V2ReceiptCheckpoint)) -> bool {
         f(self.0.as_ref());
         true
@@ -841,6 +874,30 @@ pub unsafe extern "C" fn ratify_v2_ref_store_callbacks(
                     now: Some(br_now),
                 };
             }
+            Ok(())
+        },
+    )
+}
+
+/// TEST ONLY: the resumption callbacks serving this store (SPEC-v2 §7.11).
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_ref_store_committed_callbacks(
+    s: *const RatifyV2RefStore,
+    out: *mut RatifyV2CommittedStoreCallbacks,
+) -> i32 {
+    run_h(
+        std::ptr::null_mut(),
+        &[flag(s)],
+        || {},
+        || {
+            let s = handle(s, "store")?;
+            if out.is_null() {
+                return Err(null_arg("out"));
+            }
+            *out = RatifyV2CommittedStoreCallbacks {
+                user: bridge_ptr(s.bridge.as_ref()),
+                load_committed: Some(br_load_committed),
+            };
             Ok(())
         },
     )

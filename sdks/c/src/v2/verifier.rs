@@ -324,6 +324,44 @@ pub unsafe extern "C" fn ratify_v2_recover_interrupted_claim(
     )
 }
 
+/// Resumption of committed work (SPEC-v2 §7.11): load a terminal claim's
+/// persisted record through `store`, check it as the terminal
+/// compare-and-set does, and return the handoff of the committed result,
+/// for a service whose handoff was lost after the terminal commit (for
+/// example a crash before `ratify_v2_verify_proof_bundle` returned). Nothing
+/// is built, re-evaluated or committed; a record that fails a check is
+/// `RatifyV2ClaimStoreUnavailable`. On success `*committed_out` is the
+/// committed outcome; publication, checkpoint and release then proceed as
+/// for a returned one.
+#[no_mangle]
+pub unsafe extern "C" fn ratify_v2_resume_committed_claim(
+    store: *const RatifyV2CommittedStoreCallbacks,
+    claim_id: *const c_char,
+    committed_out: *mut *mut RatifyV2Committed,
+) -> i32 {
+    run(
+        std::ptr::null_mut(),
+        || crate::guard::clear_ptr(committed_out),
+        || {
+            let cb = store.as_ref().ok_or_else(|| null_arg("store"))?;
+            if committed_out.is_null() {
+                return Err(null_arg("committed_out"));
+            }
+            let (ctx, cancel) = V2Context::background().with_cancel();
+            let store = CCommittedStore {
+                cb: *cb,
+                cancel: Cancel(cancel),
+            };
+            let c = resume_committed_claim_v2(&ctx, &store, cstr(claim_id, "claim_id")?)?;
+            *committed_out = Box::into_raw(Box::new(RatifyV2Committed {
+                poisoned: AtomicBool::new(false),
+                inner: c,
+            }));
+            Ok(())
+        },
+    )
+}
+
 /// Release a committed outcome. NULL is a no-op.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_committed_free(c: *mut RatifyV2Committed) {

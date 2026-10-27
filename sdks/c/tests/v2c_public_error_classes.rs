@@ -72,6 +72,15 @@ fn call(name: &'static str, want: &'static str, run: impl Fn() -> i32 + 'static)
     }
 }
 
+/// A claim store resumption view that holds no claim.
+unsafe extern "C" fn no_committed(
+    _: *mut c_void,
+    _: *const c_char,
+    _: *mut RatifyV2CommittedClaim,
+) -> i32 {
+    RatifyV2Code::RatifyV2ClaimNotFound as i32
+}
+
 /// A journal store whose load and compare-and-swap always fail.
 unsafe extern "C" fn failing_load(_: *mut c_void, _: *mut RatifyV2JournalSnapshot) -> i32 {
     RatifyV2Code::RatifyV2StoreUnavailable as i32
@@ -1117,6 +1126,15 @@ fn v2c_public_api_errors_are_classified() {
             let id = cs("");
             let mut out = ptr::null_mut();
             unsafe { ratify_v2_recover_interrupted_claim(ptr::null(), id.as_ptr(), &mut out) }
+        }),
+        call("ratify_v2_resume_committed_claim", "configuration_invalid", || {
+            let id = cs("");
+            let store = RatifyV2CommittedStoreCallbacks {
+                user: ptr::null_mut(),
+                load_committed: Some(no_committed),
+            };
+            let mut out = ptr::null_mut();
+            unsafe { ratify_v2_resume_committed_claim(&store, id.as_ptr(), &mut out) }
         }),
         call("ratify_v2_committed_claim_id", "", || {
             string_call(|o| unsafe { ratify_v2_committed_claim_id(ptr::null(), o) })

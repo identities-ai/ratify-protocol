@@ -15,7 +15,7 @@ use super::evaluation_progress::{V2EvaluationProgress, V2InterruptedClaim};
 use super::evaluator::ConstraintEvaluatorRefV2;
 use super::json::{parse_json, JV};
 use super::limits::v2_challenge_time_current;
-use super::operation_context::{challenge_claim_digest_v2, protocol_claim_id_v2};
+use super::operation_context::{challenge_claim_digest_v2, protocol_claim_id_from_digest_v2, protocol_claim_id_v2};
 use super::preflight::{validate_proof_bundle_v2_preflight, ExpectedChallengeStateV2, ExpectedChallengeV2, V2PreflightResult};
 use super::rate_reservation::{signed_v2_rate_reservation_batch, V2RateReservation};
 use super::receipt::decode_verification_receipt_body_v2;
@@ -612,6 +612,24 @@ pub(crate) fn finalize_claim_proof_bundle_v2_inner(
         }
     }
     result.map_err(FinalizeFailure::Store)
+}
+
+/// Whether the claim ID is the stable claim ID of the claim's (namespace,
+/// replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). A store keyed
+/// by claim ID refuses a supplied ID not derived from that key, which could
+/// create a second claim for one challenge, and resumption refuses a stored
+/// record whose ID is not derived from it.
+pub(crate) fn claim_id_matches_key(claim: &V2ChallengeClaim) -> bool {
+    let Some(encoded) = claim.challenge_digest.strip_prefix("sha384:") else {
+        return false;
+    };
+    if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return false;
+    }
+    let Ok(digest) = hex::decode(encoded) else {
+        return false;
+    };
+    protocol_claim_id_from_digest_v2(&claim.namespace, claim.replay_epoch, &digest).is_ok_and(|id| id == claim.claim_id)
 }
 
 /// Go `ValidateV2FinalizationPayload`: checks that a terminal result and its

@@ -1,7 +1,8 @@
 /*
  * A release lifecycle with a C-implemented in-memory Part B store: claim
  * store (leases, owner tokens, finalization compare-and-set, evaluation
- * progress, lease-expiry recovery), authoritative clock, receipt outbox and
+ * progress, lease-expiry recovery, resumption of committed work),
+ * authoritative clock, receipt outbox and
  * publisher (signing through ratify_v2_sign_prepared_verification_receipt),
  * release store, and checkpoint. TEST ONLY: nothing here is durable, and
  * the owner token is compared directly rather than through a one-way hash.
@@ -265,6 +266,37 @@ static int32_t st_recover(void *user, const char *id, RatifyV2Slice terminal, Ra
     commit(s, r, terminal, body, 0, now);
     *committed = 1;
     return 0;
+}
+
+/* SPEC-v2 §7.11: a terminal claim exactly as its commit persisted it. */
+static int32_t st_load_committed(void *user, const char *id, RatifyV2CommittedClaim *out) {
+    c_store *s = user;
+    claim_rec *r = find(s, id);
+    if (!r) return RatifyV2ClaimNotFound;
+    if (!r->terminal) {
+        int64_t now;
+        int32_t rc = read_clock(s, &now);
+        if (rc) return rc;
+        return now < r->lease_expires_at ? RatifyV2ClaimLeaseLive : RatifyV2ClaimLeaseLost;
+    }
+    out->record.ptr = r->record;
+    out->record.len = r->record_len;
+    out->terminal_result.ptr = r->terminal_result;
+    out->terminal_result.len = r->terminal_len;
+    out->receipt_body.ptr = r->body;
+    out->receipt_body.len = r->body_len;
+    out->allow_horizon = r->allow_horizon;
+    return 0;
+}
+
+/* Whether two committed handoffs carry the same receipt body. */
+static int same_body(const RatifyV2Committed *a, const RatifyV2Committed *b) {
+    RatifyV2Buffer x = {0}, y = {0};
+    int ok = ratify_v2_committed_receipt_body(a, &x) == 0 && ratify_v2_committed_receipt_body(b, &y) == 0 &&
+             x.len == y.len && memcmp(x.ptr, y.ptr, x.len) == 0;
+    ratify_v2_buffer_free(x);
+    ratify_v2_buffer_free(y);
+    return ok;
 }
 
 static int32_t st_load_terminal(void *user, const char *id, RatifyV2TerminalClaim *out) {
@@ -780,6 +812,7 @@ int v2c_run_lifecycle(void) {
     RatifyV2ClaimStoreCallbacks claim = {&s, 0, st_now, st_claim, st_finalize, st_progress, st_load, st_recover};
     RatifyV2ReleaseStoreCallbacks rs = {&s, st_now, st_load_terminal, st_record_release};
     RatifyV2CheckpointCallbacks cp = {&s, st_acknowledge, st_get_ack};
+    RatifyV2CommittedStoreCallbacks resume = {&s, st_load_committed};
     int checks = 0;
 
     /* 1. An allow commits, publishes, releases, and is allowed only before
@@ -804,6 +837,90 @@ int v2c_run_lifecycle(void) {
               "lifecycle replay", "exact retry was not a terminal replay");
     checks++;
     v2c_vector_free(a);
+
+    /* 2b. A finalize whose handoff is dropped (SPEC-v2 §7.11): the store
+     *     holds the committed allow, and resumption by claim ID returns its
+     *     handoff, which publishes, is acknowledged, and releases. */
+    reset_store(&s);
+    a = v2c_vector_load(allow_dir);
+    s.now = s.high_water = strtoll(v2c_vector_meta(a, "now"), NULL, 10);
+    c = NULL;
+    run_verify(&s, a, 0, &claim, &out, &c);
+    v2c_vector_free(a);
+    v2c_check(out.stage == RatifyV2StageCommitted && c != NULL, "resume fixture committed", ratify_v2_last_error_message());
+    checks++;
+    if (c) {
+        char *dropped_id = NULL;
+        ratify_v2_committed_claim_id(c, &dropped_id);
+        RatifyV2Buffer kept_body = {0};
+        ratify_v2_committed_receipt_body(c, &kept_body);
+        ratify_v2_committed_free(c); /* the handoff is lost */
+        RatifyV2Committed *resumed = NULL;
+        int32_t rrc = ratify_v2_resume_committed_claim(&resume, "unknown-claim", &resumed);
+        v2c_check(rrc == RatifyV2ClaimNotFound && resumed == NULL, "resume unknown claim", v2c_class(rrc));
+        rrc = ratify_v2_resume_committed_claim(NULL, dropped_id, &resumed);
+        v2c_check(rrc != 0 && resumed == NULL, "resume without a store", v2c_class(rrc));
+        rrc = ratify_v2_resume_committed_claim(&resume, "", &resumed);
+        v2c_check(rrc == RatifyV2ConfigurationInvalid && resumed == NULL, "resume without a claim id", v2c_class(rrc));
+        {
+            /* A stored record whose challenge digest no longer derives its
+             * claim ID, or a NULL record with a length, is the store's
+             * failure; nothing is resumed. */
+            claim_rec *r = find(&s, dropped_id);
+            uint8_t *kept = r ? r->record : NULL;
+            size_t kept_len = r ? r->record_len : 0;
+            uint8_t *altered = r ? malloc(kept_len) : NULL;
+            uint8_t *hex = NULL;
+            if (altered) {
+                memcpy(altered, kept, kept_len);
+                static const char key[] = "\"challenge_digest\":\"sha384:";
+                size_t n = sizeof key - 1;
+                for (size_t i = 0; !hex && i + n < kept_len; i++)
+                    if (memcmp(altered + i, key, n) == 0) hex = altered + i + n;
+            }
+            if (hex) {
+                *hex = *hex == '0' ? '1' : '0';
+                r->record = altered;
+            }
+            rrc = ratify_v2_resume_committed_claim(&resume, dropped_id, &resumed);
+            v2c_check(hex && rrc == RatifyV2ClaimStoreUnavailable && resumed == NULL, "resume altered claim key",
+                      v2c_class(rrc));
+            if (r) {
+                r->record = NULL;
+                r->record_len = 5;
+            }
+            rrc = ratify_v2_resume_committed_claim(&resume, dropped_id, &resumed);
+            v2c_check(r && rrc == RatifyV2ClaimStoreUnavailable && resumed == NULL, "resume NULL record slice",
+                      v2c_class(rrc));
+            if (r) {
+                r->record = kept;
+                r->record_len = kept_len;
+                int64_t horizon = r->allow_horizon;
+                r->allow_horizon = 0;
+                rrc = ratify_v2_resume_committed_claim(&resume, dropped_id, &resumed);
+                r->allow_horizon = horizon;
+                v2c_check(rrc == RatifyV2ClaimStoreUnavailable && resumed == NULL, "resume allow without horizon",
+                          v2c_class(rrc));
+            }
+            free(altered);
+            checks += 2;
+        }
+        rrc = ratify_v2_resume_committed_claim(&resume, dropped_id, &resumed);
+        v2c_check(rrc == 0 && resumed != NULL, "resume committed allow", ratify_v2_last_error_message());
+        checks += 4;
+        if (resumed) {
+            RatifyV2Buffer body = {0};
+            ratify_v2_committed_receipt_body(resumed, &body);
+            v2c_check(body.len == kept_body.len && memcmp(body.ptr, kept_body.ptr, body.len) == 0, "resumed body",
+                      "the resumed handoff differs from the committed one");
+            ratify_v2_buffer_free(body);
+            checks++;
+            checks += release(&s, resumed, &vk, "allow", &rs, &cp);
+            ratify_v2_committed_free(resumed);
+        }
+        ratify_v2_buffer_free(kept_body);
+        ratify_v2_string_free(dropped_id);
+    }
 
     /* 3. A provider cancels after the claim: nothing is committed, the claim
      *    stays in progress until its lease expires, and recovery commits the
@@ -835,7 +952,15 @@ int v2c_run_lifecycle(void) {
     RatifyV2Committed *recovered = NULL;
     int32_t rc = ratify_v2_recover_interrupted_claim(&claim, cancel_id, &recovered);
     v2c_check(rc == RatifyV2ClaimLeaseLive && recovered == NULL, "recover during lease", v2c_class(rc));
+    RatifyV2Committed *early = NULL;
+    rc = ratify_v2_resume_committed_claim(&resume, cancel_id, &early);
+    v2c_check(rc == RatifyV2ClaimLeaseLive && early == NULL, "resume during lease", v2c_class(rc));
     s.now += s.lease;
+    rc = ratify_v2_resume_committed_claim(&resume, cancel_id, &early);
+    claim_rec *interrupted = find(&s, cancel_id);
+    v2c_check(rc == RatifyV2ClaimLeaseLost && early == NULL && interrupted && !interrupted->terminal,
+              "resume before recovery", v2c_class(rc));
+    checks += 2;
     {
         /* SPEC-v2 §7.5: recovery seals only a valid canonical progress record;
          * one a store returns without context_policy_digest is malformed. */
@@ -921,6 +1046,12 @@ int v2c_run_lifecycle(void) {
         uint8_t *text = v2c_take(body, NULL);
         v2c_check(strstr((char *)text, "\"decision_reason\":\"evaluation_interrupted\"") != NULL, "interrupted body", (char *)text);
         free(text);
+        /* The recovered result resumes like any committed one (§7.11). */
+        RatifyV2Committed *again = NULL;
+        rc = ratify_v2_resume_committed_claim(&resume, cancel_id, &again);
+        v2c_check(rc == 0 && again != NULL && same_body(again, recovered), "resume recovered", v2c_class(rc));
+        ratify_v2_committed_free(again);
+        checks++;
         checks += release(&s, recovered, &vk, "indeterminate", &rs, &cp);
         ratify_v2_committed_free(recovered);
     }

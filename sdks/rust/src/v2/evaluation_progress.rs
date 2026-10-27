@@ -3,13 +3,18 @@
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use super::claim_store::{ClaimStoreV2, V2ChallengeClaim, V2EvaluationToken, V2StoreError};
+use super::claim_store::{
+    claim_id_matches_key, validate_v2_finalization_payload, ClaimStoreV2, V2ChallengeClaim, V2EvaluationToken,
+    V2StoreError,
+};
 use super::context::V2Context;
 use super::crypto::valid_prefixed_digest;
 use super::errors::{err, plain, Classify, V2Error, V2ErrorClass, V2Result};
 use super::json::{canonical, CJ};
-use super::limits::valid_v2_timestamp;
-use super::receipt::{verification_receipt_v2_body, StatusEvidenceEntryV2, VerificationReceiptV2};
+use super::limits::{valid_v2_timestamp, V2_MAX_TIMESTAMP_SECONDS};
+use super::receipt::{
+    decode_verification_receipt_body_v2, verification_receipt_v2_body, StatusEvidenceEntryV2, VerificationReceiptV2,
+};
 use super::release::CommittedV2Outcome;
 use crate::types::HybridSignature;
 
@@ -228,6 +233,87 @@ pub fn recover_interrupted_claim_v2(
         Err(_) => return err(V2ErrorClass::ClaimStoreUnavailable, "claim store recovery panicked"),
     }
     Ok(CommittedV2Outcome::new(&interrupted.claim, &body, 0))
+}
+
+/// Go `V2CommittedClaim`: a terminal claim as the claim store's terminal
+/// compare-and-set persisted it: the sealed claim values, the terminal
+/// result, the sealed receipt outbox body, and the allow horizon (0 unless
+/// the result is an allow).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct V2CommittedClaim {
+    pub claim: V2ChallengeClaim,
+    pub terminal_result: Vec<u8>,
+    pub receipt_body: Vec<u8>,
+    pub allow_horizon: i64,
+}
+
+/// Go `V2CommittedClaimStore`: loads a terminal claim's persisted record for
+/// resumption (SPEC-v2 §7.11). `load_v2_committed_claim` answers
+/// `claim_not_found` for a claim the store does not hold, `claim_lease_live`
+/// for a claim still evaluating under a live lease, and `claim_lease_lost`
+/// for a claim still evaluating after its lease expired (lease-expiry
+/// recovery runs first).
+pub trait V2CommittedClaimStore {
+    fn load_v2_committed_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2CommittedClaim, V2StoreError>;
+}
+
+/// Go `ResumeCommittedClaimV2`: returns the handoff of a claim's committed
+/// result from the claim store's persisted record (SPEC-v2 §7.11), for a
+/// service whose handoff was lost after the terminal commit, for example by
+/// a crash before the verifier returned. It checks the record as the
+/// terminal compare-and-set does and never builds or replaces a result; a
+/// record that fails a check is `claim_store_unavailable`. Publication,
+/// checkpoint submission and release then proceed as for a returned handoff.
+pub fn resume_committed_claim_v2(
+    ctx: &V2Context,
+    store: &dyn V2CommittedClaimStore,
+    claim_id: &str,
+) -> V2Result<CommittedV2Outcome> {
+    if claim_id.is_empty() {
+        return err(
+            V2ErrorClass::ConfigurationInvalid,
+            "v2 resumption requires a context, claim store and claim ID",
+        );
+    }
+    let committed = match catch_unwind(AssertUnwindSafe(|| store.load_v2_committed_claim(ctx, claim_id))) {
+        Ok(r) => r.map_err(|e| e.classified_or(V2ErrorClass::ClaimStoreUnavailable))?,
+        Err(_) => {
+            return err(
+                V2ErrorClass::ClaimStoreUnavailable,
+                "claim store committed-claim load panicked",
+            )
+        }
+    };
+    if let Err(e) = validate_v2_committed_claim(&committed, claim_id) {
+        return err(
+            V2ErrorClass::ClaimStoreUnavailable,
+            format!("v2 claim store returned a committed record that fails its checks: {}", e.message),
+        );
+    }
+    Ok(CommittedV2Outcome::new(&committed.claim, &committed.receipt_body, committed.allow_horizon))
+}
+
+/// Go `validateV2CommittedClaim`: the terminal compare-and-set's checks on a
+/// persisted record: the claim ID (§7.3), the finalization payload (§7.5),
+/// and the allow horizon (§6.8).
+fn validate_v2_committed_claim(committed: &V2CommittedClaim, claim_id: &str) -> V2Result<()> {
+    let claim = &committed.claim;
+    if claim.claim_id != claim_id {
+        return plain("the record is for a different claim");
+    }
+    if !claim_id_matches_key(claim) {
+        return plain("the claim ID does not derive from the claim's replay key");
+    }
+    validate_v2_finalization_payload(claim, &committed.terminal_result, &committed.receipt_body)?;
+    let body = decode_verification_receipt_body_v2(&committed.receipt_body)?;
+    if body.decision == "allow" {
+        if committed.allow_horizon <= 0 || committed.allow_horizon > V2_MAX_TIMESTAMP_SECONDS {
+            return plain("an allow has no allow horizon in the timestamp domain");
+        }
+    } else if committed.allow_horizon != 0 {
+        return plain("a result that is not an allow has an allow horizon");
+    }
+    Ok(())
 }
 
 /// Go `recordV2ProgressSafely`: persist progress under the evaluator

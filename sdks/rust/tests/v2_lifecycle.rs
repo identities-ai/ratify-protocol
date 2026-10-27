@@ -555,6 +555,18 @@ fn lifecycle_scenarios() {
                         committed.insert(request.clone(), c);
                     }
                 }
+                "resume" => {
+                    // SPEC-v2 §7.11: the resumed handoff replaces the one held.
+                    let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
+                        let e = &file()["requests"][&request]["expected_challenge"];
+                        protocol_claim_id_v2(&s(&e["verifier_namespace"]), i(&e["replay_epoch"]), &unb64(&e["value_b64"]))
+                            .expect("claim id")
+                    });
+                    let result = resume_committed_claim_v2(&ctx, store.as_ref(), &claim_id);
+                    if let Some(c) = check_recover(step_index, result, want) {
+                        committed.insert(request.clone(), c);
+                    }
+                }
                 "publish" => {
                     let c = &committed[&request];
                     if mode == "signer_failure" {
@@ -640,9 +652,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (63, 342), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (66, 360), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("63 Part B scripts (342 steps)"), "README row: {readme}");
+    assert!(readme.contains("66 Part B scripts (360 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

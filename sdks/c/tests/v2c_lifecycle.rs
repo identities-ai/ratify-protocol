@@ -81,6 +81,17 @@ fn claim_id_of(inputs: &Value) -> String {
     .expect("claim id")
 }
 
+/// Resumes a committed claim from the store (SPEC-v2 §7.11).
+fn resume(store: &RatifyV2CommittedStoreCallbacks, claim_id: &str) -> R<Committed> {
+    let id = cs(claim_id);
+    let mut out: *mut RatifyV2Committed = ptr::null_mut();
+    let code = unsafe { ratify_v2_resume_committed_claim(store, id.as_ptr(), &mut out) };
+    let r = check(code);
+    let c = (!out.is_null()).then_some(Committed(out));
+    assert_eq!(r.is_ok(), c.is_some(), "an output is written exactly on success");
+    r.map(|_| c.expect("committed outcome"))
+}
+
 fn recover(claim_cb: &RatifyV2ClaimStoreCallbacks, claim_id: &str) -> R<Committed> {
     let id = cs(claim_id);
     let mut out: *mut RatifyV2Committed = ptr::null_mut();
@@ -812,6 +823,20 @@ fn v2c_lifecycle_scenarios() {
                         committed.insert(request.clone(), c);
                     }
                 }
+                "resume" => {
+                    // SPEC-v2 §7.11: the resumed handoff replaces the one held.
+                    let claim_id = ids
+                        .lock()
+                        .unwrap()
+                        .0
+                        .get(&request)
+                        .cloned()
+                        .unwrap_or_else(|| claim_id_of(&file()["requests"][&request]));
+                    let result = resume(&store.committed(), &claim_id);
+                    if let Some(c) = check_recover(&at, result, want) {
+                        committed.insert(request.clone(), c);
+                    }
+                }
                 "publish" => {
                     let c = &committed[&request];
                     if mode == "signer_failure" {
@@ -924,10 +949,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (63, 342), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (66, 360), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("63 Part B scripts (342 steps)"),
+        readme.contains("66 Part B scripts (360 steps)"),
         "README row: {readme}"
     );
     println!(

@@ -904,6 +904,37 @@ typedef struct RatifyV2ClockCallbacks {
     RatifyV2NowFn now;
 } RatifyV2ClockCallbacks;
 
+// What a claim store returns to resumption (SPEC-v2 §7.11): a terminal
+// claim exactly as its terminal compare-and-set persisted it. `record` is
+// the stored claim record (the bytes `load_interrupted` returns),
+// `terminal_result` and `receipt_body` the committed bytes, and
+// `allow_horizon` the committed horizon (0 unless the result is an allow).
+typedef struct RatifyV2CommittedClaim {
+    struct RatifyV2Slice record;
+    struct RatifyV2Slice terminal_result;
+    struct RatifyV2Slice receipt_body;
+    int64_t allow_horizon;
+} RatifyV2CommittedClaim;
+
+// Loads a terminal claim's persisted record for resumption (SPEC-v2
+// §7.11). Fails with `RatifyV2ClaimNotFound` for a claim the store does not
+// hold, `RatifyV2ClaimLeaseLive` for a claim still evaluating under a live
+// lease, and `RatifyV2ClaimLeaseLost` for a claim still evaluating after its
+// lease expired (lease-expiry recovery runs first). The returned slices
+// must be the bytes the store committed; a record that is not canonical or
+// not valid, a claim record whose `claim_id` does not derive from its
+// replay key, or a result that fails the terminal commit's checks is
+// `RatifyV2ClaimStoreUnavailable`, and no handoff is returned.
+typedef int32_t (*RatifyV2LoadCommittedFn)(void *user,
+                                           const char *claim_id,
+                                           struct RatifyV2CommittedClaim *out);
+
+// The claim store's resumption view (SPEC-v2 §7.11).
+typedef struct RatifyV2CommittedStoreCallbacks {
+    void *user;
+    RatifyV2LoadCommittedFn load_committed;
+} RatifyV2CommittedStoreCallbacks;
+
 // One anchored `SecurityJournalV2` state: its canonical snapshot bytes and
 // the independently anchored head (`generation`, `digest`).
 typedef struct RatifyV2JournalSnapshot {
@@ -2820,6 +2851,12 @@ int32_t ratify_v2_ref_store_callbacks(const struct RatifyV2RefStore *s,
 #endif
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
+// TEST ONLY: the resumption callbacks serving this store (SPEC-v2 §7.11).
+int32_t ratify_v2_ref_store_committed_callbacks(const struct RatifyV2RefStore *s,
+                                                struct RatifyV2CommittedStoreCallbacks *out);
+#endif
+
+#if defined(RATIFY_V2_TEST_REFERENCE)
 // TEST ONLY: a reference journal store anchored at genesis.
 int32_t ratify_v2_ref_journal_new(struct RatifyV2RefJournal **out);
 #endif
@@ -3390,6 +3427,19 @@ int32_t ratify_v2_claim_proof_bundle(const uint8_t *bundle,
 int32_t ratify_v2_recover_interrupted_claim(const struct RatifyV2ClaimStoreCallbacks *claim_store,
                                             const char *claim_id,
                                             struct RatifyV2Committed **committed_out);
+
+// Resumption of committed work (SPEC-v2 §7.11): load a terminal claim's
+// persisted record through `store`, check it as the terminal
+// compare-and-set does, and return the handoff of the committed result,
+// for a service whose handoff was lost after the terminal commit (for
+// example a crash before `ratify_v2_verify_proof_bundle` returned). Nothing
+// is built, re-evaluated or committed; a record that fails a check is
+// `RatifyV2ClaimStoreUnavailable`. On success `*committed_out` is the
+// committed outcome; publication, checkpoint and release then proceed as
+// for a returned one.
+int32_t ratify_v2_resume_committed_claim(const struct RatifyV2CommittedStoreCallbacks *store,
+                                         const char *claim_id,
+                                         struct RatifyV2Committed **committed_out);
 
 // Release a committed outcome. NULL is a no-op.
 void ratify_v2_committed_free(struct RatifyV2Committed *c);

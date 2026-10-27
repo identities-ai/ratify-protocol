@@ -1116,6 +1116,12 @@ impl RefStore {
         c
     }
 
+    pub fn committed(&self) -> RatifyV2CommittedStoreCallbacks {
+        let mut c = unsafe { std::mem::zeroed::<RatifyV2CommittedStoreCallbacks>() };
+        check(unsafe { ratify_v2_ref_store_committed_callbacks(self.0, &mut c) }).unwrap();
+        c
+    }
+
     /// Publish; on refusal returns the refusal name.
     pub fn publish(&self, claim_id: &str, body: &[u8]) -> Result<Vec<u8>, String> {
         let id = cs(claim_id);

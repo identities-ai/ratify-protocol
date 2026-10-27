@@ -764,6 +764,7 @@ fn v2_public_api_errors_are_classified() {
             class(v2_evaluation_interrupted_result(&V2ChallengeClaim::default(), -1, &zero_progress())),
         ),
         ("RecoverInterruptedClaimV2", Some(ConfigurationInvalid), class(recover_interrupted_claim_v2(&ctx, &store, ""))),
+        ("ResumeCommittedClaimV2", Some(ConfigurationInvalid), class(resume_committed_claim_v2(&ctx, &store, ""))),
         (
             "IssueChallengeV2",
             Some(ConfigurationInvalid),
@@ -806,8 +807,8 @@ fn v2_public_api_errors_are_classified() {
     }
     assert!(failures.is_empty(), "{} misclassified:\n{}", failures.len(), failures.join("\n"));
     // Every Go entry point is either exercised here or has no Rust
-    // counterpart (errors_v2_public_test.go lists 117).
-    assert_eq!(rows.len() + NOT_REPRESENTABLE.len(), 117);
+    // counterpart (errors_v2_public_test.go lists 118).
+    assert_eq!(rows.len() + NOT_REPRESENTABLE.len(), 118);
 
     // The live verifier reports a listed class in its outcome as well.
     // Bounded decode precedes the claim-store check (SPEC-v2 §6.2), so an

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { protocolClaimIDV2 } from "../../src/challenge_claim_v2.js";
 import { claimProofBundleV2, type ClaimStoreV2 } from "../../src/claim_store_v2.js";
 import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
-import { recoverInterruptedClaimV2 } from "../../src/evaluation_progress_v2.js";
+import { recoverInterruptedClaimV2, resumeCommittedClaimV2 } from "../../src/evaluation_progress_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { CommittedV2Outcome, releaseV2Decision, type V2ReceiptCheckpoint, type V2ReleaseConfig, type V2ReleasedDecision } from "../../src/release_v2.js";
 import {
@@ -71,8 +71,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 63);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 342);
+  assert.equal(file.scenarios.length, 66);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 360);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -104,6 +104,26 @@ for (const sc of file.scenarios as Any[]) {
         if (!want.error_class) throw err;
         assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} recover class (${(err as Error).message})`);
       }
+    };
+    // resumeStep resumes the request's committed claim from the store
+    // (SPEC-v2 §7.11); the resumed handoff replaces the one held.
+    const resumeStep = async (i: number, request: string, want: Any) => {
+      let claimID = claimIDs.get(request);
+      if (claimID === undefined) {
+        const e = file.requests[request].expected_challenge;
+        claimID = protocolClaimIDV2(e.verifier_namespace, e.replay_epoch, unb64(e.value_b64));
+      }
+      let outcome: CommittedV2Outcome | null = null;
+      try {
+        outcome = await resumeCommittedClaimV2(store, claimID);
+      } catch (err) {
+        if (!want.error_class) throw err;
+        assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} resume class (${(err as Error).message})`);
+        return;
+      }
+      assert.equal(want.error_class ?? "", "", `step ${i} resume succeeded, want ${want.error_class}`);
+      checkCommitted(i, outcome, want);
+      committed.set(request, outcome);
     };
     // runVerify runs one verify step; with mode "" it is safe for concurrent
     // use (verify_concurrent).
@@ -257,6 +277,9 @@ for (const sc of file.scenarios as Any[]) {
         }
         case "recover":
           await recoverStep(i, step.request, want);
+          break;
+        case "resume":
+          await resumeStep(i, step.request, want);
           break;
         case "publish": {
           const c = committed.get(step.request)!;

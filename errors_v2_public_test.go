@@ -251,6 +251,7 @@ func TestV2PublicAPIErrorsAreClassified(t *testing.T) {
 			return err
 		}},
 		{"RecoverInterruptedClaimV2", V2ErrConfigurationInvalid, func() error { return first(RecoverInterruptedClaimV2(ctx, nil, "")) }},
+		{"ResumeCommittedClaimV2", V2ErrConfigurationInvalid, func() error { return first(ResumeCommittedClaimV2(ctx, nil, "")) }},
 		{"IssueChallengeV2", V2ErrConfigurationInvalid, func() error { return first(V2ChallengeIssuer{}.IssueChallengeV2(ctx, V2ChallengeIssueRequest{})) }},
 		{"LoadExpectedChallengeV2", V2ErrConfigurationInvalid, func() error { return first(LoadExpectedChallengeV2(ctx, nil, "ns", 0, nil)) }},
 		{"CheckV2StreamSequence", V2ErrStreamSequenceMismatch, func() error { return CheckV2StreamSequence(true, 5, 5) }},

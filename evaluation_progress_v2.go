@@ -3,8 +3,10 @@ package ratify
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // V2EvaluationProgress is the per-dimension progress of one claimed
@@ -161,6 +163,96 @@ func RecoverInterruptedClaimV2(ctx context.Context, store ClaimStoreV2, claimID 
 		return nil, classify(err)
 	}
 	return newCommittedV2Outcome(interrupted.Claim, body, 0), nil
+}
+
+// V2CommittedClaim is a terminal claim as the claim store's terminal
+// compare-and-set persisted it: the sealed claim values, the terminal result,
+// the sealed receipt outbox body, and the allow horizon (0 unless the result
+// is an allow).
+type V2CommittedClaim struct {
+	Claim          V2ChallengeClaim
+	TerminalResult []byte
+	ReceiptBody    []byte
+	AllowHorizon   int64
+}
+
+// V2CommittedClaimStore loads a terminal claim's persisted record for
+// resumption (SPEC-v2 §7.11). LoadV2CommittedClaim answers claim_not_found for
+// a claim the store does not hold, claim_lease_live for a claim still
+// evaluating under a live lease, and claim_lease_lost for a claim still
+// evaluating after its lease expired (lease-expiry recovery runs first).
+type V2CommittedClaimStore interface {
+	LoadV2CommittedClaim(ctx context.Context, claimID string) (V2CommittedClaim, error)
+}
+
+// ResumeCommittedClaimV2 returns the handoff of a claim's committed result
+// from the claim store's persisted record (SPEC-v2 §7.11), for a service
+// whose handoff was lost after the terminal commit, for example by a crash
+// before the verifier returned. It checks the record as the terminal
+// compare-and-set does and never builds or replaces a result; a record that
+// fails a check is claim_store_unavailable. Publication, checkpoint
+// submission and release then proceed as for a returned handoff.
+func ResumeCommittedClaimV2(ctx context.Context, store V2CommittedClaimStore, claimID string) (_ *CommittedV2Outcome, resultErr error) {
+	defer func() { resultErr = v2Classify(V2ErrClaimStoreUnavailable, resultErr) }()
+	if ctx == nil || store == nil || claimID == "" {
+		return nil, v2Errorf(V2ErrConfigurationInvalid, "v2 resumption requires a context, claim store and claim ID")
+	}
+	committed, err := loadV2CommittedSafely(ctx, store, claimID)
+	if err != nil {
+		if V2ErrorClassOf(err) == V2ErrUnclassified {
+			return nil, v2Classify(V2ErrClaimStoreUnavailable, err)
+		}
+		return nil, err
+	}
+	if err := validateV2CommittedClaim(committed, claimID); err != nil {
+		return nil, v2Errorf(V2ErrClaimStoreUnavailable, "v2 claim store returned a committed record that fails its checks: %v", err)
+	}
+	return newCommittedV2Outcome(committed.Claim, committed.ReceiptBody, committed.AllowHorizon), nil
+}
+
+// validateV2CommittedClaim applies the terminal compare-and-set's checks to a
+// persisted record: the claim ID (§7.3), the finalization payload (§7.5), and
+// the allow horizon (§6.8).
+func validateV2CommittedClaim(committed V2CommittedClaim, claimID string) error {
+	claim := committed.Claim
+	if claim.ClaimID != claimID {
+		return fmt.Errorf("the record is for a different claim")
+	}
+	encoded, ok := strings.CutPrefix(claim.ChallengeDigest, "sha384:")
+	if !ok || len(encoded) != 96 || encoded != strings.ToLower(encoded) {
+		return fmt.Errorf("the challenge digest is not a sha384 digest")
+	}
+	digest, err := hex.DecodeString(encoded)
+	if err != nil {
+		return fmt.Errorf("the challenge digest is not a sha384 digest")
+	}
+	if derived, err := ProtocolClaimIDFromDigestV2(claim.Namespace, claim.ReplayEpoch, digest); err != nil || derived != claim.ClaimID {
+		return fmt.Errorf("the claim ID does not derive from the claim's replay key")
+	}
+	if err := ValidateV2FinalizationPayload(claim, committed.TerminalResult, committed.ReceiptBody); err != nil {
+		return err
+	}
+	body, err := DecodeVerificationReceiptBodyV2(committed.ReceiptBody)
+	if err != nil {
+		return err
+	}
+	if body.Decision == "allow" {
+		if committed.AllowHorizon <= 0 || committed.AllowHorizon > V2MaxTimestampSeconds {
+			return fmt.Errorf("an allow has no allow horizon in the timestamp domain")
+		}
+	} else if committed.AllowHorizon != 0 {
+		return fmt.Errorf("a result that is not an allow has an allow horizon")
+	}
+	return nil
+}
+
+func loadV2CommittedSafely(ctx context.Context, store V2CommittedClaimStore, claimID string) (committed V2CommittedClaim, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			committed, err = V2CommittedClaim{}, fmt.Errorf("claim store committed-claim load panicked: %v", r)
+		}
+	}()
+	return store.LoadV2CommittedClaim(ctx, claimID)
 }
 
 func loadV2InterruptedSafely(ctx context.Context, store ClaimStoreV2, claimID string) (interrupted V2InterruptedClaim, err error) {

@@ -191,6 +191,7 @@ enum {
     S_ALREADY_TERMINAL, S_HORIZON, S_CLAIM_ONLY, S_CLAIM_ONLY_CREATED, S_RECOVER, S_RECOVERED, S_LEASE_LIVE, S_NOT_FOUND,
     S_SLOW, S_LATE_FENCED, S_NONOWNER_REFUSED, S_PUBLISH, S_ACK, S_ACK_RETRY, S_ACK_ORDER_REFUSED, S_FORK,
     S_RELEASE, S_RELEASED_ALLOW, S_RELEASED_OTHER, S_WITHHELD, S_WITHHELD_AFTER_RELEASED, S_PENDING, S_REJECTED,
+    S_RECORD_REFUSED,
     S_ADVANCE, S_CHURN, S_N
 };
 static const char *STAT_NAMES[S_N] = {
@@ -198,7 +199,7 @@ static const char *STAT_NAMES[S_N] = {
     "already_terminal", "allow_horizon_passed", "claim_only", "claim_only_created", "recover", "recovered", "lease_live", "not_found",
     "slow_owner", "late_finalize_fenced", "nonowner_refused", "publish", "ack", "ack_retry", "ack_order_refused",
     "fork", "release", "released_allow", "released_other", "withheld", "withheld_after_released", "pending",
-    "rejected", "advance", "churn"};
+    "rejected", "second_record_refused", "advance", "churn"};
 static long stats[S_N];
 static void bump_stat(int which) { __atomic_add_fetch(&stats[which], 1, __ATOMIC_RELAXED); }
 
@@ -741,6 +742,32 @@ static void op_advance(worker *w) {
     bump_stat(S_ADVANCE);
 }
 
+/* A direct record_release with the other outcome for a claim that already
+ * has a release record: the first record wins, so it is refused and the
+ * stored record does not change (SPEC-v2 §6.9). */
+static void conflicting_record(claim_book *k) {
+    store_lock();
+    claim_rec *r = find(&S, k->claim_id);
+    if (r && r->has_release) {
+        int32_t outcome = r->release_outcome;
+        char reason[64];
+        snprintf(reason, sizeof reason, "%s", r->release_reason);
+        int64_t ts = r->release_ts;
+        uint8_t hash[64];
+        memcpy(hash, r->release_hash, sizeof hash);
+        int released = outcome == RatifyV2ReleaseReleased;
+        RatifyV2ReleaseRecord other = {r->claim_id, {hash, r->release_hash_len}, ts,
+                                       released ? RatifyV2ReleaseWithheld : RatifyV2ReleaseReleased,
+                                       released ? "allow_horizon_passed" : ""};
+        int32_t rc = st_record_release(&S, &other);
+        if (rc != RatifyV2StoreReleaseStateMismatch || r->release_outcome != outcome ||
+            strcmp(r->release_reason, reason) != 0 || r->release_ts != ts)
+            fail("a second, different release record for %s was not refused", k->claim_id);
+        else bump_stat(S_RECORD_REFUSED);
+    }
+    store_unlock();
+}
+
 static void op_release(worker *w, int b) {
     claim_book *k = &book[b];
     int h = pool_take(w, b);
@@ -814,6 +841,7 @@ static void op_release(worker *w, int b) {
     ratify_v2_string_free(reason);
     ratify_v2_released_free(d);
     pthread_mutex_unlock(&handle_mu[b][h]);
+    conflicting_record(k);
 }
 
 /* Handle create/free churn: accessor copies of a shared committed handle,
@@ -1233,7 +1261,7 @@ int main(int argc, char **argv) {
     /* Every operation kind must have run, or the mix did not test it. */
     static const int required[] = {S_COMMITTED, S_REPLAY_PROGRESS, S_REPLAY_TERMINAL, S_CONFLICT, S_CANCELLED,
                                    S_LATE_FENCED, S_NONOWNER_REFUSED, S_RECOVERED, S_LEASE_LIVE, S_ACK, S_ACK_RETRY,
-                                   S_ACK_ORDER_REFUSED, S_RELEASED_ALLOW, S_RELEASED_OTHER, S_PENDING, S_CHURN};
+                                   S_ACK_ORDER_REFUSED, S_RECORD_REFUSED, S_RELEASED_ALLOW, S_RELEASED_OTHER, S_PENDING, S_CHURN};
     for (size_t i = 0; i < sizeof required / sizeof required[0]; i++)
         if (stats[required[i]] == 0) fail("operation outcome %s never occurred; run longer", STAT_NAMES[required[i]]);
 

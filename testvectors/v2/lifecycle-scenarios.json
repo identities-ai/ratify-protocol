@@ -27,6 +27,7 @@
     "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
     "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
+    "resume": "ResumeCommittedClaim for the request's claim ID (computed as for recover): the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired",
     "set_ack_withheld": "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
     "set_time": "set the authoritative clock (it may move backward to exercise clock regression). The store keeps a high-water mark of every authoritative reading, including the checkpoint's acknowledgement timestamps, and a reading below it is a reported clock regression",
     "snapshot": "copy the complete primary state (store, journal, issuance records) under snapshot",
@@ -6696,6 +6697,181 @@
           "expect": {
             "stage": "replay",
             "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_finalized_claim_without_handoff",
+      "description": "a result committed by a direct finalize has no handoff; resumption returns it from the store, and it is published and released like a returned handoff (SPEC-v2 §7.11)",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "finalize_result": "committed"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "status_unavailable"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "indeterminate",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "status_unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_replaces_lost_allow_handoff",
+      "description": "resuming a committed allow returns the same handoff: the same allow horizon, published at the same position and released once",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_refuses_claims_without_a_committed_record",
+      "description": "resumption never commits: an unknown claim is claim_not_found, a claim evaluating under a live lease is claim_lease_live and after it claim_lease_lost; after lease-expiry recovery it resumes the interrupted result",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "error_class": "claim_not_found"
+          }
+        },
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "error_class": "claim_lease_live"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "error_class": "claim_lease_lost"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted"
           }
         }
       ]

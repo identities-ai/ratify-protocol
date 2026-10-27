@@ -142,6 +142,7 @@ func (g *gen) lifecycleFile() any {
 			"acknowledge":            "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
 			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
 			"recover_direct":         "call the claim store's recovery operation directly for the request's claim (from its claim_only step) with terminal_b64 as the terminal result and body_b64 as the receipt outbox body, after the evaluator lease expired; expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store validates the result and body exactly as finalize does (SPEC-v2 §7.5: malformed for a body that is not a canonical receipt body, configuration_invalid for a body that does not bind the sealed claim or a result that differs from it) and accepts only indeterminate/evaluation_interrupted (configuration_invalid otherwise): a refused recovery commits nothing",
+			"resume":                 "ResumeCommittedClaim for the request's claim ID (computed as for recover): the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
 			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
@@ -445,7 +446,32 @@ func (g *gen) lifecycleFile() any {
 		acknowledge("A", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
 		acknowledge("B", "exact", lifecycleExpectJSON{AckTimestamp: Now + 4}),
 		release("B", released(Now+4, 2)), release("A", released(Now+4, 1)))
-	g.finalizeBindingScenarios(sc, bundles)
+	genuineTerminal, genuineBody := g.finalizeBindingScenarios(sc, bundles)
+	finalize := func(terminalB64, bodyB64 string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "finalize", Request: "A", TerminalB64: terminalB64, BodyB64: bodyB64, Expect: expect}
+	}
+	// SPEC-v2 §7.11: a committed result whose handoff was lost is resumed
+	// from the claim store's persisted record, then published and released.
+	resume := func(request string, expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "resume", Request: request, Expect: expect}
+	}
+	committedIndeterminate := lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "status_unavailable"}
+	sc("resume_finalized_claim_without_handoff", "a result committed by a direct finalize has no handoff; resumption returns it from the store, and it is published and released like a returned handoff (SPEC-v2 §7.11)",
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
+		resume("A", committedIndeterminate), publish("A", "ok", 1),
+		release("A", func() lifecycleExpectJSON { e := released(Now, 1); e.Decision = "indeterminate"; return e }()),
+		resume("A", committedIndeterminate))
+	sc("resume_replaces_lost_allow_handoff", "resuming a committed allow returns the same handoff: the same allow horizon, published at the same position and released once",
+		step("verify", "A", committedAllow), resume("A", committedAllow), publish("A", "ok", 1), release("A", released(Now, 1)),
+		step("verify", "A", lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}))
+	sc("resume_refuses_claims_without_a_committed_record", "resumption never commits: an unknown claim is claim_not_found, a claim evaluating under a live lease is claim_lease_live and after it claim_lease_lost; after lease-expiry recovery it resumes the interrupted result",
+		resume("A", lifecycleExpectJSON{ErrorClass: "claim_not_found"}),
+		lifecycleStepJSON{Op: "claim_only", Request: "A", Expect: lifecycleExpectJSON{Disposition: "created"}},
+		resume("A", lifecycleExpectJSON{ErrorClass: "claim_lease_live"}),
+		setTime(Now+lifecycleLeaseSeconds), resume("A", lifecycleExpectJSON{ErrorClass: "claim_lease_lost"}),
+		step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		resume("A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
 	g.recoveryBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f
@@ -456,7 +482,7 @@ func (g *gen) lifecycleFile() any {
 // request A, offers a body that differs from the sealed claim in exactly one
 // bound member (refused as configuration_invalid, committing nothing), and
 // then finalizes and retries the genuine body.
-func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJSON), bundles map[string][]byte) {
+func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJSON), bundles map[string][]byte) (genuineTerminal, genuineBody string) {
 	b := must(ratify.DecodeProofBundleV2(bundles["A"]))
 	issuers := []string{}
 	for _, c := range b.Delegations {
@@ -478,8 +504,8 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 	terminal := func(decision, reason, identity string) string {
 		return b64(must(ratify.CanonicalJSON(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": identity})))
 	}
-	genuineTerminal := terminal("indeterminate", "status_unavailable", "authorization_unverified")
-	genuineBody := b64(must(ratify.VerificationReceiptV2Body(genuine())))
+	genuineTerminal = terminal("indeterminate", "status_unavailable", "authorization_unverified")
+	genuineBody = b64(must(ratify.VerificationReceiptV2Body(genuine())))
 	finalize := func(terminalB64, bodyB64 string, expect lifecycleExpectJSON) lifecycleStepJSON {
 		return lifecycleStepJSON{Op: "finalize", Request: "A", TerminalB64: terminalB64, BodyB64: bodyB64, Expect: expect}
 	}
@@ -576,6 +602,7 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 		finalize(interruptedTerminal, b64(withDigest), lifecycleExpectJSON{ErrorClass: "malformed"}),
 		finalize(genuineTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 		lifecycleStepJSON{Op: "verify", Request: "A", Expect: lifecycleExpectJSON{Stage: "replay", Disposition: "terminal_replay"}})
+	return genuineTerminal, genuineBody
 }
 
 // recoveryBindingScenarios pins SPEC-v2 §7.5 for lease-expiry recovery: the

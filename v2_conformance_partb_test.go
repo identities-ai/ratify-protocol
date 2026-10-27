@@ -322,6 +322,30 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				}
 				return store
 			}
+			// resumeStep resumes the request's committed claim from the store
+			// (SPEC-v2 §7.11); the resumed handoff replaces the one held.
+			resumeStep := func(i int, request string, want v2LifecycleExpect) {
+				claimID := claimIDs[request]
+				if claimID == "" {
+					e := f.Requests[request].ExpectedChallenge
+					var err error
+					if claimID, err = ratify.ProtocolClaimIDV2(e.VerifierNamespace, e.ReplayEpoch, unb64(t, e.ValueB64)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				outcome, err := ratify.ResumeCommittedClaimV2(ctx, store, claimID)
+				if want.ErrorClass != "" {
+					if outcome != nil || string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
+						t.Fatalf("step %d resume: %v (class %s), want %s", i, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("step %d resume: %v", i, err)
+				}
+				checkV2CommittedDecision(t, i, outcome, want)
+				committed[request] = outcome
+			}
 			recoverStep := func(i int, request string, want v2LifecycleExpect) {
 				claimID := claimIDs[request]
 				if claimID == "" {
@@ -515,6 +539,8 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					}
 				case "recover":
 					recoverStep(i, step.Request, want)
+				case "resume":
+					resumeStep(i, step.Request, want)
 				case "publish":
 					c := committed[step.Request]
 					if step.Mode == "signer_failure" {

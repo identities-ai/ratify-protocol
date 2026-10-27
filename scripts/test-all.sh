@@ -14,6 +14,9 @@ echo "==> Go vet"
 GOCACHE="$GOCACHE" go vet ./...
 
 echo "==> Go tests"
+GOCACHE="$GOCACHE" go test -count=1 -timeout 40m ./...
+
+echo "==> Go tests (race detector)"
 GOCACHE="$GOCACHE" go test -race -count=1 -timeout 40m ./...
 
 echo "==> Test-vector determinism"

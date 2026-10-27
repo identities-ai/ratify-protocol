@@ -11,6 +11,9 @@ import (
 // differs from deterministic generator output. Regenerate with
 // `go run ./cmd/ratify-v2-vectors` only after reviewing the semantic change.
 func TestGeneratedV2VectorsMatchCommittedFiles(t *testing.T) {
+	if raceDetector {
+		t.Skip("the generator runs on one goroutine; this check runs without the race detector")
+	}
 	files, err := Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -31,6 +34,9 @@ func TestGeneratedV2VectorsMatchCommittedFiles(t *testing.T) {
 
 // TestGenerateIsDeterministic guards against map-order or randomness leaks.
 func TestGenerateIsDeterministic(t *testing.T) {
+	if raceDetector {
+		t.Skip("the generator runs on one goroutine; this check runs without the race detector")
+	}
 	a, err := Generate()
 	if err != nil {
 		t.Fatal(err)

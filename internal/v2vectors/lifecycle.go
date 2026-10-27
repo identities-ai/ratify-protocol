@@ -692,14 +692,18 @@ func (g *gen) recoveryBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
 			thenRecover[0], thenRecover[1], thenRecover[2])...)
-	// Recovery validates exactly as finalization does (SPEC-v2 §7.5): the
-	// terminal result is a JSON object whose decision and decision_reason
-	// match the body, and its other members are the store's own, so every SDK
-	// accepts a member of any JSON type.
-	extended := b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "evaluation_interrupted",
-		"identity_status": "authorization_unverified", "x": 1, "y": map[string]any{"z": true}})))
-	sc("recover_direct_accepts_terminal_result_with_other_members", "a terminal result whose decision and decision_reason match the canonical interrupted body, with further members of any JSON type, is committed by the claim store's recovery operation exactly as finalization would commit it; an identical repeat is a no-op",
-		append(slices.Clone(claimAndExpire),
-			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
-			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}))...)
+	// The sealed terminal result is exactly the RatifyCanonicalJSON of the
+	// body's decision, decision_reason and identity_status (SPEC-v2 §7.13),
+	// and recovery validates exactly as finalization does (§7.5), so any
+	// other bytes are configuration_invalid.
+	canonicalInterrupted := must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "evaluation_interrupted", "identity_status": "authorization_unverified"}))
+	refused("terminal_result_with_other_members", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result whose decision, decision_reason and identity_status match it but which has further members: the terminal result is not the canonical three-member object and is configuration_invalid (SPEC-v2 §7.13)",
+		b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "evaluation_interrupted",
+			"identity_status": "authorization_unverified", "x": 1, "y": map[string]any{"z": true}}))), genuineBody, "configuration_invalid")
+	refused("terminal_result_not_canonical", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with the matching terminal result preceded by a space: the bytes are not RatifyCanonicalJSON and are configuration_invalid (SPEC-v2 §7.13)",
+		b64(append([]byte(" "), canonicalInterrupted...)), genuineBody, "configuration_invalid")
+	refused("terminal_result_without_identity_status", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result that has only the matching decision and decision_reason: identity_status is required and the result is configuration_invalid (SPEC-v2 §7.13)",
+		b64(must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "evaluation_interrupted"}))), genuineBody, "configuration_invalid")
+	refused("terminal_result_other_identity_status", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a canonical terminal result whose decision and decision_reason match but whose identity_status is revoked: it differs from the body and is configuration_invalid (SPEC-v2 §7.13)",
+		terminal("indeterminate", "evaluation_interrupted", "revoked"), genuineBody, "configuration_invalid")
 }

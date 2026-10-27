@@ -7993,8 +7993,8 @@
       ]
     },
     {
-      "name": "recover_direct_accepts_terminal_result_with_other_members",
-      "description": "a terminal result whose decision and decision_reason match the canonical interrupted body, with further members of any JSON type, is committed by the claim store's recovery operation exactly as finalization would commit it; an identical repeat is a no-op",
+      "name": "recover_rejects_terminal_result_with_other_members",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result whose decision, decision_reason and identity_status match it but which has further members: the terminal result is not the canonical three-member object and is configuration_invalid (SPEC-v2 §7.13); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
       "start_time": 1800000000,
       "steps": [
         {
@@ -8015,16 +8015,203 @@
           "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwieCI6MSwieSI6eyJ6Ijp0cnVlfX0=",
           "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
           "expect": {
-            "finalize_result": "committed"
+            "error_class": "configuration_invalid"
           }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_terminal_result_not_canonical",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with the matching terminal result preceded by a space: the bytes are not RatifyCanonicalJSON and are configuration_invalid (SPEC-v2 §7.13); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
         },
         {
           "op": "recover_direct",
           "request": "A",
-          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwieCI6MSwieSI6eyJ6Ijp0cnVlfX0=",
+          "terminal_b64": "IHsiZGVjaXNpb24iOiJpbmRldGVybWluYXRlIiwiZGVjaXNpb25fcmVhc29uIjoiZXZhbHVhdGlvbl9pbnRlcnJ1cHRlZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCJ9",
           "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
           "expect": {
-            "finalize_result": "identical"
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_terminal_result_without_identity_status",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result that has only the matching decision and decision_reason: identity_status is required and the result is configuration_invalid (SPEC-v2 §7.13); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recover_rejects_terminal_result_other_identity_status",
+      "description": "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a canonical terminal result whose decision and decision_reason match but whose identity_status is revoked: it differs from the body and is configuration_invalid (SPEC-v2 §7.13); the refused recovery commits nothing, so the canonical interrupted recovery then commits, publishes at sequence 1, and an exact retry of the proof is a terminal replay",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoicmV2b2tlZCJ9",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "expect": {
+            "error_class": "configuration_invalid"
+          }
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
           }
         }
       ]

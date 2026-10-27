@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::authorization::V2LocalAuthorizationAssessment;
 use super::context::V2Context;
 use super::errors::{err, plain, V2Error, V2ErrorClass, V2Result};
-use super::evaluation_progress::{V2EvaluationProgress, V2InterruptedClaim};
+use super::evaluation_progress::{terminal_result_json, V2EvaluationProgress, V2InterruptedClaim};
 use super::evaluator::ConstraintEvaluatorRefV2;
 use super::json::{parse_json, JV};
 use super::limits::v2_challenge_time_current;
@@ -577,10 +577,10 @@ pub(crate) fn finalize_claim_proof_bundle_v2_inner(
     let Some(decision) = terminal_decision_for_v2_evaluation(&m.evaluation_status, &m.evaluation_reason) else {
         return own("v2 proof evaluation has not reached a terminal local result");
     };
+    validate_v2_finalization_payload(&state.claim, terminal_result, receipt_body).map_err(FinalizeFailure::Own)?;
     if !terminal_payload_matches_v2(terminal_result, receipt_body, decision, &m.evaluation_reason) {
         return own("v2 terminal result does not match the completed local evaluation");
     }
-    validate_v2_finalization_payload(&state.claim, terminal_result, receipt_body).map_err(FinalizeFailure::Own)?;
     if (decision == "allow" && m.allow_valid_until <= 0) || (decision != "allow" && m.allow_valid_until != 0) {
         return own("v2 terminal result lacks a valid allow freshness horizon");
     }
@@ -680,7 +680,7 @@ pub fn validate_v2_finalization_payload(
             return plain("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot");
         }
         if !terminal_payload_matches_v2(terminal_result, receipt_body, &body.decision, &body.decision_reason) {
-            return plain("v2 terminal result decision or reason differs from the receipt body");
+            return plain("v2 terminal result is not the canonical decision, reason and identity status of the receipt body");
         }
         Ok(())
     })()
@@ -709,16 +709,18 @@ pub(crate) fn terminal_decision_for_v2_evaluation(status: &str, reason: &str) ->
     ok.then_some(decision)
 }
 
-/// Go `terminalPayloadMatchesV2`: both objects are JSON objects without
+/// Go `terminalPayloadMatchesV2`: the body is a JSON object without
 /// duplicate keys at any level whose `decision` and `decision_reason` are
-/// strings equal to the expected values.
+/// strings equal to the expected values, and the terminal result is exactly
+/// the RatifyCanonicalJSON of its decision, decision_reason and
+/// identity_status (SPEC-v2 §7.13).
 pub(crate) fn terminal_payload_matches_v2(
     terminal_result: &[u8],
     receipt_body: &[u8],
     want_decision: &str,
     want_reason: &str,
 ) -> bool {
-    fn read(value: &[u8]) -> Option<(String, String)> {
+    fn read(value: &[u8]) -> Option<(String, String, String)> {
         let root = parse_json(value).ok()?;
         let JV::Obj(fields) = &root.v else {
             return None;
@@ -731,11 +733,11 @@ pub(crate) fn terminal_payload_matches_v2(
                 _ => None,
             }
         };
-        Some((field("decision")?, field("decision_reason")?))
+        Some((field("decision")?, field("decision_reason")?, field("identity_status")?))
     }
-    match (read(terminal_result), read(receipt_body)) {
-        (Some((rd, rr)), Some((bd, br))) => {
-            rd == want_decision && bd == want_decision && rr == want_reason && br == want_reason
+    match read(receipt_body) {
+        Some((decision, reason, identity)) if decision == want_decision && reason == want_reason => {
+            terminal_result_json(&decision, &reason, &identity).is_ok_and(|want| want == terminal_result)
         }
         _ => false,
     }

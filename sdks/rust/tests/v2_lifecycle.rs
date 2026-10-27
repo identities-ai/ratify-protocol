@@ -729,9 +729,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (80, 427), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (83, 447), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("80 Part B scripts (427 steps)"), "README row: {readme}");
+    assert!(readme.contains("83 Part B scripts (447 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

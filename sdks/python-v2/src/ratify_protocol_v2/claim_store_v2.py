@@ -16,6 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from . import context_v2
+from ._v2json import canonical
 from .challenge_claim_v2 import challenge_claim_digest_v2, protocol_claim_id_v2
 from .clock_bounds_v2 import v2_challenge_time_current
 from .errors_v2 import ClaimProofConflictError, V2Error, V2ErrorClass, classify, classified, V2ValueError
@@ -351,9 +352,9 @@ def finalize_claim_proof_bundle_v2(ctx: context_v2.Context, store: ClaimStoreV2,
         decision, ok = terminal_decision_for_v2_evaluation(state.evaluation_status, state.evaluation_reason)
         if not ok:
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 proof evaluation has not reached a terminal local result")
+        validate_v2_finalization_payload(state.claim, terminal_result, receipt_body)
         if not terminal_payload_matches_v2(terminal_result, receipt_body, decision, state.evaluation_reason):
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result does not match the completed local evaluation")
-        validate_v2_finalization_payload(state.claim, terminal_result, receipt_body)
         if (decision == "allow" and state.allow_valid_until <= 0) or (decision != "allow" and state.allow_valid_until != 0):
             raise V2ValueError(V2ErrorClass.CONFIGURATION_INVALID, "v2 terminal result lacks a valid allow freshness horizon")
         if state.rate_at_finalization and not is_v2_rate_at_finalization_store(store):
@@ -416,7 +417,7 @@ def validate_v2_finalization_payload(claim: V2ChallengeClaim, terminal_result: b
     if list(body.constraint_evaluators or []) != list(claim.constraint_evaluators or []):
         raise ValueError("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")
     if not terminal_payload_matches_v2(terminal_result, receipt_body, body.decision, body.decision_reason):
-        raise ValueError("v2 terminal result decision or reason differs from the receipt body")
+        raise ValueError("v2 terminal result is not the canonical decision, reason and identity status of the receipt body")
 
 
 def terminal_decision_for_v2_evaluation(status: str, reason: str) -> tuple[str, bool]:
@@ -453,7 +454,7 @@ def _reject_constant(name: str):
     raise ValueError(f"invalid JSON literal {name}")
 
 
-def _read_decision(value: bytes) -> Optional[tuple[str, str]]:
+def _read_decision(value: bytes) -> Optional[tuple[str, str, str]]:
     try:
         text = bytes(value).decode("utf-8")
         parsed = json.loads(text, object_pairs_hook=_unique_pairs, parse_constant=_reject_constant)
@@ -461,25 +462,33 @@ def _read_decision(value: bytes) -> Optional[tuple[str, str]]:
         return None
     if not isinstance(parsed, dict):
         return None
+    if "identity_status" not in parsed:
+        return None
     decision = parsed.get("decision", "")
     reason = parsed.get("decision_reason", "")
+    identity = parsed["identity_status"]
     # Go json.Unmarshal into a string accepts a string or null (zero value).
     if decision is None:
         decision = ""
     if reason is None:
         reason = ""
-    if not isinstance(decision, str) or not isinstance(reason, str):
+    if identity is None:
+        identity = ""
+    if not isinstance(decision, str) or not isinstance(reason, str) or not isinstance(identity, str):
         return None
-    return decision, reason
+    return decision, reason, identity
 
 
 def terminal_payload_matches_v2(terminal_result: bytes, receipt_body: bytes, want_decision: str, want_reason: str) -> bool:
-    """Go ``terminalPayloadMatchesV2``: both JSON objects are well formed,
-    duplicate-free, and name the expected decision and reason."""
-    result = _read_decision(terminal_result)
+    """Go ``terminalPayloadMatchesV2``: the body is a well formed,
+    duplicate-free JSON object naming the expected decision and reason, and
+    the terminal result is exactly the RatifyCanonicalJSON of its decision,
+    decision_reason and identity_status (SPEC-v2 §7.13)."""
     body = _read_decision(receipt_body)
-    return (result is not None and body is not None and result[0] == want_decision and body[0] == want_decision
-            and result[1] == want_reason and body[1] == want_reason)
+    if body is None or body[0] != want_decision or body[1] != want_reason:
+        return False
+    want = canonical({"decision": body[0], "decision_reason": body[1], "identity_status": body[2]})
+    return bytes(terminal_result) == want
 
 
 def v2_finalization_payload_digest(terminal_result: bytes, receipt_body: bytes) -> bytes:

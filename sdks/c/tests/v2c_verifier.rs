@@ -348,11 +348,11 @@ fn run_ordering(builtin_standard: bool) {
         failures.join("\n")
     );
     // Exact counts, so a dropped vector fails; the README states the same.
-    assert_eq!(vectors.len(), 485, "verifier-ordering vectors");
+    assert_eq!(vectors.len(), 514, "verifier-ordering vectors");
     let want_stages: BTreeMap<String, usize> = [
-        ("committed", 346),
+        ("committed", 362),
         ("evaluating", 2),
-        ("preflight", 135),
+        ("preflight", 148),
         ("replay", 2),
     ]
     .into_iter()
@@ -366,7 +366,7 @@ fn run_ordering(builtin_standard: bool) {
     assert_eq!(registry, 5, "reference trust registry cases");
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("485 end-to-end live-verifier cases (135 pre-claim, 2 replay, 346 committed, 2 evaluating"),
+        readme.contains("514 end-to-end live-verifier cases (148 pre-claim, 2 replay, 362 committed, 2 evaluating"),
         "README row: {readme}"
     );
 }

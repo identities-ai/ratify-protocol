@@ -544,13 +544,14 @@ func (g *gen) orderingFile() any {
 		},
 	}
 	f.Bundles = map[string]string{}
-	for _, s := range append(append(append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...), g.orderingProbeScenarios()...), g.statusKeyEpochScenarios()...) {
+	for _, s := range append(append(append(append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...), g.orderingProbeScenarios()...), g.statusKeyEpochScenarios()...), g.orderingEdgeScenarios()...) {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}
 	f.Semantics["constraint_evaluators"] = "caller-authenticated extension evaluator registry (SPEC-v2 §5.2); absent = none registered. Each entry's profile and type form the descriptor {\"profile\",\"type\"} whose digest is sha384:hex(SHA-384(\"ratify-protocol-constraint-profile-v2\" || 0x00 || RatifyCanonicalJSON(descriptor))). implementation binds the behavior: com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1 are the standard profiles; fault:error returns an error; fault:panic panics; fault:timeout never answers within the registry timeout; fault:invalid_outcome returns an outcome outside pass/denied/unverifiable; fault:pass_until returns pass with horizon valid_until. The registry entries for types present in the chain are sealed with the claim and recorded, sorted by type, in the receipt member constraint_evaluators"
 	f.Semantics["request_context.extension_counts"] = "authenticated named quantities for extension profiles: names 1 to 128 bytes of [a-z0-9_.:-], values 0..2^53-1, at most 64 entries; invalid is configuration_invalid before claim"
 	f.Semantics["request_context.extension_values"] = "authenticated named exact values for extension profiles: names as for extension_counts, values valid UTF-8 of at most 512 bytes, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["status_requests"] = "every status-provider request, in call order (SPEC-v2 §6.5 step 3): one per distinct chain issuer whose binding, anchoring and role checks passed, in ascending byte order of issuer_id, with the caller-configured status_key_epoch and status_key_id and that issuer's CertificateRefs in chain order; empty when the provider is never called"
 	f.Semantics["callback_counts.evaluator"] = "number of extension evaluator invocations; omitted when zero"
 	return f
 }

@@ -2,7 +2,8 @@
 // proof per party, with typed party statements (0x0007). Port of
 // transaction_receipt_v2.go.
 
-import { sha256, sha384 } from "@noble/hashes/sha2";
+import { sha256 } from "@noble/hashes/sha2";
+import { sha384V2 } from "./sha384_v2.js";
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
 import { validV2Timestamp } from "./clock_bounds_v2.js";
@@ -115,7 +116,7 @@ export function transactionReceiptV2SignBytes(r: TransactionReceiptV2): Uint8Arr
 
 export function transactionContextHashV2(r: TransactionReceiptV2): Uint8Array {
   return sha256(concatBytes(
-    utf8("ratify/transaction-context/v2"), lp(utf8(r.transaction_id)), lp(utf8(r.terms_schema_uri)), sha384(r.terms_canonical_json),
+    utf8("ratify/transaction-context/v2"), lp(utf8(r.transaction_id)), lp(utf8(r.terms_schema_uri)), sha384V2(r.terms_canonical_json),
   ));
 }
 

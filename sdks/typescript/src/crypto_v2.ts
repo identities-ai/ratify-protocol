@@ -1,5 +1,6 @@
 import { Point, getPublicKeyAsync as getEd25519PublicKeyAsync, verifyAsync as verifyEd25519Async } from "@noble/ed25519";
-import { sha256, sha384 } from "@noble/hashes/sha2";
+import { sha256 } from "@noble/hashes/sha2";
+import { sha384V2 } from "./sha384_v2.js";
 import { shake256 } from "@noble/hashes/sha3";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
@@ -62,7 +63,7 @@ export function deriveKeyIDV2(publicKey: HybridPublicKey): string {
 
 function signingMessageV2Delegation(signableBytes: Uint8Array): Uint8Array {
   const code = new Uint8Array([0x00, 0x01]);
-  return concatBytes(SIGNATURE_V2_DOMAIN, code, sha384(signableBytes));
+  return concatBytes(SIGNATURE_V2_DOMAIN, code, sha384V2(signableBytes));
 }
 
 /**
@@ -121,7 +122,7 @@ export function validV2ObjectType(code: number): boolean {
 /** M = "ratify-protocol-signature" || 0x00 || 0x02 || u16be(code) || SHA-384(signable). */
 export function v2SigningMessage(code: number, signable: Uint8Array): Uint8Array {
   if (!validV2ObjectType(code)) throw new Error(`unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
-  return concatBytes(SIGNATURE_V2_DOMAIN, new Uint8Array([(code >> 8) & 0xff, code & 0xff]), sha384(signable));
+  return concatBytes(SIGNATURE_V2_DOMAIN, new Uint8Array([(code >> 8) & 0xff, code & 0xff]), sha384V2(signable));
 }
 
 /** FIPS 204 context "ratify-protocol/2/" || lowercase hex4(code). */

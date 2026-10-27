@@ -689,7 +689,14 @@ export class Float64 {
 
 const HEX = "0123456789abcdef";
 
+// Characters encodeGoString writes other than as themselves.
+const GO_STRING_SPECIAL = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff]/;
+const GO_STRING_SPECIAL_HTML = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff<>&]/;
+
 export function encodeGoString(s: string, escapeHTML: boolean): string {
+  // Most strings (identifiers, base64) need no escape; the per-character
+  // loop below allocates per character, which dominates on large values.
+  if (!(escapeHTML ? GO_STRING_SPECIAL_HTML : GO_STRING_SPECIAL).test(s)) return '"' + s + '"';
   let out = '"';
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);

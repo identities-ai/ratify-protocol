@@ -125,6 +125,20 @@ fn run_vector(v: &Value, bundle: Vec<u8>) -> Vec<String> {
     });
     // claim_store "absent": no claim store is configured.
     cb.claim_store = (s(&v["claim_store"]) != "absent").then(|| store.clone() as _);
+    // Record every status-provider request in call order (SPEC-v2 §6.5 step 3).
+    let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+    if let Some(provider) = cb.status_evidence.take() {
+        let requests = Arc::clone(&requests);
+        cb.status_evidence = Some(Arc::new(move |ctx: &V2Context, r: &V2StatusEvidenceRequest| {
+            requests.lock().unwrap().push(serde_json::json!({
+                "issuer_id": r.issuer_id,
+                "status_key_epoch": r.status_key_epoch,
+                "status_key_id": r.status_key_id,
+                "refs": r.refs.iter().map(|x| serde_json::json!({"issuer_id": x.issuer_id, "cert_id": x.cert_id})).collect::<Vec<_>>(),
+            }));
+            provider(ctx, r)
+        }));
+    }
 
     let outcome = verify_proof_bundle_v2(&V2Context::background(), &req, &cb);
     let want = &v["expected"];
@@ -160,6 +174,15 @@ fn run_vector(v: &Value, bundle: Vec<u8>) -> Vec<String> {
     let want_counts = Counts::expected(&want["callback_counts"]);
     if got_counts != want_counts {
         failures.push(format!("callback counts {got_counts:?}, want {want_counts:?}"));
+    }
+    match want["status_requests"].as_array() {
+        None => failures.push("vector has no expected status_requests".into()),
+        Some(want_requests) => {
+            let got_requests = requests.lock().unwrap();
+            if *got_requests != *want_requests {
+                failures.push(format!("status requests {got_requests:?}, want {want_requests:?}"));
+            }
+        }
     }
     if want_stage != "committed" {
         if outcome.committed.is_some() {
@@ -282,18 +305,18 @@ fn v2_conformance_verifier_ordering() {
     }
     assert!(failures.is_empty(), "{} of {} vectors failed:\n{}", failures.len(), vectors.len(), failures.join("\n"));
     // Exact counts from the corpus and its README row.
-    assert_eq!(consumed.load(Ordering::SeqCst), 485);
-    assert_eq!(vectors.len(), 485);
+    assert_eq!(consumed.load(Ordering::SeqCst), 514);
+    assert_eq!(vectors.len(), 514);
     let want_stages = BTreeMap::from([
-        ("committed".to_string(), 346),
+        ("committed".to_string(), 362),
         ("evaluating".to_string(), 2),
-        ("preflight".to_string(), 135),
+        ("preflight".to_string(), 148),
         ("replay".to_string(), 2),
     ]);
     assert_eq!(stages, want_stages);
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("485 end-to-end live-verifier cases (135 pre-claim, 2 replay, 346 committed, 2 evaluating"),
+        readme.contains("514 end-to-end live-verifier cases (148 pre-claim, 2 replay, 362 committed, 2 evaluating"),
         "README row: {readme}"
     );
     let custody = vectors.iter().filter(|v| s(&v["name"]).starts_with("custody_profile_")).count();

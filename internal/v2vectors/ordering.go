@@ -2,6 +2,7 @@ package v2vectors
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -155,6 +156,24 @@ type outcomeJSON struct {
 	AllowValidUntil     int64          `json:"allow_valid_until,omitempty"`
 	RateBatch           []rateJSON     `json:"rate_batch,omitempty"`
 	CallbackCounts      countsJSON     `json:"callback_counts"`
+	// StatusRequests is every status-provider request, in call order; it is
+	// present (possibly empty) on every ordering vector.
+	StatusRequests *[]statusRequestJSON `json:"status_requests,omitempty"`
+}
+
+// statusRequestJSON is one status-provider request (SPEC-v2 §6.5 step 3):
+// the issuer, its caller-configured status-key epoch and key ID, and that
+// issuer's CertificateRefs in chain order.
+type statusRequestJSON struct {
+	IssuerID       string        `json:"issuer_id"`
+	StatusKeyEpoch uint64        `json:"status_key_epoch"`
+	StatusKeyID    string        `json:"status_key_id"`
+	Refs           []certRefJSON `json:"refs"`
+}
+
+type certRefJSON struct {
+	IssuerID string `json:"issuer_id"`
+	CertID   string `json:"cert_id"`
 }
 
 type orderingVector struct {
@@ -230,6 +249,12 @@ type scenario struct {
 	rate           string
 	evaluators     []evaluatorJSON
 	out            outcomeJSON
+	// statusIssuers names the issuers the status provider is called for,
+	// in ascending order, when that is not every configured chain issuer.
+	statusIssuers []string
+	// post edits the finished vector, for a configured value finish would
+	// replace with its default.
+	post func(*orderingVector)
 }
 
 func strp(s string) *string { return &s }
@@ -419,7 +444,9 @@ func (g *gen) finish(s scenario) orderingVector {
 	default:
 		s.out.CallbackCounts.Progress = 3
 	}
-	return orderingVector{
+	requests := g.statusRequests(s)
+	s.out.StatusRequests = &requests
+	v := orderingVector{
 		Name: s.name, Description: s.desc, Bundle: bundleName(s.bundle), RequiredScope: s.scope, ExpectedChallenge: s.expected,
 		ContextPolicy: s.policy, ConfiguredNamespace: s.namespace, ConfiguredReplayEpoch: s.epoch, ConfiguredVerifierID: verifierID, Now: s.now,
 		MaxChallengeAgeSeconds: s.maxAge, FutureSkewSeconds: s.skew, RequestContext: s.reqCtx, TZDBVersion: tzdb, ReceiverBindingHook: s.hook,
@@ -427,6 +454,57 @@ func (g *gen) finish(s scenario) orderingVector {
 		StatusPolicy: policy, Journal: s.journal, StatusEvidence: s.evidence, AudienceMode: s.audience, AudienceMemberships: s.memberships,
 		Rate: s.rate, ConstraintEvaluators: s.evaluators, Expected: s.out,
 	}
+	if s.post != nil {
+		s.post(&v)
+	}
+	return v
+}
+
+// statusRequests derives the expected status-provider requests (SPEC-v2
+// §6.5): one per distinct chain issuer in ascending byte order of issuer_id,
+// carrying the caller-configured epoch and status key ID and that issuer's
+// references in chain order. Without statusIssuers, every chain issuer with
+// a configured status key is requested; the hand-specified status count must
+// agree with the derived list.
+func (g *gen) statusRequests(s scenario) []statusRequestJSON {
+	out := []statusRequestJSON{}
+	if s.out.CallbackCounts.Status == 0 && s.statusIssuers == nil {
+		return out
+	}
+	b := must(ratify.DecodeProofBundleV2(s.bundle))
+	refs := map[string][]certRefJSON{}
+	var configured []string
+	for _, c := range b.Delegations {
+		if _, seen := refs[c.IssuerID]; !seen {
+			if _, ok := s.statusKeys[c.IssuerID]; ok {
+				configured = append(configured, c.IssuerID)
+			}
+		}
+		refs[c.IssuerID] = append(refs[c.IssuerID], certRefJSON{IssuerID: c.IssuerID, CertID: c.CertID})
+	}
+	sort.Strings(configured)
+	issuers := configured
+	if s.statusIssuers != nil {
+		issuers = s.statusIssuers
+	}
+	for _, issuer := range issuers {
+		key, ok := s.statusKeys[issuer]
+		if !ok || refs[issuer] == nil {
+			panic(s.name + ": status request for an issuer without a configured key or chain reference")
+		}
+		if id := keyIDV2(decodePub(key.PublicKey)); id != key.StatusKeyID {
+			panic(s.name + ": configured status key ID differs from its key")
+		}
+		out = append(out, statusRequestJSON{IssuerID: issuer, StatusKeyEpoch: key.Epoch, StatusKeyID: key.StatusKeyID, Refs: refs[issuer]})
+	}
+	if len(out) != s.out.CallbackCounts.Status {
+		panic(fmt.Sprintf("%s: %d derived status requests, %d expected status calls", s.name, len(out), s.out.CallbackCounts.Status))
+	}
+	return out
+}
+
+func decodePub(m map[string]any) ratify.HybridPublicKey {
+	return ratify.HybridPublicKey{Ed25519: must(base64.StdEncoding.DecodeString(m["ed25519"].(string))), MLDSA65: must(base64.StdEncoding.DecodeString(m["ml_dsa_65"].(string)))}
 }
 
 func preflight(class string, hook int) outcomeJSON {
@@ -466,13 +544,14 @@ func (g *gen) orderingFile() any {
 		},
 	}
 	f.Bundles = map[string]string{}
-	for _, s := range append(append(append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...), g.orderingProbeScenarios()...), g.statusKeyEpochScenarios()...) {
+	for _, s := range append(append(append(append(append(append(g.preflightScenarios(), g.terminalScenarios()...), g.custodyProfileScenarios()...), g.orderingCoverageScenarios()...), g.orderingProbeScenarios()...), g.statusKeyEpochScenarios()...), g.orderingEdgeScenarios()...) {
 		f.Bundles[bundleName(s.bundle)] = b64(s.bundle)
 		f.Vectors = append(f.Vectors, g.finish(s))
 	}
 	f.Semantics["constraint_evaluators"] = "caller-authenticated extension evaluator registry (SPEC-v2 §5.2); absent = none registered. Each entry's profile and type form the descriptor {\"profile\",\"type\"} whose digest is sha384:hex(SHA-384(\"ratify-protocol-constraint-profile-v2\" || 0x00 || RatifyCanonicalJSON(descriptor))). implementation binds the behavior: com.ratifyprotocol.max_count/v1 and com.ratifyprotocol.allowed_values/v1 are the standard profiles; fault:error returns an error; fault:panic panics; fault:timeout never answers within the registry timeout; fault:invalid_outcome returns an outcome outside pass/denied/unverifiable; fault:pass_until returns pass with horizon valid_until. The registry entries for types present in the chain are sealed with the claim and recorded, sorted by type, in the receipt member constraint_evaluators"
 	f.Semantics["request_context.extension_counts"] = "authenticated named quantities for extension profiles: names 1 to 128 bytes of [a-z0-9_.:-], values 0..2^53-1, at most 64 entries; invalid is configuration_invalid before claim"
 	f.Semantics["request_context.extension_values"] = "authenticated named exact values for extension profiles: names as for extension_counts, values valid UTF-8 of at most 512 bytes, at most 64 entries; invalid is configuration_invalid before claim"
+	f.Semantics["status_requests"] = "every status-provider request, in call order (SPEC-v2 §6.5 step 3): one per distinct chain issuer whose binding, anchoring and role checks passed, in ascending byte order of issuer_id, with the caller-configured status_key_epoch and status_key_id and that issuer's CertificateRefs in chain order; empty when the provider is never called"
 	f.Semantics["callback_counts.evaluator"] = "number of extension evaluator invocations; omitted when zero"
 	return f
 }
@@ -1132,6 +1211,7 @@ func (g *gen) statusProvenanceScenarios(add func(scenario), def []ratify.Delegat
 	unavailableIntermediate("status_key_is_verifier_key", "a status key equal to the verifier key named by the proof's verifier_id violates role separation (SPEC-v2 §6.5 step 2): that issuer is unavailable and its provider is not called", countsJSON{Claim: 1, Trust: 1, Status: 1}, func(s *scenario) {
 		s.statusKeys = g.statusKeyConfig()
 		s.statusKeys[intermediateID] = statusKeyJSON{Epoch: 1, StatusKeyID: g.k("verifier").ID, PublicKey: pubJSON(g.k("verifier").Pub)}
+		s.statusIssuers = []string{g.k("root").ID}
 	})
 	for _, c := range []struct {
 		mode, desc string

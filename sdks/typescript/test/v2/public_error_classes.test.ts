@@ -133,7 +133,7 @@ import { constraintProfileDigestV2, newConstraintEvaluatorRegistryV2 } from "../
 import { preflightProofBundleV2, validateProofBundleV2Preflight } from "../../src/verify_v2_preflight.js";
 import { claimProofBundleV2, finalizeClaimProofBundleV2 } from "../../src/claim_store_v2.js";
 import { resolveClaimProofBundleV2AfterAudience, resolveClaimProofBundleV2AfterRate } from "../../src/authorization_v2.js";
-import { recoverInterruptedClaimV2, v2EvaluationInterruptedResult, validateV2EvaluationProgress } from "../../src/evaluation_progress_v2.js";
+import { recoverInterruptedClaimV2, resumeCommittedClaimV2, v2EvaluationInterruptedResult, validateV2EvaluationProgress } from "../../src/evaluation_progress_v2.js";
 import { issueChallengeV2, loadExpectedChallengeV2 } from "../../src/challenge_issuance_v2.js";
 import { checkV2StreamSequence } from "../../src/stream_sequence_v2.js";
 import { V2ReleasedDecision } from "../../src/release_v2.js";
@@ -384,6 +384,7 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
       run: () => v2EvaluationInterruptedResult({} as Any, -1, { trustAssessment: "", statusAssessment: "", contextAssessment: "", contextPolicyDigest: null, statusEvidence: [] }),
     },
     { name: "recoverInterruptedClaimV2", want: "configuration_invalid", run: () => recoverInterruptedClaimV2(nil, "") },
+    { name: "resumeCommittedClaimV2", want: "configuration_invalid", run: () => resumeCommittedClaimV2(nil, "") },
     { name: "issueChallengeV2", want: "configuration_invalid", run: () => issueChallengeV2({} as Any, {} as Any) },
     { name: "loadExpectedChallengeV2", want: "configuration_invalid", run: () => loadExpectedChallengeV2(nil, "ns", 0, nil) },
     { name: "checkV2StreamSequence", want: "stream_sequence_mismatch", run: () => checkV2StreamSequence(true, 5, 5) },
@@ -394,11 +395,11 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     },
   ];
 
-  // The reference table has 117 entries: the 116 calls above (Go's
+  // The reference table has 117 entries: 116 of the calls above (Go's
   // DecodePayloadDigest has no counterpart here; its ConstraintV2 JSON
   // unmarshalling is reached through decodeDelegationCertV2) and the live
-  // verifier below.
-  assert.equal(calls.length, 116);
+  // verifier below. resumeCommittedClaimV2 is listed here in addition.
+  assert.equal(calls.length, 117);
   assert.equal(new Set(calls.map((c) => c.name)).size, calls.length, "duplicate entry point name");
 
   for (const c of calls) {

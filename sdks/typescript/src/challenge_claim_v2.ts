@@ -1,6 +1,7 @@
 // Protocol v2 replay identifiers are separate from v1 challenge-store keys.
 import { sha256, sha384 } from "@noble/hashes/sha2";
 import { classified, v2Classify, v2Errorf } from "./errors_v2.js";
+import type { V2ChallengeClaim } from "./claim_store_v2.js";
 
 const encoder = new TextEncoder();
 const claimDigestTag = encoder.encode("ratify-protocol-challenge-claim-v2\0");
@@ -70,4 +71,21 @@ export function protocolClaimIDFromDigestV2(verifierNamespace: string, replayEpo
     ));
     return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
   });
+}
+
+/**
+ * @internal Whether the claim ID is the stable claim ID of the claim's
+ * (namespace, replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3).
+ * A claim store is keyed by claim ID, so a supplied ID that is not derived
+ * from that key could create a second claim for one challenge.
+ */
+export function claimIDMatchesKeyV2(claim: V2ChallengeClaim | null | undefined): boolean {
+  const match = /^sha384:([0-9a-f]{96})$/.exec(typeof claim?.challengeDigest === "string" ? claim.challengeDigest : "");
+  if (!claim || !match) return false;
+  const digest = Uint8Array.from(match[1]!.match(/../g)!, (h) => parseInt(h, 16));
+  try {
+    return protocolClaimIDFromDigestV2(claim.namespace, claim.replayEpoch, digest) === claim.claimID;
+  } catch {
+    return false;
+  }
 }

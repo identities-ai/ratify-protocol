@@ -2,12 +2,13 @@
 // §7.5; Go evaluation_progress_v2.go).
 
 import { validV2Timestamp } from "./clock_bounds_v2.js";
+import { claimIDMatchesKeyV2 } from "./challenge_claim_v2.js";
 import { cloneConstraintEvaluatorRefsV2 } from "./constraint_evaluator_v2.js";
 import { classified, classifiedAsync, v2Classify, v2ErrorClassOf, v2Errorf } from "./errors_v2.js";
 import { canonicalJSONV2, compareStrings } from "./json_v2.js";
 import { newCommittedV2Outcome, type CommittedV2Outcome } from "./release_v2.js";
-import { tokenStateV2, type ClaimStoreV2, type V2ChallengeClaim, type V2EvaluationToken } from "./claim_store_v2.js";
-import { validPrefixedDigestV2, verificationReceiptV2Body, type StatusEvidenceEntryV2, type VerificationReceiptV2 } from "./verification_receipt_v2.js";
+import { tokenStateV2, validateV2FinalizationPayload, type ClaimStoreV2, type V2ChallengeClaim, type V2EvaluationToken } from "./claim_store_v2.js";
+import { decodeVerificationReceiptBodyV2, validPrefixedDigestV2, verificationReceiptV2Body, type StatusEvidenceEntryV2, type VerificationReceiptV2 } from "./verification_receipt_v2.js";
 
 /**
  * Per-dimension progress of one claimed evaluation. Its canonical JSON form
@@ -139,6 +140,76 @@ export async function recoverInterruptedClaimV2(store: ClaimStoreV2, claimID: st
     }
     return newCommittedV2Outcome(interrupted.claim, receiptBody, 0);
   });
+}
+
+/**
+ * A terminal claim as the claim store's terminal compare-and-set persisted
+ * it: the sealed claim values, the terminal result, the sealed receipt outbox
+ * body, and the allow horizon (0 unless the result is an allow).
+ */
+export interface V2CommittedClaim {
+  claim: V2ChallengeClaim;
+  terminalResult: Uint8Array;
+  receiptBody: Uint8Array;
+  allowHorizon: number;
+}
+
+/**
+ * Loads a terminal claim's persisted record for resumption (SPEC-v2 §7.11).
+ * loadV2CommittedClaim answers claim_not_found for a claim the store does not
+ * hold, claim_lease_live for a claim still evaluating under a live lease, and
+ * claim_lease_lost for a claim still evaluating after its lease expired
+ * (lease-expiry recovery runs first).
+ */
+export interface V2CommittedClaimStore {
+  loadV2CommittedClaim(claimID: string, signal?: AbortSignal): Promise<V2CommittedClaim>;
+}
+
+/**
+ * Returns the handoff of a claim's committed result from the claim store's
+ * persisted record (SPEC-v2 §7.11; Go ResumeCommittedClaimV2), for a service
+ * whose handoff was lost after the terminal commit, for example by a crash
+ * before the verifier returned. It checks the record as the terminal
+ * compare-and-set does and never builds or replaces a result; a record that
+ * fails a check is claim_store_unavailable. Publication, checkpoint
+ * submission and release then proceed as for a returned handoff.
+ */
+export async function resumeCommittedClaimV2(store: V2CommittedClaimStore, claimID: string, signal?: AbortSignal): Promise<CommittedV2Outcome> {
+  return classifiedAsync("claim_store_unavailable", async () => {
+    if (!store || !claimID) throw v2Errorf("configuration_invalid", "v2 resumption requires a context, claim store and claim ID");
+    let committed: V2CommittedClaim;
+    try {
+      committed = await store.loadV2CommittedClaim(claimID, signal);
+    } catch (err) {
+      throw classifyStore(err);
+    }
+    try {
+      validateV2CommittedClaim(committed, claimID);
+    } catch (err) {
+      throw v2Errorf("claim_store_unavailable", `v2 claim store returned a committed record that fails its checks: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return newCommittedV2Outcome(committed.claim, committed.receiptBody, committed.allowHorizon);
+  });
+}
+
+/**
+ * Applies the terminal compare-and-set's checks to a persisted record: the
+ * claim ID (§7.3), the finalization payload (§7.5), and the allow horizon
+ * (§6.8).
+ */
+function validateV2CommittedClaim(committed: V2CommittedClaim, claimID: string): void {
+  const claim = committed?.claim;
+  if (!claim || claim.claimID !== claimID) throw new Error("the record is for a different claim");
+  if (!claimIDMatchesKeyV2(claim)) throw new Error("the claim ID does not derive from the claim's replay key");
+  validateV2FinalizationPayload(claim, committed.terminalResult, committed.receiptBody);
+  const body = decodeVerificationReceiptBodyV2(committed.receiptBody);
+  if (body.decision === "allow") {
+    if (!validV2Timestamp(committed.allowHorizon) || committed.allowHorizon <= 0) {
+      throw new Error("an allow has no allow horizon in the timestamp domain");
+    }
+  } else if (committed.allowHorizon !== 0) {
+    throw new Error("a result that is not an allow has an allow horizon");
+  }
 }
 
 /** @internal Persists progress under the evaluator capability (Go recordV2ProgressSafely). */

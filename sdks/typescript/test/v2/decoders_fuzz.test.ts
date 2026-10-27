@@ -200,7 +200,11 @@ test("security journal snapshot: arbitrary and mutated input imports exactly or 
   const target: Target = {
     name: "security journal snapshot",
     decode: (b) => {
-      const got = importSecurityJournalSnapshotV2(b, { generation, digest: securityJournalSnapshotDigestV2(b) });
+      // An oversized snapshot is refused on its size before any digest is
+      // compared, so the test does not hash it (hashing 64 MiB would make
+      // the decode timing measure the test, not the decoder).
+      const digest = b.length > MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES ? "" : securityJournalSnapshotDigestV2(b);
+      const got = importSecurityJournalSnapshotV2(b, { generation, digest });
       assert.deepEqual(exportSecurityJournalSnapshotV2(got), b, "an imported snapshot must re-export identically");
       return got;
     },

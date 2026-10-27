@@ -545,6 +545,11 @@ func v2RaceIterations(t *testing.T, fileDefault int) int {
 		}
 		return n
 	}
+	if v2RaceDetector {
+		// The race detector reports a data race the first time racing
+		// accesses run; repeated iterations add cost, not detection.
+		return max(1, fileDefault/4)
+	}
 	return fileDefault
 }
 

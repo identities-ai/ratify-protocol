@@ -786,7 +786,13 @@ func checkV2CrashInvariants(t *testing.T, flow v2CrashFlow, run v2CrashRun) {
 // store, under both restart models, must keep I1 to I6.
 func TestV2CrashInjectionPreservesInvariants(t *testing.T) {
 	fixture := loadV2CrashFixture(t)
-	for _, flow := range v2CrashFlows() {
+	flows := v2CrashFlows()
+	if v2RaceDetector {
+		// Each crash point runs one process at a time, so the race detector
+		// adds cost but no coverage; the full sweep runs without it.
+		flows = flows[:1]
+	}
+	for _, flow := range flows {
 		t.Run(flow.name, func(t *testing.T) {
 			// Discover the durable-write sequence with a counting-only run.
 			baseline := runV2CrashPoint(t, fixture, flow, 0, v2CrashNone, false)

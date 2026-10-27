@@ -3,6 +3,7 @@ package v2vectors
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -398,6 +399,54 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 		cert := obj(arr(obj(party(o, 0)["proof_bundle"])["delegations"])[0])
 		cert["issuer_id"] = g.k("attacker").ID
 	})
+	// The same holds when only a nested bundle, or only the order of a party
+	// array, is not canonical: each is decided before any bundle is decoded.
+	keyFault := func(o map[string]any) {
+		cert := obj(arr(obj(party(o, 0)["proof_bundle"])["delegations"])[0])
+		cert["issuer_id"] = g.k("attacker").ID
+	}
+	identity := func(w []byte) []byte { return w }
+	twoFault("noncanonical_bundle_order_and_cert_key_id_mismatch", "parties[0].proof_bundle members in descending order; its delegations[0].issuer_id names another key", reverseFirstBundleMembers, keyFault)
+	twoFault("noncanonical_bundle_escape_and_cert_key_id_mismatch", "parties[0].proof_bundle cert_id value starts with an unneeded escape (\\u0063); its delegations[0].issuer_id names another key", func(w []byte) []byte {
+		return bytes.Replace(w, []byte(`"cert_id":"c`), []byte(`"cert_id":"\u0063`), 1)
+	}, keyFault)
+	twoFault("unsorted_party_signatures_and_cert_key_id_mismatch", "party_signatures in descending party_id order; parties[0].proof_bundle.delegations[0].issuer_id names another key", identity, func(o map[string]any) {
+		keyFault(o)
+		sigs := arr(o["party_signatures"])
+		o["party_signatures"] = []any{sigs[1], sigs[0]}
+	})
+	twoFault("unsorted_parties_and_cert_key_id_mismatch", "parties in descending party_id order; the former parties[0].proof_bundle.delegations[0].issuer_id names another key", identity, func(o map[string]any) {
+		keyFault(o)
+		parties := arr(o["parties"])
+		o["parties"] = []any{parties[1], parties[0]}
+	})
+}
+
+// reverseFirstBundleMembers writes the first party's proof bundle with its
+// members in descending order, leaving every other byte canonical.
+func reverseFirstBundleMembers(w []byte) []byte {
+	start := bytes.Index(w, []byte(`"proof_bundle":`)) + len(`"proof_bundle":`)
+	decoder := json.NewDecoder(bytes.NewReader(w[start:]))
+	var bundle json.RawMessage
+	if err := decoder.Decode(&bundle); err != nil {
+		panic(err)
+	}
+	members := json.NewDecoder(bytes.NewReader(bundle))
+	must(members.Token())
+	var parts [][]byte
+	for members.More() {
+		key := must(members.Token())
+		var value json.RawMessage
+		if err := members.Decode(&value); err != nil {
+			panic(err)
+		}
+		name := must(json.Marshal(key))
+		parts = append([][]byte{append(append(name, ':'), value...)}, parts...)
+	}
+	out := append(append([]byte(nil), w[:start]...), '{')
+	out = append(out, bytes.Join(parts, []byte(","))...)
+	out = append(out, '}')
+	return append(out, w[start+len(bundle):]...)
 }
 
 func (g *gen) receiptNegatives(n *negBuilder) {

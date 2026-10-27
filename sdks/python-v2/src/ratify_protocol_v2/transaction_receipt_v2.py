@@ -414,11 +414,13 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
         created_at = get_int(obj, "created_at")
         terms_schema_uri = get_str(obj, "terms_schema_uri")
         terms = get_bytes(obj, "terms_canonical_json") or b""
-        # Canonical form is part of strict decode (SPEC-v2 §2.1). The outer
-        # receipt is compared with its canonical encoding before any bundle is
-        # decoded, so a non-canonical receipt is malformed whatever its
-        # bundles hold.
-        if canonical(obj) != bytes(data):
+        # Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
+        # receipt, with both party arrays in party_id order, is compared with
+        # its canonical encoding before any bundle is decoded, so a
+        # non-canonical receipt is malformed whatever its bundles hold.
+        party_ids = [values["party_id"].encode("utf-8") for values, _ in party_values]
+        signature_ids = [s.party_id.encode("utf-8") for s in signatures]
+        if party_ids != sorted(party_ids) or signature_ids != sorted(signature_ids) or canonical(obj) != bytes(data):
             raise ValueError("wire v2: transaction receipt is not canonical JSON")
         parties = []
         bundle_hashes = []

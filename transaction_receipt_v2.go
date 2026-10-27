@@ -512,6 +512,34 @@ func encodeTransactionReceiptV2Canonical(receipt *TransactionReceiptV2) ([]byte,
 	return encoded, nil
 }
 
+// transactionReceiptV2WireIsCanonical reports whether data is the canonical
+// encoding of wire, judged without decoding any proof bundle.
+func transactionReceiptV2WireIsCanonical(wire *transactionReceiptWireV2, data []byte) bool {
+	for i := 1; i < len(wire.Parties); i++ {
+		if bytes.Compare([]byte(wire.Parties[i-1].PartyID), []byte(wire.Parties[i].PartyID)) > 0 {
+			return false
+		}
+	}
+	for i := 1; i < len(wire.PartySignatures); i++ {
+		if bytes.Compare([]byte(wire.PartySignatures[i-1].PartyID), []byte(wire.PartySignatures[i].PartyID)) > 0 {
+			return false
+		}
+	}
+	generic := *wire
+	generic.Parties = append([]transactionReceiptPartyWireV2(nil), wire.Parties...)
+	for i, party := range generic.Parties {
+		value, err := parseV2JSONValue(party.ProofBundle)
+		if err != nil {
+			return false
+		}
+		if generic.Parties[i].ProofBundle, err = CanonicalJSON(value); err != nil {
+			return false
+		}
+	}
+	outer, err := CanonicalJSON(generic)
+	return err == nil && bytes.Equal(outer, data)
+}
+
 // DecodeTransactionReceiptV2 strictly decodes the v2 transaction receipt and
 // verifies party signatures and embedded bundle identity/context bindings.
 // Trust, status, freshness, and final scope authorization require verifier
@@ -559,11 +587,12 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	if err := requireV2RoundTrip(data, &wire); err != nil {
 		return nil, err
 	}
-	// Canonical form is part of strict decode (SPEC-v2 §2.1). The outer
-	// receipt, with each proof bundle as its received bytes, is compared with
-	// its canonical encoding before any bundle is decoded, so a non-canonical
-	// receipt is malformed whatever its bundles hold.
-	if outer, err := CanonicalJSON(wire); err != nil || !bytes.Equal(outer, data) {
+	// Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
+	// receipt, with each proof bundle in its generic canonical form and both
+	// party arrays in party_id order, is compared with the received bytes
+	// before any bundle is decoded, so a non-canonical receipt is malformed
+	// whatever its bundles hold.
+	if !transactionReceiptV2WireIsCanonical(&wire, data) {
 		return nil, fmt.Errorf("wire v2: transaction receipt is not canonical JSON")
 	}
 	receipt := &TransactionReceiptV2{

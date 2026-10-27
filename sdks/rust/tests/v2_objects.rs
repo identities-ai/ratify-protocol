@@ -236,7 +236,7 @@ fn v2_object_negatives() {
         });
     }
     assert_eq!(kinds.len(), 9, "negative kinds: {kinds:?}");
-    t.finish(&[("negatives", 469)]);
+    t.finish(&[("negatives", 473)]);
 }
 
 fn hedged_idempotency(fx: &Fixture, kind: &str, vc: &Value, deterministic: &[u8], hedged: &[u8]) -> Result<(), String> {

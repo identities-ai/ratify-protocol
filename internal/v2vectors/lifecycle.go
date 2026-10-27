@@ -65,10 +65,15 @@ type lifecycleStepJSON struct {
 	// finalize step.
 	// TerminalB64 and BodyB64 are also the exact arguments of a
 	// recover_direct step.
-	TerminalB64     string              `json:"terminal_b64,omitempty"`
-	BodyB64         string              `json:"body_b64,omitempty"`
-	AllowValidUntil int64               `json:"allow_valid_until,omitempty"`
-	Expect          lifecycleExpectJSON `json:"expect"`
+	TerminalB64     string `json:"terminal_b64,omitempty"`
+	BodyB64         string `json:"body_b64,omitempty"`
+	AllowValidUntil int64  `json:"allow_valid_until,omitempty"`
+	// ClaimRecordB64, with TerminalB64, BodyB64 and AllowValidUntil, is the
+	// committed record a resume step's claim store answers with, and ClaimID
+	// the claim ID that step requests.
+	ClaimRecordB64 string              `json:"claim_record_b64,omitempty"`
+	ClaimID        string              `json:"claim_id,omitempty"`
+	Expect         lifecycleExpectJSON `json:"expect"`
 }
 
 type lifecycleScenarioJSON struct {
@@ -142,7 +147,7 @@ func (g *gen) lifecycleFile() any {
 			"acknowledge":            "submit the request's last published receipt to the reference checkpoint directly as Acknowledge(log_id, sequence, previous_receipt_hash, entry_hash). mode exact = the receipt's own entry hash; fork = the same tuple with the first entry-hash byte flipped. Expect ack_timestamp, or failed=true when the checkpoint refuses. A different entry hash at an acknowledged sequence is a fork: the checkpoint freezes the log and acknowledges nothing further for it, including the publisher's own submissions (SPEC-v2 §7.8)",
 			"finalize":               "call the claim store's finalize operation directly for the request's claim with the owner token from its claim_only step, terminal_b64 as the terminal result, body_b64 as the receipt outbox body and allow_valid_until (0 unless an allow); expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store binds the body to the sealed claim (SPEC-v2 §7.5): a refused finalize commits nothing",
 			"recover_direct":         "call the claim store's recovery operation directly for the request's claim (from its claim_only step) with terminal_b64 as the terminal result and body_b64 as the receipt outbox body, after the evaluator lease expired; expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store validates the result and body exactly as finalize does (SPEC-v2 §7.5: malformed for a body that is not a canonical receipt body, configuration_invalid for a body that does not bind the sealed claim or a result that differs from it) and accepts only indeterminate/evaluation_interrupted (configuration_invalid otherwise): a refused recovery commits nothing",
-			"resume":                 "ResumeCommittedClaim for the request's claim ID (computed as for recover): the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired",
+			"resume":                 "ResumeCommittedClaim for the request's claim ID (computed as for recover), or for claim_id when present: the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired, claim_store_unavailable for a record that fails the terminal compare-and-set's checks. With claim_record_b64 the claim store's committed-claim load answers, for any claim ID, with the record whose sealed claim is claim_record_b64 (the canonical sealed claim object of SPEC-v2 §7.13 claim records, which a store whose interface carries the sealed claim decodes into it), whose terminal result is terminal_b64, receipt outbox body body_b64 and allow horizon allow_valid_until (0 when absent); every other store operation is the reference store's. With mode record_bytes the record bytes are not the canonical encoding of the sealed claim they decode to: only an implementation whose store returns the record bytes (the C ABI) runs the step, and other implementations skip it",
 			"recover":                "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
 			"verify modes":           "verify with mode expire_lease_during_status sets the store clock to time when the status provider is first called (the evaluator lease expires mid-lookup); recover_during_status additionally runs recover for the same claim there and checks expect.recovered (the late evaluator is then fenced); regress_clock_during_status sets the clock to time (below T_claim) there; cancel_before_claim calls verify with the caller's cancellation already signalled, so the verifier stops before the claim and nothing is consumed; cancel_during_status signals the caller's cancellation when the status provider is first called and the provider then reports that cancellation as its result (SPEC-v2 §6.11)",
 			"verify_concurrent":      "run verify for every request in requests concurrently against the store at the current clock, each with its own callbacks; expect.outcomes is the sorted multiset of results, each the stage alone for committed and replay, or stage/error_class for preflight and evaluating",
@@ -472,6 +477,13 @@ func (g *gen) lifecycleFile() any {
 		setTime(Now+lifecycleLeaseSeconds), resume("A", lifecycleExpectJSON{ErrorClass: "claim_lease_lost"}),
 		step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
 		resume("A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
+	sc("resume_abandoned_claim", "resuming a committed allow whose receipt was abandoned returns its handoff; publication fails because the log is frozen, and release is withheld as receipt_abandoned (SPEC-v2 §7.7, §7.11, §6.9)",
+		step("verify", "A", committedAllow),
+		lifecycleStepJSON{Op: "abandon", Expect: lifecycleExpectJSON{Abandoned: []string{"A"}}},
+		resume("A", committedAllow), publishFails("A", "log_frozen"),
+		release("A", lifecycleExpectJSON{ReleaseStatus: "withheld", ReleaseReason: "receipt_abandoned"}),
+		resume("A", committedAllow))
+	g.resumeRecordScenarios(sc, f.Requests, bundles)
 	g.recoveryBindingScenarios(sc, bundles)
 	g.addProfileScenarios(&f, add)
 	return f

@@ -11,6 +11,7 @@
     "recover": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e of the returned outcome, or error/\u003cerror_class\u003e",
     "recover_direct": "as finalize",
     "release": "released/\u003cdecision\u003e/\u003crelease_time\u003e/\u003creceipt_sequence\u003e, or \u003cstatus\u003e/\u003creason\u003e for pending, withheld and rejected",
+    "resume": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e of the returned handoff, or error/\u003cerror_class\u003e; with mode release, the release label of the returned handoff, or error/\u003cerror_class\u003e when resumption fails",
     "set_time": "done",
     "verify": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e read from the committed receipt body; replay/\u003cdisposition\u003e; preflight/\u003cerror_class\u003e; evaluating/\u003cerror_class\u003e"
   },
@@ -18,14 +19,15 @@
     "acknowledge": "submit request's last published receipt to the reference checkpoint with its own entry hash, as the lifecycle acknowledge step with mode exact",
     "cancel": "signal the caller cancellation of every participant of group target. The runner spreads the signal over different points of the target's verification across iterations (an implementation-defined delay, for example a fraction of a measured uncancelled verification that varies with the iteration); no particular outcome is required of any one iteration",
     "claim_only": "preflight and claim request without evaluating, as the lifecycle claim_only step",
-    "committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify or recover outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
+    "committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify, recover or resume outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
     "finalize": "the claim store's finalize operation for request's claim, with the owner token its setup claim_only step returned, terminal_b64, body_b64 and allow_valid_until (0 when absent)",
     "participants": "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store. A request's claim is always the claim ID ProtocolClaimID(verifier namespace, replay epoch, challenge) of the request's expected challenge, as for the lifecycle recover step, whichever step or participant created it",
     "recover": "RecoverInterruptedClaim for request's claim",
     "recover_direct": "the claim store's recovery operation for request's claim with terminal_b64 and body_b64",
     "release": "ReleaseV2Decision of request's committed outcome with its last published receipt and the reference checkpoint, as the lifecycle release step",
+    "resume": "ResumeCommittedClaim for request's claim against the store, as the lifecycle resume step without a record (SPEC-v2 §7.11). The returned handoff is a committed result of the claim (committed results), and its receipt body must equal the body already recorded for the claim, if any: a resumed body that differs from the recorded one fails the iteration. The participant never replaces the request's committed outcome held for other participants. With mode release it then releases the returned handoff with request's last published receipt and the reference checkpoint, as the release participant does",
     "set_time": "set the store clock to time while the other participants run",
-    "setup and after": "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
+    "setup and after": "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover, resume) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
     "verify": "VerifyProofBundleV2 for request against the store at the store clock read when the participant starts, as a lifecycle verify step with mode \"\". A verify whose group is the target of a cancel participant runs with a cancellable caller context"
   },
   "invariants": {
@@ -1136,6 +1138,278 @@
             "decision": "allow",
             "decision_reason": "authorized",
             "allow_horizon": 1800003600
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_races_owner_finalize",
+      "description": "the evaluator of request A finalizes indeterminate/status_unavailable while 6 resumptions of its claim run (SPEC-v2 §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the finalized result, never another; the finalized result then resumes, publishes at sequence 1 and releases",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 1,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/indeterminate/status_unavailable"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "status_unavailable"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "indeterminate",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_races_lease_expiry_recovery",
+      "description": "the clock of request A's claimed but never evaluated claim reaches its lease expiry while 3 recoveries through RecoverInterruptedClaim and 6 resumptions run (SPEC-v2 §7.5, §7.11): a resumption sees the claim evaluating with its lease live (claim_lease_live) or lost (claim_lease_lost), or returns exactly the recovered evaluation_interrupted result; a recovery is refused while the lease is live or returns that result; afterwards the one result resumes and publishes at sequence 1",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A"
+        },
+        {
+          "group": "recoverers",
+          "count": 3,
+          "op": "recover",
+          "request": "A"
+        },
+        {
+          "group": "clock",
+          "count": 1,
+          "op": "set_time",
+          "time": 1800000030
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "error/claim_lease_lost",
+            "committed/indeterminate/evaluation_interrupted"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "recoverers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/indeterminate/evaluation_interrupted"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "concurrent_resumes_and_releases_of_one_allow",
+      "description": "request A committed an allow whose receipt is published and acknowledged; 6 participants each resume the claim and release the resumed handoff while 4 release the handoff the verifier returned (SPEC-v2 §6.9, §7.11): every resumption returns the committed allow, the first release record wins, every release returns the same released result, and a release afterwards returns it again",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A",
+          "mode": "release"
+        },
+        {
+          "group": "releasers",
+          "count": 4,
+          "op": "release",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "all_equal",
+          "groups": [
+            "resumers",
+            "releasers"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "released/allow/1800000000/1"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
           }
         }
       ]

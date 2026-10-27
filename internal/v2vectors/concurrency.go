@@ -167,24 +167,26 @@ func (g *gen) concurrencyFile() any {
 			"finalize":       "committed (the store committed this result), identical (the same result was already committed), or error/<error_class>",
 			"recover_direct": "as finalize",
 			"recover":        "committed/<decision>/<decision_reason> of the returned outcome, or error/<error_class>",
+			"resume":         "committed/<decision>/<decision_reason> of the returned handoff, or error/<error_class>; with mode release, the release label of the returned handoff, or error/<error_class> when resumption fails",
 			"release":        "released/<decision>/<release_time>/<receipt_sequence>, or <status>/<reason> for pending, withheld and rejected",
 			"acknowledge":    "acknowledged/<timestamp>, or refused",
 			"set_time":       "done",
 			"cancel":         "done",
 		},
 		Operations: map[string]string{
-			"setup and after":   "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
+			"setup and after":   "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover, resume) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
 			"participants":      "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store. A request's claim is always the claim ID ProtocolClaimID(verifier namespace, replay epoch, challenge) of the request's expected challenge, as for the lifecycle recover step, whichever step or participant created it",
 			"verify":            "VerifyProofBundleV2 for request against the store at the store clock read when the participant starts, as a lifecycle verify step with mode \"\". A verify whose group is the target of a cancel participant runs with a cancellable caller context",
 			"claim_only":        "preflight and claim request without evaluating, as the lifecycle claim_only step",
 			"finalize":          "the claim store's finalize operation for request's claim, with the owner token its setup claim_only step returned, terminal_b64, body_b64 and allow_valid_until (0 when absent)",
 			"recover_direct":    "the claim store's recovery operation for request's claim with terminal_b64 and body_b64",
 			"recover":           "RecoverInterruptedClaim for request's claim",
+			"resume":            "ResumeCommittedClaim for request's claim against the store, as the lifecycle resume step without a record (SPEC-v2 §7.11). The returned handoff is a committed result of the claim (committed results), and its receipt body must equal the body already recorded for the claim, if any: a resumed body that differs from the recorded one fails the iteration. The participant never replaces the request's committed outcome held for other participants. With mode release it then releases the returned handoff with request's last published receipt and the reference checkpoint, as the release participant does",
 			"release":           "ReleaseV2Decision of request's committed outcome with its last published receipt and the reference checkpoint, as the lifecycle release step",
 			"acknowledge":       "submit request's last published receipt to the reference checkpoint with its own entry hash, as the lifecycle acknowledge step with mode exact",
 			"set_time":          "set the store clock to time while the other participants run",
 			"cancel":            "signal the caller cancellation of every participant of group target. The runner spreads the signal over different points of the target's verification across iterations (an implementation-defined delay, for example a fraction of a measured uncancelled verification that varies with the iteration); no particular outcome is required of any one iteration",
-			"committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify or recover outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
+			"committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify, recover or resume outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
 		},
 		Invariants: map[string]string{
 			"allowed":                "every participant of groups (all participants when groups is absent) has a label in outcomes",
@@ -389,6 +391,53 @@ func (g *gen) concurrencyFile() any {
 			count(1, []string{allow, rateDenied}, "t1"), count(1, []string{allow, rateDenied}, "t2"), contiguous,
 		},
 		After: []concurrencyStepJSON{{lifecycleStepJSON: setTime(Now + 60)}, after("verify", "T3", committedAllow)},
+	})
+	// SPEC-v2 §7.11: resumption reads the committed record and never builds,
+	// re-evaluates or replaces a result, so a resume racing a commit either
+	// sees the claim still evaluating or returns exactly the committed result.
+	finalized := "committed/indeterminate/status_unavailable"
+	resumers := func(n int, mode string) concurrencyParticipantJSON {
+		return concurrencyParticipantJSON{Group: "resumers", Count: n, Op: "resume", Request: "A", Mode: mode}
+	}
+	sc(concurrencyScenarioJSON{
+		Name:         "resume_races_owner_finalize",
+		Description:  "the evaluator of request A finalizes indeterminate/status_unavailable while 6 resumptions of its claim run (SPEC-v2 §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the finalized result, never another; the finalized result then resumes, publishes at sequence 1 and releases",
+		Setup:        []lifecycleStepJSON{claimOnly},
+		Participants: []concurrencyParticipantJSON{owner(1), resumers(6, "")},
+		Invariants: []concurrencyInvariantJSON{
+			allowed([]string{"committed"}, "owner"),
+			allowed([]string{"error/claim_lease_live", finalized}, "resumers"), contiguous,
+		},
+		After: []concurrencyStepJSON{after("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "status_unavailable"}),
+			{lifecycleStepJSON: publish("A", 1)},
+			release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "indeterminate", ReleaseTime: Now, ReceiptSeq: 1}),
+			after("verify", "A", replayTerminal)},
+	})
+	sc(concurrencyScenarioJSON{
+		Name:        "resume_races_lease_expiry_recovery",
+		Description: "the clock of request A's claimed but never evaluated claim reaches its lease expiry while 3 recoveries through RecoverInterruptedClaim and 6 resumptions run (SPEC-v2 §7.5, §7.11): a resumption sees the claim evaluating with its lease live (claim_lease_live) or lost (claim_lease_lost), or returns exactly the recovered evaluation_interrupted result; a recovery is refused while the lease is live or returns that result; afterwards the one result resumes and publishes at sequence 1",
+		Setup:       []lifecycleStepJSON{claimOnly},
+		Participants: []concurrencyParticipantJSON{resumers(6, ""), {Group: "recoverers", Count: 3, Op: "recover", Request: "A"},
+			{Group: "clock", Count: 1, Op: "set_time", Time: Now + lifecycleLeaseSeconds}},
+		Invariants: []concurrencyInvariantJSON{
+			allowed([]string{"error/claim_lease_live", "error/claim_lease_lost", interrupted}, "resumers"),
+			allowed([]string{"error/claim_lease_live", interrupted}, "recoverers"), contiguous,
+		},
+		After: []concurrencyStepJSON{after("recover", "A", recoveredA),
+			after("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}),
+			{lifecycleStepJSON: publish("A", 1)}, after("verify", "A", replayTerminal)},
+	})
+	sc(concurrencyScenarioJSON{
+		Name:        "concurrent_resumes_and_releases_of_one_allow",
+		Description: "request A committed an allow whose receipt is published and acknowledged; 6 participants each resume the claim and release the resumed handoff while 4 release the handoff the verifier returned (SPEC-v2 §6.9, §7.11): every resumption returns the committed allow, the first release record wins, every release returns the same released result, and a release afterwards returns it again",
+		Setup:       []lifecycleStepJSON{step("verify", "A", committedAllow), publish("A", 1)},
+		Participants: []concurrencyParticipantJSON{resumers(6, "release"),
+			{Group: "releasers", Count: 4, Op: "release", Request: "A"}},
+		Invariants: []concurrencyInvariantJSON{
+			{Kind: "all_equal", Groups: []string{"resumers", "releasers"}}, allowed([]string{released}), contiguous,
+		},
+		After: []concurrencyStepJSON{after("resume", "A", committedAllow),
+			release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "allow", ReleaseTime: Now, ReceiptSeq: 1})},
 	})
 	return f
 }

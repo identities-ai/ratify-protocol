@@ -228,18 +228,37 @@ impl Iteration {
         }
     }
 
+    /// Go `recordResumed`: records a resumed handoff as a committed result
+    /// of its claim, and reports whether its body equals the one recorded.
+    fn record_resumed(&self, c: &CommittedV2Outcome) -> bool {
+        let (claim_id, body) = (c.claim_id(), c.receipt_body());
+        let mut sh = self.shared.lock().unwrap();
+        if let Some(prior) = sh.recorded.get(&claim_id) {
+            return *prior == body;
+        }
+        sh.recorded.insert(claim_id.clone(), body);
+        sh.recorded_at.push(claim_id);
+        true
+    }
+
     /// Go `releaseLabel`.
     fn release_label(&self, ctx: &V2Context, request: &str) -> String {
-        let (c, receipt) = {
+        let c = {
             let sh = self.shared.lock().unwrap();
-            let c = sh.committed.get(request).cloned().unwrap_or_else(|| panic!("{request} was never committed"));
-            (c, sh.receipts.get(request).cloned())
+            sh.committed.get(request).cloned().unwrap_or_else(|| panic!("{request} was never committed"))
         };
+        self.release_handoff_label(ctx, request, &c)
+    }
+
+    /// Go `releaseHandoffLabel`: releases handoff `c` with `request`'s last
+    /// published receipt.
+    fn release_handoff_label(&self, ctx: &V2Context, request: &str, c: &CommittedV2Outcome) -> String {
+        let receipt = self.shared.lock().unwrap().receipts.get(request).cloned();
         let verifier_public = keys().public(&s(&inputs()["verifier_key"]));
         let log_id = s(&inputs()["log_id"]);
         let result = release_v2_decision(
             ctx,
-            &c,
+            c,
             receipt.as_deref(),
             V2ReleaseConfig {
                 verifier_public_key: &verifier_public,
@@ -336,6 +355,18 @@ impl Iteration {
                 check_committed_decision(at, &outcome, want);
                 self.record_outcome(&request, outcome);
             }
+            "resume" => {
+                let result = resume_committed_claim_v2(&ctx, self.store.as_ref(), &claim_id_of(&request));
+                let class = s(&want["error_class"]);
+                if !class.is_empty() {
+                    assert_eq!(class_str(v2_error_class_of(&result)), class, "{at} resume: {result:?}");
+                    return;
+                }
+                let outcome = result.unwrap_or_else(|e| panic!("{at} resume: {e}"));
+                check_committed_decision(at, &outcome, want);
+                assert!(self.record_resumed(&outcome), "{at} resume: the resumed body differs from the committed one");
+                self.shared.lock().unwrap().committed.insert(request, Arc::new(outcome));
+            }
             "publish" => {
                 let c = self.shared.lock().unwrap().committed[&request].clone();
                 let wire = self
@@ -406,6 +437,15 @@ impl Iteration {
                     }
                 }
             }
+            "resume" => match resume_committed_claim_v2(&ctx, self.store.as_ref(), &claim_id_of(&request)) {
+                Err(e) => error_label(Some(e.class)),
+                Ok(outcome) if !self.record_resumed(&outcome) => "resumed a body other than the committed one".into(),
+                Ok(outcome) if s(&p["mode"]) == "release" => self.release_handoff_label(&ctx, &request, &outcome),
+                Ok(outcome) => match decode_verification_receipt_body_v2(&outcome.receipt_body()) {
+                    Ok(body) => format!("committed/{}/{}", body.decision, body.decision_reason),
+                    Err(_) => "undecodable resumed body".into(),
+                },
+            },
             "release" => self.release_label(&ctx, &request),
             "acknowledge" => {
                 let wire = self.shared.lock().unwrap().receipts.get(&request).cloned().unwrap_or_default();

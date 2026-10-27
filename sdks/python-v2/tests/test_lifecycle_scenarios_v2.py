@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import copyreg
+import json
 import pickle
 import threading
 
@@ -16,11 +17,12 @@ from v2_harness import BACKGROUND, Counts, FixedClock, build_verify_request, key
 
 from ratify_protocol_v2 import context_v2
 from ratify_protocol_v2.challenge_claim_v2 import protocol_claim_id_v2
-from ratify_protocol_v2.claim_store_v2 import claim_proof_bundle_v2
+from ratify_protocol_v2.claim_store_v2 import V2ChallengeClaim, claim_proof_bundle_v2
 from ratify_protocol_v2.errors_v2 import V2ErrorClass, error_class_of
-from ratify_protocol_v2.evaluation_progress_v2 import recover_interrupted_claim_v2, resume_committed_claim_v2
+from ratify_protocol_v2.evaluation_progress_v2 import V2CommittedClaim, recover_interrupted_claim_v2, resume_committed_claim_v2
 from ratify_protocol_v2.operation_context_v2 import session_context_v2_hash
 from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
+from ratify_protocol_v2.rate_reservation_v2 import V2RateReservation
 from ratify_protocol_v2.release_v2 import (
     CommittedV2Outcome,
     V2CheckpointAcknowledgement,
@@ -30,6 +32,7 @@ from ratify_protocol_v2.release_v2 import (
 )
 from ratify_protocol_v2.signing_v2 import key_id_v2
 from ratify_protocol_v2.types import HybridSignature
+from ratify_protocol_v2.types_v2 import ConstraintEvaluatorRefV2
 from ratify_protocol_v2.v2reference import approval_ledger as al
 from ratify_protocol_v2.v2reference import offline_device as od
 from ratify_protocol_v2.v2reference.device_state import DevicePrimaryTestOnly
@@ -63,8 +66,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 66
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 360
+    assert len(SCENARIOS) == 80
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 427
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}
@@ -88,6 +91,41 @@ class WrongEntryCheckpoint(V2ReceiptCheckpoint):
         entry = bytearray(ack.entry_hash)
         entry[0] ^= 1
         return V2CheckpointAcknowledgement(log_id=ack.log_id, sequence=ack.sequence, entry_hash=bytes(entry), timestamp=ack.timestamp)
+
+
+class _RecordCommittedStore:
+    """Answers every committed-claim load with one record, as a claim store
+    whose persisted record was altered would (SPEC-v2 §7.11)."""
+
+    def __init__(self, record):
+        self.record = record
+
+    def load_v2_committed_claim(self, ctx, claim_id):
+        return self.record
+
+
+_CLAIM_RECORD_MEMBERS = {
+    "agent_id", "bundle_hash", "challenge_digest", "claim_id", "clock_skew_seconds", "constraint_evaluators", "context_policy_digest",
+    "expires_at", "issued_at", "issuer_ids", "max_age_seconds", "namespace", "proof_digest", "rate_batch", "replay_epoch",
+    "required_scope", "requires_rate", "stream_id", "stream_seq", "verifier_id",
+}
+
+
+def _claim_from_record(record: bytes) -> V2ChallengeClaim:
+    """Decode the canonical sealed claim object of a SPEC-v2 §7.13 claim
+    record."""
+    r = json.loads(record)
+    assert set(r) == _CLAIM_RECORD_MEMBERS, sorted(r)
+    return V2ChallengeClaim(
+        claim_id=r["claim_id"], namespace=r["namespace"], replay_epoch=r["replay_epoch"], challenge_digest=r["challenge_digest"],
+        proof_digest=r["proof_digest"], bundle_hash=r["bundle_hash"], issuer_ids=list(r["issuer_ids"]), required_scope=r["required_scope"],
+        context_policy_digest=r["context_policy_digest"] or "", verifier_id=r["verifier_id"], agent_id=r["agent_id"],
+        requires_rate=r["requires_rate"],
+        rate_batch=[V2RateReservation(issuer_id=b["issuer_id"], cert_id=b["cert_id"], window_s=b["window_s"], limit=b["limit"]) for b in r["rate_batch"]],
+        issued_at=r["issued_at"], expires_at=r["expires_at"], max_age_seconds=r["max_age_seconds"], clock_skew_seconds=r["clock_skew_seconds"],
+        stream_id=None if r["stream_id"] is None else b64(r["stream_id"]), stream_seq=r["stream_seq"],
+        constraint_evaluators=[ConstraintEvaluatorRefV2(profile_digest=e["profile_digest"], type=e["type"]) for e in r["constraint_evaluators"]],
+    )
 
 
 class OwnerCapturingClaimStore:
@@ -213,15 +251,17 @@ def test_lifecycle_scenario(sc):
         check_committed(i, outcome, want)
         committed[request] = outcome
 
-    def resume_step(i, request, want):
+    def resume_step(i, request, want, record=None, requested=None):
         """Resume the request's committed claim from the store (SPEC-v2
-        §7.11); the resumed handoff replaces the one held."""
-        claim_id = claim_ids.get(request)
+        §7.11), or from the vector's record when one is given; the resumed
+        handoff replaces the one held."""
+        claim_id = requested or claim_ids.get(request)
         if claim_id is None:
             e = FILE["requests"][request]["expected_challenge"]
             claim_id = protocol_claim_id_v2(e["verifier_namespace"], e["replay_epoch"], b64(e["value_b64"]))
         try:
-            outcome, err = resume_committed_claim_v2(BACKGROUND, holder["store"], claim_id), None
+            source = holder["store"] if record is None else _RecordCommittedStore(record)
+            outcome, err = resume_committed_claim_v2(BACKGROUND, source, claim_id), None
         except Exception as exc:  # noqa: BLE001
             outcome, err = None, exc
         if want.get("error_class"):
@@ -381,7 +421,15 @@ def test_lifecycle_scenario(sc):
         elif op == "recover":
             recover_step(i, step["request"], want)
         elif op == "resume":
-            resume_step(i, step["request"], want)
+            if "claim_record_b64" not in step:
+                resume_step(i, step["request"], want)
+            elif step.get("mode") != "record_bytes":
+                # A record_bytes step is skipped: this store interface carries
+                # the sealed claim, not its record bytes.
+                record = V2CommittedClaim(claim=_claim_from_record(b64(step["claim_record_b64"])),
+                                          terminal_result=b64(step["terminal_b64"]), receipt_body=b64(step["body_b64"]),
+                                          allow_horizon=step.get("allow_valid_until", 0))
+                resume_step(i, step["request"], want, record, step.get("claim_id"))
         elif op == "publish":
             c = committed[step["request"]]
             if step.get("mode") == "signer_failure":

@@ -27,7 +27,7 @@
     "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
     "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
-    "resume": "ResumeCommittedClaim for the request's claim ID (computed as for recover): the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired",
+    "resume": "ResumeCommittedClaim for the request's claim ID (computed as for recover), or for claim_id when present: the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired, claim_store_unavailable for a record that fails the terminal compare-and-set's checks. With claim_record_b64 the claim store's committed-claim load answers, for any claim ID, with the record whose sealed claim is claim_record_b64 (the canonical sealed claim object of SPEC-v2 §7.13 claim records, which a store whose interface carries the sealed claim decodes into it), whose terminal result is terminal_b64, receipt outbox body body_b64 and allow horizon allow_valid_until (0 when absent); every other store operation is the reference store's. With mode record_bytes the record bytes are not the canonical encoding of the sealed claim they decode to: only an implementation whose store returns the record bytes (the C ABI) runs the step, and other implementations skip it",
     "set_ack_withheld": "withheld=true stops the reference outbox from submitting appended entries to the checkpoint; withheld=false submits every pending entry in log order at the current clock",
     "set_time": "set the authoritative clock (it may move backward to exercise clock regression). The store keeps a high-water mark of every authoritative reading, including the checkpoint's acknowledgement timestamps, and a reading below it is a reported clock regression",
     "snapshot": "copy the complete primary state (store, journal, issuance records) under snapshot",
@@ -6872,6 +6872,777 @@
             "stage": "committed",
             "decision": "indeterminate",
             "decision_reason": "evaluation_interrupted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_abandoned_claim",
+      "description": "resuming a committed allow whose receipt was abandoned returns its handoff; publication fails because the log is frozen, and release is withheld as receipt_abandoned (SPEC-v2 §7.7, §7.11, §6.9)",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "abandon",
+          "expect": {
+            "abandoned": [
+              "A"
+            ]
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "failed": true,
+            "publish_error": "log_frozen"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "receipt_abandoned"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_for_another_claim",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose sealed claim is request A's relabelled with request B's claim ID, so it is not the requested claim: it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiZWRiYzVhZTE1ZTI1Yjk2N2NhY2E0YmQyOWQ5NzA0NDU0ZmMwZGIyYjExM2YyYzY3YjBkYjYwOWEyYzYwMjk5YSIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_of_another_well_formed_claim",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose sealed claim, terminal result, body and allow horizon are request B's genuine committed allow: every check but the requested claim ID passes: it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDpkNTllY2VkNWMzMTllMmNlNWY2NmYzNzQxYTliZDQ2NDhjNDI3ZWIxZDQ1OTk5OWExNWNmOTkzODlkYzRiY2Y2ZmU2YjA0MTM5NjQ0NjgxZDg4YTk2MDIwMjFlZDhhYjMiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDpkNTllY2VkNWMzMTllMmNlNWY2NmYzNzQxYTliZDQ2NDhjNDI3ZWIxZDQ1OTk5OWExNWNmOTkzODlkYzRiY2Y2ZmU2YjA0MTM5NjQ0NjgxZDg4YTk2MDIwMjFlZDhhYjMiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmRlNWYxODg1Y2EzNTJiZjJlZjhlNGM4MjI4NzVkMzQwZDI3MmNmNjllYzMxNGY1NDAwMTIyMDAyNWMyNjliODc2ODYyOTQ3YzZmOGUxZGYzNmI5ZWQ0ZDU4YzUwNzRiMSIsImNsYWltX2lkIjoiZWRiYzVhZTE1ZTI1Yjk2N2NhY2E0YmQyOWQ5NzA0NDU0ZmMwZGIyYjExM2YyYzY3YjBkYjYwOWEyYzYwMjk5YSIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6ZDU5ZWNlZDVjMzE5ZTJjZTVmNjZmMzc0MWE5YmQ0NjQ4YzQyN2ViMWQ0NTk5OTlhMTVjZjk5Mzg5ZGM0YmNmNmZlNmIwNDEzOTY0NDY4MWQ4OGE5NjAyMDIxZWQ4YWIzIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_claim_id_not_derived_from_replay_key",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose claim ID is request B's while its namespace, replay epoch and challenge digest are request A's, and resumption requests that claim ID: the ID does not derive from the record's replay key (SPEC-v2 §7.3): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiZWRiYzVhZTE1ZTI1Yjk2N2NhY2E0YmQyOWQ5NzA0NDU0ZmMwZGIyYjExM2YyYzY3YjBkYjYwOWEyYzYwMjk5YSIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "claim_id": "edbc5ae15e25b967caca4bd29d9704454fc0db2b113f2c67b0db609a2c60299a",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_uppercase_challenge_digest",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose challenge digest is request A's in uppercase hex, which decodes to the digest the claim ID derives from but is not the lowercase sha384: form: it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OkU0ODQwQUFDRjUyNUNDOTIzNjI0MjJGODY4MDVBODRGRTQ4MzQyOTMyMjNEQkNGNzgyMEQ1RDdFNkM3RUNGQTZBRDNDNkEzMTc2RkQ1MUU3MDRDNDVGRjY5M0YwNkM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_non_sha384_challenge_digest",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose challenge digest carries request A's hex digest under the sha512: prefix: it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhNTEyOmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_body_for_another_agent",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose receipt body is request A's committed allow with agent_id naming another agent, so it does not bind the sealed claim (SPEC-v2 §7.5): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6Ijg5YjUyMDVhMWU3ZTc5MDZjMzg5MDJhODIzYzU0NGZjZDRjZTBjMjIwNThhMjM5ZDZkYTdkMGMxMDZjM2QyMmMiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_terminal_result_other_than_body",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose terminal result is deny/delegation_revoked while the receipt body is the committed allow (SPEC-v2 §7.5): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJkZWNpc2lvbl9yZWFzb24iOiJkZWxlZ2F0aW9uX3Jldm9rZWQiLCJpZGVudGl0eV9zdGF0dXMiOiJyZXZva2VkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_allow_without_allow_horizon",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose result is the committed allow with allow horizon 0 (SPEC-v2 §6.8): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_allow_horizon_beyond_timestamp_domain",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose result is the committed allow with allow horizon 253402300800, beyond the timestamp domain (SPEC-v2 §2.5, §6.8): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 253402300800,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_allow_horizon_on_non_allow",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose result is the canonical evaluation_interrupted indeterminate with a positive allow horizon (SPEC-v2 §6.8): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800000060,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_rejects_record_non_canonical_claim_record",
+      "description": "request A committed an allow; the claim store answers resumption with a committed record whose sealed claim record bytes are request A's canonical record with a space after the opening brace: they decode to the genuine claim but are not its canonical encoding (SPEC-v2 §7.13): it fails the terminal compare-and-set's checks, so resumption returns no handoff (claim_store_unavailable, SPEC-v2 §7.11); the store's own record then resumes, publishes and releases",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "mode": "record_bytes",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyAiYWdlbnRfaWQiOiJmZTllODZhN2ExYTViNGU4OTU2NjJkMzFjNTU4NzY4NzIzNWQxNzZkMzE3NzNmZjM1NzM4MDUzYTVmYzkxOGQwIiwiYnVuZGxlX2hhc2giOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwiY2hhbGxlbmdlX2RpZ2VzdCI6InNoYTM4NDplNDg0MGFhY2Y1MjVjYzkyMzYyNDIyZjg2ODA1YTg0ZmU0ODM0MjkzMjIzZGJjZjc4MjBkNWQ3ZTZjN2VjZmE2YWQzYzZhMzE3NmZkNTFlNzA0YzQ1ZmY2OTNmMDZjOTgiLCJjbGFpbV9pZCI6IjlkMmE3NTE4NGNlMTc1YWQ1NmQyN2JjYTM4ZmM4NzFmNTczOTY5YmE3ZmYxZWQ4NzVhOTM2OGRkNGRjYjMxZjAiLCJjbG9ja19za2V3X3NlY29uZHMiOjUsImNvbnN0cmFpbnRfZXZhbHVhdG9ycyI6W10sImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJleHBpcmVzX2F0IjoxODAwMDAwMjkwLCJpc3N1ZWRfYXQiOjE3OTk5OTk5OTAsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwibWF4X2FnZV9zZWNvbmRzIjozMDAsIm5hbWVzcGFjZSI6InZlcmlmeS10ZXN0IiwicHJvb2ZfZGlnZXN0Ijoic2hhMzg0OjU4ODg0NDljY2E5ZTQ1YjJkYzA3MDdkMjJmOGI2MDNmMDM5MTM0NzJlZDE1MTU3YjU5MWViYTJhZTQ0NzQ2Yjc0MTQ5YWY1YThmYzA3YTM0Mjc3NjZkZmU4MDUwNGQ0YSIsInJhdGVfYmF0Y2giOltdLCJyZXBsYXlfZXBvY2giOjMsInJlcXVpcmVkX3Njb3BlIjoiZGF0YTpyZWFkIiwicmVxdWlyZXNfcmF0ZSI6ZmFsc2UsInN0cmVhbV9pZCI6bnVsbCwic3RyZWFtX3NlcSI6bnVsbCwidmVyaWZpZXJfaWQiOiJlYzRiZjE3YjVlNDMzYjE0YzU5N2FkYjc5MGQwNTZkMzZkMDkxMzlmNzNmMWNkNWYzZTdkNzAwMTEyNTcwYzJjIn0=",
+          "expect": {
+            "error_class": "claim_store_unavailable"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_accepts_interrupted_record",
+      "description": "the claim store answers resumption with request A's sealed claim and the canonical evaluation_interrupted result and body with allow horizon 0: every check passes and resumption returns that committed result (SPEC-v2 §7.11)",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_accepts_honest_record",
+      "description": "request A committed an allow; the claim store answers resumption with exactly that committed record (sealed claim, terminal result, body and allow horizon): the returned handoff publishes at sequence 1 and releases exactly as the handoff the verifier returned, and a second release is the same (SPEC-v2 §7.11)",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600,
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
           }
         }
       ]

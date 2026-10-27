@@ -246,6 +246,72 @@ func (s *v2OwnerCapturingClaimStore) ClaimV2(ctx context.Context, claim ratify.V
 	return result, err
 }
 
+// v2RecordCommittedStore answers every committed-claim load with one record,
+// as a claim store whose persisted record was altered would (SPEC-v2 §7.11).
+type v2RecordCommittedStore struct{ record ratify.V2CommittedClaim }
+
+func (s v2RecordCommittedStore) LoadV2CommittedClaim(context.Context, string) (ratify.V2CommittedClaim, error) {
+	return s.record, nil
+}
+
+// v2ClaimFromRecord decodes the canonical sealed claim object of a SPEC-v2
+// §7.13 claim record.
+func v2ClaimFromRecord(t *testing.T, record []byte) ratify.V2ChallengeClaim {
+	t.Helper()
+	var r struct {
+		AgentID              string  `json:"agent_id"`
+		BundleHash           string  `json:"bundle_hash"`
+		ChallengeDigest      string  `json:"challenge_digest"`
+		ClaimID              string  `json:"claim_id"`
+		ClockSkewSeconds     int64   `json:"clock_skew_seconds"`
+		ContextPolicyDigest  *string `json:"context_policy_digest"`
+		ConstraintEvaluators []struct {
+			Type          string `json:"type"`
+			ProfileDigest string `json:"profile_digest"`
+		} `json:"constraint_evaluators"`
+		ExpiresAt     int64    `json:"expires_at"`
+		IssuedAt      int64    `json:"issued_at"`
+		IssuerIDs     []string `json:"issuer_ids"`
+		MaxAgeSeconds int64    `json:"max_age_seconds"`
+		Namespace     string   `json:"namespace"`
+		ProofDigest   string   `json:"proof_digest"`
+		RateBatch     []struct {
+			CertID   string `json:"cert_id"`
+			IssuerID string `json:"issuer_id"`
+			Limit    int64  `json:"limit"`
+			WindowS  int64  `json:"window_s"`
+		} `json:"rate_batch"`
+		ReplayEpoch   int64   `json:"replay_epoch"`
+		RequiredScope string  `json:"required_scope"`
+		RequiresRate  bool    `json:"requires_rate"`
+		StreamID      *string `json:"stream_id"`
+		StreamSeq     *int64  `json:"stream_seq"`
+		VerifierID    string  `json:"verifier_id"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(record))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&r); err != nil {
+		t.Fatalf("claim record: %v", err)
+	}
+	c := ratify.V2ChallengeClaim{ClaimID: r.ClaimID, Namespace: r.Namespace, ReplayEpoch: r.ReplayEpoch, ChallengeDigest: r.ChallengeDigest,
+		ProofDigest: r.ProofDigest, BundleHash: r.BundleHash, IssuerIDs: r.IssuerIDs, RequiredScope: r.RequiredScope, VerifierID: r.VerifierID,
+		AgentID: r.AgentID, RequiresRate: r.RequiresRate, IssuedAt: r.IssuedAt, ExpiresAt: r.ExpiresAt, MaxAgeSeconds: r.MaxAgeSeconds,
+		ClockSkewSeconds: r.ClockSkewSeconds, StreamSeq: r.StreamSeq}
+	if r.ContextPolicyDigest != nil {
+		c.ContextPolicyDigest = *r.ContextPolicyDigest
+	}
+	if r.StreamID != nil {
+		c.StreamID = unb64(t, *r.StreamID)
+	}
+	for _, b := range r.RateBatch {
+		c.RateBatch = append(c.RateBatch, ratify.V2RateReservation{CertID: b.CertID, IssuerID: b.IssuerID, Limit: b.Limit, WindowS: b.WindowS})
+	}
+	for _, e := range r.ConstraintEvaluators {
+		c.ConstraintEvaluators = append(c.ConstraintEvaluators, ratify.ConstraintEvaluatorRefV2{Type: ratify.ConstraintType(e.Type), ProfileDigest: e.ProfileDigest})
+	}
+	return c
+}
+
 // v2WrongEntryCheckpoint reports acknowledgements for a different entry hash.
 type v2WrongEntryCheckpoint struct{ inner ratify.V2ReceiptCheckpoint }
 
@@ -292,6 +358,8 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				TerminalB64     string            `json:"terminal_b64"`
 				BodyB64         string            `json:"body_b64"`
 				AllowValidUntil int64             `json:"allow_valid_until"`
+				ClaimRecordB64  string            `json:"claim_record_b64"`
+				ClaimID         string            `json:"claim_id"`
 				Expect          v2LifecycleExpect `json:"expect"`
 			} `json:"steps"`
 		} `json:"scenarios"`
@@ -323,9 +391,13 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				return store
 			}
 			// resumeStep resumes the request's committed claim from the store
-			// (SPEC-v2 §7.11); the resumed handoff replaces the one held.
-			resumeStep := func(i int, request string, want v2LifecycleExpect) {
+			// (SPEC-v2 §7.11), or from the vector's record when one is given;
+			// the resumed handoff replaces the one held.
+			resumeStep := func(i int, request string, record *ratify.V2CommittedClaim, requested string, want v2LifecycleExpect) {
 				claimID := claimIDs[request]
+				if requested != "" {
+					claimID = requested
+				}
 				if claimID == "" {
 					e := f.Requests[request].ExpectedChallenge
 					var err error
@@ -333,7 +405,11 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				outcome, err := ratify.ResumeCommittedClaimV2(ctx, store, claimID)
+				var committedStore ratify.V2CommittedClaimStore = store
+				if record != nil {
+					committedStore = v2RecordCommittedStore{*record}
+				}
+				outcome, err := ratify.ResumeCommittedClaimV2(ctx, committedStore, claimID)
 				if want.ErrorClass != "" {
 					if outcome != nil || string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
 						t.Fatalf("step %d resume: %v (class %s), want %s", i, err, ratify.V2ErrorClassOf(err), want.ErrorClass)
@@ -540,7 +616,17 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 				case "recover":
 					recoverStep(i, step.Request, want)
 				case "resume":
-					resumeStep(i, step.Request, want)
+					var record *ratify.V2CommittedClaim
+					if step.ClaimRecordB64 != "" {
+						if step.Mode == "record_bytes" {
+							// This store interface carries the sealed claim,
+							// not its record bytes.
+							continue
+						}
+						record = &ratify.V2CommittedClaim{Claim: v2ClaimFromRecord(t, unb64(t, step.ClaimRecordB64)),
+							TerminalResult: unb64(t, step.TerminalB64), ReceiptBody: unb64(t, step.BodyB64), AllowHorizon: step.AllowValidUntil}
+					}
+					resumeStep(i, step.Request, record, step.ClaimID, want)
 				case "publish":
 					c := committed[step.Request]
 					if step.Mode == "signer_failure" {

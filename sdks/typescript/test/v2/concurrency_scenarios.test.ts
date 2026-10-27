@@ -20,7 +20,7 @@ import assert from "node:assert/strict";
 import { protocolClaimIDV2 } from "../../src/challenge_claim_v2.js";
 import { claimProofBundleV2, type ClaimStoreV2, type V2ChallengeClaim, type V2ClaimResult } from "../../src/claim_store_v2.js";
 import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
-import { recoverInterruptedClaimV2 } from "../../src/evaluation_progress_v2.js";
+import { recoverInterruptedClaimV2, resumeCommittedClaimV2 } from "../../src/evaluation_progress_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { releaseV2Decision, type CommittedV2Outcome, type V2ReleaseConfig } from "../../src/release_v2.js";
 import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2, verificationReceiptV2Digest } from "../../src/verification_receipt_v2.js";
@@ -123,6 +123,14 @@ class RaceIteration {
     }
   }
 
+  /** Records a resumed handoff as a committed result of its claim; false when its body differs from the one recorded. */
+  recordResumed(c: CommittedV2Outcome): boolean {
+    const prior = this.recorded.get(c.claimID());
+    if (prior !== undefined) return Buffer.from(prior).equals(Buffer.from(c.receiptBody()));
+    this.record(c.claimID(), c.receiptBody());
+    return true;
+  }
+
   recordOutcome(request: string, c: CommittedV2Outcome): void {
     this.committed.set(request, c);
     this.record(c.claimID(), c.receiptBody());
@@ -153,9 +161,9 @@ class RaceIteration {
     }
   }
 
-  async releaseLabel(request: string): Promise<string> {
+  async releaseLabel(request: string, handoff?: CommittedV2Outcome): Promise<string> {
     const config: V2ReleaseConfig = { verifierPublicKey: this.verifier.publicKey, logID: inputs.log_id, claimStore: this.store, checkpoint: this.store };
-    const result = await releaseV2Decision(this.committed.get(request)!, this.receipts.get(request) ?? null, config);
+    const result = await releaseV2Decision(handoff ?? this.committed.get(request)!, this.receipts.get(request) ?? null, config);
     if (result.status !== "released") return `${result.status}/${result.reason}`;
     const d = result.decision!;
     return `released/${d.decision()}/${d.releaseTime()}/${d.receipt().sequence}`;
@@ -222,6 +230,21 @@ class RaceIteration {
         this.recordOutcome(s.request, outcome);
         break;
       }
+      case "resume": {
+        let outcome: CommittedV2Outcome;
+        try {
+          outcome = await resumeCommittedClaimV2(this.store, this.claimID(s.request));
+        } catch (err) {
+          if (!want.error_class) throw err;
+          assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} resume class (${(err as Error).message})`);
+          return;
+        }
+        assert.equal(want.error_class ?? "", "", `step ${i} resume succeeded, want ${want.error_class}`);
+        checkCommitted(i, outcome, want);
+        assert.ok(this.recordResumed(outcome), `step ${i} resume: the resumed body differs from the committed one`);
+        this.committed.set(s.request, outcome);
+        break;
+      }
       case "publish": {
         const c = this.committed.get(s.request)!;
         const wire = await this.store.publishV2Receipt(c.claimID(), c.receiptBody());
@@ -283,6 +306,18 @@ class RaceIteration {
           return errorLabel(err);
         }
         this.recordOutcome(p.request, outcome);
+        const body = decodeVerificationReceiptBodyV2(outcome.receiptBody());
+        return `committed/${body.decision}/${body.decision_reason}`;
+      }
+      case "resume": {
+        let outcome: CommittedV2Outcome;
+        try {
+          outcome = await resumeCommittedClaimV2(this.store, this.claimID(p.request));
+        } catch (err) {
+          return errorLabel(err);
+        }
+        if (!this.recordResumed(outcome)) return "resumed a body other than the committed one";
+        if (p.mode === "release") return this.releaseLabel(p.request, outcome);
         const body = decodeVerificationReceiptBodyV2(outcome.receiptBody());
         return `committed/${body.decision}/${body.decision_reason}`;
       }

@@ -74,7 +74,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
 | `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
-| `lifecycle-scenarios.json` (66 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (80 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
 | `limits.json` (76 vectors) | Yes | Yes | Yes | Yes | Yes |
 | `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `object-negatives.json` (433 negatives) | Yes | Yes | Yes | Yes | Yes |
@@ -142,7 +142,7 @@ All five SDKs have since been ported and pass the resulting corpus. Changes to
 | `limits.json` | New: 76 byte, count, and timestamp boundary cases, including the status evidence batch |
 | `hedged-signatures.json` | New: 10 objects with 2 hedged ML-DSA-65 variants each (not reproducible) |
 | `security-journal.json` | New: `SecurityJournalV2` snapshot known answers, transitions, migration, 20 import negatives (including unsafe integers, a member-name case variant, and a `null` array element) |
-| `lifecycle-scenarios.json` | New: 66 Part B scripts (360 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 29 requests |
+| `lifecycle-scenarios.json` | New: 80 Part B scripts (427 steps) against each SDK's in-memory reference store, plus 29 `profile_scenarios` for the single-device offline and dual-root profiles, over 29 requests |
 | `transaction-verification.json` | New: 13 composed transaction verification cases |
 | `annex-a.json` | New: Annex A clause digests, canonical JSON and strict-decode cases, and the scope vocabulary, expansion, intersection, and `custom:` cases |
 | `issuer-duties.json` | New: 11 delegation issuer-duty cases for the typed signer |

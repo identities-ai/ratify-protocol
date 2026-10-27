@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { protocolClaimIDV2 } from "../../src/challenge_claim_v2.js";
 import { claimProofBundleV2, type ClaimStoreV2 } from "../../src/claim_store_v2.js";
 import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
-import { recoverInterruptedClaimV2, resumeCommittedClaimV2 } from "../../src/evaluation_progress_v2.js";
+import { recoverInterruptedClaimV2, resumeCommittedClaimV2, type V2CommittedClaim, type V2CommittedClaimStore } from "../../src/evaluation_progress_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
 import { CommittedV2Outcome, releaseV2Decision, type V2ReceiptCheckpoint, type V2ReleaseConfig, type V2ReleasedDecision } from "../../src/release_v2.js";
 import {
@@ -71,8 +71,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 66);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 360);
+  assert.equal(file.scenarios.length, 80);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 427);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -106,16 +106,18 @@ for (const sc of file.scenarios as Any[]) {
       }
     };
     // resumeStep resumes the request's committed claim from the store
-    // (SPEC-v2 §7.11); the resumed handoff replaces the one held.
-    const resumeStep = async (i: number, request: string, want: Any) => {
-      let claimID = claimIDs.get(request);
+    // (SPEC-v2 §7.11), or from the vector's record when one is given; the
+    // resumed handoff replaces the one held.
+    const resumeStep = async (i: number, request: string, want: Any, record?: V2CommittedClaim, requested?: string) => {
+      let claimID = requested || claimIDs.get(request);
       if (claimID === undefined) {
         const e = file.requests[request].expected_challenge;
         claimID = protocolClaimIDV2(e.verifier_namespace, e.replay_epoch, unb64(e.value_b64));
       }
       let outcome: CommittedV2Outcome | null = null;
       try {
-        outcome = await resumeCommittedClaimV2(store, claimID);
+        const source: V2CommittedClaimStore = record ? { loadV2CommittedClaim: async () => record } : store;
+        outcome = await resumeCommittedClaimV2(source, claimID);
       } catch (err) {
         if (!want.error_class) throw err;
         assert.equal(v2ErrorClassOf(err), want.error_class, `step ${i} resume class (${(err as Error).message})`);
@@ -278,9 +280,23 @@ for (const sc of file.scenarios as Any[]) {
         case "recover":
           await recoverStep(i, step.request, want);
           break;
-        case "resume":
-          await resumeStep(i, step.request, want);
+        case "resume": {
+          if (step.claim_record_b64 === undefined) {
+            await resumeStep(i, step.request, want);
+            break;
+          }
+          // This store interface carries the sealed claim, not its record
+          // bytes.
+          if (step.mode === "record_bytes") break;
+          const record: V2CommittedClaim = {
+            claim: claimFromRecord(unb64(step.claim_record_b64)),
+            terminalResult: unb64(step.terminal_b64),
+            receiptBody: unb64(step.body_b64),
+            allowHorizon: step.allow_valid_until ?? 0,
+          };
+          await resumeStep(i, step.request, want, record, step.claim_id);
           break;
+        }
         case "publish": {
           const c = committed.get(step.request)!;
           if (step.mode === "signer_failure") store.setSignerFailure(true);
@@ -384,3 +400,24 @@ test("lifecycle: cancellation after claim leaves the claim recoverable", async (
   const recovered = await recoverInterruptedClaimV2(store, outcome.claim!.claimID);
   assert.equal(decodeVerificationReceiptBodyV2(recovered.receiptBody()).decision_reason, "evaluation_interrupted");
 });
+
+// claimFromRecord decodes the canonical sealed claim object of a SPEC-v2
+// §7.13 claim record.
+function claimFromRecord(record: Uint8Array): V2ChallengeClaim {
+  const r = JSON.parse(new TextDecoder().decode(record));
+  const members = [
+    "agent_id", "bundle_hash", "challenge_digest", "claim_id", "clock_skew_seconds", "constraint_evaluators", "context_policy_digest",
+    "expires_at", "issued_at", "issuer_ids", "max_age_seconds", "namespace", "proof_digest", "rate_batch", "replay_epoch",
+    "required_scope", "requires_rate", "stream_id", "stream_seq", "verifier_id",
+  ];
+  assert.deepEqual(Object.keys(r).sort(), members, "claim record members");
+  return {
+    claimID: r.claim_id, namespace: r.namespace, replayEpoch: r.replay_epoch, challengeDigest: r.challenge_digest,
+    proofDigest: r.proof_digest, bundleHash: r.bundle_hash, issuerIDs: r.issuer_ids, requiredScope: r.required_scope,
+    contextPolicyDigest: r.context_policy_digest ?? "", verifierID: r.verifier_id, agentID: r.agent_id, requiresRate: r.requires_rate,
+    rateBatch: r.rate_batch.map((b: Any) => ({ issuerID: b.issuer_id, certID: b.cert_id, windowS: b.window_s, limit: b.limit })),
+    issuedAt: r.issued_at, expiresAt: r.expires_at, maxAgeSeconds: r.max_age_seconds, clockSkewSeconds: r.clock_skew_seconds,
+    streamID: r.stream_id === null ? null : unb64(r.stream_id), streamSeq: r.stream_seq,
+    constraintEvaluators: r.constraint_evaluators.map((e: Any) => ({ type: e.type, profile_digest: e.profile_digest })),
+  };
+}

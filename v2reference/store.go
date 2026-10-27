@@ -591,6 +591,31 @@ func (s *Store) RecoverInterruptedV2Claim(_ context.Context, claimID string, ter
 	return true, nil
 }
 
+// LoadV2CommittedClaim implements ratify.V2CommittedClaimStore: it returns a
+// terminal claim exactly as its terminal commit persisted it, for
+// resumption after the handoff was lost (SPEC-v2 §7.11). A claim still
+// evaluating is claim_lease_live while its lease is live and
+// claim_lease_lost after, when lease-expiry recovery must run first.
+func (s *Store) LoadV2CommittedClaim(_ context.Context, claimID string) (ratify.V2CommittedClaim, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, ok := s.claims[claimID]
+	if !ok {
+		return ratify.V2CommittedClaim{}, &ratify.V2Error{Class: ratify.V2ErrClaimNotFound, Err: fmt.Errorf("v2reference: unknown claim")}
+	}
+	if record.state != stateTerminal {
+		now, err := s.readClockLocked()
+		if err != nil {
+			return ratify.V2CommittedClaim{}, err
+		}
+		if now < record.leaseExpiresAt {
+			return ratify.V2CommittedClaim{}, &ratify.V2Error{Class: ratify.V2ErrClaimLeaseLive, Err: fmt.Errorf("v2reference: evaluator lease is still live")}
+		}
+		return ratify.V2CommittedClaim{}, &ratify.V2Error{Class: ratify.V2ErrClaimLeaseLost, Err: fmt.Errorf("v2reference: claim is not terminal; recover it first")}
+	}
+	return ratify.V2CommittedClaim{Claim: cloneClaim(record.claim), TerminalResult: bytes.Clone(record.terminal), ReceiptBody: bytes.Clone(record.receiptBody), AllowHorizon: record.allowHorizon}, nil
+}
+
 // LoadV2TerminalClaim implements ratify.V2ReleaseClaimStore.
 func (s *Store) LoadV2TerminalClaim(_ context.Context, claimID string) (ratify.V2TerminalClaimRecord, error) {
 	s.mu.Lock()

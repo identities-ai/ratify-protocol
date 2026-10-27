@@ -31,11 +31,11 @@ import (
 //
 // After the crash the service restarts against the same store, waits out the
 // evaluator lease, and retries every presentation: verify (an in-progress
-// claim is recovered with RecoverInterruptedClaimV2), publish, acknowledge
-// and release. Two restart models are run:
+// claim is recovered with RecoverInterruptedClaimV2, and a committed claim
+// whose handoff died is resumed with ResumeCommittedClaimV2), publish,
+// acknowledge and release. Two restart models are run:
 //
-//   - volatile: the restarted service holds nothing, exactly what the SDK
-//     surface supports, since a CommittedV2Outcome cannot be persisted;
+//   - volatile: the restarted service holds nothing but the claim store;
 //   - journaled: the service is assumed to keep each committed handoff and
 //     signed receipt once the call that produced it returned (a durable
 //     caller journal the SDK does not provide), so publication,
@@ -140,6 +140,7 @@ func (o *v2CrashOracle) commit(claimID string, terminal, body []byte, recovered 
 // v2CrashDiskStore is every reference-store interface the service uses.
 type v2CrashDiskStore interface {
 	ratify.ClaimStoreV2
+	ratify.V2CommittedClaimStore
 	ratify.V2ReleaseClaimStore
 	ratify.V2ReceiptPublisher
 	ratify.V2ReceiptCheckpoint
@@ -200,6 +201,10 @@ func (d *v2CrashDisk) RecoverInterruptedV2Claim(ctx context.Context, claimID str
 		}
 	})
 	return recovered, err
+}
+
+func (d *v2CrashDisk) LoadV2CommittedClaim(ctx context.Context, claimID string) (ratify.V2CommittedClaim, error) {
+	return d.inner.LoadV2CommittedClaim(ctx, claimID)
 }
 
 func (d *v2CrashDisk) LoadV2TerminalClaim(ctx context.Context, claimID string) (ratify.V2TerminalClaimRecord, error) {
@@ -463,14 +468,14 @@ func (w *v2CrashWorld) serve(journal *v2CrashCallerJournal) {
 			case outcome.Stage == ratify.V2StageEvaluating, outcome.Stage == ratify.V2StageReplay && outcome.Disposition == ratify.V2ClaimInProgress:
 				handoff = w.recoverAfterLease(ctx, p)
 			case outcome.Stage == ratify.V2StageReplay && outcome.Disposition == ratify.V2ClaimTerminalReplay:
-				// Recovery returns the outcome only for an interrupted result;
-				// any other committed result cannot be reconstructed.
-				recovered, err := ratify.RecoverInterruptedClaimV2(ctx, w.claimStore, p.claimID)
+				// SPEC-v2 §7.11: resume the committed work from the store's
+				// persisted record; the presentation retry discloses nothing.
+				resumed, err := ratify.ResumeCommittedClaimV2(ctx, w.disk, p.claimID)
 				if err != nil {
-					w.note("%s: terminal replay with no recoverable handoff (%s)", p.name, ratify.V2ErrorClassOf(err))
+					w.note("%s: terminal replay with no resumable handoff (%s)", p.name, ratify.V2ErrorClassOf(err))
 					continue
 				}
-				handoff = recovered
+				handoff = resumed
 			default:
 				w.note("%s: verify stopped at %s/%s", p.name, outcome.Stage, outcome.ErrorClass)
 				continue
@@ -535,10 +540,6 @@ type v2CrashRun struct {
 	// evaluatingAtCrash are the claims that existed with no terminal result
 	// when the process died.
 	evaluatingAtCrash []string
-	// unreleasedCommitsAtCrash are presentations whose non-interrupted
-	// terminal result was committed but not yet released, and whose handoff
-	// the restarted service does not hold.
-	unreleasedCommitsAtCrash []string
 }
 
 // runV2CrashPoint runs the flow once with a crash armed at write n (mode
@@ -562,13 +563,8 @@ func runV2CrashPoint(t *testing.T, fixture v2CrashFixture, flow v2CrashFlow, n i
 		if _, claimed := w.oracle.claimedAt[p.claimID]; !claimed {
 			continue
 		}
-		commit, terminal := w.oracle.commits[p.claimID]
-		if !terminal {
+		if _, terminal := w.oracle.commits[p.claimID]; !terminal {
 			run.evaluatingAtCrash = append(run.evaluatingAtCrash, p.claimID)
-			continue
-		}
-		if !commit.recovered && len(w.oracle.released[p.claimID]) == 0 && (!journaled || journal.handoff[p.name] == nil) {
-			run.unreleasedCommitsAtCrash = append(run.unreleasedCommitsAtCrash, p.name)
 		}
 	}
 	w.oracle.mu.Unlock()
@@ -755,13 +751,9 @@ func checkV2CrashInvariants(t *testing.T, flow v2CrashFlow, run v2CrashRun) {
 		}
 	}
 
-	// Liveness (SPEC-v2 §7.11), wherever the restart model can complete the
-	// work: every presentation reaches its expected terminal result and is
-	// released. A committed result whose handoff died with the process is
-	// covered by TestV2CrashAfterFinalizationCompletesCommittedWork.
-	if len(run.unreleasedCommitsAtCrash) != 0 {
-		return
-	}
+	// Liveness (SPEC-v2 §7.11): every presentation reaches its expected
+	// terminal result and is released, including a committed result whose
+	// handoff died with the process.
 	allows := int64(0)
 	for i, p := range w.presentations {
 		if len(o.released[p.claimID]) == 0 {
@@ -804,22 +796,16 @@ func TestV2CrashInjectionPreservesInvariants(t *testing.T) {
 				t.Fatal("the flow made no durable writes")
 			}
 			t.Logf("%d durable writes: %s", len(ops), strings.Join(ops, ","))
-			stranded := 0
 			for _, journaled := range []bool{false, true} {
 				model := map[bool]string{false: "volatile", true: "journaled"}[journaled]
 				for _, mode := range []v2CrashMode{v2CrashBefore, v2CrashAfter} {
 					for n := 1; n <= len(ops); n++ {
 						t.Run(fmt.Sprintf("%s/%s/%02d_%s", model, mode, n, ops[n-1]), func(t *testing.T) {
-							run := runV2CrashPoint(t, fixture, flow, n, mode, journaled)
-							if len(run.unreleasedCommitsAtCrash) != 0 {
-								stranded++
-							}
-							checkV2CrashInvariants(t, flow, run)
+							checkV2CrashInvariants(t, flow, runV2CrashPoint(t, fixture, flow, n, mode, journaled))
 						})
 					}
 				}
 			}
-			t.Logf("%d crash points x 2 modes x 2 models; %d left committed work the restarted service cannot release", len(ops), stranded)
 		})
 	}
 }

@@ -559,6 +559,13 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	if err := requireV2RoundTrip(data, &wire); err != nil {
 		return nil, err
 	}
+	// Canonical form is part of strict decode (SPEC-v2 §2.1). The outer
+	// receipt, with each proof bundle as its received bytes, is compared with
+	// its canonical encoding before any bundle is decoded, so a non-canonical
+	// receipt is malformed whatever its bundles hold.
+	if outer, err := CanonicalJSON(wire); err != nil || !bytes.Equal(outer, data) {
+		return nil, fmt.Errorf("wire v2: transaction receipt is not canonical JSON")
+	}
 	receipt := &TransactionReceiptV2{
 		Version: wire.Version, TransactionID: wire.TransactionID, CreatedAt: wire.CreatedAt,
 		TermsSchemaURI: wire.TermsSchemaURI, TermsCanonicalJSON: wire.TermsCanonicalJSON,

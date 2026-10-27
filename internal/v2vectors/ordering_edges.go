@@ -170,6 +170,9 @@ func (g *gen) orderingEdgeScenarios() []scenario {
 	std("pre_expected_replay_epoch_negative", "an ExpectedChallenge replay_epoch of -1 is outside 0..2^53-1 and can never equal the configured epoch: stale_replay_epoch", "stale_replay_epoch", func(s *scenario) {
 		s.expected.ReplayEpoch = -1
 	})
+	std("pre_expected_replay_epoch_above_safe_integer", "an ExpectedChallenge replay_epoch of 2^53 is outside 0..2^53-1 and can never equal the configured epoch: stale_replay_epoch", "stale_replay_epoch", func(s *scenario) {
+		s.expected.ReplayEpoch = 1 << 53
+	})
 	std("config_replay_epoch_negative", "a configured replay epoch of -1 is outside 0..2^53-1: configuration_invalid", "configuration_invalid", func(s *scenario) {
 		s.epoch, s.expected.ReplayEpoch = -1, -1
 	})

@@ -387,8 +387,9 @@ def validate_v2_finalization_payload(claim: V2ChallengeClaim, terminal_result: b
     constraint_evaluators must equal the sealed claim's values; its
     context_policy_digest must equal the sealed claim's (None for a
     policy-less claim) unless context_assessment is not_evaluated, when it
-    must be None. The terminal result must be a JSON object whose
-    decision and decision_reason equal the body's; any difference is
+    must be None. The terminal result must be exactly the RatifyCanonicalJSON
+    of the body's decision, decision_reason and identity_status (SPEC-v2
+    §7.13); any difference is
     configuration_invalid. ``finalize_claim_proof_bundle_v2`` applies it
     before the store is called, and a claim store applies it inside its
     finalization compare-and-set so that no caller can commit a body for

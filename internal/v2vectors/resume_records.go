@@ -151,6 +151,10 @@ func (g *gen) resumeRecordScenarios(sc func(string, string, ...lifecycleStepJSON
 		record(honest, allowTerminal, allowBody(func(r *ratify.VerificationReceiptV2) { r.AgentID = g.k("intermediate").ID }), statusFreshUntil, unavailable))
 	refused("terminal_result_other_than_body", "terminal result is deny/delegation_revoked while the receipt body is the committed allow (SPEC-v2 §7.5)",
 		record(honest, terminal("deny", "delegation_revoked", "revoked"), allowBody(nil), statusFreshUntil, unavailable))
+	refused("terminal_result_other_identity_status", "terminal result is the committed allow's decision and decision_reason with identity_status revoked, not the body's authorized_agent (SPEC-v2 §7.13)",
+		record(honest, terminal("allow", "authorized", "revoked"), allowBody(nil), statusFreshUntil, unavailable))
+	refused("terminal_result_with_other_members", "terminal result is the committed allow's decision, decision_reason and identity_status with a further member, so it is not the canonical three-member object (SPEC-v2 §7.13)",
+		record(honest, b64(must(ratify.CanonicalJSON(map[string]any{"decision": "allow", "decision_reason": "authorized", "identity_status": "authorized_agent", "x": 1}))), allowBody(nil), statusFreshUntil, unavailable))
 	refused("allow_without_allow_horizon", "result is the committed allow with allow horizon 0 (SPEC-v2 §6.8)",
 		record(honest, allowTerminal, allowBody(nil), 0, unavailable))
 	refused("allow_horizon_beyond_timestamp_domain", "result is the committed allow with allow horizon 253402300800, beyond the timestamp domain (SPEC-v2 §2.5, §6.8)",

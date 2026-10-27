@@ -534,6 +534,13 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             parties,
             party_signatures,
         };
+        // Canonical form is part of strict decode (SPEC-v2 §2.1). The outer
+        // receipt is compared with its canonical encoding before any bundle
+        // is decoded, so a non-canonical receipt is malformed whatever its
+        // bundles hold.
+        if canonical(&node_to_cj(&root))? != data {
+            return plain("wire v2: transaction receipt is not canonical JSON");
+        }
         let mut bundle_hashes = Vec::with_capacity(r.parties.len());
         for (p, raw) in r.parties.iter_mut().zip(raw_bundles) {
             if !raw.starts_with(b"{") {

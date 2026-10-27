@@ -17,7 +17,7 @@ VECTORS = FILE["vectors"]
 
 
 def test_ordering_corpus_shape():
-    assert len(VECTORS) == 514
+    assert len(VECTORS) == 515
     stages = {}
     for v in VECTORS:
         stages[v["expected"]["stage"]] = stages.get(v["expected"]["stage"], 0) + 1

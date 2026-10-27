@@ -391,6 +391,13 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	})
 	twoFault("noncanonical_and_party_session_changed", "leading space; parties[0].session_id changed", leadingSpace, func(o map[string]any) { party(o, 0)["session_id"] = "session-x" })
 	twoFault("noncanonical_and_signature_missing", "trailing newline; party-b signature removed", trailingNewline, func(o map[string]any) { o["party_signatures"] = arr(o["party_signatures"])[:1] })
+	// The outer canonical check precedes decoding the nested bundles, so a
+	// fault the bundle decoder would report (here key_id_mismatch) does not
+	// mask it.
+	twoFault("noncanonical_and_bundle_cert_key_id_mismatch", "leading space; parties[0].proof_bundle.delegations[0].issuer_id names another key", leadingSpace, func(o map[string]any) {
+		cert := obj(arr(obj(party(o, 0)["proof_bundle"])["delegations"])[0])
+		cert["issuer_id"] = g.k("attacker").ID
+	})
 }
 
 func (g *gen) receiptNegatives(n *negBuilder) {

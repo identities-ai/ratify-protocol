@@ -95,8 +95,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 102);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 549);
+  assert.equal(file.scenarios.length, 108);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 579);
 });
 
 for (const sc of file.scenarios as Any[]) {

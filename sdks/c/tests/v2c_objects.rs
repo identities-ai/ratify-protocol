@@ -425,7 +425,7 @@ fn v2c_object_negatives() {
     assert!(kinds.len() >= 9, "negative kinds: {kinds:?}");
     assert_eq!(
         arr(&f["vectors"]).len(),
-        468,
+        469,
         "object-negatives.json vectors"
     );
     t.finish(&[("negatives", arr(&f["vectors"]).len())]);

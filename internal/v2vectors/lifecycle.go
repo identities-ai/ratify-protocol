@@ -566,6 +566,15 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			r.ConstraintEvaluators = []ratify.ConstraintEvaluatorRefV2{{Type: maxCountType, ProfileDigest: profileDigest(maxCountProfile, maxCountType)}}
 		}},
 		{"terminal_decision", "the terminal result is deny/delegation_revoked while the body is indeterminate/status_unavailable", terminal("deny", "delegation_revoked", "revoked"), nil},
+		// The terminal result is exactly the RatifyCanonicalJSON of the body's
+		// decision, decision_reason and identity_status (SPEC-v2 §7.13).
+		{"terminal_identity_status", "the terminal result's identity_status is revoked while the body's is authorization_unverified (SPEC-v2 §7.13)", terminal("indeterminate", "status_unavailable", "revoked"), nil},
+		{"terminal_members", "the terminal result has a further member beside the body's decision, decision_reason and identity_status (SPEC-v2 §7.13)",
+			b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "status_unavailable", "identity_status": "authorization_unverified", "x": 1}))), nil},
+		{"terminal_spelling", "the terminal result is the body's decision, decision_reason and identity_status preceded by a space, not RatifyCanonicalJSON (SPEC-v2 §7.13)",
+			b64(append([]byte(" "), must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "status_unavailable", "identity_status": "authorization_unverified"}))...)), nil},
+		{"terminal_without_identity_status", "the terminal result has the body's decision and decision_reason but no identity_status (SPEC-v2 §7.13)",
+			b64(must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "status_unavailable"}))), nil},
 	} {
 		body := genuine()
 		if m.edit != nil {

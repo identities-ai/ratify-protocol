@@ -40,6 +40,17 @@ implementation outside this repository, and a soak are gates for `2.0.0`
 
 ### Added
 
+- **Crash, stress and shared concurrency tests.** The Go reference is
+  crashed before and after every durable store write of five flows and
+  restarted under two restart models; every crash point must keep the
+  safety invariants and complete its work. The edge sentinel reference's
+  test builds can exit at each durable write (`edge/tests/crash.sh`); no
+  crash point fires the actuator twice or for a request that was not
+  released. A multi-threaded C program stresses the C ABI with C store
+  callbacks under AddressSanitizer, UndefinedBehaviorSanitizer and
+  ThreadSanitizer (`sdks/c/scripts/test-v2-c-stress.sh`). The new shared
+  vector file `concurrency-scenarios.json` gives every SDK the same
+  concurrent workloads and outcome invariants.
 - **Verify, then release.** `VerifyProofBundleV2` commits a terminal result
   and a receipt body that are not actionable; `ReleaseV2Decision` returns the
   only actionable decision after the signed receipt is appended and
@@ -349,6 +360,25 @@ match before the beta.
 
 ### Fixed
 
+- **Committed work is resumed from the claim store after a lost handoff**
+  (every SDK and the C ABI). A process that ended after the terminal
+  compare-and-set but before the verifier returned lost the only handoff of
+  the committed result: the retry was a terminal replay with no handoff and
+  recovery accepted only an interrupted result, so the receipt was never
+  published, the decision never released, and every later receipt of the
+  log waited behind it. Safety held; progress did not. SPEC-v2 §7.11 now
+  requires resumption by claim ID from the persisted record. New
+  `ResumeCommittedClaimV2` (Go), `resumeCommittedClaimV2` (TypeScript),
+  `resume_committed_claim_v2` (Python and Rust) and
+  `ratify_v2_resume_committed_claim` (C) load the record through a new
+  one-method store interface (`LoadV2CommittedClaim` and its counterparts;
+  in C a new `RatifyV2CommittedStoreCallbacks`, leaving existing structs
+  unchanged), apply the terminal commit's checks (claim key, finalization
+  payload, allow horizon; a failure is `claim_store_unavailable`) and return
+  the committed handoff for publication and release. The store answers
+  `claim_not_found`, `claim_lease_live` or `claim_lease_lost` for a claim
+  without a committed record. The reference stores implement it, and shared
+  lifecycle scenarios pin the `resume` step in every SDK.
 - **LangChain reference: the receiver parses a signed presentation header
   however it arrives.** The presentation travels in one HTTP header of about
   38 KB, larger than the 16 KiB of incomplete headers the server's HTTP

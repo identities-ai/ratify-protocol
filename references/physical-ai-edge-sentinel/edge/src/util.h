@@ -35,6 +35,22 @@ int  write_file_durable(const char *path, const void *data, size_t len, int mode
 int  write_file_sync(const char *path, const void *data, size_t len, int mode);
 int  fsync_dir_of(const char *path);
 
+/* Crash injection for tests/crash.sh, compiled into the test builds only.
+ * CRASH_POINT marks one durable step (a file write and fsync, a rename, a
+ * directory fsync, a checkpoint anchor or acknowledgement): `after` is 0
+ * immediately before the step and 1 immediately after it. With
+ * SENTINEL_CRASH_AT=N set, the process counts the steps it reaches, prints
+ * each one to stderr, and calls _exit() before (SENTINEL_CRASH_MODE=before,
+ * the default) or after (SENTINEL_CRASH_MODE=after) step N, so the harness
+ * can show that a restart from whatever reached disk keeps the protocol's
+ * invariants. In the production binaries the macro expands to nothing. */
+#ifdef SENTINEL_TEST_BUILD
+void crash_point(const char *step, const char *path, int after);
+#define CRASH_POINT(step, path, after) crash_point(step, path, after)
+#else
+#define CRASH_POINT(step, path, after) ((void)0)
+#endif
+
 /* printf into a new heap string. */
 char *xformat(const char *fmt, ...);
 /* A heap copy of a library buffer as a NUL-terminated string; frees it. */

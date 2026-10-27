@@ -227,15 +227,18 @@ int fsync_dir_of(const char *path)
     snprintf(dir, sizeof dir, "%s", path);
     char *slash = strrchr(dir, '/');
     if (slash) *slash = '\0'; else snprintf(dir, sizeof dir, ".");
+    CRASH_POINT("dirsync", path, 0);
     int fd = open(dir, O_RDONLY);
     if (fd < 0) return -1;
     int rc = fsync(fd);
     close(fd);
+    CRASH_POINT("dirsync", path, 1);
     return rc;
 }
 
 int write_file_sync(const char *path, const void *data, size_t len, int mode)
 {
+    CRASH_POINT("write", path, 0);
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (fd < 0) return -1;
     const uint8_t *p = data;
@@ -250,7 +253,9 @@ int write_file_sync(const char *path, const void *data, size_t len, int mode)
         done += (size_t)n;
     }
     if (fsync(fd) != 0) { close(fd); return -1; }
-    return close(fd);
+    int rc = close(fd);
+    CRASH_POINT("write", path, 1);
+    return rc;
 }
 
 int write_file_durable(const char *path, const void *data, size_t len, int mode)
@@ -258,9 +263,38 @@ int write_file_durable(const char *path, const void *data, size_t len, int mode)
     char tmp[1100];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     if (write_file_sync(tmp, data, len, mode) != 0) return -1;
+    CRASH_POINT("rename", path, 0);
     if (rename(tmp, path) != 0) return -1;
+    CRASH_POINT("rename", path, 1);
     return fsync_dir_of(path);
 }
+
+#ifdef SENTINEL_TEST_BUILD
+/* See CRASH_POINT in util.h. Test builds only: the production binaries have
+ * no crash injection at all. */
+void crash_point(const char *step, const char *path, int after)
+{
+    static long target = -1, reached = 0;
+    static int crash_after = 0, configured = 0;
+    if (!configured) {
+        const char *at = getenv("SENTINEL_CRASH_AT"), *mode = getenv("SENTINEL_CRASH_MODE");
+        target = at && *at ? strtol(at, NULL, 10) : -1;
+        crash_after = mode && strcmp(mode, "after") == 0;
+        configured = 1;
+    }
+    if (target < 0) return;
+    const char *name = path ? strrchr(path, '/') : NULL;
+    name = name ? name + 1 : path ? path : "-";
+    if (!after) {
+        reached++;
+        fprintf(stderr, "crash-point %ld %s %s\n", reached, step, name);
+    }
+    if (reached == target && after == crash_after) {
+        fprintf(stderr, "CRASH at %ld %s %s %s\n", reached, after ? "after" : "before", step, name);
+        _exit(86);
+    }
+}
+#endif
 
 char *xformat(const char *fmt, ...)
 {

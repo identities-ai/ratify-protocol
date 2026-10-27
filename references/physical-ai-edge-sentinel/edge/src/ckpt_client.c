@@ -193,7 +193,10 @@ int ckpt_anchor(const ckpt_client *c, const char *prev, const char *next, char *
     ckpt_event ev;
     new_nonce(nonce);
     snprintf(req, sizeof req, "ANCHOR %s %s %s", nonce, prev, next);
-    if (signed_call(c, req, nonce, &ev, reason) != 0) return -1;
+    CRASH_POINT("anchor", NULL, 0);
+    int rc = signed_call(c, req, nonce, &ev, reason);
+    CRASH_POINT("anchor", NULL, 1);
+    if (rc != 0) return -1;
     if (strcmp(ev.event, "anchor") != 0 || strcmp(ev.anchored_digest, next) != 0) {
         set_reason(reason, "checkpoint_bad_event");
         return -1;
@@ -218,7 +221,9 @@ int ckpt_ack(const ckpt_client *c, const char *log_id, int64_t sequence, const u
     free(e);
     /* An identical retry returns the original acknowledgement, which carries
      * the original request's nonce; the signed fields still must match. */
+    CRASH_POINT("ack", NULL, 0);
     int rc = signed_call(c, req, NULL, out, reason);
+    CRASH_POINT("ack", NULL, 1);
     free(req);
     if (rc != 0) return -1;
     if (!ack_matches(out, log_id, sequence, entry)) {

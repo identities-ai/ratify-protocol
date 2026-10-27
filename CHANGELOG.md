@@ -345,7 +345,7 @@ match before the beta.
   already required. Text, plus vectors
   `object-negatives.json` `transaction_receipt/terms_not_object_*`.
 - **More verifier ordering cases** (`verifier-ordering.json`, 342 to 485
-  cases): status-key epoch transitions through the live verifier, with a
+  cases, and to 514 below): status-key epoch transitions through the live verifier, with a
   new optional `journal.setup` member that lists explicit journal setup
   steps; paired pre-claim and post-claim failures; status journal
   sequences; `tz` names in and out of tzdata `2025c`; `resource_path`
@@ -357,6 +357,60 @@ match before the beta.
   §8.1 item 2) with arbitrary bytes, arbitrary JSON, mutations of a populated
   snapshot and the size and depth limits; an import that succeeds must
   re-export the identical bytes. Go and Rust already fuzzed it.
+- **Transaction receipt canonical form is checked first** (every SDK; the C
+  ABI uses the Rust decoder). A non-canonical transaction receipt is
+  `malformed` whatever else is wrong with it (SPEC-v2 §2.1). Decoders
+  compared the bytes with the canonical encoding last, so a receipt that was
+  also badly signed, mis-hashed or mis-bound reported `invalid_signature`,
+  `bundle_hash_mismatch`, `transaction_context_mismatch` or
+  `transaction_signature_set_invalid`, and a non-canonical receipt of up to
+  5 MiB was fully signature-verified before it was refused. Vectors:
+  `object-negatives.json` `transaction_receipt/noncanonical_and_*`.
+- **A sealed terminal result is exactly its canonical form** (every SDK and
+  the C ABI). Finalization, lease-expiry recovery and resumption now require
+  the terminal-result bytes to be the RatifyCanonicalJSON of the receipt
+  body's `decision`, `decision_reason` and `identity_status` (SPEC-v2 §7.5,
+  §7.13), and refuse anything else as `configuration_invalid`. They compared
+  only the decision and reason, so a result with further members, another
+  spelling, no `identity_status`, or a contradicting `identity_status` could
+  be committed. Release always acted on the signed receipt, so no decision
+  changed. Finalization also validates the payload before comparing it with
+  the local evaluation, so a body that is not a receipt body stays
+  `malformed`. Vectors: `lifecycle-scenarios.json`
+  `recover_rejects_terminal_result_*`, replacing the scenario that accepted
+  further members.
+- **C ABI evaluator registrations need an implementation.** A custom
+  registration whose `evaluate` callback is NULL is `configuration_invalid`
+  before the challenge is claimed, as in Go, TypeScript and Python. The C
+  ABI built the registry anyway and failed only when the evaluator ran, after
+  the claim, so the challenge was consumed and the result was
+  `deny / constraint_unverifiable`.
+- **Specification clarifications.** An empty `expected_receiver_id` at
+  issuance names no receiver, as in the device-state encoding, so a named
+  receiver ID is 1 to 512 bytes (§7.3). An `ExpectedChallenge` `replay_epoch`
+  outside 0 through 2^53−1 is `stale_replay_epoch` (§6.2 step 6). Every SDK
+  already behaved this way.
+- **More shared vectors.** `verifier-ordering.json` 485 to 514 cases, and
+  every ordering vector now lists the exact status-provider requests (issuer,
+  references in chain order, status key epoch and ID), which every SDK
+  harness asserts: ascending issuer order that differs from chain order,
+  repeated issuers, trust answers, extension registries, an exact audience
+  match with a failing provider, configured verifier ID forms and §2.5
+  bounds. `object-negatives.json` 433 to 468: fully re-signed wire-layer
+  cases (small-order and mixed-order Ed25519 keys that satisfy the
+  cofactorless equation, ML-DSA under another context, UTF-16 key-order
+  traps, escape spellings, byte fields at wrong lengths). `limits.json` 76 to
+  80 (a valid transaction receipt at exactly 5 MiB, chains of 8 and 9).
+  `digest-functions.json` 16 to 25. `challenge-issuance.json` 10 to 11 (the
+  receiver ID byte bound). `lifecycle-scenarios.json` 80 to 102 Part B
+  scripts (a withheld result whose record fails or conflicts, substituted and
+  forged committed records refused at release, resumption record checks,
+  clock classes at resumption and recovery). `concurrency-scenarios.json`
+  17 to 18 (resumption racing an allow finalization). The C ABI program
+  feeds every ordering vector trust outcomes and claim dispositions outside
+  their enums and requires them to act as a failing provider. The edge crash
+  test now checks release records after the restart in every flow and adds a
+  withheld flow.
 
 ### Fixed
 

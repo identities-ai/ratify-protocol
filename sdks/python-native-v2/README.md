@@ -5,7 +5,7 @@ Native key generation, hybrid signing and hybrid verification for
 requires it. Install the SDK and this extension comes with it:
 
 ```bash
-pip install ratify-protocol-v2==2.0.0a1
+pip install ratify-protocol-v2==2.0.0b1
 ```
 
 Every private-key operation in the v2 Python SDK runs here: key generation

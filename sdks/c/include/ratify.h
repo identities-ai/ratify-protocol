@@ -1,6 +1,6 @@
 /*
  * Ratify Protocol — C/C++ bindings
- * Version: 2.0.0-alpha.1
+ * Version: 2.0.0-beta.1
  *
  * Cryptographic authorization for AI agents.
  * Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204).
@@ -2312,7 +2312,7 @@ uint32_t ratify_v2_abi_version(void);
 // Returns the Protocol major version implemented by `ratify_v2_*` (2).
 uint32_t ratify_v2_protocol_version(void);
 
-// Returns the library package version (e.g. "2.0.0-alpha.1"). Statically
+// Returns the library package version (e.g. "2.0.0-beta.1"). Statically
 // allocated — do NOT free. Same value as `ratify_version()`.
 const char *ratify_v2_library_version(void);
 

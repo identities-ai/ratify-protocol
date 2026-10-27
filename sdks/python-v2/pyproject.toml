@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # package. It must never be published under the `ratify-protocol` name: an
 # unbounded v1 requirement could then resolve to this incompatible line.
 name = "ratify-protocol-v2"
-version = "2.0.0a1"
+version = "2.0.0b1"
 description = "Ratify Protocol v2 Python SDK: delegated-authority proofs, installable alongside the v1 ratify-protocol package."
 readme = "README.md"
 authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
@@ -17,7 +17,7 @@ license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "authorization", "cryptography"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -33,7 +33,7 @@ dependencies = [
     # extension (constant-time Ed25519 and ML-DSA-65); there is no pure-Python
     # signing path. Version-locked to this release; the SDK rejects a
     # mismatched extension at import time.
-    "ratify-protocol-native-v2==2.0.0a1",
+    "ratify-protocol-native-v2==2.0.0b1",
 ]
 
 [project.optional-dependencies]

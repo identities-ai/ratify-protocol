@@ -29,7 +29,7 @@ Copilot reference is the worked example.
 | [Ratify Edge Physical AI](physical-ai-edge-sentinel/README.md) | A Linux edge receiver verifies a bounded physical-action request before sending one safe actuator command to an Arduino Uno | v2 (C ABI); its Google ADK adapter in [`adk/`](../adk/README.md) is v1 only | `RATIFY_SDK=/path/to/ratify-c ./references/physical-ai-edge-sentinel/run-reference-check.sh` |
 
 Until the Protocol v2 packages are published, every v2 gate builds the SDK from
-this repository (`2.0.0-alpha.1`) and has to be re-run against the published
+this repository (`2.0.0-beta.1`) and has to be re-run against the published
 `2.0.0-beta.1` packages before a release claim. Each v2 reference keeps its
 Protocol v1 gate result as dated history; see
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](../docs/V2_REFERENCE_COMPATIBILITY.md).

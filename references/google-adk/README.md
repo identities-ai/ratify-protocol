@@ -5,7 +5,7 @@ partnership, Google-approved integration, or Google reference architecture.
 
 - **Protocol line:** v2 (2.0.0-beta.1)
 - **Tested against:** the in-tree Python v2 SDK (`ratify-protocol-v2` and
-  `ratify-protocol-native-v2` 2.0.0a1, built from this repository) until
+  `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
   2.0.0-beta.1 is published. The deterministic gate is 58/58 green; see
   [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 - **Protocol v1 history:** the v1 version of this reference (Ratify
@@ -159,7 +159,7 @@ Tested pins:
 - `google-adk==2.6.3`
 - `mcp==1.29.0`
 - `pytest==9.0.3`
-- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0a1 (in-tree build)
+- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
 
 The deterministic path needs no API key, Google Cloud project, or paid
 service. It drives the real ADK runner with a scripted model double, so ADK

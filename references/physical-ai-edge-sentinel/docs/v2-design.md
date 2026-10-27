@@ -1,7 +1,7 @@
 # Protocol v2 design of the edge receiver
 
 This note records how the edge receiver uses the Ratify Protocol v2 C ABI
-(`sdks/c`, `2.0.0-alpha.1`), which parts of SPEC-v2 it implements, and which
+(`sdks/c`, `2.0.0-beta.1`), which parts of SPEC-v2 it implements, and which
 properties a Raspberry Pi without a secure element does and does not provide.
 It is the place to check before relying on any claim in the README.
 

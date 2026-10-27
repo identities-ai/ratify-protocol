@@ -7,7 +7,7 @@
 
 Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the TypeScript, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
+Byte-identical interoperability with the TypeScript, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-beta.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
@@ -33,14 +33,14 @@ Protocol v2 is published from the Go major-version module path
 `github.com/identities-ai/ratify-protocol/v2`, on a separate prerelease line:
 
 ```go
-go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-alpha.1
+go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1
 ```
 
 ```go
 import ratify "github.com/identities-ai/ratify-protocol/v2"
 ```
 
-`v2.0.0-alpha.1` is the v2 version prepared in this tree. It is a prerelease:
+`v2.0.0-beta.1` is the v2 version prepared in this tree. It is a prerelease:
 review so far is internal adversarial review, and external independent review
 is a gate for `2.0.0`. v2 is not backward compatible with v1; see the upgrade
 guide,

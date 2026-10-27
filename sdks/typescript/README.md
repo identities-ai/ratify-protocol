@@ -7,7 +7,7 @@
 
 Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
+Byte-identical interoperability with the Go, Python, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-beta.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
@@ -26,10 +26,10 @@ For Protocol v1, beyond the one-shot delegate → present → verify round trip,
 ## Install
 
 ```bash
-npm install @identities-ai/ratify-protocol@2.0.0-alpha.1
+npm install @identities-ai/ratify-protocol@2.0.0-beta.1
 ```
 
-Version `2.0.0-alpha.1` is a Protocol v2 prerelease. It is published under the
+Version `2.0.0-beta.1` is a Protocol v2 prerelease. It is published under the
 npm dist-tag `next`, so pin it exactly (or install `@next`); an unpinned
 install resolves to the latest v1 release until `2.0.0`. The v2 API is at
 `@identities-ai/ratify-protocol/v2`, and the v1 API stays at the package
@@ -344,7 +344,7 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 
 ## Protocol v2 API
 
-Version `2.0.0-alpha.1` is a prerelease on the separate v2 line. It exports the
+Version `2.0.0-beta.1` is a prerelease on the separate v2 line. It exports the
 v2 API from `@identities-ai/ratify-protocol/v2` (and from the package root,
 next to the unchanged v1 API). v2 prereleases use the `next` npm dist-tag, so
 an unpinned install and exact `1.0.0-alpha.20` pins continue to resolve to

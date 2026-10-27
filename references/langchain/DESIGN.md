@@ -1,7 +1,7 @@
 # LangChain delegated-authority reference design
 
 **Status:** implemented and independently tested draft reference on Ratify
-Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0a1 SDK). This
+Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0b1 SDK). This
 is not a LangChain partnership, LangChain-approved integration, or LangChain
 reference architecture. The v1 design is kept in [`v1/DESIGN.md`](v1/DESIGN.md).
 

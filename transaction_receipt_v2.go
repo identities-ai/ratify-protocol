@@ -513,10 +513,12 @@ func encodeTransactionReceiptV2Canonical(receipt *TransactionReceiptV2) ([]byte,
 }
 
 // transactionReceiptV2WireIsCanonical reports whether data is the canonical
-// encoding of wire, judged without decoding any proof bundle.
+// encoding of wire, judged without decoding any proof bundle. Parties must
+// also be unique by party_id (SPEC-v2 §5.7); a repeated signature record is
+// left to the signature set check.
 func transactionReceiptV2WireIsCanonical(wire *transactionReceiptWireV2, data []byte) bool {
 	for i := 1; i < len(wire.Parties); i++ {
-		if bytes.Compare([]byte(wire.Parties[i-1].PartyID), []byte(wire.Parties[i].PartyID)) > 0 {
+		if bytes.Compare([]byte(wire.Parties[i-1].PartyID), []byte(wire.Parties[i].PartyID)) >= 0 {
 			return false
 		}
 	}

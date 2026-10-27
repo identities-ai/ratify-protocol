@@ -1,12 +1,14 @@
 # LangChain reference evidence (Protocol v2)
 
-**Evidence date:** 2026-10-26 (run started 2026-10-26T23:21:06Z)
+**Evidence date:** 2026-10-27 (run started 2026-10-27T21:26:01Z)
 
-**Branch:** `feat/verify-federation-v2`
+**Branch:** `fix/r8-receipt-order-ts-perf`
 
-**Code commit:** `d62bed2`
+**Code commit:** `9ea1ec2` with the v2 version bump to 2.0.0-beta.1 applied
+(the commit that records this run). The reference code is unchanged since
+`d62bed2`.
 
-**Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build 2.0.0a1
+**Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build 2.0.0b1
 
 The Protocol v1 evidence (Ratify `1.0.0a19`, 28/28, 2026-09-20) is kept
 unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-evidence.md).
@@ -18,8 +20,8 @@ unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-e
 | Host | macOS 26.6, arm64 (Apple M2 Pro, 10 logical CPUs) |
 | Python | `3.12.10` |
 | Rust / maturin (native extension build) | `rustc 1.95.0`, `maturin 1.15.0` |
-| ratify-protocol-v2 | `2.0.0a1`, installed from `sdks/python-v2` at the code commit |
-| ratify-protocol-native-v2 | `2.0.0a1`, built from `sdks/python-native-v2` at the code commit |
+| ratify-protocol-v2 | `2.0.0b1`, installed from `sdks/python-v2` at the code commit |
+| ratify-protocol-native-v2 | `2.0.0b1`, built from `sdks/python-native-v2` at the code commit |
 | LangChain | `1.3.14` |
 | langchain-mcp-adapters | `0.3.0` |
 | MCP Python SDK | `1.29.0` |
@@ -48,15 +50,17 @@ is shortened.
 
 ```text
 installed Ratify v2 SDK: .../site-packages/ratify_protocol_v2/__init__.py
-langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol-v2==2.0.0a1 ratify-protocol-native-v2==2.0.0a1
+langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol-v2==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
 ..................................                                       [100%]
-34 passed in 9.25s
+34 passed in 10.68s
 gate: 34/34 passed; zero skipped, xfailed, failed, or errored
 ```
 
 Zero tests were skipped or marked xfail.
 
-The previous run (2026-10-22, code commit `bb48e57`) passed 33/33. The
+The previous run (2026-10-26, code commit `d62bed2`, against the in-tree
+alpha.1 build) passed 34/34; its record is in git history at `c800022`. The
+run before it (2026-10-22, code commit `bb48e57`) passed 33/33. The
 34th test was added with the fix for an intermittent `400` from the receiver:
 a signed presentation header of about 38 KB exceeded the HTTP parser's
 default 16 KiB buffer for incomplete headers when the headers arrived in
@@ -99,7 +103,7 @@ several reads.
 
 ## What this run does not establish
 
-- The SDK packages are the in-tree 2.0.0a1 build, not the published
+- The SDK packages are the in-tree 2.0.0b1 build, not the published
   2.0.0-beta.1 packages. The result must be re-run when those are released.
 - The claim store, receipt log, checkpoint, issuance store and security
   journal are the SDK's in-memory reference stores. Nothing here is evidence

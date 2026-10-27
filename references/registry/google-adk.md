@@ -3,7 +3,7 @@
 - **Profile:** [`../google-adk/`](../google-adk/README.md)
 - **Protocol line:** v2 (2.0.0-beta.1)
 - **Status:** Independent draft ported to Protocol v2; 58/58 deterministic gate green against the in-tree v2 SDK; dual-root composition profile executed; 10, 100, and 1,000 exact-call tiers measured; not yet re-run against the published 2.0.0-beta.1 packages
-- **Ratify:** `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0a1, built from this repository; pins to the published 2.0.0b1 (2.0.0-beta.1) at release
+- **Ratify:** `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1, built from this repository; pins to the published 2.0.0b1 (2.0.0-beta.1) at release
 - **Platform:** `google-adk==2.6.3`, `mcp==1.29.0`
 - **Gate:** `./references/google-adk/run-reference-check.sh`
 - **Evidence:** [`../google-adk/evidence/reference-evidence.md`](../google-adk/evidence/reference-evidence.md)

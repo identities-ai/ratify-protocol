@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-c"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64",
  "cbindgen",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64",
  "chrono",

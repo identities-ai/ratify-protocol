@@ -39,14 +39,14 @@ for (const name of files) {
 }
 
 test("cross-sdk: a freshly generated TypeScript fixture verifies and replays", async () => {
-  const fixture = JSON.parse(JSON.stringify(await generateCrossSDKFixture("2.0.0-alpha.1", "test")));
+  const fixture = JSON.parse(JSON.stringify(await generateCrossSDKFixture("2.0.0-beta.1", "test")));
   assert.equal(await verifyCrossSDKFixture(fixture, "typescript"), 15);
   assert.equal(await verifyCrossScenarios(fixture), CROSS_SCENARIO_NAMES.length);
 });
 
 test("cross-sdk: scenario replay rejects a changed expectation, a foreign receipt, and a missing scenario", async () => {
-  const data = JSON.stringify(await generateCrossSDKFixture("2.0.0-alpha.1", "test"));
-  const other: Any = await generateCrossSDKFixture("2.0.0-alpha.1", "test");
+  const data = JSON.stringify(await generateCrossSDKFixture("2.0.0-beta.1", "test"));
+  const other: Any = await generateCrossSDKFixture("2.0.0-beta.1", "test");
   const check = async (what: string, edit: (f: Any) => void, want: string) => {
     const f = JSON.parse(data);
     edit(f);

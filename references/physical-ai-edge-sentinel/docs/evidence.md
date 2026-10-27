@@ -5,15 +5,17 @@ port is kept below as dated history; it is not v2 evidence.
 
 ## Protocol v2: local gate
 
-- Validation date: 2026-10-26
-- Reference source revision: `c800022` (the 32-row matrix, plain and sanitized; the reference is unchanged since `1c14464`; the 30-row matrix of 2026-10-22 ran at `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`)
+- Validation date: 2026-10-27
+- Source revision: branch `fix/r8-receipt-order-ts-perf` at `9ea1ec2` with the version bump to `2.0.0-beta.1` applied (the commit that records this run); the reference is unchanged since `1c14464`
 - Host: macOS development machine (Apple Silicon), not the ARMv7 target
-- SDK: Ratify C SDK `2.0.0-alpha.1` (`ratify_v2_*` ABI version 2), built from `sdks/c` at the same revision, static library, no test-reference stores
+- SDK: Ratify C SDK `2.0.0-beta.1` (`ratify_v2_*` ABI version 2), built from `sdks/c` at the same revision with `cargo build --release`, static library, no test-reference stores
 - Command: `RATIFY_SDK=/path/to/ratify-c ./run-reference-check.sh`
 - Result: 32 passed, 0 failed, 0 skipped
 - Actuator: mock only; 5 invocations in total, 0 serial or GPIO writes
 - Sanitizers: the same matrix passed with AddressSanitizer and UndefinedBehaviorSanitizer, with no reports
 - Clock: fixture clock from the test builds; every decision recorded `clock_trusted=false`
+- Sanitized run: built with `CFLAGS="-O1 -g -std=c99 -Wall -Wextra -fsanitize=address,undefined -fno-omit-frame-pointer"` (Apple clang 21.0.0)
+- Earlier runs of this gate: on 2026-10-26 the same 32-row matrix passed, plain and sanitized, at `c800022` against the in-tree alpha.1 build of the C SDK; the 30-row matrix of 2026-10-22 ran at `7f29ed4ef216e9344ddbcf11bfefe9dcd31ccbcc`
 
 | # | Row | Recorded outcome | Actuator |
 | --- | --- | --- | --- |

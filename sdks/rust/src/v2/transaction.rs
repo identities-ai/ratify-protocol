@@ -535,10 +535,12 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             party_signatures,
         };
         // Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
-        // receipt, with both party arrays in party_id order, is compared with
-        // its canonical encoding before any bundle is decoded, so a
-        // non-canonical receipt is malformed whatever its bundles hold.
-        let parties_ordered = r.parties.windows(2).all(|w| w[0].party_id.as_bytes() <= w[1].party_id.as_bytes());
+        // receipt, with parties in unique party_id order and party signatures
+        // in party_id order, is compared with its canonical encoding before
+        // any bundle is decoded, so a non-canonical receipt is malformed
+        // whatever its bundles hold. A repeated signature record is left to
+        // the signature set check.
+        let parties_ordered = r.parties.windows(2).all(|w| w[0].party_id.as_bytes() < w[1].party_id.as_bytes());
         let signatures_ordered = r.party_signatures.windows(2).all(|w| w[0].party_id.as_bytes() <= w[1].party_id.as_bytes());
         if !parties_ordered || !signatures_ordered || canonical(&node_to_cj(&root))? != data {
             return plain("wire v2: transaction receipt is not canonical JSON");

@@ -2,7 +2,8 @@
 // proof per party, with typed party statements (0x0007). Port of
 // transaction_receipt_v2.go.
 
-import { sha256, sha384 } from "@noble/hashes/sha2";
+import { sha256 } from "@noble/hashes/sha2";
+import { sha384V2 } from "./sha384_v2.js";
 
 import { V2_OBJECT_TYPE, validateHybridKeyPairV2, type HybridKeyPairV2, type V2SignOptions } from "./crypto_v2.js";
 import { validV2Timestamp } from "./clock_bounds_v2.js";
@@ -115,7 +116,7 @@ export function transactionReceiptV2SignBytes(r: TransactionReceiptV2): Uint8Arr
 
 export function transactionContextHashV2(r: TransactionReceiptV2): Uint8Array {
   return sha256(concatBytes(
-    utf8("ratify/transaction-context/v2"), lp(utf8(r.transaction_id)), lp(utf8(r.terms_schema_uri)), sha384(r.terms_canonical_json),
+    utf8("ratify/transaction-context/v2"), lp(utf8(r.transaction_id)), lp(utf8(r.terms_schema_uri)), sha384V2(r.terms_canonical_json),
   ));
 }
 
@@ -404,11 +405,14 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       raw: p.get("proof_bundle"),
     }));
     // Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
-    // receipt, with both party arrays in party_id order, is compared with its
-    // canonical encoding before any bundle is decoded, so a non-canonical
-    // receipt is malformed whatever its bundles hold.
-    const inPartyOrder = (xs: { party_id: string }[]) => xs.every((x, i) => i === 0 || byPartyID(xs[i - 1]!, x) <= 0);
-    if (!inPartyOrder(typed) || !inPartyOrder(receipt.party_signatures) || !bytesEqual(canonicalJSONV2(gAny(root)), data)) {
+    // receipt, with parties in unique party_id order and party signatures in
+    // party_id order, is compared with its canonical encoding before any
+    // bundle is decoded, so a non-canonical receipt is malformed whatever its
+    // bundles hold. A repeated signature record is left to the signature set
+    // check.
+    const inPartyOrder = (xs: { party_id: string }[], unique: boolean) =>
+      xs.every((x, i) => i === 0 || byPartyID(xs[i - 1]!, x) < (unique ? 0 : 1));
+    if (!inPartyOrder(typed, true) || !inPartyOrder(receipt.party_signatures, false) || !bytesEqual(canonicalJSONV2(gAny(root)), data)) {
       throw new Error("wire v2: transaction receipt is not canonical JSON");
     }
     const bundleHashes: string[] = [];

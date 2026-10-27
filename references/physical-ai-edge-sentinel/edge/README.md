@@ -1,7 +1,7 @@
 # Edge receiver (Protocol v2)
 
 The Linux edge receiver and its checkpoint process. The receiver links the
-Ratify C SDK `2.0.0-alpha.1` statically and uses only the `ratify_v2_*` ABI.
+Ratify C SDK `2.0.0-beta.1` statically and uses only the `ratify_v2_*` ABI.
 
 | Binary | Built from | Purpose |
 | --- | --- | --- |

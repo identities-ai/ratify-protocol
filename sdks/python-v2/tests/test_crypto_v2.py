@@ -129,10 +129,12 @@ def test_native_backend_reproduces_shared_vector():
 
 
 def test_native_version_is_lockstep_with_sdk_version():
-    # 2.0.0a1 (PEP 440) <-> 2.0.0-alpha.1 (Cargo): the same release.
+    # 2.0.0b1 (PEP 440) <-> 2.0.0-beta.1 (Cargo): the same release.
     major_minor_patch, _, pre = NATIVE_VERSION.partition("-")
-    assert pre.startswith("alpha.")
-    assert __version__ == f"{major_minor_patch}a{pre.removeprefix('alpha.')}"
+    stage, _, number = pre.partition(".")
+    pep440_stage = {"alpha": "a", "beta": "b", "rc": "rc"}[stage]
+    assert number.isdigit()
+    assert __version__ == f"{major_minor_patch}{pep440_stage}{number}"
 
 
 @requires_native

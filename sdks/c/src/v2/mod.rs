@@ -1073,7 +1073,7 @@ pub extern "C" fn ratify_v2_protocol_version() -> u32 {
     crate::guard::ffi_guard(|| 0, || RATIFY_V2_PROTOCOL_VERSION)
 }
 
-/// Returns the library package version (e.g. "2.0.0-alpha.1"). Statically
+/// Returns the library package version (e.g. "2.0.0-beta.1"). Statically
 /// allocated — do NOT free. Same value as `ratify_version()`.
 #[no_mangle]
 pub extern "C" fn ratify_v2_library_version() -> *const c_char {

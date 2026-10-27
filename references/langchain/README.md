@@ -5,7 +5,7 @@ partnership, LangChain-approved integration, or LangChain reference architecture
 
 - **Protocol line:** v2 (2.0.0-beta.1)
 - **Tested against:** the in-tree Python v2 SDK (`ratify-protocol-v2` and
-  `ratify-protocol-native-v2` 2.0.0a1, built from this repository) until
+  `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
   2.0.0-beta.1 is published. The deterministic gate is 34/34 green; see
   [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 - **Protocol v1 history:** the v1 version of this reference (Ratify
@@ -229,7 +229,7 @@ tool selection, but add no authority guarantee.
 - `mcp==1.29.0`
 - `pytest==9.0.3`
 - `pytest-asyncio==1.4.0`
-- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0a1 (in-tree build)
+- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
 
 ## Which path should I use?
 

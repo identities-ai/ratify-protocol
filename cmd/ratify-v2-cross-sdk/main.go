@@ -19,7 +19,7 @@ import (
 
 func main() {
 	out := flag.String("out", filepath.Join("testvectors", "v2", v2vectors.CrossSDKDir, "go.json"), "output path")
-	version := flag.String("sdk-version", "2.0.0-alpha.1+dev", "SDK version recorded in the fixture")
+	version := flag.String("sdk-version", "2.0.0-beta.1+dev", "SDK version recorded in the fixture")
 	flag.Parse()
 	data, err := v2vectors.GenerateCrossSDK(*version, "go run ./cmd/ratify-v2-cross-sdk (Go reference, module github.com/identities-ai/ratify-protocol/v2)")
 	if err != nil {

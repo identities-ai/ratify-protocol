@@ -1,6 +1,6 @@
 [package]
 name = "ratify-c"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -45,7 +45,7 @@ panic-test-hook = []
 test-reference = []
 
 [dependencies]
-ratify-protocol = { path = "../rust", version = "2.0.0-alpha.1" }
+ratify-protocol = { path = "../rust", version = "2.0.0-beta.1" }
 serde = "1"
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }

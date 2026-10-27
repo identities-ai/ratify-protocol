@@ -1,6 +1,6 @@
 # Ratify Protocol Specification v2
 
-**Status:** Prerelease (alpha). Target 2.0.0-beta.1: wire and API freeze after every SDK passes the full corpus and internal adversarial review closes. A production security claim for 2.0.0 additionally requires external interoperability and review.
+**Status:** Beta (2.0.0-beta.1). The wire format and API are frozen: every SDK passes the full corpus and the internal adversarial review is closed. A production security claim for 2.0.0 additionally requires external interoperability and review.
 **Wire version:** 2. **Signing suite:** fixed hybrid Ed25519 and ML-DSA-65 (FIPS 204).
 **Relationship to v1:** v2 is a breaking, separately versioned protocol. Implementations MUST select exactly one version at an API boundary. A v2 verifier MUST reject v1 objects and MUST NOT fall back. A v1 verifier continues to implement the immutable v1 contract in `SPEC.md`.
 

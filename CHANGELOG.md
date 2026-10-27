@@ -371,6 +371,21 @@ match before the beta.
   a non-canonical bundle or array order either. Vectors:
   `object-negatives.json` `transaction_receipt/noncanonical_*` and
   `transaction_receipt/unsorted_*`.
+- **A repeated party is `malformed` first; a repeated signature record is a
+  signature set fault** (every SDK). The canonical check that runs before
+  any nested bundle is decoded requires `parties` in strictly ascending,
+  unique `party_id` order. A repeated signature record stays
+  `transaction_signature_set_invalid`, and the signature set is checked after
+  every nested bundle is decoded and its hash compared, so a bundle fault
+  beside it is reported first. SPEC-v2 §5.7 now states this order. Vectors:
+  `object-negatives.json` `transaction_receipt/duplicate_party_and_*` and
+  `transaction_receipt/signature_duplicate_and_*`.
+- **Faster TypeScript decoding of large transaction receipts.** The
+  canonical encoder writes a string that needs no escape as it is, and
+  SHA-384 over a receipt's signable bytes and terms uses Node's native hash
+  when the runtime provides it, with `@noble/hashes` as the fallback. A
+  5 MiB receipt decodes in about a fifth of the time. Output bytes are
+  unchanged.
 - **A sealed terminal result is exactly its canonical form** (every SDK and
   the C ABI). Finalization, lease-expiry recovery and resumption now require
   the terminal-result bytes to be the RatifyCanonicalJSON of the receipt
@@ -404,7 +419,7 @@ match before the beta.
   harness asserts: ascending issuer order that differs from chain order,
   repeated issuers, trust answers, extension registries, an exact audience
   match with a failing provider, configured verifier ID forms and §2.5
-  bounds. `object-negatives.json` 433 to 473: fully re-signed wire-layer
+  bounds. `object-negatives.json` 433 to 476: fully re-signed wire-layer
   cases (small-order and mixed-order Ed25519 keys that satisfy the
   cofactorless equation, ML-DSA under another context, UTF-16 key-order
   traps, escape spellings, byte fields at wrong lengths). `limits.json` 76 to

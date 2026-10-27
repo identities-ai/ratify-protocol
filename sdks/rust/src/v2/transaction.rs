@@ -534,6 +534,7 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
             parties,
             party_signatures,
         };
+        let mut bundle_hashes = Vec::with_capacity(r.parties.len());
         for (p, raw) in r.parties.iter_mut().zip(raw_bundles) {
             if !raw.starts_with(b"{") {
                 return plain("wire v2: party proof_bundle must be a JSON object");
@@ -557,18 +558,24 @@ pub fn decode_transaction_receipt_v2(data: &[u8]) -> V2Result<TransactionReceipt
                     ),
                 );
             }
-            if p.proof_bundle_hash != bundle_hash_of_bytes(raw) {
+            bundle_hashes.push(bundle_hash_of_bytes(raw));
+            p.proof_bundle = Some(bundle);
+        }
+        // Canonical form is part of strict decode (SPEC-v2 §2.1), so it is
+        // checked before any bundle hash, binding or signature: a non-canonical
+        // receipt is malformed whatever else is wrong with it.
+        if encode_canonical(&r)? != data {
+            return plain("wire v2: transaction receipt is not canonical JSON");
+        }
+        for (p, actual) in r.parties.iter().zip(&bundle_hashes) {
+            if &p.proof_bundle_hash != actual {
                 return err(
                     V2ErrorClass::BundleHashMismatch,
                     format!("wire v2: party {:?} proof_bundle_hash does not match its canonical bundle bytes", p.party_id),
                 );
             }
-            p.proof_bundle = Some(bundle);
         }
         verify_transaction_receipt_v2_signatures(&r)?;
-        if encode_canonical(&r)? != data {
-            return plain("wire v2: transaction receipt is not canonical JSON");
-        }
         Ok(r)
     })()
     .classify(V2ErrorClass::Malformed)

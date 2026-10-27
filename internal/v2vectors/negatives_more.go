@@ -377,6 +377,20 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	bCert, _, _ := g.cert(certSpec{issuer: g.k("party_b_root"), subject: bAgent, certID: "cert-party-b", scope: []string{"transact:sell"}})
 	variant("party_bundle_other_verifier", "party-b's proof bundle names another verifier_id than its party entry; its hash and both party signatures are consistent",
 		bundleSpec{agent: bAgent, certs: []ratify.DelegationCertV2{bCert}, session: bCtx, verifierID: g.k("attacker").ID})
+	// Canonical form is part of strict decode (SPEC-v2 §2.1), so a
+	// non-canonical receipt is malformed even when a later check (bundle
+	// hash, context binding, signature set, signature) would also fail.
+	twoFault := func(name, mutation string, frame func([]byte) []byte, f func(map[string]any)) {
+		n.add(name, kind, mutation, frame(mutate(base, f)), v, "malformed")
+	}
+	leadingSpace := func(w []byte) []byte { return append([]byte(" "), w...) }
+	trailingNewline := func(w []byte) []byte { return append(w, '\n') }
+	twoFault("noncanonical_and_party_role_changed", "leading space; parties[0].role changed without re-signing", leadingSpace, func(o map[string]any) { party(o, 0)["role"] = "approver" })
+	twoFault("noncanonical_and_bundle_hash_flipped", "trailing newline; parties[0].proof_bundle_hash changed", trailingNewline, func(o map[string]any) {
+		party(o, 0)["proof_bundle_hash"] = flipHexDigest(party(o, 0)["proof_bundle_hash"].(string))
+	})
+	twoFault("noncanonical_and_party_session_changed", "leading space; parties[0].session_id changed", leadingSpace, func(o map[string]any) { party(o, 0)["session_id"] = "session-x" })
+	twoFault("noncanonical_and_signature_missing", "trailing newline; party-b signature removed", trailingNewline, func(o map[string]any) { o["party_signatures"] = arr(o["party_signatures"])[:1] })
 }
 
 func (g *gen) receiptNegatives(n *negBuilder) {

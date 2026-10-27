@@ -584,12 +584,6 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		if !validPrefixedDigestV2(party.ProofBundleHash) {
 			return nil, v2Errorf(V2ErrMalformed, "wire v2: party %q proof_bundle_hash is not sha384: followed by 96 lowercase hex characters", party.PartyID)
 		}
-		hash := sha512.New384()
-		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))
-		hash.Write(party.ProofBundle)
-		if party.ProofBundleHash != "sha384:"+hex.EncodeToString(hash.Sum(nil)) {
-			return nil, v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its canonical bundle bytes", party.PartyID)
-		}
 		receipt.Parties[i] = TransactionReceiptPartyV2{
 			PartyID: party.PartyID, Role: party.Role, AgentID: party.AgentID,
 			AgentPubKey: party.AgentPubKey, VerifierID: party.VerifierID, WorkspaceID: party.WorkspaceID,
@@ -600,15 +594,26 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	for i, signature := range wire.PartySignatures {
 		receipt.PartySignatures[i] = TransactionReceiptSignatureV2{PartyID: signature.PartyID, Signature: signature.Signature}
 	}
-	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
-		return nil, err
-	}
+	// Canonical form is part of strict decode (SPEC-v2 §2.1), so it is
+	// checked before any bundle hash, binding or signature: a non-canonical
+	// receipt is malformed whatever else is wrong with it.
 	canonical, err := encodeTransactionReceiptV2Canonical(receipt)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(canonical, data) {
 		return nil, fmt.Errorf("wire v2: transaction receipt is not canonical JSON")
+	}
+	for _, party := range wire.Parties {
+		hash := sha512.New384()
+		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))
+		hash.Write(party.ProofBundle)
+		if party.ProofBundleHash != "sha384:"+hex.EncodeToString(hash.Sum(nil)) {
+			return nil, v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its canonical bundle bytes", party.PartyID)
+		}
+	}
+	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
+		return nil, err
 	}
 	return receipt, nil
 }

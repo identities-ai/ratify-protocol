@@ -415,6 +415,7 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
         terms_schema_uri = get_str(obj, "terms_schema_uri")
         terms = get_bytes(obj, "terms_canonical_json") or b""
         parties = []
+        bundle_hashes = []
         for fields, raw_bundle in party_values:
             party_id = fields["party_id"]
             # The nested bundle is decoded strictly, and must be in canonical
@@ -432,19 +433,23 @@ def decode_transaction_receipt_v2(data: bytes) -> TransactionReceiptV2:
             if not valid_prefixed_digest_v2(fields["proof_bundle_hash"]):
                 raise V2Error(V2ErrorClass.MALFORMED, f"wire v2: party {party_id!r} proof_bundle_hash is not sha384: "
                               "followed by 96 lowercase hex characters")
-            actual = "sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + raw_bundle).hexdigest()
-            if fields["proof_bundle_hash"] != actual:
-                raise V2Error(V2ErrorClass.BUNDLE_HASH_MISMATCH,
-                              f"wire v2: party {party_id!r} proof_bundle_hash does not match its canonical bundle bytes")
+            bundle_hashes.append("sha384:" + sha384(b"ratify-protocol-bundle-v2\x00" + raw_bundle).hexdigest())
             parties.append(TransactionReceiptPartyV2(proof_bundle=bundle, **fields))
         receipt = TransactionReceiptV2(
             version=version, transaction_id=transaction_id, created_at=created_at,
             terms_schema_uri=terms_schema_uri, terms_canonical_json=terms, parties=parties,
             party_signatures=signatures,
         )
-        verify_transaction_receipt_v2_signatures(receipt)
+        # Canonical form is part of strict decode (SPEC-v2 §2.1), so it is
+        # checked before any bundle hash, binding or signature: a non-canonical
+        # receipt is malformed whatever else is wrong with it.
         if _encode_canonical(receipt) != bytes(data):
             raise ValueError("wire v2: transaction receipt is not canonical JSON")
+        for party, actual in zip(parties, bundle_hashes):
+            if party.proof_bundle_hash != actual:
+                raise V2Error(V2ErrorClass.BUNDLE_HASH_MISMATCH,
+                              f"wire v2: party {party.party_id!r} proof_bundle_hash does not match its canonical bundle bytes")
+        verify_transaction_receipt_v2_signatures(receipt)
         return receipt
 
     return _run(V2ErrorClass.MALFORMED, run)

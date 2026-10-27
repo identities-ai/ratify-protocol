@@ -245,6 +245,64 @@ fn publish_error_message(name: &str) -> &'static str {
 }
 
 /// Go `recoverStep`'s check of one recovery result.
+/// Answers every committed-claim load with one record, as a claim store whose
+/// persisted record was altered would (SPEC-v2 §7.11).
+struct RecordCommittedStore(V2CommittedClaim);
+
+impl V2CommittedClaimStore for RecordCommittedStore {
+    fn load_v2_committed_claim(&self, _ctx: &V2Context, _claim_id: &str) -> Result<V2CommittedClaim, V2StoreError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// Decodes the canonical sealed claim object of a SPEC-v2 §7.13 claim record.
+fn claim_from_record(record: &[u8]) -> V2ChallengeClaim {
+    let r: Value = serde_json::from_slice(record).expect("claim record");
+    let members: Vec<&str> = r.as_object().expect("claim record object").keys().map(String::as_str).collect();
+    assert_eq!(
+        members,
+        [
+            "agent_id", "bundle_hash", "challenge_digest", "claim_id", "clock_skew_seconds", "constraint_evaluators",
+            "context_policy_digest", "expires_at", "issued_at", "issuer_ids", "max_age_seconds", "namespace", "proof_digest",
+            "rate_batch", "replay_epoch", "required_scope", "requires_rate", "stream_id", "stream_seq", "verifier_id",
+        ],
+        "claim record members"
+    );
+    V2ChallengeClaim {
+        claim_id: s(&r["claim_id"]),
+        namespace: s(&r["namespace"]),
+        replay_epoch: i(&r["replay_epoch"]),
+        challenge_digest: s(&r["challenge_digest"]),
+        proof_digest: s(&r["proof_digest"]),
+        bundle_hash: s(&r["bundle_hash"]),
+        issuer_ids: arr(&r["issuer_ids"]).iter().map(s).collect(),
+        required_scope: s(&r["required_scope"]),
+        context_policy_digest: s(&r["context_policy_digest"]),
+        verifier_id: s(&r["verifier_id"]),
+        agent_id: s(&r["agent_id"]),
+        requires_rate: b(&r["requires_rate"]),
+        rate_batch: arr(&r["rate_batch"])
+            .iter()
+            .map(|v| V2RateReservation {
+                issuer_id: s(&v["issuer_id"]),
+                cert_id: s(&v["cert_id"]),
+                window_s: i(&v["window_s"]),
+                limit: i(&v["limit"]),
+            })
+            .collect(),
+        issued_at: i(&r["issued_at"]),
+        expires_at: i(&r["expires_at"]),
+        max_age_seconds: i(&r["max_age_seconds"]),
+        clock_skew_seconds: i(&r["clock_skew_seconds"]),
+        stream_id: (!r["stream_id"].is_null()).then(|| unb64(&r["stream_id"])),
+        stream_seq: r["stream_seq"].as_i64(),
+        constraint_evaluators: arr(&r["constraint_evaluators"])
+            .iter()
+            .map(|v| ConstraintEvaluatorRefV2 { kind: s(&v["type"]), profile_digest: s(&v["profile_digest"]) })
+            .collect(),
+    }
+}
+
 fn check_recover(step: usize, result: V2Result<CommittedV2Outcome>, want: &Value) -> Option<CommittedV2Outcome> {
     let class = s(&want["error_class"]);
     if !class.is_empty() {
@@ -557,12 +615,31 @@ fn lifecycle_scenarios() {
                 }
                 "resume" => {
                     // SPEC-v2 §7.11: the resumed handoff replaces the one held.
-                    let claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
+                    // With a record, the store answers with the vector's
+                    // record; a record_bytes step is skipped, since this
+                    // store interface carries the sealed claim, not its bytes.
+                    if !step["claim_record_b64"].is_null() && mode == "record_bytes" {
+                        continue;
+                    }
+                    let mut claim_id = ids.lock().unwrap().0.get(&request).cloned().unwrap_or_else(|| {
                         let e = &file()["requests"][&request]["expected_challenge"];
                         protocol_claim_id_v2(&s(&e["verifier_namespace"]), i(&e["replay_epoch"]), &unb64(&e["value_b64"]))
                             .expect("claim id")
                     });
-                    let result = resume_committed_claim_v2(&ctx, store.as_ref(), &claim_id);
+                    if !step["claim_id"].is_null() {
+                        claim_id = s(&step["claim_id"]);
+                    }
+                    let result = if step["claim_record_b64"].is_null() {
+                        resume_committed_claim_v2(&ctx, store.as_ref(), &claim_id)
+                    } else {
+                        let record = RecordCommittedStore(V2CommittedClaim {
+                            claim: claim_from_record(&unb64(&step["claim_record_b64"])),
+                            terminal_result: unb64(&step["terminal_b64"]),
+                            receipt_body: unb64(&step["body_b64"]),
+                            allow_horizon: i(&step["allow_valid_until"]),
+                        });
+                        resume_committed_claim_v2(&ctx, &record, &claim_id)
+                    };
                     if let Some(c) = check_recover(step_index, result, want) {
                         committed.insert(request.clone(), c);
                     }
@@ -652,9 +729,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (66, 360), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (80, 427), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("66 Part B scripts (360 steps)"), "README row: {readme}");
+    assert!(readme.contains("80 Part B scripts (427 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

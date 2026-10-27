@@ -92,6 +92,31 @@ fn resume(store: &RatifyV2CommittedStoreCallbacks, claim_id: &str) -> R<Committe
     r.map(|_| c.expect("committed outcome"))
 }
 
+/// A claim store whose `load_committed` answers every claim ID with one
+/// committed record, as a store whose persisted record was altered would
+/// (SPEC-v2 §7.11).
+struct RecordStore {
+    record: Vec<u8>,
+    terminal: Vec<u8>,
+    body: Vec<u8>,
+    horizon: i64,
+}
+
+unsafe extern "C" fn record_load(
+    user: *mut c_void,
+    _claim_id: *const c_char,
+    out: *mut RatifyV2CommittedClaim,
+) -> i32 {
+    let r = &*(user as *const RecordStore);
+    *out = RatifyV2CommittedClaim {
+        record: slice(&r.record),
+        terminal_result: slice(&r.terminal),
+        receipt_body: slice(&r.body),
+        allow_horizon: r.horizon,
+    };
+    0
+}
+
 fn recover(claim_cb: &RatifyV2ClaimStoreCallbacks, claim_id: &str) -> R<Committed> {
     let id = cs(claim_id);
     let mut out: *mut RatifyV2Committed = ptr::null_mut();
@@ -825,14 +850,33 @@ fn v2c_lifecycle_scenarios() {
                 }
                 "resume" => {
                     // SPEC-v2 §7.11: the resumed handoff replaces the one held.
-                    let claim_id = ids
+                    // With a record, the store's load_committed callback
+                    // answers with the vector's record bytes.
+                    let mut claim_id = ids
                         .lock()
                         .unwrap()
                         .0
                         .get(&request)
                         .cloned()
                         .unwrap_or_else(|| claim_id_of(&file()["requests"][&request]));
-                    let result = resume(&store.committed(), &claim_id);
+                    if !step["claim_id"].is_null() {
+                        claim_id = s(&step["claim_id"]);
+                    }
+                    let result = if step["claim_record_b64"].is_null() {
+                        resume(&store.committed(), &claim_id)
+                    } else {
+                        let record = RecordStore {
+                            record: b64(&step["claim_record_b64"]),
+                            terminal: b64(&step["terminal_b64"]),
+                            body: b64(&step["body_b64"]),
+                            horizon: i(&step["allow_valid_until"]),
+                        };
+                        let cb = RatifyV2CommittedStoreCallbacks {
+                            user: &record as *const RecordStore as *mut c_void,
+                            load_committed: Some(record_load),
+                        };
+                        resume(&cb, &claim_id)
+                    };
                     if let Some(c) = check_recover(&at, result, want) {
                         committed.insert(request.clone(), c);
                     }
@@ -949,10 +993,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (66, 360), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (80, 427), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("66 Part B scripts (360 steps)"),
+        readme.contains("80 Part B scripts (427 steps)"),
         "README row: {readme}"
     );
     println!(

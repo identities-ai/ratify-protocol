@@ -535,13 +535,14 @@ fn v2c_resume_refuses_a_record_that_fails_its_checks() {
 /// frees it on every path never frees a stale handle.
 #[test]
 fn v2c_failed_resume_and_recovery_clear_the_output() {
+    type OutputCall<'a> = Box<dyn Fn(*mut *mut RatifyV2Committed) -> i32 + 'a>;
     let store = new_store(&s(&file()["log_id"]));
     let committed = store.committed();
     let claim = store.claim(false);
     let id = cs("unknown-claim");
     let empty = cs("");
     let stale = ptr::NonNull::<RatifyV2Committed>::dangling().as_ptr();
-    let cases: Vec<(&str, Box<dyn Fn(*mut *mut RatifyV2Committed) -> i32>)> = vec![
+    let cases: Vec<(&str, OutputCall<'_>)> = vec![
         ("resume unknown claim", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(&committed, id.as_ptr(), out) })),
         ("resume empty claim ID", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(&committed, empty.as_ptr(), out) })),
         ("resume NULL store", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(ptr::null(), id.as_ptr(), out) })),

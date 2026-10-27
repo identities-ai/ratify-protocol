@@ -44,6 +44,7 @@ type v2ConcurrencyParticipant struct {
 	Request         string `json:"request"`
 	Time            int64  `json:"time"`
 	Target          string `json:"target"`
+	Mode            string `json:"mode"`
 	TerminalB64     string `json:"terminal_b64"`
 	BodyB64         string `json:"body_b64"`
 	AllowValidUntil int64  `json:"allow_valid_until"`
@@ -132,6 +133,19 @@ func (it *v2RaceIteration) record(claimID string, body []byte) {
 	}
 }
 
+// recordResumed records a resumed handoff as a committed result of its
+// claim, and reports whether its body equals the one already recorded.
+func (it *v2RaceIteration) recordResumed(c *ratify.CommittedV2Outcome) bool {
+	it.mu.Lock()
+	defer it.mu.Unlock()
+	if prior, ok := it.recorded[c.ClaimID()]; ok {
+		return bytes.Equal(prior, c.ReceiptBody())
+	}
+	it.recorded[c.ClaimID()] = bytes.Clone(c.ReceiptBody())
+	it.recordedAt = append(it.recordedAt, c.ClaimID())
+	return true
+}
+
 func (it *v2RaceIteration) recordOutcome(request string, c *ratify.CommittedV2Outcome) {
 	it.mu.Lock()
 	it.committed[request] = c
@@ -175,7 +189,16 @@ func v2ErrorLabel(err error) string { return "error/" + string(ratify.V2ErrorCla
 
 func (it *v2RaceIteration) releaseLabel(ctx context.Context, request string) string {
 	it.mu.Lock()
-	c, receipt := it.committed[request], it.receipts[request]
+	c := it.committed[request]
+	it.mu.Unlock()
+	return it.releaseHandoffLabel(ctx, request, c)
+}
+
+// releaseHandoffLabel releases handoff c with request's last published
+// receipt.
+func (it *v2RaceIteration) releaseHandoffLabel(ctx context.Context, request string, c *ratify.CommittedV2Outcome) string {
+	it.mu.Lock()
+	receipt := it.receipts[request]
 	it.mu.Unlock()
 	config := ratify.V2ReleaseConfig{VerifierPublicKey: it.fx.pub[it.in.VerifierKey], LogID: it.in.LogID, ClaimStore: it.store, Checkpoint: it.store}
 	result := ratify.ReleaseV2Decision(ctx, c, receipt, config)
@@ -228,6 +251,22 @@ func (it *v2RaceIteration) step(ctx context.Context, i int, s v2ConcurrencyStep,
 			t.Fatalf("step %d claim_only: claim ID %s is not the request's protocol claim ID", i, claim.ClaimID)
 		}
 		it.owners[s.Request] = capturing.owner
+	case "resume":
+		outcome, err := ratify.ResumeCommittedClaimV2(ctx, it.store, it.claimID(s.Request))
+		if want.ErrorClass != "" {
+			if string(ratify.V2ErrorClassOf(err)) != want.ErrorClass {
+				t.Fatalf("step %d resume: %v, want %s", i, err, want.ErrorClass)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("step %d resume: %v", i, err)
+		}
+		checkV2CommittedDecision(t, i, outcome, want)
+		if !it.recordResumed(outcome) {
+			t.Fatalf("step %d resume: the resumed body differs from the committed one", i)
+		}
+		it.committed[s.Request] = outcome
 	case "recover":
 		outcome, err := ratify.RecoverInterruptedClaimV2(ctx, it.store, it.claimID(s.Request))
 		if want.ErrorClass != "" {
@@ -320,6 +359,22 @@ func (it *v2RaceIteration) participant(p v2ConcurrencyParticipant, prepared func
 		body, err := ratify.DecodeVerificationReceiptBodyV2(outcome.ReceiptBody())
 		if err != nil {
 			return "undecodable recovered body"
+		}
+		return "committed/" + body.Decision + "/" + body.DecisionReason
+	case "resume":
+		outcome, err := ratify.ResumeCommittedClaimV2(ctx, it.store, it.claimID(p.Request))
+		if err != nil {
+			return v2ErrorLabel(err)
+		}
+		if !it.recordResumed(outcome) {
+			return "resumed a body other than the committed one"
+		}
+		if p.Mode == "release" {
+			return it.releaseHandoffLabel(ctx, p.Request, outcome)
+		}
+		body, err := ratify.DecodeVerificationReceiptBodyV2(outcome.ReceiptBody())
+		if err != nil {
+			return "undecodable resumed body"
 		}
 		return "committed/" + body.Decision + "/" + body.DecisionReason
 	case "release":

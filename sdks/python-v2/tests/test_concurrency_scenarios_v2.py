@@ -37,7 +37,7 @@ from ratify_protocol_v2 import context_v2
 from ratify_protocol_v2.challenge_claim_v2 import protocol_claim_id_v2
 from ratify_protocol_v2.claim_store_v2 import claim_proof_bundle_v2
 from ratify_protocol_v2.errors_v2 import error_class_of
-from ratify_protocol_v2.evaluation_progress_v2 import recover_interrupted_claim_v2
+from ratify_protocol_v2.evaluation_progress_v2 import recover_interrupted_claim_v2, resume_committed_claim_v2
 from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
 from ratify_protocol_v2.release_v2 import V2ReleaseConfig, release_v2_decision
 from ratify_protocol_v2.v2reference.store import HeadOfLineBlockedError, Store
@@ -115,6 +115,17 @@ class RaceIteration:
                 self.recorded[claim_id] = bytes(body)
                 self.recorded_at.append(claim_id)
 
+    def record_resumed(self, c) -> bool:
+        """Record a resumed handoff as a committed result of its claim;
+        False when its body differs from the one recorded."""
+        with self.lock:
+            prior = self.recorded.get(c.claim_id())
+            if prior is not None:
+                return prior == bytes(c.receipt_body())
+            self.recorded[c.claim_id()] = bytes(c.receipt_body())
+            self.recorded_at.append(c.claim_id())
+            return True
+
     def record_outcome(self, request: str, c) -> None:
         with self.lock:
             self.committed[request] = c
@@ -144,9 +155,11 @@ class RaceIteration:
             return f"replay/{outcome.disposition}", outcome
         return f"{outcome.stage}/{outcome.error_class}", outcome
 
-    def release_label(self, ctx, request: str) -> str:
+    def release_label(self, ctx, request: str, handoff=None) -> str:
         with self.lock:
             c, receipt = self.committed.get(request), self.receipts.get(request)
+        if handoff is not None:
+            c = handoff
         verifier_key = INPUTS["verifier_key"]
         config = V2ReleaseConfig(verifier_public_key=self.fx.pub[verifier_key], log_id=INPUTS["log_id"], claim_store=self.store,
                                  checkpoint=self.store)
@@ -210,6 +223,15 @@ class RaceIteration:
             assert err is None, (i, err)
             check_committed(i, outcome, want)
             self.record_outcome(s["request"], outcome)
+        elif op == "resume":
+            outcome, err = _call(resume_committed_claim_v2, BACKGROUND, self.store, self.claim_id(s["request"]))
+            if want.get("error_class"):
+                assert error_class_of(err) == want["error_class"], (i, err, want)
+                return
+            assert err is None, (i, err)
+            check_committed(i, outcome, want)
+            assert self.record_resumed(outcome), (i, "the resumed body differs from the committed one")
+            self.committed[s["request"]] = outcome
         elif op == "publish":
             c = self.committed[s["request"]]
             wire = self.store.publish_v2_receipt(BACKGROUND, c.claim_id(), c.receipt_body())
@@ -262,6 +284,18 @@ class RaceIteration:
             body, err = _call(decode_verification_receipt_body_v2, outcome.receipt_body())
             if err is not None:
                 return "undecodable recovered body"
+            return f"committed/{body.decision}/{body.decision_reason}"
+        if op == "resume":
+            outcome, err = _call(resume_committed_claim_v2, ctx, self.store, self.claim_id(p["request"]))
+            if err is not None:
+                return error_label(err)
+            if not self.record_resumed(outcome):
+                return "resumed a body other than the committed one"
+            if p.get("mode") == "release":
+                return self.release_label(ctx, p["request"], outcome)
+            body, err = _call(decode_verification_receipt_body_v2, outcome.receipt_body())
+            if err is not None:
+                return "undecodable resumed body"
             return f"committed/{body.decision}/{body.decision_reason}"
         if op == "release":
             return self.release_label(ctx, p["request"])

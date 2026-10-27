@@ -84,6 +84,17 @@ fn recover(claim_cb: &RatifyV2ClaimStoreCallbacks, claim_id: &str) -> R<Committe
     r.map(|_| c.expect("committed outcome"))
 }
 
+/// Resumes a committed claim through the store's resumption callbacks
+/// (SPEC-v2 §7.11).
+fn resume(store: &RatifyV2CommittedStoreCallbacks, claim_id: &str) -> R<Committed> {
+    let id = cs(claim_id);
+    let mut out: *mut RatifyV2Committed = ptr::null_mut();
+    let code = unsafe { ratify_v2_resume_committed_claim(store, id.as_ptr(), &mut out) };
+    let r = check(code);
+    let c = (!out.is_null()).then_some(Committed(out));
+    r.map(|_| c.expect("committed outcome"))
+}
+
 /// "committed/<decision>/<decision_reason>" of a committed outcome, read
 /// from its receipt body for the test only.
 fn committed_label(c: &Committed) -> String {
@@ -367,6 +378,19 @@ impl Iteration {
         }
     }
 
+    /// Go `recordResumed`: records a resumed handoff as a committed result
+    /// of its claim, and reports whether its body equals the one recorded.
+    fn record_resumed(&self, c: &Committed) -> bool {
+        let (claim_id, body) = (c.claim_id(), c.body());
+        let mut r = self.recorded.lock().unwrap();
+        if let Some(prior) = r.0.get(&claim_id) {
+            return *prior == body;
+        }
+        r.0.insert(claim_id.clone(), body);
+        r.1.push(claim_id);
+        true
+    }
+
     fn record_outcome(&self, request: &str, c: Arc<Committed>) {
         let (claim_id, body) = (c.claim_id(), c.body());
         self.committed
@@ -489,10 +513,16 @@ impl Iteration {
     /// and the reference checkpoint (Go `releaseLabel`).
     fn release_label(&self, request: &str) -> String {
         let c = self.committed.lock().unwrap().get(request).cloned();
-        let receipt = self.receipts.lock().unwrap().get(request).cloned();
         let Some(c) = c else {
             return format!("{request} was never committed");
         };
+        self.release_handoff_label(request, &c)
+    }
+
+    /// Release handoff `c` with request's last published receipt and the
+    /// reference checkpoint (Go `releaseHandoffLabel`).
+    fn release_handoff_label(&self, request: &str, c: &Committed) -> String {
+        let receipt = self.receipts.lock().unwrap().get(request).cloned();
         let f = inputs();
         let key = keys().key(&s(&f["verifier_key"]));
         let log = cs(&s(&f["log_id"]));
@@ -591,6 +621,12 @@ impl Iteration {
                     committed_label(&c)
                 }
                 Err(e) => format!("error/{}", e.class),
+            },
+            "resume" => match resume(&self.store.committed(), &self.claim_id(&request)) {
+                Err(e) => format!("error/{}", e.class),
+                Ok(c) if !self.record_resumed(&c) => "resumed a body other than the committed one".into(),
+                Ok(c) if s(&p["mode"]) == "release" => self.release_handoff_label(&request, &c),
+                Ok(c) => committed_label(&c),
             },
             "release" => self.release_label(&request),
             "acknowledge" => {
@@ -696,6 +732,26 @@ impl Iteration {
                 let c = result.unwrap_or_else(|e| panic!("{at} recover: {e:?}"));
                 check_committed(at, &c, want);
                 self.record_outcome(&request, Arc::new(c));
+            }
+            "resume" => {
+                let result = resume(&self.store.committed(), &self.claim_id(&request));
+                let class = s(&want["error_class"]);
+                if !class.is_empty() {
+                    assert_eq!(
+                        class_of(&result),
+                        class,
+                        "{at} resume: {:?}",
+                        result.as_ref().err()
+                    );
+                    return;
+                }
+                let c = result.unwrap_or_else(|e| panic!("{at} resume: {e:?}"));
+                check_committed(at, &c, want);
+                assert!(
+                    self.record_resumed(&c),
+                    "{at} resume: the resumed body differs from the committed one"
+                );
+                self.committed.lock().unwrap().insert(request, Arc::new(c));
             }
             "publish" => {
                 let c = Arc::clone(&self.committed.lock().unwrap()[&request]);

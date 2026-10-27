@@ -155,7 +155,7 @@ func (g *gen) lifecycleFile() any {
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
 			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
-			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
+			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). mode record_release_unavailable = the claim store's record-release operation fails with store unavailability for this call only and records nothing; record_release_state_mismatch = it answers release_state_mismatch (a different record exists) for this call only and records nothing. checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
@@ -310,6 +310,22 @@ func (g *gen) lifecycleFile() any {
 		lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expired},
 		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: expired},
 		release("A", expired))
+	noReceipt := func(expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expect}
+	}
+	notAppended := lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "receipt_not_appended"}
+	sc("withheld_when_recording_fails", "a withheld result whose recording fails with store unavailability is still withheld for that call, and nothing is recorded: a release without a receipt is then pending; the next release records the withheld result, which every later release returns",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "record_release_unavailable", Checkpoint: "reference", Expect: expired},
+		noReceipt(notAppended),
+		release("A", expired),
+		noReceipt(expired))
+	sc("withheld_record_conflict_is_rejected", "a claim store that answers the withheld record with a state mismatch (a different record already exists) makes that call rejected / release_state_mismatch, which describes only that call and records nothing; the next release records the withheld result",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "record_release_state_mismatch", Checkpoint: "reference", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}},
+		noReceipt(notAppended),
+		release("A", expired),
+		noReceipt(expired))
 	sc("withheld_after_recorded_release_records_nothing", "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
 		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+10), release("A", released(Now, 1)),
 		setTime(Now+8), release("A", withheldRegressed),

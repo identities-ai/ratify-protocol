@@ -52,8 +52,8 @@ async function presentIssued(issuance: V2ChallengeIssuanceStore, claims: ClaimSt
 }
 
 test("challenge-issuance.json: corpus shape", () => {
-  assert.equal(file.scenarios.length, 10);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 36);
+  assert.equal(file.scenarios.length, 11);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 42);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -115,8 +115,10 @@ for (const sc of file.scenarios as Any[]) {
           } catch (err) {
             cls = v2ErrorClassOf(err);
           }
-          if (exp.result === "found") assert.deepEqual([got?.issuedAt, got?.expiresAt], [exp.issued_at, exp.expires_at], `step ${i} load`);
-          else assert.equal(cls, exp.result, `step ${i} load class`);
+          if (exp.result === "found") {
+            assert.deepEqual([got?.issuedAt, got?.expiresAt], [exp.issued_at, exp.expires_at], `step ${i} load`);
+            if (exp.expected_receiver_id !== undefined) assert.equal(got?.expectedReceiverID ?? "", exp.expected_receiver_id, `step ${i} load receiver`);
+          } else assert.equal(cls, exp.result, `step ${i} load class`);
           break;
         }
         case "present":

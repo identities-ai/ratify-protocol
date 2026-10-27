@@ -38,8 +38,8 @@ EPOCH = 3
 
 
 def test_issuance_corpus_shape():
-    assert len(SCENARIOS) == 10
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 36
+    assert len(SCENARIOS) == 11
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 42
 
 
 class ScriptedRandom:
@@ -135,6 +135,8 @@ def test_challenge_issuance(sc):
                 got, err = None, exc
             if exp["result"] == "found":
                 assert err is None and got.issued_at == exp["issued_at"] and got.expires_at == exp["expires_at"], (i, err)
+                if "expected_receiver_id" in exp:
+                    assert (got.expected_receiver_id or "") == exp["expected_receiver_id"], i
             else:
                 assert error_class_of(err) == exp["result"], (i, err)
         elif op in ("present", "present_concurrent"):

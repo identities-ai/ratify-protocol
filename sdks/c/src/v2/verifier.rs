@@ -303,6 +303,8 @@ pub unsafe extern "C" fn ratify_v2_recover_interrupted_claim(
         std::ptr::null_mut(),
         || crate::guard::clear_ptr(committed_out),
         || {
+            // A failed call leaves no stale handle in the caller's variable.
+            crate::guard::clear_ptr(committed_out);
             let cb = claim_store
                 .as_ref()
                 .ok_or_else(|| null_arg("claim_store"))?;
@@ -343,6 +345,8 @@ pub unsafe extern "C" fn ratify_v2_resume_committed_claim(
         std::ptr::null_mut(),
         || crate::guard::clear_ptr(committed_out),
         || {
+            // A failed call leaves no stale handle in the caller's variable.
+            crate::guard::clear_ptr(committed_out);
             let cb = store.as_ref().ok_or_else(|| null_arg("store"))?;
             if committed_out.is_null() {
                 return Err(null_arg("committed_out"));

@@ -529,3 +529,29 @@ fn v2c_resume_refuses_a_record_that_fails_its_checks() {
     );
     assert_eq!(resumed.allow_horizon(), None);
 }
+
+/// A failed resume or recovery sets `*committed_out` to NULL, as verify and
+/// release clear their outputs, so a caller that reuses the variable and
+/// frees it on every path never frees a stale handle.
+#[test]
+fn v2c_failed_resume_and_recovery_clear_the_output() {
+    let store = new_store(&s(&file()["log_id"]));
+    let committed = store.committed();
+    let claim = store.claim(false);
+    let id = cs("unknown-claim");
+    let empty = cs("");
+    let stale = ptr::NonNull::<RatifyV2Committed>::dangling().as_ptr();
+    let cases: Vec<(&str, Box<dyn Fn(*mut *mut RatifyV2Committed) -> i32>)> = vec![
+        ("resume unknown claim", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(&committed, id.as_ptr(), out) })),
+        ("resume empty claim ID", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(&committed, empty.as_ptr(), out) })),
+        ("resume NULL store", Box::new(|out| unsafe { ratify_v2_resume_committed_claim(ptr::null(), id.as_ptr(), out) })),
+        ("recover unknown claim", Box::new(|out| unsafe { ratify_v2_recover_interrupted_claim(&claim, id.as_ptr(), out) })),
+        ("recover NULL store", Box::new(|out| unsafe { ratify_v2_recover_interrupted_claim(ptr::null(), id.as_ptr(), out) })),
+    ];
+    for (name, call) in cases {
+        let mut out = stale;
+        let code = call(&mut out);
+        assert_ne!(code, 0, "{name} succeeded");
+        assert!(out.is_null(), "{name} left a stale handle in the output");
+    }
+}

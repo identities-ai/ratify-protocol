@@ -92,6 +92,8 @@ def limit_bytes(c):
         digits = c.get("item_index_digits", 0)
         items = [f"{c.get('item_prefix', '')}{n:0{digits}d}{c.get('item_suffix', '')}".encode() for n in range(c["count"])]
         return opt("prefix_b64") + b",".join(items) + opt("suffix_b64")
+    if m == "repeat_bytes":
+        return opt("prefix_b64") + b64d(c["item_b64"]) * c["count"] + opt("suffix_b64")
     if m == "repeat_item":
         return opt("prefix_b64") + b",".join([b64d(c["item_b64"])] * c["count"]) + opt("suffix_b64")
     raise SystemExit(f"unknown construction {m}")
@@ -184,6 +186,11 @@ def vector_dir(rel, v, bundle):
         for n, o in enumerate(script.get("objects") or []):
             st.append(f"{issuer} obj {o['object_type_code']} " + write(f"{rel}/s_{issuer[:8]}_{n}.bin", b64d(o["wire_b64"])).split("/", 2)[-1])
     write(f"{rel}/status.txt", "".join(l + "\n" for l in st))
+    # Every expected status-provider request, in call order (SPEC-v2 §6.5 step 3).
+    if "status_requests" in exp:
+        write(f"{rel}/expect_status.txt", "".join(
+            f"{r['issuer_id']} {r['status_key_epoch']} {r['status_key_id']}" + "".join(f" {x['issuer_id']}/{x['cert_id']}" for x in r["refs"]) + "\n"
+            for r in exp["status_requests"]))
     pol = v.get("status_policy") or {}
     pl = [f"policy {pol.get('max_list_lifetime_seconds', 0)} {pol.get('max_status_age_seconds', 0)} {pol.get('clock_skew_seconds', 0)}"]
     for issuer in sorted(skeys):

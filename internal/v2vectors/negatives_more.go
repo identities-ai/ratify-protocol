@@ -3,6 +3,7 @@ package v2vectors
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -377,6 +378,75 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 	bCert, _, _ := g.cert(certSpec{issuer: g.k("party_b_root"), subject: bAgent, certID: "cert-party-b", scope: []string{"transact:sell"}})
 	variant("party_bundle_other_verifier", "party-b's proof bundle names another verifier_id than its party entry; its hash and both party signatures are consistent",
 		bundleSpec{agent: bAgent, certs: []ratify.DelegationCertV2{bCert}, session: bCtx, verifierID: g.k("attacker").ID})
+	// Canonical form is part of strict decode (SPEC-v2 §2.1), so a
+	// non-canonical receipt is malformed even when a later check (bundle
+	// hash, context binding, signature set, signature) would also fail.
+	twoFault := func(name, mutation string, frame func([]byte) []byte, f func(map[string]any)) {
+		n.add(name, kind, mutation, frame(mutate(base, f)), v, "malformed")
+	}
+	leadingSpace := func(w []byte) []byte { return append([]byte(" "), w...) }
+	trailingNewline := func(w []byte) []byte { return append(w, '\n') }
+	twoFault("noncanonical_and_party_role_changed", "leading space; parties[0].role changed without re-signing", leadingSpace, func(o map[string]any) { party(o, 0)["role"] = "approver" })
+	twoFault("noncanonical_and_bundle_hash_flipped", "trailing newline; parties[0].proof_bundle_hash changed", trailingNewline, func(o map[string]any) {
+		party(o, 0)["proof_bundle_hash"] = flipHexDigest(party(o, 0)["proof_bundle_hash"].(string))
+	})
+	twoFault("noncanonical_and_party_session_changed", "leading space; parties[0].session_id changed", leadingSpace, func(o map[string]any) { party(o, 0)["session_id"] = "session-x" })
+	twoFault("noncanonical_and_signature_missing", "trailing newline; party-b signature removed", trailingNewline, func(o map[string]any) { o["party_signatures"] = arr(o["party_signatures"])[:1] })
+	// The outer canonical check precedes decoding the nested bundles, so a
+	// fault the bundle decoder would report (here key_id_mismatch) does not
+	// mask it.
+	twoFault("noncanonical_and_bundle_cert_key_id_mismatch", "leading space; parties[0].proof_bundle.delegations[0].issuer_id names another key", leadingSpace, func(o map[string]any) {
+		cert := obj(arr(obj(party(o, 0)["proof_bundle"])["delegations"])[0])
+		cert["issuer_id"] = g.k("attacker").ID
+	})
+	// The same holds when only a nested bundle, or only the order of a party
+	// array, is not canonical: each is decided before any bundle is decoded.
+	keyFault := func(o map[string]any) {
+		cert := obj(arr(obj(party(o, 0)["proof_bundle"])["delegations"])[0])
+		cert["issuer_id"] = g.k("attacker").ID
+	}
+	identity := func(w []byte) []byte { return w }
+	twoFault("noncanonical_bundle_order_and_cert_key_id_mismatch", "parties[0].proof_bundle members in descending order; its delegations[0].issuer_id names another key", reverseFirstBundleMembers, keyFault)
+	twoFault("noncanonical_bundle_escape_and_cert_key_id_mismatch", "parties[0].proof_bundle cert_id value starts with an unneeded escape (\\u0063); its delegations[0].issuer_id names another key", func(w []byte) []byte {
+		return bytes.Replace(w, []byte(`"cert_id":"c`), []byte(`"cert_id":"\u0063`), 1)
+	}, keyFault)
+	twoFault("unsorted_party_signatures_and_cert_key_id_mismatch", "party_signatures in descending party_id order; parties[0].proof_bundle.delegations[0].issuer_id names another key", identity, func(o map[string]any) {
+		keyFault(o)
+		sigs := arr(o["party_signatures"])
+		o["party_signatures"] = []any{sigs[1], sigs[0]}
+	})
+	twoFault("unsorted_parties_and_cert_key_id_mismatch", "parties in descending party_id order; the former parties[0].proof_bundle.delegations[0].issuer_id names another key", identity, func(o map[string]any) {
+		keyFault(o)
+		parties := arr(o["parties"])
+		o["parties"] = []any{parties[1], parties[0]}
+	})
+}
+
+// reverseFirstBundleMembers writes the first party's proof bundle with its
+// members in descending order, leaving every other byte canonical.
+func reverseFirstBundleMembers(w []byte) []byte {
+	start := bytes.Index(w, []byte(`"proof_bundle":`)) + len(`"proof_bundle":`)
+	decoder := json.NewDecoder(bytes.NewReader(w[start:]))
+	var bundle json.RawMessage
+	if err := decoder.Decode(&bundle); err != nil {
+		panic(err)
+	}
+	members := json.NewDecoder(bytes.NewReader(bundle))
+	must(members.Token())
+	var parts [][]byte
+	for members.More() {
+		key := must(members.Token())
+		var value json.RawMessage
+		if err := members.Decode(&value); err != nil {
+			panic(err)
+		}
+		name := must(json.Marshal(key))
+		parts = append([][]byte{append(append(name, ':'), value...)}, parts...)
+	}
+	out := append(append([]byte(nil), w[:start]...), '{')
+	out = append(out, bytes.Join(parts, []byte(","))...)
+	out = append(out, '}')
+	return append(out, w[start+len(bundle):]...)
 }
 
 func (g *gen) receiptNegatives(n *negBuilder) {

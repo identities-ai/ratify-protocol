@@ -239,6 +239,7 @@ int main(int argc, char **argv) {
     total += v2c_run_objects();
     total += v2c_run_limits();
     total += v2c_run_ordering();
+    total += v2c_run_callback_domain();
     total += v2c_run_lifecycle();
     total += v2c_run_cross_sdk();
     printf("checks: %d, failures: %d\n", total, v2c_failures);

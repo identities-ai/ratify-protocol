@@ -40,6 +40,7 @@ type v2IssuanceScenario struct {
 			ExpiresAt    int64    `json:"expires_at"`
 			RecordsAfter *int     `json:"records_after"`
 			Dispositions []string `json:"dispositions"`
+			ReceiverID   *string  `json:"expected_receiver_id"`
 		} `json:"expect"`
 	} `json:"steps"`
 }
@@ -135,6 +136,9 @@ func runV2IssuanceScenario(t *testing.T, sc v2IssuanceScenario, fx v2Fixture) {
 			if exp.Result == "found" {
 				if err != nil || got.IssuedAt != exp.IssuedAt || got.ExpiresAt != exp.ExpiresAt {
 					t.Fatalf("step %d: load = %+v, %v", i, got, err)
+				}
+				if exp.ReceiverID != nil && got.ExpectedReceiverID != *exp.ReceiverID {
+					t.Fatalf("step %d: load receiver %q, want %q", i, got.ExpectedReceiverID, *exp.ReceiverID)
 				}
 			} else if string(ratify.V2ErrorClassOf(err)) != exp.Result {
 				t.Fatalf("step %d: load class %q, want %q", i, ratify.V2ErrorClassOf(err), exp.Result)

@@ -10,27 +10,28 @@ import { MAX_TRANSACTION_RECEIPT_BYTES_V2, checkV2WireSize } from "./limits_v2.j
 import { signV2StatementWithSigner, signerPublicKeyV2, withLocalSignerV2, type SignOptionsV2, type SignerV2 } from "./signer_v2.js";
 import { classified, classifiedAsync, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
 import {
-  MAX_SAFE_INTEGER_V2,
-  RawJSON,
   bytesEqual,
   canonicalJSONV2,
   checkWireJSONV2,
   compareBytes,
   concatBytes,
+  gAny,
   gBytes,
   gInt,
   gString,
   gStruct,
   isValidUTF8,
   isWellFormedString,
+  MAX_SAFE_INTEGER_V2,
   parseJSONV2,
+  RawJSON,
   rawSlice,
   rejectV2UnexpectedNull,
   requireV2Fields,
-  uint64BE,
-  utf8,
   type Fields,
   type JNode,
+  uint64BE,
+  utf8,
 } from "./json_v2.js";
 import { buildSessionContextV2 } from "./operation_context_v2.js";
 import {
@@ -402,6 +403,15 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       proof_bundle_hash: gString(p.get("proof_bundle_hash"), "proof_bundle_hash"),
       raw: p.get("proof_bundle"),
     }));
+    // Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
+    // receipt, with both party arrays in party_id order, is compared with its
+    // canonical encoding before any bundle is decoded, so a non-canonical
+    // receipt is malformed whatever its bundles hold.
+    const inPartyOrder = (xs: { party_id: string }[]) => xs.every((x, i) => i === 0 || byPartyID(xs[i - 1]!, x) <= 0);
+    if (!inPartyOrder(typed) || !inPartyOrder(receipt.party_signatures) || !bytesEqual(canonicalJSONV2(gAny(root)), data)) {
+      throw new Error("wire v2: transaction receipt is not canonical JSON");
+    }
+    const bundleHashes: string[] = [];
     for (let i = 0; i < typed.length; i++) {
       const p = typed[i]!;
       if (p.raw === undefined || p.raw.k !== "obj") throw new Error(`wire v2: party ${i} proof_bundle must be a JSON object`);
@@ -429,16 +439,22 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       if (!validPrefixedDigestV2(p.proof_bundle_hash)) {
         throw v2Errorf("malformed", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash is not sha384: followed by 96 lowercase hex characters`);
       }
-      if (p.proof_bundle_hash !== bundleHashOfBytesV2(raw)) {
-        throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);
-      }
+      bundleHashes.push(bundleHashOfBytesV2(raw));
       const { raw: _raw, ...rest } = p;
       void _raw;
       receipt.parties.push({ ...rest, proof_bundle: bundle });
     }
-    await verifyTransactionReceiptV2Signatures(receipt);
+    // Canonical form is part of strict decode (SPEC-v2 §2.1), so it is
+    // checked before any bundle hash, binding or signature: a non-canonical
+    // receipt is malformed whatever else is wrong with it.
     const canonical = encodeTransactionReceiptV2Canonical(receipt);
     if (!bytesEqual(canonical, data)) throw new Error("wire v2: transaction receipt is not canonical JSON");
+    receipt.parties.forEach((p, i) => {
+      if (p.proof_bundle_hash !== bundleHashes[i]) {
+        throw v2Errorf("bundle_hash_mismatch", `wire v2: party ${JSON.stringify(p.party_id)} proof_bundle_hash does not match its canonical bundle bytes`);
+      }
+    });
+    await verifyTransactionReceiptV2Signatures(receipt);
     return receipt;
   } catch (err) {
     throw v2Classify("malformed", err);

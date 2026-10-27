@@ -15,7 +15,10 @@
  *                 without <epoch> the issuer's configured epoch_<issuer> is used
  *   audience.txt  "m <di> <ci> <receiver|-> <issued> <expires> <digest|-> <n> <domain>..."
  *   evaluators.txt "e <type> <profile> <implementation> <valid_until>"
+ *   expect_status.txt one line per expected status-provider request, in call
+ *                 order: "<issuer> <epoch> <status_key_id> <issuer>/<cert_id>..."
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,6 +98,9 @@ struct v2c_vector {
     status_script status[MAX_ISSUERS];
     int nstatus;
     int cancel_status;
+    /* every status-provider request of the current call, in expect_status.txt form */
+    char status_log[8192];
+    int status_log_overflow;
     member members[MAX_MEMBERS];
     int nmembers;
     RatifyV2AudienceMembership member_views[MAX_MEMBERS];
@@ -145,9 +151,8 @@ static int32_t sc_now(void *user, int64_t *now) {
     return 0;
 }
 
-static int32_t sc_claim(void *user, const RatifyV2ClaimView *view, RatifyV2ClaimResult *out) {
+static int32_t sc_claim_answer(void *user, const RatifyV2ClaimView *view, RatifyV2ClaimResult *out) {
     v2c_vector *v = user;
-    bump(v, C_CLAIM);
     v->expires_at = view->expires_at;
     const char *mode = v2c_vector_meta(v, "claim_store");
     RatifyV2Slice none = {NULL, 0}, token = {v->token, sizeof v->token};
@@ -157,6 +162,24 @@ static int32_t sc_claim(void *user, const RatifyV2ClaimView *view, RatifyV2Claim
     if (strcmp(mode, "terminal_replay") == 0) { out->disposition = RatifyV2DispositionTerminalReplay; out->owner_token = none; return 0; }
     if (strcmp(mode, "proof_conflict") == 0) return RatifyV2StoreClaimProofConflict;
     return RatifyV2StoreUnavailable;
+}
+
+/* Out-of-domain answers (v2c_run_callback_domain): when set, the trust or
+ * claim callback either fails or, after its scripted answer, reports
+ * success with its outcome or disposition set to domain_value. Set only by the serial
+ * domain run, never by the stress tests. */
+enum { DOMAIN_OFF, DOMAIN_TRUST_ERROR, DOMAIN_TRUST_VALUE, DOMAIN_CLAIM_ERROR, DOMAIN_CLAIM_VALUE };
+static int domain_fault = DOMAIN_OFF;
+static int32_t domain_value;
+
+static int32_t sc_claim(void *user, const RatifyV2ClaimView *view, RatifyV2ClaimResult *out) {
+    v2c_vector *v = user;
+    bump(v, C_CLAIM);
+    if (domain_fault == DOMAIN_CLAIM_ERROR) return RatifyV2StoreUnavailable;
+    int32_t rc = sc_claim_answer(user, view, out);
+    if (domain_fault != DOMAIN_CLAIM_VALUE) return rc;
+    out->disposition = domain_value;
+    return 0;
 }
 
 static int32_t sc_finalize(void *user, const char *claim_id, RatifyV2Slice token, RatifyV2Slice terminal,
@@ -218,9 +241,8 @@ static int32_t registry_resolve(const v2c_vector *v, const RatifyV2CertView *cha
     return 0;
 }
 
-static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, int32_t *outcome, RatifyV2PublicKey *root) {
+static int32_t trust_answer(void *user, const RatifyV2CertView *chain, size_t len, int32_t *outcome, RatifyV2PublicKey *root) {
     v2c_vector *v = user;
-    bump(v, C_TRUST);
     const char *mode = v2c_vector_meta(v, "trust_mode");
     if (strcmp(v2c_vector_meta(v, "trust"), "none") == 0) { *outcome = RatifyV2TrustUnavailable; return 0; }
     if (strcmp(mode, "registry") == 0) return registry_resolve(v, chain, len, outcome, root);
@@ -234,9 +256,32 @@ static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, i
     return 0;
 }
 
+static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, int32_t *outcome, RatifyV2PublicKey *root) {
+    bump(user, C_TRUST);
+    if (domain_fault == DOMAIN_TRUST_ERROR) return RatifyV2StoreUnavailable;
+    int32_t rc = trust_answer(user, chain, len, outcome, root);
+    if (domain_fault != DOMAIN_TRUST_VALUE) return rc;
+    *outcome = domain_value;
+    return 0;
+}
+
+static void status_log_append(v2c_vector *v, const char *text) {
+    size_t used = strlen(v->status_log), n = strlen(text);
+    if (used + n >= sizeof v->status_log) { v->status_log_overflow = 1; return; }
+    memcpy(v->status_log + used, text, n + 1);
+}
+
 static int32_t status_cb(void *user, const RatifyV2StatusRequest *req, RatifyV2StatusBatch *out) {
     v2c_vector *v = user;
     bump(v, C_STATUS);
+    char item[600];
+    snprintf(item, sizeof item, "%s %llu %s", req->issuer_id, (unsigned long long)req->status_key_epoch, req->status_key_id);
+    status_log_append(v, item);
+    for (size_t i = 0; i < req->refs_len; i++) {
+        snprintf(item, sizeof item, " %s/%s", req->refs[i].issuer_id, req->refs[i].cert_id);
+        status_log_append(v, item);
+    }
+    status_log_append(v, "\n");
     out->objects = NULL;
     out->count = 0;
     for (int i = 0; i < v->nstatus; i++) {
@@ -543,6 +588,8 @@ void v2c_vector_callbacks(v2c_vector *v, const RatifyV2ClaimStoreCallbacks *clai
     RatifyV2ClaimStoreCallbacks scripted = {v, 0, sc_now, sc_claim, sc_finalize, sc_progress, sc_load, sc_recover};
     v->claim_cb = claim ? *claim : scripted;
     v->cancel_status = cancel_status;
+    v->status_log[0] = 0;
+    v->status_log_overflow = 0;
     v->trust_cb.user = v;
     v->trust_cb.resolve = trust_cb;
     v->status_cb.user = v;
@@ -628,6 +675,10 @@ static int run_vector(const char *subdir) {
     snprintf(detail, sizeof detail, "%s: counts %s want %s (%s)", name, counts, v2c_vector_meta(v, "expect_counts"),
              COUNT_NAMES[0]);
     v2c_check(strcmp(counts, v2c_vector_meta(v, "expect_counts")) == 0, "ordering callback counts", detail);
+    char *want_status = (char *)v2c_read(path(v, "expect_status.txt"), NULL);
+    snprintf(detail, sizeof detail, "%s: status requests\n%s want\n%s", name, v->status_log, want_status);
+    v2c_check(!v->status_log_overflow && strcmp(v->status_log, want_status) == 0, "ordering status requests", detail);
+    free(want_status);
     if (strcmp(want_stage, "committed") == 0) {
         v2c_check(committed != NULL, "ordering committed", name);
         if (committed) {
@@ -671,4 +722,112 @@ int v2c_run_ordering(void) {
     printf("verifier-ordering: %d/%d vectors\n", pass, n);
     if (n == 0) { fprintf(stderr, "empty ordering manifest\n"); exit(1); }
     return n;
+}
+
+/* ---- callback answers outside the C enums ------------------------------ */
+
+/* Only the C ABI can hand the library a trust outcome outside 1..4 or a
+ * claim disposition outside 1..3. Either is a malformed provider response
+ * (SPEC-v2 §6.1, §6.11) and must act exactly like that provider failing:
+ * the same rc, stage, class, disposition and committed receipt body as
+ * when the callback returns RatifyV2StoreUnavailable. The trust value is
+ * written after the genuine answer, so the correct root is in place and
+ * only the outcome is wrong, whenever the scripted answer wrote one. */
+typedef struct {
+    int32_t rc;
+    RatifyV2VerifyOutcome out;
+    uint8_t *body;
+    size_t body_len;
+} domain_result;
+
+static domain_result run_domain(const char *subdir, int fault, int32_t value) {
+    domain_fault = fault;
+    domain_value = value;
+    v2c_vector *v = v2c_vector_load(subdir);
+    RatifyV2VerifyCallbacks cb;
+    RatifyV2EvaluatorConfig eval;
+    int has_eval;
+    v2c_vector_callbacks(v, NULL, 0, &cb, &eval, &has_eval);
+    domain_result r = {0};
+    RatifyV2Committed *committed = NULL;
+    r.rc = ratify_v2_verify_proof_bundle(v->bundle, v->bundle_len, (const uint8_t *)v->request, v->request_len,
+                                         has_eval ? &eval : NULL, &cb, &r.out, NULL, &committed);
+    if (committed) {
+        RatifyV2Buffer body = {0};
+        if (ratify_v2_committed_receipt_body(committed, &body) == 0) r.body = v2c_take(body, &r.body_len);
+        ratify_v2_committed_free(committed);
+    }
+    v2c_vector_free(v);
+    domain_fault = DOMAIN_OFF;
+    return r;
+}
+
+static int same_result(const domain_result *a, const domain_result *b) {
+    return a->rc == b->rc && a->out.stage == b->out.stage && a->out.error_code == b->out.error_code &&
+           a->out.disposition == b->out.disposition && a->body_len == b->body_len &&
+           (a->body_len == 0 || memcmp(a->body, b->body, a->body_len) == 0);
+}
+
+int v2c_run_callback_domain(void) {
+    static const int32_t trust_values[] = {0, 5, -1, 255, INT32_MIN, INT32_MAX};
+    static const int32_t claim_values[] = {0, 4, -1, INT32_MIN, INT32_MAX};
+    char *index = (char *)v2c_read("ordering/index.txt", NULL), *save = NULL;
+    int checks = 0;
+    for (char *l = strtok_r(index, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
+        if (!l[0]) continue;
+        struct {
+            int error, value;
+            const int32_t *values;
+            size_t n;
+            const char *what;
+        } sets[] = {
+            {DOMAIN_TRUST_ERROR, DOMAIN_TRUST_VALUE, trust_values, sizeof trust_values / sizeof *trust_values, "trust outcome"},
+            {DOMAIN_CLAIM_ERROR, DOMAIN_CLAIM_VALUE, claim_values, sizeof claim_values / sizeof *claim_values, "claim disposition"},
+        };
+        for (size_t s = 0; s < sizeof sets / sizeof *sets; s++) {
+            domain_result failing = run_domain(l, sets[s].error, 0);
+            for (size_t i = 0; i < sets[s].n; i++) {
+                domain_result got = run_domain(l, sets[s].value, sets[s].values[i]);
+                char detail[512];
+                snprintf(detail, sizeof detail, "%s: %s %d gives rc %d stage %d class %d disposition %d body %zu, "
+                         "a failing provider gives rc %d stage %d class %d disposition %d body %zu",
+                         l, sets[s].what, (int)sets[s].values[i], (int)got.rc, (int)got.out.stage,
+                         (int)got.out.error_code, (int)got.out.disposition, got.body_len, (int)failing.rc,
+                         (int)failing.out.stage, (int)failing.out.error_code, (int)failing.out.disposition,
+                         failing.body_len);
+                v2c_check(same_result(&got, &failing), "out-of-domain callback answer", detail);
+                checks++;
+                free(got.body);
+            }
+            free(failing.body);
+        }
+        /* A custom registration without its evaluate callback is an
+         * invalid registry (SPEC-v2 §5.2): configuration_invalid before
+         * the challenge is claimed, as in the other SDKs. */
+        v2c_vector *v = v2c_vector_load(l);
+        if (v->nevals > 0) {
+            RatifyV2VerifyCallbacks cb;
+            RatifyV2EvaluatorConfig eval;
+            int has_eval;
+            v2c_vector_callbacks(v, NULL, 0, &cb, &eval, &has_eval);
+            v->regs[v->nevals - 1].evaluate = NULL;
+            RatifyV2VerifyOutcome out;
+            RatifyV2Committed *committed = NULL;
+            int32_t rc = ratify_v2_verify_proof_bundle(v->bundle, v->bundle_len, (const uint8_t *)v->request,
+                                                       v->request_len, &eval, &cb, &out, NULL, &committed);
+            char detail[512];
+            snprintf(detail, sizeof detail, "%s: evaluator without evaluate gives rc %s, %d claims (%s)", l,
+                     rc ? v2c_class(rc) : "ok", v->counts[C_CLAIM], ratify_v2_last_error_message());
+            v2c_check(rc != 0 && strcmp(v2c_class(rc), "configuration_invalid") == 0 && v->counts[C_CLAIM] == 0 &&
+                          committed == NULL,
+                      "evaluator registration without evaluate", detail);
+            checks++;
+            if (committed) ratify_v2_committed_free(committed);
+        }
+        v2c_vector_free(v);
+    }
+    free(index);
+    printf("callback-domain: %d checks\n", checks);
+    if (checks == 0) { fprintf(stderr, "empty ordering manifest\n"); exit(1); }
+    return checks;
 }

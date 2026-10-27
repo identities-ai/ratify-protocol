@@ -318,10 +318,10 @@ fn v2c_conformance_digest_functions() {
         failures.len(),
         failures.join("\n")
     );
-    assert_eq!(cases.len(), 16, "digest function cases");
+    assert_eq!(cases.len(), 25, "digest function cases");
     let readme = readme_line("digest-functions.json");
     assert!(
-        readme.contains("16 cases for `StatementBodyDigest`"),
+        readme.contains("25 cases for `StatementBodyDigest`"),
         "README row: {readme}"
     );
 }

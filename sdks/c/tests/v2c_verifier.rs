@@ -136,6 +136,23 @@ fn run_vector(v: &Value, bundle: &[u8], builtin_standard: bool) -> Vec<String> {
     let mut failures = Vec::new();
     let counts = Arc::new(Counts::default());
     let mut setup = Setup::build(v, &counts, builtin_standard);
+    // Record every status-provider request in call order (SPEC-v2 §6.5 step 3).
+    let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+    {
+        let inner = std::mem::replace(&mut setup.status, Status::new(Box::new(|_: &StatusReq| Ok(Vec::new()))));
+        let requests = Arc::clone(&requests);
+        setup.status = Status::new(Box::new(move |r: &StatusReq| {
+            requests.lock().unwrap().push(serde_json::json!({
+                "issuer_id": r.issuer_id,
+                "status_key_epoch": r.status_key_epoch,
+                "status_key_id": r.status_key_id,
+                "refs": r.refs.iter().map(|(issuer, cert)| serde_json::json!({"issuer_id": issuer, "cert_id": cert})).collect::<Vec<_>>(),
+            }));
+            (inner.f)(r)
+        }));
+        let cb = setup.status.callbacks();
+        setup.set_status(cb);
+    }
     let claimed_at = i(&v["now"]) + i(&v["claim_time_offset"]);
     let st = ScriptedClaimStore {
         mode: s(&v["claim_store"]),
@@ -193,6 +210,17 @@ fn run_vector(v: &Value, bundle: &[u8], builtin_standard: bool) -> Vec<String> {
         failures.push(format!(
             "callback counts {got_counts:?}, want {want_counts:?}"
         ));
+    }
+    match want["status_requests"].as_array() {
+        None => failures.push("vector has no expected status_requests".into()),
+        Some(want_requests) => {
+            let got_requests = requests.lock().unwrap();
+            if *got_requests != *want_requests {
+                failures.push(format!(
+                    "status requests {got_requests:?}, want {want_requests:?}"
+                ));
+            }
+        }
     }
     if want_stage != "committed" {
         if outcome.committed.is_some() {
@@ -320,11 +348,11 @@ fn run_ordering(builtin_standard: bool) {
         failures.join("\n")
     );
     // Exact counts, so a dropped vector fails; the README states the same.
-    assert_eq!(vectors.len(), 485, "verifier-ordering vectors");
+    assert_eq!(vectors.len(), 515, "verifier-ordering vectors");
     let want_stages: BTreeMap<String, usize> = [
-        ("committed", 346),
+        ("committed", 362),
         ("evaluating", 2),
-        ("preflight", 135),
+        ("preflight", 149),
         ("replay", 2),
     ]
     .into_iter()
@@ -338,7 +366,7 @@ fn run_ordering(builtin_standard: bool) {
     assert_eq!(registry, 5, "reference trust registry cases");
     let readme = readme_line("verifier-ordering.json");
     assert!(
-        readme.contains("485 end-to-end live-verifier cases (135 pre-claim, 2 replay, 346 committed, 2 evaluating"),
+        readme.contains("515 end-to-end live-verifier cases (149 pre-claim, 2 replay, 362 committed, 2 evaluating"),
         "README row: {readme}"
     );
 }
@@ -404,6 +432,7 @@ fn v2c_request_configuration_failures_are_reported_after_decode() {
             "stage": "preflight",
             "error_class": class,
             "callback_counts": {},
+            "status_requests": [],
         });
         let result = run_vector(&v, bundle, false);
         if !result.is_empty() {

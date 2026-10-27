@@ -25,6 +25,7 @@ from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
 from ratify_protocol_v2.rate_reservation_v2 import V2RateReservation
 from ratify_protocol_v2.release_v2 import (
     CommittedV2Outcome,
+    ReleaseStateMismatchErrorV2,
     V2CheckpointAcknowledgement,
     V2ReceiptCheckpoint,
     V2ReleaseConfig,
@@ -66,8 +67,8 @@ PROFILE_SCENARIOS = FILE["profile_scenarios"]
 
 
 def test_lifecycle_corpus_shape():
-    assert len(SCENARIOS) == 80
-    assert sum(len(s["steps"]) for s in SCENARIOS) == 427
+    assert len(SCENARIOS) == 108
+    assert sum(len(s["steps"]) for s in SCENARIOS) == 579
     assert len(PROFILE_SCENARIOS) == 29
     assert sum(len(s["steps"]) for s in PROFILE_SCENARIOS) == 283
     profiles = {}
@@ -75,6 +76,24 @@ def test_lifecycle_corpus_shape():
         profiles[s["profile"]] = profiles.get(s["profile"], 0) + 1
     assert set(profiles) == {"single_device_offline", "dual_root"}
     assert profiles["single_device_offline"] >= 16 and profiles["dual_root"] >= 13
+
+
+class FailingRecordStore:
+    """Answers every release record with an error and records nothing; the
+    other operations reach the store."""
+
+    def __init__(self, inner, error):
+        self.inner = inner
+        self.error = error
+
+    def authoritative_time_v2(self, ctx):
+        return self.inner.authoritative_time_v2(ctx)
+
+    def load_v2_terminal_claim(self, ctx, claim_id):
+        return self.inner.load_v2_terminal_claim(ctx, claim_id)
+
+    def record_v2_release(self, ctx, record):
+        raise self.error
 
 
 class WrongEntryCheckpoint(V2ReceiptCheckpoint):
@@ -477,6 +496,10 @@ def test_lifecycle_scenario(sc):
                 cfg.checkpoint = WrongEntryCheckpoint(store)
             if step.get("mode") == "no_receipt":
                 receipt = None
+            if step.get("mode") == "record_release_unavailable":
+                cfg.claim_store = FailingRecordStore(store, RuntimeError("claim store unavailable"))
+            if step.get("mode") == "record_release_state_mismatch":
+                cfg.claim_store = FailingRecordStore(store, ReleaseStateMismatchErrorV2("v2 claim already records a different release"))
             if op == "release_forged":
                 c, receipt = object.__new__(CommittedV2Outcome), None
             check_release(i, release_v2_decision(BACKGROUND, c, receipt, cfg), want)

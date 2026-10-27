@@ -1,6 +1,7 @@
 package v2vectors
 
 import (
+	"bytes"
 	"encoding/hex"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -116,9 +117,13 @@ type txFixture struct {
 
 const txTerms = `{"amount":100,"currency":"USD","item":"widget"}`
 
-func (g *gen) txFixture() txFixture {
+func (g *gen) txFixture() txFixture { return g.txFixtureWith("tx-0001", txTerms, "buyer") }
+
+// txFixtureWith builds the two-party receipt for another transaction ID,
+// terms bytes or first-party role, fully bound and signed.
+func (g *gen) txFixtureWith(txID, txTerms, roleA string) txFixture {
 	f := txFixture{partyReq: map[string][]byte{}, partyCtx: map[string][]byte{}, bundleHash: map[string]string{}}
-	txID, schema := "tx-0001", "https://example.com/terms/purchase/v1"
+	schema := "https://example.com/terms/purchase/v1"
 	f.txContext = func() []byte {
 		pre := append([]byte("ratify/transaction-context/v2"), lp([]byte(txID))...)
 		pre = append(pre, lp([]byte(schema))...)
@@ -130,21 +135,55 @@ func (g *gen) txFixture() txFixture {
 		agent, root     *Key
 	}
 	parties := []partySpec{
-		{"party-a", "buyer", "transact:purchase", g.k("agent"), g.k("root")},
+		{"party-a", roleA, "transact:purchase", g.k("agent"), g.k("root")},
 		{"party-b", "seller", "transact:sell", g.k("party_b_agent"), g.k("party_b_root")},
 	}
+	var bundleWires [][]byte
 	receipt := &ratify.TransactionReceiptV2{Version: 2, TransactionID: txID, CreatedAt: Now - 5, TermsSchemaURI: schema, TermsCanonicalJSON: []byte(txTerms)}
 	for _, p := range parties {
 		req := sha256Sum(append(append([]byte("ratify/transaction-party-request/v2"), lp(f.txContext)...), lp([]byte(p.scope))...))
 		ctx := sessionContext(g.k("verifier").ID, fixtureWorkspace, p.agent.ID, "session-"+p.id, "invocation-"+p.id, req)
 		cert, _, _ := g.cert(certSpec{issuer: p.root, subject: p.agent, certID: "cert-" + p.id, scope: []string{p.scope}})
 		b, bwire, _ := g.bundle(bundleSpec{agent: p.agent, certs: []ratify.DelegationCertV2{cert}, session: ctx})
+		bundleWires = append(bundleWires, bwire)
 		f.partyReq[p.id], f.partyCtx[p.id], f.bundleHash[p.id] = req, ctx, bundleHash(bwire)
 		receipt.Parties = append(receipt.Parties, ratify.TransactionReceiptPartyV2{
 			PartyID: p.id, Role: p.role, AgentID: p.agent.ID, AgentPubKey: p.agent.Pub,
 			VerifierID: g.k("verifier").ID, WorkspaceID: fixtureWorkspace, SessionID: "session-" + p.id,
 			InvocationID: "invocation-" + p.id, RequiredScope: p.scope, ProofBundleHash: bundleHash(bwire), ProofBundle: b,
 		})
+	}
+	if !bytes.Equal(canon(parse([]byte(txTerms))), []byte(txTerms)) || len(txTerms) > ratify.MaxTransactionReceiptBytesV2/2 {
+		// Terms that are not canonical, or a receipt that may exceed the byte
+		// limit, cannot pass the library encoder: build the receipt object
+		// directly from the bound parties.
+		parts := []any{}
+		for i, p := range receipt.Parties {
+			parts = append(parts, map[string]any{
+				"agent_id": p.AgentID, "agent_pub_key": pubJSON(p.AgentPubKey), "invocation_id": p.InvocationID, "party_id": p.PartyID,
+				"proof_bundle": parse(bundleWires[i]), "proof_bundle_hash": p.ProofBundleHash, "required_scope": p.RequiredScope, "role": p.Role,
+				"session_id": p.SessionID, "verifier_id": p.VerifierID, "workspace_id": p.WorkspaceID,
+			})
+		}
+		o := map[string]any{"created_at": num(receipt.CreatedAt), "parties": parts, "terms_schema_uri": receipt.TermsSchemaURI,
+			"transaction_id": receipt.TransactionID, "version": num(2)}
+		o["terms_canonical_json"] = b64([]byte(txTerms))
+		delete(o, "party_signatures")
+		projection := parse(canon(o)).(map[string]any)
+		for _, p := range arr(projection["parties"]) {
+			delete(obj(p), "proof_bundle")
+		}
+		f.signable = canon(projection)
+		sigs := []any{}
+		for _, p := range parties {
+			sig := signDet(p.agent, codeParty, f.signable)
+			sigs = append(sigs, map[string]any{"party_id": p.id, "signature": sigJSON(sig)})
+			f.sigs = append(f.sigs, signed{codeParty, p.agent, f.signable, sig})
+		}
+		o["party_signatures"] = sigs
+		f.receipt = nil
+		f.wire = canon(o)
+		return f
 	}
 	f.signable = must(ratify.TransactionReceiptV2SignBytes(receipt))
 	for _, p := range parties {

@@ -14,7 +14,8 @@ import (
 // LimitConstruction is an exact, language-neutral recipe for the vector
 // bytes, so megabyte-scale inputs are not embedded in the corpus.
 type LimitConstruction struct {
-	// Method is "inline", "pad", "repeat_items" or "repeat_item".
+	// Method is "inline", "pad", "repeat_items", "repeat_item" or
+	// "repeat_bytes".
 	Method string `json:"method"`
 	// inline: the complete object.
 	WireB64 string `json:"wire_b64,omitempty"`
@@ -32,6 +33,8 @@ type LimitConstruction struct {
 	Count           int    `json:"count,omitempty"`
 	SuffixB64       string `json:"suffix_b64,omitempty"`
 	// repeat_item: prefix || item || "," || ... || item (count times) || suffix.
+	// repeat_bytes: prefix || item || item || ... || item (count times, no
+	// separator) || suffix.
 	ItemB64 string `json:"item_b64,omitempty"`
 }
 
@@ -113,6 +116,23 @@ func BuildLimitBytes(c LimitConstruction) ([]byte, error) {
 		}
 		out.Write(suffix)
 		return out.Bytes(), nil
+	case "repeat_bytes":
+		prefix, err := b64d(c.PrefixB64)
+		if err != nil {
+			return nil, err
+		}
+		item, err := b64d(c.ItemB64)
+		if err != nil {
+			return nil, err
+		}
+		suffix, err := b64d(c.SuffixB64)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]byte, 0, len(prefix)+len(item)*c.Count+len(suffix))
+		out = append(out, prefix...)
+		out = append(out, bytes.Repeat(item, c.Count)...)
+		return append(out, suffix...), nil
 	}
 	return nil, fmt.Errorf("unknown construction method %q", c.Method)
 }
@@ -138,6 +158,7 @@ func (g *gen) limitsFile() any {
 			"MAX_STATUS_EVIDENCE_BATCH_BYTES_V2":     ratify.MaxStatusEvidenceBatchBytesV2,
 			"MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2":   ratify.MaxStatusEvidenceBatchObjectsV2,
 			"MAX_IDENTIFIER_LENGTH_BYTES":            ratify.MaxIdentifierLengthBytes,
+			"MAX_DELEGATION_CHAIN_DEPTH":             ratify.MaxDelegationChainDepth,
 		},
 		Procedure: map[string]string{
 			"delegation_certificate":    "strict v2 certificate decode",
@@ -188,6 +209,17 @@ func (g *gen) limitsFile() any {
 	bytesPair("revocation_push", "MAX_REVOCATION_PUSH_BYTES_V2", ratify.MaxRevocationPushBytesV2, pushWire, "accept", "")
 	_, listWire, _ := g.list(g.k("status_root"), root.ID, 7, Now-60, Now+3600, "cert-a", "cert-b")
 	bytesPair("revocation_list", "MAX_REVOCATION_LIST_BYTES_V2", ratify.MaxRevocationListBytesV2, listWire, "accept", "")
+
+	// Delegation chain depth (SPEC-v2 §2.6): a signed bundle whose chain has
+	// MAX_DELEGATION_CHAIN_DEPTH certificates decodes; one more is
+	// malformed at decode. Every link is signed and the chain is linked.
+	for _, c := range []struct {
+		name, expected string
+		depth          int
+	}{{"chain_depth_at_limit", "accept", ratify.MaxDelegationChainDepth}, {"chain_depth_over_limit", "reject", ratify.MaxDelegationChainDepth + 1}} {
+		add(c.name, "proof_bundle", "MAX_DELEGATION_CHAIN_DEPTH", ratify.MaxDelegationChainDepth, LimitConstruction{Method: "inline", WireB64: b64(g.deepChainBundle(c.depth))}, c.expected, "pass",
+			fmt.Sprintf("a linked chain of %d signed certificates from distinct keys", c.depth))
+	}
 
 	// Revoked-reference counts: a signed object at the count limit, and the
 	// same prefix and suffix with one more reference.
@@ -256,6 +288,19 @@ func (g *gen) limitsFile() any {
 	bytesPair("verification_receipt_body", "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2", ratify.MaxVerificationReceiptBodyBytesV2, must(ratify.VerificationReceiptV2Body(body)), "reject", canonicalOnly)
 
 	bytesPair("transaction_receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", ratify.MaxTransactionReceiptBytesV2, g.txFixture().wire, "reject", canonicalOnly)
+	// A valid, fully bound and signed receipt whose canonical encoding is
+	// exactly the byte limit, and one byte over it. The terms are one long
+	// string; its base64 repeats "eXl5" ("yyy"), so the recipe is short.
+	for _, c := range []struct {
+		name, expected, gate string
+		length               int
+	}{
+		{"valid_receipt_at_limit", "accept", "pass", ratify.MaxTransactionReceiptBytesV2},
+		{"valid_receipt_over_limit", "reject", "fail", ratify.MaxTransactionReceiptBytesV2 + 1},
+	} {
+		construction, note := g.largeTxReceipt(c.length)
+		add(c.name, "transaction_receipt", "MAX_TRANSACTION_RECEIPT_BYTES_V2", ratify.MaxTransactionReceiptBytesV2, construction, c.expected, c.gate, note)
+	}
 
 	// Status evidence batch (SPEC-v2 §6.5): byte limit by padding the
 	// canonical one-entry batch before its closing bracket, and the entry
@@ -287,7 +332,9 @@ func (g *gen) limitsFile() any {
 	batchCase("nested_unknown_and_case_variant_members", `[{"object":{"Issuer_ID":"x","extra":1},"object_type_code":3}]`, "accept", "nested member names are checked when the object is authenticated, not here")
 	batchCase("code_does_not_match_object", `[{"object":`+string(listWire)+`,"object_type_code":5}]`, "accept", "a signed list labelled code 5; the label is checked when the object is authenticated")
 	nested := func(object string) string { return `[{"object":` + object + `,"object_type_code":3}]` }
-	deep := func(levels int) string { return strings.Repeat(`{"a":`, levels-1) + `{}` + strings.Repeat(`}`, levels-1) }
+	deep := func(levels int) string {
+		return strings.Repeat(`{"a":`, levels-1) + `{}` + strings.Repeat(`}`, levels-1)
+	}
 	valueModel := "the JSON value model applies to the whole batch document, including the nested object"
 	batchCase("nested_duplicate_member", nested(`{"a":1,"a":2}`), "reject", valueModel)
 	batchCase("nested_duplicate_member_escaped", nested(`{"a":1,"\u0061":2}`), "reject", valueModel+"; member names compare after escapes are decoded")
@@ -339,3 +386,73 @@ func (g *gen) limitsFile() any {
 }
 
 func b64d(s string) ([]byte, error) { return base64.StdEncoding.Strict().DecodeString(s) }
+
+// largeTxReceipt builds the two-party receipt whose terms are
+// {"pad":"yyy...y"} sized so the canonical wire is exactly length bytes,
+// adjusting the first party's role by up to three bytes to reach a length
+// the base64 granularity cannot.
+func (g *gen) largeTxReceipt(length int) (LimitConstruction, string) {
+	const head = `{"pad":"y` // 9 bytes: three whole base64 groups
+	for extra := 0; extra < 4; extra++ {
+		role := "buyer" + strings.Repeat("x", extra)
+		base := len(g.txFixtureWith("tx-0001", head+`"}`, role).wire)
+		if (length-base)%4 != 0 {
+			continue
+		}
+		count := (length - base) / 4
+		terms := head + strings.Repeat("yyy", count) + `"}`
+		wire := g.txFixtureWith("tx-0001", terms, role).wire
+		if len(wire) != length {
+			panic(fmt.Sprintf("large transaction receipt is %d bytes, want %d", len(wire), length))
+		}
+		if _, err := ratify.DecodeTransactionReceiptV2(wire); (err == nil) != (length <= ratify.MaxTransactionReceiptBytesV2) {
+			panic(fmt.Sprintf("large transaction receipt of %d bytes: decode error %v", length, err))
+		}
+		start := bytes.Index(wire, []byte(`"terms_canonical_json":"`)) + len(`"terms_canonical_json":"`) + 12
+		end := start + 4*count
+		c := LimitConstruction{Method: "repeat_bytes", PrefixB64: b64(wire[:start]), ItemB64: b64([]byte("eXl5")), Count: count, SuffixB64: b64(wire[end:])}
+		if !bytes.Equal(must(BuildLimitBytes(c)), wire) {
+			panic("repeat_bytes recipe does not reproduce the large transaction receipt")
+		}
+		return c, fmt.Sprintf("two fully bound, signed parties; terms {\"pad\":\"%d x y\"}; parties[0].role %q", 1+3*count, role)
+	}
+	panic("no role padding reaches the transaction receipt length")
+}
+
+// deepChainBundle builds a bundle whose chain has depth certificates, each
+// from a distinct key derived for this purpose only (not keys.json keys).
+func (g *gen) deepChainBundle(depth int) []byte {
+	keys := make([]*Key, depth+1) // keys[0] is the root, keys[depth] the agent
+	for i := range keys {
+		var ed, ml [32]byte
+		for j := range ed {
+			ed[j], ml[j] = byte(0x60+i), byte(0xe0+i)
+		}
+		pub, priv := must2(ratify.HybridKeypairFromSeeds(ed, ml))
+		keys[i] = &Key{Name: fmt.Sprintf("chain_%d", i), Pub: pub, Priv: priv, ID: keyIDV2(pub), EdSeed: ed, MLSeed: ml}
+	}
+	certs := make([]ratify.DelegationCertV2, 0, depth)
+	for i := depth - 1; i >= 0; i-- { // leaf first
+		scope := []string{"data:read", "identity:delegate"}
+		if i == depth-1 {
+			scope = []string{"data:read"}
+		}
+		c, _, _ := g.cert(certSpec{issuer: keys[i], subject: keys[i+1], certID: fmt.Sprintf("cert-depth-%d", i), scope: scope})
+		certs = append(certs, c)
+	}
+	agent := keys[depth]
+	if depth <= ratify.MaxDelegationChainDepth {
+		_, wire, _ := g.bundle(bundleSpec{agent: agent, certs: certs})
+		return wire
+	}
+	// The library encoder refuses a chain over the limit: encode the
+	// longest valid prefix, then add the remaining links and re-sign.
+	_, wire, _ := g.bundle(bundleSpec{agent: agent, certs: certs[:ratify.MaxDelegationChainDepth]})
+	o := parse(wire).(map[string]any)
+	all := []any{}
+	for _, c := range certs {
+		all = append(all, parse(must(ratify.EncodeDelegationCertV2(&c))))
+	}
+	o["delegations"] = all
+	return g.resign(o, agent)
+}

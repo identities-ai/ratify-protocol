@@ -268,6 +268,14 @@ func TestV2ConformanceDigestFunctions(t *testing.T) {
 			var err error
 			switch c.Function {
 			case "statement_body_digest":
+				if c.ObjectTypeCode < 0 || c.ObjectTypeCode > 0xffff {
+					// The code parameter is 16 bits: such a code cannot be
+					// passed, and must never be truncated to one that can.
+					if c.ExpectedErrorClass != "unsupported_object_type" {
+						t.Fatalf("code %#x outside 16 bits, want class %q", c.ObjectTypeCode, c.ExpectedErrorClass)
+					}
+					return
+				}
 				digest, err = ratify.StatementBodyDigestV2(uint16(c.ObjectTypeCode), input)
 			case "status_evidence_digest":
 				list, derr := ratify.DecodeRevocationListV2(input)

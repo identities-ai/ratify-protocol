@@ -425,7 +425,7 @@ fn v2c_object_negatives() {
     assert!(kinds.len() >= 9, "negative kinds: {kinds:?}");
     assert_eq!(
         arr(&f["vectors"]).len(),
-        433,
+        473,
         "object-negatives.json vectors"
     );
     t.finish(&[("negatives", arr(&f["vectors"]).len())]);
@@ -563,6 +563,12 @@ fn build_limit_bytes(c: &Value) -> Vec<u8> {
                 }
                 out.extend_from_slice(format!("{prefix}{k:0digits$}{suffix}").as_bytes());
             }
+            out.extend(opt_b64("suffix_b64"));
+            out
+        }
+        "repeat_bytes" => {
+            let mut out = opt_b64("prefix_b64");
+            out.extend_from_slice(&b64(&c["item_b64"]).repeat(i(&c["count"]) as usize));
             out.extend(opt_b64("suffix_b64"));
             out
         }

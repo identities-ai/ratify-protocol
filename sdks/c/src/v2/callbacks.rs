@@ -2072,7 +2072,16 @@ pub(crate) unsafe fn evaluator_registry(
         std::slice::from_raw_parts(config.registrations, config.count)
     };
     let mut registrations = Vec::new();
-    for r in regs {
+    for (i, r) in regs.iter().enumerate() {
+        // A custom registration must carry its implementation (SPEC-v2
+        // §5.2), checked here, before any claim, as the other SDKs do.
+        if r.implementation == 0 && r.evaluate.is_none() {
+            return Err(V2Error::new(
+                V2ErrorClass::ConfigurationInvalid,
+                format!("v2 constraint evaluator {i} has no implementation"),
+            )
+            .into());
+        }
         let descriptor = ConstraintProfileDescriptorV2 {
             profile: super::cstr(r.profile, "evaluator profile")?.to_string(),
             kind: super::cstr(r.constraint_type, "evaluator constraint_type")?.to_string(),

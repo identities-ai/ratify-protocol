@@ -182,7 +182,21 @@ type v2OrderingVector struct {
 		AllowValidUntil     int64        `json:"allow_valid_until"`
 		RateBatch           []v2Rate     `json:"rate_batch"`
 		CallbackCounts      v2Counts     `json:"callback_counts"`
+		// StatusRequests is every status-provider request in call order
+		// (SPEC-v2 §6.5 step 3); nil only when the vector omits it.
+		StatusRequests *[]v2StatusRequest `json:"status_requests"`
 	} `json:"expected"`
+}
+
+// v2StatusRequest is one recorded status-provider request.
+type v2StatusRequest struct {
+	IssuerID       string `json:"issuer_id"`
+	StatusKeyEpoch uint64 `json:"status_key_epoch"`
+	StatusKeyID    string `json:"status_key_id"`
+	Refs           []struct {
+		IssuerID string `json:"issuer_id"`
+		CertID   string `json:"cert_id"`
+	} `json:"refs"`
 }
 
 // v2ScriptedClaimStore is a single-claim, in-memory test double used by the
@@ -586,6 +600,13 @@ func runV2OrderingVector(t *testing.T, v v2OrderingVector, bundle []byte) {
 	if v.ClaimStore == "absent" {
 		cb.ClaimStore = nil
 	}
+	var requests []ratify.V2StatusEvidenceRequest
+	if provider := cb.StatusEvidence; provider != nil {
+		cb.StatusEvidence = func(ctx context.Context, r ratify.V2StatusEvidenceRequest) (ratify.V2StatusEvidenceBatch, error) {
+			requests = append(requests, r)
+			return provider(ctx, r)
+		}
+	}
 
 	outcome, err := ratify.VerifyProofBundleV2(context.Background(), req, cb)
 	want := v.Expected
@@ -603,6 +624,24 @@ func runV2OrderingVector(t *testing.T, v v2OrderingVector, bundle []byte) {
 	}
 	if *counts != want.CallbackCounts {
 		t.Errorf("callback counts %+v, want %+v", *counts, want.CallbackCounts)
+	}
+	if want.StatusRequests == nil {
+		t.Fatal("vector has no expected status_requests")
+	}
+	var gotRequests []string
+	for _, r := range requests {
+		gotRequests = append(gotRequests, fmt.Sprintf("%s %d %s %v", r.IssuerID, r.StatusKeyEpoch, r.StatusKeyID, r.Refs))
+	}
+	var wantRequests []string
+	for _, r := range *want.StatusRequests {
+		refs := []ratify.CertificateRefV2{}
+		for _, ref := range r.Refs {
+			refs = append(refs, ratify.CertificateRefV2{IssuerID: ref.IssuerID, CertID: ref.CertID})
+		}
+		wantRequests = append(wantRequests, fmt.Sprintf("%s %d %s %v", r.IssuerID, r.StatusKeyEpoch, r.StatusKeyID, refs))
+	}
+	if strings.Join(gotRequests, "\n") != strings.Join(wantRequests, "\n") {
+		t.Errorf("status requests:\n got %v\nwant %v", gotRequests, wantRequests)
 	}
 	if want.Stage != "committed" {
 		if outcome.Committed != nil {

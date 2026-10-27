@@ -2600,8 +2600,9 @@ int32_t ratify_v2_check_stream_sequence(int32_t has_last, int64_t last, int64_t 
 // distinct sealed issuer IDs), `required_scope` and `constraint_evaluators`
 // equal the sealed claim's, whose `context_policy_digest` equals the sealed
 // claim's (null for a policy-less claim) unless `context_assessment` is
-// `not_evaluated`, when it is null, and the terminal result is a JSON
-// object whose `decision` and `decision_reason` equal the body's. Otherwise
+// `not_evaluated`, when it is null, and the terminal result is exactly the
+// RatifyCanonicalJSON of the body's `decision`, `decision_reason` and
+// `identity_status` (SPEC-v2 §7.13). Otherwise
 // `malformed` (the body does not decode) or `configuration_invalid` (any
 // difference); a store commits nothing in either case. A `claim_record` that is not a claim record is
 // `bad_argument`.
@@ -3422,8 +3423,9 @@ int32_t ratify_v2_claim_proof_bundle(const uint8_t *bundle,
 
 // Lease-expiry recovery (SPEC-v2 §7.5): load an interrupted claim after its
 // lease expired and commit the canonical `indeterminate /
-// evaluation_interrupted` result built from its recorded progress. On
-// success `*committed_out` is the committed outcome.
+// evaluation_interrupted` result built from its recorded progress.
+// `*committed_out` is set to NULL on entry; on success it is the committed
+// outcome, so it is NULL after every call that fails.
 int32_t ratify_v2_recover_interrupted_claim(const struct RatifyV2ClaimStoreCallbacks *claim_store,
                                             const char *claim_id,
                                             struct RatifyV2Committed **committed_out);
@@ -3434,9 +3436,10 @@ int32_t ratify_v2_recover_interrupted_claim(const struct RatifyV2ClaimStoreCallb
 // for a service whose handoff was lost after the terminal commit (for
 // example a crash before `ratify_v2_verify_proof_bundle` returned). Nothing
 // is built, re-evaluated or committed; a record that fails a check is
-// `RatifyV2ClaimStoreUnavailable`. On success `*committed_out` is the
-// committed outcome; publication, checkpoint and release then proceed as
-// for a returned one.
+// `RatifyV2ClaimStoreUnavailable`. `*committed_out` is set to NULL on
+// entry; on success it is the committed outcome, so it is NULL after every
+// call that fails. Publication, checkpoint and release then proceed as for
+// a returned one.
 int32_t ratify_v2_resume_committed_claim(const struct RatifyV2CommittedStoreCallbacks *store,
                                          const char *claim_id,
                                          struct RatifyV2Committed **committed_out);

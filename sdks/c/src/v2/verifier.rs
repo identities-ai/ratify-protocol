@@ -291,8 +291,9 @@ pub unsafe extern "C" fn ratify_v2_claim_proof_bundle(
 
 /// Lease-expiry recovery (SPEC-v2 §7.5): load an interrupted claim after its
 /// lease expired and commit the canonical `indeterminate /
-/// evaluation_interrupted` result built from its recorded progress. On
-/// success `*committed_out` is the committed outcome.
+/// evaluation_interrupted` result built from its recorded progress.
+/// `*committed_out` is set to NULL on entry; on success it is the committed
+/// outcome, so it is NULL after every call that fails.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_recover_interrupted_claim(
     claim_store: *const RatifyV2ClaimStoreCallbacks,
@@ -332,9 +333,10 @@ pub unsafe extern "C" fn ratify_v2_recover_interrupted_claim(
 /// for a service whose handoff was lost after the terminal commit (for
 /// example a crash before `ratify_v2_verify_proof_bundle` returned). Nothing
 /// is built, re-evaluated or committed; a record that fails a check is
-/// `RatifyV2ClaimStoreUnavailable`. On success `*committed_out` is the
-/// committed outcome; publication, checkpoint and release then proceed as
-/// for a returned one.
+/// `RatifyV2ClaimStoreUnavailable`. `*committed_out` is set to NULL on
+/// entry; on success it is the committed outcome, so it is NULL after every
+/// call that fails. Publication, checkpoint and release then proceed as for
+/// a returned one.
 #[no_mangle]
 pub unsafe extern "C" fn ratify_v2_resume_committed_claim(
     store: *const RatifyV2CommittedStoreCallbacks,

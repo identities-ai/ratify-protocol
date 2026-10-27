@@ -140,6 +140,26 @@ fn check_release(step: usize, result: V2ReleaseResult, want: &Value) -> Option<V
 
 /// Go `v2WrongEntryCheckpoint`: acknowledgements report a different entry
 /// hash.
+/// Answers every release record with a fixed error and records nothing; the
+/// other operations reach the store.
+struct FailingRecordStore(Arc<Store>, fn() -> V2StoreError);
+
+impl V2AuthoritativeClock for FailingRecordStore {
+    fn authoritative_time_v2(&self, ctx: &V2Context) -> Result<i64, V2StoreError> {
+        self.0.authoritative_time_v2(ctx)
+    }
+}
+
+impl V2ReleaseClaimStore for FailingRecordStore {
+    fn load_v2_terminal_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError> {
+        self.0.load_v2_terminal_claim(ctx, claim_id)
+    }
+
+    fn record_v2_release(&self, _ctx: &V2Context, _record: V2ReleaseRecord) -> Result<(), V2StoreError> {
+        Err((self.1)())
+    }
+}
+
 struct WrongEntryCheckpoint(Arc<Store>);
 
 impl V2ReceiptCheckpoint for WrongEntryCheckpoint {
@@ -700,6 +720,18 @@ fn lifecycle_scenarios() {
                     } else {
                         store.as_ref()
                     };
+                    let failing = FailingRecordStore(
+                        store.clone(),
+                        if mode == "record_release_state_mismatch" {
+                            || V2StoreError::ReleaseStateMismatch
+                        } else {
+                            || V2StoreError::Unavailable("claim store unavailable".into())
+                        },
+                    );
+                    let claim_store: &dyn V2ReleaseClaimStore = match mode.as_str() {
+                        "record_release_unavailable" | "record_release_state_mismatch" => &failing,
+                        _ => store.as_ref(),
+                    };
                     let result = release_v2_decision(
                         &ctx,
                         c,
@@ -707,7 +739,7 @@ fn lifecycle_scenarios() {
                         V2ReleaseConfig {
                             verifier_public_key: &verifier_public,
                             log_id: &log_id,
-                            claim_store: store.as_ref(),
+                            claim_store,
                             checkpoint,
                         },
                     );
@@ -729,9 +761,9 @@ fn lifecycle_scenarios() {
             }
         }
     }
-    assert_eq!((scenarios.len(), steps), (80, 427), "Part B scripts");
+    assert_eq!((scenarios.len(), steps), (108, 579), "Part B scripts");
     let readme = readme_line("lifecycle-scenarios.json");
-    assert!(readme.contains("80 Part B scripts (427 steps)"), "README row: {readme}");
+    assert!(readme.contains("108 Part B scripts (579 steps)"), "README row: {readme}");
 }
 
 // ---------------------------------------------------------------------------

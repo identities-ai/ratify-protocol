@@ -252,7 +252,14 @@ fn v2_conformance_digest_functions() {
     for c in &cases {
         let name = s(&c["name"]);
         let input = unb64(&c["input_b64"]);
-        let code = u16::try_from(i(&c["object_type_code"])).expect("u16 code");
+        let Ok(code) = u16::try_from(i(&c["object_type_code"])) else {
+            // The code parameter is 16 bits: such a code cannot be passed,
+            // and must never be truncated to one that can.
+            if s(&c["expected_error_class"]) != "unsupported_object_type" {
+                failures.push(format!("{name}: code outside 16 bits must be unsupported_object_type"));
+            }
+            continue;
+        };
         let digest = match s(&c["function"]).as_str() {
             "statement_body_digest" => statement_body_digest_v2(code, &input),
             "status_evidence_digest" => {
@@ -275,7 +282,7 @@ fn v2_conformance_digest_functions() {
         }
     }
     assert!(failures.is_empty(), "{} digest case(s) failed:\n{}", failures.len(), failures.join("\n"));
-    assert_eq!(cases.len(), 16, "digest function cases");
+    assert_eq!(cases.len(), 25, "digest function cases");
     let readme = readme_line("digest-functions.json");
-    assert!(readme.contains("16 cases for `StatementBodyDigest`"), "README row: {readme}");
+    assert!(readme.contains("25 cases for `StatementBodyDigest`"), "README row: {readme}");
 }

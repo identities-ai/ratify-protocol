@@ -548,8 +548,8 @@ pub fn bind_claim_to_receipt_body(claim: &mut V2ChallengeClaim, verified_at: i64
     claim.context_policy_digest = body.context_policy_digest.clone().unwrap_or_default();
     claim.constraint_evaluators = body.constraint_evaluators.clone();
     let terminal = format!(
-        r#"{{"decision":"{}","decision_reason":"{}"}}"#,
-        body.decision, body.decision_reason
+        r#"{{"decision":"{}","decision_reason":"{}","identity_status":"{}"}}"#,
+        body.decision, body.decision_reason, body.identity_status
     );
     (terminal.into_bytes(), verification_receipt_v2_body(&body).expect("body"))
 }

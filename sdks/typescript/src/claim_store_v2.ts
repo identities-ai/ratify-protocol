@@ -9,7 +9,7 @@ import { v2ChallengeTimeCurrent } from "./clock_bounds_v2.js";
 import { CONSTRAINT_MAX_RATE_V2 } from "./constraints_v2.js";
 import { cloneConstraintEvaluatorRefsV2, type ConstraintEvaluatorRefV2 } from "./constraint_evaluator_v2.js";
 import { classifiedAsync, errorIs, ErrV2RateLimitExceeded, v2Classify, v2Errorf, wrapError } from "./errors_v2.js";
-import { bytesEqual, compareStrings, concatBytes, hexOf, isValidUTF8, parseJSONV2, uint64BE } from "./json_v2.js";
+import { bytesEqual, canonicalJSONV2, compareStrings, concatBytes, hexOf, isValidUTF8, parseJSONV2, uint64BE } from "./json_v2.js";
 import { bundleHashV2, constraintCanonicalJSONV2, type ProofBundleV2 } from "./protocol_v2_wire.js";
 import type { V2LocalAuthorizationAssessment } from "./authorization_v2.js";
 import type { V2EvaluationProgress, V2InterruptedClaim } from "./evaluation_progress_v2.js";
@@ -315,15 +315,16 @@ export function terminalDecisionForV2Evaluation(status: string, reason: string):
   }
 }
 
-function readTerminalPayload(value: Uint8Array): [string, string] | null {
+function readTerminalPayload(value: Uint8Array): [string, string, string] | null {
   if (!isValidUTF8(value)) return null;
   try {
     const root = parseJSONV2(value, { rejectDuplicates: true });
     if (root.k !== "obj") return null;
     const d = root.m.get("decision");
     const r = root.m.get("decision_reason");
-    if (!d || !r || d.k !== "str" || r.k !== "str") return null;
-    return [d.v, r.v];
+    const s = root.m.get("identity_status");
+    if (!d || !r || !s || d.k !== "str" || r.k !== "str" || s.k !== "str") return null;
+    return [d.v, r.v, s.v];
   } catch {
     return null;
   }
@@ -331,9 +332,11 @@ function readTerminalPayload(value: Uint8Array): [string, string] | null {
 
 /** Go terminalPayloadMatchesV2. */
 export function terminalPayloadMatchesV2(terminalResult: Uint8Array, receiptBody: Uint8Array, wantDecision: string, wantReason: string): boolean {
-  const a = readTerminalPayload(terminalResult);
   const b = readTerminalPayload(receiptBody);
-  return a !== null && b !== null && a[0] === wantDecision && b[0] === wantDecision && a[1] === wantReason && b[1] === wantReason;
+  if (b === null || b[0] !== wantDecision || b[1] !== wantReason) return false;
+  // The sealed terminal result is exactly the RatifyCanonicalJSON of the
+  // body's decision, decision_reason and identity_status (SPEC-v2 §7.13).
+  return bytesEqual(terminalResult, canonicalJSONV2({ decision: b[0], decision_reason: b[1], identity_status: b[2] }));
 }
 
 /**
@@ -345,8 +348,8 @@ export function terminalPayloadMatchesV2(terminalResult: Uint8Array, receiptBody
  * must equal the sealed claim's values; its context_policy_digest must equal
  * the sealed claim's (null for a policy-less claim) unless
  * context_assessment is not_evaluated, when it must be null. The terminal
- * result must be a JSON object whose
- * decision and decision_reason equal the body's; any difference is
+ * result must be exactly the RatifyCanonicalJSON of the body's decision,
+ * decision_reason and identity_status (SPEC-v2 §7.13); any difference is
  * configuration_invalid. finalizeClaimProofBundleV2 applies it before the
  * store is called, and a claim store applies it inside its finalization
  * compare-and-set so that no caller can commit a body for another proof.
@@ -374,7 +377,7 @@ export function validateV2FinalizationPayload(claim: V2ChallengeClaim, terminalR
       throw new Error("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot");
     }
     if (!terminalPayloadMatchesV2(terminalResult, receiptBody, body.decision, body.decision_reason)) {
-      throw new Error("v2 terminal result decision or reason differs from the receipt body");
+      throw new Error("v2 terminal result is not the canonical decision, reason and identity status of the receipt body");
     }
   } catch (err) {
     throw v2Classify("configuration_invalid", err);
@@ -409,10 +412,10 @@ export async function finalizeClaimProofBundleV2(
       if (!state.evaluationComplete) throw v2Errorf("configuration_invalid", "v2 proof evaluation has not completed");
       const decision = terminalDecisionForV2Evaluation(state.evaluationStatus, state.evaluationReason);
       if (decision === null) throw v2Errorf("configuration_invalid", "v2 proof evaluation has not reached a terminal local result");
+      validateV2FinalizationPayload(state.claim, terminal, body);
       if (!terminalPayloadMatchesV2(terminal, body, decision, state.evaluationReason)) {
         throw v2Errorf("configuration_invalid", "v2 terminal result does not match the completed local evaluation");
       }
-      validateV2FinalizationPayload(state.claim, terminal, body);
       if ((decision === "allow" && state.allowValidUntil <= 0) || (decision !== "allow" && state.allowValidUntil !== 0)) {
         throw v2Errorf("configuration_invalid", "v2 terminal result lacks a valid allow freshness horizon");
       }

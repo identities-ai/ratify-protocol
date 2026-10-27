@@ -313,6 +313,17 @@ func v2ClaimFromRecord(t *testing.T, record []byte) ratify.V2ChallengeClaim {
 }
 
 // v2WrongEntryCheckpoint reports acknowledgements for a different entry hash.
+// v2FailingRecordStore answers every release record with err and records
+// nothing; the other operations reach the store.
+type v2FailingRecordStore struct {
+	ratify.V2ReleaseClaimStore
+	err error
+}
+
+func (s v2FailingRecordStore) RecordV2Release(context.Context, ratify.V2ReleaseRecord) error {
+	return s.err
+}
+
 type v2WrongEntryCheckpoint struct{ inner ratify.V2ReceiptCheckpoint }
 
 func (c v2WrongEntryCheckpoint) AcknowledgeV2Receipt(ctx context.Context, logID string, sequence int64, previous, entry []byte) (ratify.V2CheckpointAcknowledgement, error) {
@@ -689,8 +700,13 @@ func TestV2ConformanceLifecycleScenarios(t *testing.T) {
 					if step.Checkpoint == "wrong_entry" {
 						cfg.Checkpoint = v2WrongEntryCheckpoint{inner: store}
 					}
-					if step.Mode == "no_receipt" {
+					switch step.Mode {
+					case "no_receipt":
 						receipt = nil
+					case "record_release_unavailable":
+						cfg.ClaimStore = v2FailingRecordStore{V2ReleaseClaimStore: store, err: errors.New("claim store unavailable")}
+					case "record_release_state_mismatch":
+						cfg.ClaimStore = v2FailingRecordStore{V2ReleaseClaimStore: store, err: ratify.ErrV2ReleaseStateMismatch}
 					}
 					if step.Op == "release_forged" {
 						c, receipt = &ratify.CommittedV2Outcome{}, nil

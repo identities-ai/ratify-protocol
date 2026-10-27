@@ -512,6 +512,34 @@ func encodeTransactionReceiptV2Canonical(receipt *TransactionReceiptV2) ([]byte,
 	return encoded, nil
 }
 
+// transactionReceiptV2WireIsCanonical reports whether data is the canonical
+// encoding of wire, judged without decoding any proof bundle.
+func transactionReceiptV2WireIsCanonical(wire *transactionReceiptWireV2, data []byte) bool {
+	for i := 1; i < len(wire.Parties); i++ {
+		if bytes.Compare([]byte(wire.Parties[i-1].PartyID), []byte(wire.Parties[i].PartyID)) > 0 {
+			return false
+		}
+	}
+	for i := 1; i < len(wire.PartySignatures); i++ {
+		if bytes.Compare([]byte(wire.PartySignatures[i-1].PartyID), []byte(wire.PartySignatures[i].PartyID)) > 0 {
+			return false
+		}
+	}
+	generic := *wire
+	generic.Parties = append([]transactionReceiptPartyWireV2(nil), wire.Parties...)
+	for i, party := range generic.Parties {
+		value, err := parseV2JSONValue(party.ProofBundle)
+		if err != nil {
+			return false
+		}
+		if generic.Parties[i].ProofBundle, err = CanonicalJSON(value); err != nil {
+			return false
+		}
+	}
+	outer, err := CanonicalJSON(generic)
+	return err == nil && bytes.Equal(outer, data)
+}
+
 // DecodeTransactionReceiptV2 strictly decodes the v2 transaction receipt and
 // verifies party signatures and embedded bundle identity/context bindings.
 // Trust, status, freshness, and final scope authorization require verifier
@@ -559,6 +587,14 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	if err := requireV2RoundTrip(data, &wire); err != nil {
 		return nil, err
 	}
+	// Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
+	// receipt, with each proof bundle in its generic canonical form and both
+	// party arrays in party_id order, is compared with the received bytes
+	// before any bundle is decoded, so a non-canonical receipt is malformed
+	// whatever its bundles hold.
+	if !transactionReceiptV2WireIsCanonical(&wire, data) {
+		return nil, fmt.Errorf("wire v2: transaction receipt is not canonical JSON")
+	}
 	receipt := &TransactionReceiptV2{
 		Version: wire.Version, TransactionID: wire.TransactionID, CreatedAt: wire.CreatedAt,
 		TermsSchemaURI: wire.TermsSchemaURI, TermsCanonicalJSON: wire.TermsCanonicalJSON,
@@ -584,12 +620,6 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 		if !validPrefixedDigestV2(party.ProofBundleHash) {
 			return nil, v2Errorf(V2ErrMalformed, "wire v2: party %q proof_bundle_hash is not sha384: followed by 96 lowercase hex characters", party.PartyID)
 		}
-		hash := sha512.New384()
-		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))
-		hash.Write(party.ProofBundle)
-		if party.ProofBundleHash != "sha384:"+hex.EncodeToString(hash.Sum(nil)) {
-			return nil, v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its canonical bundle bytes", party.PartyID)
-		}
 		receipt.Parties[i] = TransactionReceiptPartyV2{
 			PartyID: party.PartyID, Role: party.Role, AgentID: party.AgentID,
 			AgentPubKey: party.AgentPubKey, VerifierID: party.VerifierID, WorkspaceID: party.WorkspaceID,
@@ -600,15 +630,26 @@ func DecodeTransactionReceiptV2(data []byte) (_ *TransactionReceiptV2, err error
 	for i, signature := range wire.PartySignatures {
 		receipt.PartySignatures[i] = TransactionReceiptSignatureV2{PartyID: signature.PartyID, Signature: signature.Signature}
 	}
-	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
-		return nil, err
-	}
+	// Canonical form is part of strict decode (SPEC-v2 §2.1), so it is
+	// checked before any bundle hash, binding or signature: a non-canonical
+	// receipt is malformed whatever else is wrong with it.
 	canonical, err := encodeTransactionReceiptV2Canonical(receipt)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(canonical, data) {
 		return nil, fmt.Errorf("wire v2: transaction receipt is not canonical JSON")
+	}
+	for _, party := range wire.Parties {
+		hash := sha512.New384()
+		hash.Write([]byte("ratify-protocol-bundle-v2\x00"))
+		hash.Write(party.ProofBundle)
+		if party.ProofBundleHash != "sha384:"+hex.EncodeToString(hash.Sum(nil)) {
+			return nil, v2Errorf(V2ErrBundleHashMismatch, "wire v2: party %q proof_bundle_hash does not match its canonical bundle bytes", party.PartyID)
+		}
+	}
+	if err := VerifyTransactionReceiptV2Signatures(receipt); err != nil {
+		return nil, err
 	}
 	return receipt, nil
 }

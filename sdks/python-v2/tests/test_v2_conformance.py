@@ -376,7 +376,7 @@ def test_object_negatives_cover_every_kind():
     assert kinds == {"delegation_certificate", "proof_bundle", "revocation_list", "revocation_push",
                      "key_rotation_statement", "witness_entry", "transaction_receipt", "verification_receipt",
                      "receipt_bundle_binding"}
-    assert len(NEGATIVES["vectors"]) == 433
+    assert len(NEGATIVES["vectors"]) == 473
 
 
 # ---------------------------------------------------------------------------

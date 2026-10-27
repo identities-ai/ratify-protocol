@@ -329,11 +329,11 @@ func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *
 	if !ok {
 		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 proof evaluation has not reached a terminal local result")
 	}
-	if !terminalPayloadMatchesV2(terminalResult, receiptBody, decision, token.state.evaluationReason) {
-		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result does not match the completed local evaluation")
-	}
 	if err := ValidateV2FinalizationPayload(token.state.claim, terminalResult, receiptBody); err != nil {
 		return false, err
+	}
+	if !terminalPayloadMatchesV2(terminalResult, receiptBody, decision, token.state.evaluationReason) {
+		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result does not match the completed local evaluation")
 	}
 	if decision == "allow" && token.state.allowValidUntil <= 0 || decision != "allow" && token.state.allowValidUntil != 0 {
 		return false, v2Errorf(V2ErrConfigurationInvalid, "v2 terminal result lacks a valid allow freshness horizon")
@@ -369,8 +369,9 @@ func FinalizeClaimProofBundleV2(ctx context.Context, store ClaimStoreV2, token *
 // distinct sealed issuer IDs), required_scope, and constraint_evaluators must
 // equal the sealed claim's values; its context_policy_digest must equal the
 // sealed claim's (null for a policy-less claim) unless context_assessment is
-// not_evaluated, when it must be null. The terminal result must be a JSON object whose
-// decision and decision_reason equal the body's; any difference is
+// not_evaluated, when it must be null. The terminal result must be exactly
+// the RatifyCanonicalJSON of the body's decision, decision_reason and
+// identity_status (SPEC-v2 §7.13); any difference is
 // configuration_invalid. FinalizeClaimProofBundleV2 applies it before the
 // store is called, and a claim store applies it inside its finalization
 // compare-and-set so that no caller can commit a body for another proof.
@@ -404,7 +405,7 @@ func ValidateV2FinalizationPayload(claim V2ChallengeClaim, terminalResult, recei
 		return fmt.Errorf("v2 receipt body constraint_evaluators differ from the sealed evaluator snapshot")
 	}
 	if !terminalPayloadMatchesV2(terminalResult, receiptBody, body.Decision, body.DecisionReason) {
-		return fmt.Errorf("v2 terminal result decision or reason differs from the receipt body")
+		return fmt.Errorf("v2 terminal result is not the canonical decision, reason and identity status of the receipt body")
 	}
 	return nil
 }
@@ -434,31 +435,32 @@ func terminalDecisionForV2Evaluation(status, reason string) (string, bool) {
 }
 
 func terminalPayloadMatchesV2(terminalResult, receiptBody []byte, wantDecision, wantReason string) bool {
-	read := func(value []byte) (string, string, bool) {
-		if !utf8.Valid(value) {
-			return "", "", false
-		}
-		decoder := json.NewDecoder(bytes.NewReader(value))
-		root, err := decoder.Token()
-		if err != nil || root != json.Delim('{') || validateUniqueJSONObjectV2(decoder) != nil {
-			return "", "", false
-		}
-		if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-			return "", "", false
-		}
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(value, &fields) != nil || fields == nil {
-			return "", "", false
-		}
-		var decision, reason string
-		if json.Unmarshal(fields["decision"], &decision) != nil || json.Unmarshal(fields["decision_reason"], &reason) != nil {
-			return "", "", false
-		}
-		return decision, reason, true
+	if !utf8.Valid(receiptBody) {
+		return false
 	}
-	resultDecision, resultReason, resultOK := read(terminalResult)
-	bodyDecision, bodyReason, bodyOK := read(receiptBody)
-	return resultOK && bodyOK && resultDecision == wantDecision && bodyDecision == wantDecision && resultReason == wantReason && bodyReason == wantReason
+	decoder := json.NewDecoder(bytes.NewReader(receiptBody))
+	root, err := decoder.Token()
+	if err != nil || root != json.Delim('{') || validateUniqueJSONObjectV2(decoder) != nil {
+		return false
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(receiptBody, &fields) != nil || fields == nil {
+		return false
+	}
+	var decision, reason, identity string
+	if json.Unmarshal(fields["decision"], &decision) != nil || json.Unmarshal(fields["decision_reason"], &reason) != nil || json.Unmarshal(fields["identity_status"], &identity) != nil {
+		return false
+	}
+	if decision != wantDecision || reason != wantReason {
+		return false
+	}
+	// The sealed terminal result is exactly the RatifyCanonicalJSON of the
+	// body's decision, decision_reason and identity_status (SPEC-v2 §7.13).
+	want, err := CanonicalJSON(map[string]string{"decision": decision, "decision_reason": reason, "identity_status": identity})
+	return err == nil && bytes.Equal(terminalResult, want)
 }
 
 // validateUniqueJSONObjectV2 consumes a root object whose opening delimiter

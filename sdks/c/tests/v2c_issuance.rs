@@ -263,6 +263,14 @@ fn run_scenario(sc: &Value, fx: &Fixture) -> usize {
                         (i(&exp["issued_at"]), i(&exp["expires_at"])),
                         "{name} step {n}"
                     );
+                    // The record omits an expected receiver it does not name.
+                    if !exp["expected_receiver_id"].is_null() {
+                        assert_eq!(
+                            s(&got["expected_receiver_id"]),
+                            s(&exp["expected_receiver_id"]),
+                            "{name} step {n}: load receiver"
+                        );
+                    }
                 } else {
                     let class = got.err().map(|e| e.class).unwrap_or_default();
                     assert_eq!(class, s(&exp["result"]), "{name} step {n}: load class");
@@ -304,7 +312,7 @@ fn v2c_challenge_issuance() {
     assert_eq!(steps, want, "every issuance step must run");
     assert_eq!(
         (scenarios.len(), steps),
-        (10, 36),
+        (11, 42),
         "challenge-issuance.json"
     );
     println!(

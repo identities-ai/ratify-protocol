@@ -17,11 +17,11 @@ VECTORS = FILE["vectors"]
 
 
 def test_ordering_corpus_shape():
-    assert len(VECTORS) == 485
+    assert len(VECTORS) == 515
     stages = {}
     for v in VECTORS:
         stages[v["expected"]["stage"]] = stages.get(v["expected"]["stage"], 0) + 1
-    assert stages == {"preflight": 135, "replay": 2, "committed": 346, "evaluating": 2}
+    assert stages == {"preflight": 149, "replay": 2, "committed": 362, "evaluating": 2}
 
 
 @pytest.mark.parametrize("v", VECTORS, ids=[v["name"] for v in VECTORS])
@@ -33,6 +33,15 @@ def test_verifier_ordering(v):
     store = ScriptedClaimStore(v.get("claim_store", ""), claimed_at, claimed_at + v.get("finalize_time_offset", 0), counts)
     # claim_store "absent": no claim store is configured.
     cb.claim_store = None if v.get("claim_store") == "absent" else store
+    # Record every status-provider request in call order (SPEC-v2 §6.5 step 3).
+    requests = []
+    provider = cb.status_evidence
+    if provider is not None:
+        def recording_provider(ctx, r):
+            requests.append({"issuer_id": r.issuer_id, "status_key_epoch": r.status_key_epoch, "status_key_id": r.status_key_id,
+                             "refs": [{"issuer_id": x.issuer_id, "cert_id": x.cert_id} for x in r.refs]})
+            return provider(ctx, r)
+        cb.status_evidence = recording_provider
 
     outcome = verify_proof_bundle_v2(BACKGROUND, req, cb)
     want = v["expected"]
@@ -42,6 +51,8 @@ def test_verifier_ordering(v):
     if want.get("disposition"):
         assert outcome.disposition == want["disposition"]
     assert counts.as_dict() == expected_counts(want.get("callback_counts", {}))
+    assert "status_requests" in want, "vector has no expected status_requests"
+    assert requests == want["status_requests"]
     if want["stage"] != "committed":
         assert outcome.committed is None
         return

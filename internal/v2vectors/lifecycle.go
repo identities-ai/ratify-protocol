@@ -155,7 +155,7 @@ func (g *gen) lifecycleFile() any {
 			"abandon":                "the receipt-abandonment procedure: freeze the receipt log and mark every claim whose outbox entry was not appended receipt_abandoned; expect abandoned (request names in log order)",
 			"restore":                "mode exact = continue on an exact copy of the complete store state (restore equal to the anchored head, no epoch change); mode lost_state_epoch_bump = continue on an empty store with receipt log log_id, and the verifier's configured replay epoch becomes replay_epoch for every later verify",
 			"rate_at_finalization":   "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
-			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
+			"release":                "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). mode record_release_unavailable = the claim store's record-release operation fails with store unavailability for this call only and records nothing; record_release_state_mismatch = it answers release_state_mismatch (a different record exists) for this call only and records nothing. checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
 			"release_forged":         "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
 			"plant_release":          "write a release record for the request's claim directly into the claim store, bypassing ReleaseV2Decision: it names the claim's appended receipt entry hash and the acknowledgement timestamp time (a primary-storage write). A recorded release never replaces the acknowledgement (SPEC-v2 §6.9 steps 4 to 6)",
 			"verifier_configuration": "status keys, status policy, trust, journal setup and evidence come from each request exactly as in verifier-ordering.json",
@@ -310,6 +310,22 @@ func (g *gen) lifecycleFile() any {
 		lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expired},
 		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "wrong_entry", Expect: expired},
 		release("A", expired))
+	noReceipt := func(expect lifecycleExpectJSON) lifecycleStepJSON {
+		return lifecycleStepJSON{Op: "release", Request: "A", Mode: "no_receipt", Checkpoint: "reference", Expect: expect}
+	}
+	notAppended := lifecycleExpectJSON{ReleaseStatus: "pending", ReleaseReason: "receipt_not_appended"}
+	sc("withheld_when_recording_fails", "a withheld result whose recording fails with store unavailability is still withheld for that call, and nothing is recorded: a release without a receipt is then pending; the next release records the withheld result, which every later release returns",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "record_release_unavailable", Checkpoint: "reference", Expect: expired},
+		noReceipt(notAppended),
+		release("A", expired),
+		noReceipt(expired))
+	sc("withheld_record_conflict_is_rejected", "a claim store that answers the withheld record with a state mismatch (a different record already exists) makes that call rejected / release_state_mismatch, which describes only that call and records nothing; the next release records the withheld result",
+		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+290),
+		lifecycleStepJSON{Op: "release", Request: "A", Mode: "record_release_state_mismatch", Checkpoint: "reference", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}},
+		noReceipt(notAppended),
+		release("A", expired),
+		noReceipt(expired))
 	sc("withheld_after_recorded_release_records_nothing", "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
 		step("verify", "A", committedAllow), publish("A", "ok", 1), setTime(Now+10), release("A", released(Now, 1)),
 		setTime(Now+8), release("A", withheldRegressed),
@@ -353,6 +369,18 @@ func (g *gen) lifecycleFile() any {
 	sc("clock_regression_during_evaluation", "a store clock that moves below T_claim during evaluation fails the next store write with clock_regressed and commits nothing; recovery after the lease commits evaluation_interrupted",
 		verifyMode("A", "regress_clock_during_status", Now-1, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "clock_regressed"}),
 		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("trusted", "unavailable", "bound")))
+	sc("clock_regression_at_resume_and_recovery", "request A is claimed at Now and never evaluated; with the store clock moved below the greatest reading already returned, resumption and lease-expiry recovery of the claim each fail with clock_regressed and commit nothing (SPEC-v2 §7.2, §7.5, §7.11); once the clock passes the lease, recovery commits evaluation_interrupted and resumption returns it",
+		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}), setTime(Now-10),
+		step("resume", "A", lifecycleExpectJSON{ErrorClass: "clock_regressed"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "clock_regressed"}),
+		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
+	sc("clock_beyond_timestamp_domain_at_resume_and_recovery", "request A is claimed at Now and never evaluated; a store clock reading of 253402300800, beyond the timestamp domain, is an unavailable clock, so resumption and lease-expiry recovery of the claim each fail with claim_store_unavailable and commit nothing (SPEC-v2 §2.5, §7.2, §7.11); once the clock reads within the domain past the lease, recovery commits evaluation_interrupted and resumption returns it",
+		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}), setTime(ratify.V2MaxTimestampSeconds+1),
+		step("resume", "A", lifecycleExpectJSON{ErrorClass: "claim_store_unavailable"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "claim_store_unavailable"}),
+		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
 	sc("restore_exact_state", "continuing on an exact copy of the complete store state keeps every claim: an exact retry is a terminal replay and the published receipt still releases",
 		step("verify", "A", committedAllow), publish("A", "ok", 1),
 		lifecycleStepJSON{Op: "restore", Mode: "exact"},
@@ -538,6 +566,15 @@ func (g *gen) finalizeBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			r.ConstraintEvaluators = []ratify.ConstraintEvaluatorRefV2{{Type: maxCountType, ProfileDigest: profileDigest(maxCountProfile, maxCountType)}}
 		}},
 		{"terminal_decision", "the terminal result is deny/delegation_revoked while the body is indeterminate/status_unavailable", terminal("deny", "delegation_revoked", "revoked"), nil},
+		// The terminal result is exactly the RatifyCanonicalJSON of the body's
+		// decision, decision_reason and identity_status (SPEC-v2 §7.13).
+		{"terminal_identity_status", "the terminal result's identity_status is revoked while the body's is authorization_unverified (SPEC-v2 §7.13)", terminal("indeterminate", "status_unavailable", "revoked"), nil},
+		{"terminal_members", "the terminal result has a further member beside the body's decision, decision_reason and identity_status (SPEC-v2 §7.13)",
+			b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "status_unavailable", "identity_status": "authorization_unverified", "x": 1}))), nil},
+		{"terminal_spelling", "the terminal result is the body's decision, decision_reason and identity_status preceded by a space, not RatifyCanonicalJSON (SPEC-v2 §7.13)",
+			b64(append([]byte(" "), must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "status_unavailable", "identity_status": "authorization_unverified"}))...)), nil},
+		{"terminal_without_identity_status", "the terminal result has the body's decision and decision_reason but no identity_status (SPEC-v2 §7.13)",
+			b64(must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "status_unavailable"}))), nil},
 	} {
 		body := genuine()
 		if m.edit != nil {
@@ -692,14 +729,18 @@ func (g *gen) recoveryBindingScenarios(sc func(string, string, ...lifecycleStepJ
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
 			recoverDirect(interruptedTerminal, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}),
 			thenRecover[0], thenRecover[1], thenRecover[2])...)
-	// Recovery validates exactly as finalization does (SPEC-v2 §7.5): the
-	// terminal result is a JSON object whose decision and decision_reason
-	// match the body, and its other members are the store's own, so every SDK
-	// accepts a member of any JSON type.
-	extended := b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "evaluation_interrupted",
-		"identity_status": "authorization_unverified", "x": 1, "y": map[string]any{"z": true}})))
-	sc("recover_direct_accepts_terminal_result_with_other_members", "a terminal result whose decision and decision_reason match the canonical interrupted body, with further members of any JSON type, is committed by the claim store's recovery operation exactly as finalization would commit it; an identical repeat is a no-op",
-		append(slices.Clone(claimAndExpire),
-			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "committed"}),
-			recoverDirect(extended, genuineBody, lifecycleExpectJSON{FinalizeResult: "identical"}))...)
+	// The sealed terminal result is exactly the RatifyCanonicalJSON of the
+	// body's decision, decision_reason and identity_status (SPEC-v2 §7.13),
+	// and recovery validates exactly as finalization does (§7.5), so any
+	// other bytes are configuration_invalid.
+	canonicalInterrupted := must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "evaluation_interrupted", "identity_status": "authorization_unverified"}))
+	refused("terminal_result_with_other_members", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result whose decision, decision_reason and identity_status match it but which has further members: the terminal result is not the canonical three-member object and is configuration_invalid (SPEC-v2 §7.13)",
+		b64(must(ratify.CanonicalJSON(map[string]any{"decision": "indeterminate", "decision_reason": "evaluation_interrupted",
+			"identity_status": "authorization_unverified", "x": 1, "y": map[string]any{"z": true}}))), genuineBody, "configuration_invalid")
+	refused("terminal_result_not_canonical", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with the matching terminal result preceded by a space: the bytes are not RatifyCanonicalJSON and are configuration_invalid (SPEC-v2 §7.13)",
+		b64(append([]byte(" "), canonicalInterrupted...)), genuineBody, "configuration_invalid")
+	refused("terminal_result_without_identity_status", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a terminal result that has only the matching decision and decision_reason: identity_status is required and the result is configuration_invalid (SPEC-v2 §7.13)",
+		b64(must(ratify.CanonicalJSON(map[string]string{"decision": "indeterminate", "decision_reason": "evaluation_interrupted"}))), genuineBody, "configuration_invalid")
+	refused("terminal_result_other_identity_status", "after the evaluator lease expired, the claim store's recovery operation receives the canonical interrupted receipt body with a canonical terminal result whose decision and decision_reason match but whose identity_status is revoked: it differs from the body and is configuration_invalid (SPEC-v2 §7.13)",
+		terminal("indeterminate", "evaluation_interrupted", "revoked"), genuineBody, "configuration_invalid")
 }

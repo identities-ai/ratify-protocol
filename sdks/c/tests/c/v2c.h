@@ -35,6 +35,7 @@ uint8_t *v2c_take(RatifyV2Buffer b, size_t *len);
 int v2c_run_objects(void);
 int v2c_run_limits(void);
 int v2c_run_ordering(void);
+int v2c_run_callback_domain(void);
 int v2c_run_lifecycle(void);
 int v2c_run_cross_sdk(void);
 

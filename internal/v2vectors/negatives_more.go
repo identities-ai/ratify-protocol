@@ -420,6 +420,26 @@ func (g *gen) transactionNegatives(n *negBuilder) {
 		parties := arr(o["parties"])
 		o["parties"] = []any{parties[1], parties[0]}
 	})
+	twoFault("duplicate_party_and_cert_key_id_mismatch", "parties[1].party_id repeats parties[0].party_id; parties[0].proof_bundle.delegations[0].issuer_id names another key", identity, func(o map[string]any) {
+		keyFault(o)
+		party(o, 1)["party_id"] = party(o, 0)["party_id"]
+	})
+	// A repeated signature record is a signature set fault, not a canonical
+	// form fault, and the signature set is checked after the nested bundles
+	// are decoded and hashed (SPEC-v2 §5.7), so a bundle fault is reported
+	// first.
+	afterBundle := func(name, mutation, class string, f func(map[string]any)) {
+		n.add(name, kind, mutation, mutate(base, f), v, class)
+	}
+	duplicateSignature := func(o map[string]any) { s := arr(o["party_signatures"]); s[1] = s[0] }
+	afterBundle("signature_duplicate_and_cert_key_id_mismatch", "party-a signature repeated in place of party-b; parties[0].proof_bundle.delegations[0].issuer_id names another key", "key_id_mismatch", func(o map[string]any) {
+		keyFault(o)
+		duplicateSignature(o)
+	})
+	afterBundle("signature_duplicate_and_bundle_hash_flipped", "party-a signature repeated in place of party-b; parties[0].proof_bundle_hash changed", "bundle_hash_mismatch", func(o map[string]any) {
+		duplicateSignature(o)
+		party(o, 0)["proof_bundle_hash"] = flipHexDigest(party(o, 0)["proof_bundle_hash"].(string))
+	})
 }
 
 // reverseFirstBundleMembers writes the first party's proof bundle with its

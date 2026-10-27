@@ -404,11 +404,14 @@ export async function decodeTransactionReceiptV2(data: Uint8Array): Promise<Tran
       raw: p.get("proof_bundle"),
     }));
     // Canonical form is part of strict decode (SPEC-v2 §2.1). The whole
-    // receipt, with both party arrays in party_id order, is compared with its
-    // canonical encoding before any bundle is decoded, so a non-canonical
-    // receipt is malformed whatever its bundles hold.
-    const inPartyOrder = (xs: { party_id: string }[]) => xs.every((x, i) => i === 0 || byPartyID(xs[i - 1]!, x) <= 0);
-    if (!inPartyOrder(typed) || !inPartyOrder(receipt.party_signatures) || !bytesEqual(canonicalJSONV2(gAny(root)), data)) {
+    // receipt, with parties in unique party_id order and party signatures in
+    // party_id order, is compared with its canonical encoding before any
+    // bundle is decoded, so a non-canonical receipt is malformed whatever its
+    // bundles hold. A repeated signature record is left to the signature set
+    // check.
+    const inPartyOrder = (xs: { party_id: string }[], unique: boolean) =>
+      xs.every((x, i) => i === 0 || byPartyID(xs[i - 1]!, x) < (unique ? 0 : 1));
+    if (!inPartyOrder(typed, true) || !inPartyOrder(receipt.party_signatures, false) || !bytesEqual(canonicalJSONV2(gAny(root)), data)) {
       throw new Error("wire v2: transaction receipt is not canonical JSON");
     }
     const bundleHashes: string[] = [];

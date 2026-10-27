@@ -98,6 +98,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_ref_store_abandon",
     "ratify_v2_ref_store_publish",
     "ratify_v2_ref_store_callbacks",
+    "ratify_v2_ref_store_committed_callbacks",
     "ratify_v2_ref_journal_new",
     "ratify_v2_ref_journal_free",
     "ratify_v2_ref_journal_callbacks",
@@ -156,6 +157,7 @@ const SWEPT: &[&str] = &[
     "ratify_v2_verify_proof_bundle",
     "ratify_v2_claim_proof_bundle",
     "ratify_v2_recover_interrupted_claim",
+    "ratify_v2_resume_committed_claim",
     "ratify_v2_committed_free",
     "ratify_v2_committed_claim_id",
     "ratify_v2_committed_receipt_body",
@@ -647,6 +649,13 @@ fn every_v2_export_contains_a_panic() {
     fired();
     arm_before_body();
     assert_eq!(
+        unsafe { ratify_v2_ref_store_committed_callbacks(z(), z()) },
+        -3,
+        "ratify_v2_ref_store_committed_callbacks"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
         unsafe { ratify_v2_ref_journal_new(z()) },
         -3,
         "ratify_v2_ref_journal_new"
@@ -1034,6 +1043,13 @@ fn every_v2_export_contains_a_panic() {
         unsafe { ratify_v2_recover_interrupted_claim(z(), z(), z()) },
         -3,
         "ratify_v2_recover_interrupted_claim"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_resume_committed_claim(z(), z(), z()) },
+        -3,
+        "ratify_v2_resume_committed_claim"
     );
     fired();
     arm_before_body();

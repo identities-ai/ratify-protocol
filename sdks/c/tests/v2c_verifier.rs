@@ -352,7 +352,7 @@ fn run_ordering(builtin_standard: bool) {
     let want_stages: BTreeMap<String, usize> = [
         ("committed", 362),
         ("evaluating", 2),
-        ("preflight", 148),
+        ("preflight", 149),
         ("replay", 2),
     ]
     .into_iter()

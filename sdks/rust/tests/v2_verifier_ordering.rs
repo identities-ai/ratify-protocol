@@ -310,7 +310,7 @@ fn v2_conformance_verifier_ordering() {
     let want_stages = BTreeMap::from([
         ("committed".to_string(), 362),
         ("evaluating".to_string(), 2),
-        ("preflight".to_string(), 148),
+        ("preflight".to_string(), 149),
         ("replay".to_string(), 2),
     ]);
     assert_eq!(stages, want_stages);

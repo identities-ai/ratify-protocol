@@ -382,7 +382,10 @@ static int commit(store *s)
     /* Anchored: the change is committed. A crash before the rename is
      * resolved at startup by promoting state.next, whose digest is the
      * anchored one. */
-    if (rename(staged, path) != 0 || fsync_dir_of(path) != 0)
+    CRASH_POINT("rename", path, 0);
+    int renamed = rename(staged, path) == 0;
+    CRASH_POINT("rename", path, 1);
+    if (!renamed || fsync_dir_of(path) != 0)
         fprintf(stderr, "store: rename after anchor failed; startup will promote state.next\n");
     snprintf(s->digest, sizeof s->digest, "%s", next);
     return 0;

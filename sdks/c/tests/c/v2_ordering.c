@@ -160,8 +160,8 @@ static int32_t sc_claim_answer(void *user, const RatifyV2ClaimView *view, Ratify
 }
 
 /* Out-of-domain answers (v2c_run_callback_domain): when set, the trust or
- * claim callback either fails or, after answering normally, overwrites its
- * outcome or disposition with domain_value. Set only by the serial
+ * claim callback either fails or, after its scripted answer, reports
+ * success with its outcome or disposition set to domain_value. Set only by the serial
  * domain run, never by the stress tests. */
 enum { DOMAIN_OFF, DOMAIN_TRUST_ERROR, DOMAIN_TRUST_VALUE, DOMAIN_CLAIM_ERROR, DOMAIN_CLAIM_VALUE };
 static int domain_fault = DOMAIN_OFF;
@@ -172,8 +172,9 @@ static int32_t sc_claim(void *user, const RatifyV2ClaimView *view, RatifyV2Claim
     bump(v, C_CLAIM);
     if (domain_fault == DOMAIN_CLAIM_ERROR) return RatifyV2StoreUnavailable;
     int32_t rc = sc_claim_answer(user, view, out);
-    if (domain_fault == DOMAIN_CLAIM_VALUE && rc == 0) out->disposition = domain_value;
-    return rc;
+    if (domain_fault != DOMAIN_CLAIM_VALUE) return rc;
+    out->disposition = domain_value;
+    return 0;
 }
 
 static int32_t sc_finalize(void *user, const char *claim_id, RatifyV2Slice token, RatifyV2Slice terminal,
@@ -254,8 +255,9 @@ static int32_t trust_cb(void *user, const RatifyV2CertView *chain, size_t len, i
     bump(user, C_TRUST);
     if (domain_fault == DOMAIN_TRUST_ERROR) return RatifyV2StoreUnavailable;
     int32_t rc = trust_answer(user, chain, len, outcome, root);
-    if (domain_fault == DOMAIN_TRUST_VALUE && rc == 0) *outcome = domain_value;
-    return rc;
+    if (domain_fault != DOMAIN_TRUST_VALUE) return rc;
+    *outcome = domain_value;
+    return 0;
 }
 
 static int32_t status_cb(void *user, const RatifyV2StatusRequest *req, RatifyV2StatusBatch *out) {
@@ -705,7 +707,7 @@ int v2c_run_ordering(void) {
  * the same rc, stage, class, disposition and committed receipt body as
  * when the callback returns RatifyV2StoreUnavailable. The trust value is
  * written after the genuine answer, so the correct root is in place and
- * only the outcome is wrong. */
+ * only the outcome is wrong, whenever the scripted answer wrote one. */
 typedef struct {
     int32_t rc;
     RatifyV2VerifyOutcome out;
@@ -774,6 +776,30 @@ int v2c_run_callback_domain(void) {
             }
             free(failing.body);
         }
+        /* A custom registration without its evaluate callback is an
+         * invalid registry (SPEC-v2 §5.2): configuration_invalid before
+         * the challenge is claimed, as in the other SDKs. */
+        v2c_vector *v = v2c_vector_load(l);
+        if (v->nevals > 0) {
+            RatifyV2VerifyCallbacks cb;
+            RatifyV2EvaluatorConfig eval;
+            int has_eval;
+            v2c_vector_callbacks(v, NULL, 0, &cb, &eval, &has_eval);
+            v->regs[v->nevals - 1].evaluate = NULL;
+            RatifyV2VerifyOutcome out;
+            RatifyV2Committed *committed = NULL;
+            int32_t rc = ratify_v2_verify_proof_bundle(v->bundle, v->bundle_len, (const uint8_t *)v->request,
+                                                       v->request_len, &eval, &cb, &out, NULL, &committed);
+            char detail[512];
+            snprintf(detail, sizeof detail, "%s: evaluator without evaluate gives rc %s, %d claims (%s)", l,
+                     rc ? v2c_class(rc) : "ok", v->counts[C_CLAIM], ratify_v2_last_error_message());
+            v2c_check(rc != 0 && strcmp(v2c_class(rc), "configuration_invalid") == 0 && v->counts[C_CLAIM] == 0 &&
+                          committed == NULL,
+                      "evaluator registration without evaluate", detail);
+            checks++;
+            if (committed) ratify_v2_committed_free(committed);
+        }
+        v2c_vector_free(v);
     }
     free(index);
     printf("callback-domain: %d checks\n", checks);

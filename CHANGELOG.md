@@ -365,9 +365,12 @@ match before the beta.
   `bundle_hash_mismatch`, `transaction_context_mismatch` or
   `transaction_signature_set_invalid`, and a non-canonical receipt of up to
   5 MiB was fully signature-verified before it was refused. The outer
-  receipt is compared before any nested proof bundle is decoded, so a bundle
-  fault such as `key_id_mismatch` does not mask it either. Vectors:
-  `object-negatives.json` `transaction_receipt/noncanonical_and_*`.
+  receipt is compared before any nested proof bundle is decoded, with each
+  bundle in its canonical form and `parties` and `party_signatures` in
+  `party_id` order, so a bundle fault such as `key_id_mismatch` does not mask
+  a non-canonical bundle or array order either. Vectors:
+  `object-negatives.json` `transaction_receipt/noncanonical_*` and
+  `transaction_receipt/unsorted_*`.
 - **A sealed terminal result is exactly its canonical form** (every SDK and
   the C ABI). Finalization, lease-expiry recovery and resumption now require
   the terminal-result bytes to be the RatifyCanonicalJSON of the receipt
@@ -401,7 +404,7 @@ match before the beta.
   harness asserts: ascending issuer order that differs from chain order,
   repeated issuers, trust answers, extension registries, an exact audience
   match with a failing provider, configured verifier ID forms and §2.5
-  bounds. `object-negatives.json` 433 to 469: fully re-signed wire-layer
+  bounds. `object-negatives.json` 433 to 473: fully re-signed wire-layer
   cases (small-order and mixed-order Ed25519 keys that satisfy the
   cofactorless equation, ML-DSA under another context, UTF-16 key-order
   traps, escape spellings, byte fields at wrong lengths). `limits.json` 76 to

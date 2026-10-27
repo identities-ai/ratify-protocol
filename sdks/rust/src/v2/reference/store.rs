@@ -19,15 +19,15 @@ use sha2::{Digest, Sha256};
 use crate::types::HybridPrivateKey;
 use crate::v2::checkpoint_ack::V2CheckpointAcknowledgement;
 use crate::v2::claim_store::{
-    challenge_claim_time_current_v2, validate_v2_finalization_payload, ClaimStoreV2, V2AuthoritativeClock, V2ChallengeClaim, V2ClaimDisposition,
+    challenge_claim_time_current_v2, claim_id_matches_key, validate_v2_finalization_payload, ClaimStoreV2, V2AuthoritativeClock, V2ChallengeClaim, V2ClaimDisposition,
     V2ClaimResult, V2RateAtFinalizationStore, V2RateReservationStore, V2StoreError,
 };
 use crate::v2::context::V2Context;
 use crate::v2::crypto::{key_id_v2, public_key_v2};
 use crate::v2::errors::{V2Error, V2ErrorClass, V2Result};
 use crate::v2::evaluation_progress::{
-    initial_v2_evaluation_progress, validate_v2_evaluation_progress_inner, V2EvaluationProgress,
-    V2InterruptedClaim,
+    initial_v2_evaluation_progress, validate_v2_evaluation_progress_inner, V2CommittedClaim,
+    V2CommittedClaimStore, V2EvaluationProgress, V2InterruptedClaim,
 };
 use crate::v2::rate_reservation::V2RateReservation;
 use crate::v2::receipt::{
@@ -38,7 +38,6 @@ use crate::v2::release::{
     receipt_outbox_digest_v2, valid_v2_release_record_outcome, V2ReceiptCheckpoint, V2ReceiptPublisher,
     V2ReleaseClaimStore, V2ReleaseRecord, V2ReleaseStatus, V2TerminalClaimRecord,
 };
-use crate::v2::operation_context::protocol_claim_id_from_digest_v2;
 use crate::v2::stream_sequence::check_v2_stream_sequence;
 
 /// The message of the reference checkpoint's refusal (Go
@@ -725,6 +724,36 @@ impl ClaimStoreV2 for Store {
     }
 }
 
+/// Returns a terminal claim exactly as its terminal commit persisted it, for
+/// resumption after the handoff was lost (SPEC-v2 §7.11). A claim still
+/// evaluating is `claim_lease_live` while its lease is live and
+/// `claim_lease_lost` after, when lease-expiry recovery must run first.
+impl V2CommittedClaimStore for Store {
+    fn load_v2_committed_claim(&self, _ctx: &V2Context, claim_id: &str) -> Result<V2CommittedClaim, V2StoreError> {
+        let mut s = self.lock();
+        let Some(record) = s.claims.get(claim_id) else {
+            return Err(classified(V2ErrorClass::ClaimNotFound, "v2reference: unknown claim"));
+        };
+        if record.state != ClaimState::Terminal {
+            let lease_expires_at = record.lease_expires_at;
+            let now = s.read_clock_locked()?;
+            if now < lease_expires_at {
+                return Err(classified(V2ErrorClass::ClaimLeaseLive, "v2reference: evaluator lease is still live"));
+            }
+            return Err(classified(
+                V2ErrorClass::ClaimLeaseLost,
+                "v2reference: claim is not terminal; recover it first",
+            ));
+        }
+        Ok(V2CommittedClaim {
+            claim: record.claim.clone(),
+            terminal_result: record.terminal.clone(),
+            receipt_body: record.receipt_body.clone(),
+            allow_horizon: record.allow_horizon,
+        })
+    }
+}
+
 impl V2ReleaseClaimStore for Store {
     fn load_v2_terminal_claim(&self, _ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError> {
         let s = self.lock();
@@ -1008,6 +1037,12 @@ impl V2RateAtFinalizationStore for RateAtFinalizationStore {
     fn admits_v2_rate_at_finalization(&self) {}
 }
 
+impl V2CommittedClaimStore for RateAtFinalizationStore {
+    fn load_v2_committed_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2CommittedClaim, V2StoreError> {
+        self.0.load_v2_committed_claim(ctx, claim_id)
+    }
+}
+
 impl V2ReleaseClaimStore for RateAtFinalizationStore {
     fn load_v2_terminal_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2TerminalClaimRecord, V2StoreError> {
         self.0.load_v2_terminal_claim(ctx, claim_id)
@@ -1015,23 +1050,6 @@ impl V2ReleaseClaimStore for RateAtFinalizationStore {
     fn record_v2_release(&self, ctx: &V2Context, record: V2ReleaseRecord) -> Result<(), V2StoreError> {
         self.0.record_v2_release(ctx, record)
     }
-}
-
-/// Whether the claim ID is the stable claim ID of the claim's (namespace,
-/// replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). The store is
-/// keyed by claim ID, so a supplied ID that is not derived from that key
-/// could create a second claim for one challenge.
-fn claim_id_matches_key(claim: &V2ChallengeClaim) -> bool {
-    let Some(encoded) = claim.challenge_digest.strip_prefix("sha384:") else {
-        return false;
-    };
-    if encoded.len() != 96 || !encoded.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
-        return false;
-    }
-    let Ok(digest) = hex::decode(encoded) else {
-        return false;
-    };
-    protocol_claim_id_from_digest_v2(&claim.namespace, claim.replay_epoch, &digest).is_ok_and(|id| id == claim.claim_id)
 }
 
 #[cfg(test)]

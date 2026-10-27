@@ -427,6 +427,24 @@ func (g *gen) concurrencyFile() any {
 			after("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}),
 			{lifecycleStepJSON: publish("A", 1)}, after("verify", "A", replayTerminal)},
 	})
+	_, wireA := g.lifecycleRequest(0xa0, 0, nil)
+	allowTerminal := b64(must(ratify.CanonicalJSON(map[string]string{"decision": "allow", "decision_reason": "authorized", "identity_status": "authorized_agent"})))
+	sc(concurrencyScenarioJSON{
+		Name:        "resume_races_owner_allow_finalize",
+		Description: "the evaluator of request A finalizes its allow with allow horizon Now+3600 while 4 resumptions of its claim run and 4 more each resume the claim and release the resumed handoff (SPEC-v2 §6.9, §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the committed allow, never another result; a release of a resumed handoff before the receipt is published is pending / receipt_not_appended; the allow then resumes with its horizon, publishes at sequence 1 and releases",
+		Setup:       []lifecycleStepJSON{claimOnly},
+		Participants: []concurrencyParticipantJSON{
+			{Group: "owner", Count: 1, Op: "finalize", Request: "A", TerminalB64: allowTerminal, BodyB64: g.requestAAllowBody(wireA, nil), AllowValidUntil: statusFreshUntil},
+			resumers(4, ""), {Group: "releasers", Count: 4, Op: "resume", Request: "A", Mode: "release"},
+		},
+		Invariants: []concurrencyInvariantJSON{
+			allowed([]string{"committed"}, "owner"),
+			allowed([]string{"error/claim_lease_live", allow}, "resumers"),
+			allowed([]string{"error/claim_lease_live", "pending/receipt_not_appended"}, "releasers"), contiguous,
+		},
+		After: []concurrencyStepJSON{after("resume", "A", committedAllow), {lifecycleStepJSON: publish("A", 1)},
+			release("A", lifecycleExpectJSON{ReleaseStatus: "released", Decision: "allow", ReleaseTime: Now, ReceiptSeq: 1})},
+	})
 	sc(concurrencyScenarioJSON{
 		Name:        "concurrent_resumes_and_releases_of_one_allow",
 		Description: "request A committed an allow whose receipt is published and acknowledged; 6 participants each resume the claim and release the resumed handoff while 4 release the handoff the verifier returned (SPEC-v2 §6.9, §7.11): every resumption returns the committed allow, the first release record wins, every release returns the same released result, and a release afterwards returns it again",

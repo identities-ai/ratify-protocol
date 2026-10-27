@@ -369,6 +369,18 @@ func (g *gen) lifecycleFile() any {
 	sc("clock_regression_during_evaluation", "a store clock that moves below T_claim during evaluation fails the next store write with clock_regressed and commits nothing; recovery after the lease commits evaluation_interrupted",
 		verifyMode("A", "regress_clock_during_status", Now-1, lifecycleExpectJSON{Stage: "evaluating", ErrorClass: "clock_regressed"}),
 		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("trusted", "unavailable", "bound")))
+	sc("clock_regression_at_resume_and_recovery", "request A is claimed at Now and never evaluated; with the store clock moved below the greatest reading already returned, resumption and lease-expiry recovery of the claim each fail with clock_regressed and commit nothing (SPEC-v2 §7.2, §7.5, §7.11); once the clock passes the lease, recovery commits evaluation_interrupted and resumption returns it",
+		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}), setTime(Now-10),
+		step("resume", "A", lifecycleExpectJSON{ErrorClass: "clock_regressed"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "clock_regressed"}),
+		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
+	sc("clock_beyond_timestamp_domain_at_resume_and_recovery", "request A is claimed at Now and never evaluated; a store clock reading of 253402300800, beyond the timestamp domain, is an unavailable clock, so resumption and lease-expiry recovery of the claim each fail with claim_store_unavailable and commit nothing (SPEC-v2 §2.5, §7.2, §7.11); once the clock reads within the domain past the lease, recovery commits evaluation_interrupted and resumption returns it",
+		step("claim_only", "A", lifecycleExpectJSON{Disposition: "created"}), setTime(ratify.V2MaxTimestampSeconds+1),
+		step("resume", "A", lifecycleExpectJSON{ErrorClass: "claim_store_unavailable"}),
+		step("recover", "A", lifecycleExpectJSON{ErrorClass: "claim_store_unavailable"}),
+		setTime(Now+lifecycleLeaseSeconds), step("recover", "A", interrupted("not_evaluated", "not_evaluated", "not_evaluated")),
+		step("resume", "A", lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
 	sc("restore_exact_state", "continuing on an exact copy of the complete store state keeps every claim: an exact retry is a terminal replay and the published receipt still releases",
 		step("verify", "A", committedAllow), publish("A", "ok", 1),
 		lifecycleStepJSON{Op: "restore", Mode: "exact"},

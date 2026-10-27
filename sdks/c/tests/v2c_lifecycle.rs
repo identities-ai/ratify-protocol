@@ -1013,10 +1013,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (86, 467), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (102, 549), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("86 Part B scripts (467 steps)"),
+        readme.contains("102 Part B scripts (549 steps)"),
         "README row: {readme}"
     );
     println!(

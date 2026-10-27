@@ -24,7 +24,7 @@ import type { V2CheckpointAcknowledgement } from "../checkpoint_ack_v2.js";
 import { keyIDV2 } from "../crypto_v2.js";
 import type { HybridKeyPairV2 } from "../crypto_v2.js";
 import { ErrV2ClaimProofConflict, ErrV2RateLimitExceeded, V2Error, V2SentinelError } from "../errors_v2.js";
-import { cloneV2EvaluationProgress, initialV2EvaluationProgress, validateV2EvaluationProgress, type V2EvaluationProgress, type V2InterruptedClaim } from "../evaluation_progress_v2.js";
+import { cloneV2EvaluationProgress, initialV2EvaluationProgress, validateV2EvaluationProgress, type V2CommittedClaim, type V2CommittedClaimStore, type V2EvaluationProgress, type V2InterruptedClaim } from "../evaluation_progress_v2.js";
 import { base64Encode, bytesEqual, canonicalJSONV2, compareBytes, compareStrings, hexOf, parseJSONV2 } from "../json_v2.js";
 import {
   ErrV2AcknowledgementNotFound,
@@ -37,7 +37,7 @@ import {
   type V2ReleaseRecord,
   type V2TerminalClaimRecord,
 } from "../release_v2.js";
-import { protocolClaimIDFromDigestV2 } from "../challenge_claim_v2.js";
+import { claimIDMatchesKeyV2 } from "../challenge_claim_v2.js";
 import { V2_MAX_TIMESTAMP_SECONDS } from "../clock_bounds_v2.js";
 import { checkV2StreamSequence } from "../stream_sequence_v2.js";
 import {
@@ -106,23 +106,6 @@ export class MutexTestOnly {
 
 const storeError = (cls: V2Error["v2Class"], message: string, cause?: unknown) => new V2Error(cls, message, cause);
 
-/**
- * Whether the claim ID is the stable claim ID of the claim's (namespace,
- * replay_epoch, ChallengeClaimDigest) key (SPEC-v2 §2.4, §7.3). The store is
- * keyed by claim ID, so a supplied ID that is not derived from that key could
- * create a second claim for one challenge.
- */
-function claimIDMatchesKey(claim: V2ChallengeClaim | null | undefined): boolean {
-  const match = /^sha384:([0-9a-f]{96})$/.exec(typeof claim?.challengeDigest === "string" ? claim.challengeDigest : "");
-  if (!claim || !match) return false;
-  const digest = Uint8Array.from(match[1]!.match(/../g)!, (h) => parseInt(h, 16));
-  try {
-    return protocolClaimIDFromDigestV2(claim.namespace, claim.replayEpoch, digest) === claim.claimID;
-  } catch {
-    return false;
-  }
-}
-
 function cloneClaim(c: V2ChallengeClaim): V2ChallengeClaim {
   return {
     ...c, issuerIDs: [...c.issuerIDs], rateBatch: c.rateBatch.map((r) => ({ ...r })),
@@ -179,7 +162,7 @@ export interface StoreOptionsTestOnly {
  * under one mutex, which makes the claim and its stream advance one atomic
  * step, and terminal commit and outbox sequence assignment another.
  */
-export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint {
+export class StoreTestOnly implements ClaimStoreV2, V2CommittedClaimStore, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint {
   readonly mutex = new MutexTestOnly();
   private nowSeconds: number;
   highWater: number;
@@ -340,7 +323,7 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
 
   async claimV2(claim: V2ChallengeClaim): Promise<V2ClaimResult> {
     return this.mutex.run(() => {
-      if (!claimIDMatchesKey(claim)) {
+      if (!claimIDMatchesKeyV2(claim)) {
         throw storeError("configuration_invalid", "v2reference: claim ID is not derived from the claim's namespace, replay epoch and challenge digest");
       }
       let now: number;
@@ -506,6 +489,29 @@ export class StoreTestOnly implements ClaimStoreV2, V2ReleaseClaimStore, V2Recei
       }
       this.change(() => this.commitTerminal(record, terminalResult, receiptBody, 0, now));
       return true;
+    });
+  }
+
+  /**
+   * Implements V2CommittedClaimStore: returns a terminal claim exactly as its
+   * terminal commit persisted it, for resumption after the handoff was lost
+   * (SPEC-v2 §7.11). A claim still evaluating is claim_lease_live while its
+   * lease is live and claim_lease_lost after, when lease-expiry recovery must
+   * run first.
+   */
+  async loadV2CommittedClaim(claimID: string): Promise<V2CommittedClaim> {
+    return this.mutex.run(() => {
+      const record = this.claims.get(claimID);
+      if (!record) throw storeError("claim_not_found", "v2reference: unknown claim");
+      if (record.state !== "terminal") {
+        const now = this.readClock();
+        if (now < record.leaseExpiresAt) throw storeError("claim_lease_live", "v2reference: evaluator lease is still live");
+        throw storeError("claim_lease_lost", "v2reference: claim is not terminal; recover it first");
+      }
+      return {
+        claim: cloneClaim(record.claim), terminalResult: Uint8Array.from(record.terminal),
+        receiptBody: Uint8Array.from(record.receiptBody), allowHorizon: record.allowHorizon,
+      };
     });
   }
 
@@ -766,7 +772,7 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /** The reference store with max_rate admission moved into finalization. */
-export class RateAtFinalizationStoreTestOnly implements V2RateAtFinalizationStore {
+export class RateAtFinalizationStoreTestOnly implements V2RateAtFinalizationStore, V2CommittedClaimStore {
   constructor(readonly store: StoreTestOnly) {}
   admitsV2RateAtFinalization(): void {}
   /**
@@ -794,5 +800,8 @@ export class RateAtFinalizationStoreTestOnly implements V2RateAtFinalizationStor
   }
   recoverInterruptedV2Claim(claimID: string, terminalResult: Uint8Array, receiptBody: Uint8Array): Promise<boolean> {
     return this.store.recoverInterruptedV2Claim(claimID, terminalResult, receiptBody);
+  }
+  loadV2CommittedClaim(claimID: string): Promise<V2CommittedClaim> {
+    return this.store.loadV2CommittedClaim(claimID);
   }
 }

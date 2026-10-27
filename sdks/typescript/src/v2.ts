@@ -361,8 +361,11 @@ export {
   encodeV2EvaluationProgress,
   v2EvaluationInterruptedResult,
   recoverInterruptedClaimV2,
+  resumeCommittedClaimV2,
   type V2EvaluationProgress,
   type V2InterruptedClaim,
+  type V2CommittedClaim,
+  type V2CommittedClaimStore,
 } from "./evaluation_progress_v2.js";
 export { checkV2StreamSequence } from "./stream_sequence_v2.js";
 export {

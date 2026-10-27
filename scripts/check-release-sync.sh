@@ -193,6 +193,14 @@ cross_sdk_default = re.search(r'"sdk-version", "([^"]+)\+dev"', read("cmd/ratify
 if not cross_sdk_default or cross_sdk_default.group(1) != ts_version:
     got = cross_sdk_default.group(1) if cross_sdk_default else "missing"
     fail(f"cmd/ratify-v2-cross-sdk default sdk-version {got} does not match {ts_version}+dev")
+# The committed cross-SDK fixtures name the SDK release that produced them;
+# a fixture from another release would claim interoperability nobody ran.
+# Go may also record the untagged "+dev" form of the line.
+for sdk, want in (("go", ts_version), ("typescript", ts_version), ("python", pyv2_version),
+                  ("rust", ts_version), ("c", ts_version)):
+    got = json.loads(read(f"testvectors/v2/cross-sdk/{sdk}.json")).get("sdk_version", "missing")
+    if got != want and not (sdk == "go" and got == want + "+dev"):
+        fail(f"testvectors/v2/cross-sdk/{sdk}.json sdk_version {got} is not the v2 line {want}; regenerate it")
 for line in read("docs/V2_REFERENCE_COMPATIBILITY.md").splitlines():
     if line.startswith("| ") and "| `sdks/" in line:
         for found in re.findall(r"`(2\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+|(?:a|b|rc)\d+))`", line):

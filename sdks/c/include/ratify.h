@@ -2600,8 +2600,9 @@ int32_t ratify_v2_check_stream_sequence(int32_t has_last, int64_t last, int64_t 
 // distinct sealed issuer IDs), `required_scope` and `constraint_evaluators`
 // equal the sealed claim's, whose `context_policy_digest` equals the sealed
 // claim's (null for a policy-less claim) unless `context_assessment` is
-// `not_evaluated`, when it is null, and the terminal result is a JSON
-// object whose `decision` and `decision_reason` equal the body's. Otherwise
+// `not_evaluated`, when it is null, and the terminal result is exactly the
+// RatifyCanonicalJSON of the body's `decision`, `decision_reason` and
+// `identity_status` (SPEC-v2 §7.13). Otherwise
 // `malformed` (the body does not decode) or `configuration_invalid` (any
 // difference); a store commits nothing in either case. A `claim_record` that is not a claim record is
 // `bad_argument`.

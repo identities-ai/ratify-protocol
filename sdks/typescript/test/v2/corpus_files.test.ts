@@ -28,6 +28,7 @@ const RUNNERS: Record<string, string> = {
   "challenge-claim.json": "challenge_claim.test.ts",
   "security-journal.json": "security_journal.test.ts",
   "lifecycle-scenarios.json": "lifecycle_scenarios.test.ts",
+  "concurrency-scenarios.json": "concurrency_scenarios.test.ts",
   "transaction-verification.json": "transaction_verification.test.ts",
   "limits.json": "limits.test.ts",
   "hedged-signatures.json": "hedged_signatures.test.ts",

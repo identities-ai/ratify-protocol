@@ -1,7 +1,7 @@
 // SPEC-v2 §2.7: every error returned by a public v2 API carries exactly one
 // class from the closed list, never "unclassified". Each public entry point
 // is called with an input it must reject, mirroring the reference SDK's
-// table of 117 entry points; where the specification fixes the class it is
+// table of 118 entry points; where the specification fixes the class it is
 // asserted exactly, so this SDK reports the same class for the same input.
 
 import { test } from "node:test";
@@ -395,10 +395,10 @@ test("public v2 API: every rejected input carries exactly one listed class", asy
     },
   ];
 
-  // The reference table has 117 entries: 116 of the calls above (Go's
+  // The reference table has 118 entries: the 117 calls above (Go's
   // DecodePayloadDigest has no counterpart here; its ConstraintV2 JSON
   // unmarshalling is reached through decodeDelegationCertV2) and the live
-  // verifier below. resumeCommittedClaimV2 is listed here in addition.
+  // verifier below.
   assert.equal(calls.length, 117);
   assert.equal(new Set(calls.map((c) => c.name)).size, calls.length, "duplicate entry point name");
 

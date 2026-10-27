@@ -50,6 +50,8 @@ def build_limit_bytes(c: dict) -> bytes:
         items = (f"{c['item_prefix']}{i:0{c['item_index_digits']}d}{c['item_suffix']}".encode()
                  for i in range(c["count"]))
         return d(c["prefix_b64"]) + b",".join(items) + d(c["suffix_b64"])
+    if method == "repeat_bytes":
+        return d(c["prefix_b64"]) + d(c["item_b64"]) * c["count"] + d(c["suffix_b64"])
     if method == "repeat_item":
         return d(c["prefix_b64"]) + b",".join([d(c["item_b64"])] * c["count"]) + d(c["suffix_b64"])
     pytest.fail(f"unknown construction {method!r}")
@@ -62,7 +64,7 @@ def test_limits_table_matches_the_sdk():
         if name == "MAX_TIMESTAMP_SECONDS_V2":
             continue
         assert getattr(limits_v2, name) == value, name
-    assert len(LIMITS["vectors"]) == 76
+    assert len(LIMITS["vectors"]) == 80
     assert set(LIMITS["procedure_by_kind"]) == set(DECODERS)
 
 

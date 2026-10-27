@@ -153,9 +153,10 @@ func (g *gen) txFixtureWith(txID, txTerms, roleA string) txFixture {
 			InvocationID: "invocation-" + p.id, RequiredScope: p.scope, ProofBundleHash: bundleHash(bwire), ProofBundle: b,
 		})
 	}
-	if !bytes.Equal(canon(parse([]byte(txTerms))), []byte(txTerms)) {
-		// Terms that are not canonical cannot pass the library encoder: build
-		// the receipt object directly from the bound parties.
+	if !bytes.Equal(canon(parse([]byte(txTerms))), []byte(txTerms)) || len(txTerms) > ratify.MaxTransactionReceiptBytesV2/2 {
+		// Terms that are not canonical, or a receipt that may exceed the byte
+		// limit, cannot pass the library encoder: build the receipt object
+		// directly from the bound parties.
 		parts := []any{}
 		for i, p := range receipt.Parties {
 			parts = append(parts, map[string]any{

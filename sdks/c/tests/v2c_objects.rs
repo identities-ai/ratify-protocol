@@ -566,6 +566,12 @@ fn build_limit_bytes(c: &Value) -> Vec<u8> {
             out.extend(opt_b64("suffix_b64"));
             out
         }
+        "repeat_bytes" => {
+            let mut out = opt_b64("prefix_b64");
+            out.extend_from_slice(&b64(&c["item_b64"]).repeat(i(&c["count"]) as usize));
+            out.extend(opt_b64("suffix_b64"));
+            out
+        }
         "repeat_item" => {
             let mut out = opt_b64("prefix_b64");
             let item = b64(&c["item_b64"]);

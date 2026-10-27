@@ -1595,7 +1595,11 @@ impl Setup {
                     "untrusted" => 2,
                     "unavailable" => 3,
                     "ambiguous" => 4,
-                    other => panic!("unknown trust outcome {other}"),
+                    // Any other outcome is answered as an integer outside
+                    // 1..4 (its own value when it is one, else 0), which the
+                    // library treats as a malformed provider response; a
+                    // panic here would abort inside the extern "C" callback.
+                    other => other.parse::<i32>().unwrap_or(0),
                 };
                 let key =
                     (!t["root_public_key"].is_null()).then(|| key_struct(&t["root_public_key"]));

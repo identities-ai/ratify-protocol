@@ -24,7 +24,7 @@
     "rate_at_finalization": "scenario flag: the reference store admits the sealed max_rate batch inside the finalization compare-and-set and is used as both claim store and rate store. This is the single-store max_rate implementation of SPEC-v2 §7.6: an allow is counted at T_final in the same transaction that commits it, all counters of the sealed batch or none, and every other terminal result, including recovery's evaluation_interrupted, counts nothing",
     "recover": "RecoverInterruptedClaim for the request's claim ID (ProtocolClaimID of the request's verifier namespace, replay epoch and challenge, whether or not it was ever claimed): the store returns the sealed claim, T_claim and the last recorded evaluation progress (refusing while the lease is live), and the evaluation_interrupted receipt reports that progress per dimension; expect stage committed (idempotent for the same body) with its assessments, or error_class",
     "recover_direct": "call the claim store's recovery operation directly for the request's claim (from its claim_only step) with terminal_b64 as the terminal result and body_b64 as the receipt outbox body, after the evaluator lease expired; expect finalize_result committed (true) or identical (false, the same result already committed), or error_class. The store validates the result and body exactly as finalize does (SPEC-v2 §7.5: malformed for a body that is not a canonical receipt body, configuration_invalid for a body that does not bind the sealed claim or a result that differs from it) and accepts only indeterminate/evaluation_interrupted (configuration_invalid otherwise): a refused recovery commits nothing",
-    "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
+    "release": "ReleaseV2Decision with the request's committed outcome and its last published receipt (none when not published or when mode is no_receipt, or receipt_of another request). mode record_release_unavailable = the claim store's record-release operation fails with store unavailability for this call only and records nothing; record_release_state_mismatch = it answers release_state_mismatch (a different record exists) for this call only and records nothing. checkpoint reference = the store checkpoint; wrong_entry = acknowledgements report a different entry hash. Expect release_status, release_reason, decision, release_time. A withheld result at release steps 7 or 8 is recorded in the claim store when no release is recorded yet, and every later release of that claim returns the recorded withheld result right after step 1; rejected describes only that call (SPEC-v2 §6.9)",
     "release_forged": "ReleaseV2Decision with a committed outcome that was never produced by the verifier (zero value); always rejected",
     "restore": "mode snapshot = replace the primary with the named copy (a rollback) and bind it to the same component without provisioning; the component and the clock are unchanged",
     "resume": "ResumeCommittedClaim for the request's claim ID (computed as for recover), or for claim_id when present: the store returns the claim's persisted terminal record and the implementation returns its committed handoff, which replaces any handoff the harness holds for the request, so later publish and release steps use it (SPEC-v2 §7.11). Expect stage committed with decision, decision_reason and allow_horizon (0 when absent), or error_class: claim_not_found for a claim the store does not hold, claim_lease_live for a claim still evaluating under a live lease, claim_lease_lost for one still evaluating after its lease expired, claim_store_unavailable for a record that fails the terminal compare-and-set's checks. With claim_record_b64 the claim store's committed-claim load answers, for any claim ID, with the record whose sealed claim is claim_record_b64 (the canonical sealed claim object of SPEC-v2 §7.13 claim records, which a store whose interface carries the sealed claim decodes into it), whose terminal result is terminal_b64, receipt outbox body body_b64 and allow horizon allow_valid_until (0 when absent); every other store operation is the reference store's. With mode record_bytes the record bytes are not the canonical encoding of the sealed claim they decode to: only an implementation whose store returns the record bytes (the C ABI) runs the step, and other implementations skip it",
@@ -4565,6 +4565,144 @@
       ]
     },
     {
+      "name": "withheld_when_recording_fails",
+      "description": "a withheld result whose recording fails with store unavailability is still withheld for that call, and nothing is recorded: a release without a receipt is then pending; the next release records the withheld result, which every later release returns",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000290,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "record_release_unavailable",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "no_receipt",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "receipt_not_appended"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "no_receipt",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        }
+      ]
+    },
+    {
+      "name": "withheld_record_conflict_is_rejected",
+      "description": "a claim store that answers the withheld record with a state mismatch (a different record already exists) makes that call rejected / release_state_mismatch, which describes only that call and records nothing; the next release records the withheld result",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000290,
+          "expect": {}
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "record_release_state_mismatch",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "rejected",
+            "release_reason": "release_state_mismatch"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "no_receipt",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "pending",
+            "release_reason": "receipt_not_appended"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "mode": "no_receipt",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "withheld",
+            "release_reason": "challenge_expired"
+          }
+        }
+      ]
+    },
+    {
       "name": "withheld_after_recorded_release_records_nothing",
       "description": "a release record already present is the first record and wins: a later call whose clock reading regressed is withheld for that call only, and a call with a current clock returns the recorded release again",
       "start_time": 1800000000,
@@ -7582,6 +7720,73 @@
             "stage": "committed",
             "decision": "indeterminate",
             "decision_reason": "evaluation_interrupted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_substituted_record_rejected_at_release",
+      "description": "request A committed an allow and published its receipt; the claim store then answers resumption with request A's sealed claim and the canonical evaluation_interrupted result and body with allow horizon 0: the record passes every resumption check, so resumption returns that handoff, but it differs from the committed record and release rejects it at step 1 (rejected / release_state_mismatch, SPEC-v2 §6.9, §7.11); the store's own record then resumes and releases at sequence 1",
+      "start_time": 1800000000,
+      "steps": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "claim_record_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfZGlnZXN0Ijoic2hhMzg0OmU0ODQwYWFjZjUyNWNjOTIzNjI0MjJmODY4MDVhODRmZTQ4MzQyOTMyMjNkYmNmNzgyMGQ1ZDdlNmM3ZWNmYTZhZDNjNmEzMTc2ZmQ1MWU3MDRjNDVmZjY5M2YwNmM5OCIsImNsYWltX2lkIjoiOWQyYTc1MTg0Y2UxNzVhZDU2ZDI3YmNhMzhmYzg3MWY1NzM5NjliYTdmZjFlZDg3NWE5MzY4ZGQ0ZGNiMzFmMCIsImNsb2NrX3NrZXdfc2Vjb25kcyI6NSwiY29uc3RyYWludF9ldmFsdWF0b3JzIjpbXSwiY29udGV4dF9wb2xpY3lfZGlnZXN0Ijoic2hhMzg0OjYxMGM0MGZhYTQ3MmFhMmE0ZjkwNTk4ODg5OTczMzc1OGNjY2YzMGYyNDNhZWQzNWYxZjQyNDMzMjI4YTI4ZGJhYjE3MjVjYjJhNGE2ODExMDI5YTgxMDlkYTBiOWIyOSIsImV4cGlyZXNfYXQiOjE4MDAwMDAyOTAsImlzc3VlZF9hdCI6MTc5OTk5OTk5MCwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJtYXhfYWdlX3NlY29uZHMiOjMwMCwibmFtZXNwYWNlIjoidmVyaWZ5LXRlc3QiLCJwcm9vZl9kaWdlc3QiOiJzaGEzODQ6NTg4ODQ0OWNjYTllNDViMmRjMDcwN2QyMmY4YjYwM2YwMzkxMzQ3MmVkMTUxNTdiNTkxZWJhMmFlNDQ3NDZiNzQxNDlhZjVhOGZjMDdhMzQyNzc2NmRmZTgwNTA0ZDRhIiwicmF0ZV9iYXRjaCI6W10sInJlcGxheV9lcG9jaCI6MywicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJyZXF1aXJlc19yYXRlIjpmYWxzZSwic3RyZWFtX2lkIjpudWxsLCJzdHJlYW1fc2VxIjpudWxsLCJ2ZXJpZmllcl9pZCI6ImVjNGJmMTdiNWU0MzNiMTRjNTk3YWRiNzkwZDA1NmQzNmQwOTEzOWY3M2YxY2Q1ZjNlN2Q3MDAxMTI1NzBjMmMifQ==",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted"
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "release_status": "rejected",
+            "release_reason": "release_state_mismatch"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
           }
         }
       ]

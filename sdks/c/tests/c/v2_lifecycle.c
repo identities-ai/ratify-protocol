@@ -475,6 +475,19 @@ static int32_t refuse_record(void *user, const RatifyV2ReleaseRecord *rec) {
     return RatifyV2StoreUnavailable;
 }
 
+/* A record_release that answers a state mismatch, and one that returns a
+ * code outside the status codes; neither records anything. */
+static int32_t conflict_record(void *user, const RatifyV2ReleaseRecord *rec) {
+    (void)user;
+    (void)rec;
+    return RatifyV2StoreReleaseStateMismatch;
+}
+static int32_t unknown_code_record(void *user, const RatifyV2ReleaseRecord *rec) {
+    (void)user;
+    (void)rec;
+    return 9999;
+}
+
 static int release(c_store *s, const RatifyV2Committed *c, const RatifyV2PublicKey *vk, const char *want_decision,
                    RatifyV2ReleaseStoreCallbacks *rs, RatifyV2CheckpointCallbacks *cp) {
     char *claim_id = NULL;
@@ -775,6 +788,28 @@ static int withheld_is_permanent(c_store *s, const char *allow_dir, RatifyV2Clai
     int64_t expires = 0;
     v2c_check(ratify_v2_committed_challenge_expires_at(c, &expires) == 0, "challenge expiry", ratify_v2_last_error_message());
     s->now = expires;
+    /* SPEC-v2 §6.9: when recording the withheld result fails, the call is
+     * still withheld; a state-mismatch answer makes it rejected /
+     * release_state_mismatch. Neither records anything. */
+    RatifyV2ReleaseStoreCallbacks failing = *rs;
+    failing.record_release = refuse_record;
+    checks += release_status(s, c, receipt, vk, &failing, cp, "challenge_expired");
+    failing.record_release = unknown_code_record;
+    checks += release_status(s, c, receipt, vk, &failing, cp, "challenge_expired");
+    v2c_check(r && !r->has_release, "withheld not recorded on failure", "a failed record_release left a record");
+    failing.record_release = conflict_record;
+    {
+        int32_t status = 0;
+        char *reason = NULL;
+        RatifyV2Released *d = NULL;
+        int32_t rc = ratify_v2_release_decision(c, receipt, vk, s->log_id, &failing, cp, &status, &reason, &d);
+        v2c_check(rc == 0 && status == RatifyV2ReleaseRejected && d == NULL && reason &&
+                      strcmp(reason, "release_state_mismatch") == 0 && r && !r->has_release,
+                  "withheld record conflict", reason ? reason : ratify_v2_last_error_message());
+        ratify_v2_string_free(reason);
+        ratify_v2_released_free(d);
+    }
+    checks += 2;
     checks += release_status(s, c, receipt, vk, rs, cp, "challenge_expired");
     v2c_check(r && r->has_release && r->release_outcome == RatifyV2ReleaseWithheld &&
                   strcmp(r->release_reason, "challenge_expired") == 0,

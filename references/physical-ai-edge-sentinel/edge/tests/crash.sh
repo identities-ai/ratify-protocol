@@ -29,8 +29,13 @@
 # release, actuation); b = denied request (zone outside the delegation);
 # c = a captured proof that was released and fired before this receiver run
 # is replayed, then a new authorized request is interrupted, and the captured
-# proof is replayed again after the restart. A process crash leaves the page
-# cache intact, so this test does not model lost unsynced writes (power loss).
+# proof is replayed again after the restart; w = an authorized request whose
+# checkpoint acknowledgement is timestamped after the challenge expired, so
+# release withholds it (SPEC-v2 §6.9 step 7) and records the withheld result.
+# For flow w the checkpoint reads its own clock file, which runs 200 seconds
+# ahead of the receiver's during the crash phase; after the crash both clocks
+# move 300 seconds on and agree again. A process crash leaves the page cache
+# intact, so this test does not model lost unsynced writes (power loss).
 #
 #   BIN_DIR=/path/to/binaries WORK_DIR=/path/to/empty/dir ./tests/crash.sh
 #
@@ -38,6 +43,11 @@
 # directory. PORT defaults to 8297. FLOWS defaults to "a b c"; MODES (default
 # "before after") and STEPS (default: every counted step) narrow a run to
 # reproduce one case, for example FLOWS=a MODES=after STEPS=40.
+#
+# Every claim that was terminal at the crash must keep its terminal result and
+# release record twice: right after the restart, and in the final state after
+# the restarted receiver has rewritten its state file, so a loader that drops
+# release or withheld records is caught.
 set -u
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -46,7 +56,7 @@ EDGE=$BIN/edge-test
 CKPT=$BIN/edge-checkpoint-test
 CTL=$BIN/controller
 PORT=${PORT:-8297}
-FLOWS=${FLOWS:-"a b c"}
+FLOWS=${FLOWS:-"a b c w"}
 WORK=${WORK_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/edge-crash.XXXXXX")}
 mkdir -p "$WORK"
 WORK=$(CDPATH= cd -- "$WORK" && pwd)
@@ -72,10 +82,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-at() { echo $((T0 + $1)) > clock; }
+# at T: the receiver's clock is T0 + OFF + T; the checkpoint's own clock file
+# runs CKPT_LEAD seconds ahead of it (0 except during flow w's crash phase).
+OFF=0
+CKPT_LEAD=0
+at() {
+    echo $((T0 + OFF + $1)) > clock
+    echo $((T0 + OFF + $1 + CKPT_LEAD)) > ckpt-clock
+}
 
 start_ckpt() {
-    "$CKPT" --dir ckpt --socket "$SOCK" >> ckpt.log 2>&1 &
+    SENTINEL_TEST_CLOCK_FILE="${SENTINEL_TEST_CLOCK_FILE%/clock}/ckpt-clock" \
+        "$CKPT" --dir ckpt --socket "$SOCK" >> ckpt.log 2>&1 &
     CKPT_PID=$!
     i=0; while [ $i -lt 50 ] && [ ! -S "$SOCK" ]; do sleep 0.1; i=$((i + 1)); done
 }
@@ -266,7 +284,37 @@ flow_crash() {
         at 20; ctl replay --capture cap-c.txt > answer.replay
         at 21; ctl act --cert cert-main.json --invocation crash-c --capture cap.txt > /dev/null
         at 22; ctl replay --capture cap.txt > answer.crash ;;
+    w)
+        CKPT_LEAD=200
+        at 10; ctl act --cert cert-main.json --invocation crash-w --capture cap.txt > /dev/null
+        at 11; ctl replay --capture cap.txt > answer.crash ;;
     esac
+}
+
+# The checkpoint acknowledgement timestamp of flow w lands after the
+# challenge expired; afterwards both clocks agree again, past every reading of
+# the crash phase. A retry after the restart that has to ask for a new
+# challenge (the crash came before the agent received one) is an ordinary
+# request and may be released.
+end_crash_phase() {
+    if [ "$1" = w ]; then
+        CKPT_LEAD=0
+        OFF=300
+    fi
+}
+
+# kept_terminal LABEL: every claim that was terminal at the crash keeps its
+# terminal result and its release or withheld record in the current state.
+kept_terminal() {
+    pre_terminal=$(awk '$2 == 1' claims.crash | wc -l | tr -d ' ')
+    [ "$pre_terminal" -gt 0 ] || return 0
+    changed=$(awk '$2 == 1' claims.crash | while read -r cid t r rel i a; do
+        now=$(state_py claims | awk -v c="$cid" '$1 == c')
+        set -- $now
+        [ "${2:-}" = 1 ] && [ "${3:-}" = "$r" ] && { [ "$rel" = - ] || [ "${4:-}" = "$rel" ]; } || echo "$cid"
+    done | wc -l | tr -d ' ')
+    [ "$changed" = 0 ] && check "$1" PASS "$pre_terminal claim(s)" ||
+        check "$1" FAIL "$changed claim(s) changed"
 }
 
 # The receiver starts just before its flow; flow c's fixture ran until 11.
@@ -279,6 +327,7 @@ fires() { cat "$@" 2>/dev/null | sed -n 's/^actuator: FIRE .*(mock, \(.*\))$/\1/
 run_one() {
     flow=$1; n=$2; mode=$3
     RUN="$flow/$mode/$n"
+    OFF=0; CKPT_LEAD=0
     runs=$((runs + 1))
     dir=$WORK/runs/$flow-$mode-$n
     rm -rf "$dir"
@@ -310,6 +359,7 @@ run_one() {
     state_py claims > claims.crash
 
     # 2. Restart on the same state directory.
+    end_crash_phase "$flow"
     at 23
     start_edge edge.2.log
     health=$(ctl health)
@@ -340,9 +390,11 @@ run_one() {
         *) check "replay after restart refused" FAIL "$(decision_line "$(cat answer.replay2)")" ;;
         esac
     fi
+    fresh_retry=0
     if [ -f cap.txt ]; then
         retry=$(decision_line "$(ctl replay --capture cap.txt)")
     else
+        fresh_retry=1
         # The crash came before the challenge reached the agent: the agent
         # asks again, which is a new request.
         ctl act --cert cert-main.json --zone "$([ "$flow" = b ] && echo greenhouse-a || echo greenhouse-b)" \
@@ -374,6 +426,7 @@ run_one() {
     esac
     case $flow:$retry in
     b:*"actuated=1 "*) check "denied request never fires" FAIL "$retry" ;;
+    w:*"actuated=1 "*) [ "$fresh_retry" = 1 ] || check "withheld request never fires" FAIL "$retry" ;;
     esac
 
     # 4. Past every lease: an interrupted claim is recovered, and the proof
@@ -397,15 +450,7 @@ run_one() {
     fi
 
     # 5. Claims that were terminal at the crash keep their result and release.
-    if [ "$pre_terminal" -gt 0 ]; then
-        changed=$(awk '$2 == 1' claims.crash | while read -r cid t r rel i a; do
-            now=$(state_py claims | awk -v c="$cid" '$1 == c')
-            set -- $now
-            [ "${2:-}" = 1 ] && [ "${3:-}" = "$r" ] && { [ "$rel" = - ] || [ "${4:-}" = "$rel" ]; } || echo "$cid"
-        done | wc -l | tr -d ' ')
-        [ "$changed" = 0 ] && check "terminal results kept" PASS "$pre_terminal claim(s)" ||
-            check "terminal results kept" FAIL "$changed claim(s) changed"
-    fi
+    kept_terminal "terminal results kept"
 
     # 6. The receiver still decides: a new authorized request is released.
     at 75
@@ -420,7 +465,31 @@ run_one() {
     stop_edge
     stop_ckpt
 
-    # 7. Durable state, the checkpoint log, and the actuator.
+    # 7. Durable state, the checkpoint log, and the actuator. The restarted
+    #    receiver has rewritten its state file by now (step 6 committed a new
+    #    claim), so this pass sees what its loader kept.
+    kept_terminal "terminal results kept after rewrite"
+    if [ "$flow" = w ]; then
+        # A withheld result is permanent for its claim (SPEC-v2 §6.9): no
+        # claim of the crash phase is ever released, and every one that
+        # recorded a release outcome recorded withheld.
+        flow_claims=$(awk '{print $1}' claims.crash | grep -v -x -F -f claims.base)
+        released=$(printf '%s\n' "$flow_claims" | grep . | while read -r cid; do
+            state_py claims | awk -v c="$cid" '$1 == c && $4 ~ /\/1$/'
+        done | wc -l | tr -d ' ')
+        withheld=$(printf '%s\n' "$flow_claims" | grep . | while read -r cid; do
+            state_py claims | awk -v c="$cid" '$1 == c && $4 ~ /\/3$/'
+        done | wc -l | tr -d ' ')
+        [ "$released" = 0 ] && check "withheld claim never released" PASS "$withheld withheld record(s)" ||
+            check "withheld claim never released" FAIL "$released crash-phase claim(s) recorded released"
+        if awk '$4 ~ /\/3$/' claims.crash | grep -q .; then
+            kept=$(awk '$4 ~ /\/3$/ {print $1}' claims.crash | while read -r cid; do
+                state_py claims | awk -v c="$cid" '$1 == c && $4 ~ /\/3$/'
+            done | wc -l | tr -d ' ')
+            [ "$kept" -ge 1 ] && check "withheld record survives the crash" PASS "" ||
+                check "withheld record survives the crash" FAIL "$(state_py claims | tr '\n' ';')"
+        fi
+    fi
     v=$(state_py check)
     [ "${v%% *}" = OK ] && check "anchored state and checkpoint log" PASS "$v" ||
         check "anchored state and checkpoint log" FAIL "$v"
@@ -439,6 +508,10 @@ run_one() {
     case $flow in
     a | c) lo=$([ "$flow" = c ] && echo 2 || echo 1); hi=$((lo + 1)) ;;
     b) lo=1; hi=1 ;;
+    # Flow w: the new request after restart, and one more when the crash came
+    # before the challenge reached the agent and its fresh retry ran with
+    # both clocks agreeing.
+    w) lo=1; hi=$((1 + fresh_retry)) ;;
     esac
     [ "$total" -ge "$lo" ] && [ "$total" -le "$hi" ] && check "actuator count" PASS "$total in [$lo, $hi]" ||
         check "actuator count" FAIL "$total not in [$lo, $hi]"
@@ -454,10 +527,12 @@ count_steps() {
     if [ "$1" = c ]; then cp -Rp "$WORK/base-c" "$dir"; else cp -Rp "$WORK/base" "$dir"; fi
     cd "$dir" || exit 1
     export SENTINEL_TEST_CLOCK_FILE="$dir/clock"
+    OFF=0; CKPT_LEAD=0
     start_ckpt
     start_clock "$1"
     start_edge edge.1.log 0 before
     flow_crash "$1"
+    decision_line "$(cat answer.crash)" > decision.nocrash
     stop_edge
     stop_ckpt
     grep -c "^crash-point " edge.1.log
@@ -470,6 +545,15 @@ mkdir -p runs
 for flow in $FLOWS; do
     steps=$(count_steps "$flow")
     echo "flow $flow: $steps durable steps"
+    # Without a crash, flow w's request is committed and withheld, so the
+    # flow exercises a withheld record; it never fires.
+    if [ "$flow" = w ]; then
+        RUN="w/count"
+        case $(cat "runs/w-count/decision.nocrash") in
+        *"stage=committed "*"release=withheld "*"actuated=0 "*) check "flow w withholds without a crash" PASS "" ;;
+        *) check "flow w withholds without a crash" FAIL "$(cat "runs/w-count/decision.nocrash")" ;;
+        esac
+    fi
     sed -n 's/^crash-point //p' "runs/$flow-count/edge.1.log" | tr '\n' ',' | sed 's/,$/\n/' > "runs/$flow-steps.txt"
     before_fails=$fails
     before_runs=$runs

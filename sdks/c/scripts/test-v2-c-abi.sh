@@ -92,6 +92,8 @@ def limit_bytes(c):
         digits = c.get("item_index_digits", 0)
         items = [f"{c.get('item_prefix', '')}{n:0{digits}d}{c.get('item_suffix', '')}".encode() for n in range(c["count"])]
         return opt("prefix_b64") + b",".join(items) + opt("suffix_b64")
+    if m == "repeat_bytes":
+        return opt("prefix_b64") + b64d(c["item_b64"]) * c["count"] + opt("suffix_b64")
     if m == "repeat_item":
         return opt("prefix_b64") + b",".join([b64d(c["item_b64"])] * c["count"]) + opt("suffix_b64")
     raise SystemExit(f"unknown construction {m}")

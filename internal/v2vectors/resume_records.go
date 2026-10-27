@@ -162,6 +162,11 @@ func (g *gen) resumeRecordScenarios(sc func(string, string, ...lifecycleStepJSON
 
 	sc("resume_accepts_interrupted_record", "the claim store answers resumption with request A's sealed claim and the canonical evaluation_interrupted result and body with allow horizon 0: every check passes and resumption returns that committed result (SPEC-v2 §7.11)",
 		record(honest, interruptedTerminal, interruptedBody, 0, lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}))
+	sc("resume_substituted_record_rejected_at_release", "request A committed an allow and published its receipt; the claim store then answers resumption with request A's sealed claim and the canonical evaluation_interrupted result and body with allow horizon 0: the record passes every resumption check, so resumption returns that handoff, but it differs from the committed record and release rejects it at step 1 (rejected / release_state_mismatch, SPEC-v2 §6.9, §7.11); the store's own record then resumes and releases at sequence 1",
+		verifyA, thenGenuine[1],
+		record(honest, interruptedTerminal, interruptedBody, 0, lifecycleExpectJSON{Stage: "committed", Decision: "indeterminate", DecisionReason: "evaluation_interrupted"}),
+		lifecycleStepJSON{Op: "release", Request: "A", Checkpoint: "reference", Expect: lifecycleExpectJSON{ReleaseStatus: "rejected", ReleaseReason: "release_state_mismatch"}},
+		thenGenuine[0], thenGenuine[2])
 	sc("resume_accepts_honest_record", "request A committed an allow; the claim store answers resumption with exactly that committed record (sealed claim, terminal result, body and allow horizon): the returned handoff publishes at sequence 1 and releases exactly as the handoff the verifier returned, and a second release is the same (SPEC-v2 §7.11)",
 		verifyA, record(honest, allowTerminal, allowBody(nil), statusFreshUntil, committedAllow),
 		thenGenuine[1], thenGenuine[2], thenGenuine[2])

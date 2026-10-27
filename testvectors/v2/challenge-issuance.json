@@ -3,7 +3,7 @@
   "description": "Challenge issuance helper lifecycle (SPEC-v2 Part B, §7.3). Each scenario replays steps in order against one issuance store and one Part B claim store that share the authoritative clock; the issuer's random source yields random_b64 in order. The helper validates the request, reads the authoritative clock as issued_at, draws 32 bytes, durably persists the complete ExpectedChallengeV2 keyed by (verifier_namespace, replay_epoch, ChallengeClaimDigest), and only then returns it. A key conflict draws fresh bytes (at most three attempts) and never overwrites a record.",
   "operations": {
     "issue": "set the clock to at; arm persist_fault for this call only (ok; fail_before_commit = nothing stored and an error; fail_after_commit = the record is stored, then an error, modelling a crash before the response); issue request. expected_agent names a keys.json fixture whose ID and complete key are bound. expect.result issued gives the exact challenge, issued_at and expires_at; error means no challenge was returned. records_after is the number of stored records after the step",
-    "load": "retrieve the record for challenge_b64 by ChallengeClaimDigest under the fixture namespace and epoch. expect.result found returns a record naming exactly these bytes; expected_challenge_unavailable otherwise",
+    "load": "retrieve the record for challenge_b64 by ChallengeClaimDigest under the fixture namespace and epoch. expect.result found returns a record naming exactly these bytes and, when expect.expected_receiver_id is present, exactly that expected receiver ID (an empty string: the record names no receiver); expected_challenge_unavailable otherwise",
     "present": "set the clock to at; load the record for the bundle's challenge (expected_challenge_unavailable when absent), then run pre-claim checks (§6.2) at now = at with max_challenge_age_seconds 300, future_skew_seconds 5, required_scope data:read, the fixture namespace and epoch, and a context policy derived from the record (the Verify session-context policy with the record's expected session context when it has one, otherwise an explicit not-required policy), then the atomic claim. expect.result preflight gives the class; claimed gives the claim disposition",
     "present_concurrent": "set the clock to at; present every bundle in bundles_b64 concurrently. expect.dispositions is the sorted multiset of outcomes: created, in_progress (an exact retry while evaluating), or proof_conflict (a different proof for the claimed challenge). Exactly one presentation creates the claim"
   },
@@ -351,6 +351,114 @@
             "issued_at": 1799999990,
             "expires_at": 1800000110,
             "records_after": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "expected_receiver_id_byte_bound",
+      "description": "an expected receiver ID is valid UTF-8 of 1 to 512 bytes, counted in bytes: 513 ASCII bytes and 257 two-byte characters (514 bytes) are configuration_invalid before any randomness is drawn and store nothing; 512 bytes is issued and stored with that receiver; an empty value names no receiver and is issued without one",
+      "random_b64": [
+        "ERERERERERERERERERERERERERERERERERERERERERE=",
+        "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI="
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "at": 1799999990,
+          "request": {
+            "verifier_namespace": "verify-test",
+            "replay_epoch": 3,
+            "verifier_id": "ec4bf17b5e433b14c597adb790d056d36d09139f73f1cd5f3e7d700112570c2c",
+            "lifetime_seconds": 120,
+            "expected_agent": "agent",
+            "expected_receiver_id": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+            "expected_session_context_b64": "iZnvNIfG1ezneNUHaQ8zZfxwkVyB8Yx3RKft8Vuexhk="
+          },
+          "expect": {
+            "result": "error",
+            "error_class": "configuration_invalid",
+            "records_after": 0
+          }
+        },
+        {
+          "op": "issue",
+          "at": 1799999990,
+          "request": {
+            "verifier_namespace": "verify-test",
+            "replay_epoch": 3,
+            "verifier_id": "ec4bf17b5e433b14c597adb790d056d36d09139f73f1cd5f3e7d700112570c2c",
+            "lifetime_seconds": 120,
+            "expected_agent": "agent",
+            "expected_receiver_id": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+            "expected_session_context_b64": "iZnvNIfG1ezneNUHaQ8zZfxwkVyB8Yx3RKft8Vuexhk="
+          },
+          "expect": {
+            "result": "error",
+            "error_class": "configuration_invalid",
+            "records_after": 0
+          }
+        },
+        {
+          "op": "issue",
+          "at": 1799999990,
+          "request": {
+            "verifier_namespace": "verify-test",
+            "replay_epoch": 3,
+            "verifier_id": "ec4bf17b5e433b14c597adb790d056d36d09139f73f1cd5f3e7d700112570c2c",
+            "lifetime_seconds": 120,
+            "expected_agent": "agent",
+            "expected_receiver_id": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+            "expected_session_context_b64": "iZnvNIfG1ezneNUHaQ8zZfxwkVyB8Yx3RKft8Vuexhk="
+          },
+          "expect": {
+            "result": "issued",
+            "challenge_b64": "ERERERERERERERERERERERERERERERERERERERERERE=",
+            "issued_at": 1799999990,
+            "expires_at": 1800000110,
+            "records_after": 1
+          }
+        },
+        {
+          "op": "load",
+          "at": 0,
+          "challenge_b64": "ERERERERERERERERERERERERERERERERERERERERERE=",
+          "expect": {
+            "result": "found",
+            "issued_at": 1799999990,
+            "expires_at": 1800000110,
+            "expected_receiver_id": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+          }
+        },
+        {
+          "op": "issue",
+          "at": 1799999990,
+          "request": {
+            "verifier_namespace": "verify-test",
+            "replay_epoch": 3,
+            "verifier_id": "ec4bf17b5e433b14c597adb790d056d36d09139f73f1cd5f3e7d700112570c2c",
+            "lifetime_seconds": 120,
+            "expected_agent": "agent",
+            "expected_receiver_id": "",
+            "expected_session_context_b64": "iZnvNIfG1ezneNUHaQ8zZfxwkVyB8Yx3RKft8Vuexhk="
+          },
+          "expect": {
+            "result": "issued",
+            "challenge_b64": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+            "issued_at": 1799999990,
+            "expires_at": 1800000110,
+            "records_after": 2
+          }
+        },
+        {
+          "op": "load",
+          "at": 0,
+          "challenge_b64": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+          "expect": {
+            "result": "found",
+            "issued_at": 1799999990,
+            "expires_at": 1800000110,
+            "expected_receiver_id": ""
           }
         }
       ]

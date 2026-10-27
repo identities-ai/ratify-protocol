@@ -11,7 +11,16 @@ import { claimProofBundleV2, type ClaimStoreV2 } from "../../src/claim_store_v2.
 import { errorIs, v2ErrorClassOf } from "../../src/errors_v2.js";
 import { recoverInterruptedClaimV2, resumeCommittedClaimV2, type V2CommittedClaim, type V2CommittedClaimStore } from "../../src/evaluation_progress_v2.js";
 import { decodeProofBundleV2 } from "../../src/protocol_v2_wire.js";
-import { CommittedV2Outcome, releaseV2Decision, type V2ReceiptCheckpoint, type V2ReleaseConfig, type V2ReleasedDecision } from "../../src/release_v2.js";
+import {
+  CommittedV2Outcome,
+  ErrV2ReleaseStateMismatch,
+  releaseV2Decision,
+  type V2ReceiptCheckpoint,
+  type V2ReleaseClaimStore,
+  type V2ReleaseConfig,
+  type V2ReleasedDecision,
+  type V2ReleaseRecord,
+} from "../../src/release_v2.js";
 import {
   decodeVerificationReceiptBodyV2,
   decodeVerificationReceiptV2,
@@ -34,6 +43,21 @@ import { checkCommitted, checkReleasedDecisionAllowed } from "./release_checks.j
 const file = load("lifecycle-scenarios.json");
 
 /** Reports acknowledgements for a different entry hash (Go v2WrongEntryCheckpoint). */
+// Answers every release record with err and records nothing; the other
+// operations reach the store.
+class FailingRecordStore implements V2ReleaseClaimStore {
+  constructor(readonly inner: V2ReleaseClaimStore, readonly err: Error) {}
+  authoritativeTimeV2(signal?: AbortSignal) {
+    return this.inner.authoritativeTimeV2(signal);
+  }
+  loadV2TerminalClaim(claimID: string, signal?: AbortSignal) {
+    return this.inner.loadV2TerminalClaim(claimID, signal);
+  }
+  async recordV2Release(_record: V2ReleaseRecord): Promise<void> {
+    throw this.err;
+  }
+}
+
 class WrongEntryCheckpoint implements V2ReceiptCheckpoint {
   constructor(readonly inner: V2ReceiptCheckpoint) {}
   acknowledgeV2Receipt(logID: string, sequence: number, previous: Uint8Array, entry: Uint8Array) {
@@ -71,8 +95,8 @@ function ownerCapturing(inner: ClaimStoreV2): { store: ClaimStoreV2; owner: () =
 
 test("lifecycle-scenarios.json: corpus shape", () => {
   assert.equal(file.version, 2);
-  assert.equal(file.scenarios.length, 83);
-  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 447);
+  assert.equal(file.scenarios.length, 86);
+  assert.equal(file.scenarios.reduce((n: number, s: Any) => n + s.steps.length, 0), 467);
 });
 
 for (const sc of file.scenarios as Any[]) {
@@ -348,6 +372,8 @@ for (const sc of file.scenarios as Any[]) {
           const cfg: V2ReleaseConfig = { ...config };
           if (step.checkpoint === "wrong_entry") cfg.checkpoint = new WrongEntryCheckpoint(store);
           if (step.mode === "no_receipt") receipt = null;
+          if (step.mode === "record_release_unavailable") cfg.claimStore = new FailingRecordStore(store, new Error("claim store unavailable"));
+          if (step.mode === "record_release_state_mismatch") cfg.claimStore = new FailingRecordStore(store, ErrV2ReleaseStateMismatch);
           if (step.op === "release_forged") {
             c = Object.create(CommittedV2Outcome.prototype) as CommittedV2Outcome;
             receipt = null;

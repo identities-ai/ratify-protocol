@@ -236,7 +236,7 @@ fn v2_object_negatives() {
         });
     }
     assert_eq!(kinds.len(), 9, "negative kinds: {kinds:?}");
-    t.finish(&[("negatives", 437)]);
+    t.finish(&[("negatives", 468)]);
 }
 
 fn hedged_idempotency(fx: &Fixture, kind: &str, vc: &Value, deterministic: &[u8], hedged: &[u8]) -> Result<(), String> {
@@ -343,6 +343,12 @@ fn build_limit_bytes(c: &Value) -> Vec<u8> {
             out.extend(opt_b64("suffix_b64"));
             out
         }
+        "repeat_bytes" => {
+            let mut out = opt_b64("prefix_b64");
+            out.extend_from_slice(&b64(&c["item_b64"]).repeat(i(&c["count"]) as usize));
+            out.extend(opt_b64("suffix_b64"));
+            out
+        }
         "repeat_item" => {
             let mut out = opt_b64("prefix_b64");
             let item = b64(&c["item_b64"]);
@@ -398,5 +404,5 @@ fn v2_limits() {
         let gate_ok = (s(&v["size_gate"]) == "fail") == gate_failed;
         t.check("limits", &name, expectation_ok && gate_ok, || format!("{result:?}"));
     }
-    t.finish(&[("limits", 76)]);
+    t.finish(&[("limits", 80)]);
 }

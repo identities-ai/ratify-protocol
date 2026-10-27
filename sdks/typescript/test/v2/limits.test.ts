@@ -18,7 +18,7 @@ import {
 import { buildSessionContextV2 } from "../../src/operation_context_v2.js";
 import { decodeVerificationReceiptBodyV2, decodeVerificationReceiptV2 } from "../../src/verification_receipt_v2.js";
 import { decodeWitnessEntryV2 } from "../../src/witness_v2.js";
-import { MAX_IDENTIFIER_LENGTH_BYTES } from "../../src/types.js";
+import { MAX_DELEGATION_CHAIN_DEPTH, MAX_IDENTIFIER_LENGTH_BYTES } from "../../src/types.js";
 import { corpusKeyPairs, load, unb64, type Any } from "./helpers.js";
 
 const file = load("limits.json");
@@ -47,6 +47,13 @@ export function buildLimitBytes(c: Any): Uint8Array {
       parts.push(b64(c.suffix_b64));
       return Buffer.concat(parts);
     }
+    case "repeat_bytes": {
+      const item = b64(c.item_b64);
+      const parts: Uint8Array[] = [b64(c.prefix_b64)];
+      for (let i = 0; i < c.count; i++) parts.push(item);
+      parts.push(b64(c.suffix_b64));
+      return Buffer.concat(parts);
+    }
     case "repeat_item": {
       const item = b64(c.item_b64);
       const parts: Uint8Array[] = [b64(c.prefix_b64)];
@@ -70,6 +77,7 @@ async function decodeBatch(b: Uint8Array): Promise<unknown> {
 
 const CONSTANTS: Record<string, number> = {
   MAX_DELEGATION_CERT_BYTES_V2: limits.MAX_DELEGATION_CERT_BYTES_V2,
+  MAX_DELEGATION_CHAIN_DEPTH,
   MAX_IDENTIFIER_LENGTH_BYTES,
   MAX_KEY_ROTATION_STATEMENT_BYTES_V2: limits.MAX_KEY_ROTATION_STATEMENT_BYTES_V2,
   MAX_PROOF_BUNDLE_BYTES_V2: limits.MAX_PROOF_BUNDLE_BYTES_V2,
@@ -105,7 +113,7 @@ test("limits.json: byte, count and timestamp boundaries", async (t) => {
     transaction_receipt: decodeTransactionReceiptV2,
     status_evidence_batch: decodeBatch,
   };
-  assert.equal(file.vectors.length, 76);
+  assert.equal(file.vectors.length, 80);
   for (const kind of Object.keys(file.procedure_by_kind)) assert.ok(kind in decoders, `no decoder for ${kind}`);
   for (const v of file.vectors as Any[]) {
     await t.test(v.name, async () => {

@@ -2,6 +2,9 @@ package v2vectors
 
 import (
 	"bytes"
+	"strings"
+
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // Challenge issuance lifecycle vectors (SPEC-v2 Part B, §7.3 challenge
@@ -27,6 +30,9 @@ type issuanceExpectJSON struct {
 	ExpiresAt    int64    `json:"expires_at,omitempty"`
 	RecordsAfter *int     `json:"records_after,omitempty"`
 	Dispositions []string `json:"dispositions,omitempty"`
+	// ReceiverID, on a load step, is the record's expected receiver ID; ""
+	// means the record names no receiver.
+	ReceiverID *string `json:"expected_receiver_id,omitempty"`
 }
 
 type issuanceStepJSON struct {
@@ -91,7 +97,7 @@ func (g *gen) challengeIssuanceFile() any {
 		Description: "Challenge issuance helper lifecycle (SPEC-v2 Part B, §7.3). Each scenario replays steps in order against one issuance store and one Part B claim store that share the authoritative clock; the issuer's random source yields random_b64 in order. The helper validates the request, reads the authoritative clock as issued_at, draws 32 bytes, durably persists the complete ExpectedChallengeV2 keyed by (verifier_namespace, replay_epoch, ChallengeClaimDigest), and only then returns it. A key conflict draws fresh bytes (at most three attempts) and never overwrites a record.",
 		Operations: map[string]string{
 			"issue":              "set the clock to at; arm persist_fault for this call only (ok; fail_before_commit = nothing stored and an error; fail_after_commit = the record is stored, then an error, modelling a crash before the response); issue request. expected_agent names a keys.json fixture whose ID and complete key are bound. expect.result issued gives the exact challenge, issued_at and expires_at; error means no challenge was returned. records_after is the number of stored records after the step",
-			"load":               "retrieve the record for challenge_b64 by ChallengeClaimDigest under the fixture namespace and epoch. expect.result found returns a record naming exactly these bytes; expected_challenge_unavailable otherwise",
+			"load":               "retrieve the record for challenge_b64 by ChallengeClaimDigest under the fixture namespace and epoch. expect.result found returns a record naming exactly these bytes and, when expect.expected_receiver_id is present, exactly that expected receiver ID (an empty string: the record names no receiver); expected_challenge_unavailable otherwise",
 			"present":            "set the clock to at; load the record for the bundle's challenge (expected_challenge_unavailable when absent), then run pre-claim checks (§6.2) at now = at with max_challenge_age_seconds 300, future_skew_seconds 5, required_scope data:read, the fixture namespace and epoch, and a context policy derived from the record (the Verify session-context policy with the record's expected session context when it has one, otherwise an explicit not-required policy), then the atomic claim. expect.result preflight gives the class; claimed gives the claim disposition",
 			"present_concurrent": "set the clock to at; present every bundle in bundles_b64 concurrently. expect.dispositions is the sorted multiset of outcomes: created, in_progress (an exact retry while evaluating), or proof_conflict (a different proof for the claimed challenge). Exactly one presentation creates the claim",
 		},
@@ -134,6 +140,20 @@ func (g *gen) challengeIssuanceFile() any {
 		issuanceStepJSON{Op: "issue", At: at, Request: request(301, true, session), Expect: issuanceExpectJSON{Result: "error", ErrorClass: "configuration_invalid", RecordsAfter: intp(0)}},
 		issuanceStepJSON{Op: "issue", At: at, Request: request(120, true, session[:31]), Expect: issuanceExpectJSON{Result: "error", ErrorClass: "configuration_invalid", RecordsAfter: intp(0)}},
 		issuanceStepJSON{Op: "issue", At: at, Request: request(120, true, session), Expect: issued(r1, at, 120, 1)},
+	)
+	receiver := func(id string) *issueRequestJSON {
+		req := request(120, true, session)
+		req.ExpectedReceiverID = strp(id)
+		return req
+	}
+	atBound := strings.Repeat("r", ratify.MaxIdentifierLengthBytes)
+	add("expected_receiver_id_byte_bound", "an expected receiver ID is valid UTF-8 of 1 to 512 bytes, counted in bytes: 513 ASCII bytes and 257 two-byte characters (514 bytes) are configuration_invalid before any randomness is drawn and store nothing; 512 bytes is issued and stored with that receiver; an empty value names no receiver and is issued without one", [][]byte{r1, r2},
+		issuanceStepJSON{Op: "issue", At: at, Request: receiver(atBound + "r"), Expect: issuanceExpectJSON{Result: "error", ErrorClass: "configuration_invalid", RecordsAfter: intp(0)}},
+		issuanceStepJSON{Op: "issue", At: at, Request: receiver(strings.Repeat("\u00e9", ratify.MaxIdentifierLengthBytes/2+1)), Expect: issuanceExpectJSON{Result: "error", ErrorClass: "configuration_invalid", RecordsAfter: intp(0)}},
+		issuanceStepJSON{Op: "issue", At: at, Request: receiver(atBound), Expect: issued(r1, at, 120, 1)},
+		issuanceStepJSON{Op: "load", ChallengeB64: b64(r1), Expect: issuanceExpectJSON{Result: "found", IssuedAt: at, ExpiresAt: at + 120, ReceiverID: strp(atBound)}},
+		issuanceStepJSON{Op: "issue", At: at, Request: receiver(""), Expect: issued(r2, at, 120, 2)},
+		issuanceStepJSON{Op: "load", ChallengeB64: b64(r2), Expect: issuanceExpectJSON{Result: "found", IssuedAt: at, ExpiresAt: at + 120, ReceiverID: strp("")}},
 	)
 	add("wrong_binding", "the record's authenticated bindings are enforced before claim; no rejected presentation consumes the challenge", [][]byte{r1},
 		issuanceStepJSON{Op: "issue", At: at, Request: request(120, true, session), Expect: issued(r1, at, 120, 1)},

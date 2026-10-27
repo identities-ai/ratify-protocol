@@ -156,6 +156,9 @@ fn run_scenario(sc: &Value, fx: &Fixture) -> usize {
                 if s(&exp["result"]) == "found" {
                     let got = got.unwrap_or_else(|e| panic!("{name} step {n}: load: {e}"));
                     assert_eq!((got.issued_at, got.expires_at), (i(&exp["issued_at"]), i(&exp["expires_at"])), "{name} step {n}");
+                    if !exp["expected_receiver_id"].is_null() {
+                        assert_eq!(got.expected_receiver_id, s(&exp["expected_receiver_id"]), "{name} step {n}: load receiver");
+                    }
                 } else {
                     let class = got.err().map(|e| e.class.as_str().to_string()).unwrap_or_default();
                     assert_eq!(class, s(&exp["result"]), "{name} step {n}: load class");
@@ -195,7 +198,7 @@ fn v2_conformance_challenge_issuance() {
     let scenarios = arr(&f["scenarios"]);
     assert!(!scenarios.is_empty(), "no challenge issuance scenarios");
     let steps: usize = scenarios.iter().map(|sc| run_scenario(sc, &fx)).sum();
-    assert_eq!((scenarios.len(), steps), (10, 36));
+    assert_eq!((scenarios.len(), steps), (11, 42));
     let readme = readme_line("challenge-issuance.json");
-    assert!(readme.contains("10 challenge issuance helper scenarios (36 steps"), "README row: {readme}");
+    assert!(readme.contains("11 challenge issuance helper scenarios (42 steps"), "README row: {readme}");
 }

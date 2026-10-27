@@ -38,7 +38,7 @@ def test_corpus_shape():
     assert len(ARCHIVAL["cases"]) == 19
     assert {c["kind"] for c in ARCHIVAL["cases"]} == set(ARCHIVAL_KINDS)
     assert len(SIGNER["cases"]) == 17
-    assert len(DIGESTS["cases"]) == 16
+    assert len(DIGESTS["cases"]) == 25
 
 
 def _archival(c: dict):

@@ -256,7 +256,21 @@ fn release_status_name(code: i32) -> String {
     unsafe { cstr_in(ratify_v2_release_status_str(code)) }
 }
 
-/// Release a committed outcome and check the step expectation.
+/// A `record_release` that fails with store unavailability and records
+/// nothing.
+unsafe extern "C" fn record_release_unavailable(_: *mut c_void, _: *const RatifyV2ReleaseRecord) -> i32 {
+    RatifyV2Code::RatifyV2StoreUnavailable as i32
+}
+
+/// A `record_release` that answers a state mismatch and records nothing.
+unsafe extern "C" fn record_release_state_mismatch(_: *mut c_void, _: *const RatifyV2ReleaseRecord) -> i32 {
+    RatifyV2Code::RatifyV2StoreReleaseStateMismatch as i32
+}
+
+/// Release a committed outcome and check the step expectation. `mode`
+/// record_release_unavailable or record_release_state_mismatch replaces the
+/// store's `record_release` for this call.
+#[allow(clippy::too_many_arguments)]
 fn release(
     at: &str,
     c: &Committed,
@@ -264,11 +278,17 @@ fn release(
     log_id: &str,
     store: &RefStore,
     checkpoint: &RatifyV2CheckpointCallbacks,
+    mode: &str,
     want: &Value,
 ) -> Option<Released> {
     let key = keys().key(&s(&file()["verifier_key"]));
     let log = cs(log_id);
-    let release_cb = store.release();
+    let mut release_cb = store.release();
+    match mode {
+        "record_release_unavailable" => release_cb.record_release = Some(record_release_unavailable),
+        "record_release_state_mismatch" => release_cb.record_release = Some(record_release_state_mismatch),
+        _ => {}
+    }
     // Seed the output with a stale non-NULL value, as a caller reusing a
     // variable would: the library must overwrite it on every call.
     let (mut status, mut reason, mut released) = (
@@ -953,7 +973,7 @@ fn v2c_lifecycle_scenarios() {
                     } else {
                         store.checkpoint()
                     };
-                    release(&at, c, receipt, &log_id, &store, &checkpoint, want);
+                    release(&at, c, receipt, &log_id, &store, &checkpoint, &mode, want);
                 }
                 "release_forged" => {
                     // The committed outcome is an opaque library handle that
@@ -993,10 +1013,10 @@ fn v2c_lifecycle_scenarios() {
         }
     }
     assert_eq!(ran, want_steps, "every lifecycle step must run");
-    assert_eq!((scenarios.len(), ran), (83, 447), "Part B scripts");
+    assert_eq!((scenarios.len(), ran), (86, 467), "Part B scripts");
     let readme = readme_line(FILE);
     assert!(
-        readme.contains("83 Part B scripts (447 steps)"),
+        readme.contains("86 Part B scripts (467 steps)"),
         "README row: {readme}"
     );
     println!(
@@ -1228,6 +1248,7 @@ fn v2c_profile_scenarios() {
                         &log_id,
                         &store,
                         &checkpoint,
+                        "",
                         want,
                     );
                     decisions.insert(request.clone(), d);

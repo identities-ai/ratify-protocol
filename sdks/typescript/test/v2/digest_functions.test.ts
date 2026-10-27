@@ -17,7 +17,7 @@ const file = load("digest-functions.json");
 const noSig = { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) };
 
 test("digest-functions.json: corpus shape", () => {
-  assert.equal(file.cases.length, 16);
+  assert.equal(file.cases.length, 25);
 });
 
 for (const c of file.cases as Any[]) {

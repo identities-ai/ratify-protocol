@@ -1334,6 +1334,109 @@
       ]
     },
     {
+      "name": "resume_races_owner_allow_finalize",
+      "description": "the evaluator of request A finalizes its allow with allow horizon Now+3600 while 4 resumptions of its claim run and 4 more each resume the claim and release the resumed handoff (SPEC-v2 §6.9, §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the committed allow, never another result; a release of a resumed handoff before the receipt is published is pending / receipt_not_appended; the allow then resumes with its horizon, publishes at sequence 1 and releases",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 1,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600
+        },
+        {
+          "group": "resumers",
+          "count": 4,
+          "op": "resume",
+          "request": "A"
+        },
+        {
+          "group": "releasers",
+          "count": 4,
+          "op": "resume",
+          "request": "A",
+          "mode": "release"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/allow/authorized"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "releasers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "pending/receipt_not_appended"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
       "name": "concurrent_resumes_and_releases_of_one_allow",
       "description": "request A committed an allow whose receipt is published and acknowledged; 6 participants each resume the claim and release the resumed handoff while 4 release the handoff the verifier returned (SPEC-v2 §6.9, §7.11): every resumption returns the committed allow, the first release record wins, every release returns the same released result, and a release afterwards returns it again",
       "start_time": 1800000000,

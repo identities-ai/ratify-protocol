@@ -345,7 +345,7 @@ match before the beta.
   already required. Text, plus vectors
   `object-negatives.json` `transaction_receipt/terms_not_object_*`.
 - **More verifier ordering cases** (`verifier-ordering.json`, 342 to 485
-  cases, and to 514 below): status-key epoch transitions through the live verifier, with a
+  cases, and to 515 below): status-key epoch transitions through the live verifier, with a
   new optional `journal.setup` member that lists explicit journal setup
   steps; paired pre-claim and post-claim failures; status journal
   sequences; `tz` names in and out of tzdata `2025c`; `resource_path`
@@ -364,7 +364,9 @@ match before the beta.
   also badly signed, mis-hashed or mis-bound reported `invalid_signature`,
   `bundle_hash_mismatch`, `transaction_context_mismatch` or
   `transaction_signature_set_invalid`, and a non-canonical receipt of up to
-  5 MiB was fully signature-verified before it was refused. Vectors:
+  5 MiB was fully signature-verified before it was refused. The outer
+  receipt is compared before any nested proof bundle is decoded, so a bundle
+  fault such as `key_id_mismatch` does not mask it either. Vectors:
   `object-negatives.json` `transaction_receipt/noncanonical_and_*`.
 - **A sealed terminal result is exactly its canonical form** (every SDK and
   the C ABI). Finalization, lease-expiry recovery and resumption now require
@@ -377,8 +379,11 @@ match before the beta.
   changed. Finalization also validates the payload before comparing it with
   the local evaluation, so a body that is not a receipt body stays
   `malformed`. Vectors: `lifecycle-scenarios.json`
-  `recover_rejects_terminal_result_*`, replacing the scenario that accepted
-  further members.
+  `recover_rejects_terminal_result_*`,
+  `finalize_rejects_body_with_other_terminal_*` and
+  `resume_rejects_record_terminal_result_*`, replacing the scenario that
+  accepted further members. A store written by an earlier alpha that holds a
+  terminal result in another form no longer resumes.
 - **C ABI evaluator registrations need an implementation.** A custom
   registration whose `evaluate` callback is NULL is `configuration_invalid`
   before the challenge is claimed, as in Go, TypeScript and Python. The C
@@ -390,19 +395,19 @@ match before the beta.
   receiver ID is 1 to 512 bytes (§7.3). An `ExpectedChallenge` `replay_epoch`
   outside 0 through 2^53−1 is `stale_replay_epoch` (§6.2 step 6). Every SDK
   already behaved this way.
-- **More shared vectors.** `verifier-ordering.json` 485 to 514 cases, and
+- **More shared vectors.** `verifier-ordering.json` 485 to 515 cases, and
   every ordering vector now lists the exact status-provider requests (issuer,
   references in chain order, status key epoch and ID), which every SDK
   harness asserts: ascending issuer order that differs from chain order,
   repeated issuers, trust answers, extension registries, an exact audience
   match with a failing provider, configured verifier ID forms and §2.5
-  bounds. `object-negatives.json` 433 to 468: fully re-signed wire-layer
+  bounds. `object-negatives.json` 433 to 469: fully re-signed wire-layer
   cases (small-order and mixed-order Ed25519 keys that satisfy the
   cofactorless equation, ML-DSA under another context, UTF-16 key-order
   traps, escape spellings, byte fields at wrong lengths). `limits.json` 76 to
   80 (a valid transaction receipt at exactly 5 MiB, chains of 8 and 9).
   `digest-functions.json` 16 to 25. `challenge-issuance.json` 10 to 11 (the
-  receiver ID byte bound). `lifecycle-scenarios.json` 80 to 102 Part B
+  receiver ID byte bound). `lifecycle-scenarios.json` 80 to 108 Part B
   scripts (a withheld result whose record fails or conflicts, substituted and
   forged committed records refused at release, resumption record checks,
   clock classes at resumption and recovery). `concurrency-scenarios.json`

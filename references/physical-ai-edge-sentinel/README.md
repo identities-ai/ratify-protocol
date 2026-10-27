@@ -88,6 +88,8 @@ sequenceDiagram
 
 The Linux receiver is the enforcement boundary. Only a released Protocol v2 allow for `physical:actuate`, within local policy, and confirmed by `ratify_v2_released_allowed` at the receiver's authoritative clock immediately before the write, can reach the actuator. The agent, model, transport, checkpoint, and Arduino cannot turn a refused decision into an actuation inside this reference.
 
+The receiver verifies, publishes, and acts in one process. At restart it promotes an anchored state, recovers claims whose lease expired, and drains its own receipt outbox, so publication and checkpoint submission complete without a caller handoff (SPEC-v2 §7.11). It does not act on a decision whose request was lost in a crash; the requester must ask again with a fresh challenge. `edge/tests/crash.sh` exits the receiver's test build at each durable write and checks that no crash point fires the actuator twice or for a request that was not released.
+
 ## What the reference proves
 
 The deterministic gate runs a 32-row scenario matrix against the test builds with a fixture clock and a mock actuator. It never writes to a serial device or GPIO line. Every row asserts the receiver's recorded stage and outcome and whether the actuator fired, and the run asserts the exact invocation count.

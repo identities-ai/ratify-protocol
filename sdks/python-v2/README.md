@@ -3,7 +3,7 @@
 Python SDK for Ratify Protocol v2 (pre-release).
 
 ```bash
-pip install ratify-protocol-v2==2.0.0a1
+pip install ratify-protocol-v2==2.0.0b1
 ```
 
 This is a separate distribution from the v1 SDK. It imports as

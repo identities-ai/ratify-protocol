@@ -2,7 +2,7 @@
 
 This document records what remains after the independent LangChain reference.
 The current evidence proves the receiver-side authority boundary on Ratify
-Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0a1 SDK); it
+Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0b1 SDK); it
 does not claim a production deployment profile.
 
 ## Definition of done

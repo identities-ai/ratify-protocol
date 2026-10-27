@@ -7,7 +7,7 @@
 
 Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
+Byte-identical interoperability with the Go, TypeScript, Python, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-beta.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
@@ -27,10 +27,10 @@ For Protocol v1, beyond the one-shot delegate → present → verify round trip,
 
 ```toml
 [dependencies]
-ratify-protocol = "2.0.0-alpha.1"
+ratify-protocol = "2.0.0-beta.1"
 ```
 
-Version `2.0.0-alpha.1` is a Protocol v2 prerelease. The v2 API is the
+Version `2.0.0-beta.1` is a Protocol v2 prerelease. The v2 API is the
 `ratify_protocol::v2` module; the v1 API stays at the crate root. To keep the
 exact v1 release next to it, rename it:
 `ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.20" }`.
@@ -201,7 +201,7 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 
 ## Protocol v2 API
 
-Version `2.0.0-alpha.1` is a prerelease on the separate v2 line. The v2 API lives
+Version `2.0.0-beta.1` is a prerelease on the separate v2 line. The v2 API lives
 in the `ratify_protocol::v2` module next to the unchanged v1 API. Review so far
 is internal adversarial review; external independent review is a gate for
 `2.0.0`, and v2 carries no production security claim yet. It covers:

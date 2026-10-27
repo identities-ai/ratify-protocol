@@ -10,5 +10,5 @@
   "tests": 32,
   "skips": 0,
   "gate": "./run-reference-check.sh",
-  "protocol": "v2 2.0.0-alpha.1 through the C ABI (SDK built from this tree; prerelease)"
+  "protocol": "v2 2.0.0-beta.1 through the C ABI (SDK built from this tree; prerelease)"
 }

@@ -2,7 +2,7 @@
 
 The current Google ADK profile proves delegated authority at an independent
 receiver over native Streamable HTTP MCP, on Ratify Protocol v2 (2.0.0-beta.1
-line, tested against the in-tree 2.0.0a1 SDK). It does not claim a production
+line, tested against the in-tree 2.0.0b1 SDK). It does not claim a production
 Google Cloud deployment or a Google-approved transport profile.
 
 ## Definition of done

@@ -27,9 +27,9 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | Swift | n/a | planned (mobile wallet) | n/a |
 | Java / Kotlin | n/a | planned (Android / JVM) | n/a |
 
-This tree carries two release lines. The v2 line (`2.0.0-alpha.1`) covers Go
+This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and the separate Python
-distributions `ratify-protocol-v2` and `ratify-protocol-native-v2` (`2.0.0a1`).
+distributions `ratify-protocol-v2` and `ratify-protocol-native-v2` (`2.0.0b1`).
 The v1 Python SDK `ratify-protocol` and its native extra `ratify-protocol-native`
 stay on the v1 line (`1.0.0a21`). Neither line's version in this tree is
 published yet; the latest published release is `v1.0.0-alpha.20`. Per-SDK v2

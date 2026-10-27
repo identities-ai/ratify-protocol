@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64",
  "chrono",
@@ -453,7 +453,7 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol-native-v2"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "ed25519-dalek",
  "fips204",

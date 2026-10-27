@@ -1,10 +1,44 @@
 # Reference evidence
 
+## Protocol v2 (2026-10-27)
+
+Executed 2026-10-27 on macOS arm64, Node.js 26.10.0, npm 11.19.1, against the
+Ratify Protocol TypeScript SDK built from this source tree (branch
+`fix/r8-receipt-order-ts-perf` at `9ea1ec2` with the version bump applied, the
+commit that records this run; package version `2.0.0-beta.1`, imported as
+`@identities-ai/ratify-protocol/v2` through a `file:` dependency). This is the
+in-tree build, not the published `2.0.0-beta.1` package; the gate must be
+re-run against the published package once it exists (`RATIFY_V2_PIN` markers
+in `run-reference-check.sh`). MCP SDK `@modelcontextprotocol/sdk@1.32.1`.
+
+```bash
+./references/github-copilot/run-reference-check.sh
+```
+
+Result: `reference gate: Protocol v2 tests passed (13/13)`, 0 failures, 0
+skips. The gate rebuilt `plugin-runtime/mcp-server.js` from the current v2
+SDK (the rebuilt bundle is committed with this record), confirmed it contains
+no `geo_circle`, `geo_polygon`, `geo_bbox` or `max_speed_mps` code, and ran
+the demo, with
+the same output as the 2026-10-22 run below:
+
+```text
+RECEIVER ALLOW: authorized
+REPLAY DENY: replay: terminal_replay
+CHANGED OPERATION DENY: preflight: session_context_mismatch
+AFTER SIGNED REVOCATION DENY: deny: delegation_revoked
+PROTECTED HANDLER INVOCATIONS: 1
+```
+
+The case table, the clean-copy runtime check and the native Copilot CLI
+limitation below were not changed by this run; the clean-copy check was not
+repeated.
+
 ## Protocol v2 (2026-10-22)
 
 Executed 2026-10-22 on macOS arm64, Node.js 26.10.0, npm 11.19.1, against the
 Ratify Protocol TypeScript SDK built from this source tree (branch base
-`a1e5b5e`, package version `2.0.0-alpha.1`, imported as
+`a1e5b5e`, the in-tree alpha.1 package version, imported as
 `@identities-ai/ratify-protocol/v2` through a `file:` dependency). This is a
 prerelease build, not the published `2.0.0-beta.1` package; the gate must be
 re-run against the published package once it exists (`RATIFY_V2_PIN` markers

@@ -1,7 +1,8 @@
 # Cross-domain multi-agent authorization and scale
 
 **Status:** executable independent reference on Ratify Protocol v2
-(2.0.0-beta.1 line, tested against the in-tree 2.0.0a1 SDK); not a Google
+(2.0.0-beta.1 line; deterministic gate tested against the in-tree 2.0.0b1 SDK,
+call tiers measured on the earlier in-tree alpha.1 build); not a Google
 architecture, endorsement, or production benchmark. The v1 version of this
 note, with its one-million-call result, is kept in
 [`v1/FEDERATION_SCALE.md`](v1/FEDERATION_SCALE.md).

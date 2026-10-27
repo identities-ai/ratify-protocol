@@ -247,7 +247,7 @@ fn verify_hybrid(
         .map_err(|e| PyValueError::new_err(e.message))
 }
 
-/// Distribution version of this extension (Cargo form, e.g. 2.0.0-alpha.1).
+/// Distribution version of this extension (Cargo form, e.g. 2.0.0-beta.1).
 #[pyfunction]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

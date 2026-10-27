@@ -22339,7 +22339,11 @@ var Float64 = class {
   }
 };
 var HEX = "0123456789abcdef";
+var GO_STRING_SPECIAL = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff]/;
+var GO_STRING_SPECIAL_HTML = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff<>&]/;
 function encodeGoString(s, escapeHTML) {
+  if (!(escapeHTML ? GO_STRING_SPECIAL_HTML : GO_STRING_SPECIAL).test(s))
+    return '"' + s + '"';
   let out = '"';
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -24824,6 +24828,14 @@ async function hybridKeypairFromSeeds(edSeed, mlSeed) {
   };
 }
 
+// ../../sdks/typescript/dist/sha384_v2.js
+var nodeCrypto = globalThis.process?.getBuiltinModule?.("node:crypto");
+function sha384V2(data) {
+  if (nodeCrypto === void 0)
+    return sha384(data);
+  return new Uint8Array(nodeCrypto.createHash("sha384").update(data).digest());
+}
+
 // ../../sdks/typescript/node_modules/@noble/hashes/esm/sha3.js
 var _0n2 = BigInt(0);
 var _1n2 = BigInt(1);
@@ -25099,7 +25111,7 @@ function validV2ObjectType(code) {
 function v2SigningMessage(code, signable) {
   if (!validV2ObjectType(code))
     throw new Error(`unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
-  return concatBytes4(SIGNATURE_V2_DOMAIN, new Uint8Array([code >> 8 & 255, code & 255]), sha384(signable));
+  return concatBytes4(SIGNATURE_V2_DOMAIN, new Uint8Array([code >> 8 & 255, code & 255]), sha384V2(signable));
 }
 function v2MLDSAContext(code) {
   if (!validV2ObjectType(code))

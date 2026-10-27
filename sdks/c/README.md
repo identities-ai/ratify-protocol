@@ -7,7 +7,7 @@
 
 Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-alpha.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
+Byte-identical interoperability with the Go, TypeScript, Python, and Rust reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package also implements Protocol v2 (version `2.0.0-beta.1`, a prerelease) and runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
@@ -407,7 +407,7 @@ behavior.
 
 ### Protocol v2 ABI (`ratify_v2_*`)
 
-Version `2.0.0-alpha.1` is a prerelease on the separate v2 line. Review so far is
+Version `2.0.0-beta.1` is a prerelease on the separate v2 line. Review so far is
 internal adversarial review; external independent review is a gate for
 `2.0.0`, and v2 carries no production security claim yet. Runnable C programs
 live in

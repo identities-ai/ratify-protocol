@@ -4,7 +4,7 @@
 
 [Ratify Protocol](https://ratifyprotocol.com) is an open protocol for proving delegated authority. A principal signs a bounded delegation naming what an agent may do, and any receiver can verify that proof offline, before acting, without calling the issuer. Signatures are hybrid Ed25519 and ML-DSA-65.
 
-This experimental reference runs Ratify Protocol v2 (`2.0.0-alpha.1`, a prerelease) through the C ABI on a Linux receiver, with a separate checkpoint process, in front of a safe Arduino actuator. It is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture. Protocol v2 has had internal adversarial review only and carries no production security claim yet.
+This experimental reference runs Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease) through the C ABI on a Linux receiver, with a separate checkpoint process, in front of a safe Arduino actuator. It is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture. Protocol v2 has had internal adversarial review only and carries no production security claim yet.
 
 **Start here:** [run it](#use-it-now) · [evidence and limitations](#evidence-security-status-and-limitations) · [open source or Ratify Verify](#which-path-should-i-use)
 
@@ -121,7 +121,7 @@ The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evi
 
 ## Use it now
 
-Prerequisites: a C compiler, `make`, and a Ratify C SDK `2.0.0-alpha.1` tree containing `include/ratify.h` and `lib/libratify_c.a`, built from `sdks/c` in this repository. The gate needs no Arduino, model API, cloud account, or RTC.
+Prerequisites: a C compiler, `make`, and a Ratify C SDK `2.0.0-beta.1` tree containing `include/ratify.h` and `lib/libratify_c.a`, built from `sdks/c` in this repository. The gate needs no Arduino, model API, cloud account, or RTC.
 
 1. Clone the protocol repository and build the C SDK:
 
@@ -196,7 +196,7 @@ Not bound: the receiver's local policy file, its reading of the RTC, and the Ard
 
 ## Evidence, security status, and limitations
 
-v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-26 the 32-row matrix, which adds two checkpoint rows, passed locally on macOS with and without AddressSanitizer and UndefinedBehaviorSanitizer, and on the Raspberry Pi 2 with the ARMv7 test builds (5 mock invocations, 126 s). On 2026-10-22 the 30-row matrix passed locally on macOS against the `2.0.0-alpha.1` C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The same day the ARMv7 test build ran on the Raspberry Pi 2 and passed all 30 rows with the mock actuator (5 mock invocations, 74 s). The v2 production run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, also passed on 2026-10-22: every decision used the RTC as trusted time with no clock override, one authorized 500 ms pulse was observed by the owner, every other request was refused, and the receiver made exactly one actuator call. Replaying the same proof was refused as `terminal_replay`, and a replay after a receiver restart was rejected at preflight as `challenge_not_fresh`. That run used one device on one day; it does not establish behavior through power loss or under the limits below.
+v2 evidence is recorded in [`docs/evidence.md`](docs/evidence.md). On 2026-10-27 the 32-row matrix passed locally on macOS against the `2.0.0-beta.1` C SDK, with and without AddressSanitizer and UndefinedBehaviorSanitizer (5 mock invocations). On 2026-10-26 the 32-row matrix, which adds two checkpoint rows, passed locally on macOS with and without AddressSanitizer and UndefinedBehaviorSanitizer, and on the Raspberry Pi 2 with the ARMv7 test builds (5 mock invocations, 126 s). On 2026-10-22 the 30-row matrix passed locally on macOS against the in-tree alpha.1 build of the C SDK, and again with AddressSanitizer and UndefinedBehaviorSanitizer. The same day the ARMv7 test build ran on the Raspberry Pi 2 and passed all 30 rows with the mock actuator (5 mock invocations, 74 s). The v2 production run on the Pi, with the DS3231 RTC, the production binaries, and the Arduino, also passed on 2026-10-22: every decision used the RTC as trusted time with no clock override, one authorized 500 ms pulse was observed by the owner, every other request was refused, and the receiver made exactly one actuator call. Replaying the same proof was refused as `terminal_replay`, and a replay after a receiver restart was rejected at preflight as `challenge_not_fresh`. That run used one device on one day; it does not establish behavior through power loss or under the limits below.
 
 Earlier hardware evidence is v1 only and kept as dated history: on 2026-10-11 the alpha.20 C SDK and v1 production receiver ran on the Pi 2 with the DS3231 RTC, allowed one 500 ms LED action, and denied a captured proof's replay without another actuator call.
 

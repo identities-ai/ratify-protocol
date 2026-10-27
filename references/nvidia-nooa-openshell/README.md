@@ -12,7 +12,7 @@ reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
 [Architecture proposal](../../docs/nvidia-open-secure-ai-reference-proposal.md) (Protocol v1) ·
-[v2 evidence record](evidence-v2-2026-10-22.md) ·
+[v2 evidence record](evidence-v2-2026-10-27.md) ·
 [v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json) ·
 [PR inventory](../../docs/nvidia-pr-inventory.md)
 
@@ -22,7 +22,7 @@ gate passes 192/192 on v2, and one live OpenShell profile run passed 64/64
 gates (52 required cases), both against the SDK built from this tree and the
 SDK's in-memory reference stores, which are for development only. The Protocol v1 results (181 tests; the live
 OpenShell profile at 64/64 gates against `ratify-protocol==1.0.0a20`) are kept
-as dated history. Details: [v2 evidence record](evidence-v2-2026-10-22.md). Every geofence, speed or
+as dated history. Details: the [deterministic gate re-run](evidence-v2-2026-10-27.md) (2026-10-27) and the [first v2 record](evidence-v2-2026-10-22.md) with the live profile. Every geofence, speed or
 kinematic statement in the NVIDIA outreach and proposal documents describes
 Protocol v1; those constraints return in v2.1.
 
@@ -119,7 +119,7 @@ behind it. Neither substitutes for the other.
 
 On Protocol v2, 192 tests pass with zero skips against the SDK built from this
 tree, and one live OpenShell profile run passed 64 of 64 gates; see
-[the v2 evidence record](evidence-v2-2026-10-22.md). On Protocol v1, 181 tests passed
+[the v2 evidence records](evidence-v2-2026-10-27.md) ([first v2 record](evidence-v2-2026-10-22.md)). On Protocol v1, 181 tests passed
 against both the in-tree SDK and the published package, and the live OpenShell
 profile passed 64 of 64 gates; see
 [the v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json).

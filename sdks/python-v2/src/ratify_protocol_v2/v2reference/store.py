@@ -36,6 +36,8 @@ from ..claim_store_v2 import (
 )
 from ..errors_v2 import V2Error, V2ErrorClass
 from ..evaluation_progress_v2 import (
+    V2CommittedClaim,
+    V2CommittedClaimStore,
     V2EvaluationProgress,
     V2InterruptedClaim,
     clone_v2_evaluation_progress,
@@ -144,7 +146,7 @@ def _same_immutable_claim(a: V2ChallengeClaim, b: V2ChallengeClaim) -> bool:
     return clone_v2_challenge_claim(a) == clone_v2_challenge_claim(b)
 
 
-class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint):
+class Store(ClaimStoreV2, V2CommittedClaimStore, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint):
     """The reference Part B store. All methods are safe for concurrent use."""
 
     def __init__(self, now: int, lease_seconds: int, log_id: str, verifier_key, *, _clone: bool = False):
@@ -451,6 +453,24 @@ class Store(ClaimStoreV2, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptChec
             self._change_locked(lambda: self._commit_terminal_locked(record, terminal_result, receipt_body, 0, now))
             return True
 
+    def load_v2_committed_claim(self, ctx: context_v2.Context, claim_id: str) -> V2CommittedClaim:
+        """Return a terminal claim exactly as its terminal commit persisted
+        it, for resumption after the handoff was lost (SPEC-v2 §7.11). A
+        claim still evaluating is ``claim_lease_live`` while its lease is
+        live and ``claim_lease_lost`` after, when lease-expiry recovery must
+        run first."""
+        with self._lock:
+            record = self._claims.get(claim_id)
+            if record is None:
+                raise V2Error(V2ErrorClass.CLAIM_NOT_FOUND, "v2reference: unknown claim")
+            if record.state != _TERMINAL:
+                now = self._read_clock_locked()
+                if now < record.lease_expires_at:
+                    raise V2Error(V2ErrorClass.CLAIM_LEASE_LIVE, "v2reference: evaluator lease is still live")
+                raise V2Error(V2ErrorClass.CLAIM_LEASE_LOST, "v2reference: claim is not terminal; recover it first")
+            return V2CommittedClaim(claim=clone_v2_challenge_claim(record.claim), terminal_result=bytes(record.terminal),
+                                    receipt_body=bytes(record.receipt_body), allow_horizon=record.allow_horizon)
+
     # -- release -----------------------------------------------------------
 
     def load_v2_terminal_claim(self, ctx: context_v2.Context, claim_id: str) -> V2TerminalClaimRecord:
@@ -624,7 +644,7 @@ def _clone_record(record: _ClaimRecord) -> _ClaimRecord:
     return out
 
 
-class RateAtFinalizationStore(V2RateAtFinalizationStore, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint):
+class RateAtFinalizationStore(V2RateAtFinalizationStore, V2CommittedClaimStore, V2ReleaseClaimStore, V2ReceiptPublisher, V2ReceiptCheckpoint):
     """The reference store with max_rate admission moved into the
     finalization compare-and-set. Use it as both claim store and rate store."""
 
@@ -661,6 +681,9 @@ class RateAtFinalizationStore(V2RateAtFinalizationStore, V2ReleaseClaimStore, V2
 
     def recover_interrupted_v2_claim(self, ctx, claim_id, terminal_result, receipt_body):
         return self._store.recover_interrupted_v2_claim(ctx, claim_id, terminal_result, receipt_body)
+
+    def load_v2_committed_claim(self, ctx, claim_id):
+        return self._store.load_v2_committed_claim(ctx, claim_id)
 
     def load_v2_terminal_claim(self, ctx, claim_id):
         return self._store.load_v2_terminal_claim(ctx, claim_id)

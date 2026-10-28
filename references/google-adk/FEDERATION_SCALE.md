@@ -1,8 +1,8 @@
 # Cross-domain multi-agent authorization and scale
 
 **Status:** executable independent reference on Ratify Protocol v2
-(2.0.0-beta.1 line; deterministic gate tested against the in-tree 2.0.0b1 SDK,
-call tiers measured on the earlier in-tree alpha.1 build); not a Google
+(2.0.0-beta.1 line; deterministic gate and call tiers run against the in-tree
+2.0.0b1 SDK); not a Google
 architecture, endorsement, or production benchmark. The v1 version of this
 note, with its one-million-call result, is kept in
 [`v1/FEDERATION_SCALE.md`](v1/FEDERATION_SCALE.md).
@@ -201,36 +201,33 @@ count excess) are included to measure discrimination and fail-closed behavior.
 
 The checked-in result is
 [`evidence/federation-scale-local.json`](evidence/federation-scale-local.json),
-measured on 2026-10-22 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
-with eight requested workers. This run predates native verification in the
-Python v2 SDK, so the table below is a pre-native measurement:
+measured on 2026-10-27 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
+with eight requested workers, against `ratify-protocol-v2` and
+`ratify-protocol-native-v2` `2.0.0b1` built from this repository, with hybrid
+verification in the native extension (`RATIFY_REQUIRE_NATIVE=1`):
 
 | Calls | Workers | Allowed | Denied (`constraint_denied`) | Released receipts | Protected actions | Wall seconds | Calls per second | p50 ms | p95 ms | p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 5 | 9 | 1 | 19 | 9 | 5.588 | 1.790 | 2,556 | 3,071 | 3,071 |
-| 100 | 8 | 90 | 10 | 190 | 90 | 71.112 | 1.406 | 5,414 | 7,195 | 8,017 |
-| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 1,123.928 | 0.890 | 7,185 | 19,359 | 25,503 |
+| 10 | 5 | 9 | 1 | 19 | 9 | 0.660 | 15.150 | 294 | 388 | 388 |
+| 100 | 8 | 90 | 10 | 190 | 90 | 6.170 | 16.206 | 473 | 595 | 636 |
+| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 63.719 | 15.694 | 514 | 650 | 724 |
 
 The encoded dual-root presentation (both proofs, base64 as carried in MCP
 `_meta`) is 76,148 bytes. Every allow released two receipts and every denial
-one, and protected actions equal allows in every tier. This pre-native run is
-far slower than v1: throughput is about one call per second, latency is
-seconds, and it falls as the tier grows. Two causes were visible in profiles
-of the same path at the time: the Python v2 SDK then verified ML-DSA-65 and
-canonicalized the security journal in pure Python, and the in-memory reference
-stores grow with every claim and receipt. The 10-call tier ran five workers
-because the harness splits calls into equal batches. Another test process
-shared the host during part of the 1,000-call tier.
+one, and protected actions equal allows in every tier. Throughput is about 16
+calls per second and stays flat from 100 to 1,000 calls. The 10-call tier ran
+five workers because the harness splits calls into equal batches. No other
+benchmark or test ran during the measurement; the host's ordinary desktop
+applications and a few idle local containers were running.
 
-The Python v2 SDK now verifies natively. On the same Apple M2 Pro host with 8
-worker threads, the same dual-root benchmark measured 13.2, 15.6 and 14.2 calls
-per second for the 10, 100 and 1,000-call tiers. Those figures, the method,
-and the remaining per-decision cost (Python protocol logic such as journal
-snapshot handling, canonical JSON and strict decoding, not signature
-verification) are recorded in the
+The first v2 measurement, on 2026-10-22 against the in-tree alpha.1 build
+before the Python v2 SDK verified natively, reached 1.790, 1.406 and 0.890
+calls per second for the same three tiers, with p50 latency of 2.6 to 7.2
+seconds. It is kept in git history (commit `1315454`). With native
+verification the remaining per-decision cost is Python protocol logic such as
+journal snapshot handling, canonical JSON and strict decoding, not signature
+verification; see the
 [Python v2 SDK performance section](../../sdks/python-v2/README.md#performance).
-The checked-in evidence file and the table above have not been re-run and
-remain the pre-native measurement.
 
 These are single-host measurements of the Python v2 SDK with in-memory
 reference stores. They exclude Gemini latency, ADK reasoning, MCP HTTP,
@@ -240,9 +237,8 @@ service latency, and they are not Google capacity claims.
 **Why there is no one-million-call v2 tier.** The v1 note records 1,000,000
 calls at 369.693 calls per second with Ratify `1.0.0a20`. Each dual-root
 call runs two full verifications with signed status and two receipt
-publications. At the pre-native measured rate the same tier would have taken
-roughly two weeks on this host; at the native rate of about 14 calls per
-second it would still take most of a day. The in-memory reference
+publications. At the measured rate of about 16 calls per second the same tier
+would take most of a day on this host. The in-memory reference
 stores also retain every claim and receipt, so memory grows with the call
 count. A meaningful v2 endurance number
 needs a faster v2 verifier and durable stores; it is listed in

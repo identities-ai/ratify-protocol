@@ -60,6 +60,24 @@ Not exercised by the matrix: lease-expiry recovery of an interrupted claim,
 promotion of an anchored `state.next` after a crash between anchoring and
 rename, and the checkpoint refusing when its capacity is used.
 
+## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix, 32 rows (2026-10-27, 2.0.0-beta.1)
+
+The ARMv7 test builds of the 32-row matrix, built against the `2.0.0-beta.1`
+C SDK, were copied to the Pi in a new bundle directory, its `SHA256SUMS`
+manifest was verified there, and the deterministic matrix was run with
+`./run-matrix.sh` on 2026-10-27. No serial or GPIO output was produced.
+
+- Target: Raspberry Pi 2 Model B Rev 1.1, armv7l, Raspbian GNU/Linux 13 (trixie), glibc 2.41; `edge` links only libc and libarmmem
+- Build: C SDK `2.0.0-beta.1` cross-compiled with `cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.36` (rustc 1.95.0) at `1efbe15`; binaries cross-compiled with `zig cc -target arm-linux-gnueabihf.2.36 -mcpu=cortex_a7` (zig 0.16.0), not stripped, Ratify library linked statically, glibc linked dynamically
+- SDK SHA-256: `ratify.h` `138d133b16f41c1082b5c15e496eb1d0b2fb23cfe196531bb74509bb660db34b`, `libratify_c.a` (armv7) `360aacd614946678a080f4b8ad600477ce97bcd2e692b6736fe74498df8b2e43`
+- Source revision: `1efbe15`; the C SDK and this reference are unchanged from `c3f08db`, the commit that moved the v2 line to `2.0.0-beta.1`
+- Binary SHA-256: `edge` `c9dc977227724598005d386702189b7c6c304b68f68173d15e1eb1c8e92d3c33`, `edge-checkpoint` `a9e95aafa476ed75f003a2c54d1125c170736f103bed2c6f0a48e9e9fb883d22`, `edge-test` `8fa5583404dcc921261f499f7c7b16778b3df6b29212236a0a439351b8452258`, `edge-checkpoint-test` `dc542f1bd97777c1eae0df3b966e7ac0987ef56a415bddf2637215f1e573a793`, `controller` `92c31b111b189691106d98cdbc74b85754bc599aea30ee2975a77133d0e94109`
+- Deterministic matrix on the Pi (mock actuator): `ALL ROWS PASSED (32/32)`, 32 passed, 0 failed, 0 skipped, no `UNEXPECTED` lines
+- Actuator: mock only; 5 invocations in total, 0 hardware writes
+- Matrix wall time on the Pi: 36 s. The bundle ran from `/tmp` (tmpfs) because the SD card was nearly full; the 2026-10-26 run used a directory on the SD card, so the two wall times are not directly comparable
+
+The production hardware run below was not repeated with these binaries.
+
 ## Protocol v2: Raspberry Pi 2 ARMv7 deterministic matrix, 32 rows (2026-10-26)
 
 The ARMv7 test builds of the 32-row matrix were copied to the Pi in a new

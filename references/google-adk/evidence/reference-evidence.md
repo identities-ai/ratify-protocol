@@ -68,34 +68,36 @@ No tests were skipped, xfailed, or retried.
 
 ## Measured call tiers
 
-Command, run from `references/google-adk` on the same host on 2026-10-22,
-with an earlier gate environment for the in-tree alpha.1 build (writing to a
-scratch path, then copied to `evidence/federation-scale-local.json`):
+Command, run from `references/google-adk` on the same host on 2026-10-27, on
+branch `test/r8-beta-live` at `eaefbb9`, with the virtual environment the gate
+above created for the in-tree `2.0.0b1` build (writing to a scratch path, then
+copied to `evidence/federation-scale-local.json`):
 
 ```bash
-PYTHONPATH=. python -W ignore -m authority_reference.scale_benchmark \
+RATIFY_REQUIRE_NATIVE=1 python -m authority_reference.scale_benchmark \
   --calls 10,100,1000 --workers 8 --output <scratch>/federation-scale-local.json
 ```
 
-The run used the working tree just before the code commit; the only later
-change to the measured code is moving an `import threading` to the top of
-`scale_benchmark.py`. The gate test
-`test_checked_in_evidence_matches_current_dual_root_proof_size` re-derives the
-presentation size from the committed code.
+Hybrid verification ran in the native extension (`2.0.0-beta.1`). The result
+records `ratify-protocol-v2` and `ratify-protocol-native-v2` `2.0.0b1`. The
+gate test `test_checked_in_evidence_matches_current_dual_root_proof_size`
+re-derives the presentation size from the committed code.
 
 The full result is [`federation-scale-local.json`](federation-scale-local.json).
 
 | Calls | Workers | Allowed | Denied | Released receipts | Protected actions | Calls/s | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 5 | 9 | 1 | 19 | 9 | 1.79 | 2,556.425 | 3,070.646 |
-| 100 | 8 | 90 | 10 | 190 | 90 | 1.406 | 5,413.662 | 7,194.725 |
-| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 0.89 | 7,185.036 | 19,358.957 |
+| 10 | 5 | 9 | 1 | 19 | 9 | 15.15 | 294.411 | 387.748 |
+| 100 | 8 | 90 | 10 | 190 | 90 | 16.206 | 473.18 | 595.461 |
+| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 15.694 | 513.558 | 649.835 |
 
 Every denial is `constraint_denied` (the deterministic one-in-ten node count
-excess). The encoded dual-root presentation is 76,148 bytes. Another test
-process shared the host during part of the 1,000-call tier. The tiers were
-not re-measured on the 2.0.0b1 build. The one-million-call tier was not run
-on v2; see
+excess). The encoded dual-root presentation is 76,148 bytes. No other
+benchmark or test ran during the measurement; ordinary desktop applications
+and a few idle local containers were running. The earlier tiers (2026-10-22,
+in-tree alpha.1 build, before native verification: 1.79, 1.406 and 0.89
+calls/s) are kept in git history at `1315454`. The one-million-call tier was
+not run on v2; see
 [`../FEDERATION_SCALE.md`](../FEDERATION_SCALE.md#measured-call-tiers).
 
 ## What this run establishes

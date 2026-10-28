@@ -118,12 +118,13 @@ material and exercises dependency outages.
 
 ### P1: verifier throughput
 
-The Python v2 verifier completes about one dual-root call per second on the
-recorded host (see `FEDERATION_SCALE.md`), far below the v1 package that
-produced the one-million-call run.
+The Python v2 SDK, with hybrid verification in its native extension,
+completes about 16 dual-root calls per second on the recorded host (see
+`FEDERATION_SCALE.md`), far below the v1 package that produced the
+one-million-call run.
 
-- Measure the same path with a faster v2 verifier (Go, Rust, or a native
-  Python verification path) before making any throughput claim.
+- Measure the same path with production-shaped stores, and with the Go or
+  Rust SDK where the receiver allows, before making any throughput claim.
 - Repeat the one-million-call tier only with durable stores that do not retain
   every claim in memory.
 

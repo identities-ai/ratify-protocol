@@ -44,8 +44,8 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 from pydantic import StrictInt
-from ratify_protocol_v2.limits_v2 import MAX_PROOF_BUNDLE_BYTES_V2
-from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
+from ratify_protocol.v2.limits_v2 import MAX_PROOF_BUNDLE_BYTES_V2
+from ratify_protocol.v2.protocol_v2 import decode_proof_bundle_v2
 
 from refund_service import BadRequest, DEFAULT_TENANT, RefundService
 

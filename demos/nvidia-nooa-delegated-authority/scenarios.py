@@ -15,7 +15,7 @@ import time
 import urllib.error
 import urllib.request
 
-from ratify_protocol_v2.scope import (
+from ratify_protocol.v2.scope import (
     SCOPE_IDENTITY_DELEGATE,
     SCOPE_PAYMENTS_RECEIVE,
     SCOPE_PAYMENTS_SEND,

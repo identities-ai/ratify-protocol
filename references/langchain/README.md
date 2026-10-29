@@ -4,10 +4,13 @@
 partnership, LangChain-approved integration, or LangChain reference architecture.
 
 - **Protocol line:** v2 (2.0.0-beta.1)
-- **Tested against:** the in-tree Python v2 SDK (`ratify-protocol-v2` and
+- **Tested against:** the in-tree Python v2 SDK (`ratify_protocol.v2` from
+  `ratify-protocol` 2.0.0b1 with its `protocol-v2` extra, and
   `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
   2.0.0-beta.1 is published. The deterministic gate is 34/34 green; see
-  [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
+  [`evidence/reference-evidence.md`](evidence/reference-evidence.md). That
+  recorded run predates the move of the v2 SDK into the `ratify-protocol`
+  distribution on 2026-10-28.
 - **Protocol v1 history:** the v1 version of this reference (Ratify
   `1.0.0a19`, 28/28 gate) is kept unchanged in [`v1/`](v1/README.md).
 
@@ -136,18 +139,18 @@ and network access to install the pinned packages. From the repository root:
 
 The gate creates a clean virtual environment (`references/langchain/.venv`,
 or `RATIFY_REFERENCE_VENV`), builds `ratify-protocol-native-v2` and installs
-`ratify-protocol-v2` from this repository, installs the pinned platform
-packages, refuses to run if the SDK resolves from the source tree or if the v1
-`ratify_protocol` package is present, and uses the real `create_agent`
+`ratify-protocol` with its `protocol-v2` extra from this repository, installs
+the pinned platform packages, refuses to run if the SDK resolves from the
+source tree, and uses the real `create_agent`
 LangGraph loop with a deterministic model double, the public
 `MultiServerMCPClient` tool-interceptor API, and an independently started
 Streamable HTTP MCP receiver. It needs no model API key or paid service. It
-requires exactly 33 passing tests and fails on a skipped, xfail, missing, or
+requires exactly 34 passing tests and fails on a skipped, xfail, missing, or
 additional test. See [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
 **Release pin.** The SDK dependency moves to the published
-`ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (2.0.0-beta.1)
-when they are released; the lines to change are marked `RATIFY_V2_PIN` in
+`"ratify-protocol[protocol-v2]==2.0.0b1"` (2.0.0-beta.1), which brings
+`ratify-protocol-native-v2` 2.0.0b1 with it, when it is released; the lines to change are marked `RATIFY_V2_PIN` in
 `requirements.txt` and `run-reference-check.sh`. The 34/34 result has not yet
 been reproduced against the published packages.
 
@@ -229,7 +232,7 @@ tool selection, but add no authority guarantee.
 - `mcp==1.29.0`
 - `pytest==9.0.3`
 - `pytest-asyncio==1.4.0`
-- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
+- `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
 
 ## Which path should I use?
 
@@ -256,7 +259,7 @@ Both verify the same proofs. The protocol does not change between them.
 | `authority_reference/status_feed.py` | One status publisher per issuer under a separate status key, and the file-based local status feed |
 | `authority_reference/authority.py` | Reference identities and the bounded delegation |
 | `authority_reference/deployment_config.py` | Trust root, expected agent, status keys and the receiver's verifier key, pinned out of band |
-| `tests/test_reference.py` | The 33 deterministic boundary, status, release, and Jev-separation cases |
+| `tests/test_reference.py` | The 34 deterministic boundary, status, release, and Jev-separation cases |
 | `evidence/reference-evidence.md` | Executed evidence for the gate |
 | `DESIGN.md` | Architecture and threat-boundary rationale |
 | `v1/` | The Protocol v1 reference and its evidence, kept as dated history |
@@ -265,7 +268,7 @@ Both verify the same proofs. The protocol does not change between them.
 
 - **Development-only stores.** The claim store, receipt log, checkpoint,
   challenge issuance store and security journal are the SDK's in-memory
-  reference stores (`ratify_protocol_v2.v2reference`). They are not durable,
+  reference stores (`ratify_protocol.v2.v2reference`). They are not durable,
   fail closed on restart, and the checkpoint is not independent of the
   receiver. A production receiver supplies durable Part B stores and an
   independent checkpoint (SPEC-v2 §7).

@@ -4,7 +4,8 @@ build-backend = "maturin"
 
 [project]
 # Distinct from the v1 `ratify-protocol-native` extension so both can be
-# installed together. Version-locked to `ratify-protocol-v2`.
+# installed together. Version-locked to `ratify-protocol` 2.x, whose
+# [protocol-v2] extra pins it exactly. Users never import it directly.
 name = "ratify-protocol-native-v2"
 description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"
 readme = "README.md"

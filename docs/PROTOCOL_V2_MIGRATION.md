@@ -74,8 +74,8 @@ brings:
 - **Migration is a clean re-enrollment.** Generate fresh v2 keys and issue new
   v2 delegations. No v1 key can authorize a v2 key, and importing a v1 key
   into a v2 identity is prohibited.
-- **Side-by-side operation is supported.** v1 and v2 packages install
-  together in every ecosystem (see [Install](#install)). A deployment chooses
+- **Side-by-side operation is supported.** v1 and v2 run together in one
+  build or environment in every ecosystem (see [Install](#install)). A deployment chooses
   the version explicitly at each API boundary and keeps a v1 verifier for v1
   proofs until it retires them.
 - **v1 remains available and pinned.** Released v1 tags and artifacts are
@@ -94,7 +94,7 @@ brings:
 | --- | --- | --- |
 | Go | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1`, import `github.com/identities-ai/ratify-protocol/v2` | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20` (original module path) |
 | TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`), import from `@identities-ai/ratify-protocol/v2` | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.20` (dist-tag `latest`) |
-| Python | `pip install ratify-protocol-v2==2.0.0b1`, import `ratify_protocol_v2` (pulls in the required `ratify-protocol-native-v2` signing backend) | `pip install ratify-protocol==1.0.0a20`, import `ratify_protocol` |
+| Python | `pip install "ratify-protocol[protocol-v2]==2.0.0b1"`, import `ratify_protocol.v2` (the `protocol-v2` extra pulls in the `ratify-protocol-native-v2` signing backend) | `pip install ratify-protocol==1.0.0a21` (the v1 maintenance release), import `ratify_protocol` |
 | Rust | `cargo add ratify-protocol@2.0.0-beta.1`, use `ratify_protocol::v2` | `ratify-protocol = "=1.0.0-alpha.20"` |
 | C/C++ | `ratify-c` 2.x release archive or `cargo build --release` in `sdks/c`; `#include "ratify.h"` and call `ratify_v2_*`; check `ratify_v2_abi_version()` | the `1.0.0-alpha.20` release archive and its `ratify_*` ABI |
 
@@ -107,9 +107,16 @@ Side by side in one build:
   root. To keep the exact v1 release as well, add an alias:
   `npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
   An unpinned install resolves to v1 until `2.0.0`.
-- **Python:** `ratify-protocol` and `ratify-protocol-v2` are separate
-  distributions with separate import packages and install together. The v1
-  package carries no v2 API; import v2 from `ratify_protocol_v2`.
+- **Python:** the 2.x `ratify-protocol` distribution keeps the v1 API at
+  `ratify_protocol` and adds `ratify_protocol.v2`, so one environment runs
+  both; `import ratify_protocol` never loads v2. v2's requirements (the
+  `ratify-protocol-native-v2` signing backend and the pinned `tzdata` release)
+  come with the `protocol-v2` extra, and the base install keeps v1's. Every
+  published version is a prerelease, so an install or upgrade without a pin
+  resolves to `2.0.0b1`; pin `ratify-protocol<2` or `==1.0.0a21` to stay on
+  the v1 release line. The exact v1 release cannot be installed next to 2.x
+  in one environment because they share a distribution name, so a process
+  that must run the exact v1 release uses its own environment.
 - **Rust:** the 2.x crate keeps the v1 API at the crate root and adds
   `ratify_protocol::v2`. To keep the exact v1 release, rename it:
   `ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.20" }`.

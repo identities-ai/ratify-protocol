@@ -2,25 +2,25 @@
 profile (com.ratifyprotocol.max_count/v1).
 
 DEVELOPMENT ONLY. This program uses the in-memory reference stores from
-ratify_protocol_v2.v2reference. A production verifier supplies durable Part B
+ratify_protocol.v2.v2reference. A production verifier supplies durable Part B
 stores and an independent checkpoint (SPEC-v2 §7).
 
 Run: python examples/v2/python/custom_scope.py
 """
 from dataclasses import replace
 
-from ratify_protocol_v2 import background, error_class_of, key_id_v2
-from ratify_protocol_v2.challenge_issuance_v2 import V2ChallengeIssuer, V2ChallengeIssueRequest, load_expected_challenge_v2
-from ratify_protocol_v2.constraint_evaluator_v2 import (
+from ratify_protocol.v2 import background, error_class_of, key_id_v2
+from ratify_protocol.v2.challenge_issuance_v2 import V2ChallengeIssuer, V2ChallengeIssueRequest, load_expected_challenge_v2
+from ratify_protocol.v2.constraint_evaluator_v2 import (
     CONSTRAINT_MAX_COUNT_V2,
     PROFILE_MAX_COUNT_V2,
     constraint_profile_digest_v2,
     new_constraint_evaluator_registry_v2,
     standard_max_count_evaluator_v2,
 )
-from ratify_protocol_v2.constraints_v2 import TZDB_VERSION_V2, ConstraintContextV2, ConstraintV2
-from ratify_protocol_v2.context_policy_v2 import new_v2_context_policy
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2.constraints_v2 import TZDB_VERSION_V2, ConstraintContextV2, ConstraintV2
+from ratify_protocol.v2.context_policy_v2 import new_v2_context_policy
+from ratify_protocol.v2.protocol_v2 import (
     DelegationCertV2,
     ProofBundleV2,
     encode_proof_bundle_v2,
@@ -28,17 +28,17 @@ from ratify_protocol_v2.protocol_v2 import (
     sign_delegation_cert_v2,
     sign_proof_bundle_v2,
 )
-from ratify_protocol_v2.release_v2 import V2_RELEASE_RELEASED, V2ReleaseConfig, release_v2_decision
-from ratify_protocol_v2.security_journal_v2 import configure_status_key_epoch_v2, record_security_key_role_v2
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.status_batch_v2 import V2StatusEvidenceBatch, V2StatusEvidenceObject
-from ratify_protocol_v2.status_provenance_v2 import V2StatusKeyConfig
-from ratify_protocol_v2.status_publisher_v2 import new_v2_status_publisher_with_key
-from ratify_protocol_v2.status_state_v2 import RevocationStatusPolicyV2
-from ratify_protocol_v2.v2reference.challenges import TestOnlyChallengeIssuanceStore
-from ratify_protocol_v2.v2reference.journal import new_journal_store
-from ratify_protocol_v2.v2reference.store import Store
-from ratify_protocol_v2.verify_v2 import (
+from ratify_protocol.v2.release_v2 import V2_RELEASE_RELEASED, V2ReleaseConfig, release_v2_decision
+from ratify_protocol.v2.security_journal_v2 import configure_status_key_epoch_v2, record_security_key_role_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.status_batch_v2 import V2StatusEvidenceBatch, V2StatusEvidenceObject
+from ratify_protocol.v2.status_provenance_v2 import V2StatusKeyConfig
+from ratify_protocol.v2.status_publisher_v2 import new_v2_status_publisher_with_key
+from ratify_protocol.v2.status_state_v2 import RevocationStatusPolicyV2
+from ratify_protocol.v2.v2reference.challenges import TestOnlyChallengeIssuanceStore
+from ratify_protocol.v2.v2reference.journal import new_journal_store
+from ratify_protocol.v2.v2reference.store import Store
+from ratify_protocol.v2.verify_v2 import (
     V2_STAGE_COMMITTED,
     V2TrustResolution,
     V2VerifyCallbacks,

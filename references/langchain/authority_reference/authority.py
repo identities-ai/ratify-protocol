@@ -14,18 +14,18 @@ from dataclasses import dataclass
 import time
 import uuid
 
-from ratify_protocol_v2 import key_id_v2
-from ratify_protocol_v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
-from ratify_protocol_v2.constraints_v2 import CONSTRAINT_RESOURCE_PATH, ConstraintV2
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2 import key_id_v2
+from ratify_protocol.v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
+from ratify_protocol.v2.constraints_v2 import CONSTRAINT_RESOURCE_PATH, ConstraintV2
+from ratify_protocol.v2.protocol_v2 import (
     DelegationCertV2,
     ProofBundleV2,
     sign_delegation_cert_v2,
     sign_proof_bundle_v2,
 )
-from ratify_protocol_v2.scope import SCOPE_IDENTITY_DELEGATE
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
+from ratify_protocol.v2.scope import SCOPE_IDENTITY_DELEGATE
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
 
 from .status_feed import StatusAuthority
 

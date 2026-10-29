@@ -20,10 +20,11 @@ Placeholders (valid in both preamble and bodies):
   {{VERSION_PYPI}}  this SDK's line version, PEP 440 form     (2.0.0aN)
   {{PROTOCOL_LINES}} which protocol lines this package implements
 
-The repository carries two release lines. Python is still on the v1 line,
-so its README takes its version from sdks/python/pyproject.toml. Every other
-SDK is on the v2 line and takes its version from sdks/typescript/package.json,
-the same manifest scripts/release.sh bumps. A release bump plus a regenerate
+Every SDK in this tree is on the v2 line and takes its version from
+sdks/typescript/package.json, the same manifest scripts/release.sh bumps.
+Python's distribution carries v1 at the package root and v2 at
+ratify_protocol.v2; its pyproject.toml is held to the same line by
+scripts/check-release-sync.sh. A release bump plus a regenerate
 keeps every README pin correct. scripts/check-release-sync.sh runs this script's
 --check mode and fails the gate when a generated file drifts from its
 sources; edit the sources, never README.md.
@@ -87,9 +88,11 @@ PROTOCOL_LINES = {
     "rust": V2_LINES,
     "c": V2_LINES,
     "python": (
-        "This package implements Protocol v1 only. Protocol v2 is the separate "
-        "`ratify-protocol-v2` distribution (import `ratify_protocol_v2`), which "
-        "installs next to this one."
+        "This package implements Protocol v1 at `ratify_protocol` and Protocol "
+        "v2 (version `{{VERSION}}`, a prerelease) at `ratify_protocol.v2`, "
+        "installed with the `protocol-v2` extra. The v2 module runs every file "
+        "in the shared `testvectors/v2` corpus and the cross-SDK fixtures of "
+        "every other SDK."
     ),
 }
 
@@ -99,18 +102,7 @@ def siblings(lang: str) -> str:
     return ", ".join(names[:-1]) + ", and " + names[-1]
 
 
-# SDKs whose README follows the v1 line. Everything else follows v2.
-V1_LINE = {"python"}
-
-
 def versions(lang: str) -> dict:
-    if lang in V1_LINE:
-        pyproject = (ROOT / "sdks/python/pyproject.toml").read_text()
-        pypi = re.search(r'^version = "([^"]+)"$', pyproject, re.M).group(1)
-        v = re.sub(r"a(\d+)$", r"-alpha.\1", pypi)
-        v = re.sub(r"b(\d+)$", r"-beta.\1", v)
-        v = re.sub(r"rc(\d+)$", r"-rc.\1", v)
-        return {"VERSION": v, "VERSION_TAG": "v" + v, "VERSION_PYPI": pypi}
     pkg = json.loads((ROOT / "sdks/typescript/package.json").read_text())
     v = pkg["version"]  # 2.0.0-alpha.N
     pypi = re.sub(r"-alpha\.(\d+)", r"a\1", v)

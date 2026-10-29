@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ratify-protocol"
-version = "1.0.0a21"
+version = "2.0.0b1"
 description = "Delegated-authority proofs for human-agent and agent-agent interactions — Python reference SDK for the Ratify Protocol."
 readme = "README.md"
 authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
@@ -13,7 +13,7 @@ license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "identity", "ai-agents", "authorization", "cryptography"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -47,9 +47,27 @@ dependencies = [
 native = [
     "ratify-protocol-native==1.0.0a21",
 ]
+# Protocol v2 (import ratify_protocol.v2). Kept out of the base requirements
+# so a v1 install that resolves to this release keeps v1's requirements: the
+# v2 signing extension has prebuilt wheels for fewer platforms than a
+# pure-Python package installs on, and v2 pins the IANA tzdata release
+# SPEC-v2 §5.2 evaluates against. Every v2 key-generation and signing call
+# runs in the extension (constant-time Ed25519 and ML-DSA-65); it is
+# version-locked to this release and a mismatch fails the import of
+# ratify_protocol.v2. Without it, v2 verification runs in pure Python and
+# signing raises ImportError. Without tzdata 2025.3, v2 time_window
+# constraints fail closed.
+#
+# The extra name must not parse as a version: pip 25.0 fails to resolve this
+# package at all, with or without extras, when one does (as "v2" would).
+protocol-v2 = [
+    "ratify-protocol-native-v2==2.0.0b1",
+    "tzdata==2025.3",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "hypothesis>=6.100",
 ]
 
 [project.urls]

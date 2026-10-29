@@ -56,9 +56,10 @@ if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; t
   exit 1
 fi
 
-# The version bump below covers the v2 line only. The v1 Python SDK in this
-# tree (sdks/python, sdks/python-native) carries its own version and is not
-# released by this script.
+# The version bump below covers the v2 line only, which includes the
+# ratify-protocol Python distribution (sdks/python). The v1 native extra in
+# this tree (sdks/python-native) carries its own version and is not released
+# by this script; v1 maintenance releases come from the release/v1 branch.
 if [[ ! "$VERSION" =~ ^v2\. ]]; then
   echo "release: '$VERSION' is not on the v2 line — this script releases v2.x only" >&2
   usage
@@ -66,7 +67,7 @@ if [[ ! "$VERSION" =~ ^v2\. ]]; then
 fi
 
 NPM_VERSION="${VERSION#v}"
-RELEASE_LINE="${VERSION%%.*}"   # v1 or v2; selects the PyPI distributions
+RELEASE_LINE="${VERSION%%.*}"   # v1 or v2; v2 adds ratify-protocol-native-v2 on PyPI
 PY_VERSION="$(python - "$NPM_VERSION" <<'PY'
 import re
 import sys
@@ -109,6 +110,26 @@ run_tests() {
   ./scripts/test-all.sh
 }
 
+# Each SDK writes its v2 cross-SDK fixture from fresh keys at the bumped
+# version (docs/RELEASES.md step 6b). This must run after bump_versions and
+# before check-release-sync.sh, which refuses a fixture whose sdk_version is
+# not the release being prepared. test-all then has every SDK verify all five.
+# Runs in a subshell so the EXIT trap removes the temporary venv on failure
+# as well as on success.
+regenerate_cross_sdk_fixtures() (
+  work="$(mktemp -d)"
+  trap 'rm -rf "${work:?}"' EXIT
+  go run ./cmd/ratify-v2-cross-sdk -sdk-version "$NPM_VERSION"
+  (cd sdks/typescript && npm run generate:cross-sdk)
+  python -m venv "$work/venv"
+  "$work/venv/bin/pip" install --quiet maturin
+  (cd sdks/python-native-v2 && "$work/venv/bin/maturin" build --release --out "$work/dist")
+  "$work/venv/bin/pip" install --quiet --find-links "$work/dist" "./sdks/python[protocol-v2,dev]"
+  (cd sdks/python && RATIFY_REQUIRE_NATIVE=1 "$work/venv/bin/python" tests_v2/gen_cross_sdk_fixture.py)
+  (cd sdks/rust && cargo run --quiet --example v2_cross_sdk_fixture)
+  (cd sdks/c && RATIFY_WRITE_CROSS_SDK=1 cargo test --quiet --test v2c_cross_sdk)
+)
+
 bump_versions() {
   python - "$VERSION" "$NPM_VERSION" "$PY_VERSION" <<'PY'
 import json
@@ -150,10 +171,11 @@ def bump_npm_file_dep(path: str, key: str) -> None:
     lock_path.write_text(json.dumps(lock, indent=2, ensure_ascii=False) + "\n")
 
 # This tree releases the v2 line: TypeScript, Rust, C, Go (module /v2), and
-# the ratify-protocol-v2 Python distribution with its native extension. The
-# v1 Python SDK (sdks/python, sdks/python-native) keeps its own version and
-# is not touched here; scripts/check-release-sync.sh checks each line
-# against itself.
+# the ratify-protocol Python distribution (v1 at the package root, v2 at
+# ratify_protocol.v2) with the v2 native extension its [protocol-v2] extra
+# pins. The v1 native extra (sdks/python-native) keeps its own version and is
+# not touched here; scripts/check-release-sync.sh checks each line against
+# itself.
 
 pkg_path = root / "sdks/typescript/package.json"
 pkg = json.loads(pkg_path.read_text())
@@ -196,7 +218,7 @@ write("sdks/c/include/ratify.h", re.sub(r'^( \* Version: )\S+$', rf'\g<1>{npm_ve
 # Programs in this tree that build against the in-tree v2 SDKs carry its
 # version in their lockfiles.
 for lock_file in ("demos/rust/Cargo.lock", "examples/v2/rust/Cargo.lock",
-                  "sdks/python-v2/bench/rust/Cargo.lock"):
+                  "sdks/python/bench_v2/rust/Cargo.lock"):
     bump_lock(lock_file, ("ratify-protocol",))
 bump_npm_file_dep("examples/v2/typescript/package-lock.json", "../../../sdks/typescript")
 bump_npm_file_dep("references/github-copilot/package-lock.json", "../../sdks/typescript")
@@ -208,22 +230,31 @@ if n != 1:
     raise SystemExit("bump: no sdk-version default in cmd/ratify-v2-cross-sdk/main.go")
 write("cmd/ratify-v2-cross-sdk/main.go", cross_sdk)
 
-# Python v2 distribution and its required native extension. The SDK pins the
-# extension to an exact version, so the two must move together or
-# `pip install ratify-protocol-v2` resolves to nothing.
-pyv2 = read("sdks/python-v2/pyproject.toml")
+# The ratify-protocol Python distribution and the v2 native extension. Its
+# [protocol-v2] extra pins the extension to an exact version, so the two must
+# move together or `pip install "ratify-protocol[protocol-v2]"` resolves to
+# nothing.
+pyv2 = read("sdks/python/pyproject.toml")
 old_pyv2_match = re.search(r'^version = "([^"]+)"$', pyv2, re.M)
 if not old_pyv2_match:
-    raise SystemExit("missing version in sdks/python-v2/pyproject.toml")
+    raise SystemExit("missing version in sdks/python/pyproject.toml")
 old_pyv2 = old_pyv2_match.group(1)
 pyv2 = re.sub(r'^version = "[^"]+"$', f'version = "{py_version}"', pyv2, count=1, flags=re.M)
-pyv2 = re.sub(r'("ratify-protocol-native-v2==)[^"]+(")', rf'\g<1>{py_version}\2', pyv2)
-write("sdks/python-v2/pyproject.toml", pyv2)
+pyv2, n = re.subn(r'("ratify-protocol-native-v2==)[^"]+(")', rf'\g<1>{py_version}\2', pyv2)
+if n != 1:
+    raise SystemExit("bump: no ratify-protocol-native-v2 pin in sdks/python/pyproject.toml")
+write("sdks/python/pyproject.toml", pyv2)
 
-pyv2_version_py = read("sdks/python-v2/src/ratify_protocol_v2/_version.py")
+py_init = read("sdks/python/src/ratify_protocol/__init__.py")
+py_init, n = re.subn(r'^__version__ = "[^"]+"$', f'__version__ = "{py_version}"', py_init, count=1, flags=re.M)
+if n != 1:
+    raise SystemExit("bump: no __version__ in sdks/python/src/ratify_protocol/__init__.py")
+write("sdks/python/src/ratify_protocol/__init__.py", py_init)
+
+pyv2_version_py = read("sdks/python/src/ratify_protocol/v2/_version.py")
 pyv2_version_py = re.sub(r'^__version__ = "[^"]+"$', f'__version__ = "{py_version}"', pyv2_version_py, flags=re.M)
 pyv2_version_py = re.sub(r'^NATIVE_VERSION = "[^"]+"$', f'NATIVE_VERSION = "{npm_version}"', pyv2_version_py, flags=re.M)
-write("sdks/python-v2/src/ratify_protocol_v2/_version.py", pyv2_version_py)
+write("sdks/python/src/ratify_protocol/v2/_version.py", pyv2_version_py)
 
 native_v2_toml = read("sdks/python-native-v2/Cargo.toml")
 native_v2_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', native_v2_toml, count=1, flags=re.M)
@@ -239,11 +270,10 @@ old_protocol = "v" + old_npm
 # sdks/{go,typescript,python,rust,c}/README.md are generated
 # (scripts/gen-sdk-readmes.py) and carry version placeholders in their
 # README.body.md sources — the regenerate step after this block stamps them
-# from package.json. Do not add the generated READMEs here. The two Python v2
-# READMEs are hand-written and pin the PEP 440 form.
+# from package.json. Do not add the generated READMEs here. The native v2
+# README is hand-written and pins the PEP 440 form.
 paths = [
     "README.md",
-    "sdks/python-v2/README.md",
     "sdks/python-native-v2/README.md",
     "docs/SDKS.md",
 ]
@@ -251,7 +281,7 @@ for path in paths:
     text = read(path)
     text = text.replace(old_protocol, protocol_tag)
     text = text.replace(old_npm, npm_version)
-    text = text.replace(f"ratify-protocol-v2=={old_pyv2}", f"ratify-protocol-v2=={py_version}")
+    text = text.replace(f"ratify-protocol[protocol-v2]=={old_pyv2}", f"ratify-protocol[protocol-v2]=={py_version}")
     text = text.replace(f"`{old_pyv2}`", f"`{py_version}`")
     write(path, text)
 
@@ -286,9 +316,10 @@ registry_http_state() {
 registry_state_npm() {
   registry_http_state "https://registry.npmjs.org/@identities-ai%2Fratify-protocol/${NPM_VERSION}"
 }
-# PyPI distributions are per release line. A v2 tag releases
-# ratify-protocol-v2 and the native extension it pins exactly
-# (ratify-protocol-native-v2); a v1 tag releases ratify-protocol.
+# PyPI distributions are per release line. Both lines release
+# ratify-protocol from sdks/python; a v2 tag also releases the native
+# extension its [protocol-v2] extra pins exactly (ratify-protocol-native-v2).
+# The name ratify-protocol-v2 is never published.
 registry_state_pypi_dist() {
   registry_http_state "https://pypi.org/pypi/$1/${PY_VERSION}/json"
 }
@@ -373,15 +404,13 @@ publish_registries() {
   ensure_published "npm" "$(registry_state_npm)" publish_npm
 
   if [[ "$RELEASE_LINE" == "v2" ]]; then
-    # The native extension first: ratify-protocol-v2 pins it exactly, so
-    # publishing the SDK before it would leave an uninstallable release.
+    # The native extension first: the [protocol-v2] extra pins it exactly, so
+    # publishing the SDK before it would leave the extra uninstallable.
     ensure_published "PyPI ratify-protocol-native-v2" \
       "$(registry_state_pypi_dist ratify-protocol-native-v2)" publish_pypi_native_v2
-    ensure_published "PyPI ratify-protocol-v2" \
-      "$(registry_state_pypi_dist ratify-protocol-v2)" publish_pypi_dir sdks/python-v2
-  else
-    ensure_published "PyPI" "$(registry_state_pypi_dist ratify-protocol)" publish_pypi_dir sdks/python
   fi
+  ensure_published "PyPI ratify-protocol" \
+    "$(registry_state_pypi_dist ratify-protocol)" publish_pypi_dir sdks/python
 
   ensure_published "crates.io ratify-protocol" "$rust_state" publish_crate_dir sdks/rust
 
@@ -403,7 +432,7 @@ publish_registries() {
   local pypi_probes=("PyPI ratify-protocol:registry_state_pypi_dist ratify-protocol")
   if [[ "$RELEASE_LINE" == "v2" ]]; then
     pypi_probes=("PyPI ratify-protocol-native-v2:registry_state_pypi_dist ratify-protocol-native-v2"
-                 "PyPI ratify-protocol-v2:registry_state_pypi_dist ratify-protocol-v2")
+                 "PyPI ratify-protocol:registry_state_pypi_dist ratify-protocol")
   fi
   for probe in "npm:registry_state_npm" "${pypi_probes[@]}" \
                "crates ratify-protocol:registry_state_crate ratify-protocol" \
@@ -511,6 +540,9 @@ if marker in text:
     today = datetime.date.today().isoformat()
     path.write_text(text.replace(marker, f"## {version} ({today})", 1))
 PY
+
+  echo "==> Regenerating the v2 cross-SDK fixtures at $VERSION"
+  regenerate_cross_sdk_fixtures
 
   ./scripts/check-release-sync.sh
 

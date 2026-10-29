@@ -201,16 +201,17 @@ count excess) are included to measure discrimination and fail-closed behavior.
 
 The checked-in result is
 [`evidence/federation-scale-local.json`](evidence/federation-scale-local.json),
-measured on 2026-10-27 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
-with eight requested workers, against `ratify-protocol-v2` and
-`ratify-protocol-native-v2` `2.0.0b1` built from this repository, with hybrid
-verification in the native extension (`RATIFY_REQUIRE_NATIVE=1`):
+measured on 2026-10-29 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
+with eight requested workers, against `ratify-protocol` `2.0.0b1` with its
+`protocol-v2` extra (`ratify_protocol.v2`) and `ratify-protocol-native-v2`
+`2.0.0b1`, built from this repository, with hybrid verification in the native
+extension (`RATIFY_REQUIRE_NATIVE=1`):
 
 | Calls | Workers | Allowed | Denied (`constraint_denied`) | Released receipts | Protected actions | Wall seconds | Calls per second | p50 ms | p95 ms | p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 5 | 9 | 1 | 19 | 9 | 0.660 | 15.150 | 294 | 388 | 388 |
-| 100 | 8 | 90 | 10 | 190 | 90 | 6.170 | 16.206 | 473 | 595 | 636 |
-| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 63.719 | 15.694 | 514 | 650 | 724 |
+| 10 | 5 | 9 | 1 | 19 | 9 | 0.605 | 16.531 | 282 | 344 | 344 |
+| 100 | 8 | 90 | 10 | 190 | 90 | 6.208 | 16.108 | 478 | 603 | 678 |
+| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 62.716 | 15.945 | 503 | 637 | 700 |
 
 The encoded dual-root presentation (both proofs, base64 as carried in MCP
 `_meta`) is 76,148 bytes. Every allow released two receipts and every denial
@@ -227,7 +228,7 @@ seconds. It is kept in git history (commit `1315454`). With native
 verification the remaining per-decision cost is Python protocol logic such as
 journal snapshot handling, canonical JSON and strict decoding, not signature
 verification; see the
-[Python v2 SDK performance section](../../sdks/python-v2/README.md#performance).
+[Python v2 SDK performance section](../../sdks/python/README.md#protocol-v2-performance).
 
 These are single-host measurements of the Python v2 SDK with in-memory
 reference stores. They exclude Gemini latency, ADK reasoning, MCP HTTP,

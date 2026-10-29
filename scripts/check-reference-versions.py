@@ -15,12 +15,13 @@ Every registry entry states a `Protocol line` (v1 or v2). The rules differ:
   so there is no Ratify pin to compare against. Instead every v2 version a
   reference states (registry entry, README, evidence, metadata, requirements,
   gate script) must be either the version in this tree
-  (sdks/python-v2/pyproject.toml) or the release the reference is waiting for
+  (sdks/python/pyproject.toml) or the release the reference is waiting for
   (V2_RELEASE). Both spellings are understood: PEP 440 (2.0.0a1, 2.0.0b1) and
   SemVer (2.0.0-alpha.1, 2.0.0-beta.1). Once the tree is bumped to the
   release, the alpha mentions fail until each reference is re-run and its
-  records updated. A v2 reference must not pin the v1 package, and the gate
-  scripts its registry entry names must exist.
+  records updated. A v2 reference must not pin a v1 release of
+  ratify-protocol, nor ratify-protocol without its protocol-v2 extra, and the
+  gate scripts its registry entry names must exist.
 """
 from __future__ import annotations
 
@@ -78,7 +79,7 @@ def v2_versions_in(path: Path) -> set[str]:
 
 
 def in_tree_v2() -> str:
-    pyproject = (ROOT / "sdks" / "python-v2" / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (ROOT / "sdks" / "python" / "pyproject.toml").read_text(encoding="utf-8")
     declared = re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1)
     normalized = v2_versions_in_text(declared)
     if len(normalized) != 1:
@@ -120,9 +121,16 @@ def check_v2(name: str, entry: Path, ref: Path, metadata: dict, allowed: set[str
                 f"expected the in-tree version or the {V2_RELEASE} release ({sorted(allowed)})"
             )
 
+    # ratify-protocol carries both lines; a v2 reference that pins it must pin
+    # a 2.x release with the protocol-v2 extra, or it installs without v2's
+    # requirements (or installs v1 only).
     requirements = ref / "requirements.txt"
-    if requirements.exists() and re.search(r"^ratify-protocol==", requirements.read_text(encoding="utf-8"), re.M):
-        failures.append(f"{name}: v2 reference pins the v1 ratify-protocol package in requirements.txt")
+    if requirements.exists():
+        req_text = requirements.read_text(encoding="utf-8")
+        if re.search(r"^ratify-protocol(?:\[[^\]]*\])?==1\.", req_text, re.M):
+            failures.append(f"{name}: v2 reference pins a v1 ratify-protocol release in requirements.txt")
+        if re.search(r"^ratify-protocol==", req_text, re.M):
+            failures.append(f"{name}: v2 reference pins ratify-protocol without the protocol-v2 extra in requirements.txt")
     protocol = metadata.get("protocol")
     if protocol is not None and not str(protocol).startswith("v2"):
         failures.append(f"{name}: ratify-reference.json protocol {protocol!r} contradicts the v2 registry line")

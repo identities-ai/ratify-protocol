@@ -1,0 +1,2218 @@
+{
+  "run_id": "ratify-osp-1793240066-17172",
+  "evidence_status": "pre-release: Ratify SDK built from the repository checkout, not the published package; run with RATIFY_SDK=published for the released one",
+  "components": {
+    "openshell_cli": "0.0.102",
+    "gateway_image": "ghcr.io/nvidia/openshell/gateway@sha256:47f5ca7b3c368841fe0ab8ef33d409ffedc6b937019d2a187b0cc4380f8ad976",
+    "sandbox_image": "ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e",
+    "supervisor_image": "ghcr.io/nvidia/openshell/supervisor@sha256:5e33ec485b9e05a00431a23faabf4a49376b8351d90664d585922e148fb18fa4",
+    "gateway_resolved_digest": "sha256:47f5ca7b3c368841fe0ab8ef33d409ffedc6b937019d2a187b0cc4380f8ad976",
+    "sandbox_resolved_digest": "sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e",
+    "supervisor_resolved_digest": "sha256:5e33ec485b9e05a00431a23faabf4a49376b8351d90664d585922e148fb18fa4",
+    "mcp": "2.0.0",
+    "uvicorn": "0.52.1",
+    "mcp_protocol": "2026-07-28",
+    "sandbox_python": "/usr/bin/python3 (CPython 3.12.3, from the pinned sandbox image)",
+    "nooa": "0.0.8",
+    "nooa_sandbox_image": "ratify-nooa-sandbox:af0a86c7b34b0dd1",
+    "nooa_sandbox_image_id": "sha256:c7a978dee5544ca226093eeb446b79fc01ffc31c08410cbb1d4f2c1bd7d0b89c",
+    "nooa_sandbox_image_provenance": "built locally from the pinned base by digest; not published to any registry",
+    "staged_deps_content_sha256": "af0a86c7b34b0dd10bb97cb4af17975b7040f868390d52c6c4486fb66cf2d3e0",
+    "dependency_lock_sha256": "1cd282367accc1198d65337016cff951801e7fb3b29521d4ea69e1c8091dab8f",
+    "ratify_sdk_source": "local",
+    "ratify_sdk_expected_version": "2.0.0b1",
+    "ratify_module_in_image": "/opt/ratify-nooa/site/ratify_protocol/v2",
+    "dependency_lock": "demos/nvidia-nooa-delegated-authority/sandbox-requirements.lock"
+  },
+  "platform": {
+    "executed_on": {
+      "os": "Darwin",
+      "release": "25.6.0",
+      "arch": "arm64",
+      "python": "3.12.12"
+    },
+    "container_runtime": "29.2.1",
+    "compatibility_targets_not_executed": [
+      "linux/amd64"
+    ]
+  },
+  "ports": {
+    "gateway": 60229,
+    "gateway_health": 60230,
+    "mcp": 60231,
+    "control": 60232
+  },
+  "hashes": {
+    "rendered_policy_sha256": "43ac590e86103ed72bec938a5289445f4356ee969f41f500d131ffd1548adda6",
+    "gateway_config_sha256": "dac9608c9f2423909eb9bd955789302da3c863c09ecdda2e96dcb8998154ee47"
+  },
+  "network": {
+    "mcp_bind": "127.0.0.1",
+    "mcp_host": "host.openshell.internal",
+    "control_bind": "127.0.0.1",
+    "control_in_policy": false
+  },
+  "concurrency": {
+    "gateway_bootstrap_serialized": true,
+    "reason": "OpenShell v0.0.102 names its supervisor-extraction container openshell-supervisor-extract-1-0, a fixed name, so two gateways bootstrapping concurrently against one container runtime collide with a Docker 409. Only bootstrap is serialized; the measured matrix runs concurrently.",
+    "per_run_isolated": [
+      "ports",
+      "data_home",
+      "compose_project",
+      "network",
+      "sandbox",
+      "work_dir",
+      "artifact"
+    ],
+    "shared_cli_registry_used": false
+  },
+  "executed_cases": [
+    "positive_and_replay::prepare_valid",
+    "positive_and_replay::execute_valid",
+    "positive_and_replay::execute_replay",
+    "positive_and_replay::openshell_denies_unlisted_tool",
+    "ratify_semantic_denials::excessive_amount",
+    "ratify_semantic_denials::wrong_resource_path",
+    "ratify_semantic_denials::same_order_other_tenant",
+    "ratify_semantic_denials::expired_delegation",
+    "ratify_semantic_denials::revoked_delegation",
+    "ratify_semantic_denials::revocation_provider_failure",
+    "ratify_semantic_denials::wrong_agent_key",
+    "ratify_semantic_denials::untrusted_root",
+    "ratify_semantic_denials::scope_amplification",
+    "ratify_semantic_denials::constraint_amplification",
+    "ratify_semantic_denials::cross_request_proof_movement",
+    "ratify_semantic_denials::invalid_challenge",
+    "ratify_semantic_denials::malformed_proof",
+    "ratify_semantic_denials::observer_failure_after_decision",
+    "ratify_semantic_denials::no_resource_constraint",
+    "maximum_depth::prepare_max_depth",
+    "maximum_depth::execute_max_depth",
+    "size_boundaries::under_openshell_limit_reaches_mcp",
+    "size_boundaries::over_openshell_limit_denied_before_mcp",
+    "size_boundaries::over_receiver_limit_admitted_then_refused",
+    "size_boundaries::invalid_base64",
+    "size_boundaries::malformed_proof_encoding",
+    "size_boundaries::chain_above_protocol_maximum",
+    "parser_differentials::dup_method_allowed_then_denied",
+    "parser_differentials::dup_method_denied_then_allowed",
+    "parser_differentials::dup_name_allowed_then_denied",
+    "parser_differentials::dup_name_denied_then_allowed",
+    "parser_differentials::dup_params_container",
+    "parser_differentials::dup_meta_container",
+    "parser_differentials::dup_proof_member",
+    "parser_differentials::hdr_method_allowed_body_denied",
+    "parser_differentials::hdr_method_denied_body_allowed",
+    "parser_differentials::hdr_name_allowed_body_denied",
+    "parser_differentials::hdr_name_denied_body_allowed",
+    "parser_differentials::hdr_method_missing",
+    "parser_differentials::hdr_name_missing",
+    "parser_differentials::dup_hdr_method",
+    "parser_differentials::dup_hdr_name",
+    "destination_path_port::unauthorized_destination",
+    "destination_path_port::wrong_port",
+    "destination_path_port::wrong_path",
+    "destination_path_port::unlisted_mcp_tool",
+    "destination_path_port::disallowed_mcp_method",
+    "destination_path_port::control_plane_unreachable",
+    "nooa_full_path::nooa_authorized_refund",
+    "nooa_full_path::nooa_over_limit_denied_by_ratify",
+    "nooa_full_path::nooa_unlisted_tool_denied_by_openshell",
+    "nooa_full_path::nooa_capability_inert_without_the_adapter"
+  ],
+  "not_executed": [],
+  "known_limitations": [
+    {
+      "item": "linux/amd64 execution",
+      "why": "only the recorded host architecture was executed; other platforms are compatibility targets, not results"
+    },
+    {
+      "item": "Podman as the container runtime",
+      "why": "only Docker was executed"
+    },
+    {
+      "item": "verifier-side missing resource context (has_resource=False)",
+      "why": "unreachable through the MCP path by construction, because the receiver always supplies its own phase-1 resource id; covered hermetically in test_verification.py instead"
+    },
+    {
+      "item": "genuinely duplicated HTTP header fields",
+      "why": "urllib collapses repeated header names, so the duplicate-header probes send one folded value; recorded as folded rather than claimed as true duplication"
+    },
+    {
+      "item": "concurrent OpenShell gateway bootstrap",
+      "why": "OpenShell v0.0.102 uses a fixed supervisor-extraction container name, so concurrent bootstrap collides upstream; the profile serializes bootstrap only and records this as a finding"
+    },
+    {
+      "item": "TLS, OIDC, or mTLS in front of the gateway",
+      "why": "the profile runs a local single-player gateway on loopback with plaintext and unauthenticated access, as its config states"
+    }
+  ],
+  "case_deltas": {
+    "positive_and_replay::prepare_valid": {
+      "http_ingress": 1,
+      "prepare": 1,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.prepare"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 3
+    },
+    "positive_and_replay::execute_valid": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 75000000,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "positive_and_replay::execute_replay": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 1,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "positive_and_replay::openshell_denies_unlisted_tool": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "ratify_semantic_denials::excessive_amount": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::wrong_resource_path": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::same_order_other_tenant": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::expired_delegation": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::revoked_delegation": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::revocation_provider_failure": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::wrong_agent_key": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 1,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::untrusted_root": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::scope_amplification": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::constraint_amplification": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::cross_request_proof_movement": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 1,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::invalid_challenge": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 1,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::malformed_proof": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "ratify_semantic_denials::observer_failure_after_decision": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 75000000,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "ratify_semantic_denials::no_resource_constraint": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 75000000,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "maximum_depth::prepare_max_depth": {
+      "http_ingress": 1,
+      "prepare": 1,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.prepare"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 3
+    },
+    "maximum_depth::execute_max_depth": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 75000000,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 5
+    },
+    "size_boundaries::under_openshell_limit_reaches_mcp": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "size_boundaries::over_openshell_limit_denied_before_mcp": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "size_boundaries::over_receiver_limit_admitted_then_refused": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "size_boundaries::invalid_base64": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "size_boundaries::malformed_proof_encoding": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "size_boundaries::chain_above_protocol_maximum": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "parser_differentials::dup_method_allowed_then_denied": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "parser_differentials::dup_method_denied_then_allowed": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::dup_name_allowed_then_denied": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "parser_differentials::dup_name_denied_then_allowed": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::dup_params_container": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "parser_differentials::dup_meta_container": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "parser_differentials::dup_proof_member": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 1,
+      "seq": 3
+    },
+    "parser_differentials::hdr_method_allowed_body_denied": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "parser_differentials::hdr_method_denied_body_allowed": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::hdr_name_allowed_body_denied": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "parser_differentials::hdr_name_denied_body_allowed": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::hdr_method_missing": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::hdr_name_missing": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::dup_hdr_method": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "parser_differentials::dup_hdr_name": {
+      "http_ingress": 1,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "destination_path_port::unauthorized_destination": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "destination_path_port::wrong_port": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "destination_path_port::wrong_path": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "destination_path_port::unlisted_mcp_tool": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "destination_path_port::disallowed_mcp_method": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "destination_path_port::control_plane_unreachable": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    },
+    "nooa_full_path::nooa_authorized_refund": {
+      "http_ingress": 4,
+      "prepare": 1,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.prepare",
+        "refund.execute"
+      ],
+      "refund": 75000000,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 10
+    },
+    "nooa_full_path::nooa_over_limit_denied_by_ratify": {
+      "http_ingress": 4,
+      "prepare": 1,
+      "execute": 1,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [
+        "refund.prepare",
+        "refund.execute"
+      ],
+      "refund": 0,
+      "receipts": 1,
+      "proof_observed": 1,
+      "seq": 10
+    },
+    "nooa_full_path::nooa_unlisted_tool_denied_by_openshell": {
+      "http_ingress": 2,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 2
+    },
+    "nooa_full_path::nooa_capability_inert_without_the_adapter": {
+      "http_ingress": 0,
+      "prepare": 0,
+      "execute": 0,
+      "refusals": 0,
+      "internal_errors": 0,
+      "tool_dispatch": [],
+      "refund": 0,
+      "receipts": 0,
+      "proof_observed": 0,
+      "seq": 0
+    }
+  },
+  "proof_sizes": {
+    "execute_valid": {
+      "sha256": "002f79e16ab388ec8a76ceb173727175bacebb4b08e99986cb0cca2f6f392b2b",
+      "len": 24132
+    },
+    "excessive_amount": {
+      "sha256": "224d3c90ef9c8cc5c042dfda737997f89a11b1afea696afbf5985c380e9821b0",
+      "len": 24132
+    },
+    "wrong_resource_path": {
+      "sha256": "3fba24461766b6ceaab86797753f8f658f15d7f98f116515ada544d6c6a49733",
+      "len": 24140
+    },
+    "same_order_other_tenant": {
+      "sha256": "1e6af4b4ce7ae067b0b8031791a180074d452bf44dc715fe6b9c56e046c0f06d",
+      "len": 24140
+    },
+    "expired_delegation": {
+      "sha256": "1ff179311fcd5a222da7be6be194ce83701a8d2c8b5b84664df3cacdf9fdb341",
+      "len": 24132
+    },
+    "revoked_delegation": {
+      "sha256": "181515f6748c575473ae94a2381ec772e5fac1cb5feee07ad712606b44f4a397",
+      "len": 24132
+    },
+    "revocation_provider_failure": {
+      "sha256": "80bdacee5be83649397a39d52c03188ab4e34935e0936f8f873eb7457fc31d54",
+      "len": 24132
+    },
+    "wrong_agent_key": {
+      "sha256": "7720428d1a013d3ab0ed2e05182ed1312bc3e0bebdd9d657f5a565ea320384ca",
+      "len": 24132
+    },
+    "untrusted_root": {
+      "sha256": "ce6a959c624239551cf0e915e08f293ffce690ed711442a0af38c848f2beb1d0",
+      "len": 24132
+    },
+    "scope_amplification": {
+      "sha256": "55a67a92970f79958b759ab36d5d6a281ccf0752553b6209aaf52a69946dccc2",
+      "len": 38024
+    },
+    "constraint_amplification": {
+      "sha256": "1c85bd15ced00d8938f7be54562aa16875562c6a9a3036d65cc23166c535b4f5",
+      "len": 38020
+    },
+    "no_resource_constraint": {
+      "sha256": "91b0f56c744aaedb59c846bdc99f28a2db7966e3d658c92351cc5fc933fc6fde",
+      "len": 24012
+    },
+    "observer_failure_after_decision": {
+      "sha256": "dee7e289e077cac44753ca8d72dc954d4232ea2961d86e07cad5d4f9235a2bf5",
+      "len": 24132
+    },
+    "cross_request_proof_movement": {
+      "sha256": "48c9a695368d37eaed7964ff24f17add5c13e1e27d1811c0d69e7568d3da8378",
+      "len": 24132
+    },
+    "execute_max_depth": {
+      "sha256": "52ce0f4bf961e1ff0a46947823bc194d055daaba077700e367fb8c3bb202747e",
+      "len": 121356
+    },
+    "chain_above_protocol_maximum": {
+      "sha256": "cf6d4f36381009cc95398ae18c48a511d10d4345a4d2f8e70986380aafe4ec29",
+      "len": 135244
+    }
+  },
+  "log_sources_inspected": {
+    "gateway_compose": {
+      "owner": "component",
+      "present": true,
+      "lines": 2164,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "gateway_container": {
+      "owner": "component",
+      "present": true,
+      "lines": 2164,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "supervisor": {
+      "owner": "component",
+      "present": true,
+      "lines": 2236,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "openshell_audit": {
+      "owner": "component",
+      "present": true,
+      "lines": 200,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "mcp_receiver": {
+      "owner": "component",
+      "present": true,
+      "lines": 11,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "harness_sandbox_stdout": {
+      "owner": "harness",
+      "present": true,
+      "lines": 166,
+      "hits": {
+        "tenant": 23,
+        "order": 30,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 24,
+        "receipt_prefix": 15,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    },
+    "harness_runner": {
+      "owner": "harness",
+      "present": true,
+      "lines": 245,
+      "hits": {
+        "tenant": 0,
+        "order": 0,
+        "principal": 0,
+        "agent": 0,
+        "resource": 0,
+        "traceparent": 0,
+        "baggage": 0,
+        "proof_key": 0,
+        "receipt_prefix": 0,
+        "malformed_marker": 0,
+        "proof_prefix": 0,
+        "proof_middle": 0,
+        "proof_suffix": 0
+      }
+    }
+  },
+  "group_g": {
+    "shapes_exercised": [
+      "authorized_request",
+      "openshell_policy_denial",
+      "ratify_semantic_denial",
+      "malformed_proof",
+      "oversized_envelope"
+    ],
+    "note": "each shape is produced by the groups above; the gate is the canary search across log sources",
+    "log_capture": {
+      "openshell-audit.log": {
+        "bytes": 28861,
+        "timed_out": false
+      },
+      "gateway-container.log": {
+        "bytes": 1252450,
+        "timed_out": false
+      },
+      "gateway-compose.log": {
+        "bytes": 1336846,
+        "timed_out": false
+      },
+      "supervisor.log": {
+        "containers": 1
+      }
+    }
+  },
+  "parser_coverage": {
+    "result": "PASS",
+    "admitted": 10,
+    "denied": 5,
+    "expected_admitted": 10,
+    "expected_denied": 5,
+    "unaccounted": [],
+    "mismatched": []
+  },
+  "clock_skew": {
+    "result": "PASS",
+    "samples": 3,
+    "margin_seconds": 2,
+    "sandbox_lead_at_least_seconds": 0.0978,
+    "sandbox_lead_at_most_seconds": 0.1382,
+    "detail": "sandbox clock offset within [+0.098, +0.138]s against a 2s clock-discipline margin"
+  },
+  "unified_execution_model": {
+    "nooa_module_loads_in_suite_process": 1,
+    "nooa_module_loads_measured": true,
+    "processes_that_import_nooa": 1,
+    "why": "four separate execs imported nooa four times and the sandbox did not survive it; the exec relay closed and the sandbox fell back to Provisioning",
+    "reconciliation": {
+      "reconciled": true,
+      "events_in_suite": 22,
+      "events_attributed": 22
+    }
+  },
+  "unified_path": {
+    "nooa_capability_inert_without_the_adapter": {
+      "outcome": "capability_inert",
+      "llm_calls": 0,
+      "capability_calls": [],
+      "mcp_tools": [],
+      "decision": null,
+      "status": null,
+      "receipt_id": null
+    },
+    "nooa_authorized_refund": {
+      "outcome": "returned",
+      "llm_calls": 0,
+      "capability_calls": [
+        "issue_refund"
+      ],
+      "mcp_tools": [
+        "initialize",
+        "refund.prepare",
+        "refund.execute"
+      ],
+      "decision": "authorized",
+      "status": "authorized_agent",
+      "receipt_id": "6e7669646961726566756e646c6f6731:14"
+    },
+    "nooa_over_limit_denied_by_ratify": {
+      "outcome": "returned",
+      "llm_calls": 0,
+      "capability_calls": [
+        "issue_refund"
+      ],
+      "mcp_tools": [
+        "initialize",
+        "refund.prepare",
+        "refund.execute"
+      ],
+      "decision": "denied",
+      "status": "constraint_denied",
+      "receipt_id": "6e7669646961726566756e646c6f6731:15"
+    },
+    "nooa_unlisted_tool_denied_by_openshell": {
+      "outcome": "mcp_transport_error",
+      "llm_calls": 0,
+      "capability_calls": [
+        "issue_refund"
+      ],
+      "mcp_tools": [
+        "initialize",
+        "admin.delete_everything"
+      ],
+      "decision": null,
+      "status": null,
+      "receipt_id": null
+    }
+  },
+  "operations": {
+    "count": 245,
+    "timeouts": [],
+    "slowest_seconds": 6.47,
+    "max_argv_bytes": 404,
+    "retried_operations": []
+  },
+  "driver_errors": [],
+  "gates": [
+    {
+      "name": "positive_and_replay::prepare_valid",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.prepare",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 1,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.prepare"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 3
+      }
+    },
+    {
+      "name": "positive_and_replay::execute_valid",
+      "result": "PASS",
+      "detail": "authorized, refunded 75000000, receipt 6e7669646961726566756e646c6f6731:1",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 75000000,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "positive_and_replay::execute_replay",
+      "result": "PASS",
+      "detail": "denied by Ratify as invalid: claim_replay: challenge already claimed (terminal_replay)",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 1,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "positive_and_replay::openshell_denies_unlisted_tool",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::excessive_amount",
+      "result": "PASS",
+      "detail": "denied by Ratify as constraint_denied: constraint_denied",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::wrong_resource_path",
+      "result": "PASS",
+      "detail": "denied by Ratify as constraint_denied: constraint_denied",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::same_order_other_tenant",
+      "result": "PASS",
+      "detail": "denied by Ratify as constraint_denied: constraint_denied",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::expired_delegation",
+      "result": "PASS",
+      "detail": "denied by Ratify as expired: delegation_expired",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::revoked_delegation",
+      "result": "PASS",
+      "detail": "denied by Ratify as revoked: delegation_revoked",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::revocation_provider_failure",
+      "result": "PASS",
+      "detail": "denied by Ratify as authorization_unverified: status_unavailable",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::wrong_agent_key",
+      "result": "PASS",
+      "detail": "denied by Ratify as invalid: chain_linkage_mismatch: agent key does not match leaf delegation subje",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 1,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::untrusted_root",
+      "result": "PASS",
+      "detail": "denied by Ratify as unauthorized: unauthorized",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::scope_amplification",
+      "result": "PASS",
+      "detail": "denied by Ratify as scope_denied: scope_denied",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::constraint_amplification",
+      "result": "PASS",
+      "detail": "denied by Ratify as constraint_denied: constraint_denied",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::cross_request_proof_movement",
+      "result": "PASS",
+      "detail": "denied by Ratify as invalid: challenge_mismatch: v2 proof does not match authenticated challenge is",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 1,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::invalid_challenge",
+      "result": "PASS",
+      "detail": "denied by Ratify as invalid: expected_challenge_unavailable: no pending request for this challenge",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 1,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::malformed_proof",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: invalid base64 in com.ratifyprotocol/proof:",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::observer_failure_after_decision",
+      "result": "PASS",
+      "detail": "authorized, refunded 75000000, receipt 6e7669646961726566756e646c6f6731:12",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 75000000,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "ratify_semantic_denials::no_resource_constraint",
+      "result": "PASS",
+      "detail": "authorized, refunded 75000000, receipt 6e7669646961726566756e646c6f6731:11",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 75000000,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "maximum_depth::prepare_max_depth",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.prepare",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 1,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.prepare"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 3
+      }
+    },
+    {
+      "name": "maximum_depth::execute_max_depth",
+      "result": "PASS",
+      "detail": "authorized, refunded 75000000, receipt 6e7669646961726566756e646c6f6731:13",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 75000000,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 5
+      }
+    },
+    {
+      "name": "size_boundaries::under_openshell_limit_reaches_mcp",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: malformed proof bundle: wire: invalid JSON:",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "size_boundaries::over_openshell_limit_denied_before_mcp",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=400)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "size_boundaries::over_receiver_limit_admitted_then_refused",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: authorization proof exceeds the receiver li",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "size_boundaries::invalid_base64",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: invalid base64 in com.ratifyprotocol/proof:",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "size_boundaries::malformed_proof_encoding",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: malformed proof bundle: wire: invalid JSON:",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "size_boundaries::chain_above_protocol_maximum",
+      "result": "PASS",
+      "detail": "refused by the receiver: Error executing tool refund.execute: malformed proof bundle: wire v2: delegation",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "parser_differentials::dup_method_allowed_then_denied",
+      "result": "PASS",
+      "detail": "denied by policy, which is permitted for this case (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "parser_differentials::dup_method_denied_then_allowed",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::dup_name_allowed_then_denied",
+      "result": "PASS",
+      "detail": "denied by policy, which is permitted for this case (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "parser_differentials::dup_name_denied_then_allowed",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::dup_params_container",
+      "result": "PASS",
+      "detail": "denied by policy, which is permitted for this case (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "parser_differentials::dup_meta_container",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "parser_differentials::dup_proof_member",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 1,
+        "seq": 3
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_method_allowed_body_denied",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_method_denied_body_allowed",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_name_allowed_body_denied",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_name_denied_body_allowed",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_method_missing",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::hdr_name_missing",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::dup_hdr_method",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "parser_differentials::dup_hdr_name",
+      "result": "PASS",
+      "detail": "admitted and dispatched as refund.execute",
+      "deltas": {
+        "http_ingress": 1,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "destination_path_port::unauthorized_destination",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "destination_path_port::wrong_port",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "destination_path_port::wrong_path",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "destination_path_port::unlisted_mcp_tool",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "destination_path_port::disallowed_mcp_method",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "destination_path_port::control_plane_unreachable",
+      "result": "PASS",
+      "detail": "refused before MCP ingress (http=403)",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "nooa_full_path::nooa_authorized_refund",
+      "result": "PASS",
+      "detail": "authorized, refunded 75000000, receipt 6e7669646961726566756e646c6f6731:14",
+      "deltas": {
+        "http_ingress": 4,
+        "prepare": 1,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.prepare",
+          "refund.execute"
+        ],
+        "refund": 75000000,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 10
+      }
+    },
+    {
+      "name": "nooa_full_path::nooa_over_limit_denied_by_ratify",
+      "result": "PASS",
+      "detail": "denied by Ratify as constraint_denied: constraint_denied",
+      "deltas": {
+        "http_ingress": 4,
+        "prepare": 1,
+        "execute": 1,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [
+          "refund.prepare",
+          "refund.execute"
+        ],
+        "refund": 0,
+        "receipts": 1,
+        "proof_observed": 1,
+        "seq": 10
+      }
+    },
+    {
+      "name": "nooa_full_path::nooa_unlisted_tool_denied_by_openshell",
+      "result": "PASS",
+      "detail": "handshake admitted, unlisted tool refused",
+      "deltas": {
+        "http_ingress": 2,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "nooa_full_path::nooa_capability_inert_without_the_adapter",
+      "result": "PASS",
+      "detail": "capability inert without the adapter",
+      "deltas": {
+        "http_ingress": 0,
+        "prepare": 0,
+        "execute": 0,
+        "refusals": 0,
+        "internal_errors": 0,
+        "tool_dispatch": [],
+        "refund": 0,
+        "receipts": 0,
+        "proof_observed": 0,
+        "seq": 0
+      }
+    },
+    {
+      "name": "mcp_handshake_through_openshell_every_group",
+      "result": "PASS",
+      "detail": "6 groups",
+      "deltas": {}
+    },
+    {
+      "name": "tools_list_exposes_exactly_the_two_refund_tools",
+      "result": "PASS",
+      "detail": "['refund.execute', 'refund.prepare']",
+      "deltas": {}
+    },
+    {
+      "name": "parser_matrix_exercised_both_admission_and_denial",
+      "result": "PASS",
+      "detail": "10/10 admitted, 5/5 denied",
+      "deltas": {}
+    },
+    {
+      "name": "unified_suite_events_fully_attributed_to_subcases",
+      "result": "PASS",
+      "detail": "{\"reconciled\": true, \"events_in_suite\": 22, \"events_attributed\": 22}",
+      "deltas": {}
+    },
+    {
+      "name": "unified_suite_imported_nooa_once",
+      "result": "PASS",
+      "detail": "measured=True module_loads=1 nooa_processes=1",
+      "deltas": {}
+    },
+    {
+      "name": "unified_path_never_called_an_llm",
+      "result": "PASS",
+      "detail": "4 NOOA runs, zero LLM calls",
+      "deltas": {}
+    },
+    {
+      "name": "one_execution_traversed_nooa_mcp_openshell_receiver_ratify",
+      "result": "PASS",
+      "detail": "capability=['issue_refund'] mcp=['initialize', 'refund.prepare', 'refund.execute'] receipt=6e7669646961726566756e646c6f6731:14",
+      "deltas": {}
+    },
+    {
+      "name": "sandbox_clock_within_presenter_safety_margin",
+      "result": "PASS",
+      "detail": "sandbox clock offset within [+0.098, +0.138]s against a 2s clock-discipline margin",
+      "deltas": {}
+    },
+    {
+      "name": "no_tested_canaries_in_inspected_logs",
+      "result": "PASS",
+      "detail": "5 component sources searched, none hit",
+      "deltas": {}
+    },
+    {
+      "name": "no_external_operation_timed_out",
+      "result": "PASS",
+      "detail": "none",
+      "deltas": {}
+    },
+    {
+      "name": "every_required_case_executed",
+      "result": "PASS",
+      "detail": "52 required cases",
+      "deltas": {}
+    },
+    {
+      "name": "driver_reported_no_errors",
+      "result": "PASS",
+      "detail": "none",
+      "deltas": {}
+    }
+  ],
+  "summary": {
+    "passed": 64,
+    "failed": 0,
+    "skipped": 0,
+    "required_cases": 52
+  }
+}

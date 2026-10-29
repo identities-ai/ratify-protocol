@@ -12,7 +12,7 @@ from pathlib import Path
 from mcp.server.fastmcp import Context, FastMCP
 import uvicorn
 
-from ratify_protocol_v2.types import HybridPublicKey
+from ratify_protocol.v2.types import HybridPublicKey
 
 from .deployment_config import decode_private_key, decode_public_key
 from .receiver import (

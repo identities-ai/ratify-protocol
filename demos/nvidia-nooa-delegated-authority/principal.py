@@ -18,22 +18,22 @@ import threading
 import uuid
 from dataclasses import dataclass
 
-from ratify_protocol_v2 import background, key_id_v2
-from ratify_protocol_v2.constraints_v2 import CONSTRAINT_MAX_AMOUNT, ConstraintV2
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2 import background, key_id_v2
+from ratify_protocol.v2.constraints_v2 import CONSTRAINT_MAX_AMOUNT, ConstraintV2
+from ratify_protocol.v2.protocol_v2 import (
     DelegationCertV2,
     encode_revocation_list_v2,
     encode_revocation_push_v2,
     sign_delegation_cert_v2,
 )
-from ratify_protocol_v2.security_journal_v2 import (
+from ratify_protocol.v2.security_journal_v2 import (
     configure_status_key_epoch_v2,
     record_security_key_role_v2,
 )
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.status_publisher_v2 import new_v2_status_publisher_with_key
-from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
-from ratify_protocol_v2.v2reference.journal import new_journal_store
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.status_publisher_v2 import new_v2_status_publisher_with_key
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
+from ratify_protocol.v2.v2reference.journal import new_journal_store
 
 #: Wire object type codes for signed status evidence (SPEC-v2 §4).
 STATUS_OBJECT_REVOCATION_LIST = 3

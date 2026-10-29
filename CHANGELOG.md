@@ -647,9 +647,24 @@ constraints; until then, claims that depend on them are v1 claims.
 | --- | --- |
 | Go | module `github.com/identities-ai/ratify-protocol/v2` |
 | TypeScript | `@identities-ai/ratify-protocol` 2.x, dist-tag `next` (`latest` stays on v1 until `2.0.0`) |
-| Python | `ratify-protocol-v2` (import `ratify_protocol_v2`) with the required signing backend `ratify-protocol-native-v2` |
+| Python | `ratify-protocol` 2.x, module `ratify_protocol.v2`, with the `protocol-v2` extra for the signing backend `ratify-protocol-native-v2` |
 | Rust | crate `ratify-protocol` 2.x, module `ratify_protocol::v2` |
 | C/C++ | `ratify-c` 2.x, `ratify_v2_*` ABI with `ratify_v2_abi_version()` |
+
+- **Python ships both lines in one distribution.** Protocol v2 is
+  `ratify_protocol.v2` in `ratify-protocol` 2.0.0b1, as TypeScript and Rust
+  already carry it, instead of a separate `ratify-protocol-v2` distribution,
+  which is never published. The v1 API at `ratify_protocol` is unchanged and
+  never imports `ratify_protocol.v2`. The base requirements stay v1's; v2's
+  come with the extra: `pip install "ratify-protocol[protocol-v2]==2.0.0b1"`
+  adds `ratify-protocol-native-v2==2.0.0b1` and `tzdata==2025.3`. Every
+  published version is a prerelease, so pip treats 2.0.0b1 as the newest
+  release for an install or upgrade without a pin; a v1 user who upgrades
+  lands on it with v1's requirements intact. To stay on the v1 release line,
+  pin `ratify-protocol<2` or `ratify-protocol==1.0.0a21`, the v1 maintenance
+  release `v1.0.0-alpha.21`. The extra is named `protocol-v2` rather than
+  `v2` because an extra name that parses as a version makes pip 25.0 fail to
+  resolve the package.
 
 ### Known limits
 

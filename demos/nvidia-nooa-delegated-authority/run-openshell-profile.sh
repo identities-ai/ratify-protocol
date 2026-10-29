@@ -196,16 +196,17 @@ VENV="$WORK/venv"
 "$PYBIN" -m venv "$VENV" >/dev/null
 # The receiver and control plane run on the host against Ratify Protocol v2
 # from this checkout: the native signing extension is built with maturin (needs
-# a Rust toolchain) and ratify-protocol-v2 is installed editable.
+# a Rust toolchain) and ratify-protocol is installed editable with its
+# protocol-v2 extra.
 # TODO(RATIFY_V2_PIN): in published mode, install the 2.0.0-beta.1 packages here.
 "$VENV/bin/pip" -q install 'maturin>=1.7,<2' >/dev/null 2>&1
 ( cd "$REPO/sdks/python-native-v2" && "$VENV/bin/maturin" build --release --quiet --out "$WORK/host-wheel" ) \
   > "$WORK/host-wheel.log" 2>&1 || { tail -15 "$WORK/host-wheel.log"; fail_now "could not build the v2 native extension for the host"; }
 "$VENV/bin/pip" -q install "$WORK"/host-wheel/*.whl >/dev/null 2>&1
-"$VENV/bin/pip" -q install -e "$REPO/sdks/python-v2" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
-"$VENV/bin/python" -c "import ratify_protocol_v2, sys; sys.exit(0 if ratify_protocol_v2.NATIVE_AVAILABLE else 1)" \
-  || fail_now "ratify_protocol_v2 native signing is not importable in the receiver venv"
-note "receiver venv ready (ratify-protocol-v2 from checkout, $MCP_PIN, $UVICORN_PIN)"
+"$VENV/bin/pip" -q install -e "$REPO/sdks/python[protocol-v2]" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
+"$VENV/bin/python" -c "import ratify_protocol.v2, sys; sys.exit(0 if ratify_protocol.v2.NATIVE_AVAILABLE else 1)" \
+  || fail_now "ratify_protocol.v2 native signing is not importable in the receiver venv"
+note "receiver venv ready (ratify-protocol[protocol-v2] from checkout, $MCP_PIN, $UVICORN_PIN)"
 
 # --- 2. dynamic ports -------------------------------------------------------
 GW_PORT="$(freeport)"; GW_HEALTH="$(freeport)"; MCP_PORT="$(freeport)"; CTRL_PORT="$(freeport)"
@@ -252,9 +253,9 @@ RATIFY_SDK="${RATIFY_SDK:-local}"
 RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-2.0.0b1}"  # TODO(RATIFY_V2_PIN)
 case "$RATIFY_SDK" in
   local)
-      # Protocol v2 needs two distributions in the sandbox: ratify-protocol-v2
-      # (pure Python) and ratify-protocol-native-v2 (the Rust signing
-      # extension). The extension is built here as a manylinux wheel for the
+      # Protocol v2 needs two distributions in the sandbox: ratify-protocol
+      # (pure Python; v2 is ratify_protocol.v2) and ratify-protocol-native-v2
+      # (the Rust signing extension). The extension is built here as a manylinux wheel for the
       # container runtime's architecture, from this checkout, in a pinned
       # builder image. Network is needed for the crate downloads.
       mkdir -p "$WORK/native-wheel"
@@ -264,14 +265,16 @@ case "$RATIFY_SDK" in
             > "$WORK/native-wheel.log" 2>&1; then
         tail -15 "$WORK/native-wheel.log"; fail_now "could not build the v2 native extension for the sandbox"
       fi
-      SDK_MOUNT=(-v "$REPO/sdks/python-v2:/src:ro" -v "$WORK/native-wheel:/wheels:ro")
+      SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro" -v "$WORK/native-wheel:/wheels:ro")
       # Both installed without dependencies, since their runtime requirements
-      # (cryptography, tzdata) are already in the lock.
+      # (cryptography, pqcrypto, tzdata) are already in the lock. pqcrypto is
+      # a v1 requirement, but importing ratify_protocol.v2 runs the v1 package
+      # initializer, which imports it.
       SDK_INSTALL='cp -r /src /build && rm -rf /build/*.egg-info /build/src/*.egg-info
 uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /wheels/*.whl /build' ;;
   published)
-      grep -qi "^ratify-protocol-v2==${RATIFY_SDK_VERSION}" "$LOCK" || fail_now \
-        "RATIFY_SDK=published needs ratify-protocol-v2==${RATIFY_SDK_VERSION} in the lock; uncomment it in sandbox-requirements.in and run ./stage-lock.sh"
+      grep -qi "^ratify-protocol==${RATIFY_SDK_VERSION}" "$LOCK" || fail_now \
+        "RATIFY_SDK=published needs ratify-protocol==${RATIFY_SDK_VERSION} in the lock; uncomment it in sandbox-requirements.in and run ./stage-lock.sh"
       SDK_MOUNT=()
       # Nothing to do: the lock install below already placed the published,
       # hash-verified package. No checkout is mounted at all.
@@ -301,7 +304,7 @@ find /out/site -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null ||
 # which was the *only* difference between two otherwise byte-identical staged
 # trees (7983 files) and was enough to change the tree hash and the image tag.
 find /out/site -name uv_cache.json -delete 2>/dev/null || true
-PYTHONPATH=/out/site /usr/bin/python3 -c "import nooa, mcp, ratify_protocol_v2; assert ratify_protocol_v2.NATIVE_AVAILABLE"
+PYTHONPATH=/out/site /usr/bin/python3 -c "import nooa, mcp, ratify_protocol.v2; assert ratify_protocol.v2.NATIVE_AVAILABLE"
 ' > "$WORK/stage-deps.log" 2>&1; then
   tail -15 "$WORK/stage-deps.log"; fail_now "could not stage NOOA dependencies"
 fi
@@ -335,7 +338,7 @@ IMAGE_RATIFY_VERSION="$(grep -o 'IMAGE_DEPS_OK.*' "$WORK/image-deps.txt" | awk '
 # assembled from the checkout. Checked here rather than trusted, because this is
 # the provenance the final evidence rests on.
 if [ "$RATIFY_SDK" = "published" ] && [ "$IMAGE_RATIFY_VERSION" != "$RATIFY_SDK_VERSION" ]; then
-  fail_now "RATIFY_SDK=published expected ratify-protocol-v2 $RATIFY_SDK_VERSION in the image, found $IMAGE_RATIFY_VERSION"
+  fail_now "RATIFY_SDK=published expected ratify-protocol $RATIFY_SDK_VERSION in the image, found $IMAGE_RATIFY_VERSION"
 fi
 
 # --- 3. render config safely ------------------------------------------------
@@ -519,7 +522,7 @@ except Exception as e:
     print('opt listing failed:', type(e).__name__, e)
 sys.path.insert(0, '/opt/ratify-nooa/site')
 try:
-    import ratify_protocol_v2; print('ratify ok', ratify_protocol_v2.__version__)
+    import ratify_protocol.v2; print('ratify ok', ratify_protocol.v2.__version__)
 except Exception as e:
     print('import failed:', type(e).__name__, e)
 " 2>&1 </dev/null | tail -12

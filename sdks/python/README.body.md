@@ -1,15 +1,20 @@
 ## Install
 
+One distribution, `ratify-protocol`, carries both protocol lines: Protocol v1
+at `ratify_protocol` and Protocol v2 at `ratify_protocol.v2`.
+
 ```bash
-pip install ratify-protocol=={{VERSION_PYPI}}
+# Protocol v1 and Protocol v2
+pip install "ratify-protocol[protocol-v2]=={{VERSION_PYPI}}"
+
+# Protocol v1 only, on the v1 maintenance release (v1.0.0-alpha.21)
+pip install "ratify-protocol==1.0.0a21"
 ```
 
-This pulls in two binary dependencies: `cryptography` (Ed25519 via OpenSSL) and `pqcrypto>=0.3.4` (ML-DSA-65). Both ship wheels for Linux / macOS / Windows on CPython 3.10+.
+The base install keeps v1's requirements: `cryptography` (Ed25519 via OpenSSL), `pqcrypto>=0.3.4` (ML-DSA-65) and `tzdata`. Both binary dependencies ship wheels for Linux / macOS / Windows on CPython 3.10+. This matters because every published version of this package is a prerelease, so pip treats `{{VERSION_PYPI}}` as the newest release for anyone who installs or upgrades without a pin: a v1 user who upgrades or rebuilds lands on this release. The v1 API in it is unchanged, and `import ratify_protocol` never imports `ratify_protocol.v2`. Protocol v2's own requirements, the native signing extension `ratify-protocol-native-v2` and the IANA `tzdata` 2025.3 release, come only with the `protocol-v2` extra. To stay on the v1 release line, pin `ratify-protocol<2` or `ratify-protocol==1.0.0a21`.
 
-This is the Protocol v1 SDK. Protocol v2 is the separate
-[`ratify-protocol-v2`](https://github.com/identities-ai/ratify-protocol/tree/main/sdks/python-v2)
-distribution (import `ratify_protocol_v2`), which installs next to this
-package. This package carries no v2 API. Runnable v2 programs are in
+The Protocol v2 API is described in [Protocol v2](#protocol-v2) below.
+Runnable v2 programs are in
 [`examples/v2/python`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/python),
 and the upgrade guide is
 [`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
@@ -45,7 +50,7 @@ If you cloned the repo and want to run `python -m pytest` against the committed 
 cd sdks/python
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'              # installs ratify-protocol + cryptography + pqcrypto + pytest
-python -m pytest tests/              # runs 79/79 conformance fixtures
+python -m pytest tests/              # runs 79/79 conformance fixtures (Protocol v1)
 ```
 
 If `pqcrypto` fails to install (typical on older pip), upgrade pip first:
@@ -285,6 +290,184 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 - **Extension-constraint params.** A `Constraint`'s `params` carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validate_params_value`; `is_canonical_constraint_type` guards which types may carry them.
 - **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
 - **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
+
+## Protocol v2
+
+Protocol v2 (version `{{VERSION}}`, a prerelease) is the `ratify_protocol.v2`
+module, installed with the `protocol-v2` extra:
+
+```bash
+pip install "ratify-protocol[protocol-v2]=={{VERSION_PYPI}}"
+```
+
+```python
+from ratify_protocol.v2 import key_id_v2
+```
+
+v1 and v2 can be used in the same process: `ratify_protocol` keeps the v1
+API (`PROTOCOL_VERSION` 1), and v2 uses its own key ID namespace and wire
+schemas, so v1 keys and proofs are never accepted as v2. Without the extra,
+`ratify_protocol.v2` still imports and verifies, but signing raises
+`ImportError`, and `time_window` constraints fail closed unless `tzdata`
+2025.3 is the installed release.
+
+### Signing and verification
+
+Key generation and signing run only in the native extension
+`ratify-protocol-native-v2` (constant-time Ed25519 and ML-DSA-65), which pip
+installs with the `protocol-v2` extra. There is no pure-Python signing path: without the
+extension every signer raises `ImportError`. Hybrid signature verification
+also runs in the extension by default, through the Rust core's strict v2
+verifier. Verification handles only public data, so the package keeps a
+pure-Python verifier as a fallback: a verify-only install without the
+extension uses it, and `RATIFY_V2_PURE_VERIFY=1` selects it explicitly
+(`signing_v2.native_verify_enabled()` reports which is active). The test suite
+replays every signature check in the shared corpus through both verifiers and
+requires identical verdicts and error classes. The pure-Python verifier is
+about 35 times slower per signature; see
+[Protocol v2 performance](#protocol-v2-performance). The extension is
+versioned in lockstep with this package, and importing `ratify_protocol.v2`
+fails if a mismatched extension, or one built without native verification, is
+installed.
+
+Every object is signed through a typed signer (`sign_delegation_cert_v2`,
+`sign_proof_bundle_v2`, `sign_revocation_list_v2`, `sign_revocation_push_v2`,
+`sign_key_rotation_statement_v2`, `sign_witness_entry_v2`,
+`sign_transaction_receipt_party_v2`, `sign_verification_receipt_v2`), each
+with a `*_with_signer(ctx, ..., signer)` variant (`sign_key_rotation_statement_v2_with_signers` for the two rotation keys) that accepts an external
+signer (`SignerV2`) in direct mode (it receives the 77-byte message `M` and
+the registered ML-DSA context) or external-μ mode (it receives only `mu`).
+The SDK checks the signer's complete public key against the object before
+any signer call, and verifies every returned signature before using it. No
+function signs caller-selected bytes, codes, or contexts, and no local
+`SignerV2` is exported: an in-process key signs only through the typed
+signers, and the status publisher takes it through
+`status_publisher_v2.new_v2_status_publisher_with_key`. Production signing
+is hedged; byte-reproducible signing for the shared vectors is available only
+to tests through `ratify_protocol.v2._testing.deterministic_test_vector_signing()`.
+
+### Live verification and release
+
+`verify_v2.verify_proof_bundle_v2(ctx, request, callbacks)` runs the SPEC-v2
+§6 order: bounded strict decode, configuration bounds, every structural and
+signature check, the authenticated challenge binding, the receiver-binding
+hook, the atomic claim, and only then trust, local authorization, status
+evidence applied through an anchored `SecurityJournalV2`, receiver audience,
+`max_rate`, and finalization at a fresh authoritative time. It returns a
+stage (`preflight`, `replay`, `evaluating`, `committed`) with an error class
+from the closed list of SPEC-v2 §2.7.
+
+A committed outcome is not a decision. `release_v2.release_v2_decision`
+checks the published receipt, its checkpoint acknowledgement, the
+authoritative clock and the exclusive deadlines, and returns a
+`V2ReleasedDecision` only when every step passes. That class has no public
+constructor, holds no state of its own, and cannot be subclassed or pickled;
+only the exact instance `release_v2_decision` returned is in its release
+registry, which lives in a closure rather than a module attribute, so a copy
+or a hand-built instance is never actionable.
+`decision.allowed(ctx, clock)` is the only value an application may use to
+gate a side effect. This guards against API misuse and accidental
+construction. It does not defend against hostile code in the same
+interpreter (for example `gc` or closure introspection, or monkeypatching the
+module), which could read the application's keys and stores anyway.
+
+Every function whose Go counterpart takes a `context.Context` takes a
+`context_v2.Context` as its first argument (`context_v2.background()`,
+`with_cancel`, `with_timeout`).
+
+The Part B storage contracts (`ClaimStoreV2`, `V2RateReservationStore`,
+`V2RateAtFinalizationStore`, `V2ReleaseClaimStore`, `V2ReceiptPublisher`,
+`V2ReceiptCheckpoint`, `SecurityJournalStoreV2`, `V2ChallengeIssuanceStore`)
+are abstract classes. A deployment supplies durable implementations; the
+in-memory stores under `ratify_protocol.v2.v2reference` exist only for tests
+and conformance scenarios and must never be used in production.
+
+`time_window` constraints are evaluated only against the IANA tzdata release
+`2025c` from the pinned `tzdata` package; the host time-zone database is
+never consulted, and a verifier must configure `tzdb_version="2025c"`.
+
+### Conformance
+
+The shared vectors live in `testvectors/v2/` of the protocol repository. The
+v2 test suite (`tests_v2`) runs every file there and fails if a file has no
+runner. From this SDK directory, with a Rust toolchain:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install 'maturin>=1.7,<2'
+(cd ../python-native-v2 && maturin build --release --out dist)
+pip install ../python-native-v2/dist/*.whl
+pip install -e '.[dev,protocol-v2]'
+RATIFY_REQUIRE_NATIVE=1 python -m pytest tests_v2/
+```
+ To run
+the suite against an installed wheel, set `RATIFY_V2_VECTOR_DIR` to that
+directory. Set `RATIFY_REQUIRE_NATIVE=1` to make a missing native extension a
+hard error instead of skipping the signing tests.
+
+This is a prerelease. Review so far is internal adversarial review; external
+independent review is a gate for `2.0.0` (SPEC-v2 §8), and v2 carries no
+production security claim yet. The per-SDK record is in
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+
+### Protocol v2 performance
+
+`bench_v2/bench_v2.py` measures, on the in-memory reference stores: one hybrid
+verification (`verify_v2_statement`); `verify_delegation_cert_v2_signature`
+(structure and key-ID checks plus one verification); one complete decision on
+the quickstart flow (verify with signed status, commit, publish the receipt,
+checkpoint acknowledgement, release); and a dual-root call (two such decisions
+under independent roots, one with a two-certificate chain). Challenge issuance
+and presentation signing happen before the clock starts. `bench_v2/go` and
+`bench_v2/rust` run the same flow on the Go and Rust SDKs.
+
+```bash
+python bench_v2/bench_v2.py              # from sdks/python; table; --json out.json; --check (CI floors)
+go run ./sdks/python/bench_v2/go         # from the repository root
+cd bench_v2/rust && cargo run --release  # from sdks/python
+```
+
+Measured on 2026-10-22 on an Apple M2 Pro (10 cores, 16 GB, macOS 26.6),
+Python 3.12.10, Go 1.27.3, Rust 1.95.0, one process at a time on an otherwise
+idle host. Operations per second, single thread:
+
+| Measurement | Python, before | Python, pure fallback | Python, native | Go | Rust |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hybrid verify | 83 | 82 | 3,130 | n/a | n/a |
+| certificate signature verify | n/a | 81 | 2,628 | 2,066 | 2,574 |
+| decision | 5.4 | 6.7 | 68.7 | 63.0 | 99.7 |
+| dual-root decision | 2.1 | 2.4 | 21.7 | 17.1 | 27.8 |
+
+"Before" is the previous release line, which verified in pure Python and
+encoded canonical JSON strings character by character. "Pure fallback" is the
+current code with `RATIFY_V2_PURE_VERIFY=1`. Go does not export a raw hybrid
+verifier, so the SDKs are compared on the certificate call.
+
+With native verification a decision spends most of its time in Python
+protocol logic: loading, validating and digesting the reference security
+journal snapshot during the status stage, canonical JSON encoding, and strict
+wire decoding. Signature verification is under a tenth of it.
+
+The Google ADK reference's dual-root scale benchmark (8 worker threads, 76 KB
+presentations) went from 1.3 / 1.6 / 1.6 calls/s to 13.2 / 15.6 / 14.2 calls/s
+for the 10 / 100 / 1,000-call tiers on the same host. The earlier run shared
+the host with other work for part of its duration.
+
+CI runs `bench_v2/bench_v2.py --check`, which fails if verification is not
+native or any measurement falls below a floor set between a tenth and a
+quarter of the native numbers above, and above the pure-Python ones.
+
+### Examples and upgrading
+
+Runnable programs live in
+[`examples/v2/python`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/python):
+a quickstart (keys, delegation, challenge from the issuance helper, proof,
+verify, receipt, checkpoint, release, `allowed`), signed status with a
+revocation, an exact `custom:` scope with the `max_count/v1` evaluator
+profile, and an external signer. They print the same output as the other
+SDKs' programs, and CI checks it. They use the in-memory reference stores and
+are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
 
 ## License
 

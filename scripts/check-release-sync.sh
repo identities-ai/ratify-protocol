@@ -86,12 +86,33 @@ if not native_core:
         'exactly (ratify-protocol = "=1.x"), not the v2 path crate'
     )
 
-# The Python SDK pins the optional native extra to an exact version, so the two
-# must move together. If they drift, `pip install ratify-protocol[native]`
+# The Python SDK pins the optional v1 native extra to an exact version, so the
+# two must move together. If they drift, `pip install ratify-protocol[native]`
 # resolves to nothing and the extra silently becomes uninstallable.
 pyproject_native = re.search(r'"ratify-protocol-native==([^"]+)"', pyproject)
 if not pyproject_native:
     fail("missing ratify-protocol-native pin in sdks/python/pyproject.toml")
+
+# Optional-dependency groups (extras) of sdks/python. pip 25.0 fails to
+# resolve the package at all, with or without extras, when an extra name
+# parses as a PEP 440 version (as "v2" does), so no extra may.
+extras_section = re.search(r'^\[project\.optional-dependencies\]\n(.*?)(?=^\[)', pyproject, re.M | re.S)
+if not extras_section:
+    fail("missing [project.optional-dependencies] in sdks/python/pyproject.toml")
+extras = dict(re.findall(r'^([A-Za-z0-9][A-Za-z0-9._-]*) = \[(.*?)^\]', extras_section.group(1), re.M | re.S))
+try:
+    from packaging.version import InvalidVersion, Version
+except ImportError:
+    print("release-sync: note: packaging is not importable; skipped the check that no extra name parses as a version")
+else:
+    for extra in extras:
+        try:
+            Version(extra)
+        except InvalidVersion:
+            continue
+        fail(f"sdks/python/pyproject.toml extra {extra!r} parses as a version; pip 25.0 cannot resolve the package")
+if "protocol-v2" not in extras:
+    fail("sdks/python/pyproject.toml must define the protocol-v2 extra (Protocol v2's requirements)")
 
 
 def py_to_semver(v: str) -> str:
@@ -105,40 +126,47 @@ def semver_to_py(v: str) -> str:
     return re.sub(r'-rc\.(\d+)$', r'rc\1', v)
 
 # Two release lines live in this tree.
-#   v2: TypeScript, Rust, C, Go (module path /v2), python-v2, python-native-v2
-#   v1: the Python SDK (sdks/python) and its native extra (sdks/python-native)
+#   v2: TypeScript, Rust, C, Go (module path /v2), the ratify-protocol Python
+#       distribution (sdks/python: v1 at ratify_protocol, v2 at
+#       ratify_protocol.v2) and python-native-v2
+#   v1: the v1 native extra (sdks/python-native) and the v1 maintenance
+#       release it belongs to, which the [native] extra pins
 # Each line must agree with itself; the lines do not have to agree with each
 # other.
 v2_version = ts_version
-v1_version = py_to_semver(py_version)
+v1_version = native_version
+v1_py_version = semver_to_py(v1_version)
 if not v2_version.startswith("2."):
     fail(f"TypeScript version {v2_version} is not on the v2 line")
 if not v1_version.startswith("1."):
-    fail(f"Python SDK version {py_version} is not on the v1 line")
+    fail(f"Python native extra version {v1_version} is not on the v1 line")
 
-# v2 Python distribution (ratify-protocol-v2) and its native extra.
-pyv2_toml = read("sdks/python-v2/pyproject.toml")
-pyv2_match = re.search(r'^version = "([^"]+)"$', pyv2_toml, re.M)
-if not pyv2_match:
-    fail("missing version in sdks/python-v2/pyproject.toml")
-pyv2_version = pyv2_match.group(1)
-pyv2_ver_py = read("sdks/python-v2/src/ratify_protocol_v2/_version.py")
+# The Python distribution is on the v2 line, with v2's requirements in the
+# protocol-v2 extra: the v2 native extension, pinned to this release, and the
+# exact tzdata release SPEC-v2 evaluates against.
+if py_version != semver_to_py(v2_version):
+    fail(f"Python SDK version {py_version} is not the v2 line {v2_version} in PEP 440 form")
+pyv2_ver_py = read("sdks/python/src/ratify_protocol/v2/_version.py")
 pyv2_init = re.search(r'^__version__ = "([^"]+)"$', pyv2_ver_py, re.M)
 pyv2_native_const = re.search(r'^NATIVE_VERSION = "([^"]+)"$', pyv2_ver_py, re.M)
 if not pyv2_init or not pyv2_native_const:
-    fail("sdks/python-v2/src/ratify_protocol_v2/_version.py must define __version__ and NATIVE_VERSION")
-if pyv2_version != semver_to_py(v2_version):
-    fail(f"python-v2 version {pyv2_version} is not the v2 line {v2_version} in PEP 440 form")
-if pyv2_init.group(1) != pyv2_version:
-    fail(f"python-v2 __version__ {pyv2_init.group(1)} != pyproject {pyv2_version}")
+    fail("sdks/python/src/ratify_protocol/v2/_version.py must define __version__ and NATIVE_VERSION")
+if pyv2_init.group(1) != py_version:
+    fail(f"ratify_protocol.v2 __version__ {pyv2_init.group(1)} != pyproject {py_version}")
 if pyv2_native_const.group(1) != v2_version:
-    fail(f"python-v2 NATIVE_VERSION {pyv2_native_const.group(1)} != v2 line {v2_version}")
-if not re.search(r'^\s*"tzdata[><=~ ]', pyv2_toml, re.M):
-    fail("sdks/python-v2/pyproject.toml must declare tzdata (time_window needs an IANA database)")
-pyv2_native_pin = re.search(r'"ratify-protocol-native-v2==([^"]+)"', pyv2_toml)
-if not pyv2_native_pin or pyv2_native_pin.group(1) != pyv2_version:
+    fail(f"ratify_protocol.v2 NATIVE_VERSION {pyv2_native_const.group(1)} != v2 line {v2_version}")
+protocol_v2_extra = extras["protocol-v2"]
+pyv2_native_pin = re.search(r'"ratify-protocol-native-v2==([^"]+)"', protocol_v2_extra)
+if not pyv2_native_pin or pyv2_native_pin.group(1) != py_version:
     got = pyv2_native_pin.group(1) if pyv2_native_pin else "missing"
-    fail(f"ratify-protocol-native-v2 pin {got} does not match python-v2 {pyv2_version}")
+    fail(f"protocol-v2 extra ratify-protocol-native-v2 pin {got} does not match the Python SDK {py_version}")
+if not re.search(r'"tzdata==[^"]+"', protocol_v2_extra):
+    fail("the protocol-v2 extra must pin tzdata exactly (SPEC-v2 time_window evaluation)")
+# The base requirements must stay v1's, so a v1 install that resolves to this
+# release is unaffected.
+base_deps = re.search(r'^dependencies = \[(.*?)^\]', pyproject, re.M | re.S)
+if not base_deps or "ratify-protocol-native-v2" in base_deps.group(1):
+    fail("sdks/python/pyproject.toml base dependencies must not require ratify-protocol-native-v2")
 native_v2_toml = read("sdks/python-native-v2/Cargo.toml")
 native_v2_match = re.search(r'^version = "([^"]+)"$', native_v2_toml, re.M)
 if not native_v2_match:
@@ -158,12 +186,10 @@ if rust_version != ts_version:
     fail(f"Rust version {rust_version} does not match TypeScript {ts_version}")
 if c_version != ts_version:
     fail(f"C version {c_version} does not match TypeScript {ts_version}")
-if native_version != v1_version:
-    fail(f"Python native extra version {native_version} does not match the v1 Python SDK {v1_version}")
-if pyproject_native.group(1) != py_version:
+if pyproject_native.group(1) != v1_py_version:
     fail(
         f"ratify-protocol-native pin {pyproject_native.group(1)} does not match "
-        f"the Python SDK version {py_version}"
+        f"the v1 native extra version {v1_py_version}"
     )
 if c_dep_match.group(1) != ts_version:
     fail(f"C ratify-protocol dependency pin {c_dep_match.group(1)} does not match {ts_version}")
@@ -179,7 +205,7 @@ if not header_banner or header_banner.group(1) != ts_version:
 # lockfiles, and the cross-SDK fixture generator defaults to a development
 # build of it. scripts/release.sh rewrites all of these on a bump.
 for lock_file in ("demos/rust/Cargo.lock", "examples/v2/rust/Cargo.lock",
-                  "sdks/python-v2/bench/rust/Cargo.lock"):
+                  "sdks/python/bench_v2/rust/Cargo.lock"):
     entry = re.search(r'\[\[package\]\]\nname = "ratify-protocol"\nversion = "([^"]+)"', read(lock_file))
     if not entry or entry.group(1) != ts_version:
         got = entry.group(1) if entry else "missing"
@@ -196,7 +222,7 @@ if not cross_sdk_default or cross_sdk_default.group(1) != ts_version:
 # The committed cross-SDK fixtures name the SDK release that produced them;
 # a fixture from another release would claim interoperability nobody ran.
 # Go may also record the untagged "+dev" form of the line.
-for sdk, want in (("go", ts_version), ("typescript", ts_version), ("python", pyv2_version),
+for sdk, want in (("go", ts_version), ("typescript", ts_version), ("python", py_version),
                   ("rust", ts_version), ("c", ts_version)):
     got = json.loads(read(f"testvectors/v2/cross-sdk/{sdk}.json")).get("sdk_version", "missing")
     if got != want and not (sdk == "go" and got == want + "+dev"):
@@ -204,7 +230,7 @@ for sdk, want in (("go", ts_version), ("typescript", ts_version), ("python", pyv
 for line in read("docs/V2_REFERENCE_COMPATIBILITY.md").splitlines():
     if line.startswith("| ") and "| `sdks/" in line:
         for found in re.findall(r"`(2\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+|(?:a|b|rc)\d+))`", line):
-            if found not in (ts_version, pyv2_version):
+            if found not in (ts_version, py_version):
                 fail(f"docs/V2_REFERENCE_COMPATIBILITY.md SDK row names {found}; the v2 line is {ts_version}")
 
 # Install pins. The alpha.13 npm tarball shipped with a README that still
@@ -216,17 +242,19 @@ for line in read("docs/V2_REFERENCE_COMPATIBILITY.md").splitlines():
 # ship.)
 install_pins = {
     "sdks/typescript/README.md": [f"npm install @identities-ai/ratify-protocol@{ts_version}"],
-    "sdks/python/README.md": [f"pip install ratify-protocol=={py_version}"],
-    "sdks/python-v2/README.md": [f"pip install ratify-protocol-v2=={pyv2_version}"],
-    # The native extension is a required dependency of ratify-protocol-v2
-    # (there is no [native] extra), so its README installs the SDK itself.
-    "sdks/python-native-v2/README.md": [f"pip install ratify-protocol-v2=={pyv2_version}"],
+    "sdks/python/README.md": [
+        f'pip install "ratify-protocol[protocol-v2]=={py_version}"',
+        f"ratify-protocol=={v1_py_version}",
+    ],
+    # The native extension comes with the protocol-v2 extra and is never
+    # imported directly, so its README installs the SDK with that extra.
+    "sdks/python-native-v2/README.md": [f'pip install "ratify-protocol[protocol-v2]=={py_version}"'],
     "sdks/rust/README.md": [f'ratify-protocol = "{rust_version}"'],
     "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}"],
     "README.md": [
         f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}",
-        f"pip install ratify-protocol=={py_version}",
-        f"pip install ratify-protocol-v2=={pyv2_version}",
+        f'pip install "ratify-protocol[protocol-v2]=={py_version}"',
+        f"pip install ratify-protocol=={v1_py_version}",
         f"cargo add ratify-protocol@{rust_version}",
     ],
 }
@@ -237,12 +265,12 @@ for path, needles in install_pins.items():
             fail(f"{path} is missing the pinned install command: {needle}")
 
 release_version_re = re.compile(r"\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+|\d+\.\d+\.\d+(?:a|b|rc)\d+")
-current_versions = {v2_version, pyv2_version, v1_version, py_version}
+current_versions = {v2_version, py_version, v1_version, v1_py_version}
 # Older v1 versions that a README may name on purpose, each with the reason.
 # Keep this list short and explicit: anything not here is treated as stale.
 DOCUMENTED_V1_PINS = {
-    # Last published v1 tag. The Go, TypeScript, Rust, and root READMEs keep a
-    # v1 install section that pins it while the v2 line is unpublished.
+    # The v1 tag before the v1.0.0-alpha.21 maintenance release. The Go,
+    # TypeScript, Rust, and root READMEs keep a v1 install section that pins it.
     "1.0.0-alpha.20",
 }
 for path in [*install_pins, "sdks/c/README.md"]:
@@ -287,7 +315,6 @@ must_contain = {
     "sdks/go/README.md": protocol_tag,
     "sdks/typescript/README.md": ts_version,
     "sdks/python/README.md": py_version,
-    "sdks/python-v2/README.md": pyv2_version,
     "sdks/rust/README.md": rust_version,
 }
 for path, needle in must_contain.items():

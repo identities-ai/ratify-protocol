@@ -20,20 +20,20 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 |---|---|---|---|
 | **Go** | `github.com/identities-ai/ratify-protocol/v2` (v1: `github.com/identities-ai/ratify-protocol`) | module root | ✅ 79/79 fixtures + unit tests; full `testvectors/v2` |
 | **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 79/79 fixtures; full `testvectors/v2` |
-| **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 79/79 fixtures |
-| **Python (v2)** | `ratify-protocol-v2` (PyPI name reserved for v2, not yet published) | `sdks/python-v2/` | ✅ full `testvectors/v2` |
+| **Python** | `ratify-protocol` (PyPI; v2 at `ratify_protocol.v2` through the `protocol-v2` extra) | `sdks/python/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
 | Swift | n/a | planned (mobile wallet) | n/a |
 | Java / Kotlin | n/a | planned (Android / JVM) | n/a |
 
 This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
-(module path `/v2`), TypeScript, Rust, C/C++, and the separate Python
-distributions `ratify-protocol-v2` and `ratify-protocol-native-v2` (`2.0.0b1`).
-The v1 Python SDK `ratify-protocol` and its native extra `ratify-protocol-native`
-stay on the v1 line (`1.0.0a21`). Neither line's version in this tree is
-published yet; the latest published release is `v1.0.0-alpha.20`. Per-SDK v2
-vector coverage is recorded in
+(module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
+distribution (`2.0.0b1`) carries v1 at `ratify_protocol` and v2 at
+`ratify_protocol.v2`, and its `protocol-v2` extra installs the v2 native
+extension `ratify-protocol-native-v2`. The v1 native extra
+`ratify-protocol-native` stays on the v1 line (`1.0.0a21`), and a Python
+install that stays on v1 pins `ratify-protocol==1.0.0a21`, the v1 maintenance
+release `v1.0.0-alpha.21`. Per-SDK v2 vector coverage is recorded in
 [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md).
 
 ### C / C++ SDK (shipped in v1.0.0-alpha.8)
@@ -288,9 +288,14 @@ Each SDK version SHOULD track the protocol version it targets:
 
 Where a language cannot carry both lines in one package without breaking
 existing v1 pins, v2 ships under a separate name: the Go module path
-`github.com/identities-ai/ratify-protocol/v2`, and the Python distributions
-`ratify-protocol-v2` (import `ratify_protocol_v2`) and
-`ratify-protocol-native-v2`. `scripts/check-release-sync.sh` checks that the
+`github.com/identities-ai/ratify-protocol/v2`. TypeScript, Rust, and Python
+carry both lines in one package, with v2 under a `v2` subpath or module
+(`ratify_protocol.v2` in Python). Python keeps v2's requirements out of the
+base install, in the `protocol-v2` extra (the native extension
+`ratify-protocol-native-v2` and the pinned `tzdata` release), because every
+published version is a prerelease: pip treats the newest one as current for
+an unpinned install, so a v1 user who upgrades lands on the v2 line and must
+keep v1's requirements. `scripts/check-release-sync.sh` checks that the
 packages of each line agree on one version and that README install pins match
 it.
 

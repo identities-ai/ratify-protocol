@@ -3,7 +3,7 @@
 //!
 //! A separate distribution and module (`ratify-protocol-native-v2` /
 //! `ratify_protocol_native_v2`) from the v1 extension, so both install
-//! together. `ratify_protocol_v2` signs only through this extension and checks
+//! together. `ratify_protocol.v2` signs only through this extension and checks
 //! `version()` at import time, rejecting a mismatched build.
 //!
 //! Signing uses `ed25519-dalek` and the constant-time `fips204` ML-DSA-65
@@ -142,7 +142,7 @@ impl HybridSigningKey {
         out
     }
 
-    /// Internal to `ratify_protocol_v2`: sign an SDK-computed v2 transcript
+    /// Internal to `ratify_protocol.v2`: sign an SDK-computed v2 transcript
     /// with both components. It is not public API. The SDK's typed signing
     /// functions are the only supported callers; they compute the message
     /// and context and verify every returned signature. The name is
@@ -214,7 +214,7 @@ fn hybrid_keypair_from_seeds_py(
     ))
 }
 
-/// Internal to `ratify_protocol_v2`: strictly verify one hybrid signature
+/// Internal to `ratify_protocol.v2`: strictly verify one hybrid signature
 /// over an SDK-computed 77-byte v2 transcript `message` and its ML-DSA
 /// `context`, under the complete public key. Not public API; the SDK's
 /// verifiers are the supported callers. Returns `None` when both components

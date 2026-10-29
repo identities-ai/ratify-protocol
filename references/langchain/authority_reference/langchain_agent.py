@@ -7,8 +7,8 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from ratify_protocol_v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
-from ratify_protocol_v2.constraints_v2 import CONSTRAINT_RESOURCE_PATH
+from ratify_protocol.v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
+from ratify_protocol.v2.constraints_v2 import CONSTRAINT_RESOURCE_PATH
 
 from .authority import NODE_COUNTER, AuthorityFixture, ChallengeGrant, region_resource
 from .jev_adapter import JevToolDecision, select_tool_with_jev

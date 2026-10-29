@@ -81,9 +81,10 @@ jobs:
           echo "checked out $got = $RELEASE_TAG"
 
       # This tree carries two release lines. A v2.* tag releases the v2 line
-      # (TypeScript, Rust, C, Go module /v2, ratify-protocol-v2 and its native
-      # extra). A v1.* tag releases the v1 line (ratify-protocol and its native
-      # extra, plus the other SDKs only if they are also at that version).
+      # (TypeScript, Rust, C, Go module /v2, ratify-protocol from sdks/python
+      # with the v2 native extension ratify-protocol-native-v2). A v1.* tag
+      # releases the v1 line (ratify-protocol and its native extra, plus the
+      # other SDKs only if they are also at that version).
       # Publish jobs read this output so one tag never publishes the other
       # line's packages.
       - name: release line
@@ -168,22 +169,23 @@ jobs:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
-      # Python v2 (ratify-protocol-v2). Signing is native-only and the native
-      # extension is a required, exactly pinned dependency, so it is built and
-      # installed first and the SDK suite runs with it required.
+      # Python v2 (ratify_protocol.v2, installed through the [protocol-v2]
+      # extra). Signing is native-only and the extra pins the native extension
+      # exactly, so it is built and installed first and the v2 suite runs with
+      # it required.
       - name: Build and install the v2 native Python extension
         working-directory: sdks/python-native-v2
         run: |
           maturin build --release --out dist
           pip install dist/*.whl
       - name: Python v2 install
-        working-directory: sdks/python-v2
-        run: pip install -e '.[dev]'
+        working-directory: sdks/python
+        run: pip install -e '.[dev,protocol-v2]'
       - name: Python v2 full test suite (native required)
-        working-directory: sdks/python-v2
+        working-directory: sdks/python
         env:
           RATIFY_REQUIRE_NATIVE: '1'
-        run: pytest -v
+        run: pytest -v tests_v2
 
       # Rust
       - uses: dtolnay/rust-toolchain@stable
@@ -219,8 +221,9 @@ jobs:
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
       # declared version. The release-sync script already proves alignment
       # within each line; here we prove the tag matches that line's version.
-      # A v2 tag checks the v2 packages and the v2 Python distributions. A v1
-      # tag checks the v1 Python packages and every other SDK, so it fails
+      # A v2 tag checks the v2 packages, ratify-protocol and the v2 native
+      # extension. A v1 tag checks the v1 Python packages and every other SDK,
+      # so it fails
       # while those SDKs are on the v2 line rather than releasing them under a
       # v1 tag.
       - name: tag matches SDK versions
@@ -241,10 +244,10 @@ jobs:
           [ "$ts_version"   = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ ts $ts_version"; exit 1; }
           if [ "$LINE" = "v2" ]; then
             go_module=$(go list -m)
-            pyv2_version=$(ver sdks/python-v2/pyproject.toml)
+            py_version=$(ver sdks/python/pyproject.toml)
             native_v2_version=$(ver sdks/python-native-v2/Cargo.toml)
             [ "$go_module" = "github.com/identities-ai/ratify-protocol/v2" ] || { echo "::error::v2 tag but Go module is $go_module"; exit 1; }
-            [ "$pyv2_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ python-v2 $pyv2_version"; exit 1; }
+            [ "$py_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
             [ "$native_v2_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ python-native-v2 $native_v2_version"; exit 1; }
           else
             py_version=$(ver sdks/python/pyproject.toml)
@@ -504,23 +507,26 @@ jobs:
           skip-existing: true
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Python v2: ratify-protocol-v2 and its native extra ratify-protocol-native-v2.
-  # These mirror the v1 Python jobs above and run only for v2 tags. They are
-  # separate distributions, so the v1 `ratify-protocol` package and its
-  # existing pins are never touched by a v2 release. The PyPI trusted
-  # publisher for both project names must be configured before the first v2
-  # release; see docs/REGISTRY_SETUP.md.
+  # Python on the v2 line: ratify-protocol from sdks/python (v1 at the package
+  # root, v2 at ratify_protocol.v2) and the v2 native extension
+  # ratify-protocol-native-v2 that its [protocol-v2] extra pins. These mirror
+  # the v1 Python jobs above and run only for v2 tags. The base requirements of
+  # ratify-protocol stay the v1 ones, so a v1 install that resolves to this
+  # release is unaffected. ratify-protocol keeps its existing trusted
+  # publisher; ratify-protocol-native-v2 needs its own before the first v2
+  # release; see docs/REGISTRY_SETUP.md. The distribution name
+  # ratify-protocol-v2 is never published.
   # ──────────────────────────────────────────────────────────────────────────
   publish-pypi-v2:
-    name: Publish v2 Python SDK to PyPI
+    name: Publish ratify-protocol (v2 line) to PyPI
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v2' }}
-    # ratify-protocol-v2 pins ratify-protocol-native-v2 exactly, so the native
-    # package must be on PyPI first or the SDK is uninstallable.
+    # The [protocol-v2] extra pins ratify-protocol-native-v2 exactly, so the
+    # native package must be on PyPI first or the extra is uninstallable.
     needs: [gate-tests, publish-pypi-native-v2]
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish
-      url: https://pypi.org/project/ratify-protocol-v2/
+      url: https://pypi.org/project/ratify-protocol/
     permissions:
       id-token: write  # required for OIDC exchange with PyPI
       contents: read   # required by actions/checkout to read the repo
@@ -545,23 +551,23 @@ jobs:
         with:
           python-version: '3.12'
       - name: build sdist + wheel
-        working-directory: sdks/python-v2
+        working-directory: sdks/python
         run: |
           python -m pip install --upgrade pip build
           python -m build
           ls -lh dist/
       - name: assert the wheel is platform-independent
-        working-directory: sdks/python-v2
+        working-directory: sdks/python
         run: |
           if ! ls dist/*-py3-none-any.whl >/dev/null 2>&1; then
-            echo "::error::ratify-protocol-v2 must publish a py3-none-any wheel."
+            echo "::error::ratify-protocol must publish a py3-none-any wheel."
             ls -l dist/
             exit 1
           fi
       - name: publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: sdks/python-v2/dist
+          packages-dir: sdks/python/dist
           skip-existing: true
 
   # Builds wheels only; no environment and no id-token, for the same reason as
@@ -962,14 +968,20 @@ jobs:
           path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
           retention-days: 1
 
-  # GitHub Release — last so it only appears once registry publishes have
-  # been attempted. Attaches the testvectors/v1 bundle and pre-built C
-  # libraries as release assets.
+  # GitHub Release — last, and only once every registry publish for this
+  # release line has succeeded. Attaches the testvectors/v1 bundle and
+  # pre-built C libraries as release assets.
+  #
+  # always() lets the job run when the other release line's jobs were skipped
+  # by their line condition. Every build, verify and publish job is listed in
+  # needs, so a failure anywhere upstream is visible here: a publish job whose
+  # build failed is itself only "skipped", and the failed build is what blocks
+  # the release.
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-pypi-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' }}
+    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1010,18 +1022,18 @@ jobs:
           tag="$RELEASE_TAG"          # v1.0.0-alpha.7
           tag_clean="${tag#v}"                     # 1.0.0-alpha.7
           py_version=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
-          # v2 uses the /v2 Go module path and the separate ratify-protocol-v2
-          # Python distribution.
+          # v2 uses the /v2 Go module path and the [protocol-v2] extra of the
+          # ratify-protocol Python distribution.
           # The summary, spec, and fixture lines are per release line. A v2
           # summary states only what the v2 corpus verifies at this tag.
           case "$tag" in
             v2.*)
-              go_module="github.com/identities-ai/ratify-protocol/v2"; py_dist="ratify-protocol-v2"
+              go_module="github.com/identities-ai/ratify-protocol/v2"; py_spec="\"ratify-protocol[protocol-v2]==${py_version}\""
               spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
               summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is internal adversarial review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md."
               ;;
             *)
-              go_module="github.com/identities-ai/ratify-protocol";    py_dist="ratify-protocol"
+              go_module="github.com/identities-ai/ratify-protocol";    py_spec="ratify-protocol==${py_version}"
               spec_file="SPEC.md"; vectors_dir="testvectors/v1"
               summary="Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204) signatures; both must verify. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++."
               ;;
@@ -1029,9 +1041,8 @@ jobs:
           {
             echo "TAG=$tag"
             echo "TAG_CLEAN=$tag_clean"
-            echo "PY_VERSION=$py_version"
             echo "GO_MODULE=$go_module"
-            echo "PY_DIST=$py_dist"
+            echo "PY_SPEC=$py_spec"
             echo "SPEC_FILE=$spec_file"
             echo "VECTORS_DIR=$vectors_dir"
             echo "SUMMARY=$summary"
@@ -1058,7 +1069,7 @@ jobs:
             go get ${{ env.GO_MODULE }}@${{ env.TAG }}
 
             # Python
-            pip install ${{ env.PY_DIST }}==${{ env.PY_VERSION }}
+            pip install ${{ env.PY_SPEC }}
 
             # Rust
             cargo add ratify-protocol@${{ env.TAG_CLEAN }}

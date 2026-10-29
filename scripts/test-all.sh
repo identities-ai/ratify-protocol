@@ -39,8 +39,8 @@ echo "==> Python v2 SDK (native extension required)"
 "$PYTHON" -m venv "$WORK/venv-v2"
 "$WORK/venv-v2/bin/python" -m pip install -q --upgrade pip 'maturin>=1.7,<2'
 (cd sdks/python-native-v2 && "$WORK/venv-v2/bin/maturin" build --release --quiet --out "$WORK/py-native-v2")
-"$WORK/venv-v2/bin/python" -m pip install -q --find-links "$WORK/py-native-v2" -e "sdks/python-v2[dev]"
-(cd sdks/python-v2 && RATIFY_REQUIRE_NATIVE=1 "$WORK/venv-v2/bin/python" -m pytest -q)
+"$WORK/venv-v2/bin/python" -m pip install -q --find-links "$WORK/py-native-v2" -e "sdks/python[dev,protocol-v2]"
+(cd sdks/python && RATIFY_REQUIRE_NATIVE=1 "$WORK/venv-v2/bin/python" -m pytest -q tests_v2)
 RATIFY_V2_PYTHON="$WORK/venv-v2/bin/python" examples/v2/python/test.sh
 
 echo "==> NVIDIA NOOA delegated-authority reference (Protocol v2 gate)"

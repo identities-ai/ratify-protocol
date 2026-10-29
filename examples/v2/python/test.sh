@@ -4,10 +4,11 @@
 # same text.
 #
 # With RATIFY_V2_PYTHON set to an interpreter that already has
-# ratify-protocol-native-v2 and ratify-protocol-v2 installed from this tree
-# (as the CI python-v2 job does), that interpreter is used as is. Otherwise a
-# temporary virtual environment is created, the native extension is built
-# with maturin and both packages are installed from this tree. That needs
+# ratify-protocol-native-v2 and ratify-protocol (with its protocol-v2 extra)
+# installed from this tree (as the CI python-v2 job does), that interpreter is
+# used as is. Otherwise a temporary virtual environment is created, the native
+# extension is built with maturin and both packages are installed from this
+# tree. That needs
 # Python 3.10+ and a Rust toolchain.
 set -euo pipefail
 
@@ -25,7 +26,7 @@ else
   "$PY" -m pip install --quiet 'maturin>=1.7,<2'
   (cd "$ROOT/sdks/python-native-v2" && "$WORK/venv/bin/maturin" build --release --quiet --out "$WORK/dist")
   "$PY" -m pip install --quiet "$WORK"/dist/*.whl
-  "$PY" -m pip install --quiet "$ROOT/sdks/python-v2"
+  "$PY" -m pip install --quiet "$ROOT/sdks/python[protocol-v2]"
 fi
 
 cd "$ROOT"

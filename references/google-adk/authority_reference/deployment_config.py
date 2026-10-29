@@ -14,9 +14,9 @@ import os
 from pathlib import Path
 import secrets
 
-from ratify_protocol_v2.protocol_v2 import decode_delegation_cert_v2, encode_delegation_cert_v2
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
+from ratify_protocol.v2.protocol_v2 import decode_delegation_cert_v2, encode_delegation_cert_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
 
 from .authority import AuthorityFixture
 

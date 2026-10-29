@@ -4,10 +4,13 @@
 partnership, Google-approved integration, or Google reference architecture.
 
 - **Protocol line:** v2 (2.0.0-beta.1)
-- **Tested against:** the in-tree Python v2 SDK (`ratify-protocol-v2` and
+- **Tested against:** the in-tree Python v2 SDK (`ratify_protocol.v2` from
+  `ratify-protocol` 2.0.0b1 with its `protocol-v2` extra, and
   `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
   2.0.0-beta.1 is published. The deterministic gate is 58/58 green; see
-  [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
+  [`evidence/reference-evidence.md`](evidence/reference-evidence.md). That
+  recorded run predates the move of the v2 SDK into the `ratify-protocol`
+  distribution on 2026-10-28.
 - **Protocol v1 history:** the v1 version of this reference (Ratify
   `1.0.0a20`, 49/49 gate, one-million-call endurance run) is kept unchanged in
   [`v1/`](v1/README.md).
@@ -141,16 +144,16 @@ From the Ratify repository root:
 
 The script creates an isolated virtual environment (`references/google-adk/.venv`,
 or `RATIFY_REFERENCE_VENV`), builds `ratify-protocol-native-v2` and installs
-`ratify-protocol-v2` from this repository, installs the pinned platform
-packages in `requirements.txt`, refuses to run if the SDK resolves from the
-source tree or if the v1 `ratify_protocol` package is present, runs the
+`ratify-protocol` with its `protocol-v2` extra from this repository, installs
+the pinned platform packages in `requirements.txt`, refuses to run if the SDK
+resolves from the source tree, runs the
 deterministic adversarial suite, and then runs the dual-root HTTP MCP
 demonstration. It requires exactly 58 passing tests and fails if any test is
 skipped, xfail, missing, or unexpectedly added.
 
 **Release pin.** The SDK dependency moves to the published
-`ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (2.0.0-beta.1)
-when they are released; the lines to change are marked `RATIFY_V2_PIN` in
+`"ratify-protocol[protocol-v2]==2.0.0b1"` (2.0.0-beta.1), which brings
+`ratify-protocol-native-v2` 2.0.0b1 with it, when it is released; the lines to change are marked `RATIFY_V2_PIN` in
 `requirements.txt` and `run-reference-check.sh`. The 58/58 result has not yet
 been reproduced against the published packages.
 
@@ -159,7 +162,7 @@ Tested pins:
 - `google-adk==2.6.3`
 - `mcp==1.29.0`
 - `pytest==9.0.3`
-- `ratify-protocol-v2` and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
+- `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
 
 The deterministic path needs no API key, Google Cloud project, or paid
 service. It drives the real ADK runner with a scripted model double, so ADK
@@ -377,7 +380,7 @@ was not run for the recorded v2 evidence.
 
 - **Development-only stores.** The claim store, receipt log, checkpoint,
   challenge issuance store, security journal and approval ledger are the SDK's
-  in-memory reference stores (`ratify_protocol_v2.v2reference`). They are not
+  in-memory reference stores (`ratify_protocol.v2.v2reference`). They are not
   durable, do not span processes, and the checkpoint is not independent of the
   receiver. A production receiver supplies durable Part B stores and an
   independent checkpoint (SPEC-v2 §7). No production claim is made here.
@@ -421,7 +424,7 @@ was not run for the recorded v2 evidence.
   the in-tree `2.0.0b1` SDK with hybrid verification in the native extension,
   measured 15.2 / 16.2 / 15.7 calls/s for 10 / 100 / 1,000 dual-root calls on
   one host; see
-  [`sdks/python-v2/README.md`](../../sdks/python-v2/README.md#performance).
+  [`sdks/python/README.md`](../../sdks/python/README.md#protocol-v2-performance).
 - The executed draft uses the real ADK runner and native `McpToolset` across an
   independently started Streamable HTTP MCP receiver with receiver-owned trust
   configuration. It does not yet execute A2A, TLS workload authentication,

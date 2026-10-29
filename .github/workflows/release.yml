@@ -968,14 +968,20 @@ jobs:
           path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
           retention-days: 1
 
-  # GitHub Release — last so it only appears once registry publishes have
-  # been attempted. Attaches the testvectors/v1 bundle and pre-built C
-  # libraries as release assets.
+  # GitHub Release — last, and only once every registry publish for this
+  # release line has succeeded. Attaches the testvectors/v1 bundle and
+  # pre-built C libraries as release assets.
+  #
+  # always() lets the job run when the other release line's jobs were skipped
+  # by their line condition. Every build, verify and publish job is listed in
+  # needs, so a failure anywhere upstream is visible here: a publish job whose
+  # build failed is itself only "skipped", and the failed build is what blocks
+  # the release.
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-pypi-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' }}
+    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

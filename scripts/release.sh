@@ -110,6 +110,25 @@ run_tests() {
   ./scripts/test-all.sh
 }
 
+# Each SDK writes its v2 cross-SDK fixture from fresh keys at the bumped
+# version (docs/RELEASES.md step 6b). This must run after bump_versions and
+# before check-release-sync.sh, which refuses a fixture whose sdk_version is
+# not the release being prepared. test-all then has every SDK verify all five.
+regenerate_cross_sdk_fixtures() {
+  local work
+  work="$(mktemp -d)"
+  go run ./cmd/ratify-v2-cross-sdk -sdk-version "$NPM_VERSION"
+  (cd sdks/typescript && npm run generate:cross-sdk)
+  python -m venv "$work/venv"
+  "$work/venv/bin/pip" install --quiet maturin
+  (cd sdks/python-native-v2 && "$work/venv/bin/maturin" build --release --out "$work/dist")
+  "$work/venv/bin/pip" install --quiet --find-links "$work/dist" "./sdks/python[protocol-v2,dev]"
+  (cd sdks/python && RATIFY_REQUIRE_NATIVE=1 "$work/venv/bin/python" tests_v2/gen_cross_sdk_fixture.py)
+  (cd sdks/rust && cargo run --quiet --example v2_cross_sdk_fixture)
+  (cd sdks/c && RATIFY_WRITE_CROSS_SDK=1 cargo test --quiet --test v2c_cross_sdk)
+  rm -rf "$work"
+}
+
 bump_versions() {
   python - "$VERSION" "$NPM_VERSION" "$PY_VERSION" <<'PY'
 import json
@@ -520,6 +539,9 @@ if marker in text:
     today = datetime.date.today().isoformat()
     path.write_text(text.replace(marker, f"## {version} ({today})", 1))
 PY
+
+  echo "==> Regenerating the v2 cross-SDK fixtures at $VERSION"
+  regenerate_cross_sdk_fixtures
 
   ./scripts/check-release-sync.sh
 

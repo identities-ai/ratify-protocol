@@ -147,6 +147,15 @@ v1.0.0-alpha.20 →  C SDK surface. `ratify_proof_bundle_create_with_context`
                    AI edge reference added, verified on ARMv7 hardware.
                    79 fixtures, byte-identical to alpha.19
                    (published 2026-09-01)
+v1.0.0-alpha.21 →  security. `max_rate` treated a negative invocation count,
+                   for example a storage error mapped to -1, as zero
+                   invocations and allowed the call; it now fails closed
+                   as constraint_unverifiable in all five SDKs. Through the
+                   C ABI, a cert_id containing U+0000 skipped rate_fn and
+                   passed; it now fails closed the same way. GitHub release
+                   created only after every publish job succeeds.
+                   79 fixtures, byte-identical to alpha.20
+                   (published 2026-10-29)
 …
 1.0.0-beta.1   →  after first external security audit of Go reference
 1.0.0-rc.1     →  when Python + Rust + TS all pass + external audit of at least 2 SDKs

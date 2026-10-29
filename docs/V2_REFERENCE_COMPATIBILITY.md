@@ -178,6 +178,16 @@ reference stores.
 
 ## Reference v2 gate matrix
 
+Re-run on 2026-10-29 after the Python v2 SDK moved into the `ratify-protocol`
+distribution as `ratify_protocol.v2` (installed with the `protocol-v2` extra),
+still built from this repository: Google ADK 58/58, LangChain 34/34 and NVIDIA
+NOOA (deterministic) 192/192, each in a fresh environment, with the Google ADK
+10, 100 and 1,000-call tiers re-measured, and one live OpenShell profile run
+at 64/64 gates and 52/52 required cases. GitHub Copilot 13/13 and the edge
+sentinel 32/32, which do not use the Python SDK, passed in the same
+`scripts/test-all.sh` run. Every gate ran with 0 skipped. Each reference's
+evidence records its run.
+
 Re-run on 2026-10-27 on macOS (Apple Silicon) after the in-tree v2 SDKs moved
 to `2.0.0-beta.1` (Python `2.0.0b1`), still built from this repository and not
 from published packages: Google ADK 58/58, LangChain 34/34, GitHub Copilot

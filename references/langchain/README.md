@@ -145,7 +145,7 @@ source tree, and uses the real `create_agent`
 LangGraph loop with a deterministic model double, the public
 `MultiServerMCPClient` tool-interceptor API, and an independently started
 Streamable HTTP MCP receiver. It needs no model API key or paid service. It
-requires exactly 33 passing tests and fails on a skipped, xfail, missing, or
+requires exactly 34 passing tests and fails on a skipped, xfail, missing, or
 additional test. See [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
 **Release pin.** The SDK dependency moves to the published
@@ -259,7 +259,7 @@ Both verify the same proofs. The protocol does not change between them.
 | `authority_reference/status_feed.py` | One status publisher per issuer under a separate status key, and the file-based local status feed |
 | `authority_reference/authority.py` | Reference identities and the bounded delegation |
 | `authority_reference/deployment_config.py` | Trust root, expected agent, status keys and the receiver's verifier key, pinned out of band |
-| `tests/test_reference.py` | The 33 deterministic boundary, status, release, and Jev-separation cases |
+| `tests/test_reference.py` | The 34 deterministic boundary, status, release, and Jev-separation cases |
 | `evidence/reference-evidence.md` | Executed evidence for the gate |
 | `DESIGN.md` | Architecture and threat-boundary rationale |
 | `v1/` | The Protocol v1 reference and its evidence, kept as dated history |

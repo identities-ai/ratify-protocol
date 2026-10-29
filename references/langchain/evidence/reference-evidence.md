@@ -1,12 +1,13 @@
 # LangChain reference evidence (Protocol v2)
 
-**Evidence date:** 2026-10-27 (run started 2026-10-27T21:26:01Z)
+**Evidence date:** 2026-10-29 (run started 2026-10-29T02:09:05Z)
 
-**Branch:** `fix/r8-receipt-order-ts-perf`
+**Branch:** `feat/python-unified`
 
-**Code commit:** `9ea1ec2` with the v2 version bump to 2.0.0-beta.1 applied
-(the commit that records this run). The reference code is unchanged since
-`d62bed2`.
+**Code commit:** `32c1c09` (the commit that records this run follows it and
+changes only this record). Since `d62bed2` the reference code changed only in
+its SDK import path: Protocol v2 moved from the separate `ratify_protocol_v2`
+package into the `ratify-protocol` distribution as `ratify_protocol.v2`.
 
 **Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build 2.0.0b1
 
@@ -20,14 +21,14 @@ unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-e
 | Host | macOS 26.6, arm64 (Apple M2 Pro, 10 logical CPUs) |
 | Python | `3.12.10` |
 | Rust / maturin (native extension build) | `rustc 1.95.0`, `maturin 1.15.0` |
-| ratify-protocol-v2 | `2.0.0b1`, installed from `sdks/python-v2` at the code commit |
+| ratify-protocol | `2.0.0b1` with the `protocol-v2` extra, installed from `sdks/python` at the code commit |
 | ratify-protocol-native-v2 | `2.0.0b1`, built from `sdks/python-native-v2` at the code commit |
 | LangChain | `1.3.14` |
 | langchain-mcp-adapters | `0.3.0` |
 | MCP Python SDK | `1.29.0` |
 | pytest | `9.0.3` |
 | pytest-asyncio | `1.4.0` |
-| Requirements SHA-256 | `e908837662775ee2e833597ae304b3f94b00d8a4fbfc78537494b1b4031b5d5a` |
+| Requirements SHA-256 | `e6a508203652babddc5e35f446a93257b2bedf0f3af2a077949c423cbef8f9b2` |
 
 ## Reproduction
 
@@ -36,11 +37,10 @@ unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-e
 ```
 
 The recorded run set `RATIFY_REFERENCE_VENV` to a fresh directory outside the
-repository. The gate builds the native extension, installs both v2 packages
-from this repository into that environment, asserts that the SDK does not
-import from the source tree and that the v1 `ratify_protocol` package is
-absent, checks every pin, runs the suite, and requires exactly 34 passing
-tests with none skipped.
+repository. The gate builds the native extension, installs `ratify-protocol`
+with its `protocol-v2` extra from this repository into that environment,
+asserts that the SDK does not import from the source tree, checks every pin,
+runs the suite, and requires exactly 34 passing tests with none skipped.
 
 ## Recorded result
 
@@ -49,17 +49,20 @@ first line after the build steps; only the absolute virtual-environment path
 is shortened.
 
 ```text
-installed Ratify v2 SDK: .../site-packages/ratify_protocol_v2/__init__.py
-langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol-v2==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
+installed Ratify v2 SDK: .../site-packages/ratify_protocol/v2/__init__.py
+langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
 ..................................                                       [100%]
-34 passed in 10.68s
+34 passed in 9.91s
 gate: 34/34 passed; zero skipped, xfailed, failed, or errored
 ```
 
 Zero tests were skipped or marked xfail.
 
-The previous run (2026-10-26, code commit `d62bed2`, against the in-tree
-alpha.1 build) passed 34/34; its record is in git history at `c800022`. The
+The previous run (2026-10-27, code commit `9ea1ec2` with the beta bump,
+against the separate `ratify-protocol-v2` 2.0.0b1 build) passed 34/34; its
+record is in git history at `32c1c09`. The run before it (2026-10-26, code
+commit `d62bed2`, against the in-tree alpha.1 build) passed 34/34; its record
+is in git history at `c800022`. The
 run before it (2026-10-22, code commit `bb48e57`) passed 33/33. The
 34th test was added with the fix for an intermittent `400` from the receiver:
 a signed presentation header of about 38 KB exceeded the HTTP parser's

@@ -4,7 +4,7 @@
 
 This independent Ratify draft uses A2A 1.0 messages to carry a bounded provisioning request and its proof to a receiving agent. The receiver verifies the exact operation before calling its protected provisioner. It is a discussion artifact, not an A2A-approved extension, Google integration, Cisco integration, or production deployment. [Run it](#use-it-now) · [Inspect the evidence](#what-the-reference-proves) · [Choose a path](#which-path-should-i-use)
 
-> **Protocol line: Ratify Protocol v2 (prerelease), one-directional only.** The calling agent presents one proof and the receiver verifies it. Protocol v2.0 has no mutual presentation profile, so the receiver-to-caller proof, the A2A mutual-presentation carrier, and the `verification_result` object of v1 §11.1 remain v1-only until Protocol 2.1. Two independent v2 proofs would not establish one conversation. The v2 SDK is a prerelease built from source (see [Use it now](#use-it-now)). The v1 (`1.0.0a20`) results are kept as dated history in [EVIDENCE.md](EVIDENCE.md).
+> **Protocol line: Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease), one-directional only.** The calling agent presents one proof and the receiver verifies it. Protocol v2.0 has no mutual presentation profile, so the receiver-to-caller proof, the A2A mutual-presentation carrier, and the `verification_result` object of v1 §11.1 remain v1-only until Protocol 2.1. Two independent v2 proofs would not establish one conversation. Until the beta packages are published, the gate builds the v2 SDK from this repository (see [Use it now](#use-it-now)). The v1 (`1.0.0a20`) results are kept as dated history in [EVIDENCE.md](EVIDENCE.md).
 
 ![A2A handoff, receiver challenge, and two possible outcomes](visuals/a2a-authority.svg)
 
@@ -118,22 +118,15 @@ The focused gate has eight deterministic tests and zero skips. Seven tests exerc
 
 ## Use it now
 
-You need Python 3.10 or newer, `pip`, Node.js 22 or newer, OpenSSL, network access to install the pinned A2A packages, and local builds of the Protocol v2 Python SDK. The v2 packages are not yet published, so build them from a checkout of the v2 source (a Rust toolchain is needed for the native signing extension):
+You need Python 3.10 or newer, `pip`, a Rust toolchain for the native signing extension, Node.js 22 or newer, OpenSSL, and network access to install the pinned A2A packages. From the repository root:
 
 ```bash
-pip install 'maturin>=1.7,<2'
-(cd sdks/python-native-v2 && maturin build --release --out /tmp/ratify-v2-dist)
+./references/a2a/run-reference-check.sh
 ```
 
-Then, from this checkout:
+`./scripts/a2a-reference-check.sh` runs the same gate. Set `RATIFY_REFERENCE_VENV` to choose the virtual environment (default `references/a2a/.venv`) and `PYTHON` to choose the interpreter that creates it.
 
-```bash
-RATIFY_V2_NATIVE_WHEEL=/tmp/ratify-v2-dist/ratify_protocol_native_v2-<version>.whl \
-RATIFY_V2_PYTHON_SDK=/path/to/v2-source/sdks/python-v2 \
-  ./scripts/a2a-reference-check.sh
-```
-
-The script recreates `references/a2a/.venv`, installs the pinned A2A packages and the two local v2 builds, checks every version, that the v1 `ratify_protocol` package is absent, and that the native signing extension loaded, then runs the wire-level tests and requires exactly 8 passed with zero skips. When `2.0.0-beta.1` is published, the local-build variables are replaced by pins. The network test listens only on local loopback and generates a short-lived test certificate and bearer token. No Gemini key, Google Cloud project, Discord account, or external service is needed. The HTTPS test needs permission to bind a local port.
+The Protocol v2 packages are not yet published, so the script builds `ratify-protocol-native-v2` from `sdks/python-native-v2` and installs `ratify-protocol` with its `protocol-v2` extra from `sdks/python`, both `2.0.0b1`. It then installs the pinned A2A packages, checks every version, that `ratify_protocol.v2` is the installed package rather than the source tree, and that the native signing extension loaded, then runs the wire-level tests and requires exactly 8 passed with zero skips. When `2.0.0-beta.1` is published, the local build is replaced by the pin `ratify-protocol[protocol-v2]==2.0.0b1` (the `RATIFY_V2_PIN` markers). The network test listens only on local loopback and generates a short-lived test certificate and bearer token. No Gemini key, Google Cloud project, Discord account, or external service is needed. The HTTPS test needs permission to bind a local port.
 
 ## Which path should I use?
 
@@ -154,14 +147,14 @@ The A2A `DataPart`, message ID, header, and metadata placement are carrier detai
 | [`serve.py`](serve.py) | Separate HTTPS receiver entry point for the network gate |
 | [`wire_client.mjs`](wire_client.mjs) | Independent Node A2A JSON-RPC caller for the network gate |
 | [`tests/test_poc.py`](tests/test_poc.py) | A2A wire allow and deny assertions with protected-call counts |
-| [`requirements.txt`](requirements.txt) | A2A dependency pins; the v2 SDK comes from local builds until published |
-| [`../../scripts/a2a-reference-check.sh`](../../scripts/a2a-reference-check.sh) | Clean-checkout gate |
+| [`requirements.txt`](requirements.txt) | A2A and test pins; the v2 SDK is built from this repository until published |
+| [`run-reference-check.sh`](run-reference-check.sh) | Clean-checkout gate; [`../../scripts/a2a-reference-check.sh`](../../scripts/a2a-reference-check.sh) runs it |
 | [`AGNTCY_A2A_FIT.md`](AGNTCY_A2A_FIT.md) | Short layer comparison and questions for maintainers |
-| [`EVIDENCE.md`](EVIDENCE.md) | Dated evidence records: the v2 run and the earlier v1 run |
+| [`EVIDENCE.md`](EVIDENCE.md) | Dated evidence records: the current v2 run and the earlier v2 and v1 runs |
 
 ## Evidence, security status, and limitations
 
-On 2026-10-22 the gate ran locally with `a2a-sdk==1.2.2`, local builds of `ratify-protocol-v2` and `ratify-protocol-native-v2` `2.0.0a1`, Python 3.12, Node 26, and OpenSSL 3.6: 8 passed with zero skips. The exact commands are in [EVIDENCE.md](EVIDENCE.md), with the earlier v1 run kept as dated history. This is an independent draft for technical discussion. The provisional extension URI has not been registered or accepted by A2A, and this profile has not been reviewed or endorsed by A2A, Google, Cisco, AGNTCY, or Microsoft.
+On 2026-10-29 the gate ran locally with `a2a-sdk==1.2.2`, `ratify-protocol` `2.0.0b1` with the `protocol-v2` extra and `ratify-protocol-native-v2` `2.0.0b1` built from this repository, Python 3.12, Node 26, and OpenSSL 3.6: 8 passed, 0 failed, 0 skipped. The exact command is in [EVIDENCE.md](EVIDENCE.md), with the earlier v2 and v1 runs kept as dated history. This is an independent draft for technical discussion. The provisional extension URI has not been registered or accepted by A2A, and this profile has not been reviewed or endorsed by A2A, Google, Cisco, AGNTCY, or Microsoft.
 
 - The network gate uses local HTTPS with a generated test certificate and bearer token. It proves transport enforcement in the fixture, not OAuth issuance, mutual TLS, AGNTCY identity verification, or binding the bearer token to the Ratify agent key. The caller validates the TLS certificate, but does not independently pin the receiver's Ratify verifier ID.
 - The challenge and execution form an in-memory A2A task with `AUTH_REQUIRED` followed by completion. The task ID and context ID are signed through the operation hash, but the task store is not durable. Whether the authority proof belongs in this provisional extension or an AGNTCY task authorization profile remains open for community review.
@@ -171,6 +164,6 @@ On 2026-10-22 the gate ran locally with `a2a-sdk==1.2.2`, local builds of `ratif
 - The challenge and pending-operation stores are in-memory in one receiver process. An authenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. The executor does not support cancellation; the A2A SDK may mark a waiting task canceled without releasing its pending challenge before that TTL. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
 - The protected provisioner is in-memory and creates no cloud resource. A real executor must ensure the verified logical resource maps to the actual resource it changes.
 - The network test runs separate caller and receiver processes on one host and uses an independent Node JSON-RPC client. It does not prove interoperability with another vendor's deployed A2A agent or use a second vendor's SDK.
-- The v2 SDK is a prerelease built from source. Protocol v2 review so far is internal adversarial review; external independent review is a gate for `2.0.0`.
+- The v2 SDK is the `2.0.0-beta.1` prerelease, built from this repository; the result has not yet been repeated against the published packages. Protocol v2 review so far is internal adversarial review; external independent review is a gate for `2.0.0`.
 
 Sources: [A2A extensions](https://a2a-protocol.org/latest/topics/extensions/), [A2A authorization scope](https://a2a-protocol.org/latest/specification/), [AGNTCY identity](https://spec.identity.agntcy.org/docs/intro/).

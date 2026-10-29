@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v1.0.0-alpha.21 (unreleased)
+## v1.0.0-alpha.21 (2026-10-29)
 
 A security fix for the v1 line in all five SDKs. No canonical bytes, fixture
 contents or wire format change, and the protocol version remains 1. Protocol

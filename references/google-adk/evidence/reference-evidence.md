@@ -1,21 +1,24 @@
 # Google ADK reference evidence (Protocol v2)
 
 **Status:** executed reference evidence, recorded 2026-10-29 (gate run started
-2026-10-29T02:07:59Z). This record is generated from the independent Ratify reference; it
+2026-10-29T08:51:25Z). This record is generated from the independent Ratify reference; it
 is not Google attestation.
 
-**Branch:** `feat/python-unified` at `32c1c09` (the commit that records this
-run follows it and changes only the evidence). Since code commit `1315454` the
-reference code changed only in its SDK import path: Protocol v2 moved from the
-separate `ratify_protocol_v2` package into the `ratify-protocol` distribution
-as `ratify_protocol.v2`.
+**Branch:** `feat/verify-federation-v2` at `e30000f` (the commit that records
+this run follows it and changes only the evidence). Since code commit
+`1315454` the reference code changed only in its SDK import path (Protocol v2
+moved from the separate `ratify_protocol_v2` package into the
+`ratify-protocol` distribution as `ratify_protocol.v2`) and in one pin:
+`mcp` moved from 1.29.0 to 1.30.0.
 
 **Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build
 2.0.0b1.
 
-The previous v2 run (2026-10-27, `9ea1ec2` with the beta bump, 58/58, against
+The previous v2 run (2026-10-29 earlier the same day, `32c1c09`, 58/58, with
+`mcp` 1.29.0) is kept in git history at `e30000f`; the one before it
+(2026-10-27, `9ea1ec2` with the beta bump, 58/58, against
 the separate `ratify-protocol-v2` 2.0.0b1 build) is kept in git history at
-`32c1c09`; the one before it (2026-10-22, code commit `1315454`, 58/58, against
+`32c1c09`; and the one before that (2026-10-22, code commit `1315454`, 58/58, against
 the in-tree alpha.1 build) at `2244540`.
 
 The Protocol v1 evidence (Ratify `1.0.0a20`, 49/49, and the
@@ -32,9 +35,9 @@ one-million-call run, September 2026) is kept unchanged in
 | ratify-protocol | `2.0.0b1` with the `protocol-v2` extra, installed from `sdks/python` at the recorded tree |
 | ratify-protocol-native-v2 | `2.0.0b1`, built from `sdks/python-native-v2` at the recorded tree |
 | Google ADK | `2.6.3` |
-| MCP Python SDK | `1.29.0` |
+| MCP Python SDK | `1.30.0` |
 | pytest | `9.0.3` |
-| Requirements SHA-256 | `27a8242661be3c5a4fa9a193a91a1c21c40d9b9181013a94beff38489153f492` |
+| Requirements SHA-256 | `ad893c26a8f6957b9c48a1663228f32d34531f77cf6a3b8173729b87875a396a` |
 
 ## Reproduction
 
@@ -56,12 +59,12 @@ virtual-environment path is shortened.
 
 ```text
 installed Ratify v2 SDK: .../site-packages/ratify_protocol/v2/__init__.py
-google-adk==2.6.3 mcp==1.29.0 pytest==9.0.3 ratify-protocol==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
+google-adk==2.6.3 mcp==1.30.0 pytest==9.0.3 ratify-protocol==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
 ..........................................................               [100%]
 (pytest warnings summary omitted: ADK and dependency deprecation and experimental-feature notices)
-58 passed, 38 warnings in 37.03s
+58 passed, 38 warnings in 40.25s
 gate: 58/58 passed; zero skipped, xfailed, failed, or errored
-ALLOW across ADK HTTP MCP: {'decision': 'allow', 'status': 'authorized_agent', 'reason': 'authorized', 'resource': 'gcp:projects/customer-project/regions/us-central1', 'nodes_provisioned': 1, 'receipt_sequences': [1, 2], 'tool_invocations': 1, 'protected_action_invoked': True, 'approval_set_id': 'cf115d2df9b170213df4e21c26d33759', 'constraint_evaluators': [{'type': 'com.ratifyprotocol.max_count', 'profile_digest': 'sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b'}]}
+ALLOW across ADK HTTP MCP: {'decision': 'allow', 'status': 'authorized_agent', 'reason': 'authorized', 'resource': 'gcp:projects/customer-project/regions/us-central1', 'nodes_provisioned': 1, 'receipt_sequences': [1, 2], 'tool_invocations': 1, 'protected_action_invoked': True, 'approval_set_id': '2144ebc96519c4c06da7e545b760a1e9', 'constraint_evaluators': [{'type': 'com.ratifyprotocol.max_count', 'profile_digest': 'sha384:27e6c6b37856ce4eed4c0923641d45a59d06e138b38893d850f8f0f1356200286fdb2e2e8d36cc69e4b550f9b2443e2b'}]}
 DENY excessive count: {'decision': 'deny', 'status': 'constraint_denied', 'reason': 'released Protocol decision: constraint_denied', 'tool_invocations': 1, 'protected_action_invoked': False, 'protocol_reason': 'constraint_denied', 'identity_status': 'constraint_denied', 'receipt_sequence': 3, 'approval_slot': 'authority'}
 DENY wrong region: {'decision': 'deny', 'status': 'constraint_denied', 'reason': 'released Protocol decision: constraint_denied', 'tool_invocations': 1, 'protected_action_invoked': False, 'protocol_reason': 'constraint_denied', 'identity_status': 'constraint_denied', 'receipt_sequence': 4, 'approval_slot': 'authority'}
 GOOGLE ADK HTTP MCP DUAL-ROOT REFERENCE PASSED
@@ -72,7 +75,7 @@ No tests were skipped, xfailed, or retried.
 ## Measured call tiers
 
 Command, run from `references/google-adk` on the same host on 2026-10-29
-(started 2026-10-29T02:09:54Z), on branch `feat/python-unified` at `32c1c09`,
+(started 2026-10-29T08:53:44Z), on branch `feat/verify-federation-v2` at `e30000f`,
 with the virtual environment the gate
 above created for the in-tree `2.0.0b1` build (writing to a scratch path, then
 copied to `evidence/federation-scale-local.json`):
@@ -91,14 +94,16 @@ The full result is [`federation-scale-local.json`](federation-scale-local.json).
 
 | Calls | Workers | Allowed | Denied | Released receipts | Protected actions | Calls/s | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 5 | 9 | 1 | 19 | 9 | 16.531 | 281.576 | 343.632 |
-| 100 | 8 | 90 | 10 | 190 | 90 | 16.108 | 477.911 | 602.781 |
-| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 15.945 | 502.777 | 636.69 |
+| 10 | 5 | 9 | 1 | 19 | 9 | 15.919 | 302.8 | 343.81 |
+| 100 | 8 | 90 | 10 | 190 | 90 | 15.291 | 501.214 | 629.169 |
+| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 14.742 | 553.794 | 684.074 |
 
 Every denial is `constraint_denied` (the deterministic one-in-ten node count
 excess). The encoded dual-root presentation is 76,148 bytes. No other
 benchmark or test ran during the measurement; ordinary desktop applications
-and a few idle local containers were running. The tiers of 2026-10-27 against the separate `ratify-protocol-v2` build
+and a few idle local containers were running. The tiers recorded earlier on 2026-10-29 with `mcp` 1.29.0 (16.531, 16.108
+and 15.945 calls/s) are kept in git history at `e30000f`. The tiers of
+2026-10-27 against the separate `ratify-protocol-v2` build
 (15.15, 16.206 and 15.694 calls/s) are kept in git history at `32c1c09`. The
 earlier tiers (2026-10-22,
 in-tree alpha.1 build, before native verification: 1.79, 1.406 and 0.89

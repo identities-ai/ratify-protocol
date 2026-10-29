@@ -2,13 +2,13 @@
   "environment": {
     "google_adk": "2.6.3",
     "logical_cpus": 10,
-    "mcp": "1.29.0",
+    "mcp": "1.30.0",
     "platform": "macOS-26.6-arm64-arm-64bit",
     "python": "3.12.10",
     "ratify_protocol": "2.0.0b1",
     "ratify_protocol_native_v2": "2.0.0b1"
   },
-  "measured_at": 1793239796,
+  "measured_at": 1793264026,
   "methodology": {
     "claim_boundary": "single-host measurements with in-memory reference stores, not Google production capacity",
     "excluded": "ADK model latency, MCP HTTP transport, status feed distribution, durable Part B stores, and multi-host orchestration",
@@ -25,16 +25,16 @@
       },
       "encoded_proof_bytes": 76148,
       "latency_ms": {
-        "max": 343.632,
-        "p50": 281.576,
-        "p95": 343.632,
-        "p99": 343.632
+        "max": 343.81,
+        "p50": 302.8,
+        "p95": 343.81,
+        "p99": 343.81
       },
       "mode": "local_dual_root_composition_profile",
       "protected_action_invocations": 9,
       "released_receipts": 19,
-      "throughput_calls_per_second": 16.531,
-      "wall_seconds": 0.604926,
+      "throughput_calls_per_second": 15.919,
+      "wall_seconds": 0.628164,
       "workers": 5
     },
     {
@@ -47,16 +47,16 @@
       },
       "encoded_proof_bytes": 76148,
       "latency_ms": {
-        "max": 683.055,
-        "p50": 477.911,
-        "p95": 602.781,
-        "p99": 677.764
+        "max": 687.209,
+        "p50": 501.214,
+        "p95": 629.169,
+        "p99": 660.595
       },
       "mode": "local_dual_root_composition_profile",
       "protected_action_invocations": 90,
       "released_receipts": 190,
-      "throughput_calls_per_second": 16.108,
-      "wall_seconds": 6.208094,
+      "throughput_calls_per_second": 15.291,
+      "wall_seconds": 6.539826,
       "workers": 8
     },
     {
@@ -69,16 +69,16 @@
       },
       "encoded_proof_bytes": 76148,
       "latency_ms": {
-        "max": 851.698,
-        "p50": 502.777,
-        "p95": 636.69,
-        "p99": 700.296
+        "max": 936.295,
+        "p50": 553.794,
+        "p95": 684.074,
+        "p99": 760.395
       },
       "mode": "local_dual_root_composition_profile",
       "protected_action_invocations": 900,
       "released_receipts": 1900,
-      "throughput_calls_per_second": 15.945,
-      "wall_seconds": 62.716408,
+      "throughput_calls_per_second": 14.742,
+      "wall_seconds": 67.83396,
       "workers": 8
     }
   ],

@@ -198,6 +198,13 @@ sentinel 32/32, which do not use the Python SDK, passed in the same
 `scripts/test-all.sh` run. Every gate ran with 0 skipped. Each reference's
 evidence records its run.
 
+Re-run again on 2026-10-29 after the merge of `main` moved the Google ADK and
+LangChain references to `mcp==1.30.0` (commit `e30000f`): Google ADK 58/58 and
+LangChain 34/34, each in a fresh environment with 0 skipped, with the Google
+ADK 10, 100 and 1,000-call tiers re-measured at 15.919, 15.291 and 14.742
+calls per second. The GitHub Copilot reference passed 13/13 with its updated
+dependencies (`zod` 4.6.7 and patched transitive packages).
+
 Re-run on 2026-10-27 on macOS (Apple Silicon) after the in-tree v2 SDKs moved
 to `2.0.0-beta.1` (Python `2.0.0b1`), still built from this repository and not
 from published packages: Google ADK 58/58, LangChain 34/34, GitHub Copilot

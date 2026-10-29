@@ -1,13 +1,14 @@
 # LangChain reference evidence (Protocol v2)
 
-**Evidence date:** 2026-10-29 (run started 2026-10-29T02:09:05Z)
+**Evidence date:** 2026-10-29 (run started 2026-10-29T08:52:42Z)
 
-**Branch:** `feat/python-unified`
+**Branch:** `feat/verify-federation-v2`
 
-**Code commit:** `32c1c09` (the commit that records this run follows it and
+**Code commit:** `e30000f` (the commit that records this run follows it and
 changes only this record). Since `d62bed2` the reference code changed only in
-its SDK import path: Protocol v2 moved from the separate `ratify_protocol_v2`
-package into the `ratify-protocol` distribution as `ratify_protocol.v2`.
+its SDK import path (Protocol v2 moved from the separate `ratify_protocol_v2`
+package into the `ratify-protocol` distribution as `ratify_protocol.v2`) and
+in one pin: `mcp` moved from 1.29.0 to 1.30.0.
 
 **Protocol line:** v2 (2.0.0-beta.1), exercised with the in-tree SDK build 2.0.0b1
 
@@ -25,10 +26,10 @@ unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-e
 | ratify-protocol-native-v2 | `2.0.0b1`, built from `sdks/python-native-v2` at the code commit |
 | LangChain | `1.3.14` |
 | langchain-mcp-adapters | `0.3.0` |
-| MCP Python SDK | `1.29.0` |
+| MCP Python SDK | `1.30.0` |
 | pytest | `9.0.3` |
 | pytest-asyncio | `1.4.0` |
-| Requirements SHA-256 | `e6a508203652babddc5e35f446a93257b2bedf0f3af2a077949c423cbef8f9b2` |
+| Requirements SHA-256 | `46ad5fc4b2594ef34d700ea0fc5de56b7ed51ff32efd9759e87bd6bcd7bc8431` |
 
 ## Reproduction
 
@@ -50,17 +51,19 @@ is shortened.
 
 ```text
 installed Ratify v2 SDK: .../site-packages/ratify_protocol/v2/__init__.py
-langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.29.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
+langchain==1.3.14 langchain-mcp-adapters==0.3.0 mcp==1.30.0 pytest==9.0.3 pytest-asyncio==1.4.0 ratify-protocol==2.0.0b1 ratify-protocol-native-v2==2.0.0b1
 ..................................                                       [100%]
-34 passed in 9.91s
+34 passed in 11.16s
 gate: 34/34 passed; zero skipped, xfailed, failed, or errored
 ```
 
 Zero tests were skipped or marked xfail.
 
-The previous run (2026-10-27, code commit `9ea1ec2` with the beta bump,
+The previous run (2026-10-29 earlier the same day, code commit `32c1c09`,
+with `mcp` 1.29.0) passed 34/34; its record is in git history at `e30000f`.
+The run before it (2026-10-27, code commit `9ea1ec2` with the beta bump,
 against the separate `ratify-protocol-v2` 2.0.0b1 build) passed 34/34; its
-record is in git history at `32c1c09`. The run before it (2026-10-26, code
+record is in git history at `32c1c09`. The run before that (2026-10-26, code
 commit `d62bed2`, against the in-tree alpha.1 build) passed 34/34; its record
 is in git history at `c800022`. The
 run before it (2026-10-22, code commit `bb48e57`) passed 33/33. The

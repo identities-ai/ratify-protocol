@@ -209,14 +209,14 @@ extension (`RATIFY_REQUIRE_NATIVE=1`):
 
 | Calls | Workers | Allowed | Denied (`constraint_denied`) | Released receipts | Protected actions | Wall seconds | Calls per second | p50 ms | p95 ms | p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 5 | 9 | 1 | 19 | 9 | 0.605 | 16.531 | 282 | 344 | 344 |
-| 100 | 8 | 90 | 10 | 190 | 90 | 6.208 | 16.108 | 478 | 603 | 678 |
-| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 62.716 | 15.945 | 503 | 637 | 700 |
+| 10 | 5 | 9 | 1 | 19 | 9 | 0.628 | 15.919 | 303 | 344 | 344 |
+| 100 | 8 | 90 | 10 | 190 | 90 | 6.540 | 15.291 | 501 | 629 | 661 |
+| 1,000 | 8 | 900 | 100 | 1,900 | 900 | 67.834 | 14.742 | 554 | 684 | 760 |
 
 The encoded dual-root presentation (both proofs, base64 as carried in MCP
 `_meta`) is 76,148 bytes. Every allow released two receipts and every denial
-one, and protected actions equal allows in every tier. Throughput is about 16
-calls per second and stays flat from 100 to 1,000 calls. The 10-call tier ran
+one, and protected actions equal allows in every tier. Throughput is about 15
+calls per second and falls by under 4% from 100 to 1,000 calls. The 10-call tier ran
 five workers because the harness splits calls into equal batches. No other
 benchmark or test ran during the measurement; the host's ordinary desktop
 applications and a few idle local containers were running.
@@ -238,7 +238,7 @@ service latency, and they are not Google capacity claims.
 **Why there is no one-million-call v2 tier.** The v1 note records 1,000,000
 calls at 369.693 calls per second with Ratify `1.0.0a20`. Each dual-root
 call runs two full verifications with signed status and two receipt
-publications. At the measured rate of about 16 calls per second the same tier
+publications. At the measured rate of about 15 calls per second the same tier
 would take most of a day on this host. The in-memory reference
 stores also retain every claim and receipt, so memory grows with the call
 count. A meaningful v2 endurance number

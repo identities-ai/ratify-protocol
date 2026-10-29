@@ -119,7 +119,7 @@ material and exercises dependency outages.
 ### P1: verifier throughput
 
 The Python v2 SDK, with hybrid verification in its native extension,
-completes about 16 dual-root calls per second on the recorded host (see
+completes about 15 dual-root calls per second on the recorded host (see
 `FEDERATION_SCALE.md`), far below the v1 package that produced the
 one-million-call run.
 

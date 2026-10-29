@@ -114,9 +114,11 @@ run_tests() {
 # version (docs/RELEASES.md step 6b). This must run after bump_versions and
 # before check-release-sync.sh, which refuses a fixture whose sdk_version is
 # not the release being prepared. test-all then has every SDK verify all five.
-regenerate_cross_sdk_fixtures() {
-  local work
+# Runs in a subshell so the EXIT trap removes the temporary venv on failure
+# as well as on success.
+regenerate_cross_sdk_fixtures() (
   work="$(mktemp -d)"
+  trap 'rm -rf "${work:?}"' EXIT
   go run ./cmd/ratify-v2-cross-sdk -sdk-version "$NPM_VERSION"
   (cd sdks/typescript && npm run generate:cross-sdk)
   python -m venv "$work/venv"
@@ -126,8 +128,7 @@ regenerate_cross_sdk_fixtures() {
   (cd sdks/python && RATIFY_REQUIRE_NATIVE=1 "$work/venv/bin/python" tests_v2/gen_cross_sdk_fixture.py)
   (cd sdks/rust && cargo run --quiet --example v2_cross_sdk_fixture)
   (cd sdks/c && RATIFY_WRITE_CROSS_SDK=1 cargo test --quiet --test v2c_cross_sdk)
-  rm -rf "$work"
-}
+)
 
 bump_versions() {
   python - "$VERSION" "$NPM_VERSION" "$PY_VERSION" <<'PY'

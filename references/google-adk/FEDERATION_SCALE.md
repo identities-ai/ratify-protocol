@@ -204,7 +204,9 @@ The checked-in result is
 measured on 2026-10-27 on a 10-core Apple M2 Pro (macOS 26.6, Python 3.12.10)
 with eight requested workers, against `ratify-protocol-v2` and
 `ratify-protocol-native-v2` `2.0.0b1` built from this repository, with hybrid
-verification in the native extension (`RATIFY_REQUIRE_NATIVE=1`):
+verification in the native extension (`RATIFY_REQUIRE_NATIVE=1`). On
+2026-10-28 the v2 SDK moved into the `ratify-protocol` distribution as
+`ratify_protocol.v2`; later runs record it under that name:
 
 | Calls | Workers | Allowed | Denied (`constraint_denied`) | Released receipts | Protected actions | Wall seconds | Calls per second | p50 ms | p95 ms | p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -227,7 +229,7 @@ seconds. It is kept in git history (commit `1315454`). With native
 verification the remaining per-decision cost is Python protocol logic such as
 journal snapshot handling, canonical JSON and strict decoding, not signature
 verification; see the
-[Python v2 SDK performance section](../../sdks/python-v2/README.md#performance).
+[Python v2 SDK performance section](../../sdks/python/README.md#protocol-v2-performance).
 
 These are single-host measurements of the Python v2 SDK with in-memory
 reference stores. They exclude Gemini latency, ADK reasoning, MCP HTTP,

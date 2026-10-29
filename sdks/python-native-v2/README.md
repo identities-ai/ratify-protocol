@@ -1,12 +1,15 @@
 # ratify-protocol-native-v2
 
-Native key generation, hybrid signing and hybrid verification for
-[`ratify-protocol-v2`](https://pypi.org/project/ratify-protocol-v2/), which
-requires it. Install the SDK and this extension comes with it:
+Native key generation, hybrid signing and hybrid verification for the
+Protocol v2 module (`ratify_protocol.v2`) of
+[`ratify-protocol`](https://pypi.org/project/ratify-protocol/). Install the
+SDK with its `protocol-v2` extra and this extension comes with it:
 
 ```bash
-pip install ratify-protocol-v2==2.0.0b1
+pip install "ratify-protocol[protocol-v2]==2.0.0b1"
 ```
+
+Applications never import this package directly.
 
 Every private-key operation in the v2 Python SDK runs here: key generation
 from seeds, public-key derivation from a private key, and Ed25519 + ML-DSA-65
@@ -47,8 +50,9 @@ key bytes cross from Python into the extension on each signing call, and back
 out from key generation (`hybrid_keypair_from_seeds_py`,
 `HybridSigningKey.private_key_bytes`). Python `bytes` cannot be wiped.
 
-It is versioned in lockstep with `ratify-protocol-v2`. Importing
-`ratify_protocol_v2` fails if this extension's `version()` does not match.
+It is versioned in lockstep with `ratify-protocol`, whose `protocol-v2` extra
+pins it exactly. Importing `ratify_protocol.v2` fails if this extension's
+`version()` does not match.
 
 It is a separate distribution and module from the v1 extension
 (`ratify-protocol-native` / `ratify_protocol_native`), so both can be installed

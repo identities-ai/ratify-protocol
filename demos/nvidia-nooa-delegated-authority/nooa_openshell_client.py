@@ -96,10 +96,10 @@ def _count_nooa_loads(event: str, args) -> None:
 
 sys.addaudithook(_count_nooa_loads)
 
-from ratify_protocol_v2 import key_id_v2
-from ratify_protocol_v2.protocol_v2 import decode_delegation_cert_v2
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
+from ratify_protocol.v2 import key_id_v2
+from ratify_protocol.v2.protocol_v2 import decode_delegation_cert_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
 
 from mcp_refund_client import MCPRefundClient, MCPTransportError
 

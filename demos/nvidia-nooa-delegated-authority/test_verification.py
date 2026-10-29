@@ -29,20 +29,20 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
-from ratify_protocol_v2.constraints_v2 import ConstraintContextV2
-from ratify_protocol_v2.protocol_v2 import decode_proof_bundle_v2
-from ratify_protocol_v2.scope import (
+from ratify_protocol.v2.constraints_v2 import ConstraintContextV2
+from ratify_protocol.v2.protocol_v2 import decode_proof_bundle_v2
+from ratify_protocol.v2.scope import (
     SCOPE_IDENTITY_DELEGATE,
     SCOPE_PAYMENTS_RECEIVE,
     SCOPE_PAYMENTS_SEND,
 )
-from ratify_protocol_v2.verification_receipt_v2 import (
+from ratify_protocol.v2.verification_receipt_v2 import (
     ReceiptV2Head,
     check_verification_receipt_v2_bundle_binding,
     verification_receipt_v2_digest,
     verify_verification_receipt_v2,
 )
-from ratify_protocol_v2.witness_v2 import ZERO_HASH
+from ratify_protocol.v2.witness_v2 import ZERO_HASH
 
 from adversary import forge_presentation as _forge
 from agent_client import RefundClient, post_json

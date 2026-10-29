@@ -123,7 +123,7 @@ test("package: ./v2 subpath and the v2 release line", () => {
 });
 
 test("public API: v2 entry carries the names the other SDKs export", () => {
-  // Parity with Go (module root), Python (ratify_protocol_v2) and Rust
+  // Parity with Go (module root), Python (ratify_protocol.v2) and Rust
   // (ratify_protocol::v2): a v2-only consumer must not need a deep import
   // for key generation, the in-memory journal role registration, or the
   // constraint-evaluator bounds it has to validate input against.

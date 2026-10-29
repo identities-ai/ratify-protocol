@@ -8,7 +8,7 @@ receiver's clock can reach the protected handler.
 
 DEVELOPMENT ONLY. The claim store, receipt log, checkpoint, challenge
 issuance store, security journal and approval ledger are the SDK's in-memory
-reference stores (``ratify_protocol_v2.v2reference``). They exist for tests
+reference stores (``ratify_protocol.v2.v2reference``). They exist for tests
 and examples: nothing survives a restart, spans processes, or provides an
 independent checkpoint. A production receiver supplies durable Part B stores
 and an independent checkpoint (SPEC-v2 §7).
@@ -27,43 +27,43 @@ import threading
 import time
 from typing import Any, Callable
 
-from ratify_protocol_v2 import background, key_id_v2, session_context_v2_hash
-from ratify_protocol_v2.challenge_issuance_v2 import (
+from ratify_protocol.v2 import background, key_id_v2, session_context_v2_hash
+from ratify_protocol.v2.challenge_issuance_v2 import (
     V2ChallengeIssuer,
     V2ChallengeIssueRequest,
     load_expected_challenge_v2,
 )
-from ratify_protocol_v2.constraint_evaluator_v2 import (
+from ratify_protocol.v2.constraint_evaluator_v2 import (
     new_constraint_evaluator_registry_v2,
     standard_max_count_evaluator_v2,
 )
-from ratify_protocol_v2.constraints_v2 import TZDB_VERSION_V2, ConstraintContextV2
-from ratify_protocol_v2.context_policy_v2 import new_v2_context_policy
-from ratify_protocol_v2.operation_context_v2 import operation_context_v2_hash
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2.constraints_v2 import TZDB_VERSION_V2, ConstraintContextV2
+from ratify_protocol.v2.context_policy_v2 import new_v2_context_policy
+from ratify_protocol.v2.operation_context_v2 import operation_context_v2_hash
+from ratify_protocol.v2.protocol_v2 import (
     ProofBundleV2,
     decode_proof_bundle_v2,
     decode_revocation_list_v2,
     decode_revocation_push_v2,
     encode_proof_bundle_v2,
 )
-from ratify_protocol_v2.release_v2 import (
+from ratify_protocol.v2.release_v2 import (
     V2_RELEASE_RELEASED,
     V2ReleaseConfig,
     release_v2_decision,
 )
-from ratify_protocol_v2.security_journal_v2 import (
+from ratify_protocol.v2.security_journal_v2 import (
     apply_revocation_list_to_journal_v2,
     apply_revocation_push_to_journal_v2,
     configure_status_key_epoch_v2,
     record_security_key_role_v2,
 )
-from ratify_protocol_v2.signing_v2 import REVOCATION_LIST, generate_keypair_v2, public_key_of
-from ratify_protocol_v2.status_batch_v2 import V2StatusEvidenceBatch
-from ratify_protocol_v2.status_provenance_v2 import V2StatusKeyConfig
-from ratify_protocol_v2.status_state_v2 import RevocationStatusPolicyV2
-from ratify_protocol_v2.types import HybridPrivateKey, HybridPublicKey
-from ratify_protocol_v2.v2reference.approval_ledger import (
+from ratify_protocol.v2.signing_v2 import REVOCATION_LIST, generate_keypair_v2, public_key_of
+from ratify_protocol.v2.status_batch_v2 import V2StatusEvidenceBatch
+from ratify_protocol.v2.status_provenance_v2 import V2StatusKeyConfig
+from ratify_protocol.v2.status_state_v2 import RevocationStatusPolicyV2
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
+from ratify_protocol.v2.v2reference.approval_ledger import (
     ApprovalActionMismatchError,
     ApprovalAlreadyExecutedError,
     ApprovalError,
@@ -74,10 +74,10 @@ from ratify_protocol_v2.v2reference.approval_ledger import (
     ApprovalRootMismatchError,
     ApprovalSetTestOnly,
 )
-from ratify_protocol_v2.v2reference.challenges import TestOnlyChallengeIssuanceStore
-from ratify_protocol_v2.v2reference.journal import new_journal_store
-from ratify_protocol_v2.v2reference.store import HeadOfLineBlockedError, Store
-from ratify_protocol_v2.verify_v2 import (
+from ratify_protocol.v2.v2reference.challenges import TestOnlyChallengeIssuanceStore
+from ratify_protocol.v2.v2reference.journal import new_journal_store
+from ratify_protocol.v2.v2reference.store import HeadOfLineBlockedError, Store
+from ratify_protocol.v2.verify_v2 import (
     V2_STAGE_COMMITTED,
     V2_STAGE_PREFLIGHT,
     V2_STAGE_REPLAY,

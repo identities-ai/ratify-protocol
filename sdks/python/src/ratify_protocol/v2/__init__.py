@@ -1,0 +1,70 @@
+"""Ratify Protocol v2 Python SDK (``ratify_protocol.v2`` in the ``ratify-protocol`` distribution).
+
+The v1 API stays at ``ratify_protocol``, which never imports this module.
+Install v2's requirements with the ``protocol-v2`` extra:
+``pip install "ratify-protocol[protocol-v2]"``. The object set, verifier and
+status machinery live in submodules such as
+``ratify_protocol.v2.protocol_v2`` and ``ratify_protocol.v2.verify_v2``.
+
+``canonical``, ``types``, ``scope``, ``resource_path`` and ``constraints`` are
+copies of the v1 modules of the same name, so this module never imports the
+v1 modules.
+
+Key generation and signing run only in the ``ratify-protocol-native-v2``
+extension (constant-time Ed25519 and ML-DSA-65) that the ``protocol-v2`` extra
+installs. Verification works without it; signing without it raises
+ImportError.
+"""
+from ._version import __version__
+from . import _native  # import-time lockstep check of the native signing extension
+from .types import HybridPrivateKey, HybridPublicKey, HybridSignature
+from .crypto_v2 import (
+    delegation_signature_message_v2,
+    derive_key_id_v2,
+    verify_delegation_signature_v2,
+)
+from .operation_context_v2 import (
+    decode_payload_digest,
+    operation_context_v2_bytes,
+    operation_context_v2_hash,
+    session_context_v2_bytes,
+    session_context_v2_hash,
+)
+from .challenge_claim_v2 import (
+    challenge_claim_digest_v2,
+    protocol_claim_id_v2,
+    protocol_claim_id_from_digest_v2,
+)
+from .signing_v2 import (
+    SignerModeV2,
+    SignerV2,
+    SignRequestV2,
+    generate_keypair_v2,
+    keypair_from_seeds_v2,
+    key_id_v2,
+    key_id_v2_classified,
+)
+from .context_v2 import Context, background, with_cancel, with_timeout
+from .errors_v2 import ALL_ERROR_CLASSES, V2Error, V2ErrorClass, error_class_of
+from .verify_v2 import V2TrustResolution, V2VerifyCallbacks, V2VerifyOutcome, V2VerifyRequest, verify_proof_bundle_v2
+from .release_v2 import CommittedV2Outcome, V2ReleaseConfig, V2ReleasedDecision, V2ReleaseResult, release_v2_decision
+
+NATIVE_AVAILABLE = _native.AVAILABLE
+
+__all__ = [
+    "__version__", "NATIVE_AVAILABLE",
+    "HybridPrivateKey", "HybridPublicKey", "HybridSignature",
+    "generate_keypair_v2", "keypair_from_seeds_v2", "key_id_v2", "key_id_v2_classified",
+    "SignerModeV2", "SignerV2", "SignRequestV2",
+    "Context", "background", "with_cancel", "with_timeout",
+    "ALL_ERROR_CLASSES", "V2Error", "V2ErrorClass", "error_class_of",
+    "V2TrustResolution", "V2VerifyCallbacks", "V2VerifyOutcome", "V2VerifyRequest", "verify_proof_bundle_v2",
+    "CommittedV2Outcome", "V2ReleaseConfig", "V2ReleasedDecision", "V2ReleaseResult", "release_v2_decision",
+    "delegation_signature_message_v2", "derive_key_id_v2",
+    "verify_delegation_signature_v2",
+    "decode_payload_digest", "operation_context_v2_bytes",
+    "operation_context_v2_hash", "session_context_v2_bytes",
+    "session_context_v2_hash",
+    "challenge_claim_digest_v2", "protocol_claim_id_v2",
+    "protocol_claim_id_from_digest_v2",
+]

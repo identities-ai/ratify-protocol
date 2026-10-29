@@ -16,8 +16,8 @@ import os
 
 import ratify_protocol_native_v2 as native
 
-from ratify_protocol_v2 import HybridPublicKey, HybridSignature, SignerModeV2, background, error_class_of, key_id_v2
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2 import HybridPublicKey, HybridSignature, SignerModeV2, background, error_class_of, key_id_v2
+from ratify_protocol.v2.protocol_v2 import (
     DelegationCertV2,
     ProofBundleV2,
     sign_delegation_cert_v2_with_signer,
@@ -25,7 +25,7 @@ from ratify_protocol_v2.protocol_v2 import (
     verify_delegation_cert_v2_signature,
     verify_proof_bundle_v2_signatures,
 )
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
 
 START = 1800000000
 

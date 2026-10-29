@@ -12,8 +12,8 @@ Nothing in the agent's own code path imports this module.
 
 from __future__ import annotations
 
-from ratify_protocol_v2 import background
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2 import background
+from ratify_protocol.v2.protocol_v2 import (
     ProofBundleV2,
     decode_proof_bundle_v2,
     delegation_digest_v2,
@@ -21,7 +21,7 @@ from ratify_protocol_v2.protocol_v2 import (
     placeholder_signature_v2,
     presentation_signable_bytes_v2,
 )
-from ratify_protocol_v2.signing_v2 import (
+from ratify_protocol.v2.signing_v2 import (
     CHALLENGE_PRESENTATION,
     _as_signer,
     _sign_v2_statement_with_signer,

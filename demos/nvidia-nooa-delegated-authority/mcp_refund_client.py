@@ -34,7 +34,7 @@ import json
 import urllib.error
 import urllib.request
 
-from ratify_protocol_v2.protocol_v2 import (
+from ratify_protocol.v2.protocol_v2 import (
     ProofBundleV2,
     encode_proof_bundle_v2,
     sign_proof_bundle_v2,

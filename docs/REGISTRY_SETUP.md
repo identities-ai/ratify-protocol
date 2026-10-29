@@ -24,7 +24,7 @@ End state we want:
 |-------------------|--------------------------------------------|--------------------|----------------|
 | PyPI              | `ratify-protocol`                          | `identities-ai` org | identities.ai + GitHub |
 | PyPI              | `ratify-protocol-native`                   | `identities-ai` org | identities.ai + GitHub |
-| PyPI (v2 line)    | `ratify-protocol-v2`, `ratify-protocol-native-v2` | `identities-ai` org | identities.ai + GitHub |
+| PyPI (v2 line)    | `ratify-protocol-native-v2`                | `identities-ai` org | identities.ai + GitHub |
 | crates.io         | `ratify-protocol`                          | `gh:identities-ai:maintainers` team | identities.ai + GitHub |
 | npm               | `@identities-ai/ratify-protocol`           | `identities-ai` org | identities.ai + GitHub |
 | Go (pkg.go.dev)   | `github.com/identities-ai/ratify-protocol` (v1), `.../ratify-protocol/v2` (v2) | GitHub org | (inherited) |
@@ -105,18 +105,24 @@ rejected outright by the gate, because it belongs to neither release line.)
 
 ### 1.6 The v2 Python distributions
 
-The v2 line publishes two new PyPI projects, `ratify-protocol-v2` and
-`ratify-protocol-native-v2`, from the `publish-pypi-v2` and
-`publish-pypi-native-v2` jobs. Those jobs run only for `v2.*` tags; a `v1.*`
-tag runs the v1 `publish-pypi` and `publish-pypi-native` jobs instead, so one
-tag never publishes the other line's Python packages.
+On the v2 line, Python v2 is part of the existing `ratify-protocol` project
+(import `ratify_protocol.v2`, installed with the `protocol-v2` extra), so the
+only new PyPI project is `ratify-protocol-native-v2`, the native extension
+that extra pins. A `v2.*` tag publishes `ratify-protocol-native-v2` from the
+`publish-pypi-native-v2` job first, then `ratify-protocol` from
+`sdks/python` in the `publish-pypi-v2` job. A `v1.*` tag runs the v1
+`publish-pypi` and `publish-pypi-native` jobs instead. The distribution name
+`ratify-protocol-v2` is never published.
 
-Before the first v2 release, add a pending Trusted Publisher for each of the
-two project names, with the same values as §1.3 (owner `identities-ai`,
-repository `ratify-protocol`, workflow `release.yml`, environment
-`pypi-publish`), and move both projects into the `identities-ai` organization
-once they exist. Until that is done the v2 publish jobs fail at the OIDC
-exchange and nothing is uploaded.
+`ratify-protocol` already has its Trusted Publisher (§1.3); both of its
+publish jobs use the same workflow and environment, so it needs nothing new.
+Before the first v2 release, add a pending Trusted Publisher for
+`ratify-protocol-native-v2` with the same values as §1.3 (owner
+`identities-ai`, repository `ratify-protocol`, workflow `release.yml`,
+environment `pypi-publish`), and move the project into the `identities-ai`
+organization once it exists. Until that is done the native v2 publish job
+fails at the OIDC exchange, nothing is uploaded, and the `ratify-protocol`
+v2 publish job, which waits for it, does not run.
 
 ---
 
@@ -285,8 +291,7 @@ main. The branch ruleset forbids it, releases included; the single-step
    Release workflow.
 5. After it completes, verify each registry ACTUALLY serves the new version
    (a green publish job is not proof; see `RELEASES.md` Appendix A Phase 4):
-   - PyPI: <https://pypi.org/project/ratify-protocol/> (v1 tags) or
-     <https://pypi.org/project/ratify-protocol-v2/> and
+   - PyPI: <https://pypi.org/project/ratify-protocol/> (both lines) and
      <https://pypi.org/project/ratify-protocol-native-v2/> (v2 tags)
    - crates.io: <https://crates.io/crates/ratify-protocol> and
      <https://crates.io/crates/ratify-c> (the token must be scoped to

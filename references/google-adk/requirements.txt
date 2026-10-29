@@ -1,10 +1,11 @@
 # Platform and test pins for the Protocol v2 reference.
 #
 # The Ratify Protocol v2 SDK is not listed here: run-reference-check.sh builds
-# ratify-protocol-native-v2 and installs ratify-protocol-v2 from this
-# repository (sdks/python-native-v2 and sdks/python-v2).
-# RATIFY_V2_PIN: at release, install the published ratify-protocol-v2 and
-# ratify-protocol-native-v2 at 2.0.0b1 (2.0.0-beta.1) instead of the local build.
+# ratify-protocol-native-v2 and installs ratify-protocol with its protocol-v2
+# extra from this repository (sdks/python-native-v2 and sdks/python).
+# RATIFY_V2_PIN: at release, install the published
+# "ratify-protocol[protocol-v2]==2.0.0b1" (2.0.0-beta.1) instead of the local
+# build.
 google-adk==2.6.3
 mcp==1.29.0
 pytest==9.0.3

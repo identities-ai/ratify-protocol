@@ -24,29 +24,26 @@ PIP=(--disable-pip-version-check -q)
 # repository. At release, replace these two steps with the published pins.
 (cd "$REPO/sdks/python-native-v2" && "$VENV/bin/maturin" build --release --quiet --out "$WORK/dist")
 "$VENV/bin/python" -m pip install "${PIP[@]}" --force-reinstall \
-  --find-links "$WORK/dist" "$REPO/sdks/python-v2"
+  --find-links "$WORK/dist" "$REPO/sdks/python[protocol-v2]"
 "$VENV/bin/python" -m pip install "${PIP[@]}" -r "$DEMO/requirements.txt"
 
 DEMO="$DEMO" REPO="$REPO" "$VENV/bin/python" - <<'PY'
 import importlib.metadata as metadata
-import importlib.util
 import os
 from pathlib import Path
 import re
-import ratify_protocol_v2
+import ratify_protocol.v2
 
 repo = Path(os.environ["REPO"]).resolve()
-module = Path(ratify_protocol_v2.__file__).resolve()
+module = Path(ratify_protocol.v2.__file__).resolve()
 if (repo / "sdks") in module.parents:
-    raise SystemExit(f"FAIL: ratify_protocol_v2 imported from the source tree: {module}")
-if importlib.util.find_spec("ratify_protocol") is not None:
-    raise SystemExit("FAIL: the v1 ratify_protocol package is installed; this gate is v2 only")
-tree = re.search(r'^version = "([^"]+)"', (repo / "sdks/python-v2/pyproject.toml").read_text(), re.M).group(1)
+    raise SystemExit(f"FAIL: ratify_protocol.v2 imported from the source tree: {module}")
+tree = re.search(r'^version = "([^"]+)"', (repo / "sdks/python/pyproject.toml").read_text(), re.M).group(1)
 expected = {
     "google-adk": "2.6.3",
     "mcp": "1.29.0",
     "pytest": "9.0.3",
-    "ratify-protocol-v2": tree,
+    "ratify-protocol": tree,
     "ratify-protocol-native-v2": tree,
 }
 for package, version in expected.items():

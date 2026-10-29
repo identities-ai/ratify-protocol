@@ -26,7 +26,7 @@ import os
 import time
 
 import pytest
-from ratify_protocol_v2.scope import SCOPE_PAYMENTS_SEND
+from ratify_protocol.v2.scope import SCOPE_PAYMENTS_SEND
 
 from agent_client import RefundClient
 from principal import StatusAuthority, max_amount_micros, new_agent, new_principal, sign_cert

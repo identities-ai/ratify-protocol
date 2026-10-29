@@ -53,12 +53,12 @@ echo "==> venv ($("$PY" -V))"
 
 # Where the Ratify v2 SDK comes from. `local` builds the native signing
 # extension (ratify-protocol-native-v2, Rust, via maturin) and installs
-# ratify-protocol-v2 from this checkout: it proves the reference against the
-# code in the tree. `published` installs the released packages and is what the
+# ratify-protocol with its protocol-v2 extra from this checkout: it proves the
+# reference against the code in the tree. `published` installs the released packages and is what the
 # final evidence must use.
 #
 # TODO(RATIFY_V2_PIN): switch the default to `published` once
-# ratify-protocol-v2 and ratify-protocol-native-v2 2.0.0-beta.1 (PEP 440:
+# ratify-protocol and ratify-protocol-native-v2 2.0.0-beta.1 (PEP 440:
 # 2.0.0b1) are on PyPI, and re-record the evidence from that run.
 RATIFY_SDK="${RATIFY_SDK:-local}"
 RATIFY_V2_VERSION="${RATIFY_V2_VERSION:-2.0.0b1}"  # TODO(RATIFY_V2_PIN)
@@ -67,11 +67,10 @@ case "$RATIFY_SDK" in
       "$VENV/bin/pip" install --quiet 'maturin>=1.7,<2'
       (cd sdks/python-native-v2 && "$VENV/bin/maturin" build --release --quiet --out "$WORKDIR/dist")
       "$VENV/bin/pip" install --quiet "$WORKDIR"/dist/*.whl
-      "$VENV/bin/pip" install --quiet -e ./sdks/python-v2 ;;
+      "$VENV/bin/pip" install --quiet -e "./sdks/python[protocol-v2]" ;;
   published)
       "$VENV/bin/pip" install --quiet \
-          "ratify-protocol-native-v2==${RATIFY_V2_VERSION}" \
-          "ratify-protocol-v2==${RATIFY_V2_VERSION}" ;;
+          "ratify-protocol[protocol-v2]==${RATIFY_V2_VERSION}" ;;
   *)  echo "RATIFY_SDK must be 'local' or 'published', got '$RATIFY_SDK'" >&2; exit 2 ;;
 esac
 "$VENV/bin/pip" install --quiet \
@@ -88,27 +87,24 @@ import pathlib
 import sys
 
 print("  python                     ", sys.version.split()[0])
-# Where ratify_protocol_v2 was actually imported from. An editable install
+# Where ratify_protocol.v2 was actually imported from. An editable install
 # resolves into the repository, a published one into site-packages, and the
 # difference is the whole provenance claim.
-import ratify_protocol_v2
+import ratify_protocol.v2
 
-module_path = pathlib.Path(ratify_protocol_v2.__file__).resolve()
+module_path = pathlib.Path(ratify_protocol.v2.__file__).resolve()
 inside_repo = pathlib.Path.cwd().resolve() in module_path.parents
-print("  ratify_protocol_v2 module  ", module_path)
+print("  ratify_protocol.v2 module  ", module_path)
 print("  ratify source              ", "repository checkout" if inside_repo else "installed package")
 expected = os.environ.get("RATIFY_SDK", "local")
 if expected == "published" and inside_repo:
-    sys.exit(f"RATIFY_SDK=published but ratify_protocol_v2 resolved inside the repository at {module_path}")
+    sys.exit(f"RATIFY_SDK=published but ratify_protocol.v2 resolved inside the repository at {module_path}")
 if expected == "local" and not inside_repo:
-    sys.exit(f"RATIFY_SDK=local but ratify_protocol_v2 resolved outside the repository at {module_path}")
-import importlib.util
-if importlib.util.find_spec("ratify_protocol") is not None:
-    sys.exit("the v1 ratify_protocol package is installed; this gate is Protocol v2 only")
-if not ratify_protocol_v2.NATIVE_AVAILABLE:
+    sys.exit(f"RATIFY_SDK=local but ratify_protocol.v2 resolved outside the repository at {module_path}")
+if not ratify_protocol.v2.NATIVE_AVAILABLE:
     sys.exit("the native signing extension is not importable; v2 signing cannot run")
 
-for dist in ("ratify-protocol-v2", "ratify-protocol-native-v2", "mcp", "uvicorn", "nooa", "pytest"):
+for dist in ("ratify-protocol", "ratify-protocol-native-v2", "mcp", "uvicorn", "nooa", "pytest"):
     try:
         print(f"  {dist:<27}", md.version(dist))
     except md.PackageNotFoundError:

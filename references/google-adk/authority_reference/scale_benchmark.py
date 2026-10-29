@@ -192,7 +192,7 @@ def benchmark_report(call_counts: list[int], *, workers: int) -> dict[str, Any]:
             "logical_cpus": os.cpu_count(),
             "google_adk": importlib.metadata.version("google-adk"),
             "mcp": importlib.metadata.version("mcp"),
-            "ratify_protocol_v2": importlib.metadata.version("ratify-protocol-v2"),
+            "ratify_protocol": importlib.metadata.version("ratify-protocol"),
             "ratify_protocol_native_v2": importlib.metadata.version("ratify-protocol-native-v2"),
         },
         "methodology": {

@@ -36,11 +36,11 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from ratify_protocol_v2 import key_id_v2
-from ratify_protocol_v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
-from ratify_protocol_v2.protocol_v2 import DelegationCertV2, sign_delegation_cert_v2
-from ratify_protocol_v2.signing_v2 import generate_keypair_v2
-from ratify_protocol_v2.v2reference.approval_ledger import ApprovalSetInvalidError
+from ratify_protocol.v2 import key_id_v2
+from ratify_protocol.v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
+from ratify_protocol.v2.protocol_v2 import DelegationCertV2, sign_delegation_cert_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.v2reference.approval_ledger import ApprovalSetInvalidError
 
 from authority_reference import (
     DualChallengeGrant,

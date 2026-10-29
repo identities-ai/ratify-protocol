@@ -50,16 +50,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 import uvicorn
 from mcp.server.transport_security import TransportSecuritySettings
-from ratify_protocol_v2 import key_id_v2
-from ratify_protocol_v2.limits_v2 import MAX_DELEGATION_CHAIN_DEPTH
-from ratify_protocol_v2.protocol_v2 import encode_delegation_cert_v2
-from ratify_protocol_v2.scope import (
+from ratify_protocol.v2 import key_id_v2
+from ratify_protocol.v2.limits_v2 import MAX_DELEGATION_CHAIN_DEPTH
+from ratify_protocol.v2.protocol_v2 import encode_delegation_cert_v2
+from ratify_protocol.v2.scope import (
     SCOPE_IDENTITY_DELEGATE,
     SCOPE_PAYMENTS_RECEIVE,
     SCOPE_PAYMENTS_SEND,
 )
-from ratify_protocol_v2.types import HybridPublicKey
-from ratify_protocol_v2.verification_receipt_v2 import (
+from ratify_protocol.v2.types import HybridPublicKey
+from ratify_protocol.v2.verification_receipt_v2 import (
     ReceiptV2Head,
     verification_receipt_v2_digest,
     verify_verification_receipt_v2,

@@ -62,15 +62,15 @@ else:
 
 import uvicorn  # noqa: E402
 from mcp import Client  # noqa: E402
-from ratify_protocol_v2.limits_v2 import (  # noqa: E402
+from ratify_protocol.v2.limits_v2 import (  # noqa: E402
     MAX_DELEGATION_CHAIN_DEPTH,
     MAX_PROOF_BUNDLE_BYTES_V2,
 )
-from ratify_protocol_v2.protocol_v2 import (  # noqa: E402
+from ratify_protocol.v2.protocol_v2 import (  # noqa: E402
     decode_proof_bundle_v2,
     verify_proof_bundle_v2_signatures,
 )
-from ratify_protocol_v2.scope import SCOPE_PAYMENTS_SEND  # noqa: E402
+from ratify_protocol.v2.scope import SCOPE_PAYMENTS_SEND  # noqa: E402
 
 from agent_client import sign_presentation  # noqa: E402
 from mcp_server import (  # noqa: E402

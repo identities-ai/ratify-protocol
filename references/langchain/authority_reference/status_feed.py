@@ -23,26 +23,26 @@ from pathlib import Path
 import threading
 from typing import Callable
 
-from ratify_protocol_v2 import background, key_id_v2
-from ratify_protocol_v2.protocol_v2 import encode_revocation_list_v2
-from ratify_protocol_v2.security_journal_v2 import (
+from ratify_protocol.v2 import background, key_id_v2
+from ratify_protocol.v2.protocol_v2 import encode_revocation_list_v2
+from ratify_protocol.v2.security_journal_v2 import (
     configure_status_key_epoch_v2,
     record_security_key_role_v2,
 )
-from ratify_protocol_v2.signing_v2 import REVOCATION_LIST, generate_keypair_v2
-from ratify_protocol_v2.status_batch_v2 import (
+from ratify_protocol.v2.signing_v2 import REVOCATION_LIST, generate_keypair_v2
+from ratify_protocol.v2.status_batch_v2 import (
     V2StatusEvidenceBatch,
     V2StatusEvidenceObject,
     decode_v2_status_evidence_batch,
     encode_v2_status_evidence_batch,
 )
-from ratify_protocol_v2.status_publisher_v2 import (
+from ratify_protocol.v2.status_publisher_v2 import (
     V2StatusPublication,
     V2StatusPublisher,
     new_v2_status_publisher_with_key,
 )
-from ratify_protocol_v2.types import HybridPublicKey
-from ratify_protocol_v2.v2reference.journal import new_journal_store
+from ratify_protocol.v2.types import HybridPublicKey
+from ratify_protocol.v2.v2reference.journal import new_journal_store
 
 
 StatusSource = Callable[[str], V2StatusEvidenceBatch]

@@ -558,14 +558,16 @@ jobs:
           path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
           retention-days: 1
 
-  # GitHub Release — last so it only appears once registry publishes have
-  # been attempted. Attaches the testvectors/v1 bundle and pre-built C
-  # libraries as release assets.
+  # GitHub Release — last, and only once every registry publish has
+  # succeeded. Attaches the testvectors/v1 bundle and pre-built C libraries
+  # as release assets. Every build and publish job is listed in needs, so a
+  # failure anywhere upstream blocks the release: a publish job whose build
+  # failed is itself only "skipped".
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' }}
+    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

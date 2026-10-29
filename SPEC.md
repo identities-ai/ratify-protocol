@@ -1386,7 +1386,7 @@ The `AnchorResolver` provider interface (§17.8) is unrelated to this binding: i
 
 ## 14. Conformance
 
-An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (79 fixtures as of the v1.0.0-alpha.20 conformance set; alpha.15 had 63):
+An implementation is conformant if, for every fixture in `testvectors/v1/*.json` (79 fixtures as of the v1.0.0-alpha.21 conformance set; alpha.15 had 63):
 
 - For `kind: "verify"` fixtures: the implementation's canonical-signing-bytes hex matches `expected.delegation_sign_bytes_hex` for every cert; the challenge-signing-bytes hex matches `expected.challenge_sign_bytes_hex`; and running `Verify()` produces a `VerifyResult` equivalent to `expected.verify_result` (with `granted_scope` compared as a set).
 - For `kind: "scope"` fixtures: `ExpandScopes(scope_input)` matches `expected.expanded_scopes`.

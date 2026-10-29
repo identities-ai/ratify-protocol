@@ -160,7 +160,7 @@ been reproduced against the published packages.
 Tested pins:
 
 - `google-adk==2.6.3`
-- `mcp==1.29.0`
+- `mcp==1.30.0`
 - `pytest==9.0.3`
 - `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
 

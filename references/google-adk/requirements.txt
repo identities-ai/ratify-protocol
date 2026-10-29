@@ -7,5 +7,5 @@
 # "ratify-protocol[protocol-v2]==2.0.0b1" (2.0.0-beta.1) instead of the local
 # build.
 google-adk==2.6.3
-mcp==1.29.0
+mcp==1.30.0
 pytest==9.0.3

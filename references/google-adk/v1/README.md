@@ -141,7 +141,7 @@ and then runs the three-case demonstration.
 Tested pins:
 
 - `google-adk==2.6.3`
-- `mcp==1.29.0`
+- `mcp==1.30.0`
 - `ratify-protocol==1.0.0a20`
 - `pytest==9.0.3`
 

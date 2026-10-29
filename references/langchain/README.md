@@ -229,7 +229,7 @@ tool selection, but add no authority guarantee.
 
 - `langchain==1.3.14`
 - `langchain-mcp-adapters==0.3.0`
-- `mcp==1.29.0`
+- `mcp==1.30.0`
 - `pytest==9.0.3`
 - `pytest-asyncio==1.4.0`
 - `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)

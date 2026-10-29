@@ -42,7 +42,7 @@ tree = re.search(r'^version = "([^"]+)"', (repo / "sdks/python/pyproject.toml").
 expected = {
     "langchain": "1.3.14",
     "langchain-mcp-adapters": "0.3.0",
-    "mcp": "1.29.0",
+    "mcp": "1.30.0",
     "pytest": "9.0.3",
     "pytest-asyncio": "1.4.0",
     "ratify-protocol": tree,

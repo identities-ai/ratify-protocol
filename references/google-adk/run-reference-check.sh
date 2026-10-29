@@ -41,7 +41,7 @@ if (repo / "sdks") in module.parents:
 tree = re.search(r'^version = "([^"]+)"', (repo / "sdks/python/pyproject.toml").read_text(), re.M).group(1)
 expected = {
     "google-adk": "2.6.3",
-    "mcp": "1.29.0",
+    "mcp": "1.30.0",
     "pytest": "9.0.3",
     "ratify-protocol": tree,
     "ratify-protocol-native-v2": tree,

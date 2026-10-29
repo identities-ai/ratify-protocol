@@ -674,12 +674,11 @@ constraints; until then, claims that depend on them are v1 claims.
   HSM.
 - Embedded v2 targets other than armv7 Linux are untested.
 
-## v1.0.0-alpha.21 (unreleased)
+## v1.0.0-alpha.21 (2026-10-29)
 
 A security fix for the v1 line in all five SDKs. No canonical bytes, fixture
 contents or wire format change, and the protocol version remains 1. Protocol
-v2 is released separately; this release is cut from `v1.0.0-alpha.20` and
-carries only the fix below.
+v2 is released separately.
 
 ### Fixed
 

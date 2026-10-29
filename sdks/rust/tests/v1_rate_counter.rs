@@ -64,7 +64,7 @@ fn verify_with_count(count: i64) -> VerifyResult {
 #[test]
 fn rate_counter_below_limit_allows() {
     let r = verify_with_count(0);
-    assert!(r.valid, "{}", r.error_reason);
+    assert!(r.valid);
 }
 
 #[test]
@@ -82,8 +82,7 @@ fn negative_rate_count_fails_closed_as_unverifiable() {
         assert_eq!(
             r.identity_status.as_str(),
             "constraint_unverifiable",
-            "count {count}: {}",
-            r.error_reason
+            "count {count}"
         );
     }
 }

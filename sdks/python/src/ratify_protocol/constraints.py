@@ -193,6 +193,10 @@ def _evaluate_constraint(
         if c.count <= 0 or c.window_s <= 0:
             return "malformed max_rate: count and window_s must be positive"
         got = ctx.invocations_in_window(cert_id, c.window_s)
+        # A negative count is not a count: the counter could not answer.
+        # Fail closed rather than read it as "no invocations".
+        if got < 0:
+            return f"constraint_unverifiable: rate counter returned negative count {got}"
         if got >= c.count:
             return f"rate limit exceeded: {got} invocations in last {c.window_s}s (max {c.count})"
         return None

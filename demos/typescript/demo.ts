@@ -156,8 +156,8 @@ async function main() {
       "  • A verifier checked the bundle in a single function call.\n" +
       "  • Every one of four tampering/misuse scenarios was rejected\n" +
       "    deterministically — no fuzzy detection, no false positives.\n" +
-      "  • Signatures are quantum-safe: breaking either Ed25519 or\n" +
-      "    ML-DSA-65 alone is insufficient to forge.\n\n" +
+      "  • Signatures are post-quantum hybrid, Ed25519 + ML-DSA-65 (NIST FIPS 204):\n" +
+      "    breaking either algorithm alone is insufficient to forge.\n\n" +
       "  This is the full Ratify Protocol v1, end to end, in one process.",
   );
   console.log();

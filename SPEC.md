@@ -4,7 +4,7 @@
 
 **Status:** Reference — authoritative alongside the Go implementation at module root. Maintained by Identities AI, Inc. Identities AI, Inc. owns the Ratify Protocol™ trademark and the patent-pending invention.
 **Version:** 1 (wire format `version` = 1)
-**Cryptography:** Hybrid Ed25519 + ML-DSA-65 (FIPS 204). **Quantum-safe.**
+**Cryptography:** Post-quantum hybrid signatures: Ed25519 plus ML-DSA-65 (NIST FIPS 204). A signature verifies only when both components verify.
 **License:** CC-BY-4.0 for this text; Apache-2.0 for the reference code.
 
 ---
@@ -56,7 +56,7 @@ The words MUST, SHOULD, MAY are used per RFC 2119.
 ## 3. Design principles
 
 1. **Hybrid cryptography is mandatory in v1.** Every signed object carries both an Ed25519 signature (RFC 8032) and an ML-DSA-65 signature (FIPS 204). Both must verify. This defends against classical cryptanalytic advances on either algorithm and against quantum attacks on Ed25519 via ML-DSA-65's lattice-based security.
-2. **Harvest-now-decrypt-later attacks cannot retroactively forge proofs.** Bundles signed today remain unforgeable even when cryptographically-relevant quantum computers exist, because ML-DSA-65 does not succumb to Shor's algorithm.
+2. **A future quantum attack on Ed25519 does not forge proofs.** A forger must also forge the ML-DSA-65 signature, and ML-DSA-65 does not succumb to Shor's algorithm, so bundles signed today stay unforgeable while ML-DSA-65 holds.
 3. **JSON wire format.** CBOR deferred to v2. Debuggability and implementer ergonomics matter more than byte compactness in v1.
 4. **No blockchain.** Signed revocation list + short cert lifetimes. Optional on-chain anchoring is an enterprise concern outside this spec.
 5. **Stateless verification.** A verifier with the relevant public keys and a recent revocation list can verify entirely offline — no round-trip to any central service is required on the hot path.

@@ -6,6 +6,21 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v1.0.0-alpha.21 (unreleased)
+
+A security fix for the v1 line in all five SDKs. No canonical bytes, fixture
+contents or wire format change, and the protocol version remains 1. Protocol
+v2 is released separately.
+
+### Fixed
+
+- **`max_rate` fails closed when the rate count is unavailable** (Go, Rust,
+  C, TypeScript and Python). A negative count from the invocation counter,
+  for example a storage error mapped to -1, passed `max_rate` as if there had
+  been no invocations. It is now `constraint_unverifiable`. Through the C ABI,
+  a `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
+  now fails closed the same way without calling the callback.
+
 ## v1.0.0-alpha.20 (2026-09-01)
 
 Completes the C SDK's context-binding surface. No canonical bytes, fixture

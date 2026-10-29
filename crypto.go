@@ -26,9 +26,9 @@ import (
 //     algebraic attack) does not forge valid hybrid signatures.
 //   - Quantum resistance: ML-DSA-65 is lattice-based (Module-LWE / Module-SIS
 //     assumptions) and believed secure against known quantum algorithms.
-//   - Forward security of today's records: "harvest now, decrypt later"
-//     attacks against archived bundles cannot forge new valid ones even
-//     after a cryptographically-relevant quantum computer arrives.
+//   - Durability of today's records: a quantum attack on Ed25519 alone
+//     cannot forge a valid signature over an archived bundle while
+//     ML-DSA-65 holds.
 //
 // Private keys never travel on the wire. They are kept on-device by the
 // principal or inside the agent's process memory.

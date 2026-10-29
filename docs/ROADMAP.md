@@ -115,7 +115,7 @@ An earlier draft proposed a boolean `requires_disclosure` constraint (default `t
 
 ## What v1.0 already guarantees (baseline)
 
-- **Hybrid quantum-safe signatures** (Ed25519 + ML-DSA-65). Harvest-now-decrypt-later attacks don't work.
+- **Hybrid signatures** (Ed25519 + ML-DSA-65, both required). A forgery needs a break of both algorithms, so a future quantum attack on Ed25519 alone does not forge a proof.
 - **Per-interaction liveness** via challenge-response (≤5 minute window, single-use challenge).
 - **Chain authorization** with scope intersection. An intermediate cannot grant what it did not receive.
 - **Explicit revocation** with signed revocation lists. Verifiers cache and fail-closed on unreachability.

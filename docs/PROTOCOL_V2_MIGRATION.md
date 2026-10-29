@@ -92,11 +92,11 @@ brings:
 
 | SDK | v2 (beta line) | v1 (stays available) |
 | --- | --- | --- |
-| Go | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1`, import `github.com/identities-ai/ratify-protocol/v2` | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20` (original module path) |
-| TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`), import from `@identities-ai/ratify-protocol/v2` | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.20` (dist-tag `latest`) |
+| Go | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1`, import `github.com/identities-ai/ratify-protocol/v2` | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.21` (original module path) |
+| TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`), import from `@identities-ai/ratify-protocol/v2` | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.21` (dist-tag `latest`) |
 | Python | `pip install "ratify-protocol[protocol-v2]==2.0.0b1"`, import `ratify_protocol.v2` (the `protocol-v2` extra pulls in the `ratify-protocol-native-v2` signing backend) | `pip install ratify-protocol==1.0.0a21` (the v1 maintenance release), import `ratify_protocol` |
-| Rust | `cargo add ratify-protocol@2.0.0-beta.1`, use `ratify_protocol::v2` | `ratify-protocol = "=1.0.0-alpha.20"` |
-| C/C++ | `ratify-c` 2.x release archive or `cargo build --release` in `sdks/c`; `#include "ratify.h"` and call `ratify_v2_*`; check `ratify_v2_abi_version()` | the `1.0.0-alpha.20` release archive and its `ratify_*` ABI |
+| Rust | `cargo add ratify-protocol@2.0.0-beta.1`, use `ratify_protocol::v2` | `ratify-protocol = "=1.0.0-alpha.21"` |
+| C/C++ | `ratify-c` 2.x release archive or `cargo build --release` in `sdks/c`; `#include "ratify.h"` and call `ratify_v2_*`; check `ratify_v2_abi_version()` | the `1.0.0-alpha.21` release archive and its `ratify_*` ABI |
 
 Side by side in one build:
 
@@ -105,7 +105,7 @@ Side by side in one build:
 - **TypeScript:** the 2.x package exports the v2 API from
   `@identities-ai/ratify-protocol/v2` and keeps the v1 API at the package
   root. To keep the exact v1 release as well, add an alias:
-  `npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
+  `npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.21`.
   An unpinned install resolves to v1 until `2.0.0`.
 - **Python:** the 2.x `ratify-protocol` distribution keeps the v1 API at
   `ratify_protocol` and adds `ratify_protocol.v2`, so one environment runs

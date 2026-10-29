@@ -55,10 +55,10 @@ run one with `go run ./examples/v2/go/quickstart` from the repository root.
 
 v1 stays at the original module path and its existing tags. Released v1 tags
 are not moved or replaced, and `go get` on that path never resolves to v2.
-The latest published v1 tag is `v1.0.0-alpha.20`:
+The latest published v1 tag is `v1.0.0-alpha.21`:
 
 ```go
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.21
 ```
 
 ```go

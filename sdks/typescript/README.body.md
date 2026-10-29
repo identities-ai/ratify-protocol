@@ -9,7 +9,7 @@ npm dist-tag `next`, so pin it exactly (or install `@next`); an unpinned
 install resolves to the latest v1 release until `2.0.0`. The v2 API is at
 `@identities-ai/ratify-protocol/v2`, and the v1 API stays at the package
 root. To keep the exact v1 release next to it, use an alias:
-`npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.20`.
+`npm install ratify-v1@npm:@identities-ai/ratify-protocol@1.0.0-alpha.21`.
 
 ### Bundle size
 
@@ -322,7 +322,7 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 Version `{{VERSION}}` is a prerelease on the separate v2 line. It exports the
 v2 API from `@identities-ai/ratify-protocol/v2` (and from the package root,
 next to the unchanged v1 API). v2 prereleases use the `next` npm dist-tag, so
-an unpinned install and exact `1.0.0-alpha.20` pins continue to resolve to
+an unpinned install and exact `1.0.0-alpha.21` pins continue to resolve to
 v1. Review so far is internal adversarial review; external independent review
 is a gate for `2.0.0`, and v2 carries no production security claim yet.
 

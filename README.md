@@ -89,11 +89,11 @@ HTTP and registry bindings, and the geo and speed constraints.
 
 | SDK | v2 install (prerelease) | v1 install |
 |---|---|---|
-| Go | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1` | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20` |
-| TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`; import `@identities-ai/ratify-protocol/v2`) | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.20` |
+| Go | `go get github.com/identities-ai/ratify-protocol/v2@v2.0.0-beta.1` | `go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.21` |
+| TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`; import `@identities-ai/ratify-protocol/v2`) | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.21` |
 | Python | `pip install "ratify-protocol[protocol-v2]==2.0.0b1"` (import `ratify_protocol.v2`) | `pip install ratify-protocol==1.0.0a21` |
-| Rust | `cargo add ratify-protocol@2.0.0-beta.1` (module `ratify_protocol::v2`) | `ratify-protocol = "=1.0.0-alpha.20"` |
-| C/C++ | `ratify-c` 2.x: build `sdks/c` (`ratify_v2_*` ABI in `ratify.h`) | the `1.0.0-alpha.20` release archive |
+| Rust | `cargo add ratify-protocol@2.0.0-beta.1` (module `ratify_protocol::v2`) | `ratify-protocol = "=1.0.0-alpha.21"` |
+| C/C++ | `ratify-c` 2.x: build `sdks/c` (`ratify_v2_*` ABI in `ratify.h`) | the `1.0.0-alpha.21` release archive |
 
 Start here:
 
@@ -254,7 +254,7 @@ The v2 line uses the `/v2` module path. The v1 module path is unchanged, and
 its latest published tag stays installable:
 
 ```bash
-go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.20
+go get github.com/identities-ai/ratify-protocol@v1.0.0-alpha.21
 ```
 
 ### TypeScript

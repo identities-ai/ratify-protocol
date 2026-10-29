@@ -303,7 +303,7 @@ Both must hold. This means:
 
 - If a quantum computer breaks Ed25519 tomorrow, ML-DSA-65 still holds the line.
 - If a flaw is found in the (newer) ML-DSA-65 algorithm, Ed25519 still holds the line.
-- Harvest-now-decrypt-later adversaries cannot forge today's bundles in a post-quantum future.
+- A quantum attack on Ed25519 alone cannot forge a bundle signed today while ML-DSA-65 holds.
 
 This is the **hybrid-PQC posture** recommended by CNSA 2.0 and BSI for the transition period.
 
@@ -487,7 +487,7 @@ ratify-protocol/
 
 ## Security
 
-- **Quantum-safe in v1.** Every signature is hybrid Ed25519 (RFC 8032) + ML-DSA-65 (NIST FIPS 204). Both must verify.
+- **Hybrid signatures in v1.** Every signature is Ed25519 (RFC 8032) plus ML-DSA-65 (NIST FIPS 204). Both must verify.
 - **No central authority** at verify time — verifiers need only the principal's public key. No live token-introspection call.
 - **Fail-closed verifier.** Unknown fields, invalid signatures, expired certs, out-of-scope requests all return a deterministic NO.
 - **External audit planned** before v1.0.0 stable.

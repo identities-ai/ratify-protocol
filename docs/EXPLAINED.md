@@ -33,15 +33,15 @@ One distinction worth internalizing: that YES is stateless cryptographic verific
 
 ---
 
-## 3. Hybrid Cryptography: Quantum-Safe by Design
+## 3. Hybrid Cryptography
 
-The "harvest now, decrypt later" threat is real. Any authorization proof signed today might be archived by an adversary and forged decades from now if today's cryptographic assumptions fail.
+"Harvest now, decrypt later" is a threat to encrypted data. Ratify signs and does not encrypt, so the corresponding risk is a future forgery: if today's assumptions fail, an adversary could try to forge new authorization proofs.
 
-Ratify defends against this by requiring **hybrid signatures** for every object in the protocol:
+Ratify answers this by requiring **hybrid signatures** for every object in the protocol:
 - **Ed25519 (RFC 8032):** High-performance, classical elliptic-curve signatures.
 - **ML-DSA-65 (NIST FIPS 204):** Post-quantum lattice-based signatures.
 
-**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, the ML-DSA-65 signature remains an unforgeable barrier. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still holds the line.
+**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, a forger still has to forge the ML-DSA-65 signature. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still has to be forged.
 
 ---
 

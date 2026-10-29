@@ -609,7 +609,7 @@ jobs:
           body: |
             ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
-            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204), quantum-safe by design. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
+            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204) signatures; both must verify. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
 
             ### Install
 

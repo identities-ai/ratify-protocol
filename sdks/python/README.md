@@ -5,7 +5,7 @@
 
 **Python reference SDK of the Ratify Protocol v1 — delegated-authority proofs for human-agent and agent-agent interactions.**
 
-Quantum-safe by design: every signature is hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204). Both must verify.
+Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
 Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** on every CI run.
 

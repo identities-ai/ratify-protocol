@@ -11,10 +11,8 @@ project, not an NVIDIA partnership, NVIDIA-approved integration, or NVIDIA
 reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
-[Architecture proposal](../../docs/nvidia-open-secure-ai-reference-proposal.md) (Protocol v1) ·
 [v2 evidence record](evidence-v2-2026-10-29.md) ·
-[v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json) ·
-[PR inventory](../../docs/nvidia-pr-inventory.md)
+[v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json)
 
 **Protocol line.** The reference runs on Ratify Protocol v2, built from this
 source tree ahead of the published `2.0.0-beta.1` packages. Its deterministic

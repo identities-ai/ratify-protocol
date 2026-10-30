@@ -256,6 +256,6 @@ Two directions extend the same receiver-side pattern. Neither is implemented her
 
 ---
 
-Architecture, threat model, and open questions for NVIDIA engineers: [`docs/nvidia-open-secure-ai-reference-proposal.md`](../../docs/nvidia-open-secure-ai-reference-proposal.md) (written against Protocol v1). Protocol v1 evidence, hashes, and known limitations: [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md). Protocol v2 evidence: [`references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md`](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md).
+Protocol v1 evidence, hashes, and known limitations: [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md). Protocol v2 evidence: [`references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md`](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md).
 
 Ratify Protocol is published by Identities.AI, Inc., and is a member of NVIDIA Inception. This is an independent reference implementation. It is not an NVIDIA partnership, not an approved or official integration, not an NVIDIA reference architecture, and not an Open Secure AI Alliance membership artifact. No NVIDIA repository is modified by this contribution. Every live result comes from executions recorded in the profile's own artifact, on the single platform recorded there: arm64 macOS with Docker. linux/amd64 and Podman are compatibility targets, not results.

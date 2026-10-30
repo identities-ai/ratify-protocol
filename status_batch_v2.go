@@ -101,7 +101,10 @@ func DecodeV2StatusEvidenceBatch(data []byte) (_ V2StatusEvidenceBatch, err erro
 		if len(trimmed) == 0 || trimmed[0] != '{' {
 			return V2StatusEvidenceBatch{}, fmt.Errorf("wire v2: status evidence object must be a JSON object")
 		}
-		value, _ := strconv.Atoi(string(code))
+		value, err := strconv.ParseUint(string(code), 10, 16)
+		if err != nil {
+			return V2StatusEvidenceBatch{}, fmt.Errorf("wire v2: status evidence object_type_code must be 3 or 5")
+		}
 		batch.Objects = append(batch.Objects, V2StatusEvidenceObject{ObjectType: uint16(value), Wire: bytes.Clone(trimmed)})
 	}
 	return batch, nil

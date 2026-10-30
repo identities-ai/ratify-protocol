@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -257,10 +258,9 @@ func (e unknownConstraintError) Error() string {
 	return "constraint_unknown: unknown constraint type " + fmtQuoted(e.kind)
 }
 
-// fmtQuoted wraps a string in double quotes for stable error text without
-// pulling in strconv's escaping surprises — the constraint-type string is
-// always safe ASCII by v1 spec.
-func fmtQuoted(s string) string { return "\"" + s + "\"" }
+// fmtQuoted quotes a constraint type for error text. The type comes from the
+// certificate, so it is escaped rather than trusted to be plain ASCII.
+func fmtQuoted(s string) string { return strconv.Quote(s) }
 
 // haversineMeters — great-circle distance on a sphere (WGS-84 mean radius).
 // Accurate enough for bounded-radius geofence checks at the meter scale.

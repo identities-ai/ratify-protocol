@@ -183,7 +183,7 @@ test("checkpoint acknowledgement: canonical round trip and strictness", () => {
     text.replace('"sequence":7', '"sequence":7.0'),
     text.replace('"sequence":7', '"sequence":-0'),
     text.replace('"log_id"', '"Log_id"'),
-    text.replace("}", ',"extra":1}'),
+    text.replace(/}$/, ',"extra":1}'),
     text.replace('"timestamp":1800000000', '"timestamp":"1800000000"'),
   ]) {
     assert.throws(() => decodeV2CheckpointAcknowledgement(new TextEncoder().encode(variant)), (e: unknown) => v2ErrorClassOf(e) === "malformed", variant);

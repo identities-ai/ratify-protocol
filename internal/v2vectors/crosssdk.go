@@ -426,7 +426,7 @@ func verifyCrossObject(o objectVector, keys map[string]ratify.HybridPublicKey, i
 		}
 		for _, component := range []string{"ed25519", "ml_dsa_65"} {
 			v, _ := s.Signature[component].(string)
-			if v == "" || !bytes.Contains(wire, []byte(`"`+v+`"`)) {
+			if v == "" || !bytes.Contains(wire, []byte(strconv.Quote(v))) {
 				return fmt.Errorf("%s: pinned %s signature is not carried by the wire object", s.Field, component)
 			}
 		}

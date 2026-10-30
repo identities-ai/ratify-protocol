@@ -1996,7 +1996,9 @@ fn to_hex(bytes: &[u8]) -> String {
 fn from_hex(value: &str) -> Vec<u8> {
     value
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let hi = (pair[0] as char).to_digit(16).expect("valid hex") as u8;
             let lo = (pair[1] as char).to_digit(16).expect("valid hex") as u8;

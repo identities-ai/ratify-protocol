@@ -230,7 +230,7 @@ impl Edited {
     }
 }
 
-static ONE: [u8; 1] = [b'{'];
+static ONE: [u8; 1] = *b"{";
 
 fn answer_slice(b: &[u8], null: bool, forged: bool) -> RatifyV2Slice {
     if null {

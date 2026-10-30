@@ -567,6 +567,9 @@ mod tests {
             self.loads.fetch_add(1, Ordering::SeqCst);
             self.inner.load(ctx)
         }
+        // fetch_update is deprecated as try_update from Rust 1.99, which older
+        // supported toolchains do not have.
+        #[allow(deprecated)]
         fn compare_and_swap(
             &self,
             ctx: &V2Context,

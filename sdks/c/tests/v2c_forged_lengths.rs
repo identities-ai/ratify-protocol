@@ -21,7 +21,7 @@ use std::ptr;
 use ratify_c::*;
 use v2c_common::*;
 
-static ONE: [u8; 1] = [b'{'];
+static ONE: [u8; 1] = *b"{";
 
 fn one() -> *const u8 {
     ONE.as_ptr()

@@ -872,7 +872,18 @@ jobs:
           # Re-run safety: if this version is already published, do not
           # publish again, but confirm the dist-tag points at it. A version
           # left under the wrong tag fails here instead of passing silently.
-          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qxF "$VERSION"; then
+          # npm view fails with E404 for a version that does not exist yet.
+          # Any other failure means the registry could not be read, which
+          # stops the job rather than guessing.
+          if published=$(npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>view.err); then
+            :
+          elif grep -q "E404" view.err; then
+            published=""
+          else
+            cat view.err
+            echo "::error::cannot read ${VERSION} from the registry; refusing to guess"; exit 1
+          fi
+          if [ "$published" = "$VERSION" ]; then
             tagged=$(npm view @identities-ai/ratify-protocol "dist-tags.${DIST_TAG}") || {
               echo "::error::cannot read the ${DIST_TAG} dist-tag"; exit 1; }
             if [ "$tagged" != "$VERSION" ]; then

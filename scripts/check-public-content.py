@@ -32,14 +32,14 @@ EXEMPT_PREFIXES = (
 EXEMPT_GENERATED = re.compile(r"^testvectors/.*\.json$")
 
 # Domains that may appear in addresses: documentation placeholders and the
-# project's own addresses. SSH remotes (git@host), the generic user@ example
+# project's own addresses. SSH remotes (git@host), the user@github.com example
 # and .local device logins are not mailboxes. Any other address is treated as
 # personal.
 ALLOWED_EMAIL_DOMAINS = re.compile(
     r"@(example\.(com|org|net)|[a-z0-9.-]+\.example|identities\.ai|ratifyprotocol\.com|users\.noreply\.github\.com)$",
     re.I,
 )
-ALLOWED_EMAIL_FORMS = re.compile(r"^(git|user)@|@[a-z0-9.-]+\.local$", re.I)
+ALLOWED_EMAIL_FORMS = re.compile(r"^git@|^user@(github|gitlab)\.com$|@[a-z0-9.-]+\.local$", re.I)
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")
 
 # Prose files, where a "Subject:" line reads as correspondence. In code it is
@@ -48,7 +48,7 @@ PROSE_SUFFIXES = (".md", ".mdx", ".txt", ".rst", ".html", ".eml")
 
 RULES = [
     ("email subject line", re.compile(r"^\s*(\*\*)?subject:(\*\*)?\s+\S", re.I)),
-    ("email greeting", re.compile(r"^\s*(?i:hi|hello|dear|hey)\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)?\s*,")),
+    ("email greeting", re.compile(r"^\s*(hi|hello|dear|hey)\s+[a-z]+(\s+[a-z]+)?\s*,", re.I)),
     ("email sign-off", re.compile(r"^\s*(best|best regards|kind regards|regards|thanks|thank you|cheers|warmly|sincerely)\s*,\s*$", re.I)),
     ("introduction request", re.compile(r"\b(could|can|would) you (please )?(connect|introduce) (me|us)\b|\bwarm intro", re.I)),
     ("outreach material", re.compile(r"\boutreach\b|\bcover (email|note|letter|communication)s?\b|\bcold email", re.I)),

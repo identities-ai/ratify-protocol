@@ -500,7 +500,7 @@ Publishing to four registries is not atomic. If PyPI succeeds and crates.io fail
 
 ### 5.5 Pre-release vs stable
 
-The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively, but each resolves them differently while every release is a prerelease. npm installs the `latest` dist-tag, which only v1 releases move; v2 prereleases publish under `next`. Cargo never matches a 2.x prerelease from a 1.x requirement. pip skips prereleases only when a final release exists, so with none published, an unpinned `pip install ratify-protocol` resolves to the newest prerelease (`2.0.0b1` once it ships); v1 users pin `ratify-protocol<2`. The Go `/v2` module path keeps v1 importers on v1.
+The release workflow marks the GitHub Release as pre-release automatically if the version has a prerelease suffix (anything after a `-`, such as `-beta.1`). PyPI / crates.io / npm all understand semver pre-release suffixes natively, but each resolves them differently while every release is a prerelease. npm installs the `latest` dist-tag, which only v1 releases move; v2 prereleases publish under `next`. Cargo never matches a 2.x prerelease from a 1.x requirement. pip skips prereleases only when a final release exists, so with none published, an unpinned `pip install ratify-protocol` resolves to the newest prerelease (`2.0.0b1` once it ships); v1 users pin `ratify-protocol<2`. The Go `/v2` module path keeps v1 importers on v1.
 
 This is the right behavior during the alpha series. When `v1.0.0` (stable) ships, the same workflow will produce a non-prerelease GitHub Release and the registries will surface it as the default install target.
 

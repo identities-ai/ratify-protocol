@@ -467,12 +467,19 @@ jobs:
             echo "Version ${VERSION} already published — skipping."
             exit 0
           fi
-          # Publish with --tag latest in a single OIDC-authenticated command.
-          # Pre-release versions get tagged latest so
-          # 'npm install @identities-ai/ratify-protocol' always resolves to
-          # the newest published version. Stable 1.0.0 will naturally become
-          # latest when it ships.
-          npm publish --access public --provenance --tag latest
+          # A v1 release publishes as latest only while latest is still a v1
+          # version. Once a Protocol v2 final release holds latest, v1
+          # maintenance releases publish under the v1 dist-tag and never take
+          # latest back. Fail rather than guess if the tag cannot be read.
+          current_latest=$(npm view @identities-ai/ratify-protocol dist-tags.latest) || {
+            echo "::error::cannot read the latest dist-tag; refusing to guess"; exit 1; }
+          case "$current_latest" in
+            1.*) DIST_TAG=latest ;;
+            2.*) DIST_TAG=v1 ;;
+            *)   echo "::error::unexpected latest dist-tag '$current_latest'"; exit 1 ;;
+          esac
+          echo "publishing $VERSION under dist-tag $DIST_TAG"
+          npm publish --access public --provenance --tag "$DIST_TAG"
 
   # ──────────────────────────────────────────────────────────────────────────
   # Go: nothing to do. Tag push + pkg.go.dev auto-discovery handle it.

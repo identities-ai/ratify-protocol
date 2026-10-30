@@ -1,6 +1,6 @@
 # Protocol v2 reference compatibility ledger
 
-Status: inventory and test plan. A reference is not v2-compatible until its
+Status: compatibility record for `2.0.0-beta.1`. A reference is not v2-compatible until its
 implementation has been updated where needed, run against the v2 vectors, and
 its README and evidence record state the exact tested versions. Existing v1
 evidence remains historical evidence for its pinned release and is not
@@ -8,8 +8,8 @@ rewritten as a v2 result.
 
 ## Compatibility rules
 
-- Public Protocol `main` is the canonical development contract. The v1 alpha.20
-  tag remains available for consumers who need the released v1 behavior.
+- Public Protocol `main` is the canonical development contract. The v1
+  `v1.0.0-alpha.21` tag remains available for consumers who need the released v1 behavior.
 - V2 uses a distinct protocol version, key identity namespace, schemas, and
   strict dispatch. A v1 key or proof is never silently upgraded or accepted as
   v2. References must pin an SDK version or commit and name the protocol
@@ -36,7 +36,7 @@ rewritten as a v2 result.
 | A2A delegated authority | `references/a2a` | Give the draft its own v2 receiver instead of the Google ADK package; keep task and context binding, pending-task handling, the HTTPS path and the independent Node.js wire client; run the documented gate | v2 tested, in-tree SDK, one-directional: 8/8 (2026-10-29, in-tree `ratify-protocol` `2.0.0b1` with the `protocol-v2` extra); see [reference matrix](#reference-v2-gate-matrix). Mutual presentation, the receiver-to-caller proof and `verification_result` stay v1-only until Protocol 2.1. v1 history in `references/a2a/EVIDENCE.md` |
 | GitHub Copilot | `references/github-copilot` | Upgrade TypeScript SDK, action profile, plugin/runtime and tests; check registry entry and published Lab page | v2 tested, in-tree SDK: 13/13 (2026-10-27, in-tree `2.0.0-beta.1`); see [reference matrix](#reference-v2-gate-matrix). Native Copilot CLI run not repeated on v2 |
 | NVIDIA OpenShell + NOOA | `references/nvidia-nooa-openshell`, `demos/nvidia-nooa-delegated-authority` | Upgrade lock and sandbox profile; rerun all live OpenShell gates where credentials/runtime permit; preserve the alpha.20 historical campaign separately | v2 tested, in-tree SDK: deterministic 192/192 and live OpenShell profile 64/64 gates (2026-10-29, in-tree `ratify-protocol` `2.0.0b1` with the `protocol-v2` extra); see [reference matrix](#reference-v2-gate-matrix) |
-| Physical AI edge sentinel | `references/physical-ai-edge-sentinel` and its Pi/Arduino lab | Port constrained verifier/controller path, embedded key handling, offline/freshness/revocation behavior, replay and fail-safe actuation tests; repeat the Raspberry Pi 2 Model B ARMv7 plus Arduino Uno path with trusted RTC, no clock override, replay denial, and exact actuator invocation count. The Arduino remains an untrusted actuator; the Linux verifier is the enforcement boundary. Preserve the prior v1 physical run as dated v1 evidence. | v2 tested, in-tree C SDK: 32/32 on macOS and on the Pi 2 (ARMv7) with test builds against `2.0.0-beta.1` (2026-10-27); production run with the DS3231 RTC and the Arduino passed (2026-10-22, one authorized pulse, exactly one actuator call); Google ADK adapter (`adk/edge_agent.py`) v1 only; see [reference matrix](#reference-v2-gate-matrix) |
+| Physical AI edge sentinel | `references/physical-ai-edge-sentinel` and its Pi/Arduino lab | Port constrained verifier/controller path, embedded key handling, offline/freshness/revocation behavior, replay and fail-safe actuation tests; repeat the Raspberry Pi 2 Model B ARMv7 plus Arduino Uno path with trusted RTC, no clock override, replay denial, and exact actuator invocation count. The Arduino remains an untrusted actuator; the Linux verifier is the enforcement boundary. Preserve the prior v1 physical run as dated v1 evidence. | v2 tested, in-tree C SDK: 32/32 on macOS and on the Pi 2 (ARMv7) with test builds against `2.0.0-beta.1` (2026-10-27); Protocol v2 production run with the DS3231 RTC and the Arduino passed (2026-10-22, in-tree `2.0.0-alpha.1` build, one authorized pulse, exactly one actuator call); Google ADK adapter (`adk/edge_agent.py`) v1 only; see [reference matrix](#reference-v2-gate-matrix) |
 | Classifier.dev | `references/classifier-dev` and the public [`ratify-classifier-reference`](https://github.com/identities-ai/ratify-classifier-reference) repository | Upgrade classifier-to-scope mapping and receiver path; run model-output adversarial cases, policy refusal cases, shared v2 vectors and deploy-independent tests | v1 published reference (alpha.20). A v2 port passed its local gate (6/6, 2026-10-22) on a pre-release branch against an unpublished local SDK build; not yet published |
 | Maritime | Public [`ratify-maritime-reference`](https://github.com/identities-ai/ratify-maritime-reference) repository | Upgrade Python pin and constrained maritime authorization examples; run offline and simulator/evidence gates; do not claim live hardware compatibility without fresh run | Alpha.16/17 v1 evidence; v2 pending |
 | Agent Relay | Public [`ratify-agent-relay-harness`](https://github.com/identities-ai/ratify-agent-relay-harness) repository and its published evidence | Keep the 2026-08-19 run as historical evidence for its pinned v1 version. The later network-denied rerun validates only offline harness reproduction. A v2 compatibility result requires a new versioned adapter and run. | Historical v1 result retained; v2 not run |
@@ -65,6 +65,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `archival.json` (19 cases, every object kind) | Yes | Yes | Yes | Yes | Yes |
 | `challenge-claim.json` (claim ID inputs) | Yes | Yes | Yes | Yes | Yes |
 | `challenge-issuance.json` (11 scenarios) | Yes | Yes | Yes | Yes | Yes |
+| `concurrency-scenarios.json` (18 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `cross-sdk/` (5 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes |
 | `digest-functions.json` (25 cases) | Yes | Yes | Yes | Yes | Yes |
 | `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes |

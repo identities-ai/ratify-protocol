@@ -85,7 +85,7 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   composition (§7.14), middleware custody (§7.15).
 - v2 rotation statements, witness entries, transaction receipts with
   composed verification, and archival verification (never actionable).
-- **Shared corpus** `testvectors/v2` (25 vector files plus cross-SDK
+- **Shared corpus** `testvectors/v2` (26 vector files plus cross-SDK
   fixtures), run in full by every SDK, with every SDK verifying the fixtures
   every other SDK produces.
 - **Runnable examples** in [`examples/v2/`](examples/v2/) for all five

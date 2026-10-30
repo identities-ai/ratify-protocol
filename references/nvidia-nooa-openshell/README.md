@@ -21,9 +21,8 @@ gates (52 required cases), both on 2026-10-29 against `ratify-protocol`
 `2.0.0b1` with its `protocol-v2` extra, built from this tree, and the SDK's
 in-memory reference stores, which are for development only. The Protocol v1 results (181 tests; the live
 OpenShell profile at 64/64 gates against `ratify-protocol==1.0.0a20`) are kept
-as dated history. Details: the [current record](evidence-v2-2026-10-29.md) (2026-10-29), the [record on the separate `ratify-protocol-v2` build](evidence-v2-2026-10-27.md) (2026-10-27) and the [first v2 record](evidence-v2-2026-10-22.md) (alpha.1 build). Every geofence, speed or
-kinematic statement in the NVIDIA outreach and proposal documents describes
-Protocol v1; those constraints return in v2.1.
+as dated history. Details: the [current record](evidence-v2-2026-10-29.md) (2026-10-29), the [record on the separate `ratify-protocol-v2` build](evidence-v2-2026-10-27.md) (2026-10-27) and the [first v2 record](evidence-v2-2026-10-22.md) (alpha.1 build). Geofence, speed and
+kinematic constraints are Protocol v1 features; they return in v2.1.
 
 ## Why would a developer or enterprise need this?
 

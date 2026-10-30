@@ -12,7 +12,7 @@ compatible, and the order in which to move each part of a deployment.
 ## Release status
 
 `2.0.0-beta.1` is a prerelease. It freezes the v2 wire format and SDK API.
-Review so far is internal adversarial review of the specification, the
+Review so far is the project's own pre-release security review of the specification, the
 vectors and every SDK. External independent review and interoperability with
 at least one implementation outside this repository are gates for `2.0.0`
 (SPEC-v2 §8.2), so no v2 release carries a production security claim yet.
@@ -118,8 +118,12 @@ Side by side in one build:
   in one environment because they share a distribution name, so a process
   that must run the exact v1 release uses its own environment.
 - **Rust:** the 2.x crate keeps the v1 API at the crate root and adds
-  `ratify_protocol::v2`. To keep the exact v1 release, rename it:
-  `ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.20" }`.
+  `ratify_protocol::v2`, with one source change for v1 code: the fields of
+  `HybridPrivateKey` are private, so build a key with
+  `HybridPrivateKey::from_components(ed25519, ml_dsa_65)` and read it with
+  `.ed25519()` and `.ml_dsa_65()`. Both buffers are wiped on drop. To keep the
+  exact v1 release, rename it:
+  `ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.21" }`.
 - **C/C++:** the 2.x library exports the unchanged v1 `ratify_*` ABI next to
   the `ratify_v2_*` ABI. Check `ratify_v2_abi_version()` at startup.
 

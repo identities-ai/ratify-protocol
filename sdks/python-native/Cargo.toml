@@ -19,4 +19,4 @@ pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
 # Pinned to the last published v1 crate. sdks/rust is now the v2 line, so a
 # path dependency would build this v1 extension against the wrong protocol.
 # The pin is exact: the extension must stay byte-identical with the v1 SDKs.
-ratify-protocol = "=1.0.0-alpha.20"
+ratify-protocol = "=1.0.0-alpha.21"

@@ -433,9 +433,9 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "1.0.0-alpha.20"
+version = "1.0.0-alpha.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91a8e1278c059a61621f3f7b9bb046e287f0dd84f197bd6986cc7f9e978afaca"
+checksum = "2528612bfcb21df8eae1691d7a8edb49561a1a34adc5a4f1bf3af48bf3224a10"
 dependencies = [
  "base64",
  "chrono",

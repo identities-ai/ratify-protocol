@@ -4,7 +4,7 @@
 
 [Ratify Protocol](https://ratifyprotocol.com) is an open protocol for proving delegated authority. A principal signs a bounded delegation naming what an agent may do, and any receiver can verify that proof offline, before acting, without calling the issuer. Signatures are hybrid Ed25519 and ML-DSA-65.
 
-This experimental reference runs Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease) through the C ABI on a Linux receiver, with a separate checkpoint process, in front of a safe Arduino actuator. It is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture. Protocol v2 has had internal adversarial review only and carries no production security claim yet.
+This experimental reference runs Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease) through the C ABI on a Linux receiver, with a separate checkpoint process, in front of a safe Arduino actuator. It is self-authored by the Ratify Protocol project. It is not a platform partnership, endorsed integration, or safety-certified reference architecture. Protocol v2 has had only the project's own pre-release security review and carries no production security claim yet.
 
 **Start here:** [run it](#use-it-now) · [evidence and limitations](#evidence-security-status-and-limitations) · [open source or Ratify Verify](#which-path-should-i-use)
 

@@ -36,7 +36,7 @@ JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec 
 
 **Status.** Two protocol lines live in this repository:
 
-- **Protocol v2** ([`SPEC-v2.md`](SPEC-v2.md)) is in prerelease toward its first beta. It is not backward compatible with v1. Every SDK runs the full shared `testvectors/v2` corpus (25 vector files plus cross-SDK fixtures from all five SDKs). Review so far is internal adversarial review; external independent review and outside interoperability are gates for `2.0.0`, so v2 carries no production security claim yet.
+- **Protocol v2** ([`SPEC-v2.md`](SPEC-v2.md)) is in beta (`2.0.0-beta.1`, a prerelease). It is not backward compatible with v1. Every SDK runs the full shared `testvectors/v2` corpus (25 vector files plus cross-SDK fixtures from all five SDKs). Review so far is the project's own pre-release security review; external independent review and outside interoperability are gates for `2.0.0`, so v2 carries no production security claim yet.
 - **Protocol v1** ([`SPEC.md`](SPEC.md)) is alpha, validated by 79 canonical test vectors in every SDK. It remains available and pinned; v1 support terms will be announced with v2 `2.0.0`.
 
 Counts and feature descriptions in this README describe `main` (the development branch). Install commands pin the versions prepared in this tree: `2.0.0-beta.1` on the v2 line (Go, TypeScript, Rust, C/C++, and Python, whose `ratify-protocol` distribution carries v1 at `ratify_protocol` and v2 at `ratify_protocol.v2`), and `1.0.0a21` for a Python install that stays on v1. A pin installs only once its release appears on [Releases](https://github.com/identities-ai/ratify-protocol/releases), which also lists each release's notes and exact fixture set. The v1 maintenance release is `v1.0.0-alpha.21`.
@@ -310,7 +310,7 @@ pytest
 cargo add ratify-protocol@2.0.0-beta.1
 ```
 
-To stay on v1, pin the published crate exactly: `ratify-protocol = "=1.0.0-alpha.20"`.
+To stay on v1, pin the published crate exactly: `ratify-protocol = "=1.0.0-alpha.21"`.
 
 Or to run the conformance suite yourself:
 
@@ -630,7 +630,7 @@ ratify-protocol/
 - **Hybrid signatures in both lines.** Every signature is Ed25519 (RFC 8032) plus ML-DSA-65 (NIST FIPS 204). Both must verify.
 - **No central authority** at verify time. Verifiers need only the principal's public key, and there is no live token-introspection call.
 - **Fail-closed verifier.** Unknown fields, invalid signatures, expired certs, out-of-scope requests all return a deterministic NO.
-- **Review status.** Protocol v2 has had internal adversarial review of the specification, vectors and every SDK. External independent review is a gate for v2 `2.0.0`, and no release carries a production security claim until it passes.
+- **Review status.** Protocol v2 has had the project's own pre-release security review of the specification, vectors and every SDK. External independent review is a gate for v2 `2.0.0`, and no release carries a production security claim until it passes.
 - **Responsible-disclosure policy:** see [`SECURITY.md`](SECURITY.md). Do not open public issues for security reports.
 - **Threat model:** [`docs/EXPLAINED.md`](docs/EXPLAINED.md) §5.
 

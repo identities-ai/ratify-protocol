@@ -203,7 +203,7 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 
 Version `2.0.0-beta.1` is a prerelease on the separate v2 line. The v2 API lives
 in the `ratify_protocol::v2` module next to the unchanged v1 API. Review so far
-is internal adversarial review; external independent review is a gate for
+is the project's own pre-release security review; external independent review is a gate for
 `2.0.0`, and v2 carries no production security claim yet. It covers:
 
 - strict decoding and canonical encoding of every v2 signed object, full

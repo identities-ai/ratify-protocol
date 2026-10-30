@@ -405,7 +405,7 @@ the suite against an installed wheel, set `RATIFY_V2_VECTOR_DIR` to that
 directory. Set `RATIFY_REQUIRE_NATIVE=1` to make a missing native extension a
 hard error instead of skipping the signing tests.
 
-This is a prerelease. Review so far is internal adversarial review; external
+This is a prerelease. Review so far is the project's own pre-release security review; external
 independent review is a gate for `2.0.0` (SPEC-v2 §8), and v2 carries no
 production security claim yet. The per-SDK record is in
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).

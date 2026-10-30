@@ -11,7 +11,7 @@ each SDK ships for tests (claim store, receipt log, checkpoint, journal store
 and challenge issuance store). They are not durable and must not back a
 production verifier. A production deployment supplies durable Part B stores
 and an independent checkpoint ([SPEC-v2 §7](../../SPEC-v2.md)). Protocol v2 is
-a prerelease: review so far is internal adversarial review, and external
+a prerelease: review so far is the project's own pre-release security review, and external
 independent review is a gate for `2.0.0`.
 
 ## Programs

@@ -14,8 +14,8 @@ in Go, TypeScript, Python, Rust and C. Protocol v1 is unchanged and remains
 available; its released tags and artifacts are not moved or replaced. Upgrade
 guide: [`docs/PROTOCOL_V2_MIGRATION.md`](docs/PROTOCOL_V2_MIGRATION.md).
 
-**Review status.** This is a prerelease. Review so far is internal
-adversarial review of the specification, the shared vectors and every SDK.
+**Review status.** This is a prerelease. Review so far is the project's own pre-release
+security review of the specification, the shared vectors and every SDK.
 External independent review has not happened; releasing the beta without it
 is an accepted risk (SPEC-v2 §8.1). External review, interoperability with an
 implementation outside this repository, and a soak are gates for `2.0.0`
@@ -35,6 +35,11 @@ implementation outside this repository, and a soak are gates for `2.0.0`
   is pinned to complete public keys.
 - **Integers only.** No floating-point value anywhere on the wire; amounts use
   `max_amount_micros`.
+- **Rust v1 API: private key fields.** In the 2.x crate, the fields of the
+  root `HybridPrivateKey` are private and both buffers are wiped on drop.
+  Build a key with `HybridPrivateKey::from_components` and read it with
+  `.ed25519()` and `.ml_dsa_65()`. `Debug` prints only the Ed25519 public half.
+  This is the only change to a v1 API at the root of a 2.x package.
 - **Finite expiry.** Every delegation has a real `expires_at`, at most
   315360000 seconds after `issued_at`.
 

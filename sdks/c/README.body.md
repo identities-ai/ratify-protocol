@@ -383,7 +383,7 @@ behavior.
 ### Protocol v2 ABI (`ratify_v2_*`)
 
 Version `{{VERSION}}` is a prerelease on the separate v2 line. Review so far is
-internal adversarial review; external independent review is a gate for
+the project's own pre-release security review; external independent review is a gate for
 `2.0.0`, and v2 carries no production security claim yet. Runnable C programs
 live in
 [`examples/v2/c`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/c):

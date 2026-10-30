@@ -1,6 +1,6 @@
 # Ratify Protocol Specification v2
 
-**Status:** Beta (2.0.0-beta.1). The wire format and API are frozen: every SDK passes the full corpus and the internal adversarial review is closed. A production security claim for 2.0.0 additionally requires external interoperability and review.
+**Status:** Beta (2.0.0-beta.1). The wire format and API are frozen: every SDK passes the full corpus and the pre-release security review is closed. A production security claim for 2.0.0 additionally requires external interoperability and review.
 **Wire version:** 2. **Signing suite:** fixed hybrid Ed25519 and ML-DSA-65 (FIPS 204).
 **Relationship to v1:** v2 is a breaking, separately versioned protocol. Implementations MUST select exactly one version at an API boundary. A v2 verifier MUST reject v1 objects and MUST NOT fall back. A v1 verifier continues to implement the immutable v1 contract in `SPEC.md`.
 
@@ -957,7 +957,7 @@ Every public SDK's v2 ID vectors MUST pin the full 256-bit `key_id_v2` result an
 7. Python signs only through its native backend and fails signing when the backend is absent.
 8. The C ABI suite also runs on armv7 Linux hardware, and the C library is shown to contain panics at every export (§1.3).
 
-The beta additionally requires that the internal adversarial review of the final schema, vectors, and every SDK is closed, with every critical and high finding fixed and re-reviewed, and that the closure record, the exact package commits, and the test results of every SDK are recorded with the tag. External independent review is not a beta gate: releasing the beta without it is an explicitly accepted risk, and the beta release notes MUST say so.
+The beta additionally requires that the pre-release security review of the final schema, vectors, and every SDK is closed, with every critical and high finding fixed and re-reviewed, and that the closure record, the exact package commits, and the test results of every SDK are recorded with the tag. External independent review is not a beta gate: releasing the beta without it is an explicitly accepted risk, and the beta release notes MUST say so.
 
 ### 8.2 Gates for 2.0.0
 

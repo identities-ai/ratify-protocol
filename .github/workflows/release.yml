@@ -1030,7 +1030,7 @@ jobs:
             v2.*)
               go_module="github.com/identities-ai/ratify-protocol/v2"; py_spec="\"ratify-protocol[protocol-v2]==${py_version}\""
               spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
-              summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is internal adversarial review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md."
+              summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md."
               ;;
             *)
               go_module="github.com/identities-ai/ratify-protocol";    py_spec="ratify-protocol==${py_version}"

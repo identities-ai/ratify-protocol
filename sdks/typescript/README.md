@@ -348,7 +348,7 @@ Version `2.0.0-beta.1` is a prerelease on the separate v2 line. It exports the
 v2 API from `@identities-ai/ratify-protocol/v2` (and from the package root,
 next to the unchanged v1 API). v2 prereleases use the `next` npm dist-tag, so
 an unpinned install and exact `1.0.0-alpha.21` pins continue to resolve to
-v1. Review so far is internal adversarial review; external independent review
+v1. Review so far is the project's own pre-release security review; external independent review
 is a gate for `2.0.0`, and v2 carries no production security claim yet.
 
 Choose the helpers that match the proof version: v1 proofs use the v1 API,

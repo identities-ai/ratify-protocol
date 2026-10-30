@@ -16,7 +16,7 @@ import ratify "github.com/identities-ai/ratify-protocol/v2"
 ```
 
 `v{{VERSION}}` is the v2 version prepared in this tree. It is a prerelease:
-review so far is internal adversarial review, and external independent review
+review so far is the project's own pre-release security review, and external independent review
 is a gate for `2.0.0`. v2 is not backward compatible with v1; see the upgrade
 guide,
 [`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).

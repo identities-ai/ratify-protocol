@@ -359,7 +359,7 @@ of this pass; "After" is the reference with this corpus.
 
 This is still not a v2 conformance badge. `2.0.0-beta.1` requires every SDK to
 pass the complete corpus, including every file required for beta, together
-with the other SDK gates and the internal adversarial review closure in
+with the other SDK gates and the pre-release security review closure in
 [SPEC-v2 §8.1](../../SPEC-v2.md#8-conformance-and-release-gates). `2.0.0`
 additionally requires external interoperability, an external independent
 review, and a soak (SPEC-v2 §8.2).

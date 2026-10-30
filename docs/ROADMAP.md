@@ -156,7 +156,7 @@ external signers, and deployment profiles. See
 
 | Milestone | Gate |
 |---------|------|
-| `2.0.0-beta.1` | Every SDK passes the beta gates of SPEC-v2 §8.1, and the internal adversarial review is closed and recorded. External independent review is not a beta gate; the beta carries no production security claim. |
+| `2.0.0-beta.1` | Every SDK passes the beta gates of SPEC-v2 §8.1, and the pre-release security review is closed and recorded. External independent review is not a beta gate; the beta carries no production security claim. |
 | `2.0.0` | Interoperability with at least one implementation outside this repository, an external independent review with every critical and high finding fixed, and a recorded soak (SPEC-v2 §8.2). |
 
 v1 remains available and pinned while v2 matures. Released v1 artifacts are

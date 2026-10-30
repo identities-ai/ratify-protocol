@@ -11,9 +11,7 @@ project, not an NVIDIA partnership, NVIDIA-approved integration, or NVIDIA
 reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
-[Architecture proposal](../../docs/nvidia-open-secure-ai-reference-proposal.md) ·
-[Evidence record](../../docs/evidence/nvidia-reference-evidence.json) ·
-[PR inventory](../../docs/nvidia-pr-inventory.md)
+[Evidence record](../../docs/evidence/nvidia-reference-evidence.json)
 
 ## Why would a developer or enterprise need this?
 

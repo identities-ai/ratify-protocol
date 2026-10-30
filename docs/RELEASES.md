@@ -503,3 +503,28 @@ Publishing to four registries is not atomic. If PyPI succeeds and crates.io fail
 The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively, but each resolves them differently while every release is a prerelease. npm installs the `latest` dist-tag, which only v1 releases move; v2 prereleases publish under `next`. Cargo never matches a 2.x prerelease from a 1.x requirement. pip skips prereleases only when a final release exists, so with none published, an unpinned `pip install ratify-protocol` resolves to the newest prerelease (`2.0.0b1` once it ships); v1 users pin `ratify-protocol<2`. The Go `/v2` module path keeps v1 importers on v1.
 
 This is the right behavior during the alpha series. When `v1.0.0` (stable) ships, the same workflow will produce a non-prerelease GitHub Release and the registries will surface it as the default install target.
+
+### 5.6 v1 maintenance after v2 is on main
+
+Once the v2 line is merged, `main` is v2 (its `go.mod` declares the `/v2`
+module path), so `make release-tag` from `main` publishes v2 only. A v1 fix
+ships from the `release/v1` branch, which starts at the last v1 tag: open the
+fix PR against `release/v1`, bump the five SDKs to the next
+`1.0.0-alpha.N` in a release PR against the same branch, then create the
+protocol tag and the `sdk-*` tags by hand on the merged commit. The tag runs
+the workflow file from that commit. npm dist-tags are chosen per version:
+v2 prereleases publish under `next`, a v2 final release under `latest`, and a
+v1 release under `latest` only while `latest` still holds a v1 version, and
+under `v1` once a v2 final release holds it. The publish job reads the
+current `latest` and fails rather than guess if it cannot.
+
+### 5.7 Promoting v2 to the default at 2.0.0
+
+`2.0.0` needs no change to how the release runs: a tag without a prerelease
+suffix publishes npm `latest`, is preferred by pip and Cargo, and is marked
+latest on GitHub. Before preparing it: move the `protocol-v2` extra's
+requirements into the base `dependencies` of `sdks/python/pyproject.toml`
+(keep the extra, empty or identical, so existing install commands still
+resolve), announce v1 support terms, and switch the developer docs and site
+to lead with v2. Import paths do not change (see
+[`PROTOCOL_V2_MIGRATION.md`](PROTOCOL_V2_MIGRATION.md#what-changes-at-200)).

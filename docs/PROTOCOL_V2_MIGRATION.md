@@ -127,6 +127,28 @@ Side by side in one build:
 - **C/C++:** the 2.x library exports the unchanged v1 `ratify_*` ABI next to
   the `ratify_v2_*` ABI. Check `ratify_v2_abi_version()` at startup.
 
+## What changes at 2.0.0
+
+`2.0.0` changes what an unpinned install resolves to. It does not change any
+import path, so code written against `2.0.0-beta.1` needs no import change.
+
+- **Import paths are permanent.** v2 stays at
+  `github.com/identities-ai/ratify-protocol/v2`,
+  `@identities-ai/ratify-protocol/v2`, `ratify_protocol.v2`,
+  `ratify_protocol::v2` and the `ratify_v2_*` C ABI. The package roots keep the
+  v1 API; nothing changes meaning under an existing import.
+- **Default installs move to v2.** npm `latest` moves to `2.0.0`, a plain
+  `pip install ratify-protocol` and `cargo add ratify-protocol` resolve to
+  `2.0.0`, and the GitHub release is marked latest.
+- **Python's v2 requirements join the base install.** From `2.0.0`, installing
+  `ratify-protocol` also installs the v2 signing backend and the pinned
+  `tzdata` release; the `protocol-v2` extra remains accepted, so existing
+  install commands keep working.
+- **v1 stays installable.** Released v1 versions are never moved or replaced.
+  After `2.0.0`, v1 maintenance releases publish to npm under the `v1`
+  dist-tag and never take `latest` back. Pinned v1 installs in every ecosystem
+  are unaffected. v1 support terms will be announced with `2.0.0`.
+
 ## Before and after
 
 v1 verification is one call that returns a status. A typical v1 Go verifier:

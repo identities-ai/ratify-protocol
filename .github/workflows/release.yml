@@ -851,16 +851,27 @@ jobs:
             echo "Version ${VERSION} already published — skipping."
             exit 0
           fi
-          # v1 versions publish with --tag latest so
-          # 'npm install @identities-ai/ratify-protocol' resolves to the newest
-          # v1 release. v2 prereleases (2.x.y-alpha/beta/rc) publish under the
-          # next dist-tag (matching publishConfig.tag) so they never become
-          # latest by accident and an unpinned install keeps resolving to v1
-          # until 2.0.0.
+          # v2 prereleases (2.x.y-alpha/beta/rc) publish under the next
+          # dist-tag (matching publishConfig.tag) so they never become latest
+          # by accident and an unpinned install keeps resolving to v1 until
+          # 2.0.0. A v2 final release publishes as latest. A v1 release
+          # publishes as latest only while latest is still a v1 version; once
+          # a v2 final release holds latest, v1 maintenance releases publish
+          # under the v1 dist-tag and never take latest back.
           case "$VERSION" in
             2.*-*) DIST_TAG=next ;;
+            1.*)
+              current_latest=$(npm view @identities-ai/ratify-protocol dist-tags.latest) || {
+                echo "::error::cannot read the latest dist-tag; refusing to guess"; exit 1; }
+              case "$current_latest" in
+                1.*) DIST_TAG=latest ;;
+                2.*) DIST_TAG=v1 ;;
+                *)   echo "::error::unexpected latest dist-tag '$current_latest'"; exit 1 ;;
+              esac
+              ;;
             *)     DIST_TAG=latest ;;
           esac
+          echo "publishing $VERSION under dist-tag $DIST_TAG"
           npm publish --access public --provenance --tag "$DIST_TAG"
 
   # ──────────────────────────────────────────────────────────────────────────

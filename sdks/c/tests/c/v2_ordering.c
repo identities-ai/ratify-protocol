@@ -80,7 +80,7 @@ struct v2c_vector {
     size_t bundle_len;
     char *request;
     size_t request_len;
-    char meta_key[MAX_META][64];
+    char meta_key[MAX_META][128];
     char meta_val[MAX_META][1024];
     int nmeta;
     /* scripted claim store */
@@ -432,7 +432,7 @@ v2c_vector *v2c_vector_load(const char *subdir) {
         char *sp = strchr(l, ' ');
         if (!sp) continue;
         *sp = 0;
-        snprintf(v->meta_key[v->nmeta], sizeof v->meta_key[0], "%s", l);
+        v2c_copy(v->meta_key[v->nmeta], sizeof v->meta_key[0], l);
         snprintf(v->meta_val[v->nmeta], sizeof v->meta_val[0], "%s", sp + 1);
         v->nmeta++;
     }

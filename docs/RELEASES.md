@@ -56,6 +56,16 @@ fails before anything is built: `tag 1.0.0-alpha.21 ≠ rust 1.0.0-alpha.20`. A
 dry run rehearses publishing what is on `main`, which is the same artifact path
 the next release will use.
 
+To rehearse a version that has no tag yet, such as a new release line, pass
+`ref` as well, set to a full 40-character commit SHA: every job builds that
+exact commit instead of the tag, and the gate still checks the tag name
+against the manifests in that commit. Only a dry run reads `ref`; a run that
+publishes always builds the tag.
+
+```
+gh workflow run release.yml --ref <branch> -f tag=<version in that commit> -f dry_run=true -f ref=<commit sha>
+```
+
 What runs: the test gate, the five-leg wheel matrix, the C library build, and
 `verify-pypi-native`, which downloads and merges the wheels exactly as the
 upload would receive them and asserts five wheels, one sdist, no nested paths,

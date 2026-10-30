@@ -6,7 +6,7 @@ name: Release
 # anything was published.
 run-name: >-
   ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run)
-      && format('Dry run {0} — verifies artifacts, publishes nothing', inputs.tag)
+      && format('Dry run {0}{1} — verifies artifacts, publishes nothing', inputs.tag, inputs.ref != '' && format(' at {0}', inputs.ref) || '')
       || format('Release {0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
 
 # Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
@@ -33,16 +33,27 @@ on:
         required: false
         default: false
         type: boolean
+      ref:
+        description: 'Dry run only: full 40-character commit SHA to build instead of the tag'
+        required: false
+        default: ''
+        type: string
 
 env:
   # Normalise the ref so both push and workflow_dispatch use the same variable.
   # For push: github.ref_name = "v1.0.0-alpha.8"
   # For workflow_dispatch: inputs.tag = "v1.0.0-alpha.8"
-  # Every job checks out refs/tags/$RELEASE_TAG, never the workflow ref, and
+  # Every job checks out $RELEASE_REF (the tag), never the workflow ref, and
   # then proves HEAD is the commit the tag points to on origin. A manual run
   # started from a branch therefore builds, tests, and publishes the tagged
   # tree, not the branch head.
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  # What every job checks out and verifies. Always the release tag, except
+  # that a dry run may name one exact commit SHA, so the artifact path of a
+  # version that has no tag yet can be rehearsed. A SHA, not a branch, so
+  # every job builds the same commit even if the branch moves during the run.
+  # A run that publishes never reads inputs.ref.
+  RELEASE_REF: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run && inputs.ref != '') && inputs.ref || format('refs/tags/{0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
 
 permissions:
   contents: read
@@ -65,20 +76,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
 
       # This tree carries two release lines. A v2.* tag releases the v2 line
       # (TypeScript, Rust, C, Go module /v2, ratify-protocol from sdks/python
@@ -282,20 +301,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -367,20 +394,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -412,20 +447,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -476,20 +519,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -538,20 +589,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -596,20 +655,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -636,20 +703,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -692,20 +767,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -736,20 +819,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -816,20 +907,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -945,20 +1044,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -1021,20 +1128,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-      - name: verify checkout is the release tag commit
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
         shell: bash
         run: |
           set -euo pipefail
-          refs=$(git ls-remote --tags origin)
-          want=$(awk -v r="refs/tags/${RELEASE_TAG}^{}" '$2 == r { print $1 }' <<<"$refs")
-          [ -n "$want" ] || want=$(awk -v r="refs/tags/${RELEASE_TAG}" '$2 == r { print $1 }' <<<"$refs")
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
           got=$(git rev-parse HEAD)
           if [ -z "$want" ] || [ "$got" != "$want" ]; then
-            echo "::error::checked out $got but tag $RELEASE_TAG points to ${want:-nothing}"
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
             exit 1
           fi
-          echo "checked out $got = $RELEASE_TAG"
+          echo "checked out $got = $RELEASE_REF"
       - name: Download C library artifacts
         uses: actions/download-artifact@v8
         with:

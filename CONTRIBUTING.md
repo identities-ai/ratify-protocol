@@ -61,6 +61,12 @@ the protocol. Write them for an outside reader:
   adversarial review" is public-friendly; naming the internal tool or process
   that found it is not.
 - No AI-tool attribution footers or "generated with" banners.
+- Every tracked file is public and ships in release archives and Go module
+  zips, which cannot be recalled. Never commit correspondence (emails, cover
+  notes, introduction requests), outreach, partner or fundraising material,
+  planning notes, private workspace paths or personal addresses.
+  `scripts/check-public-content.py` enforces this in CI; fix a match by
+  removing or rewording the text, not by adding an exception.
 - Squash-and-merge means the merge-time message is what lands on `main` —
   proofread it at merge time, not only the branch commits.
 

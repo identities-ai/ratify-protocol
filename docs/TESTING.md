@@ -18,7 +18,7 @@ Four testing levels, from fastest to most realistic:
 Exercises the protocol primitives in each SDK against the 79 canonical test vectors.
 
 ```bash
-cd ~/projects/IdentitiesAI/ratify-protocol
+cd ratify-protocol
 
 # Go
 go test ./...
@@ -70,7 +70,7 @@ Uses the `ratify` CLI for every step. No code, no server.
 
 ```bash
 # Build the CLI
-cd ~/projects/IdentitiesAI/ratify-protocol
+cd ratify-protocol
 go build -o /tmp/rat/ratify ./cmd/ratify
 
 # Create a clean workspace
@@ -131,7 +131,7 @@ A minimal reference HTTP verifier plus the CLI agent. Exercises the real wire pr
 ### Start the verifier server
 
 ```bash
-cd ~/projects/IdentitiesAI/ratify-protocol
+cd ratify-protocol
 go run ./cmd/ratify-verifier -addr :8080
 # Listens on :8080 with two endpoints:
 #   POST /v1/ratify/challenge
@@ -204,7 +204,7 @@ curl -s -X POST http://localhost:8080/v1/ratify/verify \
 
 ```bash
 # Before any PR:
-cd ~/projects/IdentitiesAI/ratify-protocol
+cd ratify-protocol
 go test ./... && \
   cd sdks/typescript && npm test && cd ../.. && \
   cd sdks/python && source .venv/bin/activate && pytest -q && deactivate && cd ../.. && \

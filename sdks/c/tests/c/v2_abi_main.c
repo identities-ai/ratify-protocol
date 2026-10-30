@@ -15,6 +15,7 @@
  *                check; R requests a byte-identical re-encode check)
  *   limits.txt   <kind> <accept|reject> <class|-> <data> <pass|fail size gate>
  */
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,6 +52,22 @@ void v2c_check(int ok, const char *what, const char *detail) {
         v2c_failures++;
         fprintf(stderr, "FAIL %s: %s\n", what, detail);
     }
+}
+
+void v2c_fmt(char *dst, size_t size, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(dst, size, fmt, ap);
+    va_end(ap);
+}
+
+void v2c_copy(char *dst, size_t size, const char *src) {
+    size_t n = strlen(src);
+    if (n >= size) {
+        fprintf(stderr, "FAIL value of %zu bytes does not fit a %zu-byte field: %.64s\n", n, size, src);
+        exit(1);
+    }
+    memcpy(dst, src, n + 1);
 }
 
 char *v2c_b64(const uint8_t *data, size_t len) {
@@ -177,7 +194,7 @@ int v2c_run_limits(void) {
         int32_t rc = ratify_v2_object_decode(kind, data, len, NULL);
         const char *msg = ratify_v2_last_error_message();
         char detail[512];
-        snprintf(detail, sizeof detail, "%s: got %s (%s)", d, v2c_class(rc), msg);
+        v2c_fmt(detail, sizeof detail, "%s: got %s (%s)", d, v2c_class(rc), msg);
         if (strcmp(b, "accept") == 0) v2c_check(rc == 0, "limit accept", detail);
         else v2c_check(strcmp(v2c_class(rc), c) == 0, "limit reject", detail);
         int gate = rc != 0 && strstr(msg, "rejected before parsing") != NULL;

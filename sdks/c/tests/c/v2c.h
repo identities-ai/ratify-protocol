@@ -22,6 +22,10 @@ unsigned char *v2c_read(const char *name, size_t *len);
 unsigned char *v2c_read_opt(const char *name, size_t *len);
 /* Record a failure when !ok. */
 void v2c_check(int ok, const char *what, const char *detail);
+/* Format diagnostic text into dst; output that does not fit is cut short. */
+void v2c_fmt(char *dst, size_t size, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+/* Copy src into dst; a value that does not fit exits as a test failure. */
+void v2c_copy(char *dst, size_t size, const char *src);
 /* Standard base64 of `len` bytes into a malloc'd NUL-terminated string. */
 char *v2c_b64(const uint8_t *data, size_t len);
 /* Load a 32-byte Ed25519 + 1952-byte ML-DSA-65 public key from two files. */

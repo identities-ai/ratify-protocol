@@ -467,8 +467,8 @@ v2c_vector *v2c_vector_load(const char *subdir) {
         if (sscanf(l, "%255s %255s %255s %255s", a, b, c, d) < 3) continue;
         status_script *s = NULL;
         for (int i = 0; i < v->nstatus; i++) if (strcmp(v->status[i].issuer, a) == 0) s = &v->status[i];
-        if (!s) { s = &v->status[v->nstatus++]; snprintf(s->issuer, sizeof s->issuer, "%s", a); snprintf(s->mode, sizeof s->mode, "ok"); }
-        if (strcmp(b, "mode") == 0) snprintf(s->mode, sizeof s->mode, "%s", c);
+        if (!s) { s = &v->status[v->nstatus++]; v2c_copy(s->issuer, sizeof s->issuer, a); v2c_copy(s->mode, sizeof s->mode, "ok"); }
+        if (strcmp(b, "mode") == 0) v2c_copy(s->mode, sizeof s->mode, c);
         else {
             size_t len;
             s->data[s->count] = v2c_read(path(v, d), &len);
@@ -558,7 +558,7 @@ v2c_vector *v2c_vector_load(const char *subdir) {
                 v2c_load_key(path(v, c), path(v, e), &k);
                 long long epoch = z;
                 if (n == 6) {
-                    char key_line[64];
+                    char key_line[sizeof "epoch_" + sizeof a];
                     snprintf(key_line, sizeof key_line, "epoch_%s", a);
                     epoch = strtoll(v2c_vector_meta(v, key_line), NULL, 10);
                 }
@@ -672,11 +672,11 @@ static int run_vector(const char *subdir) {
         snprintf(c, sizeof c, "%d ", v->counts[i]);
         strcat(counts, c);
     }
-    snprintf(detail, sizeof detail, "%s: counts %s want %s (%s)", name, counts, v2c_vector_meta(v, "expect_counts"),
+    v2c_fmt(detail, sizeof detail, "%s: counts %s want %s (%s)", name, counts, v2c_vector_meta(v, "expect_counts"),
              COUNT_NAMES[0]);
     v2c_check(strcmp(counts, v2c_vector_meta(v, "expect_counts")) == 0, "ordering callback counts", detail);
     char *want_status = (char *)v2c_read(path(v, "expect_status.txt"), NULL);
-    snprintf(detail, sizeof detail, "%s: status requests\n%s want\n%s", name, v->status_log, want_status);
+    v2c_fmt(detail, sizeof detail, "%s: status requests\n%s want\n%s", name, v->status_log, want_status);
     v2c_check(!v->status_log_overflow && strcmp(v->status_log, want_status) == 0, "ordering status requests", detail);
     free(want_status);
     if (strcmp(want_stage, "committed") == 0) {

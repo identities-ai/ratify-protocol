@@ -96,6 +96,11 @@ jobs:
             *) echo "::error::tag $RELEASE_TAG is on neither the v1 nor the v2 line"; exit 1 ;;
           esac
 
+      # The tagged tree must pass the same public-content check as PR CI,
+      # so a tag pushed or dispatched outside the PR flow cannot publish it.
+      - name: public content check
+        run: python3 scripts/check-public-content.py
+
       # Go
       - uses: actions/setup-go@v7
         with:
@@ -844,13 +849,6 @@ jobs:
         working-directory: sdks/typescript
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          # Skip gracefully if this version is already published (re-run safety).
-          # The normal publish path uses --tag latest, so if we're skipping an
-          # already-published version, latest was already set correctly.
-          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qF "$VERSION"; then
-            echo "Version ${VERSION} already published — skipping."
-            exit 0
-          fi
           # v2 prereleases (2.x.y-alpha/beta/rc) publish under the next
           # dist-tag (matching publishConfig.tag) so they never become latest
           # by accident and an unpinned install keeps resolving to v1 until
@@ -871,6 +869,19 @@ jobs:
               ;;
             *)     DIST_TAG=latest ;;
           esac
+          # Re-run safety: if this version is already published, do not
+          # publish again, but confirm the dist-tag points at it. A version
+          # left under the wrong tag fails here instead of passing silently.
+          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qxF "$VERSION"; then
+            tagged=$(npm view @identities-ai/ratify-protocol "dist-tags.${DIST_TAG}") || {
+              echo "::error::cannot read the ${DIST_TAG} dist-tag"; exit 1; }
+            if [ "$tagged" != "$VERSION" ]; then
+              echo "::error::${VERSION} is published but dist-tag ${DIST_TAG} is '${tagged}'. Repair with: npm dist-tag add @identities-ai/ratify-protocol@${VERSION} ${DIST_TAG}"
+              exit 1
+            fi
+            echo "Version ${VERSION} already published under ${DIST_TAG}; skipping."
+            exit 0
+          fi
           echo "publishing $VERSION under dist-tag $DIST_TAG"
           npm publish --access public --provenance --tag "$DIST_TAG"
 
@@ -1041,7 +1052,10 @@ jobs:
             v2.*)
               go_module="github.com/identities-ai/ratify-protocol/v2"; py_spec="\"ratify-protocol[protocol-v2]==${py_version}\""
               spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
-              summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md."
+              case "$tag_clean" in
+                *-*) summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+                *)   summary="Protocol v2. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+              esac
               ;;
             *)
               go_module="github.com/identities-ai/ratify-protocol";    py_spec="ratify-protocol==${py_version}"
@@ -1057,6 +1071,12 @@ jobs:
             echo "SPEC_FILE=$spec_file"
             echo "VECTORS_DIR=$vectors_dir"
             echo "SUMMARY=$summary"
+            # Any version with a prerelease component (alpha, beta, rc,
+            # preview, ...) is a GitHub prerelease.
+            case "$tag_clean" in
+              *-*) echo "PRERELEASE=true" ;;
+              *)   echo "PRERELEASE=false" ;;
+            esac
           } >> "$GITHUB_ENV"
       - name: create release
         uses: softprops/action-gh-release@v3
@@ -1064,7 +1084,7 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}   # required for workflow_dispatch (no tag in ref)
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(env.RELEASE_TAG, 'alpha') || contains(env.RELEASE_TAG, 'beta') || contains(env.RELEASE_TAG, 'rc') }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
           files: |
             ratify-testvectors-*.tar.gz
             c-artifacts/*

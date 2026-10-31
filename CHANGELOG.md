@@ -6,7 +6,7 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
-## v2.0.0-beta.1 (unreleased)
+## v2.0.0-beta.1 (2026-10-30)
 
 The first beta of Protocol v2 ([`SPEC-v2.md`](SPEC-v2.md)), a breaking,
 separately versioned protocol line. It freezes the v2 wire format and SDK API

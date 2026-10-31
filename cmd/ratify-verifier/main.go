@@ -40,7 +40,7 @@ import (
 	"sync"
 	"time"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // rateLimiter tracks per-IP request counts in a rolling window.

@@ -1,41 +1,80 @@
-"""Explicit receiver/public and presenter/private deployment configuration."""
+"""Explicit receiver and presenter deployment configuration.
+
+The receiver file holds the receiver's own verifier (receipt-signing) key,
+the pinned complete root and agent keys, each issuer's public status key, and
+the location of the local status feed. The presenter file holds the agent's
+private key and its delegation chain. Both are written with mode ``0600``.
+"""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 from pathlib import Path
 import secrets
 
-from ratify_protocol import (
-    HybridPrivateKey,
-    HybridPublicKey,
-    base64_standard_decode,
-    base64_standard_encode,
-    decode_delegation_cert,
-    encode_delegation_cert,
-)
+from ratify_protocol.v2.protocol_v2 import decode_delegation_cert_v2, encode_delegation_cert_v2
+from ratify_protocol.v2.signing_v2 import generate_keypair_v2
+from ratify_protocol.v2.types import HybridPrivateKey, HybridPublicKey
 
 from .authority import AuthorityFixture
 
 
-def write_configs(authority: AuthorityFixture, receiver_path: Path, presenter_path: Path) -> None:
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def _unb64(text: str) -> bytes:
+    return base64.b64decode(text, validate=True)
+
+
+def encode_key(key: HybridPublicKey | HybridPrivateKey) -> dict[str, str]:
+    return {"ed25519": _b64(key.ed25519), "ml_dsa_65": _b64(key.ml_dsa_65)}
+
+
+def decode_public_key(data: dict[str, str]) -> HybridPublicKey:
+    return HybridPublicKey(ed25519=_unb64(data["ed25519"]), ml_dsa_65=_unb64(data["ml_dsa_65"]))
+
+
+def decode_private_key(data: dict[str, str]) -> HybridPrivateKey:
+    return HybridPrivateKey(ed25519=_unb64(data["ed25519"]), ml_dsa_65=_unb64(data["ml_dsa_65"]))
+
+
+def write_configs(
+    authority: AuthorityFixture,
+    receiver_path: Path,
+    presenter_path: Path,
+    *,
+    status_dir: Path | None = None,
+) -> None:
+    """Write both configs and publish the issuers' signed status lists."""
+    if authority.status is None:
+        raise ValueError("authority has no status publishers")
+    status_dir = status_dir or receiver_path.parent / "status"
+    authority.status.write(status_dir)
     transport_token = secrets.token_urlsafe(32)
+    _, verifier_private = generate_keypair_v2()
     receiver_payload = json.dumps({
         "trusted_root_id": authority.root_id,
+        "root_public_key": encode_key(authority.root_public_key),
         "trusted_agent_id": authority.specialist_id,
-        "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
-        "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
+        "agent_public_key": encode_key(authority.specialist_public_key),
+        "verifier_private_key": encode_key(verifier_private),
+        "log_id": secrets.token_hex(16),
+        "status_keys": {
+            issuer_id: encode_key(key) for issuer_id, key in authority.status.status_keys().items()
+        },
+        "status_feed_dir": str(status_dir.resolve()),
         "transport_token": transport_token,
     })
     presenter_payload = json.dumps({
         "root_id": authority.root_id,
-        "root_ed25519": base64_standard_encode(authority.root_public_key.ed25519),
-        "root_ml_dsa_65": base64_standard_encode(authority.root_public_key.ml_dsa_65),
+        "root_public_key": encode_key(authority.root_public_key),
         "specialist_id": authority.specialist_id,
-        "private_ed25519": base64_standard_encode(authority.specialist_private_key.ed25519),
-        "private_ml_dsa_65": base64_standard_encode(authority.specialist_private_key.ml_dsa_65),
-        "delegations": [encode_delegation_cert(cert) for cert in authority.delegations],
+        "specialist_public_key": encode_key(authority.specialist_public_key),
+        "specialist_private_key": encode_key(authority.specialist_private_key),
+        "delegations": [_b64(encode_delegation_cert_v2(cert)) for cert in authority.delegations],
         "transport_token": transport_token,
     })
     _write_secret(receiver_path, receiver_payload)
@@ -52,16 +91,11 @@ def load_presenter(path: str) -> AuthorityFixture:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return AuthorityFixture(
         root_id=data["root_id"],
-        root_public_key=HybridPublicKey(
-            ed25519=base64_standard_decode(data["root_ed25519"]),
-            ml_dsa_65=base64_standard_decode(data["root_ml_dsa_65"]),
-        ),
+        root_public_key=decode_public_key(data["root_public_key"]),
         specialist_id=data["specialist_id"],
-        specialist_private_key=HybridPrivateKey(
-            ed25519=base64_standard_decode(data["private_ed25519"]),
-            ml_dsa_65=base64_standard_decode(data["private_ml_dsa_65"]),
-        ),
-        delegations=[decode_delegation_cert(cert) for cert in data["delegations"]],
+        specialist_public_key=decode_public_key(data["specialist_public_key"]),
+        specialist_private_key=decode_private_key(data["specialist_private_key"]),
+        delegations=[decode_delegation_cert_v2(_unb64(cert)) for cert in data["delegations"]],
     )
 
 

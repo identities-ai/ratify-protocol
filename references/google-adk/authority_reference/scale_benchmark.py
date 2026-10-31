@@ -1,9 +1,17 @@
-"""Exact-call benchmark for the cross-domain authority path.
+"""Exact-call benchmark for the cross-domain dual-root authority path.
 
-Each measured call issues a unique challenge, signs authority and admission
-proofs with the leaf agent, verifies both hybrid chains, evaluates constraints
-and revocation, atomically consumes the challenge, and increments the protected
-action counter. Ten percent of calls intentionally exceed the node constraint.
+Each measured call opens one approval set, issues two challenges through the
+SDK issuance helper, signs both presentations with the worker key, runs two
+full v2 verifications (hybrid chain signatures, trust pinning, signed status
+from the journal, constraint evaluation including the max_count profile),
+publishes two signed receipts, waits for two checkpoint acknowledgements,
+releases both decisions, records them in the approval ledger, executes the
+set once, and increments the protected action counter. Ten percent of calls
+intentionally exceed the node constraint.
+
+DEVELOPMENT ONLY: the claim store, receipt log, checkpoint, issuance store,
+journal and ledger are the SDK's in-memory reference stores. They retain
+every claim and receipt, so memory grows with the call count.
 """
 
 from __future__ import annotations
@@ -21,8 +29,6 @@ import threading
 import time
 from typing import Any
 
-from ratify_protocol import encode_proof_bundle
-
 from .authority import issue_dual_root_federated_authority
 from .receiver import (
     DualPresentation,
@@ -30,6 +36,7 @@ from .receiver import (
     FederationRoute,
     InfrastructureReceiver,
     OperationRequest,
+    encode_presentation,
 )
 
 
@@ -45,21 +52,12 @@ class _CountingProvisioner:
             self.invocations += 1
 
 
-def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict[str, Any]:
-    """Run exact dual-root decisions with a deterministic deny mix."""
-    if calls < 1:
-        raise ValueError("calls must be positive")
-    if workers < 1:
-        raise ValueError("workers must be positive")
-    now = int(time.time())
-    authority = issue_dual_root_federated_authority(
-        now=now - 1,
-        expires_at=now + 86_400,
-    )
-    provisioner = _CountingProvisioner()
-    receiver = InfrastructureReceiver(
+def _receiver(authority, provisioner) -> InfrastructureReceiver:
+    return InfrastructureReceiver(
         trusted_root_id=authority.root_id,
         trusted_root_public_key=authority.root_public_key,
+        status_keys=authority.status.status_keys(),
+        status_source=authority.status.evidence,
         federation_policy=FederationPolicy(
             roots={authority.root_id: authority.root_public_key},
             routes=[FederationRoute(
@@ -77,20 +75,31 @@ def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict
             )],
         ),
         provisioner=provisioner,
+        pending_capacity=1024,
     )
 
-    sample_request = OperationRequest(
-        "proof-size-sample", "us-central1", "n2-standard-4", 1
+
+def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict[str, Any]:
+    """Run exact dual-root decisions with a deterministic deny mix."""
+    if calls < 1:
+        raise ValueError("calls must be positive")
+    if workers < 1:
+        raise ValueError("workers must be positive")
+    now = int(time.time())
+    authority = issue_dual_root_federated_authority(now=now - 1, expires_at=now + 86_400)
+    provisioner = _CountingProvisioner()
+    receiver = _receiver(authority, provisioner)
+
+    sample = OperationRequest("proof-size-sample", "us-central1", "n2-standard-4", 1)
+    grant = receiver.issue_challenge(sample, agent_public_key=authority.specialist_public_key)
+    presented = DualPresentation(
+        encode_presentation(authority.present(grant.authority)),
+        encode_presentation(authority.present_admission(grant.admission)),
     )
-    sample_grant = receiver.issue_challenge(
-        sample_request, expected_agent_id=authority.specialist_id
-    )
-    sample_bundle = DualPresentation(
-        authority.present(challenge=sample_grant.challenge, session_context=sample_grant.session_context),
-        authority.present_admission(challenge=sample_grant.challenge, session_context=sample_grant.session_context),
-    )
-    proof_bytes = sum(len(encode_proof_bundle(bundle).encode("ascii")) for bundle in (sample_bundle.authority, sample_bundle.admission))
-    receiver.execute(sample_request, sample_bundle)
+    proof_bytes = len(presented.authority) + len(presented.admission)
+    warmup = receiver.execute(sample, presented)
+    if warmup["decision"] != "allow":
+        raise RuntimeError(f"warm-up call was not allowed: {warmup}")
     receiver.tool_invocations = 0
     provisioner.invocations = 0
 
@@ -100,30 +109,30 @@ def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict
     def run_batch(worker_index: int, start: int, count: int):
         latencies = array("d")
         allowed = 0
+        receipts = 0
         denied_by_reason: dict[str, int] = {}
         for offset in range(count):
             sequence = start + offset
             request = OperationRequest(
-                f"scale-{worker_index}-{start + offset}",
+                f"scale-{worker_index}-{sequence}",
                 "us-central1",
                 "n2-standard-4",
                 2 if mixed and sequence % 10 == 9 else 1,
             )
             began = time.perf_counter_ns()
-            grant = receiver.issue_challenge(
-                request, expected_agent_id=authority.specialist_id
-            )
-            bundle = DualPresentation(
-                authority.present(challenge=grant.challenge, session_context=grant.session_context),
-                authority.present_admission(challenge=grant.challenge, session_context=grant.session_context),
-            )
-            result = receiver.execute(request, bundle)
+            grant = receiver.issue_challenge(request, agent_public_key=authority.specialist_public_key)
+            result = receiver.execute(request, DualPresentation(
+                authority.present(grant.authority), authority.present_admission(grant.admission),
+            ))
             latencies.append((time.perf_counter_ns() - began) / 1_000_000)
-            allowed += result["decision"] == "allow"
-            if result["decision"] != "allow":
-                reason = result.get("verification_code", result.get("status", "deny"))
+            if result["decision"] == "allow":
+                allowed += 1
+                receipts += len(result["receipt_sequences"])
+            else:
+                reason = result.get("protocol_reason", result.get("status", "deny"))
                 denied_by_reason[reason] = denied_by_reason.get(reason, 0) + 1
-        return latencies, allowed, denied_by_reason
+                receipts += 1 if "receipt_sequence" in result else 0
+        return latencies, allowed, receipts, denied_by_reason
 
     started = time.perf_counter()
     futures = []
@@ -133,9 +142,7 @@ def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict
         worker_index = 0
         while remaining:
             count = min(batch_size, remaining)
-            futures.append(executor.submit(
-                run_batch, worker_index, start, count
-            ))
+            futures.append(executor.submit(run_batch, worker_index, start, count))
             start += count
             remaining -= count
             worker_index += 1
@@ -143,21 +150,24 @@ def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict
 
     latencies = array("d")
     allowed = 0
+    receipts = 0
     denied_by_reason: dict[str, int] = {}
     for future in futures:
-        batch_latencies, batch_allowed, batch_denied = future.result()
+        batch_latencies, batch_allowed, batch_receipts, batch_denied = future.result()
         latencies.extend(batch_latencies)
         allowed += batch_allowed
+        receipts += batch_receipts
         for reason, count in batch_denied.items():
             denied_by_reason[reason] = denied_by_reason.get(reason, 0) + count
     ordered = sorted(latencies)
     return {
-        "mode": "local_dual_root_authority_and_admission_path",
+        "mode": "local_dual_root_composition_profile",
         "calls_requested": calls,
         "calls_completed": len(ordered),
         "allowed": allowed,
         "denied": len(ordered) - allowed,
         "denied_by_reason": denied_by_reason,
+        "released_receipts": receipts,
         "protected_action_invocations": provisioner.invocations,
         "workers": len(futures),
         "wall_seconds": round(wall_seconds, 6),
@@ -174,7 +184,7 @@ def run_scale_benchmark(calls: int, *, workers: int, mixed: bool = True) -> dict
 
 def benchmark_report(call_counts: list[int], *, workers: int) -> dict[str, Any]:
     return {
-        "schema": "ratify.google-adk.federation-scale.v1",
+        "schema": "ratify.google-adk.federation-scale.v2",
         "measured_at": int(time.time()),
         "environment": {
             "platform": platform.platform(),
@@ -183,19 +193,22 @@ def benchmark_report(call_counts: list[int], *, workers: int) -> dict[str, Any]:
             "google_adk": importlib.metadata.version("google-adk"),
             "mcp": importlib.metadata.version("mcp"),
             "ratify_protocol": importlib.metadata.version("ratify-protocol"),
+            "ratify_protocol_native_v2": importlib.metadata.version("ratify-protocol-native-v2"),
         },
         "methodology": {
             "measured": (
-                "unique challenge, authority and admission leaf signatures, full "
-                "dual-root hybrid verification, constraint and revocation evaluation, atomic challenge "
-                "consumption, and protected counter increment"
+                "approval set, two issued challenges, two worker signatures, two full v2 "
+                "verifications with signed status and the max_count profile, two signed "
+                "receipts with checkpoint acknowledgement, two releases, the approval "
+                "ledger, and the protected counter increment"
             ),
             "excluded": (
-                "ADK model latency, MCP HTTP transport, external revocation distribution, "
-                "and multi-host orchestration"
+                "ADK model latency, MCP HTTP transport, status feed distribution, durable "
+                "Part B stores, and multi-host orchestration"
             ),
             "claim_boundary": (
-                "results are single-host measurements, not Google production capacity"
+                "single-host measurements with in-memory reference stores, not Google "
+                "production capacity"
             ),
         },
         "results": [
@@ -214,8 +227,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--calls",
-        default="10,100,1000",
-        help="comma-separated exact call counts, for example 10,100,1000,1000000",
+        default="10,100",
+        help="comma-separated exact call counts, for example 10,100,1000",
     )
     parser.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1))
     parser.add_argument("--output", type=Path)

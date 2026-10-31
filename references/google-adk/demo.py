@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Local harness for the independently configured HTTP MCP reference."""
+"""Local harness for the independently configured HTTP MCP reference.
+
+Runs the dual-root profile end to end: a real ADK runner calls the tool, the
+receiver runs in a separate process with its own trust file, and each call
+needs two released approvals before the protected action runs.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +52,7 @@ async def run() -> None:
     with tempfile.TemporaryDirectory() as directory:
         receiver_config = Path(directory) / "receiver.json"
         presenter_config = Path(directory) / "presenter.json"
-        write_configs(authority, receiver_config, presenter_config)
+        write_configs(authority, receiver_config, presenter_config, status_dir=Path(directory) / "status")
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
@@ -112,9 +117,10 @@ async def run() -> None:
             print(f"DENY excessive count: {excessive}")
             print(f"DENY wrong region: {wrong_region}")
             assert allowed["tool_invocations"] == 1
+            assert len(allowed["receipt_sequences"]) == 2  # both roots released
             assert excessive["decision"] == wrong_region["decision"] == "deny"
             assert excessive["tool_invocations"] == wrong_region["tool_invocations"] == 1
-            print("GOOGLE ADK HTTP MCP FEDERATION REFERENCE PASSED")
+            print("GOOGLE ADK HTTP MCP DUAL-ROOT REFERENCE PASSED")
         finally:
             process.terminate()
             process.wait(timeout=5)

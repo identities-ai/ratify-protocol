@@ -1,4 +1,8 @@
-//! Ratify Protocol v1 — Rust reference SDK.
+//! Ratify Protocol — Rust reference SDK (2.x line).
+//!
+//! The `v2` module is the Protocol v2 API. The crate-root items are the
+//! Protocol v1 API, retained so one dependency can verify both during the
+//! migration window; v1-only consumers stay on the 1.0.0-alpha.x releases.
 //!
 //! Delegated-authority proofs for human-agent and agent-agent interactions.
 //! Every signature is a post-quantum hybrid of Ed25519 and ML-DSA-65 (NIST FIPS 204), and it verifies
@@ -21,17 +25,26 @@ pub mod challenge_store;
 pub mod constraints;
 pub mod operation_context;
 pub mod crypto;
+pub mod crypto_v2;
 pub mod receipts;
 pub mod resource_path;
 pub mod scope;
 pub mod types;
 pub mod verify;
 pub mod wire;
+#[cfg(feature = "std")]
+pub mod v2;
 
 pub use canonical::{base64_std_decode, base64_std_encode, hex_decode, hex_encode};
 #[cfg(feature = "std")]
 pub use canonical::canonical_json;
 pub use challenge_store::{ChallengeStore, UNKNOWN_CHALLENGE};
+#[cfg(feature = "std")]
+pub use v2::{
+    build_session_context_v2, challenge_claim_digest_v2, decode_payload_digest_v2,
+    operation_context_v2_bytes, operation_context_v2_hash, protocol_claim_id_from_digest_v2,
+    protocol_claim_id_v2, session_context_v2_bytes, OperationContextV2, SessionContextV2Inputs,
+};
 pub use operation_context::{
     build_session_context, operation_context_bytes, operation_context_hash,
     session_context_bytes, OperationContext, SessionContextInputs,
@@ -52,6 +65,7 @@ pub use crypto::{
     verify_revocation_push, verify_session_token, verify_session_token_e, verify_witness_entry,
     witness_entry_sign_bytes,
 };
+pub use crypto_v2::{delegation_signature_message_v2, derive_key_id_v2, verify_delegation_v2};
 #[cfg(feature = "std")]
 pub use crypto::{generate_agent, generate_human_root};
 pub use scope::{

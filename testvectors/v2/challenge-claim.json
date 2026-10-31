@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "challenge_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "expected_challenge_claim_digest_hex": "3517c5ebca47c89274b4a9a2007c87448aa1833cf9396d947b84a780873c96382ff390b69b3e7e696a12f3c760d3f26c",
+  "claim_id_input": {
+    "verifier_namespace": "verify-prod",
+    "replay_epoch": 7
+  },
+  "expected_claim_id": "fb99625258652227d583396ed97c2724e1879093e29482ee9f68cdfcd045125d",
+  "additional_claim_id_cases": [
+    {
+      "verifier_namespace": "é",
+      "replay_epoch": 9007199254740991,
+      "expected_claim_id": "d1a0a7c665fdb2220976dae3c9fdc387ca5c26c46fb4e7de1c746f77ec770a38"
+    },
+    {
+      "verifier_namespace": "verify-prod",
+      "replay_epoch": 0,
+      "expected_claim_id": "8ed919b6554b983a4b247de034c15974e5ae905a84926fc4765ae52f1af17c03"
+    },
+    {
+      "verifier_namespace": "a\u0000b",
+      "replay_epoch": 7,
+      "expected_claim_id": "e030672647fa3b3f5384a66c9a13e523de2e1e0f9e2c1d45d23d86261ec8383b"
+    }
+  ]
+}

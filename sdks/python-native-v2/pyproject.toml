@@ -1,0 +1,32 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+# Distinct from the v1 `ratify-protocol-native` extension so both can be
+# installed together. Version-locked to `ratify-protocol` 2.x, whose
+# [protocol-v2] extra pins it exactly. Users never import it directly.
+name = "ratify-protocol-native-v2"
+description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"
+readme = "README.md"
+authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Security :: Cryptography",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://ratifyprotocol.com"
+Repository = "https://github.com/identities-ai/ratify-protocol"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "ratify_protocol_native_v2"
+features = ["pyo3/extension-module"]

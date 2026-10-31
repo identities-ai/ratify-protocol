@@ -1,4 +1,4 @@
-# Registry Setup — Identities AI ownership of Ratify SDKs
+# Registry Setup: Identities AI ownership of Ratify SDKs
 
 How to move the Ratify Protocol SDK packages from personal publisher accounts
 to **Identities AI, Inc.** ownership across PyPI, crates.io, and npm, with
@@ -15,7 +15,7 @@ all future publishing without manual steps.
 
 The packages on PyPI and crates.io were initially published from a personal
 account to reserve the `ratify-protocol` name. That account now appears as
-the maintainer on every package page — which is wrong for an open-source
+the maintainer on every package page, which is wrong for an open-source
 protocol owned by **Identities AI, Inc.**
 
 End state we want:
@@ -23,9 +23,11 @@ End state we want:
 | Registry          | Package                                    | Owner shown        | Links to       |
 |-------------------|--------------------------------------------|--------------------|----------------|
 | PyPI              | `ratify-protocol`                          | `identities-ai` org | identities.ai + GitHub |
+| PyPI              | `ratify-protocol-native`                   | `identities-ai` org | identities.ai + GitHub |
+| PyPI (v2 line)    | `ratify-protocol-native-v2`                | `identities-ai` org | identities.ai + GitHub |
 | crates.io         | `ratify-protocol`                          | `gh:identities-ai:maintainers` team | identities.ai + GitHub |
 | npm               | `@identities-ai/ratify-protocol`           | `identities-ai` org | identities.ai + GitHub |
-| Go (pkg.go.dev)   | `github.com/identities-ai/ratify-protocol` | GitHub org         | (inherited)    |
+| Go (pkg.go.dev)   | `github.com/identities-ai/ratify-protocol` (v1), `.../ratify-protocol/v2` (v2) | GitHub org | (inherited) |
 
 Go is the easy case: pkg.go.dev derives everything from the GitHub repo, so
 the GitHub org is the only thing to get right. The other three require
@@ -33,7 +35,7 @@ explicit org/team setup in the registry UI.
 
 ---
 
-## 1. PyPI — Organizations + Trusted Publisher
+## 1. PyPI: Organizations + Trusted Publisher
 
 PyPI Organizations is in beta but works for our case. We create an
 organization, transfer the project into it, then attach Trusted Publisher
@@ -45,12 +47,12 @@ API token.
 1. Log in to PyPI as the account that currently owns `ratify-protocol`.
 2. Go to **Your account → Organizations → Create new organization**.
 3. Fill in:
-   - **Name:** `identities-ai` (this becomes the URL slug — must match
+   - **Name:** `identities-ai` (this becomes the URL slug and must match
      across registries; the lowercase hyphenated form mirrors the GitHub org)
    - **Display name:** `Identities AI`
-   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises. https://ratifyprotocol.com · Patent pending.`
+   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol, the open standard, and Ratify Verify, the managed control plane for enterprises. https://ratifyprotocol.com · Patent pending.`
    - **Type:** Company (you may need to upgrade or pay a fee for org features
-     depending on PyPI's current pricing — at the time of writing,
+     depending on PyPI's current pricing. At the time of writing,
      Organizations is free during the beta for the company tier).
 4. Confirm the org's email address.
 
@@ -66,7 +68,7 @@ org page that shows your description, URL, and email.
 
 ### 1.3 Set Trusted Publisher (no API token needed)
 
-This is the security upgrade — instead of a long-lived API token sitting in
+This is the security upgrade. Instead of a long-lived API token sitting in
 GitHub Secrets, PyPI verifies a short-lived OIDC token from the GitHub
 Actions workflow itself. Anyone who steals our repo secrets cannot publish a
 malicious version because they can't forge that token.
@@ -96,14 +98,35 @@ required-reviewer approval (if you set one), then publish. The package page
 will show the new release within seconds; pip cache invalidation may take a
 few minutes.
 
-If you want to confirm without doing a real release, tag a `v0.0.0-test` →
-the release workflow will run gate-tests, refuse to publish (version mismatch
-against SDK metadata), and exit cleanly without touching PyPI. That's the
-"safe smoke test" for the gate logic.
+If you want to confirm without doing a real release, run the Release
+workflow manually with `dry_run` enabled: it runs gate-tests and builds and
+checks the artifacts, and every publish job is skipped. (A `v0.*` tag is now
+rejected outright by the gate, because it belongs to neither release line.)
+
+### 1.6 The v2 Python distributions
+
+On the v2 line, Python v2 is part of the existing `ratify-protocol` project
+(import `ratify_protocol.v2`, installed with the `protocol-v2` extra), so the
+only new PyPI project is `ratify-protocol-native-v2`, the native extension
+that extra pins. A `v2.*` tag publishes `ratify-protocol-native-v2` from the
+`publish-pypi-native-v2` job first, then `ratify-protocol` from
+`sdks/python` in the `publish-pypi-v2` job. A `v1.*` tag runs the v1
+`publish-pypi` and `publish-pypi-native` jobs instead. The distribution name
+`ratify-protocol-v2` is never published.
+
+`ratify-protocol` already has its Trusted Publisher (§1.3); both of its
+publish jobs use the same workflow and environment, so it needs nothing new.
+Before the first v2 release, add a pending Trusted Publisher for
+`ratify-protocol-native-v2` with the same values as §1.3 (owner
+`identities-ai`, repository `ratify-protocol`, workflow `release.yml`,
+environment `pypi-publish`), and move the project into the `identities-ai`
+organization once it exists. Until that is done the native v2 publish job
+fails at the OIDC exchange, nothing is uploaded, and the `ratify-protocol`
+v2 publish job, which waits for it, does not run.
 
 ---
 
-## 2. crates.io — GitHub team co-ownership
+## 2. crates.io: GitHub team co-ownership
 
 crates.io doesn't have organizations the way PyPI/npm do. The pattern is to
 add a **GitHub team** as a co-owner of the crate; then anyone in that team
@@ -118,7 +141,7 @@ can publish, and the crate page links to the team via the GitHub URL.
 ### 2.2 Add the team as a crate owner
 
 Run this **locally** (you need to be logged in to crates.io as the current
-owner). It uses your existing `cargo login` token — no GitHub Actions
+owner). It uses your existing `cargo login` token; no GitHub Actions
 involved at this step.
 
 ```bash
@@ -158,7 +181,7 @@ This removes the personal-account attribution from the crate page entirely.
 3. Scopes: select **publish-update** only, and scope to **both crates this
    repo publishes: `ratify-protocol` AND `ratify-c`** (not "all crates").
    This minimizes blast radius if the token leaks. A token scoped to only
-   one crate fails the other's publish with a 403 — this happened at
+   one crate fails the other's publish with a 403. This happened at
    v1.0.0-alpha.13 and was initially masked by the publish step's old
    error handling.
 4. Set an expiry (a year is fine) and copy the token.
@@ -167,13 +190,13 @@ This removes the personal-account attribution from the crate page entirely.
 
 ### 2.6 (Optional) Add a `crates-publish` GitHub environment
 
-Same idea as PyPI — create a `crates-publish` environment with required
+Same idea as PyPI: create a `crates-publish` environment with required
 reviewers if you want manual approval on every release. This matches the
 `environment.name` already set in the `publish-crates` job.
 
 ---
 
-## 3. npm — `@identities-ai` scoped org
+## 3. npm: `@identities-ai` scoped org
 
 **Status: ACTIVE.** The `@identities-ai` org is approved on npm and the package is live
 at <https://www.npmjs.com/package/@identities-ai/ratify-protocol>.
@@ -187,13 +210,13 @@ The `publish-npm` job in `release.yml` runs on every tagged release (when
 2. Verify you have **Owner** role on the `identities-ai` org at
    <https://www.npmjs.com/settings/identities-ai/packages>.
 3. Org **Settings → Profile**:
-   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol — the open standard — and Ratify Verify, the managed control plane for enterprises.`
+   - **Description:** `Identities AI builds the cryptographic identity and authorization layer for AI agents. We make Ratify Protocol, the open standard, and Ratify Verify, the managed control plane for enterprises.`
    - **URL:** `https://ratifyprotocol.com`
    - **Email:** `hello@identities.ai`
 
 ### 3.2 Configure Trusted Publisher (no token needed)
 
-Publishing uses npm's OIDC Trusted Publisher — no long-lived token stored in GitHub Secrets.
+Publishing uses npm's OIDC Trusted Publisher, so no long-lived token is stored in GitHub Secrets.
 
 The Trusted Publisher is already configured on the npm package page with:
 - **Repository:** `identities-ai/ratify-protocol`
@@ -215,19 +238,25 @@ No `NPM_TOKEN` secret is required or used.
 
 The next tag push will exercise the full four-registry pipeline.
 
+v1 versions publish under the `latest` dist-tag. v2 prereleases (`2.x.y-alpha`,
+`-beta` and `-rc` versions) publish under the `next` dist-tag (the same tag
+`publishConfig` names), so a v2 prerelease never becomes what an unpinned
+`npm install @identities-ai/ratify-protocol` resolves to. `latest` stays on
+v1 until `2.0.0`.
+
 ### 3.4 Provenance attestations
 
 The workflow uses `npm publish --provenance` which creates a Sigstore
 attestation linking the published package back to the exact GitHub Actions
 run that built it. The badge appears on the npm package page as "Published
-by GitHub Actions". No extra config needed — the OIDC exchange and provenance
+by GitHub Actions". No extra config needed: the OIDC exchange and provenance
 signing both use the `id-token: write` permission already set in the job.
 
 ---
 
 ## 4. GitHub org settings (one-time hygiene)
 
-These should already match — verify and fix if not:
+These should already match. Verify and fix them if not:
 
 1. <https://github.com/identities-ai> **profile**:
    - **Display name:** `Identities AI`
@@ -247,32 +276,35 @@ These should already match — verify and fix if not:
 
 Once one or more registries are set up, run a normal release through the
 two-phase flow ([`RELEASES.md`](RELEASES.md) §4). There is no direct push to
-main — the branch ruleset forbids it, releases included; the single-step
+main. The branch ruleset forbids it, releases included; the single-step
 `make release` this section used to describe was removed for that reason.
 
-1. `make release-prepare VERSION=<next version>` — creates the release
+1. `make release-prepare VERSION=<next version>` creates the release
    branch, bumps all SDK versions and README pins, runs the full cross-SDK
    gate, and opens the release PR.
 2. Merge the release PR through the normal path (CI + DCO run on it), then
    `git checkout main && git pull`.
-3. `make release-tag VERSION=<next version>` — verifies main carries the
+3. `make release-tag VERSION=<next version>` verifies main carries the
    bump, pushes the protocol tag alone (then the `sdk-*` tags), which
    triggers the Release workflow.
 4. Watch <https://github.com/identities-ai/ratify-protocol/actions> for the
    Release workflow.
 5. After it completes, verify each registry ACTUALLY serves the new version
-   (a green publish job is not proof — see `RELEASES.md` Appendix A Phase 4):
-   - PyPI: <https://pypi.org/project/ratify-protocol/>
+   (a green publish job is not proof; see `RELEASES.md` Appendix A Phase 4):
+   - PyPI: <https://pypi.org/project/ratify-protocol/> (both lines) and
+     <https://pypi.org/project/ratify-protocol-native-v2/> (v2 tags)
    - crates.io: <https://crates.io/crates/ratify-protocol> and
-     <https://crates.io/crates/ratify-c> — the token must be scoped to
-     BOTH crates
+     <https://crates.io/crates/ratify-c> (the token must be scoped to
+     BOTH crates)
    - npm: <https://www.npmjs.com/package/@identities-ai/ratify-protocol> (if enabled)
-   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol>
+   - Go: <https://pkg.go.dev/github.com/identities-ai/ratify-protocol> (v1
+     tags) or <https://pkg.go.dev/github.com/identities-ai/ratify-protocol/v2>
+     (v2 tags)
    - GitHub Release: <https://github.com/identities-ai/ratify-protocol/releases>
 
 ---
 
-## 6. Recovery — what to do if a publish fails partway
+## 6. Recovery: what to do if a publish fails partway
 
 The four registries are not atomic. PyPI may succeed and crates.io may fail
 (or vice versa). The release workflow tolerates this by design:

@@ -6,17 +6,19 @@ source, policy engine, and enforcement boundary. The Uno does not hold keys,
 parse proof bundles, or make authorization decisions.
 
 Load `ratify_actuator/ratify_actuator.ino`, connect the board by USB, and pass
-the serial device to the edge binary:
+the serial device to the production receiver:
 
 ```sh
-./edge --trust trust --serial /dev/cu.usbmodemXXXX --baud 115200
+./edge --state state --trust trust --checkpoint ckpt.sock --serial /dev/ttyACM0 --baud 115200
 ```
 
-Only a successful `physical:actuate` decision can reach `actuator_fire`, which
-then emits `RATIFY_ALLOW FIRE <milliseconds>`. The Uno ignores malformed,
+Only a released Protocol v2 allow for `physical:actuate` that passes local
+policy and the release gate can reach `actuator_fire`, which then emits
+`RATIFY_ALLOW FIRE <milliseconds>`. The Uno ignores malformed,
 unknown, out-of-range, and oversized frames. Its built-in LED needs no external
 wiring for the first demonstration.
 
-This demonstrates the physical output path, not offline authorization on the
-Arduino. The Raspberry Pi RTC and production hardware acceptance test remain
-required for the Edge Sentinel offline claim.
+This demonstrates the physical output path, not authorization on the Arduino.
+The Arduino is an untrusted actuator: anyone with direct access to its serial
+port can drive it, and that path is outside this reference's security
+boundary.

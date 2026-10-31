@@ -1,11 +1,23 @@
-# Edge C component
+# Edge receiver (Protocol v2)
 
-Linux edge receiver. This component links the Ratify C SDK,
-issue and consume single-use challenges, verify presented authority against a
-pinned operator public key and derived identity, apply local policy, and invoke only a safe
-actuator adapter after an allow decision. It will use the published
-`ratify-c-v1.0.0-alpha.20-linux-armv7.tar.gz` artifact rather than building the
-Rust core on the Pi.
+The Linux edge receiver and its checkpoint process. The receiver links the
+Ratify C SDK `2.0.0-beta.1` statically and uses only the `ratify_v2_*` ABI.
 
-The production binary is fail-closed without a trusted clock. The test build
-has explicit clock and quarantine overrides for deterministic fixtures only.
+| Binary | Built from | Purpose |
+| --- | --- | --- |
+| `edge` | `src/`, `actuator/` | Production receiver: RTC clock only, real quarantine |
+| `edge-checkpoint` | `checkpoint/` | Production checkpoint process with its own key and storage |
+| `edge-test`, `edge-checkpoint-test` | same, with `-DSENTINEL_TEST_BUILD` | Test builds: fixture clock and quarantine override compiled in |
+| `controller` | `../controller/` | Principal, status publisher, and agent for demonstrations |
+
+```sh
+make RATIFY_SDK=/path/to/ratify-c all test-bins
+./tests/scenarios.sh
+```
+
+The production binaries fail closed without the DS3231 RTC (`/dev/rtc0`), and
+the receiver refuses `physical:actuate` for 300 seconds after start. The test
+builds exist for the deterministic matrix only and never drive hardware there:
+`tests/scenarios.sh` starts the receiver without `--serial` or `--gpio`, so the
+actuator is a mock that only counts. See `../docs/v2-design.md` for the design
+and its limits.

@@ -53,7 +53,15 @@ unsafe fn fixture() -> Fixture {
     let scopes = CString::new("[\"physical:actuate\"]").unwrap();
     let mut cert = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
-    ratify_delegation_issue(root, agent, scopes.as_ptr(), NOW, NOW + 3600, &mut cert, &mut err);
+    ratify_delegation_issue(
+        root,
+        agent,
+        scopes.as_ptr(),
+        NOW,
+        NOW + 3600,
+        &mut cert,
+        &mut err,
+    );
     assert!(err.is_null(), "delegation must succeed");
     let cert_json = ratify_delegation_cert_to_json(cert, &mut err);
     assert!(!cert_json.is_null(), "cert json must serialise");
@@ -63,7 +71,14 @@ unsafe fn fixture() -> Fixture {
     let mut context = [0u8; 32];
     ratify_challenge_generate(context.as_mut_ptr(), 32);
 
-    Fixture { root, agent, cert, cert_json, challenge, context }
+    Fixture {
+        root,
+        agent,
+        cert,
+        cert_json,
+        challenge,
+        context,
+    }
 }
 
 #[test]
@@ -73,8 +88,15 @@ fn creates_a_bundle_bound_to_a_session_context() {
         let mut bundle = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         let status = ratify_proof_bundle_create_with_context(
-            f.agent, f.cert_json, f.challenge.as_ptr(), 32, NOW,
-            f.context.as_ptr(), 32, &mut bundle, &mut err,
+            f.agent,
+            f.cert_json,
+            f.challenge.as_ptr(),
+            32,
+            NOW,
+            f.context.as_ptr(),
+            32,
+            &mut bundle,
+            &mut err,
         );
         assert_eq!(status, RatifyStatus::RatifyOk, "creation must succeed");
         assert!(err.is_null());
@@ -85,7 +107,10 @@ fn creates_a_bundle_bound_to_a_session_context() {
         let json_ptr = ratify_proof_bundle_to_json(bundle, &mut err);
         assert!(!json_ptr.is_null());
         let json = CStr::from_ptr(json_ptr).to_string_lossy().into_owned();
-        assert!(json.contains("session_context"), "bundle json must carry the context");
+        assert!(
+            json.contains("session_context"),
+            "bundle json must carry the context"
+        );
         ratify_string_free(json_ptr);
         ratify_proof_bundle_free(bundle);
     }
@@ -102,8 +127,15 @@ fn differing_contexts_produce_differing_bundles() {
             let mut bundle = std::ptr::null_mut();
             let mut err = std::ptr::null_mut();
             let status = ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, f.challenge.as_ptr(), 32, NOW,
-                ctx, 32, &mut bundle, &mut err,
+                f.agent,
+                f.cert_json,
+                f.challenge.as_ptr(),
+                32,
+                NOW,
+                ctx,
+                32,
+                &mut bundle,
+                &mut err,
             );
             assert_eq!(status, RatifyStatus::RatifyOk);
             let ptr = ratify_proof_bundle_to_json(bundle, &mut err);
@@ -127,15 +159,25 @@ fn rejects_a_context_that_is_not_exactly_32_bytes() {
             let mut bundle = std::ptr::null_mut();
             let mut err = std::ptr::null_mut();
             let status = ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, f.challenge.as_ptr(), 32, NOW,
-                f.context.as_ptr(), len, &mut bundle, &mut err,
+                f.agent,
+                f.cert_json,
+                f.challenge.as_ptr(),
+                32,
+                NOW,
+                f.context.as_ptr(),
+                len,
+                &mut bundle,
+                &mut err,
             );
             assert_eq!(
-                status, RatifyStatus::RatifyErrBadArgument,
+                status,
+                RatifyStatus::RatifyErrBadArgument,
                 "session_context_len {len} must be rejected"
             );
             assert!(bundle.is_null(), "no bundle on rejection");
-            if !err.is_null() { ratify_string_free(err); }
+            if !err.is_null() {
+                ratify_string_free(err);
+            }
         }
     }
 }
@@ -148,15 +190,25 @@ fn rejects_a_challenge_that_is_not_exactly_32_bytes() {
             let mut bundle = std::ptr::null_mut();
             let mut err = std::ptr::null_mut();
             let status = ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, f.challenge.as_ptr(), len, NOW,
-                f.context.as_ptr(), 32, &mut bundle, &mut err,
+                f.agent,
+                f.cert_json,
+                f.challenge.as_ptr(),
+                len,
+                NOW,
+                f.context.as_ptr(),
+                32,
+                &mut bundle,
+                &mut err,
             );
             assert_eq!(
-                status, RatifyStatus::RatifyErrBadArgument,
+                status,
+                RatifyStatus::RatifyErrBadArgument,
                 "challenge_len {len} must be rejected"
             );
             assert!(bundle.is_null());
-            if !err.is_null() { ratify_string_free(err); }
+            if !err.is_null() {
+                ratify_string_free(err);
+            }
         }
     }
 }
@@ -169,29 +221,87 @@ fn rejects_null_arguments() {
         let mut err = std::ptr::null_mut();
 
         let cases: [(&str, RatifyStatus); 5] = [
-            ("agent", ratify_proof_bundle_create_with_context(
-                std::ptr::null(), f.cert_json, f.challenge.as_ptr(), 32, NOW,
-                f.context.as_ptr(), 32, &mut bundle, &mut err)),
-            ("cert_json", ratify_proof_bundle_create_with_context(
-                f.agent, std::ptr::null(), f.challenge.as_ptr(), 32, NOW,
-                f.context.as_ptr(), 32, &mut bundle, &mut err)),
-            ("challenge", ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, std::ptr::null(), 32, NOW,
-                f.context.as_ptr(), 32, &mut bundle, &mut err)),
-            ("session_context", ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, f.challenge.as_ptr(), 32, NOW,
-                std::ptr::null(), 32, &mut bundle, &mut err)),
-            ("out", ratify_proof_bundle_create_with_context(
-                f.agent, f.cert_json, f.challenge.as_ptr(), 32, NOW,
-                f.context.as_ptr(), 32, std::ptr::null_mut(), &mut err)),
+            (
+                "agent",
+                ratify_proof_bundle_create_with_context(
+                    std::ptr::null(),
+                    f.cert_json,
+                    f.challenge.as_ptr(),
+                    32,
+                    NOW,
+                    f.context.as_ptr(),
+                    32,
+                    &mut bundle,
+                    &mut err,
+                ),
+            ),
+            (
+                "cert_json",
+                ratify_proof_bundle_create_with_context(
+                    f.agent,
+                    std::ptr::null(),
+                    f.challenge.as_ptr(),
+                    32,
+                    NOW,
+                    f.context.as_ptr(),
+                    32,
+                    &mut bundle,
+                    &mut err,
+                ),
+            ),
+            (
+                "challenge",
+                ratify_proof_bundle_create_with_context(
+                    f.agent,
+                    f.cert_json,
+                    std::ptr::null(),
+                    32,
+                    NOW,
+                    f.context.as_ptr(),
+                    32,
+                    &mut bundle,
+                    &mut err,
+                ),
+            ),
+            (
+                "session_context",
+                ratify_proof_bundle_create_with_context(
+                    f.agent,
+                    f.cert_json,
+                    f.challenge.as_ptr(),
+                    32,
+                    NOW,
+                    std::ptr::null(),
+                    32,
+                    &mut bundle,
+                    &mut err,
+                ),
+            ),
+            (
+                "out",
+                ratify_proof_bundle_create_with_context(
+                    f.agent,
+                    f.cert_json,
+                    f.challenge.as_ptr(),
+                    32,
+                    NOW,
+                    f.context.as_ptr(),
+                    32,
+                    std::ptr::null_mut(),
+                    &mut err,
+                ),
+            ),
         ];
 
         for (name, status) in cases {
             assert_eq!(
-                status, RatifyStatus::RatifyErrNullPointer,
+                status,
+                RatifyStatus::RatifyErrNullPointer,
                 "null {name} must be rejected"
             );
         }
-        if !err.is_null() { ratify_string_free(err); }
+        if !err.is_null() {
+            ratify_string_free(err);
+        }
     }
 }

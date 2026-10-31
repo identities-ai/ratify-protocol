@@ -100,7 +100,7 @@ var require_code = __commonJS({
     }
     exports._ = _;
     var plus = new _Code("+");
-    function str(strs, ...args) {
+    function str2(strs, ...args) {
       const expr = [safeStringify(strs[0])];
       let i = 0;
       while (i < args.length) {
@@ -111,7 +111,7 @@ var require_code = __commonJS({
       optimize(expr);
       return new _Code(expr);
     }
-    exports.str = str;
+    exports.str = str2;
     function addCodeArg(code, arg) {
       if (arg instanceof _Code)
         code.push(...arg._items);
@@ -154,7 +154,7 @@ var require_code = __commonJS({
       return;
     }
     function strConcat(c1, c2) {
-      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
+      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str2`${c1}${c2}`;
     }
     exports.strConcat = strConcat;
     function interpolate(x) {
@@ -1116,22 +1116,22 @@ var require_util = __commonJS({
       return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
     }
     exports.schemaRefOrVal = schemaRefOrVal;
-    function unescapeFragment(str) {
-      return unescapeJsonPointer(decodeURIComponent(str));
+    function unescapeFragment(str2) {
+      return unescapeJsonPointer(decodeURIComponent(str2));
     }
     exports.unescapeFragment = unescapeFragment;
-    function escapeFragment(str) {
-      return encodeURIComponent(escapeJsonPointer(str));
+    function escapeFragment(str2) {
+      return encodeURIComponent(escapeJsonPointer(str2));
     }
     exports.escapeFragment = escapeFragment;
-    function escapeJsonPointer(str) {
-      if (typeof str == "number")
-        return `${str}`;
-      return str.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPointer(str2) {
+      if (typeof str2 == "number")
+        return `${str2}`;
+      return str2.replace(/~/g, "~0").replace(/\//g, "~1");
     }
     exports.escapeJsonPointer = escapeJsonPointer;
-    function unescapeJsonPointer(str) {
-      return str.replace(/~1/g, "/").replace(/~0/g, "~");
+    function unescapeJsonPointer(str2) {
+      return str2.replace(/~1/g, "/").replace(/~0/g, "~");
     }
     exports.unescapeJsonPointer = unescapeJsonPointer;
     function eachItem(xs, f) {
@@ -2156,8 +2156,8 @@ var require_json_schema_traverse = __commonJS({
         post2(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
       }
     }
-    function escapeJsonPtr(str) {
-      return str.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPtr(str2) {
+      return str2.replace(/~/g, "~0").replace(/\//g, "~1");
     }
   }
 });
@@ -3254,10 +3254,10 @@ var require_utils = __commonJS({
         isIPV6: true
       };
     }
-    function findToken(str, token) {
+    function findToken(str2, token) {
       let ind = 0;
-      for (let i = 0; i < str.length; i++) {
-        if (str[i] === token) ind++;
+      for (let i = 0; i < str2.length; i++) {
+        if (str2[i] === token) ind++;
       }
       return ind;
     }
@@ -4327,7 +4327,7 @@ var require_core = __commonJS({
     var util_1 = require_util();
     var $dataRefSchema = require_data();
     var uri_1 = require_uri();
-    var defaultRegExp = (str, flags) => new RegExp(str, flags);
+    var defaultRegExp = (str2, flags) => new RegExp(str2, flags);
     defaultRegExp.code = "new RegExp";
     var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
     var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
@@ -5122,16 +5122,16 @@ var require_ucs2length = __commonJS({
   "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    function ucs2length(str) {
-      const len = str.length;
+    function ucs2length(str2) {
+      const len = str2.length;
       let length = 0;
       let pos = 0;
       let value;
       while (pos < len) {
         length++;
-        value = str.charCodeAt(pos++);
+        value = str2.charCodeAt(pos++);
         if (value >= 55296 && value <= 56319 && pos < len) {
-          value = str.charCodeAt(pos);
+          value = str2.charCodeAt(pos);
           if ((value & 64512) === 56320)
             pos++;
         }
@@ -7014,8 +7014,8 @@ var require_formats = __commonJS({
     }
     var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
     var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    function date5(str) {
-      const matches = DATE.exec(str);
+    function date5(str2) {
+      const matches = DATE.exec(str2);
       if (!matches)
         return false;
       const year = +matches[1];
@@ -7034,8 +7034,8 @@ var require_formats = __commonJS({
     }
     var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
     function getTime(strictTimeZone) {
-      return function time3(str) {
-        const matches = TIME.exec(str);
+      return function time3(str2) {
+        const matches = TIME.exec(str2);
         if (!matches)
           return false;
         const hr = +matches[1];
@@ -7081,8 +7081,8 @@ var require_formats = __commonJS({
     var DATE_TIME_SEPARATOR = /t|\s/i;
     function getDateTime(strictTimeZone) {
       const time3 = getTime(strictTimeZone);
-      return function date_time(str) {
-        const dateTime = str.split(DATE_TIME_SEPARATOR);
+      return function date_time(str2) {
+        const dateTime = str2.split(DATE_TIME_SEPARATOR);
         return dateTime.length === 2 && date5(dateTime[0]) && time3(dateTime[1]);
       };
     }
@@ -7107,13 +7107,13 @@ var require_formats = __commonJS({
     }
     var NOT_URI_FRAGMENT = /\/|:/;
     var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-    function uri(str) {
-      return NOT_URI_FRAGMENT.test(str) && URI.test(str);
+    function uri(str2) {
+      return NOT_URI_FRAGMENT.test(str2) && URI.test(str2);
     }
     var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
-    function byte(str) {
+    function byte(str2) {
       BYTE.lastIndex = 0;
-      return BYTE.test(str);
+      return BYTE.test(str2);
     }
     var MIN_INT32 = -(2 ** 31);
     var MAX_INT32 = 2 ** 31 - 1;
@@ -7127,11 +7127,11 @@ var require_formats = __commonJS({
       return true;
     }
     var Z_ANCHOR = /[^\\]\\Z/;
-    function regex(str) {
-      if (Z_ANCHOR.test(str))
+    function regex(str2) {
+      if (Z_ANCHOR.test(str2))
         return false;
       try {
-        new RegExp(str);
+        new RegExp(str2);
         return true;
       } catch (e) {
         return false;
@@ -11721,14 +11721,14 @@ function promiseAllObject(promisesObj) {
 }
 function randomString(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz";
-  let str = "";
+  let str2 = "";
   for (let i = 0; i < length; i++) {
-    str += chars[Math.floor(Math.random() * chars.length)];
+    str2 += chars[Math.floor(Math.random() * chars.length)];
   }
-  return str;
+  return str2;
 }
-function esc(str) {
-  return JSON.stringify(str);
+function esc(str2) {
+  return JSON.stringify(str2);
 }
 function slugify(input2) {
   return input2.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -11842,8 +11842,8 @@ var primitiveTypes = /* @__PURE__ */ new Set([
   "symbol",
   "undefined"
 ]);
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegex(str2) {
+  return str2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function clone(inst, def, params) {
   const cl = new inst._zod.constr(def ?? inst._zod.def);
@@ -12109,13 +12109,13 @@ function getSizableOrigin(input2) {
   return "unknown";
 }
 var highSurrogate = /[\uD800-\uDBFF]/;
-function codePointLength(str) {
-  const units = str.length;
-  if (!highSurrogate.test(str))
+function codePointLength(str2) {
+  const units = str2.length;
+  if (!highSurrogate.test(str2))
     return units;
   let count = units;
   for (let i = 0; i < units - 1; i++) {
-    if ((str.charCodeAt(i) & 64512) === 55296 && (str.charCodeAt(i + 1) & 64512) === 56320) {
+    if ((str2.charCodeAt(i) & 64512) === 55296 && (str2.charCodeAt(i + 1) & 64512) === 56320) {
       count--;
       i++;
     }
@@ -36644,15 +36644,904 @@ var StdioServerTransport = class {
   }
 };
 
-// node_modules/@identities-ai/ratify-protocol/dist/types.js
-var PROTOCOL_VERSION = 1;
+// ../../sdks/typescript/dist/errors_v2.js
+var V2_ERROR_CLASSES = Object.freeze([
+  "malformed",
+  "unsupported_object_type",
+  "key_id_mismatch",
+  "delegation_digest_mismatch",
+  "chain_linkage_mismatch",
+  "duplicate_certificate_ref",
+  "invalid_signature",
+  "invalid_required_scope",
+  "configuration_invalid",
+  "expected_challenge_unavailable",
+  "namespace_mismatch",
+  "stale_replay_epoch",
+  "verifier_id_mismatch",
+  "challenge_mismatch",
+  "challenge_not_fresh",
+  "expected_agent_mismatch",
+  "session_context_mismatch",
+  "receiver_audience_required",
+  "receiver_audience_mismatch",
+  "receiver_binding_rejected",
+  "claim_replay",
+  "stream_sequence_mismatch",
+  "claim_store_unavailable",
+  "receipt_abandoned",
+  "evaluation_cancelled",
+  "clock_regressed",
+  "allow_horizon_passed",
+  "claim_lease_live",
+  "claim_lease_lost",
+  "claim_already_terminal",
+  "claim_not_found",
+  "status_key_binding_mismatch",
+  "status_object_rejected",
+  "receipt_bundle_mismatch",
+  "bundle_hash_mismatch",
+  "transaction_party_mismatch",
+  "transaction_context_mismatch",
+  "transaction_signature_set_invalid",
+  "rotation_state_mismatch",
+  "rotation_key_reused",
+  "rotation_future_dated",
+  "rotation_fork",
+  "rotation_frozen",
+  "rotation_recovery_invalid",
+  "log_state_mismatch",
+  "log_gap",
+  "log_orphan",
+  "log_fork",
+  "log_frozen"
+]);
+var V2Error = class extends Error {
+  v2Class;
+  constructor(v2Class, message, cause) {
+    super(message, cause === void 0 ? void 0 : { cause });
+    this.name = "V2Error";
+    this.v2Class = v2Class;
+  }
+};
+var V2SentinelError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "V2SentinelError";
+  }
+};
+var ErrWitnessLogFork = new V2SentinelError("witness log fork");
+var ErrWitnessLogGap = new V2SentinelError("witness log sequence gap");
+var ErrWitnessLogOrphan = new V2SentinelError("orphaned witness entry");
+var ErrWitnessLogFrozen = new V2SentinelError("witness log is frozen");
+var ErrV2ClaimProofConflict = new V2SentinelError("v2 challenge was already claimed by a different proof");
+var ErrKeyRotationForkV2 = new V2SentinelError("key rotation fork");
+var ErrKeyRotationFrozenV2 = new V2SentinelError("key rotation authority is frozen");
+var ErrV2RateLimitExceeded = new V2SentinelError("v2 signed rate limit has no remaining capacity");
+function wrapError(message, cause) {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new Error(`${message}: ${detail}`, { cause });
+}
+function* chain(err2) {
+  let current = err2;
+  for (let depth = 0; current !== void 0 && current !== null && depth < 64; depth++) {
+    yield current;
+    current = current instanceof Error ? current.cause : void 0;
+  }
+}
+function errorIs(err2, target) {
+  for (const e of chain(err2))
+    if (e === target)
+      return true;
+  return false;
+}
+function findV2Error(err2) {
+  for (const e of chain(err2))
+    if (e instanceof V2Error)
+      return e;
+  return void 0;
+}
+function v2Errorf(v2Class, message, cause) {
+  return new V2Error(v2Class, message, cause);
+}
+function v2Classify(v2Class, err2) {
+  if (v2ErrorClassOf(err2) !== "unclassified")
+    return err2;
+  const message = err2 instanceof Error ? err2.message : String(err2);
+  return new V2Error(v2Class, message, err2);
+}
+function v2ErrorClassOf(err2) {
+  if (err2 === void 0 || err2 === null)
+    return "";
+  const classified2 = findV2Error(err2);
+  if (classified2)
+    return classified2.v2Class;
+  if (errorIs(err2, ErrWitnessLogFork))
+    return "log_fork";
+  if (errorIs(err2, ErrWitnessLogGap))
+    return "log_gap";
+  if (errorIs(err2, ErrWitnessLogOrphan))
+    return "log_orphan";
+  if (errorIs(err2, ErrWitnessLogFrozen))
+    return "log_frozen";
+  if (errorIs(err2, ErrV2ClaimProofConflict))
+    return "claim_replay";
+  if (errorIs(err2, ErrKeyRotationForkV2))
+    return "rotation_fork";
+  if (errorIs(err2, ErrKeyRotationFrozenV2))
+    return "rotation_frozen";
+  return "unclassified";
+}
+function classified(v2Class, fn) {
+  try {
+    return fn();
+  } catch (err2) {
+    throw v2Classify(v2Class, err2);
+  }
+}
+async function classifiedAsync(v2Class, fn) {
+  try {
+    return await fn();
+  } catch (err2) {
+    throw v2Classify(v2Class, err2);
+  }
+}
+
+// ../../sdks/typescript/dist/limits_v2.js
+var MAX_DELEGATION_CERT_BYTES_V2 = 32 << 10;
+var MAX_PROOF_BUNDLE_BYTES_V2 = 128 << 10;
+var MAX_KEY_ROTATION_STATEMENT_BYTES_V2 = 32 << 10;
+var MAX_REVOCATION_PUSH_BYTES_V2 = 256 << 10;
+var MAX_REVOCATION_LIST_BYTES_V2 = 4 << 20;
+var MAX_WITNESS_ENTRY_BYTES_V2 = 64 << 10;
+var MAX_WITNESS_ENTRY_DATA_BYTES_V2 = 16 << 10;
+var MAX_VERIFICATION_RECEIPT_BYTES_V2 = 64 << 10;
+var MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2 = 64 << 10;
+var MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 = 8 << 20;
+var MAX_TRANSACTION_RECEIPT_BYTES_V2 = 5 << 20;
+function checkV2WireSize(data, object3, limitName, limit) {
+  if (data.length > limit) {
+    throw new Error(`wire v2: ${object3} exceeds ${limitName} (${limit} bytes); rejected before parsing`);
+  }
+}
+
+// ../../sdks/typescript/dist/clock_bounds_v2.js
+var V2_MAX_TIMESTAMP_SECONDS = 253402300799;
+var V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS = 86400;
+var V2_MAX_RATE_WINDOW_SECONDS = 86400;
+var V2_MAX_DELEGATION_LIFETIME_SECONDS = 31536e4;
+function validV2Timestamp(t) {
+  return Number.isSafeInteger(t) && t >= 0 && t <= V2_MAX_TIMESTAMP_SECONDS;
+}
+
+// ../../sdks/typescript/dist/types.js
+var MAX_DELEGATION_CHAIN_DEPTH = 8;
 var MAX_SCOPES_PER_CERT = 128;
 var MAX_CONSTRAINTS_PER_CERT = 32;
 var MAX_SCOPE_LENGTH_BYTES = 256;
 var MAX_IDENTIFIER_LENGTH_BYTES = 512;
 var MAX_JSON_NESTING_DEPTH = 16;
 
-// node_modules/@noble/ed25519/index.js
+// ../../sdks/typescript/dist/json_v2.js
+var MAX_SAFE_INTEGER_V2 = Number.MAX_SAFE_INTEGER;
+var utf8Strict = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+var utf8Encoder = new TextEncoder();
+function utf8(s) {
+  return utf8Encoder.encode(s);
+}
+function isValidUTF8(bytes) {
+  try {
+    utf8Strict.decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function utf8Len(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 128)
+      n += 1;
+    else if (c < 2048)
+      n += 2;
+    else if (c >= 55296 && c <= 56319 && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 56320 && d <= 57343) {
+        n += 4;
+        i++;
+      } else
+        n += 3;
+    } else
+      n += 3;
+  }
+  return n;
+}
+function compareStrings(a, b) {
+  if (a === b)
+    return 0;
+  const ab = utf8(a);
+  const bb = utf8(b);
+  return compareBytes(ab, bb);
+}
+function compareBytes(a, b) {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    if (a[i] !== b[i])
+      return a[i] < b[i] ? -1 : 1;
+  }
+  return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+}
+function bytesEqual(a, b) {
+  const x = a ?? new Uint8Array(0);
+  const y = b ?? new Uint8Array(0);
+  if (x.length !== y.length)
+    return false;
+  for (let i = 0; i < x.length; i++)
+    if (x[i] !== y[i])
+      return false;
+  return true;
+}
+function concatBytes(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+var JSONSyntaxError = class extends Error {
+};
+function parseJSONV2(bytes, opts = {}) {
+  if (!isValidUTF8(bytes))
+    throw new Error("wire: invalid UTF-8");
+  const p = new Parser(bytes, opts);
+  p.ws();
+  const root = p.value(0);
+  p.ws();
+  if (p.i !== bytes.length)
+    throw new Error("wire: trailing data after JSON document");
+  return root;
+}
+var Parser = class {
+  b;
+  opts;
+  i = 0;
+  constructor(b, opts) {
+    this.b = b;
+    this.opts = opts;
+  }
+  ws() {
+    while (this.i < this.b.length) {
+      const c = this.b[this.i];
+      if (c === 32 || c === 9 || c === 10 || c === 13)
+        this.i++;
+      else
+        break;
+    }
+  }
+  fail(msg) {
+    throw new JSONSyntaxError(`wire: invalid JSON: ${msg} at offset ${this.i}`);
+  }
+  value(depth) {
+    if (this.i >= this.b.length)
+      this.fail("unexpected end of input");
+    const c = this.b[this.i];
+    const s = this.i;
+    switch (c) {
+      case 123: {
+        if (this.opts.limitDepth && depth >= MAX_JSON_NESTING_DEPTH) {
+          throw new Error(`wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (${MAX_JSON_NESTING_DEPTH})`);
+        }
+        this.i++;
+        const m = /* @__PURE__ */ new Map();
+        this.ws();
+        if (this.b[this.i] === 125) {
+          this.i++;
+          return { k: "obj", m, s, e: this.i };
+        }
+        for (; ; ) {
+          this.ws();
+          if (this.b[this.i] !== 34)
+            this.fail("expected object key");
+          const key = this.string();
+          if (m.has(key) && this.opts.rejectDuplicates) {
+            throw new Error(`wire: duplicate key ${JSON.stringify(key)} in JSON object`);
+          }
+          this.ws();
+          if (this.b[this.i] !== 58)
+            this.fail("expected ':'");
+          this.i++;
+          this.ws();
+          const v = this.value(depth + 1);
+          m.delete(key);
+          m.set(key, v);
+          this.ws();
+          const d = this.b[this.i];
+          if (d === 44) {
+            this.i++;
+            continue;
+          }
+          if (d === 125) {
+            this.i++;
+            return { k: "obj", m, s, e: this.i };
+          }
+          this.fail("expected ',' or '}'");
+        }
+      }
+      case 91: {
+        if (this.opts.limitDepth && depth >= MAX_JSON_NESTING_DEPTH) {
+          throw new Error(`wire: JSON nesting exceeds MAX_JSON_NESTING_DEPTH (${MAX_JSON_NESTING_DEPTH})`);
+        }
+        this.i++;
+        const a = [];
+        this.ws();
+        if (this.b[this.i] === 93) {
+          this.i++;
+          return { k: "arr", a, s, e: this.i };
+        }
+        for (; ; ) {
+          this.ws();
+          a.push(this.value(depth + 1));
+          this.ws();
+          const d = this.b[this.i];
+          if (d === 44) {
+            this.i++;
+            continue;
+          }
+          if (d === 93) {
+            this.i++;
+            return { k: "arr", a, s, e: this.i };
+          }
+          this.fail("expected ',' or ']'");
+        }
+      }
+      case 34: {
+        const v = this.string();
+        return { k: "str", v, s, e: this.i };
+      }
+      case 116:
+        this.literal("true");
+        return { k: "bool", v: true, s, e: this.i };
+      case 102:
+        this.literal("false");
+        return { k: "bool", v: false, s, e: this.i };
+      case 110:
+        this.literal("null");
+        return { k: "null", s, e: this.i };
+      default:
+        if (c === 45 || c >= 48 && c <= 57)
+          return this.number();
+        this.fail("unexpected character");
+    }
+  }
+  literal(word) {
+    for (let j = 0; j < word.length; j++) {
+      if (this.b[this.i + j] !== word.charCodeAt(j))
+        this.fail(`invalid literal`);
+    }
+    this.i += word.length;
+  }
+  number() {
+    const s = this.i;
+    const b = this.b;
+    const digit = (x) => x !== void 0 && x >= 48 && x <= 57;
+    if (b[this.i] === 45)
+      this.i++;
+    if (b[this.i] === 48) {
+      this.i++;
+    } else if (digit(b[this.i])) {
+      while (digit(b[this.i]))
+        this.i++;
+    } else
+      this.fail("invalid number");
+    if (b[this.i] === 46) {
+      this.i++;
+      if (!digit(b[this.i]))
+        this.fail("invalid number fraction");
+      while (digit(b[this.i]))
+        this.i++;
+    }
+    if (b[this.i] === 101 || b[this.i] === 69) {
+      this.i++;
+      if (b[this.i] === 43 || b[this.i] === 45)
+        this.i++;
+      if (!digit(b[this.i]))
+        this.fail("invalid number exponent");
+      while (digit(b[this.i]))
+        this.i++;
+    }
+    const raw = String.fromCharCode(...b.subarray(s, this.i));
+    if (this.opts.strictV2 && /[.eE]/.test(raw)) {
+      throw new Error(`wire: number ${raw} is not an integer; v2 forbids floating point`);
+    }
+    if (this.opts.strictV2 && raw.startsWith("-") && Number(raw) === 0) {
+      throw new Error("wire: negative zero is not a canonical number");
+    }
+    if (this.opts.safeIntegers && !/[.eE]/.test(raw)) {
+      const n = BigInt(raw);
+      if (n > BigInt(MAX_SAFE_INTEGER_V2) || n < -BigInt(MAX_SAFE_INTEGER_V2)) {
+        throw new Error(`wire: integer ${raw} outside the safe-integer range [-(2^53-1), 2^53-1]`);
+      }
+    }
+    return { k: "num", raw, s, e: this.i };
+  }
+  // Decodes a string the way Go's encoding/json does: a lone surrogate
+  // escape becomes U+FFFD; raw control characters are rejected.
+  string() {
+    const b = this.b;
+    this.i++;
+    let out = "";
+    let runStart = this.i;
+    const flush = (end) => {
+      if (end > runStart)
+        out += utf8Strict.decode(b.subarray(runStart, end));
+    };
+    for (; ; ) {
+      if (this.i >= b.length)
+        this.fail("unterminated string");
+      const c = b[this.i];
+      if (c === 34) {
+        flush(this.i);
+        this.i++;
+        return out;
+      }
+      if (c < 32)
+        this.fail("control character in string");
+      if (c !== 92) {
+        this.i++;
+        continue;
+      }
+      flush(this.i);
+      const e = b[this.i + 1];
+      switch (e) {
+        case 34:
+          out += '"';
+          this.i += 2;
+          break;
+        case 92:
+          out += "\\";
+          this.i += 2;
+          break;
+        case 47:
+          out += "/";
+          this.i += 2;
+          break;
+        case 98:
+          out += "\b";
+          this.i += 2;
+          break;
+        case 102:
+          out += "\f";
+          this.i += 2;
+          break;
+        case 110:
+          out += "\n";
+          this.i += 2;
+          break;
+        case 114:
+          out += "\r";
+          this.i += 2;
+          break;
+        case 116:
+          out += "	";
+          this.i += 2;
+          break;
+        case 117: {
+          const u = this.hex4(this.i + 2);
+          this.i += 6;
+          if (u >= 55296 && u <= 56319) {
+            if (b[this.i] === 92 && b[this.i + 1] === 117) {
+              const v = this.hex4(this.i + 2);
+              if (v >= 56320 && v <= 57343) {
+                out += String.fromCharCode(u, v);
+                this.i += 6;
+                break;
+              }
+            }
+            if (this.opts.strictV2)
+              throw new Error("wire: unpaired UTF-16 surrogate escape");
+            out += String.fromCharCode(65533);
+          } else if (u >= 56320 && u <= 57343) {
+            if (this.opts.strictV2)
+              throw new Error("wire: unpaired UTF-16 surrogate escape");
+            out += String.fromCharCode(65533);
+          } else {
+            out += String.fromCharCode(u);
+          }
+          break;
+        }
+        default:
+          this.fail("invalid escape");
+      }
+      runStart = this.i;
+    }
+  }
+  hex4(at) {
+    let v = 0;
+    for (let j = 0; j < 4; j++) {
+      const c = this.b[at + j];
+      let d;
+      if (c === void 0)
+        this.fail("truncated \\u escape");
+      if (c >= 48 && c <= 57)
+        d = c - 48;
+      else if (c >= 97 && c <= 102)
+        d = c - 87;
+      else if (c >= 65 && c <= 70)
+        d = c - 55;
+      else
+        this.fail("invalid \\u escape");
+      v = v << 4 | d;
+    }
+    return v;
+  }
+};
+var WIRE_BYTE_FIELDS = /* @__PURE__ */ new Set([
+  "bundle_hash",
+  "chain_hash",
+  "challenge",
+  "context_hash",
+  "ed25519",
+  "entry_data",
+  "mac",
+  "ml_dsa_65",
+  "prev_hash",
+  "session_context",
+  "stream_id",
+  "terms_canonical_json"
+]);
+function isPaddedBase64Shape(s) {
+  if (s.length % 4 !== 0)
+    return false;
+  let end = s.length;
+  if (end > 0 && s.charCodeAt(end - 1) === 61)
+    end--;
+  if (end > 0 && s.charCodeAt(end - 1) === 61)
+    end--;
+  for (let i = 0; i < end; i++) {
+    const c = s.charCodeAt(i);
+    const ok = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57 || c === 43 || c === 47;
+    if (!ok)
+      return false;
+  }
+  return true;
+}
+function base64Encode(bytes) {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
+}
+function base64DecodeCanonical(s) {
+  if (!isPaddedBase64Shape(s))
+    return null;
+  const out = new Uint8Array(Buffer.from(s, "base64"));
+  if (base64Encode(out) !== s)
+    return null;
+  return out;
+}
+function checkWireJSONV2(data, topLevelByteFields = [], topLevelTextFields = []) {
+  const root = parseJSONV2(data, { rejectDuplicates: true, limitDepth: true, safeIntegers: true, strictV2: true });
+  const topBytes = new Set(topLevelByteFields);
+  const topText = new Set(topLevelTextFields);
+  const walk = (n, depth) => {
+    if (n.k === "obj") {
+      for (const [key, v] of n.m) {
+        if (v.k === "str") {
+          const isTop = depth === 1;
+          if (WIRE_BYTE_FIELDS.has(key) && !(isTop && topText.has(key)) || isTop && topBytes.has(key)) {
+            if (base64DecodeCanonical(v.v) === null) {
+              throw new Error(`wire: field ${JSON.stringify(key)}: malformed or non-canonical base64`);
+            }
+          }
+        } else if (key !== "params") {
+          walk(v, depth + 1);
+        }
+      }
+    } else if (n.k === "arr") {
+      for (const v of n.a)
+        walk(v, depth + 1);
+    }
+  };
+  walk(root, 1);
+  return root;
+}
+var V2_SCHEMA_FIELD_NAMES = "version cert_id issuer_id issuer_pub_key subject_id subject_pub_key scope constraints signature ed25519 ml_dsa_65 issued_at expires_at verifier_id agent_id agent_pub_key delegations delegation_digest challenge challenge_at challenge_sig session_context stream_id stream_seq type params count currency end lat lon max_alt_m max_amount max_lat max_lon max_mps min_alt_m min_lat min_lon path_prefix points radius_m resource_id start tz window_s exact_receiver_ids trust_domain_ids max_membership_age_seconds next_update sequence pushed_at revoked authority_id recovery_epoch role previous_statement_hash old_key new_key old_key_id new_key_id not_before old_signature new_signature log_id bundle_hash issuer_ids decision decision_reason identity_status trust_assessment status_assessment challenge_assessment context_assessment context_policy_digest verified_at required_scope granted_scope status_evidence_digests previous_receipt_hash human_id status_key_id object_type_code digest transaction_id created_at terms_schema_uri terms_canonical_json parties party_id proof_bundle_hash proof_bundle party_signatures invocation_id workspace_id session_id".split(" ");
+function equalFoldASCIIName(key, canonical) {
+  if (key.length !== canonical.length)
+    return false;
+  for (let i = 0; i < key.length; i++) {
+    let c = key[i];
+    if (c === "\u017F")
+      c = "s";
+    else if (c === "\u212A")
+      c = "k";
+    else
+      c = c.toLowerCase();
+    if (c !== canonical[i])
+      return false;
+  }
+  return true;
+}
+function checkV2SchemaKeyCase(root) {
+  const walk = (n) => {
+    if (n.k === "obj") {
+      for (const [key, v] of n.m) {
+        for (const canonical of V2_SCHEMA_FIELD_NAMES) {
+          if (key !== canonical && equalFoldASCIIName(key, canonical)) {
+            throw new Error(`wire v2: field ${JSON.stringify(key)} has incorrect case; use ${JSON.stringify(canonical)}`);
+          }
+        }
+        if (key !== "params")
+          walk(v);
+      }
+    } else if (n.k === "arr") {
+      for (const v of n.a)
+        walk(v);
+    }
+  };
+  walk(root);
+}
+function requireV2Fields(root, names, nullable2 = []) {
+  if (root.k !== "obj") {
+    if (root.k === "null")
+      throw new Error(`wire v2: required field ${JSON.stringify(names[0] ?? "")} is missing`);
+    throw new Error("wire v2: expected a JSON object");
+  }
+  for (const name of names) {
+    const v = root.m.get(name);
+    if (v === void 0)
+      throw new Error(`wire v2: required field ${JSON.stringify(name)} is missing`);
+    if (v.k === "null" && !nullable2.includes(name)) {
+      throw new Error(`wire v2: required field ${JSON.stringify(name)} must not be null`);
+    }
+  }
+  checkV2SchemaKeyCase(root);
+}
+function checkV2Nulls(n) {
+  if (n.k === "null")
+    throw new Error("null is not allowed in this v2 object");
+  if (n.k === "obj") {
+    for (const [key, v] of n.m) {
+      if (key === "params")
+        continue;
+      checkV2Nulls(v);
+    }
+  } else if (n.k === "arr") {
+    for (const v of n.a)
+      checkV2Nulls(v);
+  }
+}
+var V2_NULLABLE_MEMBERS = /* @__PURE__ */ new Set([
+  "session_context",
+  "stream_id",
+  "stream_seq",
+  "context_policy_digest",
+  "floor",
+  "accepted_snapshot",
+  "preceding_checkpoint"
+]);
+function rejectV2UnexpectedNull(n, path = "$") {
+  if (n.k === "null")
+    throw new Error(`wire v2: ${path} must not be null`);
+  if (n.k === "obj") {
+    for (const [key, v] of n.m) {
+      if (key === "params" || v.k === "null" && V2_NULLABLE_MEMBERS.has(key))
+        continue;
+      rejectV2UnexpectedNull(v, `${path}.${key}`);
+    }
+  } else if (n.k === "arr") {
+    n.a.forEach((v, i) => rejectV2UnexpectedNull(v, `${path}[${i}]`));
+  }
+}
+function gStruct(n, allowed, what) {
+  if (n === void 0 || n.k === "null")
+    return /* @__PURE__ */ new Map();
+  if (n.k !== "obj")
+    throw new Error(`wire: cannot unmarshal into ${what}: expected object`);
+  for (const key of n.m.keys()) {
+    if (!allowed.includes(key))
+      throw new Error(`wire: json: unknown field ${JSON.stringify(key)}`);
+  }
+  return n.m;
+}
+function gString(n, what) {
+  if (n === void 0 || n.k === "null")
+    return "";
+  if (n.k !== "str")
+    throw new Error(`wire: ${what} must be a string`);
+  return n.v;
+}
+function gInt(n, what) {
+  if (n === void 0 || n.k === "null")
+    return 0;
+  if (n.k !== "num" || /[.eE]/.test(n.raw))
+    throw new Error(`wire: ${what} must be an integer`);
+  const v = BigInt(n.raw);
+  if (v > 0x7fffffffffffffffn || v < -0x8000000000000000n)
+    throw new Error(`wire: ${what} overflows int64`);
+  if (v > BigInt(MAX_SAFE_INTEGER_V2) || v < -BigInt(MAX_SAFE_INTEGER_V2)) {
+    throw new Error(`wire: ${what} is outside the safe-integer range`);
+  }
+  return Number(v) + 0;
+}
+function gBytes(n, what) {
+  if (n === void 0 || n.k === "null")
+    return null;
+  if (n.k !== "str")
+    throw new Error(`wire: ${what} must be a base64 string`);
+  const out = base64DecodeCanonical(n.v);
+  if (out === null)
+    throw new Error(`wire: ${what}: illegal or non-canonical base64 data`);
+  return out;
+}
+function gStringArray(n, what) {
+  if (n === void 0 || n.k === "null")
+    return null;
+  if (n.k !== "arr")
+    throw new Error(`wire: ${what} must be an array`);
+  return n.a.map((x, i) => gString(x, `${what}[${i}]`));
+}
+function gArray(n, what) {
+  if (n === void 0 || n.k === "null")
+    return null;
+  if (n.k !== "arr")
+    throw new Error(`wire: ${what} must be an array`);
+  return n.a;
+}
+function gAny(n) {
+  switch (n.k) {
+    case "null":
+      return null;
+    case "bool":
+      return n.v;
+    case "str":
+      return n.v;
+    case "num": {
+      const v = Number(n.raw);
+      if (!Number.isFinite(v))
+        throw new Error("wire: number out of range");
+      return v;
+    }
+    case "arr":
+      return n.a.map(gAny);
+    case "obj": {
+      const out = {};
+      for (const [k, v] of n.m) {
+        Object.defineProperty(out, k, { value: gAny(v), enumerable: true, writable: true, configurable: true });
+      }
+      return out;
+    }
+  }
+}
+var HTMLEscaped = class {
+  value;
+  constructor(value) {
+    this.value = value;
+  }
+};
+var RawJSON = class {
+  bytes;
+  constructor(bytes) {
+    this.bytes = bytes;
+  }
+};
+var Float64 = class {
+  value;
+  constructor(value) {
+    this.value = value;
+  }
+};
+var HEX = "0123456789abcdef";
+var GO_STRING_SPECIAL = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff]/;
+var GO_STRING_SPECIAL_HTML = /["\\\u0000-\u001f\u2028\u2029\ud800-\udfff<>&]/;
+function encodeGoString(s, escapeHTML) {
+  if (!(escapeHTML ? GO_STRING_SPECIAL_HTML : GO_STRING_SPECIAL).test(s))
+    return '"' + s + '"';
+  let out = '"';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 128) {
+      if (c === 34)
+        out += '\\"';
+      else if (c === 92)
+        out += "\\\\";
+      else if (c < 32) {
+        if (c === 8)
+          out += "\\b";
+        else if (c === 12)
+          out += "\\f";
+        else if (c === 10)
+          out += "\\n";
+        else if (c === 13)
+          out += "\\r";
+        else if (c === 9)
+          out += "\\t";
+        else
+          out += "\\u00" + HEX[c >> 4] + HEX[c & 15];
+      } else if (escapeHTML && (c === 60 || c === 62 || c === 38)) {
+        out += "\\u00" + HEX[c >> 4] + HEX[c & 15];
+      } else
+        out += s[i];
+      continue;
+    }
+    if (c === 8232 || c === 8233) {
+      out += c === 8232 ? "\\u2028" : "\\u2029";
+      continue;
+    }
+    if (c >= 55296 && c <= 56319) {
+      const d = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      if (d >= 56320 && d <= 57343) {
+        out += s[i] + s[i + 1];
+        i++;
+      } else
+        out += "\\ufffd";
+      continue;
+    }
+    if (c >= 56320 && c <= 57343) {
+      out += "\\ufffd";
+      continue;
+    }
+    out += s[i];
+  }
+  return out + '"';
+}
+function checkIntegerToken(token) {
+  if (/[.eE]/.test(token))
+    return;
+  const v = BigInt(token);
+  if (v > BigInt(MAX_SAFE_INTEGER_V2) || v < -BigInt(MAX_SAFE_INTEGER_V2)) {
+    throw new Error(`canonical JSON: integer ${token} outside the safe-integer range [-(2^53-1), 2^53-1]`);
+  }
+}
+function formatGoFloat(n) {
+  if (!Number.isFinite(n))
+    throw new Error("json: unsupported value: non-finite float");
+  if (Object.is(n, -0))
+    return "-0";
+  return n.toString();
+}
+function encodeInto(v, escapeHTML) {
+  if (v === null || v === void 0)
+    return "null";
+  if (v instanceof HTMLEscaped)
+    return encodeInto(v.value, true);
+  if (v instanceof RawJSON)
+    return new TextDecoder().decode(v.bytes);
+  if (v instanceof Float64) {
+    const t = formatGoFloat(v.value);
+    checkIntegerToken(t);
+    return t;
+  }
+  if (typeof v === "boolean")
+    return v ? "true" : "false";
+  if (typeof v === "bigint") {
+    const t = v.toString(10);
+    checkIntegerToken(t);
+    return t;
+  }
+  if (typeof v === "number") {
+    const t = formatGoFloat(v);
+    checkIntegerToken(t);
+    return t;
+  }
+  if (typeof v === "string")
+    return encodeGoString(v, escapeHTML);
+  if (v instanceof Uint8Array)
+    return '"' + base64Encode(v) + '"';
+  if (Array.isArray(v))
+    return "[" + v.map((x) => encodeInto(x, escapeHTML)).join(",") + "]";
+  if (typeof v === "object") {
+    const obj = v;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== void 0).sort(compareStrings);
+    return "{" + keys.map((k) => encodeGoString(k, escapeHTML) + ":" + encodeInto(obj[k], escapeHTML)).join(",") + "}";
+  }
+  throw new Error(`canonical JSON: unsupported type ${typeof v}`);
+}
+function canonicalJSONV2(v) {
+  return utf8(encodeInto(v, false));
+}
+
+// ../../sdks/typescript/node_modules/@noble/ed25519/index.js
 var ed25519_CURVE = {
   p: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn,
   n: 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn,
@@ -36708,7 +37597,7 @@ var hexToBytes = (hex3) => {
 var toU8 = (a, len) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len);
 var cr = () => globalThis?.crypto;
 var subtle = () => cr()?.subtle ?? err("crypto.subtle must be defined");
-var concatBytes = (...arrs) => {
+var concatBytes2 = (...arrs) => {
   const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0));
   let pad = 0;
   arrs.forEach((a) => {
@@ -36728,10 +37617,10 @@ var M = (a, b = P) => {
   return r >= 0n ? r : b + r;
 };
 var modN = (a) => M(a, N);
-var invert = (num, md) => {
-  if (num === 0n || md <= 0n)
-    err("no inverse n=" + num + " mod=" + md);
-  let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+var invert = (num2, md) => {
+  if (num2 === 0n || md <= 0n)
+    err("no inverse n=" + num2 + " mod=" + md);
+  let a = M(num2, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {
     const q = b / a, r = b % a;
     const m = x - u * q, n = y - v * q;
@@ -36935,7 +37824,7 @@ var G = new Point(Gx, Gy, 1n, M(Gx * Gy));
 var I = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
-var numTo32bLE = (num) => hexToBytes(padh(arange(num, 0n, B256), L2)).reverse();
+var numTo32bLE = (num2) => hexToBytes(padh(arange(num2, 0n, B256), L2)).reverse();
 var bytesToNumLE = (b) => big("0x" + bytesToHex(u8fr(abytes(b)).reverse()));
 var pow2 = (x, power) => {
   let r = x;
@@ -37000,10 +37889,10 @@ var _sign = (e, rBytes, msg) => {
   const { pointBytes: P2, scalar: s } = e;
   const r = modL_LE(rBytes);
   const R = G.multiply(r).toBytes();
-  const hashable = concatBytes(R, P2, msg);
+  const hashable = concatBytes2(R, P2, msg);
   const finish = (hashed) => {
     const S = modN(r + modL_LE(hashed) * s);
-    return abytes(concatBytes(R, numTo32bLE(S)), L2);
+    return abytes(concatBytes2(R, numTo32bLE(S)), L2);
   };
   return { hashable, finish };
 };
@@ -37013,16 +37902,47 @@ var signAsync = async (msg, privKey) => {
   const rBytes = await sha512a(e.prefix, m);
   return hashFinishA(_sign(e, rBytes, m));
 };
+var veriOpts = { zip215: true };
+var _verify = (sig, msg, pub, opts = veriOpts) => {
+  sig = toU8(sig, L2);
+  msg = toU8(msg);
+  pub = toU8(pub, L);
+  const { zip215 } = opts;
+  let A;
+  let R;
+  let s;
+  let SB;
+  let hashable = Uint8Array.of();
+  try {
+    A = Point.fromHex(pub, zip215);
+    R = Point.fromHex(sig.slice(0, L), zip215);
+    s = bytesToNumLE(sig.slice(L, L2));
+    SB = G.multiply(s, false);
+    hashable = concatBytes2(R.toBytes(), A.toBytes(), msg);
+  } catch (error62) {
+  }
+  const finish = (hashed) => {
+    if (SB == null)
+      return false;
+    if (!zip215 && A.isSmallOrder())
+      return false;
+    const k = modL_LE(hashed);
+    const RkA = R.add(A.multiply(k, false));
+    return RkA.add(SB.negate()).clearCofactor().is0();
+  };
+  return { hashable, finish };
+};
+var verifyAsync = async (s, m, p, opts = veriOpts) => hashFinishA(_verify(s, m, p, opts));
 var etc = {
   sha512Async: async (...messages) => {
     const s = subtle();
-    const m = concatBytes(...messages);
+    const m = concatBytes2(...messages);
     return u8n(await s.digest("SHA-512", m.buffer));
   },
   sha512Sync: void 0,
   bytesToHex,
   hexToBytes,
-  concatBytes,
+  concatBytes: concatBytes2,
   mod: M,
   invert,
   randomBytes
@@ -37080,7 +38000,7 @@ var wNAF = (n) => {
   return { p, f };
 };
 
-// node_modules/@noble/curves/utils.js
+// ../../sdks/typescript/node_modules/@noble/curves/utils.js
 function abool(value, title = "") {
   if (typeof value !== "boolean") {
     const prefix = title && `"${title}" `;
@@ -37089,7 +38009,7 @@ function abool(value, title = "") {
   return value;
 }
 
-// node_modules/@noble/post-quantum/node_modules/@noble/hashes/_u64.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/_u64.js
 var U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
 var _32n = /* @__PURE__ */ BigInt(32);
 function fromBig(n, le = false) {
@@ -37112,7 +38032,7 @@ var rotlSL = (h2, l, s) => l << s | h2 >>> 32 - s;
 var rotlBH = (h2, l, s) => l << s - 32 | h2 >>> 64 - s;
 var rotlBL = (h2, l, s) => h2 << s - 32 | l >>> 64 - s;
 
-// node_modules/@noble/post-quantum/node_modules/@noble/hashes/utils.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/utils.js
 function isBytes2(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -37173,7 +38093,7 @@ function byteSwap32(arr) {
   return arr;
 }
 var swap32IfBE = isLE ? (u) => u : byteSwap32;
-function concatBytes2(...arrays) {
+function concatBytes3(...arrays) {
   let sum = 0;
   for (let i = 0; i < arrays.length; i++) {
     const a = arrays[i];
@@ -37213,7 +38133,7 @@ var oidNist = (suffix) => ({
   oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
 });
 
-// node_modules/@noble/post-quantum/node_modules/@noble/hashes/sha3.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/sha3.js
 var _0n = BigInt(0);
 var _1n = BigInt(1);
 var _2n = BigInt(2);
@@ -37414,7 +38334,7 @@ var genShake = (suffix, blockLen, outputLen, info = {}) => createHasher((opts = 
 var shake128 = /* @__PURE__ */ genShake(31, 168, 16, /* @__PURE__ */ oidNist(11));
 var shake256 = /* @__PURE__ */ genShake(31, 136, 32, /* @__PURE__ */ oidNist(12));
 
-// node_modules/@noble/curves/abstract/fft.js
+// ../../sdks/typescript/node_modules/@noble/curves/abstract/fft.js
 function checkU32(n) {
   if (!Number.isSafeInteger(n) || n < 0 || n > 4294967295)
     throw new Error("wrong u32 integer:" + n);
@@ -37499,7 +38419,7 @@ var FFTCore = (F2, coreOpts) => {
   };
 };
 
-// node_modules/@noble/post-quantum/utils.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/utils.js
 var abytesDoc = abytes2;
 var randomBytes3 = randomBytes2;
 function equalBytes(a, b) {
@@ -37602,7 +38522,7 @@ function getMessage(msg, ctx = EMPTY) {
   abytes2(ctx);
   if (ctx.length > 255)
     throw new RangeError("context should be 255 bytes or less");
-  return concatBytes2(new Uint8Array([0, ctx.length]), ctx, msg);
+  return concatBytes3(new Uint8Array([0, ctx.length]), ctx, msg);
 }
 var oidNistP = /* @__PURE__ */ Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2]);
 function checkHash(hash2, requiredStrength = 0) {
@@ -37619,10 +38539,10 @@ function getMessagePrehash(hash2, msg, ctx = EMPTY) {
   if (ctx.length > 255)
     throw new RangeError("context should be 255 bytes or less");
   const hashed = hash2(msg);
-  return concatBytes2(new Uint8Array([1, ctx.length]), ctx, hash2.oid, hashed);
+  return concatBytes3(new Uint8Array([1, ctx.length]), ctx, hash2.oid, hashed);
 }
 
-// node_modules/@noble/post-quantum/_crystals.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/_crystals.js
 var genCrystals = (opts) => {
   const { newPoly: newPoly2, N: N3, Q: Q2, F: F2, ROOT_OF_UNITY: ROOT_OF_UNITY2, brvBits, isKyber } = opts;
   const mod = (a, modulo = Q2) => {
@@ -37742,7 +38662,7 @@ var createXofShake = (shake) => (seed2, blockLen) => {
 var XOF128 = /* @__PURE__ */ createXofShake(shake128);
 var XOF256 = /* @__PURE__ */ createXofShake(shake256);
 
-// node_modules/@noble/post-quantum/ml-dsa.js
+// ../../sdks/typescript/node_modules/@noble/post-quantum/ml-dsa.js
 function validateInternalOpts(opts) {
   validateOpts(opts);
   if (opts.externalMu !== void 0)
@@ -38263,9 +39183,13 @@ var ml_dsa65 = /* @__PURE__ */ (() => getDilithium({
   securityLevel: 192
 }))();
 
-// node_modules/@noble/hashes/esm/utils.js
+// ../../sdks/typescript/node_modules/@noble/hashes/esm/utils.js
 function isBytes3(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
+}
+function anumber2(n) {
+  if (!Number.isSafeInteger(n) || n < 0)
+    throw new Error("positive integer expected, got " + n);
 }
 function abytes3(b, ...lengths) {
   if (!isBytes3(b))
@@ -38286,6 +39210,9 @@ function aoutput2(out, instance) {
     throw new Error("digestInto() expects output buffer of length at least " + min);
   }
 }
+function u322(arr) {
+  return new Uint32Array(arr.buffer, arr.byteOffset, Math.floor(arr.byteLength / 4));
+}
 function clean2(...arrays) {
   for (let i = 0; i < arrays.length; i++) {
     arrays[i].fill(0);
@@ -38297,10 +39224,21 @@ function createView(arr) {
 function rotr(word, shift) {
   return word << 32 - shift | word >>> shift;
 }
-function utf8ToBytes(str) {
-  if (typeof str !== "string")
+var isLE2 = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+function byteSwap2(word) {
+  return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
+}
+function byteSwap322(arr) {
+  for (let i = 0; i < arr.length; i++) {
+    arr[i] = byteSwap2(arr[i]);
+  }
+  return arr;
+}
+var swap32IfBE2 = isLE2 ? (u) => u : byteSwap322;
+function utf8ToBytes(str2) {
+  if (typeof str2 !== "string")
     throw new Error("string expected");
-  return new Uint8Array(new TextEncoder().encode(str));
+  return new Uint8Array(new TextEncoder().encode(str2));
 }
 function toBytes(data) {
   if (typeof data === "string")
@@ -38318,19 +39256,27 @@ function createHasher2(hashCons) {
   hashC.create = () => hashCons();
   return hashC;
 }
+function createXOFer(hashCons) {
+  const hashC = (msg, opts) => hashCons(opts).update(toBytes(msg)).digest();
+  const tmp = hashCons({});
+  hashC.outputLen = tmp.outputLen;
+  hashC.blockLen = tmp.blockLen;
+  hashC.create = (opts) => hashCons(opts);
+  return hashC;
+}
 
-// node_modules/@noble/hashes/esm/_md.js
-function setBigUint64(view, byteOffset, value, isLE2) {
+// ../../sdks/typescript/node_modules/@noble/hashes/esm/_md.js
+function setBigUint64(view, byteOffset, value, isLE3) {
   if (typeof view.setBigUint64 === "function")
-    return view.setBigUint64(byteOffset, value, isLE2);
-  const _32n2 = BigInt(32);
+    return view.setBigUint64(byteOffset, value, isLE3);
+  const _32n3 = BigInt(32);
   const _u32_max = BigInt(4294967295);
-  const wh = Number(value >> _32n2 & _u32_max);
+  const wh = Number(value >> _32n3 & _u32_max);
   const wl = Number(value & _u32_max);
-  const h2 = isLE2 ? 4 : 0;
-  const l = isLE2 ? 0 : 4;
-  view.setUint32(byteOffset + h2, wh, isLE2);
-  view.setUint32(byteOffset + l, wl, isLE2);
+  const h2 = isLE3 ? 4 : 0;
+  const l = isLE3 ? 0 : 4;
+  view.setUint32(byteOffset + h2, wh, isLE3);
+  view.setUint32(byteOffset + l, wl, isLE3);
 }
 function Chi(a, b, c) {
   return a & b ^ ~a & c;
@@ -38339,7 +39285,7 @@ function Maj(a, b, c) {
   return a & b ^ a & c ^ b & c;
 }
 var HashMD = class extends Hash {
-  constructor(blockLen, outputLen, padOffset, isLE2) {
+  constructor(blockLen, outputLen, padOffset, isLE3) {
     super();
     this.finished = false;
     this.length = 0;
@@ -38348,7 +39294,7 @@ var HashMD = class extends Hash {
     this.blockLen = blockLen;
     this.outputLen = outputLen;
     this.padOffset = padOffset;
-    this.isLE = isLE2;
+    this.isLE = isLE3;
     this.buffer = new Uint8Array(blockLen);
     this.view = createView(this.buffer);
   }
@@ -38382,7 +39328,7 @@ var HashMD = class extends Hash {
     aexists2(this);
     aoutput2(out, this);
     this.finished = true;
-    const { buffer, view, blockLen, isLE: isLE2 } = this;
+    const { buffer, view, blockLen, isLE: isLE3 } = this;
     let { pos } = this;
     buffer[pos++] = 128;
     clean2(this.buffer.subarray(pos));
@@ -38392,7 +39338,7 @@ var HashMD = class extends Hash {
     }
     for (let i = pos; i < blockLen; i++)
       buffer[i] = 0;
-    setBigUint64(view, blockLen - 8, BigInt(this.length * 8), isLE2);
+    setBigUint64(view, blockLen - 8, BigInt(this.length * 8), isLE3);
     this.process(view, 0);
     const oview = createView(out);
     const len = this.outputLen;
@@ -38403,7 +39349,7 @@ var HashMD = class extends Hash {
     if (outLen > state.length)
       throw new Error("_sha2: outputLen bigger than state");
     for (let i = 0; i < outLen; i++)
-      oview.setUint32(4 * i, state[i], isLE2);
+      oview.setUint32(4 * i, state[i], isLE3);
   }
   digest() {
     const { buffer, outputLen } = this;
@@ -38438,8 +39384,83 @@ var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
   528734635,
   1541459225
 ]);
+var SHA384_IV = /* @__PURE__ */ Uint32Array.from([
+  3418070365,
+  3238371032,
+  1654270250,
+  914150663,
+  2438529370,
+  812702999,
+  355462360,
+  4144912697,
+  1731405415,
+  4290775857,
+  2394180231,
+  1750603025,
+  3675008525,
+  1694076839,
+  1203062813,
+  3204075428
+]);
+var SHA512_IV = /* @__PURE__ */ Uint32Array.from([
+  1779033703,
+  4089235720,
+  3144134277,
+  2227873595,
+  1013904242,
+  4271175723,
+  2773480762,
+  1595750129,
+  1359893119,
+  2917565137,
+  2600822924,
+  725511199,
+  528734635,
+  4215389547,
+  1541459225,
+  327033209
+]);
 
-// node_modules/@noble/hashes/esm/sha2.js
+// ../../sdks/typescript/node_modules/@noble/hashes/esm/_u64.js
+var U32_MASK642 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
+var _32n2 = /* @__PURE__ */ BigInt(32);
+function fromBig2(n, le = false) {
+  if (le)
+    return { h: Number(n & U32_MASK642), l: Number(n >> _32n2 & U32_MASK642) };
+  return { h: Number(n >> _32n2 & U32_MASK642) | 0, l: Number(n & U32_MASK642) | 0 };
+}
+function split2(lst, le = false) {
+  const len = lst.length;
+  let Ah = new Uint32Array(len);
+  let Al = new Uint32Array(len);
+  for (let i = 0; i < len; i++) {
+    const { h: h2, l } = fromBig2(lst[i], le);
+    [Ah[i], Al[i]] = [h2, l];
+  }
+  return [Ah, Al];
+}
+var shrSH = (h2, _l, s) => h2 >>> s;
+var shrSL = (h2, l, s) => h2 << 32 - s | l >>> s;
+var rotrSH = (h2, l, s) => h2 >>> s | l << 32 - s;
+var rotrSL = (h2, l, s) => h2 << 32 - s | l >>> s;
+var rotrBH = (h2, l, s) => h2 << 64 - s | l >>> s - 32;
+var rotrBL = (h2, l, s) => h2 >>> s - 32 | l << 64 - s;
+var rotlSH2 = (h2, l, s) => h2 << s | l >>> 32 - s;
+var rotlSL2 = (h2, l, s) => l << s | h2 >>> 32 - s;
+var rotlBH2 = (h2, l, s) => l << s - 32 | h2 >>> 64 - s;
+var rotlBL2 = (h2, l, s) => h2 << s - 32 | l >>> 64 - s;
+function add(Ah, Al, Bh, Bl) {
+  const l = (Al >>> 0) + (Bl >>> 0);
+  return { h: Ah + Bh + (l / 2 ** 32 | 0) | 0, l: l | 0 };
+}
+var add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
+var add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
+var add4L = (Al, Bl, Cl, Dl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0);
+var add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0;
+var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
+var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
+
+// ../../sdks/typescript/node_modules/@noble/hashes/esm/sha2.js
 var SHA256_K = /* @__PURE__ */ Uint32Array.from([
   1116352408,
   1899447441,
@@ -38577,177 +39598,230 @@ var SHA256 = class extends HashMD {
     clean2(this.buffer);
   }
 };
+var K512 = /* @__PURE__ */ (() => split2([
+  "0x428a2f98d728ae22",
+  "0x7137449123ef65cd",
+  "0xb5c0fbcfec4d3b2f",
+  "0xe9b5dba58189dbbc",
+  "0x3956c25bf348b538",
+  "0x59f111f1b605d019",
+  "0x923f82a4af194f9b",
+  "0xab1c5ed5da6d8118",
+  "0xd807aa98a3030242",
+  "0x12835b0145706fbe",
+  "0x243185be4ee4b28c",
+  "0x550c7dc3d5ffb4e2",
+  "0x72be5d74f27b896f",
+  "0x80deb1fe3b1696b1",
+  "0x9bdc06a725c71235",
+  "0xc19bf174cf692694",
+  "0xe49b69c19ef14ad2",
+  "0xefbe4786384f25e3",
+  "0x0fc19dc68b8cd5b5",
+  "0x240ca1cc77ac9c65",
+  "0x2de92c6f592b0275",
+  "0x4a7484aa6ea6e483",
+  "0x5cb0a9dcbd41fbd4",
+  "0x76f988da831153b5",
+  "0x983e5152ee66dfab",
+  "0xa831c66d2db43210",
+  "0xb00327c898fb213f",
+  "0xbf597fc7beef0ee4",
+  "0xc6e00bf33da88fc2",
+  "0xd5a79147930aa725",
+  "0x06ca6351e003826f",
+  "0x142929670a0e6e70",
+  "0x27b70a8546d22ffc",
+  "0x2e1b21385c26c926",
+  "0x4d2c6dfc5ac42aed",
+  "0x53380d139d95b3df",
+  "0x650a73548baf63de",
+  "0x766a0abb3c77b2a8",
+  "0x81c2c92e47edaee6",
+  "0x92722c851482353b",
+  "0xa2bfe8a14cf10364",
+  "0xa81a664bbc423001",
+  "0xc24b8b70d0f89791",
+  "0xc76c51a30654be30",
+  "0xd192e819d6ef5218",
+  "0xd69906245565a910",
+  "0xf40e35855771202a",
+  "0x106aa07032bbd1b8",
+  "0x19a4c116b8d2d0c8",
+  "0x1e376c085141ab53",
+  "0x2748774cdf8eeb99",
+  "0x34b0bcb5e19b48a8",
+  "0x391c0cb3c5c95a63",
+  "0x4ed8aa4ae3418acb",
+  "0x5b9cca4f7763e373",
+  "0x682e6ff3d6b2b8a3",
+  "0x748f82ee5defb2fc",
+  "0x78a5636f43172f60",
+  "0x84c87814a1f0ab72",
+  "0x8cc702081a6439ec",
+  "0x90befffa23631e28",
+  "0xa4506cebde82bde9",
+  "0xbef9a3f7b2c67915",
+  "0xc67178f2e372532b",
+  "0xca273eceea26619c",
+  "0xd186b8c721c0c207",
+  "0xeada7dd6cde0eb1e",
+  "0xf57d4f7fee6ed178",
+  "0x06f067aa72176fba",
+  "0x0a637dc5a2c898a6",
+  "0x113f9804bef90dae",
+  "0x1b710b35131c471b",
+  "0x28db77f523047d84",
+  "0x32caab7b40c72493",
+  "0x3c9ebe0a15c9bebc",
+  "0x431d67c49c100d4c",
+  "0x4cc5d4becb3e42b6",
+  "0x597f299cfc657e2a",
+  "0x5fcb6fab3ad6faec",
+  "0x6c44198c4a475817"
+].map((n) => BigInt(n))))();
+var SHA512_Kh = /* @__PURE__ */ (() => K512[0])();
+var SHA512_Kl = /* @__PURE__ */ (() => K512[1])();
+var SHA512_W_H = /* @__PURE__ */ new Uint32Array(80);
+var SHA512_W_L = /* @__PURE__ */ new Uint32Array(80);
+var SHA512 = class extends HashMD {
+  constructor(outputLen = 64) {
+    super(128, outputLen, 16, false);
+    this.Ah = SHA512_IV[0] | 0;
+    this.Al = SHA512_IV[1] | 0;
+    this.Bh = SHA512_IV[2] | 0;
+    this.Bl = SHA512_IV[3] | 0;
+    this.Ch = SHA512_IV[4] | 0;
+    this.Cl = SHA512_IV[5] | 0;
+    this.Dh = SHA512_IV[6] | 0;
+    this.Dl = SHA512_IV[7] | 0;
+    this.Eh = SHA512_IV[8] | 0;
+    this.El = SHA512_IV[9] | 0;
+    this.Fh = SHA512_IV[10] | 0;
+    this.Fl = SHA512_IV[11] | 0;
+    this.Gh = SHA512_IV[12] | 0;
+    this.Gl = SHA512_IV[13] | 0;
+    this.Hh = SHA512_IV[14] | 0;
+    this.Hl = SHA512_IV[15] | 0;
+  }
+  // prettier-ignore
+  get() {
+    const { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
+    return [Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl];
+  }
+  // prettier-ignore
+  set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl) {
+    this.Ah = Ah | 0;
+    this.Al = Al | 0;
+    this.Bh = Bh | 0;
+    this.Bl = Bl | 0;
+    this.Ch = Ch | 0;
+    this.Cl = Cl | 0;
+    this.Dh = Dh | 0;
+    this.Dl = Dl | 0;
+    this.Eh = Eh | 0;
+    this.El = El | 0;
+    this.Fh = Fh | 0;
+    this.Fl = Fl | 0;
+    this.Gh = Gh | 0;
+    this.Gl = Gl | 0;
+    this.Hh = Hh | 0;
+    this.Hl = Hl | 0;
+  }
+  process(view, offset) {
+    for (let i = 0; i < 16; i++, offset += 4) {
+      SHA512_W_H[i] = view.getUint32(offset);
+      SHA512_W_L[i] = view.getUint32(offset += 4);
+    }
+    for (let i = 16; i < 80; i++) {
+      const W15h = SHA512_W_H[i - 15] | 0;
+      const W15l = SHA512_W_L[i - 15] | 0;
+      const s0h = rotrSH(W15h, W15l, 1) ^ rotrSH(W15h, W15l, 8) ^ shrSH(W15h, W15l, 7);
+      const s0l = rotrSL(W15h, W15l, 1) ^ rotrSL(W15h, W15l, 8) ^ shrSL(W15h, W15l, 7);
+      const W2h = SHA512_W_H[i - 2] | 0;
+      const W2l = SHA512_W_L[i - 2] | 0;
+      const s1h = rotrSH(W2h, W2l, 19) ^ rotrBH(W2h, W2l, 61) ^ shrSH(W2h, W2l, 6);
+      const s1l = rotrSL(W2h, W2l, 19) ^ rotrBL(W2h, W2l, 61) ^ shrSL(W2h, W2l, 6);
+      const SUMl = add4L(s0l, s1l, SHA512_W_L[i - 7], SHA512_W_L[i - 16]);
+      const SUMh = add4H(SUMl, s0h, s1h, SHA512_W_H[i - 7], SHA512_W_H[i - 16]);
+      SHA512_W_H[i] = SUMh | 0;
+      SHA512_W_L[i] = SUMl | 0;
+    }
+    let { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
+    for (let i = 0; i < 80; i++) {
+      const sigma1h = rotrSH(Eh, El, 14) ^ rotrSH(Eh, El, 18) ^ rotrBH(Eh, El, 41);
+      const sigma1l = rotrSL(Eh, El, 14) ^ rotrSL(Eh, El, 18) ^ rotrBL(Eh, El, 41);
+      const CHIh = Eh & Fh ^ ~Eh & Gh;
+      const CHIl = El & Fl ^ ~El & Gl;
+      const T1ll = add5L(Hl, sigma1l, CHIl, SHA512_Kl[i], SHA512_W_L[i]);
+      const T1h = add5H(T1ll, Hh, sigma1h, CHIh, SHA512_Kh[i], SHA512_W_H[i]);
+      const T1l = T1ll | 0;
+      const sigma0h = rotrSH(Ah, Al, 28) ^ rotrBH(Ah, Al, 34) ^ rotrBH(Ah, Al, 39);
+      const sigma0l = rotrSL(Ah, Al, 28) ^ rotrBL(Ah, Al, 34) ^ rotrBL(Ah, Al, 39);
+      const MAJh = Ah & Bh ^ Ah & Ch ^ Bh & Ch;
+      const MAJl = Al & Bl ^ Al & Cl ^ Bl & Cl;
+      Hh = Gh | 0;
+      Hl = Gl | 0;
+      Gh = Fh | 0;
+      Gl = Fl | 0;
+      Fh = Eh | 0;
+      Fl = El | 0;
+      ({ h: Eh, l: El } = add(Dh | 0, Dl | 0, T1h | 0, T1l | 0));
+      Dh = Ch | 0;
+      Dl = Cl | 0;
+      Ch = Bh | 0;
+      Cl = Bl | 0;
+      Bh = Ah | 0;
+      Bl = Al | 0;
+      const All = add3L(T1l, sigma0l, MAJl);
+      Ah = add3H(All, T1h, sigma0h, MAJh);
+      Al = All | 0;
+    }
+    ({ h: Ah, l: Al } = add(this.Ah | 0, this.Al | 0, Ah | 0, Al | 0));
+    ({ h: Bh, l: Bl } = add(this.Bh | 0, this.Bl | 0, Bh | 0, Bl | 0));
+    ({ h: Ch, l: Cl } = add(this.Ch | 0, this.Cl | 0, Ch | 0, Cl | 0));
+    ({ h: Dh, l: Dl } = add(this.Dh | 0, this.Dl | 0, Dh | 0, Dl | 0));
+    ({ h: Eh, l: El } = add(this.Eh | 0, this.El | 0, Eh | 0, El | 0));
+    ({ h: Fh, l: Fl } = add(this.Fh | 0, this.Fl | 0, Fh | 0, Fl | 0));
+    ({ h: Gh, l: Gl } = add(this.Gh | 0, this.Gl | 0, Gh | 0, Gl | 0));
+    ({ h: Hh, l: Hl } = add(this.Hh | 0, this.Hl | 0, Hh | 0, Hl | 0));
+    this.set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl);
+  }
+  roundClean() {
+    clean2(SHA512_W_H, SHA512_W_L);
+  }
+  destroy() {
+    clean2(this.buffer);
+    this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  }
+};
+var SHA384 = class extends SHA512 {
+  constructor() {
+    super(48);
+    this.Ah = SHA384_IV[0] | 0;
+    this.Al = SHA384_IV[1] | 0;
+    this.Bh = SHA384_IV[2] | 0;
+    this.Bl = SHA384_IV[3] | 0;
+    this.Ch = SHA384_IV[4] | 0;
+    this.Cl = SHA384_IV[5] | 0;
+    this.Dh = SHA384_IV[6] | 0;
+    this.Dl = SHA384_IV[7] | 0;
+    this.Eh = SHA384_IV[8] | 0;
+    this.El = SHA384_IV[9] | 0;
+    this.Fh = SHA384_IV[10] | 0;
+    this.Fl = SHA384_IV[11] | 0;
+    this.Gh = SHA384_IV[12] | 0;
+    this.Gl = SHA384_IV[13] | 0;
+    this.Hh = SHA384_IV[14] | 0;
+    this.Hl = SHA384_IV[15] | 0;
+  }
+};
 var sha256 = /* @__PURE__ */ createHasher2(() => new SHA256());
+var sha384 = /* @__PURE__ */ createHasher2(() => new SHA384());
 
-// node_modules/@identities-ai/ratify-protocol/dist/canonical.js
-var HEX = "0123456789abcdef";
-function canonicalJSON(value) {
-  const text = encodeValue(value);
-  return new TextEncoder().encode(text);
-}
-function encodeValue(v) {
-  if (v === null || v === void 0)
-    return "null";
-  if (typeof v === "boolean")
-    return v ? "true" : "false";
-  if (typeof v === "number")
-    return encodeNumber(v);
-  if (typeof v === "bigint")
-    return v.toString(10);
-  if (typeof v === "string")
-    return encodeString(v);
-  if (v instanceof Uint8Array)
-    return encodeString(base64StandardEncode(v));
-  if (Array.isArray(v))
-    return encodeArray(v);
-  if (typeof v === "object")
-    return encodeObject(v);
-  throw new Error(`canonical JSON: unsupported type ${typeof v}`);
-}
-function encodeNumber(n) {
-  if (!Number.isFinite(n)) {
-    throw new Error("canonical JSON: non-finite number");
-  }
-  if (Number.isInteger(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER) {
-    return n.toString(10);
-  }
-  return n.toString();
-}
-function encodeArray(arr) {
-  const parts = arr.map(encodeValue);
-  return "[" + parts.join(",") + "]";
-}
-function encodeObject(obj) {
-  const keys = Object.keys(obj).sort();
-  const parts = [];
-  for (const k of keys) {
-    const v = obj[k];
-    if (v === void 0)
-      continue;
-    parts.push(encodeString(k) + ":" + encodeValue(v));
-  }
-  return "{" + parts.join(",") + "}";
-}
-function encodeString(s) {
-  let out = '"';
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c === 34) {
-      out += '\\"';
-      continue;
-    }
-    if (c === 92) {
-      out += "\\\\";
-      continue;
-    }
-    if (c === 8) {
-      out += "\\b";
-      continue;
-    }
-    if (c === 9) {
-      out += "\\t";
-      continue;
-    }
-    if (c === 10) {
-      out += "\\n";
-      continue;
-    }
-    if (c === 12) {
-      out += "\\f";
-      continue;
-    }
-    if (c === 13) {
-      out += "\\r";
-      continue;
-    }
-    if (c < 32) {
-      out += "\\u00" + HEX[c >> 4 & 15] + HEX[c & 15];
-      continue;
-    }
-    if (c === 8232) {
-      out += "\\u2028";
-      continue;
-    }
-    if (c === 8233) {
-      out += "\\u2029";
-      continue;
-    }
-    out += s[i];
-  }
-  out += '"';
-  return out;
-}
-function base64StandardEncode(bytes) {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
-  }
-  const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let out = "";
-  let i = 0;
-  for (; i + 2 < bytes.length; i += 3) {
-    const a = bytes[i];
-    const b = bytes[i + 1];
-    const c = bytes[i + 2];
-    out += table[a >> 2];
-    out += table[(a & 3) << 4 | b >> 4];
-    out += table[(b & 15) << 2 | c >> 6];
-    out += table[c & 63];
-  }
-  if (i < bytes.length) {
-    const a = bytes[i];
-    out += table[a >> 2];
-    if (i + 1 < bytes.length) {
-      const b = bytes[i + 1];
-      out += table[(a & 3) << 4 | b >> 4];
-      out += table[(b & 15) << 2];
-      out += "=";
-    } else {
-      out += table[(a & 3) << 4];
-      out += "==";
-    }
-  }
-  return out;
-}
-function base64StandardDecode(s) {
-  if (typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(s, "base64"));
-  }
-  const table = {};
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("").forEach((c, i) => table[c] = i);
-  let end = s.length;
-  while (end > 0 && s.charCodeAt(end - 1) === 61)
-    end -= 1;
-  const clean3 = s.slice(0, end);
-  const bytes = [];
-  let buf = 0;
-  let bits = 0;
-  for (const c of clean3) {
-    const v = table[c];
-    if (v === void 0)
-      throw new Error(`invalid base64 char: ${c}`);
-    buf = buf << 6 | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      bytes.push(buf >> bits & 255);
-    }
-  }
-  return new Uint8Array(bytes);
-}
-function hexEncode(bytes) {
-  let out = "";
-  for (const b of bytes) {
-    out += HEX[b >> 4 & 15] + HEX[b & 15];
-  }
-  return out;
-}
-
-// node_modules/@identities-ai/ratify-protocol/dist/resource_path.js
+// ../../sdks/typescript/dist/resource_path.js
 var MAX_SAFE_INTEGER_VALUE = Number.MAX_SAFE_INTEGER;
 var _utf8 = new TextEncoder();
-function utf8ByteLength(s) {
-  return _utf8.encode(s).length;
-}
 function normalizeResourcePath(p) {
   if (p === "")
     throw new Error("path is empty");
@@ -38795,42 +39869,6 @@ function resourcePathsNested(a, b) {
   const bb = b === "" ? "/" : b;
   return resourcePathMatches(aa, bb) || resourcePathMatches(bb, aa);
 }
-function validateResourceConstraints(constraints) {
-  let resourceID = "";
-  const prefixes = [];
-  for (let i = 0; i < constraints.length; i++) {
-    const c = constraints[i];
-    if (c.type !== "resource_path")
-      continue;
-    const rid = c.resource_id ?? "";
-    if (rid === "") {
-      throw new Error(`constraint[${i}]: resource_path requires a non-empty resource_id`);
-    }
-    const ridLen = utf8ByteLength(rid);
-    if (ridLen > MAX_IDENTIFIER_LENGTH_BYTES) {
-      throw new Error(`constraint[${i}]: resource_id is ${ridLen} bytes, exceeding MAX_IDENTIFIER_LENGTH_BYTES (${MAX_IDENTIFIER_LENGTH_BYTES})`);
-    }
-    const pp = c.path_prefix ?? "";
-    if (pp !== "") {
-      try {
-        normalizeResourcePath(pp);
-      } catch (e) {
-        throw new Error(`constraint[${i}]: invalid path_prefix: ${e.message}`);
-      }
-    }
-    if (resourceID === "") {
-      resourceID = rid;
-    } else if (rid !== resourceID) {
-      throw new Error(`constraint[${i}]: certificate carries resource_path constraints naming different resource_ids \u2014 jointly unsatisfiable (SPEC \xA75.7.3); issue separate certificates`);
-    }
-    for (const prev of prefixes) {
-      if (!resourcePathsNested(prev, pp)) {
-        throw new Error(`constraint[${i}]: same-resource path_prefix values "${prev}" and "${pp}" do not nest \u2014 jointly unsatisfiable (SPEC \xA75.7.3); narrow to one prefix or issue separate certificates`);
-      }
-    }
-    prefixes.push(pp);
-  }
-}
 function validateParamsValue(v, depth) {
   if (depth > MAX_JSON_NESTING_DEPTH) {
     throw new Error(`params nesting exceeds MAX_JSON_NESTING_DEPTH (${MAX_JSON_NESTING_DEPTH})`);
@@ -38868,28 +39906,8 @@ function validateParamsValue(v, depth) {
   }
   throw new Error(`params value of type ${typeof v} is outside the restricted value model`);
 }
-var CANONICAL_CONSTRAINT_TYPES = /* @__PURE__ */ new Set([
-  "geo_circle",
-  "geo_polygon",
-  "geo_bbox",
-  "time_window",
-  "max_speed_mps",
-  "max_amount",
-  "max_rate",
-  "resource_path"
-]);
-function isCanonicalConstraintType(t) {
-  return CANONICAL_CONSTRAINT_TYPES.has(t);
-}
 
-// node_modules/@identities-ai/ratify-protocol/dist/crypto.js
-function deriveID(pub) {
-  const buf = new Uint8Array(pub.ed25519.length + pub.ml_dsa_65.length);
-  buf.set(pub.ed25519, 0);
-  buf.set(pub.ml_dsa_65, pub.ed25519.length);
-  const h2 = sha256(buf);
-  return hexEncode(h2.slice(0, 16));
-}
+// ../../sdks/typescript/dist/crypto.js
 async function hybridKeypairFromSeeds(edSeed, mlSeed) {
   if (edSeed.length !== 32)
     throw new Error(`Ed25519 seed must be 32 bytes, got ${edSeed.length}`);
@@ -38902,218 +39920,1432 @@ async function hybridKeypairFromSeeds(edSeed, mlSeed) {
     privateKey: { ed25519: edSeed, ml_dsa_65: ml.secretKey }
   };
 }
-function delegationSignBytes(cert) {
-  const signable = {
-    cert_id: cert.cert_id,
-    constraints: (cert.constraints ?? []).map(canonicalConstraintDict),
-    expires_at: cert.expires_at,
-    issued_at: cert.issued_at,
-    issuer_id: cert.issuer_id,
-    issuer_pub_key: cert.issuer_pub_key,
-    scope: cert.scope,
-    subject_id: cert.subject_id,
-    subject_pub_key: cert.subject_pub_key,
-    version: cert.version
-  };
-  return canonicalJSON(signable);
-}
-function canonicalConstraintDict(c) {
-  const out = { type: c.type };
-  switch (c.type) {
-    case "geo_circle":
-      out.lat = c.lat ?? 0;
-      out.lon = c.lon ?? 0;
-      out.radius_m = c.radius_m ?? 0;
-      break;
-    case "geo_polygon":
-      out.points = c.points ?? [];
-      break;
-    case "geo_bbox":
-      out.max_lat = c.max_lat ?? 0;
-      out.max_lon = c.max_lon ?? 0;
-      out.min_lat = c.min_lat ?? 0;
-      out.min_lon = c.min_lon ?? 0;
-      if ((c.min_alt_m ?? 0) !== 0 || (c.max_alt_m ?? 0) !== 0) {
-        out.max_alt_m = c.max_alt_m ?? 0;
-        out.min_alt_m = c.min_alt_m ?? 0;
-      }
-      break;
-    case "time_window":
-      out.end = c.end ?? "";
-      out.start = c.start ?? "";
-      out.tz = c.tz ?? "";
-      break;
-    case "max_speed_mps":
-      out.max_mps = c.max_mps ?? 0;
-      break;
-    case "max_amount":
-      out.currency = c.currency ?? "";
-      out.max_amount = c.max_amount ?? 0;
-      break;
-    case "max_rate":
-      out.count = c.count ?? 0;
-      out.window_s = c.window_s ?? 0;
-      break;
-    case "resource_path": {
-      if (!c.resource_id) {
-        throw new Error("resource_path constraint requires a non-empty resource_id");
-      }
-      out.resource_id = c.resource_id;
-      if (c.path_prefix !== void 0 && c.path_prefix !== "") {
-        out.path_prefix = c.path_prefix;
-      }
-      break;
-    }
-    default:
-      if (c.params !== void 0 && c.params !== null) {
-        validateParamsValue(c.params, 0);
-        out.params = c.params;
-      }
-      break;
-  }
-  if (c.type !== void 0 && (c.params !== void 0 && c.params !== null) && isCanonicalConstraintType(c.type)) {
-    throw new Error(`canonical constraint type "${c.type}" must not carry params`);
-  }
-  return out;
-}
-function challengeSignBytes(challenge, ts, sessionContext, streamID, streamSeq) {
-  const ctx = sessionContext ?? new Uint8Array(0);
-  const stream = streamID ?? new Uint8Array(0);
-  const hasStream = stream.length > 0;
-  const streamBytes = hasStream ? stream.length + 8 : 0;
-  const out = new Uint8Array(challenge.length + 8 + ctx.length + streamBytes);
-  let off = 0;
-  out.set(challenge, off);
-  off += challenge.length;
-  writeBigEndianUint64(out, off, ts);
-  off += 8;
-  out.set(ctx, off);
-  off += ctx.length;
-  if (hasStream) {
-    out.set(stream, off);
-    off += stream.length;
-    writeBigEndianInt64(out, off, streamSeq ?? 0);
-  }
-  return out;
-}
-function writeBigEndianUint64(buf, offset, value) {
-  const view = new DataView(buf.buffer, buf.byteOffset + offset, 8);
-  const hi = Math.floor(value / 4294967296);
-  const lo = value >>> 0;
-  view.setUint32(0, hi, false);
-  view.setUint32(4, lo, false);
-}
-function writeBigEndianInt64(buf, offset, value) {
-  writeBigEndianUint64(buf, offset, value);
-}
-async function signBoth(msg, priv) {
-  const edSig = await signAsync(msg, priv.ed25519);
-  const mlSig = ml_dsa65.sign(msg, priv.ml_dsa_65);
-  return { ed25519: edSig, ml_dsa_65: mlSig };
-}
-async function issueDelegation(cert, issuerPrivateKey) {
-  if (!cert.constraints)
-    cert.constraints = [];
-  try {
-    validateResourceConstraints(cert.constraints);
-  } catch (e) {
-    throw new Error(`issuing delegation: ${e?.message ?? e}`);
-  }
-  for (let i = 0; i < cert.constraints.length; i++) {
-    const c = cert.constraints[i];
-    if (c.params !== void 0 && c.params !== null) {
-      if (isCanonicalConstraintType(c.type)) {
-        throw new Error(`issuing delegation: constraint[${i}]: canonical constraint type "${c.type}" must not carry params`);
-      }
-      try {
-        validateParamsValue(c.params, 0);
-      } catch (e) {
-        throw new Error(`issuing delegation: constraint[${i}] params: ${e?.message ?? e}`);
-      }
-    }
-  }
-  if (cert.scope.length > MAX_SCOPES_PER_CERT) {
-    throw new Error(`issuing delegation: ${cert.scope.length} scopes exceeds MAX_SCOPES_PER_CERT (${MAX_SCOPES_PER_CERT})`);
-  }
-  if (cert.constraints.length > MAX_CONSTRAINTS_PER_CERT) {
-    throw new Error(`issuing delegation: ${cert.constraints.length} constraints exceeds MAX_CONSTRAINTS_PER_CERT (${MAX_CONSTRAINTS_PER_CERT})`);
-  }
-  for (const s of cert.scope) {
-    const sLen = utf8ByteLength(s);
-    if (sLen > MAX_SCOPE_LENGTH_BYTES) {
-      throw new Error(`issuing delegation: scope "${s}" is ${sLen} bytes, exceeding MAX_SCOPE_LENGTH_BYTES (${MAX_SCOPE_LENGTH_BYTES})`);
-    }
-  }
-  cert.signature = await signBoth(delegationSignBytes(cert), issuerPrivateKey);
-}
-async function signChallenge(challenge, ts, agentPrivateKey, sessionContext, streamID, streamSeq) {
-  return signBoth(challengeSignBytes(challenge, ts, sessionContext, streamID, streamSeq), agentPrivateKey);
+
+// ../../sdks/typescript/dist/sha384_v2.js
+var nodeCrypto = globalThis.process?.getBuiltinModule?.("node:crypto");
+function sha384V2(data) {
+  if (nodeCrypto === void 0)
+    return sha384(data);
+  return new Uint8Array(nodeCrypto.createHash("sha384").update(data).digest());
 }
 
-// node_modules/@identities-ai/ratify-protocol/dist/wire.js
-function encodeProofBundle(bundle) {
-  const dict = {
-    agent_id: bundle.agent_id,
-    agent_pub_key: bundle.agent_pub_key,
-    challenge: bundle.challenge,
-    challenge_at: checkWireInt(bundle.challenge_at, "ProofBundle.challenge_at"),
-    challenge_sig: bundle.challenge_sig,
-    delegations: bundle.delegations.map((c, i) => certWireDict(c, `ProofBundle.delegations[${i}]`))
-  };
-  if (bundle.session_context !== void 0 && bundle.session_context.length > 0) {
-    dict.session_context = bundle.session_context;
+// ../../sdks/typescript/node_modules/@noble/hashes/esm/sha3.js
+var _0n2 = BigInt(0);
+var _1n2 = BigInt(1);
+var _2n2 = BigInt(2);
+var _7n2 = BigInt(7);
+var _256n2 = BigInt(256);
+var _0x71n2 = BigInt(113);
+var SHA3_PI2 = [];
+var SHA3_ROTL2 = [];
+var _SHA3_IOTA2 = [];
+for (let round = 0, R = _1n2, x = 1, y = 0; round < 24; round++) {
+  [x, y] = [y, (2 * x + 3 * y) % 5];
+  SHA3_PI2.push(2 * (5 * y + x));
+  SHA3_ROTL2.push((round + 1) * (round + 2) / 2 % 64);
+  let t = _0n2;
+  for (let j = 0; j < 7; j++) {
+    R = (R << _1n2 ^ (R >> _7n2) * _0x71n2) % _256n2;
+    if (R & _2n2)
+      t ^= _1n2 << (_1n2 << /* @__PURE__ */ BigInt(j)) - _1n2;
   }
-  if (bundle.stream_id !== void 0 && bundle.stream_id.length > 0) {
-    dict.stream_id = bundle.stream_id;
-  }
-  if (bundle.stream_seq !== void 0 && bundle.stream_seq !== 0) {
-    dict.stream_seq = checkWireInt(bundle.stream_seq, "ProofBundle.stream_seq");
-  }
-  return jsonText(dict);
+  _SHA3_IOTA2.push(t);
 }
-function certWireDict(cert, path) {
+var IOTAS2 = split2(_SHA3_IOTA2, true);
+var SHA3_IOTA_H2 = IOTAS2[0];
+var SHA3_IOTA_L2 = IOTAS2[1];
+var rotlH2 = (h2, l, s) => s > 32 ? rotlBH2(h2, l, s) : rotlSH2(h2, l, s);
+var rotlL2 = (h2, l, s) => s > 32 ? rotlBL2(h2, l, s) : rotlSL2(h2, l, s);
+function keccakP2(s, rounds = 24) {
+  const B = new Uint32Array(5 * 2);
+  for (let round = 24 - rounds; round < 24; round++) {
+    for (let x = 0; x < 10; x++)
+      B[x] = s[x] ^ s[x + 10] ^ s[x + 20] ^ s[x + 30] ^ s[x + 40];
+    for (let x = 0; x < 10; x += 2) {
+      const idx1 = (x + 8) % 10;
+      const idx0 = (x + 2) % 10;
+      const B0 = B[idx0];
+      const B1 = B[idx0 + 1];
+      const Th = rotlH2(B0, B1, 1) ^ B[idx1];
+      const Tl = rotlL2(B0, B1, 1) ^ B[idx1 + 1];
+      for (let y = 0; y < 50; y += 10) {
+        s[x + y] ^= Th;
+        s[x + y + 1] ^= Tl;
+      }
+    }
+    let curH = s[2];
+    let curL = s[3];
+    for (let t = 0; t < 24; t++) {
+      const shift = SHA3_ROTL2[t];
+      const Th = rotlH2(curH, curL, shift);
+      const Tl = rotlL2(curH, curL, shift);
+      const PI = SHA3_PI2[t];
+      curH = s[PI];
+      curL = s[PI + 1];
+      s[PI] = Th;
+      s[PI + 1] = Tl;
+    }
+    for (let y = 0; y < 50; y += 10) {
+      for (let x = 0; x < 10; x++)
+        B[x] = s[y + x];
+      for (let x = 0; x < 10; x++)
+        s[y + x] ^= ~B[(x + 2) % 10] & B[(x + 4) % 10];
+    }
+    s[0] ^= SHA3_IOTA_H2[round];
+    s[1] ^= SHA3_IOTA_L2[round];
+  }
+  clean2(B);
+}
+var Keccak2 = class _Keccak extends Hash {
+  // NOTE: we accept arguments in bytes instead of bits here.
+  constructor(blockLen, suffix, outputLen, enableXOF = false, rounds = 24) {
+    super();
+    this.pos = 0;
+    this.posOut = 0;
+    this.finished = false;
+    this.destroyed = false;
+    this.enableXOF = false;
+    this.blockLen = blockLen;
+    this.suffix = suffix;
+    this.outputLen = outputLen;
+    this.enableXOF = enableXOF;
+    this.rounds = rounds;
+    anumber2(outputLen);
+    if (!(0 < blockLen && blockLen < 200))
+      throw new Error("only keccak-f1600 function is supported");
+    this.state = new Uint8Array(200);
+    this.state32 = u322(this.state);
+  }
+  clone() {
+    return this._cloneInto();
+  }
+  keccak() {
+    swap32IfBE2(this.state32);
+    keccakP2(this.state32, this.rounds);
+    swap32IfBE2(this.state32);
+    this.posOut = 0;
+    this.pos = 0;
+  }
+  update(data) {
+    aexists2(this);
+    data = toBytes(data);
+    abytes3(data);
+    const { blockLen, state } = this;
+    const len = data.length;
+    for (let pos = 0; pos < len; ) {
+      const take = Math.min(blockLen - this.pos, len - pos);
+      for (let i = 0; i < take; i++)
+        state[this.pos++] ^= data[pos++];
+      if (this.pos === blockLen)
+        this.keccak();
+    }
+    return this;
+  }
+  finish() {
+    if (this.finished)
+      return;
+    this.finished = true;
+    const { state, suffix, pos, blockLen } = this;
+    state[pos] ^= suffix;
+    if ((suffix & 128) !== 0 && pos === blockLen - 1)
+      this.keccak();
+    state[blockLen - 1] ^= 128;
+    this.keccak();
+  }
+  writeInto(out) {
+    aexists2(this, false);
+    abytes3(out);
+    this.finish();
+    const bufferOut = this.state;
+    const { blockLen } = this;
+    for (let pos = 0, len = out.length; pos < len; ) {
+      if (this.posOut >= blockLen)
+        this.keccak();
+      const take = Math.min(blockLen - this.posOut, len - pos);
+      out.set(bufferOut.subarray(this.posOut, this.posOut + take), pos);
+      this.posOut += take;
+      pos += take;
+    }
+    return out;
+  }
+  xofInto(out) {
+    if (!this.enableXOF)
+      throw new Error("XOF is not possible for this instance");
+    return this.writeInto(out);
+  }
+  xof(bytes) {
+    anumber2(bytes);
+    return this.xofInto(new Uint8Array(bytes));
+  }
+  digestInto(out) {
+    aoutput2(out, this);
+    if (this.finished)
+      throw new Error("digest() was already called");
+    this.writeInto(out);
+    this.destroy();
+    return out;
+  }
+  digest() {
+    return this.digestInto(new Uint8Array(this.outputLen));
+  }
+  destroy() {
+    this.destroyed = true;
+    clean2(this.state);
+  }
+  _cloneInto(to) {
+    const { blockLen, suffix, outputLen, rounds, enableXOF } = this;
+    to || (to = new _Keccak(blockLen, suffix, outputLen, enableXOF, rounds));
+    to.state32.set(this.state32);
+    to.pos = this.pos;
+    to.posOut = this.posOut;
+    to.finished = this.finished;
+    to.rounds = rounds;
+    to.suffix = suffix;
+    to.outputLen = outputLen;
+    to.enableXOF = enableXOF;
+    to.destroyed = this.destroyed;
+    return to;
+  }
+};
+var genShake2 = (suffix, blockLen, outputLen) => createXOFer((opts = {}) => new Keccak2(blockLen, suffix, opts.dkLen === void 0 ? outputLen : opts.dkLen, true));
+var shake2562 = /* @__PURE__ */ (() => genShake2(31, 136, 256 / 8))();
+
+// ../../sdks/typescript/dist/crypto_v2.js
+var KEY_ID_V2_DOMAIN = new TextEncoder().encode("ratify-key-id-v2\0");
+var SIGNATURE_V2_DOMAIN = new TextEncoder().encode("ratify-protocol-signature\0");
+var ML_DSA_V2_CERT_CONTEXT = new TextEncoder().encode("ratify-protocol/2/0001");
+var ED25519_ORDER_LE = new Uint8Array([
+  237,
+  211,
+  245,
+  92,
+  26,
+  99,
+  18,
+  88,
+  214,
+  156,
+  247,
+  162,
+  222,
+  249,
+  222,
+  20,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  16
+]);
+function concatBytes4(...parts) {
+  const out = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+function encodeHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function hasCanonicalNonIdentityPrimeOrder(encoded) {
+  if (encoded.length !== 32)
+    return false;
+  try {
+    const point = Point.fromBytes(encoded, false);
+    return point.toBytes().every((byte, index) => byte === encoded[index]) && !point.is0() && point.isTorsionFree();
+  } catch {
+    return false;
+  }
+}
+function hasCanonicalScalar(encoded) {
+  if (encoded.length !== ED25519_ORDER_LE.length)
+    return false;
+  for (let i = encoded.length - 1; i >= 0; i--) {
+    const value = encoded[i];
+    const orderByte = ED25519_ORDER_LE[i];
+    if (value !== orderByte)
+      return value < orderByte;
+  }
+  return false;
+}
+function deriveKeyIDV2(publicKey) {
+  if (!publicKey || !(publicKey.ed25519 instanceof Uint8Array) || !(publicKey.ml_dsa_65 instanceof Uint8Array) || publicKey.ed25519.length !== 32 || publicKey.ml_dsa_65.length !== 1952) {
+    throw v2Errorf("malformed", "v2 hybrid public key has invalid component length");
+  }
+  return encodeHex(sha256(concatBytes4(KEY_ID_V2_DOMAIN, publicKey.ed25519, publicKey.ml_dsa_65)));
+}
+var V2_OBJECT_TYPE = {
+  delegationCertificate: 1,
+  challengePresentation: 2,
+  revocationList: 3,
+  keyRotationAuthorization: 4,
+  revocationPush: 5,
+  witnessEntry: 6,
+  transactionPartyStatement: 7,
+  verificationReceipt: 8,
+  keyRotationProofOfPossession: 9
+};
+function validV2ObjectType(code) {
+  return Number.isInteger(code) && code >= 1 && code <= 9;
+}
+function v2SigningMessage(code, signable) {
+  if (!validV2ObjectType(code))
+    throw new Error(`unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
+  return concatBytes4(SIGNATURE_V2_DOMAIN, new Uint8Array([code >> 8 & 255, code & 255]), sha384V2(signable));
+}
+function v2MLDSAContext(code) {
+  if (!validV2ObjectType(code))
+    throw new Error(`unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
+  return new TextEncoder().encode(`ratify-protocol/2/${code.toString(16).padStart(4, "0")}`);
+}
+var ML_DSA_65_SECRET_KEY_SIZE = 4032;
+async function validateHybridKeyPairV2(pair) {
+  const priv = pair?.privateKey;
+  const pub = pair?.publicKey;
+  if (!priv || !pub || !(priv.ed25519 instanceof Uint8Array) || !(priv.ml_dsa_65 instanceof Uint8Array) || priv.ed25519.length !== 32 || priv.ml_dsa_65.length !== ML_DSA_65_SECRET_KEY_SIZE || !(pub.ed25519 instanceof Uint8Array) || !(pub.ml_dsa_65 instanceof Uint8Array) || pub.ed25519.length !== 32 || pub.ml_dsa_65.length !== 1952) {
+    throw new Error("incomplete hybrid private key");
+  }
+  const edPublic = await getPublicKeyAsync(priv.ed25519);
+  if (!edPublic.every((b, i) => b === pub.ed25519[i])) {
+    throw new Error("Ed25519 private key seed and public component do not match");
+  }
+  const tr = shake2562(pub.ml_dsa_65, { dkLen: 64 });
+  const embedded = priv.ml_dsa_65.subarray(64, 128);
+  if (!tr.every((b, i) => b === embedded[i])) {
+    throw new Error("ML-DSA-65 private key and public component do not match");
+  }
+}
+function keyIDV2(pub) {
+  if (!pub || !(pub.ed25519 instanceof Uint8Array) || pub.ed25519.length !== 32) {
+    throw new Error(`Ed25519 public key wrong length: ${pub?.ed25519?.length ?? 0}`);
+  }
+  if (!(pub.ml_dsa_65 instanceof Uint8Array) || pub.ml_dsa_65.length !== 1952) {
+    throw new Error(`ML-DSA-65 public key wrong length: ${pub.ml_dsa_65?.length ?? 0}`);
+  }
+  return deriveKeyIDV2(pub);
+}
+async function verifyV2Statement(code, signable, sig, pub) {
+  if (!validV2ObjectType(code)) {
+    throw v2Errorf("unsupported_object_type", `unsupported v2 object type: ${code.toString(16).padStart(4, "0")}`);
+  }
+  const reason = await verifyV2StatementReason(code, signable, sig, pub);
+  if (reason !== null)
+    throw v2Errorf("invalid_signature", reason);
+}
+async function verifyV2StatementReason(code, signable, sig, pub) {
+  try {
+    if (!pub || !(pub.ed25519 instanceof Uint8Array) || !(pub.ml_dsa_65 instanceof Uint8Array) || pub.ed25519.length !== 32 || pub.ml_dsa_65.length !== 1952) {
+      return "hybrid public key has invalid component length";
+    }
+    if (!sig || !(sig.ed25519 instanceof Uint8Array) || !(sig.ml_dsa_65 instanceof Uint8Array) || sig.ed25519.length !== 64 || sig.ml_dsa_65.length !== 3309) {
+      return "hybrid signature has invalid component length";
+    }
+    if (!hasCanonicalNonIdentityPrimeOrder(pub.ed25519) || !hasCanonicalNonIdentityPrimeOrder(sig.ed25519.subarray(0, 32))) {
+      return "Ed25519 v2 public key or R component is not a canonical non-identity prime-order point";
+    }
+    if (!hasCanonicalScalar(sig.ed25519.subarray(32)))
+      return "Ed25519 v2 S component is not a canonical scalar";
+    const message = v2SigningMessage(code, signable);
+    const context = v2MLDSAContext(code);
+    if (!await verifyAsync(sig.ed25519, message, pub.ed25519, { zip215: false })) {
+      return "Ed25519 v2 signature invalid";
+    }
+    if (!ml_dsa65.verify(sig.ml_dsa_65, message, pub.ml_dsa_65, { context }))
+      return "ML-DSA-65 v2 signature invalid";
+    return null;
+  } catch (err2) {
+    return `v2 signature verification failed: ${err2?.message ?? err2}`;
+  }
+}
+
+// ../../sdks/typescript/dist/signer_v2.js
+function keyIDV22(pub) {
+  try {
+    return keyIDV2(pub);
+  } catch (err2) {
+    throw v2Classify("malformed", err2);
+  }
+}
+var SIGNER_MODE_DIRECT_V2 = 1;
+var SIGNER_MODE_EXTERNAL_MU_V2 = 2;
+var localSigners = /* @__PURE__ */ new WeakSet();
+var localSignerBuffersObserverV2 = null;
+var LocalSignerV2 = class {
+  #pair;
+  #deterministic;
+  #disposed = false;
+  constructor(pair, deterministic) {
+    this.#pair = {
+      publicKey: { ed25519: Uint8Array.from(pair.publicKey.ed25519), ml_dsa_65: Uint8Array.from(pair.publicKey.ml_dsa_65) },
+      privateKey: { ed25519: Uint8Array.from(pair.privateKey.ed25519), ml_dsa_65: Uint8Array.from(pair.privateKey.ml_dsa_65) }
+    };
+    this.#deterministic = deterministic;
+    localSigners.add(this);
+    localSignerBuffersObserverV2?.([this.#pair.privateKey.ed25519, this.#pair.privateKey.ml_dsa_65]);
+  }
+  #live() {
+    if (this.#disposed)
+      throw new Error("local v2 signer has been disposed");
+  }
+  publicKeyV2() {
+    this.#live();
+    return { ed25519: Uint8Array.from(this.#pair.publicKey.ed25519), ml_dsa_65: Uint8Array.from(this.#pair.publicKey.ml_dsa_65) };
+  }
+  modeV2() {
+    return SIGNER_MODE_DIRECT_V2;
+  }
+  async signV2(req, signal) {
+    this.#live();
+    if (signal?.aborted)
+      throw v2Classify("evaluation_cancelled", signal.reason ?? new Error("signing cancelled"));
+    if (req.mode !== SIGNER_MODE_DIRECT_V2 || req.message.length !== V2_SIGNING_MESSAGE_SIZE || !req.mlDsaContext || req.mlDsaContext.length === 0) {
+      throw new Error("local v2 signer supports only direct-mode requests");
+    }
+    const ed25519 = await signAsync(req.message, this.#pair.privateKey.ed25519);
+    this.#live();
+    const ml_dsa_65 = ml_dsa65.sign(req.message, this.#pair.privateKey.ml_dsa_65, this.#deterministic ? { context: req.mlDsaContext, extraEntropy: false } : { context: req.mlDsaContext });
+    return { ed25519, ml_dsa_65 };
+  }
+  async validate() {
+    this.#live();
+    await validateHybridKeyPairV2(this.#pair);
+  }
+  /** Zeroes the signer's private-key copies; later use throws. Idempotent. */
+  dispose() {
+    this.#disposed = true;
+    this.#pair.privateKey.ed25519.fill(0);
+    this.#pair.privateKey.ml_dsa_65.fill(0);
+  }
+};
+async function newLocalSignerV2(pair, opts = {}) {
+  return classifiedAsync("configuration_invalid", async () => {
+    await validateHybridKeyPairV2(pair);
+    return new LocalSignerV2(pair, opts.deterministic === true);
+  });
+}
+function disposeLocalSignerV2(signer) {
+  if (signer && localSigners.has(signer))
+    signer.dispose();
+}
+async function withLocalSignerV2(pair, opts, fn) {
+  const signer = await newLocalSignerV2(pair, opts);
+  try {
+    return await fn(signer);
+  } finally {
+    disposeLocalSignerV2(signer);
+  }
+}
+var V2_SIGNING_MESSAGE_SIZE = 77;
+async function signerPublicKeyV2(signer) {
+  if (!signer)
+    throw v2Errorf("configuration_invalid", "v2 signer is required");
+  if (localSigners.has(signer))
+    await signer.validate();
+  const pub = signer.publicKeyV2();
+  try {
+    keyIDV2(pub);
+  } catch (err2) {
+    throw v2Errorf("configuration_invalid", `v2 signer public key: ${err2.message}`, err2);
+  }
+  return { ed25519: Uint8Array.from(pub.ed25519), ml_dsa_65: Uint8Array.from(pub.ml_dsa_65) };
+}
+function externalMuV2(mlPub, mlContext, message) {
+  const tr = shake2562(mlPub, { dkLen: 64 });
+  return shake2562(concatBytes(tr, new Uint8Array([0, mlContext.length]), mlContext, message), { dkLen: 64 });
+}
+function aborted2(signal) {
+  if (!signal?.aborted)
+    return null;
+  return signal.reason instanceof Error ? signal.reason : new Error("v2 signing cancelled");
+}
+async function signV2StatementWithSigner(objectType2, signable, signer, pub, opts = {}) {
+  const before = aborted2(opts.signal);
+  if (before)
+    throw v2Classify("evaluation_cancelled", before);
+  const message = v2SigningMessage(objectType2, signable);
+  const mlContext = v2MLDSAContext(objectType2);
+  const keyId = keyIDV2(pub);
+  const mode = signer.modeV2();
+  let req;
+  const publicKey = { ed25519: Uint8Array.from(pub.ed25519), ml_dsa_65: Uint8Array.from(pub.ml_dsa_65) };
+  if (mode === SIGNER_MODE_DIRECT_V2) {
+    req = { mode, message, mlDsaContext: mlContext, mlDsaMu: null, publicKey, keyId };
+  } else if (mode === SIGNER_MODE_EXTERNAL_MU_V2) {
+    req = { mode, message, mlDsaContext: null, mlDsaMu: externalMuV2(pub.ml_dsa_65, mlContext, message), publicKey, keyId };
+  } else {
+    throw v2Errorf("configuration_invalid", `v2 signer reports an unsupported mode ${String(mode)}`);
+  }
+  let signature;
+  try {
+    signature = await signer.signV2(req, opts.signal);
+  } catch (err2) {
+    throw v2Classify("configuration_invalid", wrapError("v2 signer", err2));
+  }
+  const after = aborted2(opts.signal);
+  if (after)
+    throw v2Classify("evaluation_cancelled", after);
+  if (!signature || !(signature.ed25519 instanceof Uint8Array) || !(signature.ml_dsa_65 instanceof Uint8Array)) {
+    throw v2Errorf("invalid_signature", "v2 signer returned a signature that does not verify: missing component");
+  }
+  const copy = { ed25519: Uint8Array.from(signature.ed25519), ml_dsa_65: Uint8Array.from(signature.ml_dsa_65) };
+  try {
+    await verifyV2Statement(objectType2, signable, copy, pub);
+  } catch (err2) {
+    throw v2Errorf("invalid_signature", `v2 signer returned a signature that does not verify: ${err2.message}`, err2);
+  }
+  return copy;
+}
+
+// ../../sdks/typescript/dist/scope.js
+var SCOPE_MEETING_ATTEND = "meeting:attend";
+var SCOPE_MEETING_SPEAK = "meeting:speak";
+var SCOPE_MEETING_VIDEO = "meeting:video";
+var SCOPE_MEETING_CHAT = "meeting:chat";
+var SCOPE_MEETING_SHARE_SCREEN = "meeting:share_screen";
+var SCOPE_MEETING_RECORD = "meeting:record";
+var SCOPE_COMMS_MESSAGE_READ = "comms:message:read";
+var SCOPE_COMMS_MESSAGE_SEND = "comms:message:send";
+var SCOPE_COMMS_MESSAGE_DELETE = "comms:message:delete";
+var SCOPE_COMMS_EMAIL_READ = "comms:email:read";
+var SCOPE_COMMS_EMAIL_SEND = "comms:email:send";
+var SCOPE_COMMS_EMAIL_DELETE = "comms:email:delete";
+var SCOPE_COMMS_CALENDAR_READ = "comms:calendar:read";
+var SCOPE_COMMS_CALENDAR_WRITE = "comms:calendar:write";
+var SCOPE_FILES_READ = "files:read";
+var SCOPE_FILES_WRITE = "files:write";
+var SCOPE_IDENTITY_PROVE = "identity:prove";
+var SCOPE_IDENTITY_DELEGATE = "identity:delegate";
+var SCOPE_PRESENCE_REPRESENT = "presence:represent";
+var SCOPE_TRANSACT_PURCHASE = "transact:purchase";
+var SCOPE_TRANSACT_SELL = "transact:sell";
+var SCOPE_PAYMENTS_SEND = "payments:send";
+var SCOPE_PAYMENTS_RECEIVE = "payments:receive";
+var SCOPE_PAYMENTS_AUTHORIZE = "payments:authorize";
+var SCOPE_CONTRACT_READ = "contract:read";
+var SCOPE_CONTRACT_SIGN = "contract:sign";
+var SCOPE_DATA_READ = "data:read";
+var SCOPE_DATA_WRITE = "data:write";
+var SCOPE_DATA_DELETE = "data:delete";
+var SCOPE_DATA_EXPORT = "data:export";
+var SCOPE_DATA_SHARE = "data:share";
+var SCOPE_EXECUTE_TOOL = "execute:tool";
+var SCOPE_EXECUTE_CODE = "execute:code";
+var SCOPE_GENERATE_CONTENT = "generate:content";
+var SCOPE_GENERATE_DEEPFAKE = "generate:deepfake";
+var SCOPE_PHYSICAL_ENTER = "physical:enter";
+var SCOPE_PHYSICAL_EXIT = "physical:exit";
+var SCOPE_PHYSICAL_ACTUATE = "physical:actuate";
+var SCOPE_PHYSICAL_MANIPULATE = "physical:manipulate";
+var SCOPE_ROBOT_OPERATE = "robot:operate";
+var SCOPE_ROBOT_MOVE = "robot:move";
+var SCOPE_ROBOT_INTERACT = "robot:interact";
+var SCOPE_DRONE_FLY = "drone:fly";
+var SCOPE_DRONE_DELIVER = "drone:deliver";
+var SCOPE_DRONE_CAPTURE = "drone:capture";
+var SCOPE_VEHICLE_OPERATE = "vehicle:operate";
+var SCOPE_VEHICLE_TRANSPORT = "vehicle:transport";
+var SCOPE_VEHICLE_CHARGE = "vehicle:charge";
+var SCOPE_INFRASTRUCTURE_MONITOR = "infrastructure:monitor";
+var SCOPE_INFRASTRUCTURE_CONTROL = "infrastructure:control";
+var SCOPE_INFRASTRUCTURE_ACCESS = "infrastructure:access";
+var SCOPE_ACTUATE_VALVE = "actuate:valve";
+var SCOPE_ACTUATE_MOTOR = "actuate:motor";
+var SCOPE_ACTUATE_SWITCH = "actuate:switch";
+var CUSTOM_SCOPE_PREFIX = "custom:";
+var VALID_SCOPES = /* @__PURE__ */ new Set([
+  SCOPE_MEETING_ATTEND,
+  SCOPE_MEETING_SPEAK,
+  SCOPE_MEETING_VIDEO,
+  SCOPE_MEETING_CHAT,
+  SCOPE_MEETING_SHARE_SCREEN,
+  SCOPE_MEETING_RECORD,
+  SCOPE_COMMS_MESSAGE_READ,
+  SCOPE_COMMS_MESSAGE_SEND,
+  SCOPE_COMMS_MESSAGE_DELETE,
+  SCOPE_COMMS_EMAIL_READ,
+  SCOPE_COMMS_EMAIL_SEND,
+  SCOPE_COMMS_EMAIL_DELETE,
+  SCOPE_COMMS_CALENDAR_READ,
+  SCOPE_COMMS_CALENDAR_WRITE,
+  SCOPE_FILES_READ,
+  SCOPE_FILES_WRITE,
+  SCOPE_IDENTITY_PROVE,
+  SCOPE_IDENTITY_DELEGATE,
+  SCOPE_PRESENCE_REPRESENT,
+  SCOPE_TRANSACT_PURCHASE,
+  SCOPE_TRANSACT_SELL,
+  SCOPE_PAYMENTS_SEND,
+  SCOPE_PAYMENTS_RECEIVE,
+  SCOPE_PAYMENTS_AUTHORIZE,
+  SCOPE_CONTRACT_READ,
+  SCOPE_CONTRACT_SIGN,
+  SCOPE_DATA_READ,
+  SCOPE_DATA_WRITE,
+  SCOPE_DATA_DELETE,
+  SCOPE_DATA_EXPORT,
+  SCOPE_DATA_SHARE,
+  SCOPE_EXECUTE_TOOL,
+  SCOPE_EXECUTE_CODE,
+  SCOPE_GENERATE_CONTENT,
+  SCOPE_GENERATE_DEEPFAKE,
+  SCOPE_PHYSICAL_ENTER,
+  SCOPE_PHYSICAL_EXIT,
+  SCOPE_PHYSICAL_ACTUATE,
+  SCOPE_PHYSICAL_MANIPULATE,
+  SCOPE_ROBOT_OPERATE,
+  SCOPE_ROBOT_MOVE,
+  SCOPE_ROBOT_INTERACT,
+  SCOPE_DRONE_FLY,
+  SCOPE_DRONE_DELIVER,
+  SCOPE_DRONE_CAPTURE,
+  SCOPE_VEHICLE_OPERATE,
+  SCOPE_VEHICLE_TRANSPORT,
+  SCOPE_VEHICLE_CHARGE,
+  SCOPE_INFRASTRUCTURE_MONITOR,
+  SCOPE_INFRASTRUCTURE_CONTROL,
+  SCOPE_INFRASTRUCTURE_ACCESS,
+  SCOPE_ACTUATE_VALVE,
+  SCOPE_ACTUATE_MOTOR,
+  SCOPE_ACTUATE_SWITCH
+]);
+var SCOPE_WILDCARDS = {
+  "meeting:*": [
+    SCOPE_MEETING_ATTEND,
+    SCOPE_MEETING_SPEAK,
+    SCOPE_MEETING_VIDEO,
+    SCOPE_MEETING_CHAT,
+    SCOPE_MEETING_SHARE_SCREEN
+  ],
+  "comms:message:*": [SCOPE_COMMS_MESSAGE_READ, SCOPE_COMMS_MESSAGE_SEND],
+  "comms:email:*": [SCOPE_COMMS_EMAIL_READ, SCOPE_COMMS_EMAIL_SEND],
+  "comms:*": [
+    SCOPE_COMMS_MESSAGE_READ,
+    SCOPE_COMMS_MESSAGE_SEND,
+    SCOPE_COMMS_EMAIL_READ,
+    SCOPE_COMMS_EMAIL_SEND,
+    SCOPE_COMMS_CALENDAR_READ,
+    SCOPE_COMMS_CALENDAR_WRITE
+  ],
+  "transact:*": [SCOPE_TRANSACT_PURCHASE, SCOPE_TRANSACT_SELL],
+  "payments:*": [SCOPE_PAYMENTS_SEND, SCOPE_PAYMENTS_RECEIVE],
+  "data:*": [SCOPE_DATA_READ, SCOPE_DATA_SHARE],
+  "execute:*": [SCOPE_EXECUTE_TOOL],
+  "generate:*": [SCOPE_GENERATE_CONTENT],
+  "physical:*": [SCOPE_PHYSICAL_ENTER, SCOPE_PHYSICAL_EXIT],
+  "robot:*": [SCOPE_ROBOT_OPERATE, SCOPE_ROBOT_MOVE, SCOPE_ROBOT_INTERACT],
+  "drone:*": [SCOPE_DRONE_DELIVER, SCOPE_DRONE_CAPTURE],
+  "vehicle:*": [SCOPE_VEHICLE_TRANSPORT, SCOPE_VEHICLE_CHARGE],
+  "infrastructure:*": [SCOPE_INFRASTRUCTURE_MONITOR]
+  // actuate:* — every member is sensitive; NO wildcard expansion.
+  // presence:* — presence:represent is sensitive, so NO wildcard expansion.
+  // Representation must always be granted explicitly.
+};
+function vocabulary() {
+  return Object.freeze([...VALID_SCOPES].sort());
+}
+function scopeWildcards() {
+  const out = {};
+  for (const [wildcard, children] of Object.entries(SCOPE_WILDCARDS)) {
+    out[wildcard] = Object.freeze([...children]);
+  }
+  return Object.freeze(out);
+}
+
+// ../../sdks/typescript/dist/scope_v2.js
+var VALID = new Set(vocabulary());
+var WILDCARDS = new Map(Object.entries(scopeWildcards()));
+function isValidScopeV2(s) {
+  return VALID.has(s) || WILDCARDS.has(s) || s.startsWith(CUSTOM_SCOPE_PREFIX) && s.length > CUSTOM_SCOPE_PREFIX.length;
+}
+function validateScopesV2(scopes) {
+  if (!scopes || scopes.length === 0)
+    return "scope must be a non-empty array";
+  for (const s of scopes) {
+    if (!isValidScopeV2(s))
+      return `unknown scope ${JSON.stringify(s)}: not in canonical vocabulary and not a custom: extension`;
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const s of scopes) {
+    if (s === "custom:*")
+      return "custom:* is not a valid scope";
+    if (seen.has(s))
+      return `duplicate scope ${JSON.stringify(s)}`;
+    seen.add(s);
+  }
+  return null;
+}
+
+// ../../sdks/typescript/dist/constraints_v2.js
+var CONSTRAINT_TIME_WINDOW_V2 = "time_window";
+var CONSTRAINT_MAX_AMOUNT_V2 = "max_amount";
+var CONSTRAINT_MAX_RATE_V2 = "max_rate";
+var CONSTRAINT_RESOURCE_PATH_V2 = "resource_path";
+var CONSTRAINT_RECEIVER_AUDIENCE_V2 = "ratify.receiver_audience";
+var MAX_AUDIENCE_IDS_V2 = 64;
+function isRegisteredStructuredConstraintV2(t) {
+  return t === CONSTRAINT_TIME_WINDOW_V2 || t === CONSTRAINT_MAX_AMOUNT_V2 || t === CONSTRAINT_MAX_RATE_V2 || t === CONSTRAINT_RESOURCE_PATH_V2;
+}
+var str = (v) => typeof v === "string" ? v : "";
+var num = (v) => typeof v === "number" ? v : 0;
+function constraintWireObjectV2(c) {
+  const m = { type: str(c.type) };
+  switch (c.type) {
+    case CONSTRAINT_TIME_WINDOW_V2:
+      m.start = str(c.start);
+      m.end = str(c.end);
+      m.tz = str(c.tz);
+      break;
+    case CONSTRAINT_MAX_AMOUNT_V2:
+      m.currency = str(c.currency);
+      m.max_amount_micros = num(c.max_amount_micros);
+      break;
+    case CONSTRAINT_MAX_RATE_V2:
+      m.count = num(c.count);
+      m.window_s = num(c.window_s);
+      break;
+    case CONSTRAINT_RESOURCE_PATH_V2:
+      m.resource_id = str(c.resource_id);
+      if (str(c.path_prefix) !== "")
+        m.path_prefix = c.path_prefix;
+      break;
+    default:
+      if (c.params !== void 0 && c.params !== null)
+        m.params = c.params;
+  }
+  if (c.params !== void 0 && c.params !== null && isRegisteredStructuredConstraintV2(c.type)) {
+    throw new Error(`v2 constraint type ${JSON.stringify(c.type)} must not carry params`);
+  }
+  return m;
+}
+function encodeConstraintV2(c) {
+  return classified("malformed", () => {
+    const out = canonicalJSONV2(constraintWireObjectV2(c));
+    validateV2ConstraintFields(parseJSONV2(out));
+    return out;
+  });
+}
+function decodeConstraintNodeV2(n) {
+  validateV2ConstraintFields(n);
+  const fields = n.m;
+  const type = fields.get("type").v;
+  const out = { type };
+  const s = (name) => {
+    const node2 = fields.get(name);
+    return node2 !== void 0 && node2.k === "str" ? node2.v : "";
+  };
+  const i = (name) => {
+    const node2 = fields.get(name);
+    return node2 !== void 0 && node2.k === "num" ? Number(node2.raw) + 0 : 0;
+  };
+  switch (type) {
+    case CONSTRAINT_TIME_WINDOW_V2:
+      out.start = s("start");
+      out.end = s("end");
+      out.tz = s("tz");
+      break;
+    case CONSTRAINT_MAX_AMOUNT_V2:
+      out.currency = s("currency");
+      out.max_amount_micros = i("max_amount_micros");
+      break;
+    case CONSTRAINT_MAX_RATE_V2:
+      out.count = i("count");
+      out.window_s = i("window_s");
+      break;
+    case CONSTRAINT_RESOURCE_PATH_V2:
+      out.resource_id = s("resource_id");
+      if (fields.has("path_prefix"))
+        out.path_prefix = s("path_prefix");
+      break;
+    default: {
+      const params = fields.get("params");
+      if (params !== void 0) {
+        out.params = params.k === "null" ? null : gAny(params);
+      }
+    }
+  }
+  return out;
+}
+function validateV2ConstraintFields(n) {
+  checkV2Nulls(n);
+  if (n.k !== "obj")
+    throw new Error("constraint must be an object");
+  const fields = n.m;
+  const typeNode = fields.get("type");
+  if (typeNode === void 0 || typeNode.k !== "str" || typeNode.v === "") {
+    throw new Error("constraint type must be a non-empty string");
+  }
+  const kind = typeNode.v;
+  const exact = (required2, optional2 = []) => {
+    for (const key of fields.keys()) {
+      if (key !== "type" && !required2.includes(key) && !optional2.includes(key)) {
+        throw new Error(`field ${JSON.stringify(key)} is not allowed for constraint type ${JSON.stringify(kind)}`);
+      }
+    }
+    for (const name of required2) {
+      if (!fields.has(name))
+        throw new Error(`constraint type ${JSON.stringify(kind)} requires field ${JSON.stringify(name)}`);
+    }
+  };
+  switch (kind) {
+    case CONSTRAINT_TIME_WINDOW_V2: {
+      exact(["start", "end", "tz"]);
+      for (const name of ["start", "end"]) {
+        const value = v2StringField(fields.get(name), `time_window ${name} must be a string`);
+        parseHHMMV2(value);
+      }
+      const tz = fields.get("tz");
+      if (tz === void 0 || tz.k !== "str" || !validTimeZoneIDV2(tz.v)) {
+        throw new Error("time_window tz must be 1 to 64 bytes of /-separated [A-Za-z0-9_+-] segments");
+      }
+      return;
+    }
+    case CONSTRAINT_MAX_AMOUNT_V2: {
+      exact(["currency", "max_amount_micros"]);
+      const currency = fields.get("currency");
+      if (currency === void 0 || currency.k !== "str" || !validISO4217AlphaV2(currency.v)) {
+        throw new Error("max_amount currency must be an ISO-4217 alphabetic code");
+      }
+      const amount = v2IntegerFieldOrNull(fields.get("max_amount_micros"));
+      if (amount === null || amount < 0)
+        throw new Error("max_amount_micros must be a nonnegative safe integer");
+      return;
+    }
+    case CONSTRAINT_MAX_RATE_V2: {
+      exact(["count", "window_s"]);
+      const count = v2IntegerFieldOrNull(fields.get("count"));
+      if (count === null || count <= 0)
+        throw new Error("max_rate count must be a positive safe integer");
+      const window = v2IntegerFieldOrNull(fields.get("window_s"));
+      if (window === null || window <= 0 || window > V2_MAX_RATE_WINDOW_SECONDS) {
+        throw new Error(`max_rate window_s must be an integer in 1..${V2_MAX_RATE_WINDOW_SECONDS}`);
+      }
+      return;
+    }
+    case CONSTRAINT_RESOURCE_PATH_V2: {
+      exact(["resource_id"], ["path_prefix"]);
+      const id2 = fields.get("resource_id");
+      if (id2 === void 0 || id2.k !== "str" || id2.v === "" || utf8Len(id2.v) > MAX_IDENTIFIER_LENGTH_BYTES) {
+        throw new Error("resource_path resource_id must be a non-empty string within MAX_IDENTIFIER_LENGTH_BYTES");
+      }
+      const prefix = fields.get("path_prefix");
+      if (prefix !== void 0 && (prefix.k !== "str" || prefix.v === "")) {
+        throw new Error("resource_path path_prefix must be a non-empty string when present");
+      }
+      return;
+    }
+    case CONSTRAINT_RECEIVER_AUDIENCE_V2:
+      exact(["params"]);
+      validateV2ReceiverAudience(fields.get("params"));
+      return;
+    default: {
+      if (utf8Len(kind) > MAX_IDENTIFIER_LENGTH_BYTES) {
+        throw new Error("unregistered constraint type exceeds MAX_IDENTIFIER_LENGTH_BYTES");
+      }
+      exact([], ["params"]);
+      const params = fields.get("params");
+      if (params !== void 0) {
+        if (params.k !== "obj")
+          throw new Error("unregistered constraint params must be an object");
+        validateParamsValue(gAny(params), 0);
+      }
+    }
+  }
+}
+function strictStringArray(n) {
+  if (n === void 0 || n.k !== "arr")
+    return null;
+  const out = [];
+  for (const item of n.a) {
+    if (item.k === "str")
+      out.push(item.v);
+    else if (item.k === "null")
+      out.push("");
+    else
+      return null;
+  }
+  return out;
+}
+function validateV2ReceiverAudience(raw) {
+  if (raw.k !== "obj")
+    throw new Error("receiver audience requires params object");
+  const params = raw.m;
+  for (const key of params.keys()) {
+    if (key !== "exact_receiver_ids" && key !== "trust_domain_ids" && key !== "max_membership_age_seconds") {
+      throw new Error(`unknown receiver audience parameter ${JSON.stringify(key)}`);
+    }
+  }
+  const exact = strictStringArray(params.get("exact_receiver_ids"));
+  const domains = strictStringArray(params.get("trust_domain_ids"));
+  if (exact === null || domains === null) {
+    throw new Error("receiver audience requires exact_receiver_ids and trust_domain_ids arrays");
+  }
+  if (exact.length + domains.length === 0)
+    throw new Error("receiver audience must name an exact receiver or trust domain");
+  for (const values of [exact, domains]) {
+    if (values.length > MAX_AUDIENCE_IDS_V2)
+      throw new Error(`receiver audience arrays hold at most ${MAX_AUDIENCE_IDS_V2} IDs`);
+    const seen = /* @__PURE__ */ new Set();
+    for (const value of values) {
+      if (value === "" || utf8Len(value) > MAX_IDENTIFIER_LENGTH_BYTES || seen.has(value)) {
+        throw new Error(`receiver audience IDs must be unique and 1 to ${MAX_IDENTIFIER_LENGTH_BYTES} bytes`);
+      }
+      seen.add(value);
+    }
+  }
+  const age = params.get("max_membership_age_seconds");
+  if (domains.length > 0 && (age === void 0 || age.k === "null")) {
+    throw new Error("receiver audience trust domains require max_membership_age_seconds");
+  }
+  if (age !== void 0) {
+    const seconds = v2IntegerFieldOrNull(age);
+    if (seconds === null || seconds <= 0 || seconds > V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS) {
+      throw new Error(`max_membership_age_seconds must be an integer in 1..${V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS}`);
+    }
+  }
+  if (domains.length === 0 && age !== void 0) {
+    throw new Error("receiver audience without trust domains must omit max_membership_age_seconds");
+  }
+}
+function v2IntegerField(n) {
+  if (n === void 0 || n.k !== "num")
+    throw new Error("integer is required");
+  const token = n.raw;
+  const digits = token.startsWith("-") ? token.slice(1) : token;
+  if (digits === "" || digits.length > 1 && digits[0] === "0")
+    throw new Error(`integer ${JSON.stringify(token)} is not canonical`);
+  if (!/^[0-9]+$/.test(digits))
+    throw new Error(`integer ${JSON.stringify(token)} is not a JSON integer`);
+  if (token === "-0")
+    throw new Error("negative zero is not a canonical integer");
+  const v = BigInt(token);
+  if (v > BigInt(MAX_SAFE_INTEGER_V2) || v < -BigInt(MAX_SAFE_INTEGER_V2)) {
+    throw new Error(`integer ${JSON.stringify(token)} is outside the safe-integer range`);
+  }
+  return Number(v);
+}
+function v2IntegerFieldOrNull(n) {
+  try {
+    return v2IntegerField(n);
+  } catch {
+    return null;
+  }
+}
+function v2StringField(n, message) {
+  if (n === void 0 || n.k !== "str")
+    throw new Error(message);
+  return n.v;
+}
+function validISO4217AlphaV2(code) {
+  return typeof code === "string" && /^[A-Z]{3}$/.test(code);
+}
+function validTimeZoneIDV2(tz) {
+  if (tz.length === 0 || tz.length > 64)
+    return false;
+  for (const segment of tz.split("/")) {
+    if (segment === "" || segment === "." || segment === "..")
+      return false;
+    if (!/^[A-Za-z0-9_+-]+$/.test(segment))
+      return false;
+  }
+  return true;
+}
+function parseHHMMV2(s) {
+  if (s.length !== 5 || s[2] !== ":" || !/^[0-9]{2}:[0-9]{2}$/.test(s))
+    throw new Error(`expected HH:MM, got ${JSON.stringify(s)}`);
+  const h2 = Number(s.slice(0, 2));
+  const m = Number(s.slice(3, 5));
+  if (h2 > 23 || m > 59)
+    throw new Error(`out-of-range HH:MM ${JSON.stringify(s)}`);
+  return h2 * 60 + m;
+}
+
+// ../../sdks/typescript/dist/protocol_v2_wire.js
+function validV2ID(id2) {
+  return typeof id2 === "string" && /^[0-9a-f]{64}$/.test(id2);
+}
+function equalHybridPublicKeys(a, b) {
+  return bytesEqual(a?.ed25519, b?.ed25519) && bytesEqual(a?.ml_dsa_65, b?.ml_dsa_65);
+}
+function placeholderV2Signature() {
+  return { ed25519: new Uint8Array(64), ml_dsa_65: new Uint8Array(3309) };
+}
+function validateHybridSignatureV2(sig) {
+  if (!sig || !(sig.ed25519 instanceof Uint8Array) || !(sig.ml_dsa_65 instanceof Uint8Array) || sig.ed25519.length !== 64 || sig.ml_dsa_65.length !== 3309) {
+    throw new Error("wire v2: signature must contain 64-byte Ed25519 and 3309-byte ML-DSA-65 components");
+  }
+}
+function keyWire(k) {
+  return { ed25519: k?.ed25519 ?? null, ml_dsa_65: k?.ml_dsa_65 ?? null };
+}
+function decodeHybridKey(n, what) {
+  if (n !== void 0 && n.k === "obj") {
+    for (const member of ["ed25519", "ml_dsa_65"]) {
+      if (!n.m.has(member))
+        throw new Error(`wire v2: ${what}.${member} is missing`);
+    }
+  }
+  const f = gStruct(n, ["ed25519", "ml_dsa_65"], what);
   return {
-    cert_id: cert.cert_id,
-    constraints: (cert.constraints ?? []).map((c, i) => checkedConstraintDict(c, `${path}.constraints[${i}]`)),
-    expires_at: checkWireInt(cert.expires_at, `${path}.expires_at`),
-    issued_at: checkWireInt(cert.issued_at, `${path}.issued_at`),
-    issuer_id: cert.issuer_id,
-    issuer_pub_key: cert.issuer_pub_key,
-    scope: cert.scope,
-    signature: cert.signature,
-    subject_id: cert.subject_id,
-    subject_pub_key: cert.subject_pub_key,
-    version: checkWireInt(cert.version, `${path}.version`)
+    ed25519: gBytes(f.get("ed25519"), `${what}.ed25519`) ?? new Uint8Array(0),
+    ml_dsa_65: gBytes(f.get("ml_dsa_65"), `${what}.ml_dsa_65`) ?? new Uint8Array(0)
   };
 }
-function checkedConstraintDict(c, path) {
-  const dict = canonicalConstraintDict(c);
-  if ("count" in dict)
-    checkWireInt(dict.count, `${path}.count`);
-  if ("window_s" in dict)
-    checkWireInt(dict.window_s, `${path}.window_s`);
-  return dict;
+var decodeHybridSignature = decodeHybridKey;
+function validateV2ScopeArray(n) {
+  if (n === void 0 || n.k !== "arr")
+    throw new Error("wire v2: scope must be an array of strings");
+  if (n.a.length > MAX_SCOPES_PER_CERT)
+    throw new Error("wire v2: scope count exceeds protocol bound");
+  n.a.forEach((raw, i) => {
+    if (raw.k !== "str" && raw.k !== "null" || raw.k === "str" && utf8Len(raw.v) > MAX_SCOPE_LENGTH_BYTES) {
+      throw new Error(`wire v2: scope ${i} must be a bounded string`);
+    }
+  });
 }
-function checkWireInt(v, field) {
-  if (typeof v === "bigint") {
-    throw new Error(`wire: ${field}: bigint is not a wire integer; use a number within the safe-integer range`);
+var DELEGATION_V2_FIELDS = ["version", "cert_id", "issuer_id", "issuer_pub_key", "subject_id", "subject_pub_key", "scope", "constraints", "issued_at", "expires_at", "signature"];
+var PROOF_BUNDLE_V2_FIELDS = ["version", "verifier_id", "agent_id", "agent_pub_key", "delegations", "delegation_digest", "challenge", "challenge_at", "challenge_sig", "session_context", "stream_id", "stream_seq"];
+function checkRawCertificate(n, prefix) {
+  try {
+    requireV2Fields(n, DELEGATION_V2_FIELDS);
+    const fields = n.m;
+    const constraints = fields.get("constraints");
+    if (constraints.k !== "arr")
+      throw new Error("constraints must be an array");
+    validateV2ScopeArray(fields.get("scope"));
+    constraints.a.forEach((raw, j) => {
+      try {
+        validateV2ConstraintFields(raw);
+      } catch (err2) {
+        throw wrapError(`constraint ${j}`, err2);
+      }
+    });
+  } catch (err2) {
+    throw wrapError(prefix, err2);
   }
-  if (typeof v !== "number" || !Number.isInteger(v)) {
-    throw new Error(`wire: ${field}: expected integer`);
-  }
-  if (!Number.isSafeInteger(v)) {
-    throw new Error(`wire: ${field}: integer outside the safe-integer range [-(2^53-1), 2^53-1]`);
-  }
-  return v;
 }
-function jsonText(value) {
-  return new TextDecoder().decode(canonicalJSON(value));
+function decodeCertStruct(n, what) {
+  const f = gStruct(n, DELEGATION_V2_FIELDS, what);
+  const rawConstraints = gArray(f.get("constraints"), `${what}.constraints`);
+  return {
+    version: gInt(f.get("version"), "version"),
+    cert_id: gString(f.get("cert_id"), "cert_id"),
+    issuer_id: gString(f.get("issuer_id"), "issuer_id"),
+    issuer_pub_key: decodeHybridKey(f.get("issuer_pub_key"), "issuer_pub_key"),
+    subject_id: gString(f.get("subject_id"), "subject_id"),
+    subject_pub_key: decodeHybridKey(f.get("subject_pub_key"), "subject_pub_key"),
+    scope: gStringArray(f.get("scope"), "scope"),
+    constraints: rawConstraints === null ? null : rawConstraints.map((c) => decodeConstraintNodeV2(c)),
+    issued_at: gInt(f.get("issued_at"), "issued_at"),
+    expires_at: gInt(f.get("expires_at"), "expires_at"),
+    signature: decodeHybridSignature(f.get("signature"), "signature")
+  };
+}
+function validateDelegationCertV2(c) {
+  if (c.version !== 2)
+    throw new Error("version must be 2");
+  if (!validV2Timestamp(c.issued_at) || !validV2Timestamp(c.expires_at))
+    throw new Error("issued_at and expires_at must be safe integers");
+  if (typeof c.cert_id !== "string" || c.cert_id === "" || utf8Len(c.cert_id) > MAX_IDENTIFIER_LENGTH_BYTES) {
+    throw new Error("cert_id must be non-empty and within the identifier byte limit");
+  }
+  if (!validV2ID(c.issuer_id) || !validV2ID(c.subject_id)) {
+    throw new Error("issuer_id and subject_id must be 64 lowercase hexadecimal characters");
+  }
+  let issuer;
+  let subject;
+  try {
+    issuer = keyIDV2(c.issuer_pub_key);
+  } catch (err2) {
+    throw wrapError("issuer key", err2);
+  }
+  try {
+    subject = keyIDV2(c.subject_pub_key);
+  } catch (err2) {
+    throw wrapError("subject key", err2);
+  }
+  if (c.issuer_id !== issuer || c.subject_id !== subject) {
+    throw v2Errorf("key_id_mismatch", "key ID does not match complete public key");
+  }
+  if (c.scope === null || !Array.isArray(c.scope))
+    throw new Error("scope must be an array");
+  for (const s of c.scope)
+    if (utf8Len(s) > MAX_SCOPE_LENGTH_BYTES)
+      throw new Error("scope exceeds the protocol byte limit");
+  if (c.constraints === null || !Array.isArray(c.constraints))
+    throw new Error("constraints must be an array");
+  if (c.scope.length > MAX_SCOPES_PER_CERT || c.constraints.length > MAX_CONSTRAINTS_PER_CERT) {
+    throw new Error("scope or constraint count exceeds protocol bound");
+  }
+  c.constraints.forEach((constraint, i) => {
+    try {
+      encodeConstraintV2(constraint);
+    } catch (err2) {
+      throw wrapError(`constraint ${i}`, err2);
+    }
+  });
+}
+function certSignableObject(c) {
+  return {
+    cert_id: c.cert_id,
+    constraints: (c.constraints ?? []).map(constraintWireObjectV2),
+    expires_at: c.expires_at,
+    issued_at: c.issued_at,
+    issuer_id: c.issuer_id,
+    issuer_pub_key: keyWire(c.issuer_pub_key),
+    scope: c.scope,
+    subject_id: c.subject_id,
+    subject_pub_key: keyWire(c.subject_pub_key),
+    version: c.version
+  };
+}
+function certCanonicalObject(c, nilConstraintsAsEmpty) {
+  const o = certSignableObject(c);
+  if (!nilConstraintsAsEmpty && c.constraints === null)
+    o.constraints = null;
+  o.signature = keyWire(c.signature);
+  return o;
+}
+function delegationCertV2SignBytes(c) {
+  return canonicalJSONV2(certSignableObject(c));
+}
+function decodeDelegationCertV2(data) {
+  return classified("malformed", () => {
+    checkV2WireSize(data, "certificate", "MAX_DELEGATION_CERT_BYTES_V2", MAX_DELEGATION_CERT_BYTES_V2);
+    const root = checkWireJSONV2(data);
+    checkRawCertificate(root, "wire v2");
+    rejectV2UnexpectedNull(root);
+    const cert = decodeCertStruct(root, "certificate");
+    validateDelegationCertV2(cert);
+    validateHybridSignatureV2(cert.signature);
+    return cert;
+  });
+}
+function encodeDelegationCertV2(c) {
+  return classified("malformed", () => {
+    if (!c)
+      throw new Error("v2 delegation certificate is nil");
+    validateDelegationCertV2(c);
+    validateHybridSignatureV2(c.signature);
+    const encoded = canonicalJSONV2(certCanonicalObject(c, false));
+    try {
+      decodeDelegationCertV2(encoded);
+    } catch (err2) {
+      throw wrapError("invalid v2 delegation certificate", err2);
+    }
+    return encoded;
+  });
+}
+async function signDelegationCertV2(cert, issuer, opts = {}) {
+  return withLocalSignerV2(issuer, { deterministic: opts.deterministic }, (signer) => signDelegationCertV2WithSigner(cert, signer));
+}
+async function signDelegationCertV2WithSigner(cert, signer, opts = {}) {
+  return classifiedAsync("malformed", async () => {
+    if (!cert)
+      throw new Error("v2 delegation certificate is nil");
+    validateDelegationCertV2(cert);
+    const scopeErr = validateScopesV2(cert.scope);
+    if (scopeErr)
+      throw new Error(`v2 issuer scope: ${scopeErr}`);
+    validateDelegationIssuanceV2(cert);
+    const issuerPub = await signerPublicKeyV2(signer);
+    const issuerID = keyIDV2(issuerPub);
+    if (cert.issuer_id !== issuerID || !equalHybridPublicKeys(cert.issuer_pub_key, issuerPub)) {
+      throw v2Errorf("key_id_mismatch", "v2 issuer key does not match certificate issuer");
+    }
+    const prepared = decodeDelegationCertV2(encodeDelegationCertV2({ ...cert, signature: placeholderV2Signature() }));
+    const signable = delegationCertV2SignBytes(prepared);
+    prepared.signature = await signV2StatementWithSigner(V2_OBJECT_TYPE.delegationCertificate, signable, signer, issuerPub, opts);
+    const signed = decodeDelegationCertV2(encodeDelegationCertV2(prepared));
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable, signed.signature, issuerPub);
+    } catch (err2) {
+      throw wrapError("signed v2 delegation certificate failed verification", err2);
+    }
+    return signed;
+  });
+}
+function validateDelegationIssuanceV2(cert) {
+  if (cert.issued_at >= cert.expires_at)
+    throw new Error("v2 issuer duty: issued_at must be earlier than expires_at");
+  if (cert.expires_at - cert.issued_at > V2_MAX_DELEGATION_LIFETIME_SECONDS) {
+    throw new Error(`v2 issuer duty: delegation lifetime exceeds ${V2_MAX_DELEGATION_LIFETIME_SECONDS} seconds`);
+  }
+  let resourceID = "";
+  const prefixes = [];
+  (cert.constraints ?? []).forEach((c, i) => {
+    if (c.type !== CONSTRAINT_RESOURCE_PATH_V2)
+      return;
+    const prefix = c.path_prefix ?? "";
+    if (prefix !== "") {
+      try {
+        normalizeResourcePath(prefix);
+      } catch (err2) {
+        throw new Error(`v2 issuer duty: constraint ${i} path_prefix can never match: ${err2.message}`);
+      }
+    }
+    if (resourceID === "")
+      resourceID = c.resource_id ?? "";
+    else if (c.resource_id !== resourceID) {
+      throw new Error(`v2 issuer duty: constraint ${i} names a different resource_id; the resource_path set is jointly unsatisfiable`);
+    }
+    for (const prior of prefixes) {
+      if (!resourcePathsNested(prior, prefix)) {
+        throw new Error(`v2 issuer duty: constraint ${i} path_prefix ${JSON.stringify(prefix)} does not nest with ${JSON.stringify(prior)}; the resource_path set is jointly unsatisfiable`);
+      }
+    }
+    prefixes.push(prefix);
+  });
+}
+function presentationSignableObject(b) {
+  return {
+    agent_id: b.agent_id,
+    agent_pub_key: keyWire(b.agent_pub_key),
+    challenge: b.challenge,
+    challenge_at: b.challenge_at,
+    delegation_digest: b.delegation_digest,
+    session_context: b.session_context,
+    stream_id: b.stream_id,
+    stream_seq: b.stream_seq,
+    verifier_id: b.verifier_id,
+    version: b.version
+  };
+}
+function presentationV2SignBytes(b) {
+  return canonicalJSONV2(presentationSignableObject(b));
+}
+function delegationDigestV2(certs) {
+  const canonical = canonicalJSONV2(certs.map((c) => certCanonicalObject(c, true)));
+  return sha384(concatBytes(utf8("ratify-protocol-delegations-v2\0"), canonical));
+}
+function encodeProofBundleV2(b) {
+  return classified("malformed", () => {
+    if (!b)
+      throw new Error("v2 proof bundle is nil");
+    const wire = presentationSignableObject(b);
+    wire.challenge_sig = keyWire(b.challenge_sig);
+    wire.delegations = b.delegations === null ? null : b.delegations.map((c) => certCanonicalObject(c, false));
+    const encoded = canonicalJSONV2(wire);
+    try {
+      decodeProofBundleV2(encoded);
+    } catch (err2) {
+      throw wrapError("invalid v2 proof bundle", err2);
+    }
+    return encoded;
+  });
+}
+function optionalBytes(n, what) {
+  if (n === void 0 || n.k === "null")
+    return null;
+  return gBytes(n, what) ?? new Uint8Array(0);
+}
+function decodeProofBundleV2(data) {
+  return classified("malformed", () => {
+    checkV2WireSize(data, "proof bundle", "MAX_PROOF_BUNDLE_BYTES_V2", MAX_PROOF_BUNDLE_BYTES_V2);
+    const root = checkWireJSONV2(data, ["delegation_digest"]);
+    requireV2Fields(root, PROOF_BUNDLE_V2_FIELDS, ["session_context", "stream_id", "stream_seq"]);
+    const top = root.m;
+    const rawDelegations = top.get("delegations");
+    if (rawDelegations.k !== "arr")
+      throw new Error("wire v2: delegations must be an array");
+    rawDelegations.a.forEach((raw, i) => checkRawCertificate(raw, `wire v2 delegation ${i}`));
+    rejectV2UnexpectedNull(root);
+    const f = gStruct(root, PROOF_BUNDLE_V2_FIELDS, "proof bundle");
+    const delegations = gArray(f.get("delegations"), "delegations");
+    const stream = f.get("stream_seq");
+    const bundle = {
+      version: gInt(f.get("version"), "version"),
+      verifier_id: gString(f.get("verifier_id"), "verifier_id"),
+      agent_id: gString(f.get("agent_id"), "agent_id"),
+      agent_pub_key: decodeHybridKey(f.get("agent_pub_key"), "agent_pub_key"),
+      delegations: delegations === null ? null : delegations.map((c, i) => decodeCertStruct(c, `delegations[${i}]`)),
+      delegation_digest: gBytes(f.get("delegation_digest"), "delegation_digest") ?? new Uint8Array(0),
+      challenge: gBytes(f.get("challenge"), "challenge") ?? new Uint8Array(0),
+      challenge_at: gInt(f.get("challenge_at"), "challenge_at"),
+      challenge_sig: decodeHybridSignature(f.get("challenge_sig"), "challenge_sig"),
+      session_context: optionalBytes(f.get("session_context"), "session_context"),
+      stream_id: optionalBytes(f.get("stream_id"), "stream_id"),
+      stream_seq: stream === void 0 || stream.k === "null" ? null : gInt(stream, "stream_seq")
+    };
+    if (bundle.version !== 2)
+      throw new Error("wire v2: version must be 2");
+    if (!validV2ID(bundle.verifier_id) || !validV2ID(bundle.agent_id)) {
+      throw new Error("wire v2: verifier_id and agent_id must be 64 lowercase hexadecimal characters");
+    }
+    if (bundle.delegations === null)
+      throw new Error("wire v2: delegations must be an array");
+    if (bundle.delegations.length > MAX_DELEGATION_CHAIN_DEPTH) {
+      throw new Error(`wire v2: delegation chain exceeds MAX_DELEGATION_CHAIN_DEPTH (${MAX_DELEGATION_CHAIN_DEPTH})`);
+    }
+    if (bundle.challenge.length !== 32)
+      throw new Error("wire v2: challenge must be 32 bytes");
+    if (!validV2Timestamp(bundle.challenge_at))
+      throw new Error("wire v2: challenge_at is outside 0..253402300799");
+    if (bundle.delegation_digest.length !== 48)
+      throw new Error("wire v2: delegation_digest must be 48 bytes");
+    if (bundle.session_context !== null && bundle.session_context.length !== 32) {
+      throw new Error("wire v2: session_context must be null or 32 bytes");
+    }
+    if (bundle.stream_id === null !== (bundle.stream_seq === null)) {
+      throw new Error("wire v2: stream_id and stream_seq must both be null or both set");
+    }
+    if (bundle.stream_id !== null && (bundle.stream_id.length !== 32 || bundle.stream_seq <= 0)) {
+      throw new Error("wire v2: bound stream requires 32-byte stream_id and positive stream_seq");
+    }
+    if (bundle.stream_seq !== null && bundle.stream_seq > MAX_SAFE_INTEGER_V2)
+      throw new Error("wire v2: stream_seq exceeds the safe integer range");
+    validateHybridSignatureV2(bundle.challenge_sig);
+    bundle.delegations.forEach((c, i) => {
+      try {
+        validateDelegationCertV2(c);
+        validateHybridSignatureV2(c.signature);
+      } catch (err2) {
+        throw wrapError(`wire v2 delegation ${i}`, err2);
+      }
+    });
+    return bundle;
+  });
+}
+function verifyProofBundleV2Structure(b) {
+  if (!b)
+    throw v2Errorf("malformed", "v2 proof bundle is nil");
+  if (b.version !== 2)
+    throw v2Errorf("malformed", "v2 proof bundle version must be 2");
+  if (b.delegations === null || !Array.isArray(b.delegations)) {
+    if (!(b.challenge?.length === 32 && b.delegation_digest?.length === 48)) {
+      throw v2Errorf("malformed", "v2 proof bundle exceeds a chain bound or has an invalid challenge/digest length");
+    }
+    throw v2Errorf("malformed", "v2 delegations must be an array");
+  }
+  if (b.delegations.length > MAX_DELEGATION_CHAIN_DEPTH || b.challenge?.length !== 32 || b.delegation_digest?.length !== 48) {
+    throw v2Errorf("malformed", "v2 proof bundle exceeds a chain bound or has an invalid challenge/digest length");
+  }
+  if (b.stream_seq !== null && b.stream_seq > MAX_SAFE_INTEGER_V2)
+    throw v2Errorf("malformed", "v2 stream sequence exceeds the safe integer range");
+  if (b.session_context !== null && b.session_context.length !== 32)
+    throw v2Errorf("malformed", "v2 session_context must be null or 32 bytes");
+  const streamNull = b.stream_id === null;
+  if (streamNull !== (b.stream_seq === null) || !streamNull && (b.stream_id.length !== 32 || b.stream_seq <= 0)) {
+    throw v2Errorf("malformed", "v2 stream_id and stream_seq must both be null or a 32-byte ID and positive sequence");
+  }
+  if (!validV2ID(b.agent_id) || !validV2ID(b.verifier_id))
+    throw v2Errorf("malformed", "v2 verifier and agent IDs must be canonical");
+  let agentID;
+  try {
+    agentID = keyIDV2(b.agent_pub_key);
+  } catch (err2) {
+    throw v2Classify("malformed", err2);
+  }
+  if (agentID !== b.agent_id)
+    throw v2Errorf("key_id_mismatch", "agent_id does not match agent_pub_key");
+  const certs = b.delegations;
+  certs.forEach((c, i) => {
+    try {
+      validateDelegationCertV2(c);
+    } catch (err2) {
+      throw v2Classify("malformed", wrapError(`delegation ${i}`, err2));
+    }
+  });
+  let digest;
+  try {
+    digest = delegationDigestV2(certs);
+  } catch (err2) {
+    throw v2Classify("malformed", err2);
+  }
+  if (!bytesEqual(digest, b.delegation_digest))
+    throw v2Errorf("delegation_digest_mismatch", "delegation_digest mismatch");
+  const seen = /* @__PURE__ */ new Set();
+  for (let i = 0; i < certs.length; i++) {
+    const c = certs[i];
+    const ref = c.issuer_id + "\0" + c.cert_id;
+    if (seen.has(ref))
+      throw v2Errorf("duplicate_certificate_ref", "duplicate delegation reference");
+    seen.add(ref);
+    const parent = certs[i + 1];
+    if (parent && (c.issuer_id !== parent.subject_id || !equalHybridPublicKeys(c.issuer_pub_key, parent.subject_pub_key))) {
+      throw v2Errorf("chain_linkage_mismatch", `delegation chain link ${i} does not match parent subject`);
+    }
+  }
+  const leaf = certs[0];
+  if (leaf && (leaf.subject_id !== b.agent_id || !equalHybridPublicKeys(leaf.subject_pub_key, b.agent_pub_key))) {
+    throw v2Errorf("chain_linkage_mismatch", "agent key does not match leaf delegation subject");
+  }
+}
+async function verifyProofBundleV2SignaturesOnly(b) {
+  const certs = b.delegations ?? [];
+  for (let i = 0; i < certs.length; i++) {
+    const c = certs[i];
+    let signable2;
+    try {
+      signable2 = delegationCertV2SignBytes(c);
+    } catch (err2) {
+      throw v2Classify("malformed", err2);
+    }
+    try {
+      await verifyV2Statement(V2_OBJECT_TYPE.delegationCertificate, signable2, c.signature, c.issuer_pub_key);
+    } catch (err2) {
+      throw wrapError(`delegation ${i} signature`, err2);
+    }
+  }
+  let signable;
+  try {
+    signable = presentationV2SignBytes(b);
+  } catch (err2) {
+    throw v2Classify("malformed", err2);
+  }
+  await verifyV2Statement(V2_OBJECT_TYPE.challengePresentation, signable, b.challenge_sig, b.agent_pub_key);
+}
+async function verifyProofBundleV2Signatures(b) {
+  return classifiedAsync("malformed", async () => {
+    verifyProofBundleV2Structure(b);
+    await verifyProofBundleV2SignaturesOnly(b);
+  });
+}
+async function signProofBundleV2(bundle, agent, opts = {}) {
+  return withLocalSignerV2(agent, { deterministic: opts.deterministic }, (signer) => signProofBundleV2WithSigner(bundle, signer));
+}
+async function signProofBundleV2WithSigner(bundle, signer, opts = {}) {
+  return classifiedAsync("malformed", async () => {
+    if (!bundle)
+      throw new Error("v2 proof bundle is nil");
+    const agentPub = await signerPublicKeyV2(signer);
+    const agentID = keyIDV2(agentPub);
+    if (bundle.agent_id !== agentID || !equalHybridPublicKeys(bundle.agent_pub_key, agentPub)) {
+      throw v2Errorf("key_id_mismatch", "v2 agent key does not match proof bundle agent");
+    }
+    const prepared = decodeProofBundleV2(encodeProofBundleV2({
+      ...bundle,
+      challenge_sig: placeholderV2Signature(),
+      delegation_digest: new Uint8Array(48)
+    }));
+    prepared.delegation_digest = delegationDigestV2(prepared.delegations ?? []);
+    prepared.challenge_sig = await signV2StatementWithSigner(V2_OBJECT_TYPE.challengePresentation, presentationV2SignBytes(prepared), signer, agentPub, opts);
+    const signed = decodeProofBundleV2(encodeProofBundleV2(prepared));
+    try {
+      await verifyProofBundleV2Signatures(signed);
+    } catch (err2) {
+      throw wrapError("invalid signed v2 proof bundle", err2);
+    }
+    return signed;
+  });
 }
 
 // src/constants.ts
 var REQUIRED_SCOPE = "custom:github:deploy";
 var REPOSITORY = "identities-ai/copilot-authority-demo";
-var RESOURCE_ID = `github:${REPOSITORY}`;
+var RESOURCE_ID = `git:github.com/${REPOSITORY}`;
 var ALLOWED_PATH = "/services/payments/environments/staging";
 var CERT_ID = "ratify-copilot-reference-cert";
 
@@ -39121,28 +41353,22 @@ var CERT_ID = "ratify-copilot-reference-cert";
 function seed(byte) {
   return new Uint8Array(32).fill(byte);
 }
+var unsigned = { ed25519: new Uint8Array(0), ml_dsa_65: new Uint8Array(0) };
 async function createDemoAuthority() {
-  const rootKeys = await hybridKeypairFromSeeds(seed(11), seed(12));
-  const agentKeys = await hybridKeypairFromSeeds(seed(21), seed(22));
-  const root = {
-    id: deriveID(rootKeys.publicKey),
-    public_key: rootKeys.publicKey,
-    created_at: 17e8
-  };
-  const agent = {
-    id: deriveID(agentKeys.publicKey),
-    public_key: agentKeys.publicKey,
-    name: "GitHub Copilot deployment adapter",
-    agent_type: "mcp_adapter",
-    created_at: 17e8
-  };
-  const delegation = {
+  const root = await hybridKeypairFromSeeds(seed(11), seed(12));
+  const status = await hybridKeypairFromSeeds(seed(13), seed(14));
+  const agent = await hybridKeypairFromSeeds(seed(21), seed(22));
+  const rootID = keyIDV22(root.publicKey);
+  const agentID = keyIDV22(agent.publicKey);
+  const delegation = await signDelegationCertV2({
+    version: 2,
     cert_id: CERT_ID,
-    version: PROTOCOL_VERSION,
-    issuer_id: root.id,
-    issuer_pub_key: root.public_key,
-    subject_id: agent.id,
-    subject_pub_key: agent.public_key,
+    issuer_id: rootID,
+    issuer_pub_key: root.publicKey,
+    subject_id: agentID,
+    subject_pub_key: agent.publicKey,
+    // An exact custom: scope. It is matched by byte equality and no wildcard
+    // or canonical scope grants it (SPEC-v2 §2.4).
     scope: [REQUIRED_SCOPE],
     constraints: [{
       type: "resource_path",
@@ -39151,27 +41377,26 @@ async function createDemoAuthority() {
     }],
     issued_at: 17e8,
     expires_at: 19e8,
-    signature: { ed25519: new Uint8Array(), ml_dsa_65: new Uint8Array() }
-  };
-  await issueDelegation(delegation, rootKeys.privateKey);
-  return { root, agent, agentPrivateKey: agentKeys.privateKey, delegation };
+    signature: unsigned
+  }, root);
+  return { root, rootID, status, agent, agentID, delegation };
 }
-async function presentAuthority(authority, challenge, sessionContext) {
-  const challengeAt = Math.floor(Date.now() / 1e3);
-  return {
-    agent_id: authority.agent.id,
-    agent_pub_key: authority.agent.public_key,
+async function presentAuthority(authority, challenge) {
+  const bundle = await signProofBundleV2({
+    version: 2,
+    verifier_id: challenge.verifierID,
+    agent_id: authority.agentID,
+    agent_pub_key: authority.agent.publicKey,
     delegations: [authority.delegation],
-    challenge,
-    challenge_at: challengeAt,
-    challenge_sig: await signChallenge(
-      challenge,
-      challengeAt,
-      authority.agentPrivateKey,
-      sessionContext
-    ),
-    session_context: sessionContext
-  };
+    delegation_digest: new Uint8Array(0),
+    challenge: challenge.value,
+    challenge_at: challenge.challengeAt,
+    challenge_sig: unsigned,
+    session_context: challenge.sessionContext,
+    stream_id: null,
+    stream_seq: null
+  }, authority.agent);
+  return encodeProofBundleV2(bundle);
 }
 
 // src/adapter.ts
@@ -39186,18 +41411,16 @@ async function post(url2, body) {
 }
 async function invokeProtectedDeploy(receiverURL, request, authority) {
   const presenter = authority ?? await createDemoAuthority();
-  const challenge = await post(
-    `${receiverURL}/challenge`,
-    { request }
-  );
-  const proof = await presentAuthority(
-    presenter,
-    base64StandardDecode(challenge.challenge),
-    base64StandardDecode(challenge.session_context)
-  );
+  const challenge = await post(`${receiverURL}/challenge`, { request });
+  const proof = await presentAuthority(presenter, {
+    value: new Uint8Array(Buffer.from(challenge.challenge, "base64")),
+    challengeAt: challenge.challenge_at,
+    verifierID: challenge.verifier_id,
+    sessionContext: new Uint8Array(Buffer.from(challenge.session_context, "base64"))
+  });
   const decision = await post(`${receiverURL}/deploy`, {
     request,
-    proof: encodeProofBundle(proof)
+    proof: Buffer.from(proof).toString("base64")
   });
   return { decision, proof };
 }

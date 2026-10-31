@@ -1,0 +1,1521 @@
+{
+  "version": 1,
+  "description": "Shared concurrency scenarios for the Part B reference store (SPEC-v2 §6.9, §6.11, §7.3 to §7.8). Every SDK runs every scenario default_iterations times (a runner may take another count from its environment, and a runner whose build or runtime makes that count slow may default to fewer iterations, documented in the runner), each iteration on a fresh in-memory reference store built exactly as for lifecycle-scenarios.json (inputs): its requests, bundles_b64, verifier_key, log_id and lease_seconds, the store clock starting at start_time, and rate_at_finalization with the same meaning. An iteration runs setup sequentially, then starts every participant at once with the runtime's real concurrency and waits for all of them, then checks every invariant, then runs after sequentially. Thread interleavings differ by runtime, so invariants constrain only outcomes: which labels occur, how many times, and what the store holds afterwards.",
+  "inputs": "lifecycle-scenarios.json",
+  "default_iterations": 20,
+  "labels": {
+    "acknowledge": "acknowledged/\u003ctimestamp\u003e, or refused",
+    "cancel": "done",
+    "claim_only": "the claim disposition (created, in_progress, terminal_replay), or error/\u003cerror_class\u003e",
+    "finalize": "committed (the store committed this result), identical (the same result was already committed), or error/\u003cerror_class\u003e",
+    "recover": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e of the returned outcome, or error/\u003cerror_class\u003e",
+    "recover_direct": "as finalize",
+    "release": "released/\u003cdecision\u003e/\u003crelease_time\u003e/\u003creceipt_sequence\u003e, or \u003cstatus\u003e/\u003creason\u003e for pending, withheld and rejected",
+    "resume": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e of the returned handoff, or error/\u003cerror_class\u003e; with mode release, the release label of the returned handoff, or error/\u003cerror_class\u003e when resumption fails",
+    "set_time": "done",
+    "verify": "committed/\u003cdecision\u003e/\u003cdecision_reason\u003e read from the committed receipt body; replay/\u003cdisposition\u003e; preflight/\u003cerror_class\u003e; evaluating/\u003cerror_class\u003e"
+  },
+  "operations": {
+    "acknowledge": "submit request's last published receipt to the reference checkpoint with its own entry hash, as the lifecycle acknowledge step with mode exact",
+    "cancel": "signal the caller cancellation of every participant of group target. The runner spreads the signal over different points of the target's verification across iterations (an implementation-defined delay, for example a fraction of a measured uncancelled verification that varies with the iteration); no particular outcome is required of any one iteration",
+    "claim_only": "preflight and claim request without evaluating, as the lifecycle claim_only step",
+    "committed results": "every terminal result committed during an iteration, by a setup or after step or by a participant (a committed verify, recover or resume outcome, or a finalize or recover_direct labelled committed with the claim ID of its setup claim_only step and its body_b64), is recorded per claim ID; a later identical commit of the same claim is the same record",
+    "finalize": "the claim store's finalize operation for request's claim, with the owner token its setup claim_only step returned, terminal_b64, body_b64 and allow_valid_until (0 when absent)",
+    "participants": "each entry is count participants of group performing op once. A participant has its own callbacks and its own copy of every input; all participants share the scenario's one store. A request's claim is always the claim ID ProtocolClaimID(verifier namespace, replay epoch, challenge) of the request's expected challenge, as for the lifecycle recover step, whichever step or participant created it",
+    "recover": "RecoverInterruptedClaim for request's claim",
+    "recover_direct": "the claim store's recovery operation for request's claim with terminal_b64 and body_b64",
+    "release": "ReleaseV2Decision of request's committed outcome with its last published receipt and the reference checkpoint, as the lifecycle release step",
+    "resume": "ResumeCommittedClaim for request's claim against the store, as the lifecycle resume step without a record (SPEC-v2 §7.11). The returned handoff is a committed result of the claim (committed results), and its receipt body must equal the body already recorded for the claim, if any: a resumed body that differs from the recorded one fails the iteration. The participant never replaces the request's committed outcome held for other participants. With mode release it then releases the returned handoff with request's last published receipt and the reference checkpoint, as the release participant does",
+    "set_time": "set the store clock to time while the other participants run",
+    "setup and after": "steps in the lifecycle-scenarios.json vocabulary (set_time, set_ack_withheld, verify, claim_only, publish, release, recover, resume) with the same semantics and expectations. An after step may carry expect_by_outcome instead of expect: group names a group with exactly one participant, and cases maps that participant's label to the step's expectation",
+    "verify": "VerifyProofBundleV2 for request against the store at the store clock read when the participant starts, as a lifecycle verify step with mode \"\". A verify whose group is the target of a cancel participant runs with a cancellable caller context"
+  },
+  "invariants": {
+    "all_equal": "every participant of groups has the same label",
+    "allowed": "every participant of groups (all participants when groups is absent) has a label in outcomes",
+    "count": "the number of participants of groups (all when absent) with a label in outcomes is exactly equals, or at most at_most",
+    "one_winner": "at most one group of by_group has a participant whose label is in winning (a count invariant states when one is required); every participant of that group has a label in its if_winner list and every participant of every other group of by_group a label in its if_loser list",
+    "receipt_log_contiguous": "publish every committed result recorded in the iteration through the reference publisher, in any order, retrying an entry that fails head_of_line_blocked after the others until a full pass publishes nothing new: every result publishes, the receipt sequences are exactly 1..k for k recorded claims, and each claim's receipt is the same on a second publication. A second terminal commit of one claim, or a commit that never reached the outbox, breaks this"
+  },
+  "scenarios": [
+    {
+      "name": "same_challenge_claim_storm",
+      "description": "8 concurrent verifications of one proof (SPEC-v2 §7.3): the claim is created once, so exactly one commits and every other sees the claim in progress or terminal; the one receipt publishes at sequence 1 and releases",
+      "start_time": 1800000000,
+      "setup": [],
+      "participants": [
+        {
+          "group": "verifiers",
+          "count": 8,
+          "op": "verify",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/allow/authorized"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "committed/allow/authorized",
+            "replay/terminal_replay",
+            "replay/in_progress"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "same_challenge_claim_storm_store_level",
+      "description": "8 concurrent claims of one proof without evaluation (SPEC-v2 §7.3): exactly one is created and holds the evaluator lease, every other is in progress; after the lease, recovery commits evaluation_interrupted once",
+      "start_time": 1800000000,
+      "setup": [],
+      "participants": [
+        {
+          "group": "claimers",
+          "count": 8,
+          "op": "claim_only",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "created"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "created",
+            "in_progress"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "in_progress"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        },
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "conflicting_proofs_for_one_challenge",
+      "description": "4 verifications each of two different proofs for one challenge (R1 and R1x, whose signed rate batches differ) run concurrently (SPEC-v2 §7.3): the first claim seals one proof, which commits once; every verification of the other proof fails before claim with claim_replay and admits nothing, so R2 is still admitted afterwards",
+      "start_time": 1800000000,
+      "rate_at_finalization": true,
+      "setup": [],
+      "participants": [
+        {
+          "group": "r1",
+          "count": 4,
+          "op": "verify",
+          "request": "R1"
+        },
+        {
+          "group": "r1x",
+          "count": 4,
+          "op": "verify",
+          "request": "R1x"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/allow/authorized"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "one_winner",
+          "winning": [
+            "committed/allow/authorized"
+          ],
+          "by_group": {
+            "r1": {
+              "if_winner": [
+                "committed/allow/authorized",
+                "replay/terminal_replay",
+                "replay/in_progress"
+              ],
+              "if_loser": [
+                "preflight/claim_replay"
+              ]
+            },
+            "r1x": {
+              "if_winner": [
+                "committed/allow/authorized",
+                "replay/terminal_replay",
+                "replay/in_progress"
+              ],
+              "if_loser": [
+                "preflight/claim_replay"
+              ]
+            }
+          }
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "R2",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        }
+      ]
+    },
+    {
+      "name": "owner_finalize_races_lease_expiry_and_recovery",
+      "description": "an evaluator holds the claim of request A while the clock reaches its lease expiry and 3 recoverers commit the canonical interrupted result directly (SPEC-v2 §7.5): at most one terminal result is committed, by the owner (lease still live) or by one recoverer (lease expired), and none when every recovery ran before the expiry and the owner after it; the owner is never committed after recovery and recovery never replaces the owner's result, so a later recovery is claim_already_terminal exactly when the owner committed",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 1,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "recoverers",
+          "count": 3,
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "clock",
+          "count": 1,
+          "op": "set_time",
+          "time": 1800000030
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "groups": [
+            "owner",
+            "recoverers"
+          ],
+          "outcomes": [
+            "committed"
+          ],
+          "at_most": 1
+        },
+        {
+          "kind": "one_winner",
+          "winning": [
+            "committed"
+          ],
+          "by_group": {
+            "owner": {
+              "if_winner": [
+                "committed"
+              ],
+              "if_loser": [
+                "error/claim_lease_lost",
+                "error/claim_already_terminal"
+              ]
+            },
+            "recoverers": {
+              "if_winner": [
+                "committed",
+                "identical",
+                "error/claim_lease_live"
+              ],
+              "if_loser": [
+                "error/claim_lease_live",
+                "error/claim_already_terminal"
+              ]
+            }
+          }
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {},
+          "expect_by_outcome": {
+            "group": "owner",
+            "cases": {
+              "committed": {
+                "error_class": "claim_already_terminal"
+              },
+              "error/claim_already_terminal": {
+                "stage": "committed",
+                "decision": "indeterminate",
+                "decision_reason": "evaluation_interrupted",
+                "trust_assessment": "not_evaluated",
+                "status_assessment": "not_evaluated",
+                "context_assessment": "not_evaluated"
+              },
+              "error/claim_lease_lost": {
+                "stage": "committed",
+                "decision": "indeterminate",
+                "decision_reason": "evaluation_interrupted",
+                "trust_assessment": "not_evaluated",
+                "status_assessment": "not_evaluated",
+                "context_assessment": "not_evaluated"
+              }
+            }
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recovery_races_after_owner_committed",
+      "description": "the evaluator of request A committed an allow; after its lease would have expired, 4 direct recoveries and 2 recoveries through RecoverInterruptedClaim run concurrently (SPEC-v2 §7.5): every one is claim_already_terminal, so recovery never replaces a committed result and nothing reaches the receipt outbox twice",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        }
+      ],
+      "participants": [
+        {
+          "group": "recoverers",
+          "count": 4,
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "helpers",
+          "count": 2,
+          "op": "recover",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "error/claim_already_terminal"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "late_worker_finalize_after_recovery",
+      "description": "after the evaluator lease of request A expired, 2 late finalizations by the original evaluator race 3 recoveries through RecoverInterruptedClaim (SPEC-v2 §7.5, §7.9): every recovery returns the one evaluation_interrupted result and every late finalization fails, lease lost or already terminal; the result publishes once and releases as a non-actionable indeterminate",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 2,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "recoverers",
+          "count": 3,
+          "op": "recover",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "error/claim_lease_lost",
+            "error/claim_already_terminal"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "recoverers"
+          ],
+          "outcomes": [
+            "committed/indeterminate/evaluation_interrupted"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "indeterminate",
+            "release_status": "released",
+            "release_time": 1800000030,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "cancel_races_finalization",
+      "description": "the caller cancels a verification of request A while it runs (SPEC-v2 §6.11): before the claim nothing is consumed; after the claim nothing is committed and the claim stays in progress; a verification that committed reports committed. An exact retry agrees with the reported outcome in each case",
+      "start_time": 1800000000,
+      "setup": [],
+      "participants": [
+        {
+          "group": "verifier",
+          "count": 1,
+          "op": "verify",
+          "request": "A"
+        },
+        {
+          "group": "canceller",
+          "count": 1,
+          "op": "cancel",
+          "target": "verifier"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "verifier"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "preflight/evaluation_cancelled",
+            "evaluating/evaluation_cancelled"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {},
+          "expect_by_outcome": {
+            "group": "verifier",
+            "cases": {
+              "committed/allow/authorized": {
+                "stage": "replay",
+                "disposition": "terminal_replay"
+              },
+              "evaluating/evaluation_cancelled": {
+                "stage": "replay",
+                "disposition": "in_progress"
+              },
+              "preflight/evaluation_cancelled": {
+                "stage": "committed",
+                "decision": "allow",
+                "decision_reason": "authorized",
+                "allow_horizon": 1800003600
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "concurrent_identical_retries",
+      "description": "6 identical finalizations by the owner of request A's claim race 4 exact retries of the proof (SPEC-v2 §7.3, §7.5): exactly one finalization commits, every other is identical, and every retry sees the claim in progress or terminal without evaluating",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 6,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "retries",
+          "count": 4,
+          "op": "verify",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed",
+            "identical"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "retries"
+          ],
+          "outcomes": [
+            "replay/terminal_replay",
+            "replay/in_progress"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "concurrent_identical_recoveries",
+      "description": "6 identical direct recoveries of request A's claim after its lease expired (SPEC-v2 §7.5): exactly one commits and every other is identical; the recovery helper then returns the same result",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        },
+        {
+          "op": "set_time",
+          "time": 1800000030,
+          "expect": {}
+        }
+      ],
+      "participants": [
+        {
+          "group": "recoverers",
+          "count": 6,
+          "op": "recover_direct",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIn0=",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwiY29udGV4dF9wb2xpY3lfZGlnZXN0IjpudWxsLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJldmFsdWF0aW9uX2ludGVycnVwdGVkIiwiZ3JhbnRlZF9zY29wZSI6W10sImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6YXRpb25fdW52ZXJpZmllZCIsImlzc3Vlcl9pZHMiOlsiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiXSwicmVxdWlyZWRfc2NvcGUiOiJkYXRhOnJlYWQiLCJzdGF0dXNfYXNzZXNzbWVudCI6Im5vdF9ldmFsdWF0ZWQiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJub3RfZXZhbHVhdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "committed",
+            "identical"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "release_while_acknowledgement_lands",
+      "description": "6 releases of one committed allow run while its receipt's acknowledgement lands (SPEC-v2 §6.9, §7.8): each release is pending before the acknowledgement or released after it, every released result is the same (decision, release time, receipt sequence), and a release afterwards returns it again",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "set_ack_withheld",
+          "withheld": true,
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "releasers",
+          "count": 6,
+          "op": "release",
+          "request": "A"
+        },
+        {
+          "group": "acknowledger",
+          "count": 1,
+          "op": "acknowledge",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "releasers"
+          ],
+          "outcomes": [
+            "pending/acknowledgement_unavailable",
+            "released/allow/1800000000/1"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "acknowledger"
+          ],
+          "outcomes": [
+            "acknowledged/1800000000"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "concurrent_release_of_one_decision",
+      "description": "8 concurrent releases of one acknowledged allow (SPEC-v2 §6.9): the first release record wins and every release returns the same released result",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "releasers",
+          "count": 8,
+          "op": "release",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "all_equal",
+          "groups": [
+            "releasers"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "released/allow/1800000000/1"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": []
+    },
+    {
+      "name": "concurrent_stream_advances",
+      "description": "after stream sequence 1, 3 verifications each of two different proofs carrying stream_seq 2 run concurrently (SPEC-v2 §7.4): claims are serialized per stream key, so one proof commits once and every verification of the other fails before claim with stream_sequence_mismatch; the stream then accepts only sequence 3",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "S1",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "s2",
+          "count": 3,
+          "op": "verify",
+          "request": "S2"
+        },
+        {
+          "group": "s2b",
+          "count": 3,
+          "op": "verify",
+          "request": "S2b"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/allow/authorized"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "one_winner",
+          "winning": [
+            "committed/allow/authorized"
+          ],
+          "by_group": {
+            "s2": {
+              "if_winner": [
+                "committed/allow/authorized",
+                "replay/terminal_replay",
+                "replay/in_progress"
+              ],
+              "if_loser": [
+                "preflight/stream_sequence_mismatch"
+              ]
+            },
+            "s2b": {
+              "if_winner": [
+                "committed/allow/authorized",
+                "replay/terminal_replay",
+                "replay/in_progress"
+              ],
+              "if_loser": [
+                "preflight/stream_sequence_mismatch"
+              ]
+            }
+          }
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "verify",
+          "request": "S4",
+          "expect": {
+            "stage": "preflight",
+            "error_class": "stream_sequence_mismatch"
+          }
+        },
+        {
+          "op": "verify",
+          "request": "S3",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        }
+      ]
+    },
+    {
+      "name": "rate_admission_under_contention",
+      "description": "with max_rate admitted inside the finalization compare-and-set, 2 verifications each of four different proofs sharing a 2-per-60-second counter run concurrently (SPEC-v2 §7.6): each proof commits once, exactly 2 are admitted as allows and the other 2 commit constraint_denied, so the counter equals the committed allows",
+      "start_time": 1800000000,
+      "rate_at_finalization": true,
+      "setup": [],
+      "participants": [
+        {
+          "group": "r1",
+          "count": 2,
+          "op": "verify",
+          "request": "R1"
+        },
+        {
+          "group": "r2",
+          "count": 2,
+          "op": "verify",
+          "request": "R2"
+        },
+        {
+          "group": "r3",
+          "count": 2,
+          "op": "verify",
+          "request": "R3"
+        },
+        {
+          "group": "r4",
+          "count": 2,
+          "op": "verify",
+          "request": "R4"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/allow/authorized"
+          ],
+          "equals": 2
+        },
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 2
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied",
+            "replay/terminal_replay",
+            "replay/in_progress"
+          ]
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "r1"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "r2"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "r3"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "r4"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": []
+    },
+    {
+      "name": "rate_two_counter_admission_under_contention",
+      "description": "two proofs whose one sealed batch has two counters (2 per 120 seconds and 1 per 60 seconds) are verified concurrently, twice each (SPEC-v2 §7.6): exactly one is admitted and the other is denied by the 60-second counter alone; admission is all or none, so the denied one did not count against the 120-second counter and T3 at Now+60 is admitted",
+      "start_time": 1800000000,
+      "rate_at_finalization": true,
+      "setup": [],
+      "participants": [
+        {
+          "group": "t1",
+          "count": 2,
+          "op": "verify",
+          "request": "T1"
+        },
+        {
+          "group": "t2",
+          "count": 2,
+          "op": "verify",
+          "request": "T2"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/allow/authorized"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "outcomes": [
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied",
+            "replay/terminal_replay",
+            "replay/in_progress"
+          ]
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "t1"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "groups": [
+            "t2"
+          ],
+          "outcomes": [
+            "committed/allow/authorized",
+            "committed/deny/constraint_denied"
+          ],
+          "equals": 1
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "set_time",
+          "time": 1800000060,
+          "expect": {}
+        },
+        {
+          "op": "verify",
+          "request": "T3",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_races_owner_finalize",
+      "description": "the evaluator of request A finalizes indeterminate/status_unavailable while 6 resumptions of its claim run (SPEC-v2 §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the finalized result, never another; the finalized result then resumes, publishes at sequence 1 and releases",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 1,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemF0aW9uX3VudmVyaWZpZWQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImluZGV0ZXJtaW5hdGUiLCJkZWNpc2lvbl9yZWFzb24iOiJzdGF0dXNfdW5hdmFpbGFibGUiLCJncmFudGVkX3Njb3BlIjpbXSwiaWRlbnRpdHlfc3RhdHVzIjoiYXV0aG9yaXphdGlvbl91bnZlcmlmaWVkIiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoidW5hdmFpbGFibGUiLCJzdGF0dXNfZXZpZGVuY2VfZGlnZXN0cyI6W10sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9"
+        },
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/indeterminate/status_unavailable"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "status_unavailable"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "indeterminate",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_races_lease_expiry_recovery",
+      "description": "the clock of request A's claimed but never evaluated claim reaches its lease expiry while 3 recoveries through RecoverInterruptedClaim and 6 resumptions run (SPEC-v2 §7.5, §7.11): a resumption sees the claim evaluating with its lease live (claim_lease_live) or lost (claim_lease_lost), or returns exactly the recovered evaluation_interrupted result; a recovery is refused while the lease is live or returns that result; afterwards the one result resumes and publishes at sequence 1",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A"
+        },
+        {
+          "group": "recoverers",
+          "count": 3,
+          "op": "recover",
+          "request": "A"
+        },
+        {
+          "group": "clock",
+          "count": 1,
+          "op": "set_time",
+          "time": 1800000030
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "error/claim_lease_lost",
+            "committed/indeterminate/evaluation_interrupted"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "recoverers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/indeterminate/evaluation_interrupted"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "recover",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted",
+            "trust_assessment": "not_evaluated",
+            "status_assessment": "not_evaluated",
+            "context_assessment": "not_evaluated"
+          }
+        },
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "indeterminate",
+            "decision_reason": "evaluation_interrupted"
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "replay",
+            "disposition": "terminal_replay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_races_owner_allow_finalize",
+      "description": "the evaluator of request A finalizes its allow with allow horizon Now+3600 while 4 resumptions of its claim run and 4 more each resume the claim and release the resumed handoff (SPEC-v2 §6.9, §7.11): each resumption sees the claim evaluating under its live lease (claim_lease_live) or returns exactly the committed allow, never another result; a release of a resumed handoff before the receipt is published is pending / receipt_not_appended; the allow then resumes with its horizon, publishes at sequence 1 and releases",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "claim_only",
+          "request": "A",
+          "expect": {
+            "disposition": "created"
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "owner",
+          "count": 1,
+          "op": "finalize",
+          "request": "A",
+          "terminal_b64": "eyJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImlkZW50aXR5X3N0YXR1cyI6ImF1dGhvcml6ZWRfYWdlbnQifQ==",
+          "body_b64": "eyJhZ2VudF9pZCI6ImZlOWU4NmE3YTFhNWI0ZTg5NTY2MmQzMWM1NTg3Njg3MjM1ZDE3NmQzMTc3M2ZmMzU3MzgwNTNhNWZjOTE4ZDAiLCJidW5kbGVfaGFzaCI6InNoYTM4NDo1ODg4NDQ5Y2NhOWU0NWIyZGMwNzA3ZDIyZjhiNjAzZjAzOTEzNDcyZWQxNTE1N2I1OTFlYmEyYWU0NDc0NmI3NDE0OWFmNWE4ZmMwN2EzNDI3NzY2ZGZlODA1MDRkNGEiLCJjaGFsbGVuZ2VfYXNzZXNzbWVudCI6ImN1cnJlbnQiLCJjb250ZXh0X2Fzc2Vzc21lbnQiOiJib3VuZCIsImNvbnRleHRfcG9saWN5X2RpZ2VzdCI6InNoYTM4NDo2MTBjNDBmYWE0NzJhYTJhNGY5MDU5ODg4OTk3MzM3NThjY2NmMzBmMjQzYWVkMzVmMWY0MjQzMzIyOGEyOGRiYWIxNzI1Y2IyYTRhNjgxMTAyOWE4MTA5ZGEwYjliMjkiLCJkZWNpc2lvbiI6ImFsbG93IiwiZGVjaXNpb25fcmVhc29uIjoiYXV0aG9yaXplZCIsImdyYW50ZWRfc2NvcGUiOlsiZGF0YTpyZWFkIiwiZmlsZXM6cmVhZCJdLCJpZGVudGl0eV9zdGF0dXMiOiJhdXRob3JpemVkX2FnZW50IiwiaXNzdWVyX2lkcyI6WyI4OWI1MjA1YTFlN2U3OTA2YzM4OTAyYTgyM2M1NDRmY2Q0Y2UwYzIyMDU4YTIzOWQ2ZGE3ZDBjMTA2YzNkMjJjIiwiZjFmMGQ4NjRiMjY1MTk2OTM5NTFiYTc4NGQyOWFlNzBjMDliZWE5MzI4NDJlMDY2N2RjY2Q0MWJhOGI4YmE3MSJdLCJyZXF1aXJlZF9zY29wZSI6ImRhdGE6cmVhZCIsInN0YXR1c19hc3Nlc3NtZW50IjoiY3VycmVudCIsInN0YXR1c19ldmlkZW5jZV9kaWdlc3RzIjpbeyJkaWdlc3QiOiJzaGEzODQ6MzIzNmVlZjBhNjVlYjkxNTllNDllYjk1NTNlOWU0YWQxYzJjZjEyZDAxNjkyMDc3OTE0N2ZjMWQ4NjZjNjczYjdjYWFlY2NmNTEwNDhjNDE3M2M3YjI0MGQ2OWFjNTRjIiwiaXNzdWVyX2lkIjoiODliNTIwNWExZTdlNzkwNmMzODkwMmE4MjNjNTQ0ZmNkNGNlMGMyMjA1OGEyMzlkNmRhN2QwYzEwNmMzZDIyYyIsIm9iamVjdF90eXBlX2NvZGUiOjMsInNlcXVlbmNlIjoxLCJzdGF0dXNfa2V5X2lkIjoiNDg5MjM3Mjk1YjlhOGU3OGQyYjI5YTgzYTk2YjY4NDM0M2NiOWYzMjU4YzJjYTkyNjYxZDQ1ZWRiYWNhZDQ2YSJ9LHsiZGlnZXN0Ijoic2hhMzg0OmZlY2RjYmMwZGEyMDY4ZWY2MjUwNzc1NTg3N2YzYjczNjJhOGU4ODNiYzFmN2I3NjI5ZGZlOTk5YjIwMjI5ZTA5OTRjZTM1NTY1Yjk0OTM4MWVhZTg2ZjU5NTU3ZjAxYiIsImlzc3Vlcl9pZCI6ImYxZjBkODY0YjI2NTE5NjkzOTUxYmE3ODRkMjlhZTcwYzA5YmVhOTMyODQyZTA2NjdkY2NkNDFiYThiOGJhNzEiLCJvYmplY3RfdHlwZV9jb2RlIjozLCJzZXF1ZW5jZSI6MSwic3RhdHVzX2tleV9pZCI6IjUxYjQ3ZGQ3Mzc1NDA4NjRjNWI3YTRlY2FjMjVkZjBhOWMzODFjNGRmODFlMmNiMTE5NGJlYjUxMzdmMmY1M2IifV0sInRydXN0X2Fzc2Vzc21lbnQiOiJ0cnVzdGVkIiwidmVyaWZpZWRfYXQiOjE4MDAwMDAwMDAsInZlcmlmaWVyX2lkIjoiZWM0YmYxN2I1ZTQzM2IxNGM1OTdhZGI3OTBkMDU2ZDM2ZDA5MTM5ZjczZjFjZDVmM2U3ZDcwMDExMjU3MGMyYyIsInZlcnNpb24iOjJ9",
+          "allow_valid_until": 1800003600
+        },
+        {
+          "group": "resumers",
+          "count": 4,
+          "op": "resume",
+          "request": "A"
+        },
+        {
+          "group": "releasers",
+          "count": 4,
+          "op": "resume",
+          "request": "A",
+          "mode": "release"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "allowed",
+          "groups": [
+            "owner"
+          ],
+          "outcomes": [
+            "committed"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "resumers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "committed/allow/authorized"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "groups": [
+            "releasers"
+          ],
+          "outcomes": [
+            "error/claim_lease_live",
+            "pending/receipt_not_appended"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "concurrent_resumes_and_releases_of_one_allow",
+      "description": "request A committed an allow whose receipt is published and acknowledged; 6 participants each resume the claim and release the resumed handoff while 4 release the handoff the verifier returned (SPEC-v2 §6.9, §7.11): every resumption returns the committed allow, the first release record wins, every release returns the same released result, and a release afterwards returns it again",
+      "start_time": 1800000000,
+      "setup": [
+        {
+          "op": "verify",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "publish",
+          "request": "A",
+          "mode": "ok",
+          "expect": {
+            "receipt_sequence": 1
+          }
+        }
+      ],
+      "participants": [
+        {
+          "group": "resumers",
+          "count": 6,
+          "op": "resume",
+          "request": "A",
+          "mode": "release"
+        },
+        {
+          "group": "releasers",
+          "count": 4,
+          "op": "release",
+          "request": "A"
+        }
+      ],
+      "invariants": [
+        {
+          "kind": "all_equal",
+          "groups": [
+            "resumers",
+            "releasers"
+          ]
+        },
+        {
+          "kind": "allowed",
+          "outcomes": [
+            "released/allow/1800000000/1"
+          ]
+        },
+        {
+          "kind": "receipt_log_contiguous"
+        }
+      ],
+      "after": [
+        {
+          "op": "resume",
+          "request": "A",
+          "expect": {
+            "stage": "committed",
+            "decision": "allow",
+            "decision_reason": "authorized",
+            "allow_horizon": 1800003600
+          }
+        },
+        {
+          "op": "release",
+          "request": "A",
+          "checkpoint": "reference",
+          "expect": {
+            "decision": "allow",
+            "release_status": "released",
+            "release_time": 1800000000,
+            "receipt_sequence": 1
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,7 @@
-//! Ratify Protocol v1 — end-to-end narrative demo (Rust).
+//! Ratify Protocol v1 end-to-end narrative demo (Rust).
+//!
+//! Protocol v1 only. For the Protocol v2 flow (delegate, present, verify,
+//! release) see examples/v2/rust.
 //!
 //! Run: `cargo run` from `demos/rust/`.
 
@@ -107,7 +110,7 @@ fn main() {
     kv("Hybrid sig:", "Ed25519 + ML-DSA-65 over challenge || BE(ts)");
 
     // Step 5
-    banner("STEP 5  Verifier runs verify_bundle() — expects meeting:attend");
+    banner("STEP 5  Verifier runs verify_bundle(), expects meeting:attend");
     let result = verify_bundle(
         &bundle,
         &VerifyOptions {
@@ -123,7 +126,7 @@ fn main() {
         kv("Granted scope:", &result.granted_scope.join(", "));
     } else {
         println!(
-            "  ❌  INVALID — {}: {}",
+            "  ❌  INVALID: {}: {}",
             result.identity_status.as_str(),
             result.error_reason
         );
@@ -211,11 +214,13 @@ fn main() {
   • The agent signed a fresh challenge to prove liveness.
   • A verifier checked the bundle in a single function call.
   • Every one of four tampering/misuse scenarios was rejected
-    deterministically — no fuzzy detection, no false positives.
+    deterministically, with no fuzzy detection and no false positives.
   • Signatures are post-quantum hybrid, Ed25519 + ML-DSA-65 (NIST FIPS 204):
     breaking either algorithm alone is insufficient to forge.
 
-  This is the full Ratify Protocol v1, end to end, in one process."#
+  This is Ratify Protocol v1, end to end, in one process.
+  For the Protocol v2 flow (delegate, present, verify, release),
+  see examples/v2/ in this repository."#
     );
     println!();
 }

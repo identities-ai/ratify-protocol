@@ -5,7 +5,25 @@
 ratify-protocol = "{{VERSION}}"
 ```
 
-## Quickstart
+Version `{{VERSION}}` is a Protocol v2 prerelease. The v2 API is the
+`ratify_protocol::v2` module; the v1 API stays at the crate root. To keep the
+exact v1 release next to it, rename it:
+`ratify_v1 = { package = "ratify-protocol", version = "=1.0.0-alpha.20" }`.
+
+## Protocol v2 quickstart
+
+Runnable Rust programs live in
+[`examples/v2/rust`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/rust)
+(`cargo run --release --bin quickstart` from that directory): a quickstart
+(keys, delegation, challenge from the issuance helper, proof, verify, receipt,
+checkpoint, release, `allowed`), signed status with a revocation, an exact
+`custom:` scope with the `max_count/v1` evaluator profile, and an external
+signer. Each prints the same output as the other SDKs' programs, and CI checks
+it. They use the in-memory reference stores in `ratify_protocol::v2::reference`
+and are development-only. Upgrading from v1 is covered in
+[`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
+
+## Quickstart (Protocol v1 API)
 
 ```rust
 use ratify_protocol::{
@@ -79,7 +97,7 @@ The user generates and holds their own keypair. No third party can sign on their
 ```rust
 use ratify_protocol::{generate_human_root, issue_delegation};
 
-// User generates keypair on their own device — private key never leaves
+// User generates keypair on their own device; the private key never leaves
 let (root, private_key) = generate_human_root();
 
 // User signs delegations locally
@@ -144,9 +162,9 @@ cargo test
 
 The suite loads every fixture from the [canonical test vectors](https://github.com/identities-ai/ratify-protocol/tree/main/testvectors/v1) and runs it through the Rust implementation. All 79 must pass; any failure means this SDK has drifted from the Go reference.
 
-## API added on main (ships in alpha.16, release unpublished)
+## v1 API added in alpha.16
 
-The following surface is merged to `main` and ships in alpha.16. The tag is not yet published; depend on `main` (git) to use it ahead of the release.
+The following surface first shipped in the v1 alpha.16 release and is available in every later v1 release.
 
 - **Resource-bound verification.** The `resource_path` constraint (the 8th constraint type, SPEC §5.7.3) binds authority to a named resource via a `Constraint`'s `resource_id` and optional `path_prefix`. At verify time the application supplies `requested_resource_id` and `requested_path` on `VerifierContext` (SPEC §5.16); `verify_bundle(&bundle, &VerifyOptions { context, ..Default::default() })` evaluates them. Helpers: `normalize_resource_path`, `resource_path_matches`, `validate_resource_constraints`.
 - **Operation / session verifier context.** `OperationContext` and `SessionContextInputs`, with `operation_context_bytes`, `operation_context_hash`, `session_context_bytes`, and `build_session_context`; `verifier_context_hash` produces the canonical hash bound into a `VerificationReceipt`.
@@ -155,6 +173,35 @@ The following surface is merged to `main` and ships in alpha.16. The tag is not 
 - **Extension-constraint params.** A `Constraint`'s `params` (typed `ParamsValue`) carries parameters for non-canonical constraint types (SPEC §5.7.1), validated by `validate_params_value` and `validate_constraint_params`; `is_canonical_constraint_type` guards which types may carry them.
 - **Deeper delegation chains.** `MAX_DELEGATION_CHAIN_DEPTH` is raised from 3 to 8 (SPEC §5.1).
 - **Input bounds constants.** `MAX_PROOF_BUNDLE_BYTES`, `MAX_SCOPES_PER_CERT`, `MAX_CONSTRAINTS_PER_CERT`, `MAX_SCOPE_LENGTH_BYTES`, `MAX_IDENTIFIER_LENGTH_BYTES`, `MAX_AGENT_NAME_LENGTH_BYTES`, `MAX_JSON_NESTING_DEPTH`.
+
+## Protocol v2 API
+
+Version `{{VERSION}}` is a prerelease on the separate v2 line. The v2 API lives
+in the `ratify_protocol::v2` module next to the unchanged v1 API. Review so far
+is the project's own pre-release security review; external independent review is a gate for
+`2.0.0`, and v2 carries no production security claim yet. It covers:
+
+- strict decoding and canonical encoding of every v2 signed object, full
+  256-bit v2 key IDs, and typed signers for every object, each with an
+  external-signer form (direct or external-mu mode) whose returned signatures
+  are verified before use;
+- the challenge issuance helper (persist before expose) and the live verifier
+  `verify_proof_bundle_v2`, which returns a committed outcome with no
+  decision, and the release step that returns the only actionable decision;
+- signed status: the status publisher under a separate status key and the
+  anchored `SecurityJournalV2`;
+- the closed constraint registry and extension evaluator profiles, including
+  the standard `max_count/v1` and `allowed_values/v1`;
+- witness and verification-receipt logs, key rotation, transaction receipts,
+  archival verification, and the Part B traits, with in-memory reference
+  implementations in `ratify_protocol::v2::reference` for tests only.
+
+`cargo test` runs every file in `testvectors/v2`, including the verifier
+ordering, lifecycle, status, log, and rotation sequences, and verifies the
+cross-SDK fixtures of every other SDK. The per-SDK record against the gates in
+SPEC-v2 §8 is in
+[`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
+A deployment supplies durable Part B stores and an independent checkpoint.
 
 ## License
 

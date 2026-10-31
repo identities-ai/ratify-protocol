@@ -2,12 +2,16 @@
  * Bounded HTTP/1.1 listener.
  *
  * Deliberately minimal, and deliberately parses no JSON of its own: the action
- * scope arrives in a header and the request body is handed to the Ratify SDK
- * byte-for-byte. The edge binary therefore has no hand-written JSON parser on
- * its attack surface.
+ * arrives in headers and the request body is handed to the Ratify library
+ * byte for byte, which decodes it strictly.
  *
- *   GET  /challenge   -> {"challenge":"<64 hex>","session_context":"<64 hex>","expires_at":N,"quarantine_remaining":N}
- *   POST /action      -> body is the proof bundle; X-Sentinel-Scope names the scope
+ *   GET  /challenge  action headers -> challenge bound to the action
+ *   POST /action     action headers, body = proof bundle -> decision
+ *   POST /status     X-Sentinel-Status-Kind: list|push, body = signed object
+ *   GET  /health     ready or recovering, quarantine, actuator count
+ *
+ * Action headers: X-Sentinel-Scope, X-Sentinel-Zone, X-Sentinel-Resource,
+ * X-Sentinel-Duration-Ms, X-Sentinel-Invocation.
  */
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
@@ -25,12 +29,12 @@
 #include <sys/socket.h>
 
 #include "http.h"
-#include "trust.h"
 #include "actuator.h"
 
 #define HEADER_MAX 8192
 #define SOCKET_TIMEOUT_S 5
 #define MIN_ACTION_INTERVAL_MS 100   /* crude rate limit; see note below */
+#define DEFAULT_DURATION_MS 500
 
 static volatile sig_atomic_t stop_requested = 0;
 static void on_signal(int sig) { (void)sig; stop_requested = 1; }
@@ -89,94 +93,101 @@ static int header_value(const char *headers, const char *name, char *out,
     return 0;
 }
 
-static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers,
-                             int default_duration_ms)
+static void read_action(const char *headers, actx_action *a, int default_duration_ms)
 {
-    char scope[128] = {0}, zone[64] = {0}, durbuf[16] = {0};
-    char resource[128] = "arduino-led", invocation[128] = "manual";
-    header_value(headers, "X-Sentinel-Scope", scope, sizeof(scope));
-    header_value(headers, "X-Sentinel-Zone", zone, sizeof(zone));
-    header_value(headers, "X-Sentinel-Duration-Ms", durbuf, sizeof(durbuf));
-    header_value(headers, "X-Sentinel-Resource", resource, sizeof(resource));
-    header_value(headers, "X-Sentinel-Invocation", invocation, sizeof(invocation));
-    sentinel_request req = { scope, zone,
-                             durbuf[0] ? atoi(durbuf) : default_duration_ms,
-                             resource, invocation };
-    char hex[SENTINEL_CHALLENGE_HEX + 1];
-    char context_hex[SENTINEL_CHALLENGE_HEX + 1];
-    int64_t expires = 0;
-    if (sentinel_issue_challenge(ctx, &req, hex, context_hex, &expires) != 0) {
-        send_response(fd, 503, "Service Unavailable",
-                      "{\"error\":\"challenge_unavailable\"}");
+    char durbuf[16] = "";
+    memset(a, 0, sizeof *a);
+    header_value(headers, "X-Sentinel-Scope", a->scope, sizeof a->scope);
+    header_value(headers, "X-Sentinel-Zone", a->zone, sizeof a->zone);
+    header_value(headers, "X-Sentinel-Resource", a->resource, sizeof a->resource);
+    header_value(headers, "X-Sentinel-Invocation", a->invocation, sizeof a->invocation);
+    a->duration_ms = header_value(headers, "X-Sentinel-Duration-Ms", durbuf, sizeof durbuf) ? atoi(durbuf)
+                                                                                          : default_duration_ms;
+}
+
+/* Issuance failures collapse into one public answer; the class goes to the
+ * device log only (SPEC-v2 §7.3). */
+static void handle_challenge(sentinel_ctx *ctx, int fd, const char *headers, int default_duration_ms)
+{
+    actx_action a;
+    read_action(headers, &a, default_duration_ms);
+    sentinel_challenge ch;
+    char reason[SENTINEL_TEXT_MAX];
+    if (sentinel_issue_challenge(ctx, &a, &ch, reason) != 0) {
+        printf("challenge refused reason=%s\n", reason);
+        fflush(stdout);
+        send_response(fd, 503, "Service Unavailable", "{\"error\":\"challenge_unavailable\"}");
         return;
     }
-    char body[256];
-    snprintf(body, sizeof(body),
-             "{\"challenge\":\"%s\",\"session_context\":\"%s\",\"expires_at\":%lld,"
-             "\"quarantine_remaining\":%lld}",
-             hex, context_hex, (long long)expires,
-             (long long)sentinel_quarantine_remaining(ctx));
+    char body[512];
+    snprintf(body, sizeof body,
+             "{\"challenge_b64\":\"%s\",\"session_context_b64\":\"%s\",\"verifier_id\":\"%s\",\"issued_at\":%lld,"
+             "\"expires_at\":%lld,\"quarantine_remaining\":%lld}",
+             ch.challenge_b64, ch.session_context_b64, ch.verifier_id, (long long)ch.issued_at,
+             (long long)ch.expires_at, (long long)sentinel_quarantine_remaining(ctx));
     send_response(fd, 200, "OK", body);
 }
 
-static void handle_action(sentinel_ctx *ctx, int fd, const char *headers,
-                          const char *body, size_t body_len, int actuate_ms,
-                          const char *actuate_scope)
+static void handle_action(sentinel_ctx *ctx, int fd, const char *headers, const char *body, size_t body_len,
+                          int default_duration_ms)
 {
-    char scope[128] = {0};
-    if (!header_value(headers, "X-Sentinel-Scope", scope, sizeof(scope))) {
-        send_response(fd, 400, "Bad Request",
-                      "{\"error\":\"missing X-Sentinel-Scope\"}");
-        return;
-    }
-
-    char zone[TRUST_ZONE_MAX] = {0};
-    char durbuf[16] = {0};
-    char resource[128] = "arduino-led", invocation[128] = "manual";
-    header_value(headers, "X-Sentinel-Zone", zone, sizeof(zone));
-    int requested_ms = header_value(headers, "X-Sentinel-Duration-Ms",
-                                    durbuf, sizeof(durbuf))
-                       ? atoi(durbuf) : actuate_ms;
-    header_value(headers, "X-Sentinel-Resource", resource, sizeof(resource));
-    header_value(headers, "X-Sentinel-Invocation", invocation, sizeof(invocation));
-
-    sentinel_request req;
-    req.scope = scope;
-    req.zone = zone;
-    req.duration_ms = requested_ms;
-    req.resource_id = resource;
-    req.invocation_id = invocation;
-
+    actx_action a;
+    read_action(headers, &a, default_duration_ms);
     sentinel_decision d;
-    sentinel_decide(ctx, body, body_len, &req, &d);
+    sentinel_decide(ctx, body, body_len, &a, &d);
 
-    /* Authorization is necessary but not sufficient to actuate. An allowed
-     * infrastructure:monitor request is authorized to READ; routing every
-     * allow to the actuator would light the beacon on a monitoring call. The
-     * actuator is reachable only by the one scope that means "actuate". */
+    /* The release gate, immediately before the write. A released allow for
+     * any scope other than physical:actuate authorizes no actuation. */
     int fired = 0;
-    if (d.allow && strcmp(scope, actuate_scope) == 0)
-        fired = (actuator_fire(&d, requested_ms) == 0);
+    uint64_t token = 0;
+    if (d.actionable && sentinel_release_gate(ctx, &d, &token)) fired = actuator_fire(token, a.duration_ms, d.claim_id) == 0;
+    token = 0;
 
-    /* The decision record. No key material, no bundle contents. */
-    char out[768];
-    snprintf(out, sizeof(out),
-             "{\"allow\":%s,\"status\":\"%s\",\"detail\":\"%s\","
-             "\"human_id\":\"%s\",\"agent_id\":\"%s\",\"decided_at\":%lld,"
-             "\"clock_trusted\":%s,\"test_quarantine_override\":%s,"
-             "\"actuated\":%s,\"actuator_invocations\":%lu}",
-             d.allow ? "true" : "false", d.status, d.reason,
-             d.human_id, d.agent_id, (long long)d.decided_at,
-             d.clock_trusted ? "true" : "false",
-             d.quarantine_override ? "true" : "false",
-             fired ? "true" : "false", actuator_invocations());
-
-    printf("decision allow=%d status=%s scope=%s agent=%s actuated=%d\n",
-           d.allow, d.status, scope, d.agent_id, fired);
+    /* A preflight rejection is one public answer; its class is logged. */
+    int preflight = strcmp(d.stage, "preflight") == 0;
+    char out[1400];
+    snprintf(out, sizeof out,
+             "{\"serial\":%lld,\"allow\":%s,\"stage\":\"%s\",\"status\":\"%s\",\"release\":\"%s\","
+             "\"decision\":\"%s\",\"reason\":\"%s\",\"identity_status\":\"%s\",\"local_policy\":\"%s\","
+             "\"decided_at\":%lld,\"clock_trusted\":%s,\"test_quarantine_override\":%s,\"actuated\":%s,"
+             "\"actuator_invocations\":%lu}",
+             (long long)d.serial, fired ? "true" : "false", d.stage, preflight ? "rejected" : d.status, d.release,
+             d.decision, d.reason, d.identity_status, d.local_policy, (long long)d.decided_at,
+             d.clock_trusted ? "true" : "false", d.quarantine_override ? "true" : "false", fired ? "true" : "false",
+             actuator_invocations());
+    printf("decision serial=%lld stage=%s status=%s release=%s decision=%s reason=%s identity=%s local=%s "
+           "scope=%s zone=%s resource=%s ms=%d actuated=%d invocations=%lu\n",
+           (long long)d.serial, d.stage, d.status, d.release[0] ? d.release : "-", d.decision[0] ? d.decision : "-",
+           d.reason[0] ? d.reason : "-", d.identity_status[0] ? d.identity_status : "-",
+           d.local_policy[0] ? d.local_policy : "-", a.scope, a.zone, a.resource, a.duration_ms, fired,
+           actuator_invocations());
     fflush(stdout);
+    sentinel_decision_free(&d);
+    send_response(fd, fired ? 200 : 403, fired ? "OK" : "Forbidden", out);
+}
 
-    send_response(fd, d.allow ? 200 : 403,
-                  d.allow ? "OK" : "Forbidden", out);
+/* Signed status objects are verified against the pinned status key before
+ * they touch the journal, so this endpoint needs no other authentication. */
+static void handle_status(sentinel_ctx *ctx, int fd, const char *headers, const char *body, size_t body_len)
+{
+    char kind[16] = "";
+    header_value(headers, "X-Sentinel-Status-Kind", kind, sizeof kind);
+    int k = !strcmp(kind, "list") ? RatifyV2KindRevocationList : !strcmp(kind, "push") ? RatifyV2KindRevocationPush : 0;
+    char reason[SENTINEL_TEXT_MAX] = "bad_kind";
+    int ok = k && sentinel_stage_status(ctx, k, (const uint8_t *)body, body_len, reason) == 0;
+    printf("status staged=%d kind=%s reason=%s\n", ok, kind, reason[0] ? reason : "-");
+    fflush(stdout);
+    char out[256];
+    snprintf(out, sizeof out, "{\"staged\":%s,\"reason\":\"%s\"}", ok ? "true" : "false", reason);
+    send_response(fd, ok ? 200 : 422, ok ? "OK" : "Unprocessable Entity", out);
+}
+
+static void handle_health(sentinel_ctx *ctx, int fd)
+{
+    char out[256];
+    snprintf(out, sizeof out, "{\"health\":\"%s\",\"quarantine_remaining\":%lld,\"actuator_invocations\":%lu}",
+             sentinel_health(ctx), (long long)sentinel_quarantine_remaining(ctx), actuator_invocations());
+    send_response(fd, 200, "OK", out);
 }
 
 static long long now_ms(void)
@@ -186,11 +197,10 @@ static long long now_ms(void)
     return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port,
-               int actuate_ms, const char *actuate_scope)
+int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port)
 {
     /* sigaction without SA_RESTART, deliberately. signal() on glibc installs
-     * BSD semantics, which restart accept() automatically — the handler runs,
+     * BSD semantics, which restart accept() automatically: the handler runs,
      * sets the flag, and the loop condition is never re-evaluated, so the
      * daemon ignores SIGTERM entirely and survives its own shutdown. */
     struct sigaction sa;
@@ -248,22 +258,28 @@ int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port,
         }
 
         if (strncmp(headers, "GET /challenge", 14) == 0) {
-            handle_challenge(ctx, fd, headers, actuate_ms);
+            handle_challenge(ctx, fd, headers, DEFAULT_DURATION_MS);
+            close(fd);
+            continue;
+        }
+        if (strncmp(headers, "GET /health", 11) == 0) {
+            handle_health(ctx, fd);
             close(fd);
             continue;
         }
 
-        if (strncmp(headers, "POST /action", 12) != 0) {
+        int is_status = strncmp(headers, "POST /status", 12) == 0;
+        if (!is_status && strncmp(headers, "POST /action", 12) != 0) {
             send_response(fd, 404, "Not Found", "{\"error\":\"not_found\"}");
             close(fd);
             continue;
         }
 
-        /* Rate limit before doing ~24.5 ms of work. A challenge this verifier
-         * did not issue is already rejected cheaply inside the SDK (SPEC §10
-         * step 2b), so this bounds the cost of a caller who does hold live
-         * challenges. It is per-process, not per-peer: a deployment facing a
-         * hostile network needs a real limiter in front. */
+        /* Rate limit before doing signature work. A challenge this receiver
+         * did not issue is rejected at preflight before any claim, so this
+         * bounds the cost of a caller who does hold live challenges. It is
+         * per-process, not per-peer: a deployment facing a hostile network
+         * needs a real limiter in front. */
         long long t = now_ms();
         if (t - last_action_ms < MIN_ACTION_INTERVAL_MS) {
             send_response(fd, 429, "Too Many Requests",
@@ -308,8 +324,10 @@ int http_serve(sentinel_ctx *ctx, const char *bind_addr, int port,
         if (short_read) {
             send_response(fd, 400, "Bad Request",
                           "{\"error\":\"incomplete_body\"}");
+        } else if (is_status) {
+            handle_status(ctx, fd, headers, body, have);
         } else {
-            handle_action(ctx, fd, headers, body, have, actuate_ms, actuate_scope);
+            handle_action(ctx, fd, headers, body, have, DEFAULT_DURATION_MS);
         }
         free(body);
         close(fd);

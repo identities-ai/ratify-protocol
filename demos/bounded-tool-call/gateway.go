@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 type toolRequest struct {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // Known-answer vectors (§6.4.9). These exact hex values are duplicated in

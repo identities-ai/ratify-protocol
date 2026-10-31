@@ -16,23 +16,31 @@ import re
 import subprocess
 import sys
 
-TEXT_SUFFIXES = (
-    ".md", ".mdx", ".txt", ".rst", ".html", ".yml", ".yaml", ".toml", ".cfg",
-    ".ini", ".json", ".py", ".go", ".rs", ".ts", ".tsx", ".js", ".mjs", ".cjs",
-    ".sh", ".c", ".h", ".in", ".eml",
-)
-
 # Files whose job is to state the rule, so they name what they forbid.
+# .gitignore lists private paths precisely so they are never committed.
 EXEMPT = {
+    ".gitignore",
     "CONTRIBUTING.md",
     "scripts/check-public-content.py",
 }
 
-# Paths that hold generated or third-party data rather than authored text.
+# Generated or third-party data rather than authored text. Only the generated
+# vector JSON is exempt; any other file under testvectors/ is checked.
 EXEMPT_PREFIXES = (
-    "testvectors/",
     "internal/tzdbv2/",
 )
+EXEMPT_GENERATED = re.compile(r"^testvectors/.*\.json$")
+
+# Domains that may appear in addresses: documentation placeholders and the
+# project's own addresses. SSH remotes (git@host), the user@github.com example
+# and .local device logins are not mailboxes. Any other address is treated as
+# personal.
+ALLOWED_EMAIL_DOMAINS = re.compile(
+    r"@(example\.(com|org|net)|[a-z0-9.-]+\.example|identities\.ai|ratifyprotocol\.com|users\.noreply\.github\.com)$",
+    re.I,
+)
+ALLOWED_EMAIL_FORMS = re.compile(r"^git@|^user@(github|gitlab)\.com$|@[a-z0-9.-]+\.local$", re.I)
+EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")
 
 # Prose files, where a "Subject:" line reads as correspondence. In code it is
 # usually a field name.
@@ -40,15 +48,14 @@ PROSE_SUFFIXES = (".md", ".mdx", ".txt", ".rst", ".html", ".eml")
 
 RULES = [
     ("email subject line", re.compile(r"^\s*(\*\*)?subject:(\*\*)?\s+\S", re.I)),
-    ("email greeting", re.compile(r"^\s*(hi|hello|dear|hey)\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)?\s*,\s*$")),
+    ("email greeting", re.compile(r"^\s*(hi|hello|dear|hey)\s+[a-z]+(\s+[a-z]+)?\s*,", re.I)),
     ("email sign-off", re.compile(r"^\s*(best|best regards|kind regards|regards|thanks|thank you|cheers|warmly|sincerely)\s*,\s*$", re.I)),
     ("introduction request", re.compile(r"\b(could|can|would) you (please )?(connect|introduce) (me|us)\b|\bwarm intro", re.I)),
     ("outreach material", re.compile(r"\boutreach\b|\bcover (email|note|letter|communication)s?\b|\bcold email", re.I)),
     ("fundraising material", re.compile(r"\binvestors?\b|\bfundrais|\bpitch deck\b|\bterm sheet\b|\bvaluation\b|\bcap table\b", re.I)),
     ("internal tool name", re.compile(r"\b(codex|chatgpt)\b|\bclaude[ _-]?(code|ai|opus|sonnet|haiku)?\b(?!\.ai/)", re.I)),
     ("private workspace path", re.compile(r"\.memory/|products/ratify/|ratify-web\b|ratify-command\b|identitiesai/", re.I)),
-    ("local filesystem path", re.compile(r"/Users/(?!runner/)[A-Za-z]|/home/[a-z][a-z0-9_-]+/|C:\\\\Users\\\\", re.I)),
-    ("personal email address", re.compile(r"\b[A-Za-z0-9._%+-]+@(gmail|googlemail|yahoo|hotmail|outlook|icloud|proton|protonmail)\.(com|me)\b", re.I)),
+    ("local filesystem path", re.compile(r"/Users/(?!runner/)[A-Za-z]|/home/[a-z][a-z0-9_-]+/|\b[A-Z]:\\Users\\", re.I)),
 ]
 
 
@@ -58,9 +65,16 @@ def tracked_files():
 
 
 def checked(path):
-    if path in EXEMPT or path.startswith(EXEMPT_PREFIXES):
-        return False
-    return path.endswith(TEXT_SUFFIXES) or "/" not in path and "." not in path
+    return not (path in EXEMPT or path.startswith(EXEMPT_PREFIXES) or EXEMPT_GENERATED.match(path))
+
+
+def read_text(path):
+    """Return the file's lines, or None for a binary file. Unreadable files raise."""
+    with open(path, "rb") as f:
+        data = f.read()
+    if b"\0" in data[:8192]:
+        return None
+    return data.decode("utf-8", errors="replace").splitlines()
 
 
 def main(argv):
@@ -70,11 +84,17 @@ def main(argv):
         if not checked(path):
             continue
         try:
-            with open(path, encoding="utf-8") as f:
-                lines = f.read().splitlines()
-        except (OSError, UnicodeDecodeError):
+            lines = read_text(path)
+        except OSError as err:
+            failures.append(f"{path}: unreadable: {err}")
+            continue
+        if lines is None:
             continue
         for number, line in enumerate(lines, 1):
+            for match in EMAIL.finditer(line):
+                address = match.group(0)
+                if not (ALLOWED_EMAIL_DOMAINS.search(address) or ALLOWED_EMAIL_FORMS.search(address)):
+                    failures.append(f"{path}:{number}: email address: {address}")
             for label, pattern in RULES:
                 if label == "email subject line" and not path.endswith(PROSE_SUFFIXES):
                     continue

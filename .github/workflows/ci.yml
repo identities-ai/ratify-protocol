@@ -29,12 +29,20 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test -race -count=1 ./...
+        run: go test -count=1 -timeout 40m ./...
+
+      - name: go test (race detector)
+        run: go test -race -count=1 -timeout 40m ./...
 
       - name: go mod tidy (must be clean)
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
+
+      # The v2 example programs print fixed text; every SDK must match
+      # examples/v2/expected exactly.
+      - name: v2 examples (output matches examples/v2/expected)
+        run: examples/v2/go/test.sh
 
   testvector-determinism:
     name: Test vectors regenerate byte-identical
@@ -101,7 +109,9 @@ jobs:
           node-version: '24'
           check-latest: true
           cache: 'npm'
-          cache-dependency-path: sdks/typescript/package-lock.json
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            examples/v2/typescript/package-lock.json
 
       - name: install
         run: npm install --no-audit --no-fund
@@ -111,6 +121,10 @@ jobs:
 
       - name: full test suite (101 tests — conformance + cross-SDK + levers + providers)
         run: npm test
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        run: examples/v2/typescript/test.sh
 
   python:
     name: Python SDK
@@ -136,6 +150,14 @@ jobs:
       - name: import check (pqcrypto must be importable)
         run: python -c "from pqcrypto.sign import ml_dsa_65; print('pqcrypto ok')"
 
+      # The v1 suite must run on the base install, which has neither the v2
+      # native extension nor any other [protocol-v2] requirement, and
+      # `import ratify_protocol` must not load the v2 module.
+      - name: base install carries no v2 requirement and v1 does not import v2
+        run: |
+          python -c "import importlib.util, sys; sys.exit('ratify_protocol_native_v2 is installed' if importlib.util.find_spec('ratify_protocol_native_v2') else 0)"
+          python -c "import sys, ratify_protocol; assert ratify_protocol.PROTOCOL_VERSION == 1; assert 'ratify_protocol.v2' not in sys.modules, 'import ratify_protocol loaded ratify_protocol.v2'"
+
       # The pure-Python package must pass without the optional native extra:
       # that is the configuration most users install.
       - name: full test suite (79 fixtures)
@@ -157,6 +179,63 @@ jobs:
         env:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
+
+  # The v2 Python SDK is ratify_protocol.v2 in the same ratify-protocol
+  # distribution as the v1 package above, installed with the [protocol-v2]
+  # extra. Its native extension (ratify-protocol-native-v2) is built from
+  # source and required for the full v2 suite (tests_v2), the examples and the
+  # performance floors; the extension is then removed and the verify-only
+  # suite runs against the pure-Python verification fallback.
+  python-v2:
+    name: Python v2 SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # Signing is native-only, and the [protocol-v2] extra pins
+      # ratify-protocol-native-v2 to the same release, so the extension is
+      # built and installed before the SDK; pip then resolves the pin locally
+      # instead of from PyPI.
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - name: build and install the v2 native extension
+        working-directory: sdks/python-native-v2
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'maturin>=1.7,<2'
+          maturin build --release --out dist
+          pip install dist/*.whl
+
+      - name: install the SDK with the protocol-v2 extra in the same environment
+        run: pip install -e '.[dev,protocol-v2]'
+
+      - name: full v2 test suite with the native extension required (testvectors/v2)
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
+        run: pytest -v tests_v2
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        env:
+          RATIFY_V2_PYTHON: python
+        run: examples/v2/python/test.sh
+
+      # Fails if signature verification is not native or a decision falls far
+      # below the recorded throughput (floors in bench_v2/bench_v2.py).
+      - name: performance floors (native verification)
+        run: python bench_v2/bench_v2.py --check
+
+      - name: verify-only suite on the pure-Python fallback (extension removed)
+        run: |
+          pip uninstall -y ratify-protocol-native-v2
+          python -c "import ratify_protocol.v2.signing_v2 as s; assert not s.native_verify_enabled()"
+          pytest -v tests_v2
 
   # The optional native extra's wheels are built on five platforms at release
   # time. That matrix would otherwise run for the first time during a release,
@@ -226,25 +305,32 @@ jobs:
           cd sdks/python
           RATIFY_REQUIRE_NATIVE=1 pytest -q
   a2a-reference:
-    name: A2A reference (wire gate, no skips)
+    name: A2A reference, Protocol v2 (in-tree SDK, wire gate, no skips)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           check-latest: true
 
-      - name: A2A reference gate
-        run: ./scripts/a2a-reference-check.sh
+      # The gate builds ratify-protocol-native-v2 from this tree with maturin
+      # and installs ratify-protocol from sdks/python, never a published
+      # package.
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: A2A reference gate, Protocol v2
+        env:
+          PYTHON: python
+        run: ./references/a2a/run-reference-check.sh
 
   nooa-reference:
-    name: NVIDIA NOOA reference (integration required, not skipped)
+    name: NVIDIA NOOA reference, Protocol v2 (integration required, not skipped)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -254,14 +340,113 @@ jobs:
           # nooa declares requires-python >=3.12,<3.14.
           python-version: '3.12'
 
-      - name: NVIDIA reference gate (authoritative; fails on any skip)
+      # The gate builds the v2 native signing extension from this tree with
+      # maturin, so it needs a Rust toolchain. It installs ratify-protocol from
+      # sdks/python, never a published package, and asserts the
+      # ratify_protocol.v2 import resolves inside this checkout.
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: NVIDIA reference gate, Protocol v2 (authoritative; fails on any skip)
         # One script owns the environment, the pins, and the counts, so CI and a
         # local run cannot drift apart. It sets RATIFY_REQUIRE_NOOA=1 and
         # RATIFY_REQUIRE_MCP=1, so a missing optional dependency is a failure
         # rather than a skip: an ordinary pytest run on 3.11 reported
         # "91 passed, 1 skipped" and exited 0 while the whole MCP module had not
         # run.
-        run: ./scripts/nvidia-reference-check.sh
+        env:
+          PYTHON: python
+          RATIFY_SDK: local
+        run: ./demos/nvidia-nooa-delegated-authority/reference-check-v2.sh
+
+  # The Python v2 reference gates build ratify-protocol-native-v2 from this
+  # tree with maturin and install ratify-protocol from sdks/python, never
+  # a published package. Each gate fails on any skip and on a test count that
+  # differs from the one it declares.
+  google-adk-reference:
+    name: Google ADK reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: Google ADK reference gate, Protocol v2
+        env:
+          PYTHON: python
+        run: ./references/google-adk/run-reference-check.sh
+
+  langchain-reference:
+    name: LangChain reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: LangChain reference gate, Protocol v2
+        env:
+          PYTHON: python
+        run: ./references/langchain/run-reference-check.sh
+
+  # The gate builds the TypeScript SDK in this tree (a file: dependency of the
+  # reference), rebuilds the plugin runtime from it, and fails on any skip or
+  # on a test count that differs from ratify-reference.json.
+  github-copilot-reference:
+    name: GitHub Copilot reference, Protocol v2 (in-tree SDK, no skips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          check-latest: true
+          cache: 'npm'
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            references/github-copilot/package-lock.json
+
+      - name: GitHub Copilot reference gate, Protocol v2
+        run: ./references/github-copilot/run-reference-check.sh
+
+  # The deterministic scenario matrix (fixture clock, mock actuator; no serial
+  # device or GPIO) against the C SDK built from this tree. macOS matches the
+  # recorded local runs. The gate refuses a header whose version differs from
+  # sdks/c/Cargo.toml and fails on a row count other than ratify-reference.json.
+  edge-sentinel-reference:
+    name: Physical AI edge sentinel reference, Protocol v2 (macOS deterministic matrix)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/c
+
+      - name: build the in-tree C SDK
+        working-directory: sdks/c
+        run: cargo build --release
+
+      - name: assemble the C SDK tree the gate expects
+        run: |
+          sdk="$RUNNER_TEMP/ratify-c"
+          mkdir -p "$sdk/include" "$sdk/lib"
+          cp sdks/c/include/ratify.h "$sdk/include/"
+          cp sdks/c/target/release/libratify_c.a "$sdk/lib/"
+          echo "RATIFY_SDK=$sdk" >> "$GITHUB_ENV"
+
+      - name: edge sentinel reference gate, Protocol v2
+        run: ./references/physical-ai-edge-sentinel/run-reference-check.sh
 
   rust:
     name: Rust SDK conformance
@@ -278,7 +463,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: sdks/rust
+          workspaces: |
+            sdks/rust
+            examples/v2/rust
 
       - name: build
         run: cargo build --all-targets
@@ -292,6 +479,10 @@ jobs:
 
       - name: full test suite (79 fixtures)
         run: cargo test
+
+      - name: v2 examples (output matches examples/v2/expected)
+        working-directory: .
+        run: examples/v2/rust/test.sh
 
   c-sdk:
     name: C/C++ SDK
@@ -327,6 +518,59 @@ jobs:
 
       - name: input-bound boundary tests
         run: cargo test --test bounds
+
+      - name: v2 ABI tests (testvectors/v2)
+        run: cargo test --test v2_abi
+
+      - name: panic containment at every C ABI export
+        run: cargo test --test panic_containment
+
+      # Compiles a C program against include/ratify.h and the static library
+      # and runs it over every testvectors/v2 key, object, and negative, so
+      # the ratify_v2_* ABI is exercised from C, not only from Rust.
+      - name: v2 C ABI smoke test (system C compiler)
+        run: ./scripts/test-v2-c-abi.sh
+
+      # The v2 store, lifecycle, concurrency, status and cross-SDK suites
+      # (tests/v2c_*.rs) have no step of their own; run every test target.
+      - name: every test target (v1 and v2)
+        run: cargo test
+
+      - name: v2 C ABI under AddressSanitizer and UBSan
+        env:
+          SANITIZE: '1'
+        run: ./scripts/test-v2-c-abi.sh
+
+  # The C v2 examples link the test-only reference stores. The external
+  # signer example implements its signing provider with OpenSSL libcrypto,
+  # which needs ML-DSA-65 support (OpenSSL 3.5 or later). Ubuntu runners
+  # ship OpenSSL 3.0, so this job runs on macOS with Homebrew's openssl@3.
+  c-examples:
+    name: C v2 examples
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdks/c
+
+      - name: OpenSSL 3.5 or later
+        run: |
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          prefix="$(brew --prefix openssl@3)"
+          "$prefix/bin/openssl" version
+          echo "OPENSSL_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+      - name: v2 examples (output matches examples/v2/expected)
+        run: examples/v2/c/test.sh
+
+      - name: v2 examples under AddressSanitizer and UBSan
+        env:
+          SANITIZE: '1'
+        run: examples/v2/c/test.sh
 
   dco:
     name: DCO sign-off

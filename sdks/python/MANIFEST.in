@@ -1,0 +1,3 @@
+# setuptools ships tests/test*.py in the sdist by default; ship the v2 suite,
+# with its helper modules, the same way.
+recursive-include tests_v2 *.py

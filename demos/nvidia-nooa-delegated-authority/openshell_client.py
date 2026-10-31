@@ -202,7 +202,7 @@ def run_case(case, url, session):
         "status_code": (parsed or {}).get("status"),
         "reason": ((parsed or {}).get("reason") or "")[:160],
         "receipt_id": (parsed or {}).get("receipt_id"),
-        "refunded": (parsed or {}).get("refunded"),
+        "refunded_micros": (parsed or {}).get("refunded_micros"),
         "body_head": text[:200] if isinstance(text, str) else None,
     }
     # refund.prepare returns the challenge and session binding the receiver

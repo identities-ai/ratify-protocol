@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 type testPrincipal struct {

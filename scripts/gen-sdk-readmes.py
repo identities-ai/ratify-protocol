@@ -15,13 +15,17 @@ Placeholders (valid in both preamble and bodies):
   {{TITLE}}         README h1 for this SDK
   {{SDK_DESC}}      e.g. "TypeScript reference SDK"
   {{SIBLINGS}}      the other four SDKs, prose list
-  {{VERSION}}       current version, npm/cargo form   (1.0.0-alpha.N)
-  {{VERSION_TAG}}   current version, tag form         (v1.0.0-alpha.N)
-  {{VERSION_PYPI}}  current version, PEP 440 form     (1.0.0aN)
+  {{VERSION}}       this SDK's line version, npm/cargo form   (2.0.0-alpha.N)
+  {{VERSION_TAG}}   this SDK's line version, tag form         (v2.0.0-alpha.N)
+  {{VERSION_PYPI}}  this SDK's line version, PEP 440 form     (2.0.0aN)
+  {{PROTOCOL_LINES}} which protocol lines this package implements
 
-The version is read from sdks/typescript/package.json — the same manifest
-scripts/release.sh bumps — so a release bump plus a regenerate keeps every
-README pin correct. scripts/check-release-sync.sh runs this script's
+Every SDK in this tree is on the v2 line and takes its version from
+sdks/typescript/package.json, the same manifest scripts/release.sh bumps.
+Python's distribution carries v1 at the package root and v2 at
+ratify_protocol.v2; its pyproject.toml is held to the same line by
+scripts/check-release-sync.sh. A release bump plus a regenerate
+keeps every README pin correct. scripts/check-release-sync.sh runs this script's
 --check mode and fails the gate when a generated file drifts from its
 sources; edit the sources, never README.md.
 
@@ -51,7 +55,7 @@ ALL_NAMES = {
 
 SDKS = {
     "go": {
-        "TITLE": "Ratify Protocol — Go SDK",
+        "TITLE": "Ratify Protocol Go SDK",
         "SDK_DESC": "Go reference implementation",
     },
     "typescript": {
@@ -67,9 +71,29 @@ SDKS = {
         "SDK_DESC": "Rust reference SDK",
     },
     "c": {
-        "TITLE": "Ratify Protocol — C/C++ SDK",
+        "TITLE": "Ratify Protocol C/C++ SDK",
         "SDK_DESC": "C and C++ reference SDK",
     },
+}
+
+
+V2_LINES = (
+    "This package also implements Protocol v2 (version `{{VERSION}}`, a "
+    "prerelease) and runs every file in the shared `testvectors/v2` corpus "
+    "and the cross-SDK fixtures of every other SDK."
+)
+PROTOCOL_LINES = {
+    "go": V2_LINES,
+    "typescript": V2_LINES,
+    "rust": V2_LINES,
+    "c": V2_LINES,
+    "python": (
+        "This package implements Protocol v1 at `ratify_protocol` and Protocol "
+        "v2 (version `{{VERSION}}`, a prerelease) at `ratify_protocol.v2`, "
+        "installed with the `protocol-v2` extra. The v2 module runs every file "
+        "in the shared `testvectors/v2` corpus and the cross-SDK fixtures of "
+        "every other SDK."
+    ),
 }
 
 
@@ -78,9 +102,9 @@ def siblings(lang: str) -> str:
     return ", ".join(names[:-1]) + ", and " + names[-1]
 
 
-def versions() -> dict:
+def versions(lang: str) -> dict:
     pkg = json.loads((ROOT / "sdks/typescript/package.json").read_text())
-    v = pkg["version"]  # 1.0.0-alpha.N
+    v = pkg["version"]  # 2.0.0-alpha.N
     pypi = re.sub(r"-alpha\.(\d+)", r"a\1", v)
     pypi = re.sub(r"-beta\.(\d+)", r"b\1", pypi)
     pypi = re.sub(r"-rc\.(\d+)", r"rc\1", pypi)
@@ -90,8 +114,9 @@ def versions() -> dict:
 def render(lang: str) -> str:
     preamble = (ROOT / "sdks/readme-src/preamble.md").read_text()
     body = (ROOT / f"sdks/{lang}/README.body.md").read_text()
-    subs = {**SDKS[lang], "SIBLINGS": siblings(lang), **versions()}
     out = MARKER + preamble.rstrip("\n") + "\n\n" + body
+    out = out.replace("{{PROTOCOL_LINES}}", PROTOCOL_LINES[lang])
+    subs = {**SDKS[lang], "SIBLINGS": siblings(lang), **versions(lang)}
     for key, value in subs.items():
         out = out.replace("{{" + key + "}}", value)
     leftover = re.findall(r"\{\{[A-Z_]+\}\}", out)

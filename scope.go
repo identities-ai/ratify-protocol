@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Canonical scope constants. Use these instead of bare strings.
@@ -331,6 +332,48 @@ func ValidateScopes(scopes []string) error {
 		return fmt.Errorf("unknown scope %q: not in canonical vocabulary and not a custom: extension", s)
 	}
 	return nil
+}
+
+// ValidateScopesV2 applies the Protocol v2 delegation scope rules while
+// leaving the published v1 validator unchanged. V2 treats registry validity
+// as a post-claim authorization check, so callers should use this only after
+// authenticated challenge claim.
+func ValidateScopesV2(scopes []string) error {
+	if len(scopes) == 0 {
+		return fmt.Errorf("scope must be a non-empty array")
+	}
+	if err := ValidateScopes(scopes); err != nil {
+		return err
+	}
+	seen := make(map[string]bool, len(scopes))
+	for _, scope := range scopes {
+		if scope == "custom:*" {
+			return fmt.Errorf("custom:* is not a valid scope")
+		}
+		if seen[scope] {
+			return fmt.Errorf("duplicate scope %q", scope)
+		}
+		seen[scope] = true
+	}
+	return nil
+}
+
+// ValidateRequiredScopeV2 requires exactly one requestable action scope
+// (SPEC-v2 §2.4): a registered canonical scope, or one exact custom:
+// extension scope. A canonical wildcard, custom:*, the bare prefix custom:,
+// an empty string, invalid UTF-8, and a scope longer than
+// MAX_SCOPE_LENGTH_BYTES are rejected. A custom required scope is an exact
+// string: it is matched by byte equality against the effective delegation
+// scope and never expanded, folded, or mapped to a canonical scope.
+func ValidateRequiredScopeV2(scope string) error {
+	if validScopes[scope] && scopeWildcards[scope] == nil {
+		return nil
+	}
+	if strings.HasPrefix(scope, CustomScopePrefix) && len(scope) > len(CustomScopePrefix) &&
+		scope != "custom:*" && len(scope) <= MaxScopeLengthBytes && utf8.ValidString(scope) {
+		return nil
+	}
+	return fmt.Errorf("required scope must be one canonical scope or one exact custom: scope")
 }
 
 // isValidScope returns true iff s is canonical, a wildcard, or a custom extension.

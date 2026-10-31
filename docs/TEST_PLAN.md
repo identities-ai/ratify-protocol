@@ -1,9 +1,9 @@
 # Ratify Protocol Test Plan
 
-**Companion to [`SPEC.md`](../SPEC.md) and [`SDKS.md`](SDKS.md). Defines how Ratify v1 is validated — from unit tests through external audit, and how every new language SDK proves it is conformant with the reference.**
+**Companion to [`SPEC.md`](../SPEC.md) and [`SDKS.md`](SDKS.md). Defines how Ratify v1 is validated, from unit tests through external audit, and how every new language SDK proves it is conformant with the reference.**
 
 **Last updated:** 2026-07-31
-**Scope:** Ratify Protocol v1 (hybrid Ed25519 + ML-DSA-65 delegation, JSON wire format)
+**Scope:** Ratify Protocol v1 (hybrid Ed25519 + ML-DSA-65 delegation, JSON wire format). The geo, speed and SessionToken fixtures below are v1-only until Protocol 2.1. Protocol v2 validation (the `testvectors/v2` corpus, fuzzing, concurrency, cross-SDK fixtures and the `examples/v2` output checks) is defined in SPEC-v2 §8 and recorded in [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md).
 
 ---
 
@@ -12,17 +12,17 @@
 1. **Every cryptographic check has an adversarial test.** If we check it, we prove it catches the attack.
 2. **Test vectors are the ground truth.** Cross-implementation interop depends on a canonical set of inputs with known outputs, versioned alongside the spec. The fixtures at `testvectors/v1/` ARE the spec in runnable form.
 3. **Fail-closed in the tests mirrors fail-closed in the verifier.** Ambiguous cases resolve to invalid, and the test fixture enforces that.
-4. **Hybrid means both.** A signature is valid only if the Ed25519 AND the ML-DSA-65 component verify. Tests MUST cover single-component-failure cases — a tampered Ed25519 with a valid ML-DSA, and vice versa — and reject both.
+4. **Hybrid means both.** A signature is valid only if the Ed25519 AND the ML-DSA-65 component verify. Tests MUST cover single-component-failure cases (a tampered Ed25519 with a valid ML-DSA, and vice versa) and reject both.
 5. **Cross-language interop is tested continuously.** Every PR in any SDK reruns the fixture suite; any drift between languages is a bug in at least one of them, not a spec ambiguity.
 6. **Production telemetry is a test surface.** Verification counts, error code distributions, and latency percentiles are testable properties of the system.
 
 ---
 
-## Layer 1 — Unit Tests (Go)
+## Layer 1: Unit Tests (Go)
 
 Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is planning-era, and this plan expands to ~35).
 
-### 1.1 Happy path — extend current `TestDelegationRoundTrip`
+### 1.1 Happy path: extend current `TestDelegationRoundTrip`
 
 - Depth-1 chain (current)
 - Depth-2 chain (human → intermediate → agent)
@@ -31,7 +31,7 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 
 ### 1.2 Cryptographic failures
 
-- Tampered cert body (current `TestTamperedSignature`) — expand to per-field tampering (every field in `delegationSignable`)
+- Tampered cert body (current `TestTamperedSignature`): expand to per-field tampering (every field in `delegationSignable`)
 - Wrong issuer public key in cert (mismatches signature)
 - Signature from different private key
 - Empty signature
@@ -40,8 +40,8 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 
 ### 1.3 Chain validation
 
-- `broken_chain` — cert[0].IssuerID ≠ cert[1].SubjectID
-- `broken_chain_keys` — issuer key differs from previous subject key
+- `broken_chain`: cert[0].IssuerID ≠ cert[1].SubjectID
+- `broken_chain_keys`: issuer key differs from previous subject key
 - Chain depth 0 (empty `Delegations`)
 - Chain depth > `MaxDelegationChainDepth` (8 as of the alpha.16 spec; 3 through alpha.15)
 - Chain with loop (A → B → A)
@@ -51,9 +51,9 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 
 - `expired` (current `TestExpiredCert`)
 - `not_yet_valid` (cert with IssuedAt in future)
-- Challenge age = `ChallengeWindowSeconds` exactly (edge — accept)
+- Challenge age = `ChallengeWindowSeconds` exactly (edge case; accept)
 - Challenge age = `ChallengeWindowSeconds + 1` (reject)
-- Challenge with negative age (reject — future challenge)
+- Challenge with negative age (reject: future challenge)
 - Clock skew: verifier clock 30s fast vs. signer
 
 ### 1.5 Revocation
@@ -61,24 +61,24 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 - `revoked` (current `TestRevokedCert`)
 - Revocation callback returns true only for intermediate cert (revocation must reject the whole bundle)
 - Revocation callback nil (no check)
-- Revocation callback panics (must not crash verifier; decide: propagate or catch and fail-closed — **spec gap**, see §8 Open Questions)
+- Revocation callback panics (must not crash verifier; decide: propagate or catch and fail-closed; **spec gap**, see §8 Open Questions)
 
 ### 1.6 Agent / key binding
 
-- `key_mismatch` — bundle.AgentPubKey ≠ cert[0].SubjectPubKey
-- `id_mismatch` — bundle.AgentID ≠ cert[0].SubjectID
+- `key_mismatch`: bundle.AgentPubKey ≠ cert[0].SubjectPubKey
+- `id_mismatch`: bundle.AgentID ≠ cert[0].SubjectID
 - Agent pubkey wrong length (`invalid_agent_key`)
 - Agent signs challenge with *human's* private key (must fail)
 
 ### 1.7 Scope validation
 
 - `TestScopeRejection` (current)
-- `TestScopeWildcard` (current — meeting:* expansion)
+- `TestScopeWildcard` (current: meeting:* expansion)
 - The four comms/meeting wildcard expansions (`meeting:*`, `comms:*`, `comms:message:*`, `comms:email:*`), a subset of the 14 wildcards in the vocabulary
-- Sensitive scope in a wildcard (must be rejected — `meeting:record` must not ride `meeting:*`)
+- Sensitive scope in a wildcard (must be rejected: `meeting:record` must not ride `meeting:*`)
 - Unknown scope string (`ValidateScopes` rejects)
 - Empty scope list with non-empty required scope (reject)
-- Scope narrowing in multi-cert chain — **see Critical Security Test in §6**
+- Scope narrowing in multi-cert chain. **See Critical Security Test in §6**
 
 ### 1.8 Serialization round-trips
 
@@ -96,7 +96,7 @@ Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is plan
 
 ---
 
-## Layer 2 — Property-Based / Fuzz Tests
+## Layer 2: Property-Based / Fuzz Tests
 
 Go 1.18+ native fuzzing.
 
@@ -130,15 +130,15 @@ Every output of `ExpandScopes` must satisfy `ValidateScopes` without error.
 
 ---
 
-## Layer 3 — Canonical Test Vectors
+## Layer 3: Canonical Test Vectors
 
 This is the single highest-leverage test artifact for the open-source launch. Without cross-language test vectors, no JS or Python implementation can be verified correct.
 
-**Status:** ✅ Implemented on `main` — **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
+**Status:** ✅ Implemented on `main`. **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
 
 ### 3.1 Location
 
-`testvectors/v1/*.json` — each file is a self-contained test case. All five SDKs read from the same directory.
+`testvectors/v1/*.json`: each file is a self-contained test case. All five SDKs read from the same directory.
 
 ### 3.2 Format
 
@@ -170,7 +170,7 @@ This is the single highest-leverage test artifact for the open-source launch. Wi
 
 All **79 fixtures** present, generated deterministically, and passing conformance across Go / TypeScript / Python / Rust / C:
 
-**Core v1 — 20 fixtures**
+**Core v1: 20 fixtures**
 
 | Name | Kind | Purpose |
 |---|---|---|
@@ -195,14 +195,14 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `reject_unknown_scope` | scope | Scope outside canonical vocabulary and not a `custom:` extension |
 | `revocation_list_signature_valid` | revocation | RevocationList signed by issuer |
 
-**Sub-delegation gate — 2 fixtures (P0-1)**
+**Sub-delegation gate: 2 fixtures (P0-1)**
 
 | Name | Purpose |
 |---|---|
 | `sub_delegation_allowed` | Non-root parent grants `identity:delegate`; child cert accepted. |
 | `sub_delegation_denied` | Non-root parent lacks `identity:delegate`; child cert rejected with `delegation_not_authorized`. |
 
-**Constraint evaluation — 12 fixtures (P0-2 + unknown-type gate)**
+**Constraint evaluation: 12 fixtures (P0-2 + unknown-type gate)**
 
 | Name | Constraint type | Expected |
 |---|---|---|
@@ -217,23 +217,23 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `constraint_max_amount_exceeds` | `max_amount` | `constraint_denied` |
 | `constraint_max_speed_mps_denied` | `max_speed_mps` | `constraint_denied` |
 | `constraint_max_rate_denied` | `max_rate` | `constraint_denied` |
-| `constraint_unknown_denied` | (unknown type) | `constraint_unknown` — proves verifier fails closed on unrecognized constraint types |
+| `constraint_unknown_denied` | (unknown type) | `constraint_unknown`; proves verifier fails closed on unrecognized constraint types |
 
-**Session-bound challenge — 2 fixtures (v1.1)**
+**Session-bound challenge: 2 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
 | `session_bound_challenge` | Challenge signature includes a 32-byte `session_context`; verifier accepts only when the same context is supplied. |
 | `reject_session_context_mismatch` | Same bundle rejected when the verifier supplies a different session context. |
 
-**Key rotation — 2 fixtures (v1.1)**
+**Key rotation: 2 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
 | `key_rotation_valid` | `KeyRotationStatement` signed by both old and new root keys verifies. |
 | `reject_key_rotation_tampered` | Tampered statement fails verification after canonical sign-byte comparison still matches the tampered object. |
 
-**Stream sequence numbers — 6 fixtures (v1.1)**
+**Stream sequence numbers: 6 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
@@ -244,7 +244,7 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `reject_stream_id_mismatch` | Verifier stream ID mismatch is rejected. |
 | `reject_stream_context_unverifiable` | Stream-bound bundle without verifier stream context is rejected. |
 
-**Session cert cache — 5 fixtures (v1.1)**
+**Session cert cache: 5 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
@@ -254,7 +254,7 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `reject_session_token_wrong_secret` | Token from another verifier secret is rejected. |
 | `reject_session_token_bad_challenge_sig` | Fresh challenge signature failure rejects the streamed turn. |
 
-**Transaction receipts — 5 fixtures (v1.1)**
+**Transaction receipts: 5 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
@@ -264,7 +264,7 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 | `reject_transaction_receipt_terms_tampered` | Terms tampering invalidates receipt signatures. |
 | `reject_transaction_receipt_wrong_party_key` | Party key mismatch is rejected. |
 
-**Revocation push, Witness, and challenge forwarding — 3 fixtures (v1.1)**
+**Revocation push, Witness, and challenge forwarding: 3 fixtures (v1.1)**
 
 | Name | Purpose |
 |---|---|
@@ -316,7 +316,7 @@ All **79 fixtures** present, generated deterministically, and passing conformanc
 
 ### 3.4 Test vector generator
 
-`cmd/ratify-testvectors/main.go` — regenerates all vectors from fixed 32-byte seeds (`0x01…` for human root, `0x02…` for agent, etc.). Timestamps are fixed (`1800000000` = 2027-01-15 UTC). Challenges are SHA-256 of the fixture name. **Determinism is a required property:** `go run ./cmd/ratify-testvectors` produces byte-identical output to committed fixtures; any drift fails the conformance test.
+`cmd/ratify-testvectors/main.go` regenerates all vectors from fixed 32-byte seeds (`0x01…` for human root, `0x02…` for agent, etc.). Timestamps are fixed (`1800000000` = 2027-01-15 UTC). Challenges are SHA-256 of the fixture name. **Determinism is a required property:** `go run ./cmd/ratify-testvectors` produces byte-identical output to committed fixtures; any drift fails the conformance test.
 
 Run to regenerate in place:
 
@@ -339,7 +339,7 @@ Byte-level cross-language equivalence is proven separately by the hub-and-spoke 
 
 ---
 
-## Layer 4 — Cross-language interop
+## Layer 4: Cross-language interop
 
 **Status:** All five SDKs (Go, TypeScript, Python, Rust, C) pass the 79 canonical fixtures. Byte-level equivalence is proven for Go, TypeScript, Python, and Rust through the hub-and-spoke corpus (§4.1).
 
@@ -389,7 +389,7 @@ New SDK jobs append to the same workflow and adopt the same two-mechanism check:
 
 ---
 
-## Layer 5 — API Integration Tests
+## Layer 5: API Integration Tests
 
 Location: `api/ratify_handlers_test.go` (to be written).
 
@@ -409,7 +409,7 @@ Location: `api/ratify_handlers_test.go` (to be written).
 
 - Root registration creates a record in the identity store
 - Revocation creates a record in the revocation store; subsequent verify rejects
-- Verification log — inserts at correct partition
+- Verification log inserts at correct partition
 
 ### 5.4 Authentication
 
@@ -419,31 +419,31 @@ Location: `api/ratify_handlers_test.go` (to be written).
 
 ---
 
-## Layer 6 — Security / Adversarial Tests
+## Layer 6: Security / Adversarial Tests
 
 ### 6.1 Scope narrowing in multi-cert chains ✅ Resolved
 
-**Status:** Fixed in `verify.go` — effective granted scope is the intersection of every cert's expanded scope set via `IntersectScopes`. Sensitive scopes never ride wildcards through any level. Four tests in `ratify_test.go` cover the adversarial and positive cases:
+**Status:** Fixed in `verify.go`. Effective granted scope is the intersection of every cert's expanded scope set via `IntersectScopes`. Sensitive scopes never ride wildcards through any level. Four tests in `ratify_test.go` cover the adversarial and positive cases:
 
-- `TestScopeNarrowingDepth2Escalation` — intermediate grants `files:write` without receiving it; rejected
-- `TestScopeNarrowingDepth2Legitimate` — human grants `meeting:*`, intermediate narrows to `meeting:attend`; valid
-- `TestScopeNarrowingWildcardSensitive` — intermediate attempts `meeting:record` with only `meeting:*` received; rejected
-- `TestScopeNarrowingDepth3` — three-level chain with scope drops at each hop; only scopes surviving all three hops are granted
+- `TestScopeNarrowingDepth2Escalation`: intermediate grants `files:write` without receiving it; rejected
+- `TestScopeNarrowingDepth2Legitimate`: human grants `meeting:*`, intermediate narrows to `meeting:attend`; valid
+- `TestScopeNarrowingWildcardSensitive`: intermediate attempts `meeting:record` with only `meeting:*` received; rejected
+- `TestScopeNarrowingDepth3`: three-level chain with scope drops at each hop; only scopes surviving all three hops are granted
 
 ### 6.2 Replay attacks
 
-- Replay a used server-issued challenge (must fail — enforced by single-use challenge store)
+- Replay a used server-issued challenge (must fail; enforced by single-use challenge store)
 - Replay a bundle against a different session_id (must fail if the verifier binds to session)
 - Replay a bundle after revocation (must fail)
 
 ### 6.3 Downgrade attacks
 
 - Present v1 cert to v2 verifier (expected behavior documented)
-- Present v2 cert to v1 verifier (rejected — `version_mismatch`)
+- Present v2 cert to v1 verifier (rejected: `version_mismatch`)
 
 ### 6.4 Key confusion
 
-- Human and agent use same pubkey (reject — self-delegation blocked)
+- Human and agent use same pubkey (reject: self-delegation blocked)
 - Challenge signed by human key instead of agent key (reject)
 
 ### 6.5 Encoding attacks
@@ -459,18 +459,18 @@ Location: `api/ratify_handlers_test.go` (to be written).
 ### 6.7 Resource exhaustion
 
 - ProofBundle with 1 MB Challenge field (server limit enforced)
-- ProofBundle with 1000 delegations (rejected — chain_too_deep)
+- ProofBundle with 1000 delegations (rejected: chain_too_deep)
 - Concurrent challenge requests from single IP (rate limited)
 
 ---
 
-## Layer 7 — Fuzzing
+## Layer 7: Fuzzing
 
 ### 7.1 Go native fuzz targets
 
-- `FuzzVerify` — random bytes → parsed bundle → Verify. No panic.
-- `FuzzExpandScopes` — random strings → ExpandScopes. No panic, no infinite loop.
-- `FuzzDelegationSignBytes` — random cert → serialize. Deterministic.
+- `FuzzVerify`: random bytes → parsed bundle → Verify. No panic.
+- `FuzzExpandScopes`: random strings → ExpandScopes. No panic, no infinite loop.
+- `FuzzDelegationSignBytes`: random cert → serialize. Deterministic.
 
 ### 7.2 Continuous fuzzing
 
@@ -482,7 +482,7 @@ Seeded from test vectors. Fuzz evolves new edge cases over time.
 
 ---
 
-## Layer 8 — Load / Performance Tests
+## Layer 8: Load / Performance Tests
 
 Tool: k6 or vegeta against a dev deployment.
 
@@ -490,13 +490,13 @@ Tool: k6 or vegeta against a dev deployment.
 
 - **Target:** 10,000 verifies/sec sustained at <100 ms p95
 - Hot path: in-memory crypto + cache lookup + database revocation check
-- Cold path: add verification log insert — verify doesn't block on it (async queue)
+- Cold path: add verification log insert; verify doesn't block on it (async queue)
 
 ### 8.2 Revocation list size scaling
 
-- 1K revoked certs — constant-time lookup
-- 100K revoked certs — still constant-time (indexed database query or in-memory bloom filter?)
-- 1M revoked certs — measure actual latency
+- 1K revoked certs: constant-time lookup
+- 100K revoked certs: still constant-time (indexed database query or in-memory bloom filter?)
+- 1M revoked certs: measure actual latency
 
 ### 8.3 Challenge endpoint burst
 
@@ -511,15 +511,15 @@ Tool: k6 or vegeta against a dev deployment.
 
 ---
 
-## Layer 9 — External Audit
+## Layer 9: External Audit
 
 Post v1.0 tag, before category launch.
 
 ### 9.1 Target firms
 
-- **Trail of Bits** — strong crypto and Go expertise, known for Signal-level protocol reviews
-- **NCC Group** — broad security review, cheaper
-- **Cure53** — fast turnaround, good for open-source
+- **Trail of Bits**: strong crypto and Go expertise, known for Signal-level protocol reviews
+- **NCC Group**: broad security review, cheaper
+- **Cure53**: fast turnaround, good for open-source
 
 ### 9.2 Scope
 
@@ -539,7 +539,7 @@ In parallel, an external academic cryptography reviewer audits the spec for peer
 
 ---
 
-## Layer 10 — Public Conformance Suite
+## Layer 10: Public Conformance Suite
 
 A web tool at `ratify.dev/test` (or similar) where any implementer can submit a ProofBundle JSON and see which checks pass / fail with detailed explanations.
 
@@ -558,7 +558,7 @@ Ship alongside the v1.0 open-source announcement.
 
 ---
 
-## Layer 11 — Production Telemetry
+## Layer 11: Production Telemetry
 
 The `ratify_verification_log` table already exists. Build dashboards from it.
 
@@ -580,7 +580,7 @@ The `ratify_verification_log` table already exists. Build dashboards from it.
 
 ---
 
-## Layer 12 — Real-World Pilot
+## Layer 12: Real-World Pilot
 
 Final proving ground. Everything above is artificial.
 
@@ -590,13 +590,13 @@ Final proving ground. Everything above is artificial.
 - **Duration:** 90 days
 - **Metrics:** verifications/day, error types observed in production, operator feedback on false positives/negatives
 
-### 12.2 Second pilot — agent platform
+### 12.2 Second pilot: agent platform
 
 Protocol conformance validated against multiple third-party agent platform integrations.
 
 ---
 
-## Summary — Test Pyramid
+## Summary: Test Pyramid
 
 ```
                         ┌────────────────────┐
@@ -629,7 +629,7 @@ Protocol conformance validated against multiple third-party agent platform integ
 
 ## Known Open Questions (track to resolution before v1.0 public tag)
 
-1. ~~**Scope narrowing semantics.** Effective granted scope = intersection of all chain scopes.~~ ✅ Resolved — implemented via `IntersectScopes`; see §6.1.
+1. ~~**Scope narrowing semantics.** Effective granted scope = intersection of all chain scopes.~~ ✅ Resolved: implemented via `IntersectScopes`; see §6.1.
 2. **Revocation callback panic behavior.** Catch and fail-closed, or propagate? Recommended: fail-closed with logged error.
 3. **Revocation list freshness.** Max age before verifier fetches a new list? Recommended: 60 seconds, with webhook push for real-time revocation.
 4. **Canonical JSON library for non-Go implementers.** Adopt RFC 8785 JCS or document implicit rules? Recommended: RFC 8785 for safety, but document Go's current `encoding/json` behavior as the reference for migration.

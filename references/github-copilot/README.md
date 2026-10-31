@@ -8,9 +8,18 @@ deployment tool while an independently operated receiver verifies that a
 recognized principal authorized this agent to perform this exact action on this
 exact resource before the protected handler runs.
 
-It is implemented on `main`, tested with GitHub Copilot CLI 1.0.80, and
-available to use now. It is an independent Ratify Protocol project, not a
-GitHub- or Microsoft-endorsed integration.
+It is an independent Ratify Protocol project, not a GitHub- or
+Microsoft-endorsed integration.
+
+**Protocol line.** This reference now runs on Ratify Protocol v2, built from
+this source tree (the TypeScript SDK prerelease, ahead of the published
+`2.0.0-beta.1` packages). Its deterministic gate passes 13/13 on v2. The native
+GitHub Copilot CLI 1.0.80 runs recorded in
+[`reference-evidence.md`](reference-evidence.md) were executed on Protocol v1
+(`1.0.0-alpha.19`) on 2026-08-14 and have not been repeated on v2. The plugin
+installed from `main` stays on Protocol v1 until this v2 port is merged.
+The v2 receiver uses the SDK's in-memory reference stores, which are for
+development only.
 
 [Run it with Copilot](#use-it-now-with-github-copilot) ·
 [See what it proves](#what-the-reference-proves) ·
@@ -67,7 +76,7 @@ Copilot, GitHub, or any Microsoft surface is required for this to work.
 | --- | --- | --- | --- |
 | **Principal** | The person or organization accountable for the action | Signs a bounded delegation naming the scope, resource, and expiry | No code. Issues a delegation with the SDK or Ratify Verify, and decides what the bounds should be |
 | **Agent operator** | The team running Copilot | Installs the plugin and points it at their receiver and trust root | No code, but real configuration: the receiver address, the trusted issuer public key and derived ID, and which tools are protected |
-| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is 138 lines: the `verifyBundle` call is about 15 of them, and the rest is challenge issuance, session binding, comparing the verified root key against the trust policy, and making the handler unreachable except through the allow branch |
+| **Receiver operator** | Whoever owns the consequence: the deploy service, the SaaS API, the MCP server | Issues challenges, verifies the proof, releases the decision, and guards the protected handler | The verification path. In this reference `src/receiver.ts` is under 300 lines: the `verifyProofBundleV2` and `releaseV2Decision` calls are a small part, and the rest is challenge issuance, session binding, pinning the root and status keys, publishing the signed receipt, and making the handler unreachable except through a released allow |
 | **GitHub / Copilot** | The agent platform | Routes the tool call it already routes | **Nothing.** The plugin uses the existing plugin manifest and MCP mechanisms |
 
 The receiver number is worth being precise about, because the verification call
@@ -102,9 +111,9 @@ prompt, or the platform that routed the call.
 The included principal delegates only:
 
 ```text
-scope       custom:github:deploy
-repository  identities-ai/copilot-authority-demo
-path        /services/payments/environments/staging
+scope        custom:github:deploy
+resource_id  git:github.com/identities-ai/copilot-authority-demo
+path         /services/payments/environments/staging
 ```
 
 Copilot sees one ordinary MCP tool named `deploy_service`. The model never
@@ -124,8 +133,9 @@ sequenceDiagram
     Receiver-->>Adapter: Fresh single-use challenge
     Adapter->>Adapter: Present signed delegated authority
     Adapter->>Receiver: Exact request plus Ratify ProofBundle
-    Receiver->>Receiver: Verify trust, agent, scope, resource, payload, expiry, revocation, and replay
-    alt valid authority
+    Receiver->>Receiver: Verify trust, agent, scope, resource, payload, expiry, signed status, and replay
+    Receiver->>Receiver: Publish signed receipt, read checkpoint, release
+    alt released and allowed
         Receiver->>Handler: Invoke once
         Receiver-->>Copilot: ALLOW plus decision receipt
     else invalid authority
@@ -133,8 +143,8 @@ sequenceDiagram
     end
 ```
 
-The receiver—not the prompt, skill, model, or adapter—is the enforcement
-boundary. A caller cannot reach the protected handler by skipping Ratify proof
+The receiver is the enforcement boundary. The prompt, skill, model, and
+adapter are not. A caller cannot reach the protected handler by skipping Ratify proof
 presentation.
 
 ## What the reference proves
@@ -145,7 +155,10 @@ presentation.
 | Payments to production | Deny | Not invoked |
 | Different repository | Deny | Not invoked |
 | Artifact changed after challenge issuance | Deny | Not invoked |
-| Revoked delegation | Deny | Not invoked |
+| Revoked delegation (signed status from the principal's status key) | Deny | Not invoked |
+| Status signed by any key other than the pinned status key | Deny | Not invoked |
+| Delegation for a different `custom:` scope | Deny | Not invoked |
+| Non-canonical repository spelling | Refused before a challenge is issued | Not invoked |
 | Replayed proof | Deny | Not invoked again |
 | Untrusted root key, including an ID-spoofed root | Deny | Not invoked |
 
@@ -192,7 +205,9 @@ In terminal one:
 
 ```bash
 git clone https://github.com/identities-ai/ratify-protocol.git
-cd ratify-protocol/references/github-copilot
+cd ratify-protocol
+(cd sdks/typescript && npm ci && npm run build)
+cd references/github-copilot
 npm ci
 npm run receiver
 ```
@@ -224,9 +239,15 @@ Approve the MCP tool when Copilot asks. The expected result includes:
   "allowed": true,
   "reason": "authorized",
   "handler_invocations": 1,
+  "verification_receipt": {
+    "log_sequence": 1,
+    "decision": "allow",
+    "decision_reason": "authorized"
+  },
   "receipt": {
+    "agent_id": "3f33b9bc63ecd1e64d97f8244bcf598e896d9d6590ace12a4a421f822548f4e5",
     "scope": "custom:github:deploy",
-    "resource": "github:identities-ai/copilot-authority-demo",
+    "resource": "git:github.com/identities-ai/copilot-authority-demo",
     "path": "/services/payments/environments/staging",
     "invocation_id": "my-first-ratify-deploy"
   }
@@ -242,14 +263,14 @@ To inspect the protocol boundary or contribute to the implementation:
 
 ```bash
 git clone https://github.com/identities-ai/ratify-protocol.git
-cd ratify-protocol/references/github-copilot
-npm ci
-npm run check
-npm run demo
+cd ratify-protocol
+./references/github-copilot/run-reference-check.sh
 ```
 
-The gate compiles the source, runs all seven allow and deny tests, and rebuilds
-the distributable plugin runtime.
+The gate builds the TypeScript SDK from this tree, compiles the reference, runs
+all 13 allow and deny tests, rebuilds the distributable plugin runtime, checks
+that the runtime no longer bundles the v1 geo and speed evaluator, and runs the
+demo. It fails if the declared count drifts or if any test fails or skips.
 
 ## Which path should I use?
 
@@ -279,10 +300,10 @@ format and receiver decision remain portable. This repository is the immediate
 starting point.
 
 Do not deploy the reference unchanged to production. Its keys are public test
-material, its state is in memory, its receiver uses local HTTP, and its handler
-is intentionally a counter. A production receiver must pin each trusted issuer
-public key out of band and validate its derived ID; this reference now enforces
-that check.
+material, its state is in development-only in-memory stores, its receiver uses
+local HTTP, and its handler is intentionally a counter. A production receiver
+must pin each trusted issuer public key and status key out of band; this
+reference pins both and checks any configured root ID against its key.
 
 ### Ratify Verify
 
@@ -306,21 +327,61 @@ path; Ratify Verify is not yet offered here as a generally available service.
 
 ## What is cryptographically bound?
 
-The published `@identities-ai/ratify-protocol@1.0.0-alpha.19` TypeScript SDK
-verifies:
+The Ratify Protocol v2 TypeScript SDK (`@identities-ai/ratify-protocol/v2`,
+built from this tree) verifies:
 
-- the hybrid-signed delegation chain;
-- the trusted human root and expected adapter agent;
-- the required `custom:github:deploy` scope;
-- the canonical GitHub repository and resource path;
-- the artifact digest and invocation identifier;
-- a receiver-issued, single-use challenge;
-- certificate validity and fresh revocation state; and
-- operation and session context reconstructed by the receiver.
+- the hybrid-signed delegation chain, with 64-hex key IDs that must match the
+  complete keys they name;
+- the trusted root, pinned by its complete public key rather than an ID;
+- the expected adapter key, bound to the challenge when it is issued;
+- the exact required scope `custom:github:deploy`, matched by byte equality
+  and granted by no wildcard or canonical scope;
+- the Git resource identifier and logical path, through a `resource_path`
+  constraint;
+- the artifact digest and invocation identifier, through the operation and
+  session context;
+- a receiver-issued, single-use challenge, persisted by the issuance helper
+  before it is returned;
+- revocation status from a signed list or push under the principal's status
+  key, which is role-separated from the root key.
 
-Changing the request after challenge issuance changes its signed session
-binding. Reusing a proof fails because the receiver atomically consumes the
-challenge.
+Changing the request after challenge issuance changes its session context, and
+the receiver rejects it before any state is consumed. A verified proof is only
+committed. The receiver publishes the signed verification receipt, reads the
+checkpoint acknowledgement, and releases the decision; only a released decision
+whose `allowed()` holds at the receiver's clock reaches the handler. Reusing a
+proof is a replay and is never evaluated.
+
+### Git resource profile in Protocol v2
+
+The Git resource-identifier profile in
+[`docs/RESOURCE_PROFILES.md`](../../docs/RESOURCE_PROFILES.md) was written for
+Protocol v1. This reference applies it unchanged to v2:
+
+- The repository is named `git:github.com/<owner>/<repo>` in its canonical
+  lowercase form. The value is the `resource_id` of a v2 `resource_path`
+  constraint, an opaque string the verifier compares by exact byte equality
+  (SPEC-v2 §5.2). The verifier never parses or normalizes it.
+- The receiver builds `requested_resource_id` from the request and refuses any
+  non-canonical spelling (uppercase, a `.git` suffix, a URL) instead of
+  normalizing it, so one repository has exactly one identifier.
+- `path_prefix` is a logical path inside the repository
+  (`/services/payments/environments/staging`), matched on segment boundaries.
+  It is lexical authorization, not filesystem confinement.
+- The identifier names a repository, not a revision. Authority for a path
+  covers that path at any revision the receiver operates on.
+- The v1 reference used `github:<owner>/<repo>`; v2 uses the profile form.
+
+## npm advisories
+
+On 2026-10-22, `npm audit` against the v1 lockfile reported five advisories (3
+moderate, 1 high, 1 critical): `@modelcontextprotocol/sdk` 1.30.0 (high),
+`proxy-addr` (critical), `hono`, `fast-uri` and `ip-address` (moderate), all
+reached through the MCP SDK. The MCP SDK pin moved to 1.32.1, a minor release,
+and `npm audit fix` updated the transitive packages without a breaking change.
+`npm audit` now reports 0 vulnerabilities. None of the affected HTTP-server
+code paths were reachable in this reference, which uses only the MCP stdio
+transport.
 
 ## Repository map
 
@@ -332,8 +393,9 @@ challenge.
 | `plugin-runtime/mcp-server.js` | Self-contained runtime delivered to plugin users |
 | `src/mcp-server.ts` | MCP tool definition |
 | `src/adapter.ts` | Challenge retrieval and proof presentation |
-| `src/authority.ts` | Reproducible reference identity and delegation |
-| `src/receiver.ts` | Independent verification and protected handler boundary |
+| `src/authority.ts` | Reproducible reference keys, v2 delegation, and proof presentation |
+| `src/status-feed.ts` | The principal's signed status, from the SDK status publisher (development only) |
+| `src/receiver.ts` | Independent v2 verification, release, and protected handler boundary |
 | `src/request.ts` | Exact operation and session binding |
 | `test/authority-boundary.test.ts` | Deterministic allow and deny cases |
 | `ratify-reference.json` | Reference metadata and gate declaration |
@@ -342,11 +404,16 @@ challenge.
 ## Evidence, security status, and limitations
 
 - [Executed reference evidence](reference-evidence.md)
-- [Ratify Protocol specification](../../SPEC.md)
+- [Ratify Protocol v2 specification](../../SPEC-v2.md)
 - [Reference profile requirements](../README.md)
 
 This reference is live and maintained as part of Ratify Protocol. It changes no
 real infrastructure. The fixed seeds must never be reused for real authority.
-The in-memory stores are single-process and intentionally fail closed on
-restart. Production deployments must replace every demo-only component listed
-above.
+The receiver uses the SDK's in-memory Part B reference stores (claim store,
+receipt log, checkpoint, journal, challenge issuance), which are for
+development only: they are single-process, not durable, and give no
+independent checkpoint. A restart loses every challenge, so pending requests
+fail closed. Production deployments must supply durable stores and an
+independent checkpoint (SPEC-v2 §7) and replace every demo-only component
+listed above. Protocol v2 is a prerelease, reviewed internally so far; external
+independent review is a gate for `2.0.0`.

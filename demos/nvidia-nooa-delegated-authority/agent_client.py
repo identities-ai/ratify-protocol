@@ -5,26 +5,29 @@ There is deliberately no authorization logic in this file. The client asks the
 service what it intends to do, signs the challenge the service issues, and
 returns whatever the service decided. It has no ability to allow anything, and
 no knowledge of what the delegation permits.
+
+Protocol v2. The proof is a ``ProofBundleV2`` signed with the agent's hybrid
+key and sent as its exact wire bytes (base64), because v2 decodes the wire
+strictly and a re-serialized object is not the object that was signed.
 """
 
 from __future__ import annotations
 
 import base64
 import json
-import time
 import urllib.request
 
-from ratify_protocol import ProofBundle, sign_challenge
-from ratify_protocol.wire import encode_proof_bundle
+from ratify_protocol.v2.protocol_v2 import (
+    ProofBundleV2,
+    encode_proof_bundle_v2,
+    sign_proof_bundle_v2,
+)
+
+from refund_service import encode_public_key
 
 
 def post_json(url: str, payload: dict) -> dict:
-    """POST JSON and decode the JSON response.
-
-    Proof bundles are serialized through the protocol's own canonical wire
-    codec rather than an ad-hoc encoding, so what crosses the boundary here is
-    the real interop format.
-    """
+    """POST JSON and decode the JSON response."""
     body = json.dumps(payload, default=_encode).encode("utf-8")
     request = urllib.request.Request(
         url, data=body, headers={"Content-Type": "application/json"}, method="POST"
@@ -38,11 +41,35 @@ def post_json(url: str, payload: dict) -> dict:
 
 
 def _encode(value):
-    if isinstance(value, ProofBundle):
-        return json.loads(encode_proof_bundle(value))
     if isinstance(value, bytes):
         return base64.b64encode(value).decode("ascii")
     raise TypeError(f"not JSON-serializable: {type(value).__name__}")
+
+
+def sign_presentation(
+    *, verifier_id, agent_id, agent_pub, agent_priv, delegations, challenge,
+    challenge_at, session_context,
+) -> bytes:
+    """Sign a v2 proof bundle over the receiver's challenge and binding.
+
+    Returns the exact wire bytes. ``challenge_at`` is the receiver's issuance
+    time for this challenge, which the verifier compares exactly."""
+    bundle = sign_proof_bundle_v2(
+        ProofBundleV2(
+            version=2,
+            verifier_id=verifier_id,
+            agent_id=agent_id,
+            agent_pub_key=agent_pub,
+            delegations=list(delegations),
+            delegation_digest=b"",  # computed by sign_proof_bundle_v2
+            challenge=challenge,
+            challenge_at=challenge_at,
+            challenge_sig=None,  # computed by sign_proof_bundle_v2
+            session_context=session_context,
+        ),
+        agent_priv,
+    )
+    return encode_proof_bundle_v2(bundle)
 
 
 class RefundClient:
@@ -56,38 +83,39 @@ class RefundClient:
         # Chain order is [leaf, ... root].
         self.delegations = list(delegations)
 
-    def fetch_challenge(self, order_id: str, amount: float, currency: str = "USD") -> dict:
+    def fetch_challenge(self, order_id: str, amount_micros: int, currency: str = "USD") -> dict:
         """Phase 1, describe the intended action and receive a challenge
         bound to the *receiver's* canonical reading of it."""
         return post_json(
             self.base_url + "/refunds/challenge",
             {
                 "order_id": order_id,
-                "amount": amount,
+                "amount_micros": amount_micros,
                 "currency": currency,
                 "agent_id": self.agent_id,
+                "agent_public_key": encode_public_key(self.agent_pub),
             },
+        )
+
+    def sign(self, challenge: dict) -> bytes:
+        return sign_presentation(
+            verifier_id=challenge["verifier_id"],
+            agent_id=self.agent_id,
+            agent_pub=self.agent_pub,
+            agent_priv=self.agent_priv,
+            delegations=self.delegations,
+            challenge=challenge["challenge"],
+            challenge_at=challenge["issued_at"],
+            session_context=challenge["session_context"],
         )
 
     def present(self, challenge: dict) -> dict:
         """Phase 2, prove possession of the agent key and submit the chain."""
-        at = int(time.time())
-        bundle = ProofBundle(
-            agent_id=self.agent_id,
-            agent_pub_key=self.agent_pub,
-            delegations=self.delegations,
-            challenge=challenge["challenge"],
-            challenge_at=at,
-            challenge_sig=sign_challenge(
-                challenge["challenge"], at, self.agent_priv, challenge["session_context"]
-            ),
-            session_context=challenge["session_context"],
-        )
         return post_json(
             self.base_url + "/refunds",
-            {"challenge": challenge["challenge"], "bundle": bundle},
+            {"challenge": challenge["challenge"], "proof": self.sign(challenge)},
         )
 
-    def request_refund(self, order_id: str, amount: float, currency: str = "USD") -> dict:
+    def request_refund(self, order_id: str, amount_micros: int, currency: str = "USD") -> dict:
         """Both phases. Returns the service's decision verbatim."""
-        return self.present(self.fetch_challenge(order_id, amount, currency))
+        return self.present(self.fetch_challenge(order_id, amount_micros, currency))

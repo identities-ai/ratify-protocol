@@ -39,8 +39,8 @@ use ratify_c::{
     ratify_error_free, ratify_human_root_free, ratify_human_root_generate,
     ratify_proof_bundle_create, ratify_proof_bundle_free, ratify_proof_bundle_to_json,
     ratify_string_free, ratify_verify_bundle, ratify_verify_result_error_reason,
-    ratify_verify_result_free, ratify_verify_result_identity_status,
-    ratify_verify_result_is_valid, RatifyStatus,
+    ratify_verify_result_free, ratify_verify_result_identity_status, ratify_verify_result_is_valid,
+    RatifyStatus,
 };
 use serde_json::{json, Value};
 use std::ffi::{CStr, CString};
@@ -86,7 +86,15 @@ unsafe fn valid_bundle_json() -> String {
     let scopes = CString::new("[\"meeting:attend\"]").unwrap();
     let mut cert = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
-    ratify_delegation_issue(root, agent, scopes.as_ptr(), NOW, NOW + 3600, &mut cert, &mut err);
+    ratify_delegation_issue(
+        root,
+        agent,
+        scopes.as_ptr(),
+        NOW,
+        NOW + 3600,
+        &mut cert,
+        &mut err,
+    );
     assert!(err.is_null(), "delegation must succeed");
     let cert_json = ratify_delegation_cert_to_json(cert, &mut err);
     assert!(!cert_json.is_null());
@@ -94,7 +102,15 @@ unsafe fn valid_bundle_json() -> String {
     let mut challenge = [0u8; 32];
     ratify_challenge_generate(challenge.as_mut_ptr(), 32);
     let mut bundle = std::ptr::null_mut();
-    ratify_proof_bundle_create(agent, cert_json, challenge.as_ptr(), 32, NOW, &mut bundle, &mut err);
+    ratify_proof_bundle_create(
+        agent,
+        cert_json,
+        challenge.as_ptr(),
+        32,
+        NOW,
+        &mut bundle,
+        &mut err,
+    );
     assert!(err.is_null(), "bundle creation must succeed");
     let bundle_json_ptr = ratify_proof_bundle_to_json(bundle, &mut err);
     let bundle_json = read_opt(bundle_json_ptr);
@@ -110,7 +126,10 @@ unsafe fn valid_bundle_json() -> String {
 
 /// Deserialize `bundle_json`, apply `f` to the first delegation cert's object,
 /// and re-serialize. Panics if the structure is not as expected.
-fn mutate_first_cert(bundle_json: &str, f: impl FnOnce(&mut serde_json::Map<String, Value>)) -> String {
+fn mutate_first_cert(
+    bundle_json: &str,
+    f: impl FnOnce(&mut serde_json::Map<String, Value>),
+) -> String {
     let mut v: Value = serde_json::from_str(bundle_json).expect("bundle JSON parses");
     let cert = v["delegations"][0]
         .as_object_mut()
@@ -144,7 +163,13 @@ unsafe fn verify(bundle_json: &str) -> Outcome {
             ratify_error_free(err);
             s
         };
-        return Outcome { status, has_result: false, valid: false, identity_status: String::new(), reason };
+        return Outcome {
+            status,
+            has_result: false,
+            valid: false,
+            identity_status: String::new(),
+            reason,
+        };
     }
 
     let valid = ratify_verify_result_is_valid(result) != 0;
@@ -154,7 +179,13 @@ unsafe fn verify(bundle_json: &str) -> Outcome {
     if !err.is_null() {
         ratify_error_free(err);
     }
-    Outcome { status, has_result: true, valid, identity_status, reason }
+    Outcome {
+        status,
+        has_result: true,
+        valid,
+        identity_status,
+        reason,
+    }
 }
 
 /// N vocabulary-valid custom scopes.
@@ -185,7 +216,11 @@ fn max_scopes_per_cert_boundary() {
             c.insert("scope".into(), scopes(MAX_SCOPES_PER_CERT));
         });
         let o = verify(&at);
-        assert_eq!(o.status, RatifyStatus::RatifyOk, "at-limit bundle must parse and verify");
+        assert_eq!(
+            o.status,
+            RatifyStatus::RatifyOk,
+            "at-limit bundle must parse and verify"
+        );
         assert!(o.has_result, "at-limit must produce a VerifyResult");
         assert!(
             !o.reason.contains("MAX_SCOPES_PER_CERT"),
@@ -226,7 +261,10 @@ fn max_constraints_per_cert_boundary() {
         );
 
         let over = mutate_first_cert(&base, |c| {
-            c.insert("constraints".into(), constraints(MAX_CONSTRAINTS_PER_CERT + 1));
+            c.insert(
+                "constraints".into(),
+                constraints(MAX_CONSTRAINTS_PER_CERT + 1),
+            );
         });
         let o = verify(&over);
         assert_eq!(o.status, RatifyStatus::RatifyOk);
@@ -347,7 +385,11 @@ fn max_json_nesting_depth_boundary() {
             "]".repeat(MAX_JSON_NESTING_DEPTH + 1)
         );
         let o = verify(&over);
-        assert_eq!(o.status, RatifyStatus::RatifyOk, "over-limit nesting surfaces as an invalid result");
+        assert_eq!(
+            o.status,
+            RatifyStatus::RatifyOk,
+            "over-limit nesting surfaces as an invalid result"
+        );
         assert!(o.has_result);
         assert!(!o.valid);
         assert!(
@@ -386,7 +428,11 @@ fn max_proof_bundle_bytes_boundary() {
         // `invalid` VerifyResult naming the bound.
         let over = "x".repeat(MAX_PROOF_BUNDLE_BYTES + 1);
         let o = verify(&over);
-        assert_eq!(o.status, RatifyStatus::RatifyOk, "over-limit size surfaces as an invalid result");
+        assert_eq!(
+            o.status,
+            RatifyStatus::RatifyOk,
+            "over-limit size surfaces as an invalid result"
+        );
         assert!(o.has_result);
         assert!(!o.valid);
         assert!(

@@ -1,0 +1,135 @@
+[package]
+name = "ratify-protocol-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ratify-protocol = { path = ".." }
+
+# Separate workspace: the fuzz crate is never part of the main build.
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+# One target per v2 decoder. Each checks that decoding never panics and that
+# a successful decode re-encodes to the exact input and decodes again to the
+# same bytes.
+#
+# Still to add once the status subsystem port lands (decoders not in this
+# crate yet):
+#   - status evidence batch
+#   - checkpoint acknowledgement
+#   - security journal snapshot import
+#   - archival result / archival evidence objects
+
+[[bin]]
+name = "delegation_cert_v2"
+path = "fuzz_targets/delegation_cert_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "proof_bundle_v2"
+path = "fuzz_targets/proof_bundle_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "revocation_list_v2"
+path = "fuzz_targets/revocation_list_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "revocation_push_v2"
+path = "fuzz_targets/revocation_push_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "key_rotation_statement_v2"
+path = "fuzz_targets/key_rotation_statement_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "witness_entry_v2"
+path = "fuzz_targets/witness_entry_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verification_receipt_v2"
+path = "fuzz_targets/verification_receipt_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verification_receipt_body_v2"
+path = "fuzz_targets/verification_receipt_body_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "transaction_receipt_v2"
+path = "fuzz_targets/transaction_receipt_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "canonical_json_v2"
+path = "fuzz_targets/canonical_json_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "constraint_v2"
+path = "fuzz_targets/constraint_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "status_evidence_batch_v2"
+path = "fuzz_targets/status_evidence_batch_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "checkpoint_acknowledgement_v2"
+path = "fuzz_targets/checkpoint_acknowledgement_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "journal_snapshot_import_v2"
+path = "fuzz_targets/journal_snapshot_import_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archival_proof_bundle_v2"
+path = "fuzz_targets/archival_proof_bundle_v2.rs"
+test = false
+doc = false
+bench = false

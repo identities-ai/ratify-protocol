@@ -11,16 +11,22 @@ import json
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
-from ratify_protocol import HybridPublicKey, base64_standard_decode, base64_standard_encode
 import uvicorn
 
+from .deployment_config import decode_private_key, decode_public_key
 from .receiver import InfrastructureReceiver, OperationRequest
+from .status_feed import DirectoryStatusSource
 
 
 _request_headers: ContextVar[dict[bytes, bytes]] = ContextVar("request_headers", default={})
 _TRANSPORT_HEADER = b"x-ratify-transport-token"
 _PRESENTATION_HEADER = b"x-ratify-presentation"
 MAX_PRESENTATION_HEADER_BYTES = 64 * 1024
+# h11 refuses a request with 400 once more than its incomplete-event limit
+# (16 KiB by default) of headers is buffered. A signed presentation alone is
+# larger, so whether it parsed depended on how the headers were split across
+# reads. Allow every header the boundary admits, plus the other headers.
+MAX_REQUEST_HEADER_BYTES = MAX_PRESENTATION_HEADER_BYTES + 16 * 1024
 
 
 def _unique_header(headers: list[tuple[bytes, bytes]], name: bytes) -> bytes | None:
@@ -34,12 +40,15 @@ def load_receiver(path: str):
     config = json.loads(Path(path).read_text(encoding="utf-8"))
     receiver = InfrastructureReceiver(
         trusted_root_id=config["trusted_root_id"],
-        trusted_root_public_key=HybridPublicKey(
-            ed25519=base64_standard_decode(config["root_ed25519"]),
-            ml_dsa_65=base64_standard_decode(config["root_ml_dsa_65"]),
-        ),
+        trusted_root_public_key=decode_public_key(config["root_public_key"]),
+        verifier_private_key=decode_private_key(config["verifier_private_key"]),
+        log_id=config["log_id"],
+        status_keys={
+            issuer_id: decode_public_key(key) for issuer_id, key in config["status_keys"].items()
+        },
+        status_source=DirectoryStatusSource(config["status_feed_dir"]),
     )
-    return receiver, config["trusted_agent_id"], config["transport_token"]
+    return receiver, decode_public_key(config["agent_public_key"]), config["transport_token"]
 
 
 class HeaderBoundary:
@@ -74,7 +83,7 @@ class HeaderBoundary:
             _request_headers.reset(reset)
 
 
-def create_server(receiver, trusted_agent_id: str, host: str, port: int):
+def create_server(receiver, agent_public_key, host: str, port: int):
     server = FastMCP("ratify-langchain-authority-receiver", host=host, port=port,
                      stateless_http=False, log_level="ERROR")
 
@@ -85,14 +94,12 @@ def create_server(receiver, trusted_agent_id: str, host: str, port: int):
             grant = await asyncio.to_thread(
                 receiver.issue_challenge,
                 OperationRequest(request_id, region, instance_type, count),
-                expected_agent_id=trusted_agent_id,
+                agent_public_key=agent_public_key,
             )
         except ValueError as exc:
             return {"decision": "deny", "status": "challenge_rejected",
                     "reason": str(exc), "tool_invocations": receiver.tool_invocations}
-        return {"challenge": base64_standard_encode(grant.challenge),
-                "session_context": base64_standard_encode(grant.session_context),
-                "expires_at": grant.expires_at}
+        return grant.to_json()
 
     @server.tool()
     async def provision_cloud_node(request_id: str, region: str,
@@ -118,10 +125,11 @@ def main():
         raise SystemExit("--host must be localhost or a numeric loopback address") from exc
     if not loopback:
         raise SystemExit("non-loopback bind requires production TLS/auth")
-    receiver, agent_id, token = load_receiver(args.trust_config)
-    server = create_server(receiver, agent_id, host, args.port)
+    receiver, agent_public_key, token = load_receiver(args.trust_config)
+    server = create_server(receiver, agent_public_key, host, args.port)
     uvicorn.run(HeaderBoundary(server.streamable_http_app(), token), host=host,
-                port=args.port, log_level="error")
+                port=args.port, log_level="error",
+                h11_max_incomplete_event_size=MAX_REQUEST_HEADER_BYTES)
 
 
 if __name__ == "__main__":

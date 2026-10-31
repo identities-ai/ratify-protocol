@@ -1305,12 +1305,20 @@ See `docs/AGENT_TO_AGENT.md` for detailed sequence diagrams of all three pattern
 
 ## 12. Versioning and forward compatibility
 
+**Versioned migration amendment (2026-10-11):** The forward-looking dual-accept
+language below describes the earlier v1 alpha design and is superseded for new
+development by [`docs/PROTOCOL_V2_MIGRATION.md`](docs/PROTOCOL_V2_MIGRATION.md)
+and the separate [`SPEC-v2.md`](SPEC-v2.md). Released v1 tags and packages
+remain unchanged. A v2 verifier is strict and MUST reject v1; v1 verifiers
+retain their pinned v1 behavior. There is no protocol-wide requirement for
+dual acceptance or for a v1 signing key to authorize v2 material.
+
 - The `version` field on `DelegationCert` is the authoritative protocol version indicator.
 - A v1 verifier MUST reject any cert with `version != 1` (`version_mismatch`).
-- A future v2 MAY extend `HybridPublicKey` and `HybridSignature` with additional algorithm components (e.g. SLH-DSA for ultra-conservative fallback). The wire format will remain backward-readable; v2 verifiers will accept v1 bundles during a documented migration window.
+- v2 is a separately versioned, breaking profile defined by `SPEC-v2.md`. It fixes its wire schema and signature suite. A v2 verifier MUST NOT accept v1 bundles or fall back to v1.
 - No v1 fields are to be omitted or renamed. Extensions requiring new fields or new algorithm components require a version bump.
 
-**Crypto agility.** v1 deliberately fixes the algorithm pair (Ed25519 + ML-DSA-65) rather than negotiating algorithms on the wire — negotiation is itself an attack surface (downgrade attacks), and a fixed pair keeps every verifier byte-compatible. The consequence is that replacing a broken component is a protocol-version event, not a configuration change. If a practical weakness is found in ML-DSA-65 (a young algorithm, FIPS 204 finalized 2024), the migration path is: v2 adds a replacement or third component (e.g. SLH-DSA, whose hash-based security assumptions are independent of both existing components), verifiers dual-accept v1 and v2 bundles during the documented migration window, and issuers re-sign delegations under v2. Until both components of the v1 pair are broken *simultaneously*, previously issued v1 bundles remain unforgeable — that is the point of the hybrid. Deployments with archival needs beyond the v1 lifetime SHOULD anchor long-lived artifacts (receipts, witness chains) so that re-attestation under a future version is possible.
+**Crypto agility.** v1 deliberately fixes Ed25519 + ML-DSA-65; v2 likewise fixes its suite and adds a typed signing transcript. Algorithm replacement is a protocol-version event, never wire negotiation. The earlier dual-accept migration idea is not a conformance requirement and is superseded by the versioned amendment above. Operators choose explicit migration policy at their API boundary. Archival deployments SHOULD retain version-specific verifiers and trust material for long-lived evidence.
 
 ---
 

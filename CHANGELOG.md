@@ -6,6 +6,679 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## v2.0.0-beta.1 (unreleased)
+
+The first beta of Protocol v2 ([`SPEC-v2.md`](SPEC-v2.md)), a breaking,
+separately versioned protocol line. It freezes the v2 wire format and SDK API
+in Go, TypeScript, Python, Rust and C. Protocol v1 is unchanged and remains
+available; its released tags and artifacts are not moved or replaced. Upgrade
+guide: [`docs/PROTOCOL_V2_MIGRATION.md`](docs/PROTOCOL_V2_MIGRATION.md).
+
+**Review status.** This is a prerelease. Review so far is the project's own pre-release
+security review of the specification, the shared vectors and every SDK.
+External independent review has not happened; releasing the beta without it
+is an accepted risk (SPEC-v2 §8.1). External review, interoperability with an
+implementation outside this repository, and a soak are gates for `2.0.0`
+(SPEC-v2 §8.2). No v2 release carries a production security claim yet.
+
+### Breaking (relative to Protocol v1)
+
+- **Not backward compatible.** New signed bytes, key IDs, challenge signing,
+  status references and verifier ordering. A v2 verifier rejects v1 objects
+  and never falls back; migration is a clean re-enrollment with fresh v2 keys
+  and new delegations.
+- **Signing transcript.** Ed25519 and ML-DSA-65 sign
+  `M = "ratify-protocol-signature" || 0x00 || 0x02 || uint16_be(type_code) || SHA-384(signable)`,
+  with the ML-DSA-65 context `ratify-protocol/2/<type_code>`. Both signatures
+  must verify.
+- **Key IDs** are the full 256-bit `key_id_v2` (64 hex characters), and trust
+  is pinned to complete public keys.
+- **Integers only.** No floating-point value anywhere on the wire; amounts use
+  `max_amount_micros`.
+- **Rust v1 API: private key fields.** In the 2.x crate, the fields of the
+  root `HybridPrivateKey` are private and both buffers are wiped on drop.
+  Build a key with `HybridPrivateKey::from_components` and read it with
+  `.ed25519()` and `.ml_dsa_65()`. `Debug` prints only the Ed25519 public half.
+  This is the only change to a v1 API at the root of a 2.x package.
+- **Finite expiry.** Every delegation has a real `expires_at`, at most
+  315360000 seconds after `issued_at`.
+
+### Added
+
+- **Crash, stress and shared concurrency tests.** The Go reference is
+  crashed before and after every durable store write of five flows and
+  restarted under two restart models; every crash point must keep the
+  safety invariants and complete its work. The edge sentinel reference's
+  test builds can exit at each durable write (`edge/tests/crash.sh`); no
+  crash point fires the actuator twice or for a request that was not
+  released. A multi-threaded C program stresses the C ABI with C store
+  callbacks under AddressSanitizer, UndefinedBehaviorSanitizer and
+  ThreadSanitizer (`sdks/c/scripts/test-v2-c-stress.sh`). The new shared
+  vector file `concurrency-scenarios.json` gives every SDK the same
+  concurrent workloads and outcome invariants.
+- **Verify, then release.** `VerifyProofBundleV2` commits a terminal result
+  and a receipt body that are not actionable; `ReleaseV2Decision` returns the
+  only actionable decision after the signed receipt is appended and
+  acknowledged by an independent checkpoint and the exclusive deadlines are
+  still current.
+- **Signed status** under a role-separated status key, applied through the
+  anchored `SecurityJournalV2`, and a minimal status publisher (genesis,
+  heartbeat, revoke) in every SDK.
+- **Verification receipts** for every terminal result in a hash-chained log
+  with checkpoint acknowledgements.
+- **Challenge issuance helper** that persists each challenge before it is
+  returned, and atomic challenge claims with replay epochs.
+- **Exact `custom:` required scopes:** one exact `custom:<name>`, listed by
+  every certificate in the chain; `custom:*` is invalid.
+- **Extension evaluator profiles** in a caller-authenticated registry, with
+  the standard `com.ratifyprotocol.max_count/v1` and
+  `com.ratifyprotocol.allowed_values/v1`; the profiles a chain uses are
+  signed into the receipt as `constraint_evaluators`.
+- **A closed constraint registry:** `time_window` (pinned IANA tzdata
+  `2025c`), `max_amount`, `max_rate`, `resource_path`,
+  `ratify.receiver_audience`.
+- **Typed signers only,** and an external signer interface (direct or
+  external-mu mode) whose returned signatures are verified before use.
+- **Wire limits** checked before parsing, and a closed table of 49 error
+  classes.
+- **Deployment profiles:** single-device offline (§7.13), dual-root
+  composition (§7.14), middleware custody (§7.15).
+- v2 rotation statements, witness entries, transaction receipts with
+  composed verification, and archival verification (never actionable).
+- **Shared corpus** `testvectors/v2` (26 vector files plus cross-SDK
+  fixtures), run in full by every SDK, with every SDK verifying the fixtures
+  every other SDK produces.
+- **Runnable examples** in [`examples/v2/`](examples/v2/) for all five
+  languages (quickstart, signed status, custom scope with `max_count/v1`,
+  external signer), with identical output checked in CI. They use the
+  test-only in-memory reference stores.
+
+### Release and Part B store changes before the beta
+
+These change the Part B interfaces every SDK implements; SDKs are ported to
+match before the beta.
+
+- **Finalization binds the receipt body to the sealed claim** (SPEC-v2 §7.5).
+  The finalize helper and the reference claim store refuse a receipt body
+  whose `verifier_id`, `agent_id`, `bundle_hash`, `issuer_ids`,
+  `required_scope`, `context_policy_digest` or `constraint_evaluators`
+  differs from the sealed claim (`configuration_invalid`; `malformed` for a
+  body that does not decode). Go adds `ValidateV2FinalizationPayload` for
+  claim-store implementers. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_other_*`, with the new `finalize` step.
+- **Withheld is permanent; rejected is per call** (SPEC-v2 §6.9). When
+  release is withheld at step 7 or 8 and no release is recorded, it records
+  the withheld result through the same claim-store record call, and every
+  later release of the claim returns that result right after step 1. If the
+  store is unavailable while recording, the call is still withheld. A
+  `rejected` result describes only that call and records nothing. Interface
+  change: `V2ReleaseRecord` gains `Outcome` (`released` or `withheld`) and
+  `Reason`; claim stores persist and return both, and compare them for the
+  first-record-wins rule. Go adds `ValidV2ReleaseRecordOutcome`. The
+  single-device complete-state projection's `release` member gains `outcome`
+  and `reason` (SPEC-v2 §7.13). The reference checkpoint now timestamps
+  acknowledgements from the store's authoritative clock and its high-water
+  mark (SPEC-v2 §7.2). Vectors: `lifecycle-scenarios.json`
+  `clock_regression_at_release_is_withheld` (extended),
+  `recorded_withheld_answers_before_receipt_checks`,
+  `withheld_after_recorded_release_records_nothing`,
+  `corrupt_receipt_signature_is_rejected`,
+  `receipt_of_another_claim_is_rejected` and
+  `acknowledgement_for_another_entry_is_rejected` (extended),
+  `device_rtc_regression` (now stays withheld); `device-state.json`
+  `every_record_kind_with_withheld_record`.
+- **`max_rate` admission is specified for the SDK surface** (SPEC-v2 §7.1,
+  §7.2, §7.6). The reference claim store is the single-store
+  implementation: it admits the sealed rate batch inside the terminal
+  compare-and-set, all counters or none, counts only an `allow`, and its
+  provisional `ReserveV2RateBatch` is never called and always fails. A
+  separate rate store that cannot share the claim store's transaction is a
+  managed-deployment option outside the SDK reference surface for beta. No
+  interface change. Vectors: `lifecycle-scenarios.json`
+  `rate_admission_is_all_or_none`,
+  `rate_retry_and_changed_batch_count_once`,
+  `rate_clock_rollback_keeps_admissions_blocking`, `rate_counts_only_allow`.
+- **Journal head mismatch class** (SPEC-v2 §2.7): `log_state_mismatch` also
+  covers a canonical `SecurityJournalV2` snapshot whose generation or digest
+  does not match the anchored head, as every SDK and
+  `security-journal.json` (`head_digest_mismatch`,
+  `head_generation_mismatch`) already report. Specification text only.
+- **The reference checkpoint freezes a log after a fork** (SPEC-v2 §7.8): a
+  different entry hash at an acknowledged sequence is refused and no later
+  sequence of that log is acknowledged. Vectors: `lifecycle-scenarios.json`
+  `checkpoint_fork_freezes_log` and
+  `checkpoint_refusal_without_fork_does_not_freeze`, with the new
+  `acknowledge` step.
+- **Rust and C interfaces for these changes.** Rust: `V2ReleaseRecord` gains
+  `outcome` and `reason` (and no longer implements `Default`), with
+  `valid_v2_release_record_outcome` and `validate_v2_finalization_payload`.
+  C: `RATIFY_V2_ABI_VERSION` is 3. `RatifyV2ReleaseRecord` gains `outcome`
+  (a `RatifyV2ReleaseStatus`) and `reason`, `RatifyV2TerminalClaim` gains
+  `release_outcome` and `release_reason`, and the store helpers
+  `ratify_v2_validate_finalization_payload` and
+  `ratify_v2_valid_release_record_outcome` are exported. A C program built
+  against ABI version 2 must be rebuilt.
+
+### Changed in pre-release review
+
+- **One future skew in the live verifier.** Status freshness uses
+  `future_skew_seconds` (SPEC-v2 §6.1). A verify request whose status policy
+  carries a different `clock_skew_seconds` is `configuration_invalid` before
+  claim; previously the status policy skew silently governed status
+  freshness. The status policy member remains for the standalone reducer.
+- **Configured replay epoch** outside 0 through 2^53−1 is
+  `configuration_invalid` at §6.2 step 2, before signatures; previously it
+  surfaced later as `stale_replay_epoch`.
+- **Expected session context length.** An `ExpectedChallenge` whose
+  `expected_session_context` is present but not exactly 32 bytes is
+  `configuration_invalid` at §6.2 step 2; previously, with no context policy,
+  it surfaced later as `session_context_mismatch`.
+- **Revoked `cert_id` length.** A revocation list or push whose revoked
+  `cert_id` exceeds 512 UTF-8 bytes is `malformed` (SPEC-v2 §2.6); decoders
+  previously accepted it.
+- **Rotation verification clock bounds.** `now` outside 0 through
+  253402300799 or a future skew outside 0 through 300 is
+  `configuration_invalid` (SPEC-v2 §2.5, §5.5); previously any skew up to
+  2^53−1 was accepted.
+- **One future skew in transaction verification.** `VerifyTransactionReceiptV2`
+  rejects a status policy whose `clock_skew_seconds` differs from
+  `future_skew_seconds` with `configuration_invalid` (SPEC-v2 §5.7), as the
+  live verifier does. Vector: `transaction-verification.json`
+  `configuration_invalid_status_skew_differs`.
+- **Standalone preflight replay epoch.** `ValidateProofBundleV2Preflight` and
+  `PreflightProofBundleV2` report a configured replay epoch outside 0 through
+  2^53−1 as `configuration_invalid`, like `VerifyProofBundleV2`.
+- **Transaction receipt nested bundles** are strictly decoded, and must be
+  canonical, before their hash is compared, so a malformed nested bundle is
+  `malformed` rather than `bundle_hash_mismatch` (SPEC-v2 §5.7).
+- **Finalization binds a null `context_policy_digest`** (all SDKs). The
+  finalization helper and every reference claim store compared only a
+  non-null receipt-body digest with the sealed claim, so a body that dropped
+  the configured policy's digest was committed. Once `context_assessment` is
+  other than `not_evaluated`, the body's digest must now equal the sealed
+  claim's (null only for a claim sealed without a context policy); otherwise
+  the finalization is `configuration_invalid` and commits nothing (SPEC-v2
+  §7.5). Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_body_with_null_context_policy_digest_unverified`,
+  `..._unbound`, and `finalize_rejects_body_with_context_policy_digest_not_evaluated`
+  (`malformed`, as §5.8 already requires a null digest there).
+- **Status evidence batch: one rule for nested objects** (all SDKs). The
+  JSON value model (UTF-8, duplicate member names, number grammar and
+  safe-integer range, `-0`, unpaired surrogate escapes, nesting depth
+  counted from the batch array) applies to the whole batch document,
+  nested objects included; object schema rules (member names and case
+  variants, nullability, required members, base64 spelling of byte fields)
+  apply to a nested object only when it is decoded under its code during
+  authentication (SPEC-v2 §2.1, §6.5). Every SDK already applied the value
+  model to nested objects and left their schema alone, except that it
+  rejected a nested byte field such as `ed25519` or `challenge` spelled as
+  non-canonical base64; such a batch now decodes and the object fails
+  authentication instead, with the same `unavailable` status result.
+  Vectors: 19 new `limits.json` `status_evidence_batch/nested_*` cases.
+- **Python: claim_already_terminal carries no store state.** The Python
+  reference store re-raised `claim_already_terminal` from inside the handler
+  of an internal exception that held the live claim record, so the error's
+  `__context__` reached it. The error is now raised with no chained
+  exception, as in the other SDKs (SPEC-v2 §7.3).
+- **Edge sentinel reference: recovery validates what it commits.** The
+  reference's own C claim store committed any lease-expiry recovery result;
+  it now validates the result and body as its finalization does and accepts
+  only `indeterminate / evaluation_interrupted` (SPEC-v2 §7.5). Its
+  finalization also refuses an allow horizon that does not match the
+  decision (§6.8).
+- **C: callback text must be valid UTF-8, and the release-record predicate
+  fails closed.** A string a callback answers with (a claim ID, log ID,
+  digest, reason, receiver or trust-domain ID) that is not valid UTF-8 now
+  fails that provider or store closed instead of being compared as a lossy
+  copy. `ratify_v2_valid_release_record_outcome` returns 0 for a NULL or
+  non-UTF-8 reason (SPEC-v2 §1.3). `ratify_error_free` documents that it
+  frees every v1 and v2 `err_out` string.
+- **The allow horizon matches the decision at finalization** (all SDKs).
+  A reference claim store refuses an `allow` receipt body finalized without
+  a positive `allow_valid_until`, and any other decision finalized with one,
+  as `configuration_invalid` (SPEC-v2 §6.8, §7.5). Before, an allow with no
+  horizon skipped the horizon check and `max_rate` admission (release then
+  withheld it), and a non-allow with a horizon was counted against the rate
+  limit. A non-allow must carry exactly 0 and an allow a horizon no later
+  than 253402300799. Vectors: `lifecycle-scenarios.json`
+  `finalize_rejects_allow_without_allow_horizon`,
+  `finalize_rejects_allow_horizon_on_non_allow`,
+  `finalize_rejects_negative_allow_horizon_on_non_allow` and
+  `finalize_rejects_allow_horizon_beyond_timestamp_domain`.
+- **Recovery accepts what finalization accepts** (Go, Rust, C). The Go and
+  Rust reference stores required the recovered terminal result to hold only
+  string members, which finalization does not require, so the same bytes
+  committed through finalize but not through recovery. Recovery now reads
+  the decision and reason from the validated receipt body, as TypeScript and
+  Python already did (SPEC-v2 §7.5). Vector:
+  `recover_direct_accepts_terminal_result_with_other_members`.
+- **Lease-expiry recovery validates what it commits** (all SDKs). Every
+  reference claim store's recovery operation accepted any terminal result
+  whose decision and reason were `indeterminate / evaluation_interrupted`,
+  with any receipt body, so a body that was not a receipt body (for example
+  `{"decision":"allow","verifier_id":"forged"}`) or that named another
+  claim was sealed as the terminal result: the claim could then never
+  publish, and a canonical recovery failed `claim_already_terminal`.
+  Recovery now validates the result and body exactly as finalization does
+  (`malformed` for a body that is not a canonical receipt body,
+  `configuration_invalid` for one that does not bind the sealed claim) and
+  requires `indeterminate / evaluation_interrupted`
+  (`configuration_invalid`, previously an unclassified error); a refused
+  recovery commits nothing (SPEC-v2 §7.5). The recovery helpers already
+  built the canonical body and are unchanged. Vectors: 6 new
+  `lifecycle-scenarios.json` scripts through a new `recover_direct` step.
+- **Extension `params` are application data at every depth** (all SDKs).
+  The strict wire check applied canonical-base64 validation to any string
+  member named like a protocol byte field (`challenge`, `ed25519`,
+  `session_context`, ...) at any depth, including inside a constraint's
+  `params` object, so a correctly signed certificate whose unregistered
+  constraint carried `params: {"challenge":"!"}` was `malformed` in every
+  SDK. Inside `params` only the JSON value model applies (SPEC-v2 §2.1,
+  §5.2; the text now says so explicitly), as it already did for nulls and
+  member-name case. Vectors: `objects.json`
+  `delegation_extension_params_byte_field_names` and
+  `proof_bundle_extension_params_byte_field_names`.
+- **Bounded decode runs before every configuration check** (all SDKs).
+  The verifier checked for a missing claim store before decoding the
+  bundle, so a malformed bundle with no claim store was
+  `configuration_invalid` instead of `malformed`, contrary to the SPEC-v2
+  §6.2 order. Decoding now runs first, and step 2 lists the claim store
+  among the configuration it checks; no callback runs in either case.
+  Vectors: `verifier-ordering.json` `pre_malformed_and_claim_store_absent`
+  and `pre_claim_store_absent`, with a new `claim_store` mode `absent`.
+- **C ABI return conventions stated exactly** (SPEC-v2 §1.3). The text said
+  every C function returns an integer status and every export returns the
+  internal-failure code after a caught panic, but the version, string,
+  predicate and free functions do not return a status. §1.3 now lists the
+  four forms with their result after a failure or caught panic: version
+  numbers return 0, strings return a fixed library-owned string,
+  predicates return their fail-closed value, and free functions return
+  nothing (a NULL pointer is a no-op and a poisoned handle is still freed).
+  Text only; the library already behaved this way.
+- **The live verifier takes the configured verifier key ID** (all SDKs).
+  SPEC-v2 §2.4 and §6.1 require the ExpectedChallenge and the proof bundle
+  to name the caller-authenticated verifier key ID, but no SDK took that
+  value, so a proof and an ExpectedChallenge that both named another
+  verifier committed an `allow` (release then refused it). The value is now
+  required configuration: an empty or non-canonical verifier key ID is
+  `configuration_invalid` at §6.2 step 2, and an ExpectedChallenge or proof
+  naming another verifier is `verifier_id_mismatch` at step 6, before claim.
+  API changes: Go `V2VerifyRequest.VerifierID`, and a `configuredVerifierID`
+  parameter after `configuredReplayEpoch` in `PreflightProofBundleV2` and
+  `ValidateProofBundleV2Preflight`; TypeScript `V2VerifyRequest.verifierID`
+  and the same parameter in `preflightProofBundleV2` and
+  `validateProofBundleV2Preflight`; Python `V2VerifyRequest.verifier_id` and
+  a `configured_verifier_id` parameter in `preflight_proof_bundle_v2` and
+  `validate_proof_bundle_v2_preflight`; Rust `V2VerifyRequest::verifier_id`
+  and a `configured_verifier_id: &str` parameter in
+  `preflight_proof_bundle_v2` and `validate_proof_bundle_v2_preflight`; C:
+  the `request_json` of `ratify_v2_verify_proof_bundle` and
+  `ratify_v2_claim_proof_bundle` gains the required member `verifier_id`
+  (no C struct or signature changes, so `RATIFY_V2_ABI_VERSION` stays 3; a
+  request without it is now a preflight `configuration_invalid`). Vectors:
+  `verifier-ordering.json` `configured_verifier_id` in every case,
+  `pre_verifier_id_*`, `pre_namespace_before_verifier_id` and
+  `config_verifier_id_*`.
+- **An empty configured namespace is `configuration_invalid`** at §6.2 step 2
+  (all SDKs); it was reported as `namespace_mismatch` at step 6. The vector
+  formerly named `pre_empty_configured_namespace` emptied the
+  ExpectedChallenge namespace, not the configured one, and is renamed
+  `pre_empty_expected_namespace`. Vectors: `config_namespace_empty` and
+  `config_namespace_empty_before_expected_challenge`.
+- **Release of a handoff whose claim the store does not hold is rejected**
+  (all SDKs). Release step 1 returned `pending / claim_store_unavailable`
+  for every load failure, so a claim the store answered it did not hold
+  (`claim_not_found`) was reported as retryable forever. It is now
+  `rejected / release_state_mismatch`; only an unavailable store is
+  `pending` (SPEC-v2 §6.9). Vector: `lifecycle-scenarios.json`
+  `release_of_claim_the_store_does_not_hold`.
+- **`issued_at < expires_at` for challenge records and membership
+  evidence** is stated in SPEC-v2 §2.5, §5.2 and §6.2 step 6, as every SDK
+  already enforced it: an ExpectedChallenge that violates it is
+  `configuration_invalid` before claim even when each freshness inequality
+  holds, and audience membership evidence that violates it is
+  `constraint_unverifiable`. Vectors:
+  `pre_expires_before_issued_within_skew`,
+  `aud_membership_expires_before_issued` and
+  `aud_membership_expires_equals_issued`.
+- **Transaction receipt party `proof_bundle_hash` shape** (all SDKs). A value
+  that is not `sha384:` followed by 96 lowercase hex characters (for example
+  uppercase hex) is `malformed` at decode, before the hash is compared; it
+  was `bundle_hash_mismatch` (SPEC-v2 §5.7, §2.7). Vectors:
+  `object-negatives.json` `transaction_receipt/party_bundle_hash_*`.
+- **Transaction terms are one JSON object** (SPEC-v2 §5.7), as every SDK
+  already required. Text, plus vectors
+  `object-negatives.json` `transaction_receipt/terms_not_object_*`.
+- **More verifier ordering cases** (`verifier-ordering.json`, 342 to 485
+  cases, and to 515 below): status-key epoch transitions through the live verifier, with a
+  new optional `journal.setup` member that lists explicit journal setup
+  steps; paired pre-claim and post-claim failures; status journal
+  sequences; `tz` names in and out of tzdata `2025c`; `resource_path`
+  spellings; audience membership shapes; scope wildcards; and the
+  configured verifier identity above. Every SDK harness, including the
+  plain C program, runs them.
+- **Journal snapshot fuzzing in TypeScript and Python.** The randomized
+  decoder suites now cover the `SecurityJournalV2` snapshot importer (SPEC-v2
+  §8.1 item 2) with arbitrary bytes, arbitrary JSON, mutations of a populated
+  snapshot and the size and depth limits; an import that succeeds must
+  re-export the identical bytes. Go and Rust already fuzzed it.
+- **Transaction receipt canonical form is checked first** (every SDK; the C
+  ABI uses the Rust decoder). A non-canonical transaction receipt is
+  `malformed` whatever else is wrong with it (SPEC-v2 §2.1). Decoders
+  compared the bytes with the canonical encoding last, so a receipt that was
+  also badly signed, mis-hashed or mis-bound reported `invalid_signature`,
+  `bundle_hash_mismatch`, `transaction_context_mismatch` or
+  `transaction_signature_set_invalid`, and a non-canonical receipt of up to
+  5 MiB was fully signature-verified before it was refused. The outer
+  receipt is compared before any nested proof bundle is decoded, with each
+  bundle in its canonical form and `parties` and `party_signatures` in
+  `party_id` order, so a bundle fault such as `key_id_mismatch` does not mask
+  a non-canonical bundle or array order either. Vectors:
+  `object-negatives.json` `transaction_receipt/noncanonical_*` and
+  `transaction_receipt/unsorted_*`.
+- **A repeated party is `malformed` first; a repeated signature record is a
+  signature set fault** (every SDK). The canonical check that runs before
+  any nested bundle is decoded requires `parties` in strictly ascending,
+  unique `party_id` order. A repeated signature record stays
+  `transaction_signature_set_invalid`, and the signature set is checked after
+  every nested bundle is decoded and its hash compared, so a bundle fault
+  beside it is reported first. SPEC-v2 §5.7 now states this order. Vectors:
+  `object-negatives.json` `transaction_receipt/duplicate_party_and_*` and
+  `transaction_receipt/signature_duplicate_and_*`.
+- **Cross-SDK fixtures from the beta.** The five `testvectors/v2/cross-sdk`
+  fixtures are regenerated by each SDK at `2.0.0-beta.1` (Python `2.0.0b1`),
+  and every SDK verifies all five. The release-sync check now refuses a
+  fixture whose `sdk_version` is not the release being prepared.
+- **Faster TypeScript decoding of large transaction receipts.** The
+  canonical encoder writes a string that needs no escape as it is, and
+  SHA-384 over a receipt's signable bytes and terms uses Node's native hash
+  when the runtime provides it, with `@noble/hashes` as the fallback. A
+  5 MiB receipt decodes in about a fifth of the time. Output bytes are
+  unchanged.
+- **A sealed terminal result is exactly its canonical form** (every SDK and
+  the C ABI). Finalization, lease-expiry recovery and resumption now require
+  the terminal-result bytes to be the RatifyCanonicalJSON of the receipt
+  body's `decision`, `decision_reason` and `identity_status` (SPEC-v2 §7.5,
+  §7.13), and refuse anything else as `configuration_invalid`. They compared
+  only the decision and reason, so a result with further members, another
+  spelling, no `identity_status`, or a contradicting `identity_status` could
+  be committed. Release always acted on the signed receipt, so no decision
+  changed. Finalization also validates the payload before comparing it with
+  the local evaluation, so a body that is not a receipt body stays
+  `malformed`. Vectors: `lifecycle-scenarios.json`
+  `recover_rejects_terminal_result_*`,
+  `finalize_rejects_body_with_other_terminal_*` and
+  `resume_rejects_record_terminal_result_*`, replacing the scenario that
+  accepted further members. A store written by an earlier alpha that holds a
+  terminal result in another form no longer resumes.
+- **C ABI evaluator registrations need an implementation.** A custom
+  registration whose `evaluate` callback is NULL is `configuration_invalid`
+  before the challenge is claimed, as in Go, TypeScript and Python. The C
+  ABI built the registry anyway and failed only when the evaluator ran, after
+  the claim, so the challenge was consumed and the result was
+  `deny / constraint_unverifiable`.
+- **Specification clarifications.** An empty `expected_receiver_id` at
+  issuance names no receiver, as in the device-state encoding, so a named
+  receiver ID is 1 to 512 bytes (§7.3). An `ExpectedChallenge` `replay_epoch`
+  outside 0 through 2^53−1 is `stale_replay_epoch` (§6.2 step 6). Every SDK
+  already behaved this way.
+- **More shared vectors.** `verifier-ordering.json` 485 to 515 cases, and
+  every ordering vector now lists the exact status-provider requests (issuer,
+  references in chain order, status key epoch and ID), which every SDK
+  harness asserts: ascending issuer order that differs from chain order,
+  repeated issuers, trust answers, extension registries, an exact audience
+  match with a failing provider, configured verifier ID forms and §2.5
+  bounds. `object-negatives.json` 433 to 476: fully re-signed wire-layer
+  cases (small-order and mixed-order Ed25519 keys that satisfy the
+  cofactorless equation, ML-DSA under another context, UTF-16 key-order
+  traps, escape spellings, byte fields at wrong lengths). `limits.json` 76 to
+  80 (a valid transaction receipt at exactly 5 MiB, chains of 8 and 9).
+  `digest-functions.json` 16 to 25. `challenge-issuance.json` 10 to 11 (the
+  receiver ID byte bound). `lifecycle-scenarios.json` 80 to 108 Part B
+  scripts (a withheld result whose record fails or conflicts, substituted and
+  forged committed records refused at release, resumption record checks,
+  clock classes at resumption and recovery). `concurrency-scenarios.json`
+  17 to 18 (resumption racing an allow finalization). The C ABI program
+  feeds every ordering vector trust outcomes and claim dispositions outside
+  their enums and requires them to act as a failing provider. The edge crash
+  test now checks release records after the restart in every flow and adds a
+  withheld flow.
+
+### Fixed
+
+- **Committed work is resumed from the claim store after a lost handoff**
+  (every SDK and the C ABI). A process that ended after the terminal
+  compare-and-set but before the verifier returned lost the only handoff of
+  the committed result: the retry was a terminal replay with no handoff and
+  recovery accepted only an interrupted result, so the receipt was never
+  published, the decision never released, and every later receipt of the
+  log waited behind it. Safety held; progress did not. SPEC-v2 §7.11 now
+  requires resumption by claim ID from the persisted record. New
+  `ResumeCommittedClaimV2` (Go), `resumeCommittedClaimV2` (TypeScript),
+  `resume_committed_claim_v2` (Python and Rust) and
+  `ratify_v2_resume_committed_claim` (C) load the record through a new
+  one-method store interface (`LoadV2CommittedClaim` and its counterparts;
+  in C a new `RatifyV2CommittedStoreCallbacks`, leaving existing structs
+  unchanged), apply the terminal commit's checks (claim key, finalization
+  payload, allow horizon; a failure is `claim_store_unavailable`) and return
+  the committed handoff for publication and release. The store answers
+  `claim_not_found`, `claim_lease_live` or `claim_lease_lost` for a claim
+  without a committed record. The reference stores implement it, and shared
+  lifecycle scenarios pin the `resume` step in every SDK.
+- **LangChain reference: the receiver parses a signed presentation header
+  however it arrives.** The presentation travels in one HTTP header of about
+  38 KB, larger than the 16 KiB of incomplete headers the server's HTTP
+  parser buffers by default. When the headers arrived in several reads, as
+  under heavy load, the receiver answered `400` before its own boundary saw
+  the request; this was the intermittent gate failure. The parser now
+  buffers every header the boundary admits (64 KiB for the presentation)
+  plus the other headers, and a test sends a maximum-size header in small
+  pieces. The v1 copy under `references/langchain/v1/` is dated history
+  and is unchanged.
+- **Reference claim stores refuse a claim ID that is not derived from its
+  replay key** (Go, TypeScript, Python and Rust, the C reference store
+  over Rust, the plain C test store and the edge sentinel store). SPEC-v2 §7.3 makes the claim store unique by namespace, replay
+  epoch and challenge digest; the stores keyed their records by the supplied
+  claim ID without checking it, so a caller that called the store directly
+  with another ID could create a second claim for one challenge. The verifier
+  always derives the ID and was not affected. A mismatched ID, or a challenge
+  digest that is not a `sha384:` digest, is now `configuration_invalid` and
+  creates nothing. The `device-state.json` projections now carry derived
+  claim IDs, so every vector state is one a store can hold. A C store keyed
+  by claim ID applies the same check through the new predicate
+  `ratify_v2_claim_id_matches_key`.
+- **C: evaluation progress records are validated before they are stored.**
+  The new predicate `ratify_v2_valid_evaluation_progress` is the check the
+  Go, TypeScript, Python and Rust reference stores apply (SPEC-v2 §7.5). The
+  plain C test store and the edge sentinel reference store now reject an
+  invalid record as `RatifyV2Malformed`; the edge store used to keep it, and
+  lease-expiry recovery of that claim then failed instead of committing
+  `evaluation_interrupted`. The C ABI also named the evidence member
+  `status_evidence`; a progress record now carries `status_evidence_digests`
+  as §7.5 requires, and the predicate accepts only the RatifyCanonicalJSON
+  form with all five members, so a record without `context_policy_digest`
+  or with another encoding is malformed. Lease-expiry recovery applies the
+  same check to the progress and claim records a C store returns, so a
+  record the store altered is refused as `RatifyV2Malformed` instead of
+  being sealed; that includes a claim record whose `claim_id` no longer
+  derives from its challenge digest. The plain C test store's recovery now
+  validates the result as its finalization does, so an invalid recovery
+  payload commits nothing. `ratify_v2_claim_id_matches_key` also requires
+  every scalar field of the claim view to equal the sealed record's, so a
+  store's freshness rule cannot read a later expiry than the claim carries
+  and create an expired claim. A slice a C callback returns with a NULL
+  pointer and a non-zero length is now refused instead of being read as
+  empty; recovery used to seal the initial progress for it. The same holds
+  for an audience membership's `trust_domain_ids`: a NULL list with a
+  non-zero length is a provider failure (`constraint_unverifiable`), not an
+  empty list (`constraint_denied`). The C claim record is now exactly the §7.13 sealed claim
+  object (`stream_id`, and `null` for a policy-less
+  `context_policy_digest`).
+- **Release withholds a finalization time outside the timestamp domain**
+  (Go, TypeScript, Python, Rust, and C through Rust). Step 7 required
+  `T_final <= ack.timestamp <= T_release` but never checked that `T_final`
+  was a timestamp, so a claim store answering a negative finalization time
+  for a committed allow had it released. Release now returns
+  `withheld / clock_regressed` (SPEC-v2 §6.9 step 7 states the domain
+  requirement for `T_final` and `ack.timestamp`).
+- **Reference authoritative clocks stay in the timestamp domain** (Go,
+  TypeScript, Python, Rust, and the plain C test store). A reading past
+  253402300799 is refused as `claim_store_unavailable` instead of returned.
+  The plain C test store's evaluator capability is now random, and the edge
+  sentinel checkpoint answers a retry only when its predecessor hash matches
+  as well. The edge checkpoint answers an acknowledged sequence before it
+  reads its clock, so an identical retry returns the original acknowledgement
+  even when the current time is unusable.
+- **Reference checkpoints keep every acknowledgement in the timestamp domain**
+  (Go, TypeScript, Python, Rust, and the edge sentinel). A reference
+  checkpoint whose clock was past 253402300799 still acknowledged an entry
+  with that time; it now refuses, as SPEC-v2 §7.8 requires. Release already
+  refused such an acknowledgement. The edge sentinel checkpoint also refused
+  an identical retry of an earlier acknowledgement once a fork had frozen
+  the log; it now returns the original acknowledgement, and the plain C
+  test store's checkpoint acknowledges in order only and freezes on a fork.
+- **v1 `max_rate` fails closed when the rate count is unavailable** (Go, Rust,
+  C, TypeScript and Python). A negative count from the invocation counter is now
+  `constraint_unverifiable` instead of passing. Through the C ABI, a
+  `cert_id` containing U+0000 used to skip `rate_fn` and pass `max_rate`; it
+  now fails closed the same way without calling the callback.
+- **Python: store failures are contained like any other failure.** The
+  claim store (claim, progress write, finalization, lease-expiry recovery,
+  release load and record, and the release clock), the rate store and the
+  `SecurityJournalV2` store adapters caught only `Exception`, so a store
+  that raised another `BaseException` escaped the verifier instead of
+  failing closed as Go does for a store panic. Every `BaseException` is now
+  classified exactly as an `Exception` failure; `KeyboardInterrupt` and
+  `SystemExit` are the caller's own cancellation and propagate.
+- **C: `ratify_v2_release_decision` sets `*released_out` to NULL on entry.**
+  A successful call that did not release left the output unwritten, so a
+  reused caller variable could still hold an earlier released handle.
+- **C: `ratify_v2_object_decode` decodes a status evidence batch at the
+  envelope only** (SPEC-v2 §6.5 step 3), as the Go, TypeScript, Python and
+  Rust batch decoders do. It used to decode and re-encode every nested
+  object, so it rejected batches the other SDKs accept. A non-NULL
+  `canonical_out` is the §6.5 canonical batch encoding, byte for byte what
+  the other SDKs' batch encoders produce: each nested object is decoded and
+  re-encoded, and one that does not decode under its code makes the call
+  `malformed`.
+- **C: identifiers containing U+0000 are never stripped before a
+  callback.** The callback adapters removed the NUL, so a C store keyed
+  `"lab\0x"` and `"labx"` (or rate counters for `"x\0y"` and `"xy"`) to the
+  same record. A configured `verifier_namespace` containing U+0000 is now
+  `configuration_invalid`; any other such identifier fails the call closed
+  as that provider or store being unavailable, without calling it.
+- **C: `ratify_set_entropy_source` is declared only under
+  `RATIFY_CUSTOM_ENTROPY`.** It is exported only by a `custom-entropy`
+  build, but the header declared it unconditionally, so a default-build
+  program that referenced it failed to link. The C ABI test now links every
+  function the header declares by default against the default build.
+- **C: provider answers are bounded before they are copied.** A status
+  batch over 64 objects or 8 MiB is refused before any object is copied
+  (the verifier rejected it only after copying, so a large answer cost its
+  full size in memory). The audience adapter copies only memberships for a
+  deferred constraint, at most two per constraint, which leaves the result
+  unchanged.
+- **C: forged lengths and counts no longer abort the process.** A length
+  or count over `PTRDIFF_MAX` bytes in total, passed by a caller or returned
+  by a callback, used to reach `slice::from_raw_parts`, which aborts instead
+  of unwinding into the panic guard. `ratify_v2_object_decode(kind, p,
+  SIZE_MAX, out)` was one such call; an audience answer with
+  `count = SIZE_MAX` was another. Every v1 and v2 export now checks the
+  length before reading. An input with a SPEC-v2 §2.6 byte limit (every
+  strict decoder input, including the bundle and receipt the verifiers
+  decode) is reported exactly as a real oversized input (`malformed` before
+  parsing, after any check the operation makes first) and is never read;
+  any other byte input or count is `bad_argument` (v1:
+  `RatifyErrBadArgument`). An audience answer whose membership or domain
+  count is over the bound is `constraint_unverifiable`, any other callback
+  answer fails closed as that provider or store failing, and an evaluator
+  registry over 32 entries is `configuration_invalid` before any entry is
+  read.
+- **C: `ratify_v2_verify_object` rejects unknown context members**
+  (`bad_argument`), as the README states for every structured input. It
+  used to ignore them, so a misspelled member was silently dropped.
+- **C: `ratify_v2_challenge_time_current` fails closed on out-of-range
+  configuration.** A maximum age outside 1 to 300 seconds or a skew outside
+  0 to 300 seconds returns 0. Inside those bounds the result matches the
+  documented formula; with a negative skew it used to contradict it.
+- **C: documentation corrections.** `RatifyV2ErrCancelled` and the README
+  now give its effect per callback (it is not always
+  `evaluation_cancelled`); callback output pointers must stay valid until
+  the library copies them, never on the callback's stack; the claim store's
+  `now` is not called during verification.
+- **TypeScript: a `claim_already_terminal` error carries no store state.**
+  The reference store attached its live claim record to the error, and the
+  verifier returns that error in `V2VerifyOutcome.error`, so a caller could
+  change the stored allow horizon or abandonment of a committed claim
+  (SPEC-v2 §7.3). The error is now a plain classified error.
+- **TypeScript: large byte fields no longer exhaust the stack.** The
+  canonical base64 check used a backtracking pattern that overflowed the V8
+  stack at about 4.47 million characters, so a valid transaction receipt
+  with terms over about 3.35 MB was `malformed` in TypeScript only. The
+  check is now a linear scan with the same accepted shapes.
+- **C: request configuration failures are reported after the bundle
+  decodes** (SPEC-v2 §6.2). A configured `verifier_namespace` containing
+  U+0000, or a `context_policy` that cannot be built, failed
+  `ratify_v2_verify_proof_bundle` as a call before the bundle was decoded,
+  so a malformed bundle reported `configuration_invalid` with no outcome.
+  Both are now a preflight outcome at step 2, after decode, as in the other
+  SDKs: `configuration_invalid`, or `expected_challenge_unavailable` for
+  such a policy without a challenge record. No callback runs.
+  `ratify_v2_claim_proof_bundle` also decodes first.
+- **Python: `release_v2_decision` classifies a receipt that is not bytes.**
+  A `str` or other non-bytes signed receipt raised `TypeError` from
+  release step 2; it is now `rejected / receipt_invalid`, as in the other
+  SDKs. An `int`, which `bytes()` turned into zero bytes, gets the same
+  result without being converted.
+
+### Not carried into v2
+
+The no-expiry sentinel, an empty required scope, floating-point constraint
+values, the identity enrollment objects, the `PolicyProvider`,
+`AuditProvider` and `PolicyVerdict` hooks, `AnchorResolver` inside
+verification, unsigned or boolean revocation inputs and
+`ForceRevocationCheck`, and self-issued live challenges.
+
+### v1-only until 2.1
+
+The SessionToken fast path, the A2A mutual presentation profile, the HTTP and
+registry bindings, and the geo and speed constraints have no v2.0
+equivalent. They are planned for Protocol 2.1, together with activation
+constraints; until then, claims that depend on them are v1 claims.
+
+### Packages
+
+| SDK | Package |
+| --- | --- |
+| Go | module `github.com/identities-ai/ratify-protocol/v2` |
+| TypeScript | `@identities-ai/ratify-protocol` 2.x, dist-tag `next` (`latest` stays on v1 until `2.0.0`) |
+| Python | `ratify-protocol` 2.x, module `ratify_protocol.v2`, with the `protocol-v2` extra for the signing backend `ratify-protocol-native-v2` |
+| Rust | crate `ratify-protocol` 2.x, module `ratify_protocol::v2` |
+| C/C++ | `ratify-c` 2.x, `ratify_v2_*` ABI with `ratify_v2_abi_version()` |
+
+- **Python ships both lines in one distribution.** Protocol v2 is
+  `ratify_protocol.v2` in `ratify-protocol` 2.0.0b1, as TypeScript and Rust
+  already carry it, instead of a separate `ratify-protocol-v2` distribution,
+  which is never published. The v1 API at `ratify_protocol` is unchanged and
+  never imports `ratify_protocol.v2`. The base requirements stay v1's; v2's
+  come with the extra: `pip install "ratify-protocol[protocol-v2]==2.0.0b1"`
+  adds `ratify-protocol-native-v2==2.0.0b1` and `tzdata==2025.3`. Every
+  published version is a prerelease, so pip treats 2.0.0b1 as the newest
+  release for an install or upgrade without a pin; a v1 user who upgrades
+  lands on it with v1's requirements intact. To stay on the v1 release line,
+  pin `ratify-protocol<2` or `ratify-protocol==1.0.0a21`, the v1 maintenance
+  release `v1.0.0-alpha.21`. The extra is named `protocol-v2` rather than
+  `v2` because an extra name that parses as a version makes pip 25.0 fail to
+  resolve the package.
+
+### Known limits
+
+- The in-memory reference stores are for tests and examples only; production
+  needs durable Part B stores and an independent checkpoint.
+- The external signer interface makes no claim about any particular KMS or
+  HSM.
+- Embedded v2 targets other than armv7 Linux are untested.
+
 ## v1.0.0-alpha.21 (2026-10-29)
 
 A security fix for the v1 line in all five SDKs. No canonical bytes, fixture
@@ -373,7 +1046,7 @@ Shipped (alpha.10) / planned backward-compatible (alpha.11 docs pass, alpha.12 p
 
 ### Changed — SDK READMEs and registry publishing
 
-- All five SDK READMEs (Go, TypeScript, Python, Rust, C/C++) now include a "What is Ratify Protocol?" introduction, the quantum-safe line, and consistent cross-language interop framing
+- All five SDK READMEs (Go, TypeScript, Python, Rust, C/C++) now include a "What is Ratify Protocol?" introduction, the post-quantum line, and consistent cross-language interop framing
 - All relative links in SDK READMEs replaced with absolute GitHub URLs (broken on npm, PyPI, and crates.io package pages)
 - npm package homepage updated to `docs.identities.ai`
 - npm publishing switched from long-lived `NPM_TOKEN` to OIDC Trusted Publisher — no stored secret required

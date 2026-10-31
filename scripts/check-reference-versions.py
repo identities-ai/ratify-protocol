@@ -6,6 +6,22 @@ installs, the registry entry a reader consults, and its own README. They drift
 silently, and the drift is only visible when someone runs the gate months later
 against a version the metadata never claimed. This makes disagreement a
 failure instead.
+
+Every registry entry states a `Protocol line` (v1 or v2). The rules differ:
+
+- v1: requirements.txt pins exactly one `ratify-protocol==1.0.0aN`, and the
+  registry entry and README name that version and no other.
+- v2: the SDK is built from this repository until the v2 release is published,
+  so there is no Ratify pin to compare against. Instead every v2 version a
+  reference states (registry entry, README, evidence, metadata, requirements,
+  gate script) must be either the version in this tree
+  (sdks/python/pyproject.toml) or the release the reference is waiting for
+  (V2_RELEASE). Both spellings are understood: PEP 440 (2.0.0a1, 2.0.0b1) and
+  SemVer (2.0.0-alpha.1, 2.0.0-beta.1). Once the tree is bumped to the
+  release, the alpha mentions fail until each reference is re-run and its
+  records updated. A v2 reference must not pin a v1 release of
+  ratify-protocol, nor ratify-protocol without its protocol-v2 extra, and the
+  gate scripts its registry entry names must exist.
 """
 from __future__ import annotations
 
@@ -17,6 +33,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(r"1\.0\.0a\d+")
+# Protocol v2 versions in either spelling.
+V2_PEP440 = re.compile(r"(?<![\w.])2\.0\.0(a|b|rc)(\d+)(?![\w.])")
+V2_SEMVER = re.compile(r"(?<![\w.])2\.0\.0-(alpha|beta|rc)\.(\d+)(?![\w.])")
+V2_STAGES = {"a": "alpha", "b": "beta", "rc": "rc"}
+# The published release the v2 references are waiting for.
+V2_RELEASE = "2.0.0-beta.1"
+PROTOCOL_LINE = re.compile(r"^\s*-\s*(?:\*\*)?Protocol line:(?:\*\*)?\s*(.+)$", re.M)
+GATE_LINE = re.compile(r"^\s*-\s*(?:\*\*)?Gate:(?:\*\*)?\s*(.+)$", re.M)
+GATE_PATH = re.compile(r"(?<![\w/])\.?/?((?:references|demos|scripts)/[\w./-]+\.sh)")
+# Evidence result lines. The second form is the gate's own summary line:
+#   Result: `reference gate: Protocol v2 tests passed (13/13)`, 0 failures, 0 skips
+RESULT_PLAIN = re.compile(r"Result:\s*(\d+) passed,\s*(\d+) failed,\s*(\d+) skipped")
+RESULT_GATE = re.compile(
+    r"Result:\s*`[^`]*\((\d+)/\d+\)`,\s*(\d+)\s+failures?,\s*(\d+)\s+skips?")
 # package==version, as it appears in requirements files and in prose.
 PIN = re.compile(r"([A-Za-z][A-Za-z0-9._-]*)==([0-9][A-Za-z0-9.]*)")
 # Evidence files state versions as table rows rather than as pins:
@@ -41,17 +71,90 @@ def versions_in(path: Path) -> set[str]:
     return set(VERSION.findall(path.read_text(encoding="utf-8")))
 
 
+def v2_versions_in(path: Path) -> set[str]:
+    """Every v2 version stated in a file, normalized to SemVer."""
+    if not path.exists():
+        return set()
+    return v2_versions_in_text(path.read_text(encoding="utf-8"))
+
+
+def in_tree_v2() -> str:
+    pyproject = (ROOT / "sdks" / "python" / "pyproject.toml").read_text(encoding="utf-8")
+    declared = re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1)
+    normalized = v2_versions_in_text(declared)
+    if len(normalized) != 1:
+        raise SystemExit(f"reference-version-sync: cannot read the in-tree v2 version from {declared!r}")
+    return normalized.pop()
+
+
+def v2_versions_in_text(text: str) -> set[str]:
+    found = {f"2.0.0-{V2_STAGES[stage]}.{n}" for stage, n in V2_PEP440.findall(text)}
+    found |= {f"2.0.0-{stage}.{n}" for stage, n in V2_SEMVER.findall(text)}
+    return found
+
+
+def check_v2(name: str, entry: Path, ref: Path, metadata: dict, allowed: set[str],
+             failures: list[str]) -> None:
+    entry_text = entry.read_text(encoding="utf-8")
+    gates: list[Path] = []
+    gate_line = GATE_LINE.search(entry_text)
+    if gate_line:
+        for rel in GATE_PATH.findall(gate_line.group(1)):
+            gate = ROOT / rel
+            if not gate.exists():
+                failures.append(f"{name}: registry Gate names {rel}, which does not exist")
+            else:
+                gates.append(gate)
+    if not gates and (ref / "run-reference-check.sh").exists():
+        gates.append(ref / "run-reference-check.sh")
+    if not gates:
+        failures.append(f"{name}: v2 registry entry names no gate script in this repository")
+
+    files = [entry, ref / "README.md", ref / "ratify-reference.json",
+             ref / "requirements.txt", ref / "evidence" / "reference-evidence.md", *gates]
+    if "evidence" in metadata:
+        files.append(ref / metadata["evidence"])
+    for path in dict.fromkeys(files):
+        for version in sorted(v2_versions_in(path) - allowed):
+            failures.append(
+                f"{name}: {path.relative_to(ROOT)} names v2 {version}; "
+                f"expected the in-tree version or the {V2_RELEASE} release ({sorted(allowed)})"
+            )
+
+    # ratify-protocol carries both lines; a v2 reference that pins it must pin
+    # a 2.x release with the protocol-v2 extra, or it installs without v2's
+    # requirements (or installs v1 only).
+    requirements = ref / "requirements.txt"
+    if requirements.exists():
+        req_text = requirements.read_text(encoding="utf-8")
+        if re.search(r"^ratify-protocol(?:\[[^\]]*\])?==1\.", req_text, re.M):
+            failures.append(f"{name}: v2 reference pins a v1 ratify-protocol release in requirements.txt")
+        if re.search(r"^ratify-protocol==", req_text, re.M):
+            failures.append(f"{name}: v2 reference pins ratify-protocol without the protocol-v2 extra in requirements.txt")
+    protocol = metadata.get("protocol")
+    if protocol is not None and not str(protocol).startswith("v2"):
+        failures.append(f"{name}: ratify-reference.json protocol {protocol!r} contradicts the v2 registry line")
+
+
 def main() -> int:
     failures: list[str] = []
+    allowed_v2 = {in_tree_v2(), V2_RELEASE}
     registry_dir = ROOT / "references" / "registry"
     if not registry_dir.exists():
         print("reference-version-sync: no registry directory; nothing to check")
         return 0
 
     for entry in sorted(registry_dir.glob("*.md")):
+        if entry.name == "README.md":
+            continue
         name = entry.stem
         ref = ROOT / "references" / name
         metadata_path = ref / "ratify-reference.json"
+        metadata = {}
+        line_match = PROTOCOL_LINE.search(entry.read_text(encoding="utf-8"))
+        line = line_match.group(1).strip()[:2] if line_match else None
+        if line not in ("v1", "v2"):
+            failures.append(f"{name}: registry entry has no 'Protocol line' starting with v1 or v2")
         if metadata_path.exists():
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             evidence = ref / metadata.get("evidence", "docs/evidence.md")
@@ -60,10 +163,7 @@ def main() -> int:
                     failures.append(f"{name}: evidence file missing: {evidence}")
                 else:
                     evidence_text = evidence.read_text(encoding="utf-8")
-                    match = re.search(
-                        r"Result:\s*(\d+) passed,\s*(\d+) failed,\s*(\d+) skipped",
-                        evidence_text,
-                    )
+                    match = RESULT_PLAIN.search(evidence_text) or RESULT_GATE.search(evidence_text)
                     if not match:
                         failures.append(f"{name}: evidence has no parseable test result")
                     else:
@@ -85,24 +185,28 @@ def main() -> int:
                     f"{name}: README gate count {gate_count.group(1)} does not match metadata {metadata.get('tests')}"
                 )
 
+        if line == "v2":
+            check_v2(name, entry, ref, metadata, allowed_v2, failures)
+
         # Python references pin in requirements.txt. Others (the TypeScript
         # ones) pin in package.json and are checked by their own gate.
         requirements = ref / "requirements.txt"
         if not requirements.exists():
             continue
 
-        pinned = versions_in(requirements)
-        if len(pinned) != 1:
-            failures.append(f"{name}: expected exactly one pinned version in requirements.txt, found {sorted(pinned) or 'none'}")
-            continue
-        want = pinned.pop()
+        if line == "v1":
+            pinned = versions_in(requirements)
+            if len(pinned) != 1:
+                failures.append(f"{name}: expected exactly one pinned version in requirements.txt, found {sorted(pinned) or 'none'}")
+                continue
+            want = pinned.pop()
 
-        for label, path in (("registry entry", entry), ("README", ref / "README.md")):
-            found = versions_in(path)
-            if not found:
-                failures.append(f"{name}: {label} names no Ratify version; expected {want}")
-            elif found != {want}:
-                failures.append(f"{name}: {label} names {sorted(found)}, but requirements.txt pins {want}")
+            for label, path in (("registry entry", entry), ("README", ref / "README.md")):
+                found = versions_in(path)
+                if not found:
+                    failures.append(f"{name}: {label} names no Ratify version; expected {want}")
+                elif found != {want}:
+                    failures.append(f"{name}: {label} names {sorted(found)}, but requirements.txt pins {want}")
 
 
         # Every other pin, not just Ratify's. A reference states its tested

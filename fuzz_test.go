@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // FuzzVerifyNeverPanics feeds arbitrary bytes into the verifier. The verifier

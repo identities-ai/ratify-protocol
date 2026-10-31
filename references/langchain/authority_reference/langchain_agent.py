@@ -7,11 +7,12 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from ratify_protocol import base64_standard_decode, encode_proof_bundle
+from ratify_protocol.v2.constraint_evaluator_v2 import CONSTRAINT_MAX_COUNT_V2
+from ratify_protocol.v2.constraints_v2 import CONSTRAINT_RESOURCE_PATH
 
-from .authority import AuthorityFixture
+from .authority import NODE_COUNTER, AuthorityFixture, ChallengeGrant, region_resource
 from .jev_adapter import JevToolDecision, select_tool_with_jev
-from .receiver import OperationRequest
+from .receiver import OperationRequest, encode_presentation
 
 
 def _result(value: Any) -> dict[str, Any]:
@@ -50,12 +51,9 @@ async def build_mcp_tools(
         grant = _result(await challenge_tool.ainvoke(request.args))
         if grant.get("decision") == "deny":
             return grant
-        bundle = authority.present(
-            challenge=base64_standard_decode(grant["challenge"]),
-            session_context=base64_standard_decode(grant["session_context"]),
-        )
+        bundle = authority.present(ChallengeGrant.from_json(grant))
         headers = dict(request.headers or {})
-        headers["X-Ratify-Presentation"] = encode_proof_bundle(bundle)
+        headers["X-Ratify-Presentation"] = encode_presentation(bundle)
         return await handler(request.override(headers=headers))
 
     client = MultiServerMCPClient(
@@ -112,19 +110,20 @@ def local_preflight(
         return False
 
     resource = next(
-        (constraint.resource_id for constraint in certificate.constraints
-         if constraint.type == "resource_path"),
+        (constraint.resource_id for constraint in certificate.constraints or []
+         if constraint.type == CONSTRAINT_RESOURCE_PATH),
         None,
     )
     max_nodes = next(
-        (constraint.params.get("max_nodes")
-         for constraint in certificate.constraints
-         if constraint.type == "com.ratifyprotocol.langchain.max_nodes"
-         and isinstance(constraint.params, dict)),
+        (constraint.params.get("max")
+         for constraint in certificate.constraints or []
+         if constraint.type == CONSTRAINT_MAX_COUNT_V2
+         and isinstance(constraint.params, dict)
+         and constraint.params.get("counter") == NODE_COUNTER),
         None,
     )
     return (
-        resource == f"gcp:projects/customer-project/regions/{request.region}"
+        resource == region_resource(request.region)
         and isinstance(max_nodes, int)
         and request.count <= max_nodes
     )

@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // humanIDPattern is the §7 identifier shape: hex(SHA-256(keys)[:16]) —

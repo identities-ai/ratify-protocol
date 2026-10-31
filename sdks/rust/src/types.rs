@@ -81,10 +81,58 @@ pub struct HybridSignature {
 }
 
 /// Both component private keys. Never serialized to the wire.
-#[derive(Debug, Clone)]
+///
+/// The components are private: read them only to persist the key, through
+/// [`HybridPrivateKey::ed25519`] and [`HybridPrivateKey::ml_dsa_65`]. Both
+/// buffers are wiped when the value is dropped, and `Debug` prints only the
+/// Ed25519 public half.
+#[derive(Clone)]
 pub struct HybridPrivateKey {
-    pub ed25519: Vec<u8>,   // 32-byte seed
-    pub ml_dsa_65: Vec<u8>, // ML-DSA-65 secret key bytes
+    ed25519: Vec<u8>,   // 32-byte seed (or 64-byte seed || public)
+    ml_dsa_65: Vec<u8>, // ML-DSA-65 secret key bytes
+}
+
+impl HybridPrivateKey {
+    /// Assemble a private key from stored components: the 32-byte Ed25519
+    /// seed (or the 64-byte seed-and-public form) and the ML-DSA-65 secret
+    /// key bytes. The components are validated when the key is used.
+    pub fn from_components(ed25519: Vec<u8>, ml_dsa_65: Vec<u8>) -> Self {
+        HybridPrivateKey { ed25519, ml_dsa_65 }
+    }
+
+    /// The Ed25519 private component. Secret: handle it as key material.
+    pub fn ed25519(&self) -> &[u8] {
+        &self.ed25519
+    }
+
+    /// The ML-DSA-65 secret key bytes. Secret: handle them as key material.
+    pub fn ml_dsa_65(&self) -> &[u8] {
+        &self.ml_dsa_65
+    }
+}
+
+impl Drop for HybridPrivateKey {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.ed25519.zeroize();
+        self.ml_dsa_65.zeroize();
+    }
+}
+
+impl fmt::Debug for HybridPrivateKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let public = self
+            .ed25519
+            .get(..32)
+            .and_then(|s| <[u8; 32]>::try_from(s).ok())
+            .map(zeroize::Zeroizing::new)
+            .map(|seed| {
+                hex::encode(ed25519_dalek::SigningKey::from_bytes(&seed).verifying_key().to_bytes())
+            });
+        f.debug_struct("HybridPrivateKey")
+            .field("ed25519_public", &public)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Optional external binding for higher-assurance identity.

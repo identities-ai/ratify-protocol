@@ -40,6 +40,10 @@ SANDBOX_IMAGE="ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:aeef1c63
 SUPERVISOR_IMAGE="ghcr.io/nvidia/openshell/supervisor@sha256:5e33ec485b9e05a00431a23faabf4a49376b8351d90664d585922e148fb18fa4"
 UVICORN_PIN="uvicorn==0.52.1"
 MCP_PIN="mcp==2.0.0"
+# Builds the Ratify v2 native signing extension (Rust) as a manylinux wheel for
+# the sandbox's architecture, in `local` SDK mode. Multi-arch index digest of
+# ghcr.io/pyo3/maturin:v1.9.6.
+MATURIN_IMAGE="ghcr.io/pyo3/maturin@sha256:8b1adbcdc912ea215e6f45e1838006f234b17412c9234918a85c4865ea910258"
 
 RUN_ID="ratify-osp-$(date +%s)-$$"
 # OpenShell caps sandbox names at 19 characters, so the sandbox gets a short
@@ -190,8 +194,19 @@ note "openshell CLI $CLI_V"
 
 VENV="$WORK/venv"
 "$PYBIN" -m venv "$VENV" >/dev/null
-"$VENV/bin/pip" -q install -e "$REPO/sdks/python" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
-note "receiver venv ready ($MCP_PIN, $UVICORN_PIN)"
+# The receiver and control plane run on the host against Ratify Protocol v2
+# from this checkout: the native signing extension is built with maturin (needs
+# a Rust toolchain) and ratify-protocol is installed editable with its
+# protocol-v2 extra.
+# TODO(RATIFY_V2_PIN): in published mode, install the 2.0.0-beta.1 packages here.
+"$VENV/bin/pip" -q install 'maturin>=1.7,<2' >/dev/null 2>&1
+( cd "$REPO/sdks/python-native-v2" && "$VENV/bin/maturin" build --release --quiet --out "$WORK/host-wheel" ) \
+  > "$WORK/host-wheel.log" 2>&1 || { tail -15 "$WORK/host-wheel.log"; fail_now "could not build the v2 native extension for the host"; }
+"$VENV/bin/pip" -q install "$WORK"/host-wheel/*.whl >/dev/null 2>&1
+"$VENV/bin/pip" -q install -e "$REPO/sdks/python[protocol-v2]" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
+"$VENV/bin/python" -c "import ratify_protocol.v2, sys; sys.exit(0 if ratify_protocol.v2.NATIVE_AVAILABLE else 1)" \
+  || fail_now "ratify_protocol.v2 native signing is not importable in the receiver venv"
+note "receiver venv ready (ratify-protocol[protocol-v2] from checkout, $MCP_PIN, $UVICORN_PIN)"
 
 # --- 2. dynamic ports -------------------------------------------------------
 GW_PORT="$(freeport)"; GW_HEALTH="$(freeport)"; MCP_PORT="$(freeport)"; CTRL_PORT="$(freeport)"
@@ -235,14 +250,28 @@ LOCK="$HERE/sandbox-requirements.lock"
 # rather than the checkout:
 #   RATIFY_SDK=published ./run-openshell-profile.sh
 RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-1.0.0a20}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-2.0.0b1}"  # TODO(RATIFY_V2_PIN)
 case "$RATIFY_SDK" in
   local)
-      SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro")
-      # Built from the checkout and installed without dependencies, since its
-      # runtime requirements are already in the lock.
+      # Protocol v2 needs two distributions in the sandbox: ratify-protocol
+      # (pure Python; v2 is ratify_protocol.v2) and ratify-protocol-native-v2
+      # (the Rust signing extension). The extension is built here as a manylinux wheel for the
+      # container runtime's architecture, from this checkout, in a pinned
+      # builder image. Network is needed for the crate downloads.
+      mkdir -p "$WORK/native-wheel"
+      if ! docker run --rm -v "$REPO:/io:ro" -v "$WORK/native-wheel:/out" \
+            -e CARGO_TARGET_DIR=/tmp/target "$MATURIN_IMAGE" \
+            build --release --locked --manifest-path /io/sdks/python-native-v2/Cargo.toml --out /out \
+            > "$WORK/native-wheel.log" 2>&1; then
+        tail -15 "$WORK/native-wheel.log"; fail_now "could not build the v2 native extension for the sandbox"
+      fi
+      SDK_MOUNT=(-v "$REPO/sdks/python:/src:ro" -v "$WORK/native-wheel:/wheels:ro")
+      # Both installed without dependencies, since their runtime requirements
+      # (cryptography, pqcrypto, tzdata) are already in the lock. pqcrypto is
+      # a v1 requirement, but importing ratify_protocol.v2 runs the v1 package
+      # initializer, which imports it.
       SDK_INSTALL='cp -r /src /build && rm -rf /build/*.egg-info /build/src/*.egg-info
-uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /build' ;;
+uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /wheels/*.whl /build' ;;
   published)
       grep -qi "^ratify-protocol==${RATIFY_SDK_VERSION}" "$LOCK" || fail_now \
         "RATIFY_SDK=published needs ratify-protocol==${RATIFY_SDK_VERSION} in the lock; uncomment it in sandbox-requirements.in and run ./stage-lock.sh"
@@ -275,10 +304,7 @@ find /out/site -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null ||
 # which was the *only* difference between two otherwise byte-identical staged
 # trees (7983 files) and was enough to change the tree hash and the image tag.
 find /out/site -name uv_cache.json -delete 2>/dev/null || true
-# Ratify signs; it never encapsulates a key. pqcrypto ships every KEM as a
-# separate compiled module, 39 MB of them, none reachable from this path.
-rm -rf /out/site/pqcrypto/_kem /out/site/pqcrypto/kem
-PYTHONPATH=/out/site /usr/bin/python3 -c "import nooa, mcp, ratify_protocol"
+PYTHONPATH=/out/site /usr/bin/python3 -c "import nooa, mcp, ratify_protocol.v2; assert ratify_protocol.v2.NATIVE_AVAILABLE"
 ' > "$WORK/stage-deps.log" 2>&1; then
   tail -15 "$WORK/stage-deps.log"; fail_now "could not stage NOOA dependencies"
 fi
@@ -496,7 +522,7 @@ except Exception as e:
     print('opt listing failed:', type(e).__name__, e)
 sys.path.insert(0, '/opt/ratify-nooa/site')
 try:
-    import ratify_protocol; print('ratify ok', ratify_protocol.__version__)
+    import ratify_protocol.v2; print('ratify ok', ratify_protocol.v2.__version__)
 except Exception as e:
     print('import failed:', type(e).__name__, e)
 " 2>&1 </dev/null | tail -12

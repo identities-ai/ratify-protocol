@@ -1,4 +1,4 @@
-// Ratify Protocol v1 — TypeScript SDK public entry point.
+// Ratify Protocol TypeScript SDK public entry point.
 
 export * from "./types.js";
 export * from "./scope.js";
@@ -59,3 +59,6 @@ export {
   type OperationContext,
   type SessionContextInputs,
 } from "./operation_context.js";
+
+// Protocol v2 surface; also importable alone from "@identities-ai/ratify-protocol/v2".
+export * from "./v2.js";

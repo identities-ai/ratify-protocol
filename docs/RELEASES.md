@@ -1,6 +1,6 @@
 # Release Process
 
-**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep — and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`make release-publish`, gated on `RELEASE_CI_FAILED=1`) is break-glass only.**
+**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep, and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`make release-publish`, gated on `RELEASE_CI_FAILED=1`) is break-glass only.**
 
 Companion to [`SPEC.md`](../SPEC.md), [`SDKS.md`](SDKS.md), and [`TEST_PLAN.md`](TEST_PLAN.md).
 
@@ -8,7 +8,7 @@ Companion to [`SPEC.md`](../SPEC.md), [`SDKS.md`](SDKS.md), and [`TEST_PLAN.md`]
 
 ## 1. Why this matters
 
-Ratify is a cryptographic protocol with multiple language implementations. If the Go reference ships a v1.0.1 bugfix but the Python SDK is still at v1.0.0, a user who installs both ends up with implementations that produce different bytes — and their signatures stop verifying across languages. That is how protocols die.
+Ratify is a cryptographic protocol with multiple language implementations. If the Go reference ships a v1.0.1 bugfix but the Python SDK is still at v1.0.0, a user who installs both ends up with implementations that produce different bytes, and their signatures stop verifying across languages. That is how protocols die.
 
 The release process exists to guarantee one property: **at any tagged version, every SDK and the reference pass the exact same fixture set byte-for-byte.** No exceptions, no negotiated drift, no "we'll update Python later."
 
@@ -30,7 +30,7 @@ ratify-protocol/
     (future: swift, java)
 ```
 
-**Why monorepo, not per-SDK repos:** a spec change (or even a clarification that affects canonical bytes) must land in every SDK atomically. Monorepo makes that a single PR that touches every language. Multi-repo makes it N PRs coordinated across N release cycles — that is how drift happens.
+**Why monorepo, not per-SDK repos:** a spec change (or even a clarification that affects canonical bytes) must land in every SDK atomically. Monorepo makes that a single PR that touches every language. Multi-repo makes it N PRs coordinated across N release cycles. That is how drift happens.
 
 Contributors who prefer to iterate on a language in their own repository may do so (the `sdks/` tree is just one home among many possibilities, not an exclusive one), but the *canonical* release comes from this repo.
 
@@ -55,6 +55,16 @@ gate checks the tag against the SDK manifests, so asking for the next version
 fails before anything is built: `tag 1.0.0-alpha.21 ≠ rust 1.0.0-alpha.20`. A
 dry run rehearses publishing what is on `main`, which is the same artifact path
 the next release will use.
+
+To rehearse a version that has no tag yet, such as a new release line, pass
+`ref` as well, set to a full 40-character commit SHA: every job builds that
+exact commit instead of the tag, and the gate still checks the tag name
+against the manifests in that commit. Only a dry run reads `ref`; a run that
+publishes always builds the tag.
+
+```
+gh workflow run release.yml --ref <branch> -f tag=<version in that commit> -f dry_run=true -f ref=<commit sha>
+```
 
 What runs: the test gate, the five-leg wheel matrix, the C library build, and
 `verify-pypi-native`, which downloads and merges the wheels exactly as the
@@ -163,7 +173,7 @@ v1.0.0-alpha.21 →  security. `max_rate` treated a negative invocation count,
                   partner production deployment live
 1.0.1          →  patch: any bugfix that doesn't change fixture bytes
 1.1.0          →  minor: backward-compatible additions (new optional fields,
-                  new scope vocabulary entries, new canonical helpers) — MUST
+                  new scope vocabulary entries, new canonical helpers); MUST
                   still pass every v1.0 fixture
 2.0.0          →  major: wire-incompatible changes. Triggers protocol version=2.
                   testvectors/v2/ coexists alongside v1 fixtures. v2 SDKs MAY
@@ -191,17 +201,17 @@ The protocol-level tag `v1.0.0-alpha.11` is what Go modules consume (`go get git
 
 ## 4. The release workflow
 
-### 4.1 Two-phase release — through a PR, like every other change
+### 4.1 Two-phase release through a PR, like every other change
 
-**Releases do not push to main.** `main` accepts changes only via pull request — including release version bumps. The old single-step `make release` required a direct (ruleset-bypassing) push to main and was removed. The flow is now:
+**Releases do not push to main.** `main` accepts changes only via pull request, including release version bumps. The old single-step `make release` required a direct (ruleset-bypassing) push to main and was removed. The flow is now:
 
 ```bash
-# Phase 1 — from clean, up-to-date main:
+# Phase 1: from clean, up-to-date main:
 make release-prepare VERSION=v1.0.0-alpha.12
 #   → creates release/v1.0.0-alpha.12, bumps all SDK versions, runs the
 #     full cross-SDK gate, commits (signed-off), pushes, opens the PR.
 
-# Phase 2 — merge the release PR (CI + DCO run on it like any PR), then:
+# Phase 2: merge the release PR (CI + DCO run on it like any PR), then:
 git checkout main && git pull
 make release-tag VERSION=v1.0.0-alpha.12
 #   → verifies main carries the bump, creates the protocol + sdk-* tags,
@@ -210,43 +220,44 @@ make release-tag VERSION=v1.0.0-alpha.12
 
 Any failure in either phase aborts. `release-tag` refuses to run if main's versions don't match the target (i.e. the release PR hasn't merged).
 
-**Registry publishing is handled by CI**, not by a local invocation. See [§5 — CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local two-phase flow owns version bumping, fixture regeneration, the cross-SDK gate, and tagging — but pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
+**Registry publishing is handled by CI**, not by a local invocation. See [§5, CI-driven publishing](#5-cidriven-publishing-tagtriggered) below. The local two-phase flow owns version bumping, fixture regeneration, the cross-SDK gate, and tagging. Pushing the tag to GitHub is what causes the registries to receive the package, not a local `cargo publish` / `twine upload` / `npm publish`. This eliminates the "I forgot which `PUBLISH=1` step I ran from which laptop" failure mode entirely.
 
-`make release-publish VERSION=… RELEASE_CI_FAILED=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It is deliberately a separate step from `release-tag`: the tag push triggers the CI publish, so publishing locally in the same breath would race it. The script refuses to run without `RELEASE_CI_FAILED=1` — an explicit operator assertion that the tag-triggered run has already failed.
+`make release-publish VERSION=… RELEASE_CI_FAILED=1` remains as an escape hatch for emergency manual publishes (e.g. CI is broken and a security fix needs to ship). It is deliberately a separate step from `release-tag`: the tag push triggers the CI publish, so publishing locally in the same breath would race it. The script refuses to run without `RELEASE_CI_FAILED=1`, an explicit operator assertion that the tag-triggered run has already failed.
 
 ### 4.2 What the workflow does, step-by-step
 
-**Phase 1 — `make release-prepare`:**
+**Phase 1: `make release-prepare`:**
 
-1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-(alpha|beta|rc)\.\d+)?` — only prerelease forms the Python bump and the release workflow PEP 440-normalize; no target tag exists locally or remotely.
+1. **Preflight.** Working tree clean; on main and in sync with `origin/main`; version matches `vX.Y.Z(-(alpha|beta|rc)\.\d+)?`, accepting only the prerelease forms the Python bump and the release workflow PEP 440-normalize; no target tag exists locally or remotely.
 2. **Create `release/<version>`.**
-3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing — Go consumes the git tag directly.)
+3. **Bump SDK versions in-place.** `sdks/typescript/package.json` (+lockfile), `sdks/python/pyproject.toml` (+`__init__.py`, `v2/_version.py`, and the `protocol-v2` extra's native pin), `sdks/python-native-v2` (+lockfile), `sdks/rust/Cargo.toml` (+lockfile), and version strings in docs. (`go.mod` needs nothing: Go consumes the git tag directly.)
 4. **Regenerate test vectors deterministically.** `go run ./cmd/ratify-testvectors`. If the result differs from committed, the release is aborted and the user is told to investigate.
 5. **Run the full conformance suite across all SDKs.**
-   - Go: `go vet ./...` and `go test -race -count=1 ./...`
+   - Go: `go vet ./...` and `go test -race -count=1 -timeout 40m ./...`
    - Determinism: regenerate fixtures to `/tmp` and `diff -rq` against `testvectors/v1/`
    - TypeScript: `cd sdks/typescript && npm ci && npx tsc --noEmit && npm test`
-   - Python: `cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q`
+   - Python: `cd sdks/python && python -m pip install -e '.[dev]' && python -m pytest -q` (v1), then, with `ratify-protocol-native-v2` built and installed, `python -m pip install -e '.[dev,protocol-v2]' && RATIFY_REQUIRE_NATIVE=1 python -m pytest -q tests_v2` (v2)
    - Rust: `cd sdks/rust && cargo build --all-targets && cargo test`
    - C/C++: `cd sdks/c && cargo test --test conformance -- --nocapture && cargo test --test api`
    - Release sync: package versions, lockfiles, docs, and SDK constants must agree
    - Any failure aborts the release.
 6. **Commit (signed-off), push the branch, open the PR.** CI and the DCO check run on the release PR exactly as on any other PR.
+6a. **Complete the draft release notes.** When `docs/releases/<version>.md` exists, its "Evidence (fill in at the tag)" section holds placeholders in angle brackets: `<sha>`, `<re-measure at the tag>`, `<result and date>`, `<records>`, and `<record>`. Replace every one with a result measured on the release branch (per-SDK test counts, the armv7 C ABI run, fuzzing, concurrency and issuer-collision records, and the review closure record), and remove the draft banner, in the release PR. `` grep -nE '`<[a-z][^>]*>`' docs/releases/<version>.md `` must print nothing before the PR merges. The tag commit SHA is known only after the merge: point that line at the GitHub release, and record the SHA in the release body when the tag is pushed.
 
-**Phase 2 — `make release-tag` (after the PR merges):**
+6b. **Regenerate the v2 cross-SDK fixtures (v2 line only).** After the version bump, each SDK writes its `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys at the new version, and every SDK verifies all five: `go run ./cmd/ratify-v2-cross-sdk -sdk-version <version>`; `npm run generate:cross-sdk` in `sdks/typescript`; `python tests_v2/gen_cross_sdk_fixture.py` in `sdks/python` with the `protocol-v2` extra and the native extension installed; `cargo run --example v2_cross_sdk_fixture` in `sdks/rust`; `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk` in `sdks/c`. The release-sync check refuses a fixture whose `sdk_version` is not the release being prepared.
+
+**Phase 2: `make release-tag` (after the PR merges):**
 
 7. **Preflight.** On clean, up-to-date main; main's versions match the target (refuses otherwise); release-sync check passes; tags still absent.
 8. **Tag the protocol version and each SDK.** `git tag v1.0.0-alpha.12`, then `sdk-go-v1.0.0-alpha.12`, etc.
-8a. **Push the protocol tag alone, then the `sdk-*` tags.** GitHub creates no push event when more than three tags arrive at once (see §5.3.1) — the protocol tag must travel by itself to trigger the Release workflow.
-9. **(Optional / emergency only) Publish to registries via `make release-publish VERSION=… RELEASE_CI_FAILED=1`, per SDK.** Prefer CI publishing instead — see §5. The manual commands are kept here for break-glass use.
+8a. **Push the protocol tag alone, then the `sdk-*` tags.** GitHub creates no push event when more than three tags arrive at once (see §5.3.1), so the protocol tag must travel by itself to trigger the Release workflow.
+9. **(Optional / emergency only) Publish to registries via `make release-publish VERSION=… RELEASE_CI_FAILED=1`, per SDK.** Prefer CI publishing instead (see §5). The manual commands are kept here for break-glass use.
    - **Go:** `git push` publishes the module; `go get` works against the tag directly. No registry action needed.
-   - **npm:** `cd sdks/typescript && npm publish --access public` — publishes `@identities-ai/ratify-protocol@<version>`.
-   - **PyPI:** `cd sdks/python && python -m build && twine upload dist/*` — publishes `ratify-protocol==<PEP 440 version>`.
-   - **crates.io:** `cd sdks/rust && cargo publish` — publishes `ratify-protocol = "<version>"`.
-10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now — see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
-11. **Update downstream claims.** The docs site (`ratify-docs`) and marketing site (`ratify-marketing`) each carry protocol facts — version, fixture count, scope count, SDK list — centralized in one constants file per repo (`src/constants/protocol.ts` / `lib/protocol-facts.ts`, plus each repo's bump checklist for literals in code snippets). Bump them via a normal PR in each repo as part of release day. `check-release-sync.sh` cannot reach those repos; this step is the manual bridge.
-
-    The two repos behave differently and the difference is deliberate. `ratify-docs` bumps its constants and sweeps literals per its `RELEASE_BUMP.md`. `ratify-marketing` runs `check-facts.mjs`, which fails as soon as a registry moves ahead of the site and forces an explicit choice: re-review the version-dependent claims and move `PROTOCOL_VERSION`, `LATEST_PUBLISHED_ACKNOWLEDGED` and `FACTS_REVIEWED` together, or move the acknowledgement alone to record that the site deliberately keeps stating the older release. Its declared dependency must match the reviewed version rather than the published one, so bumping `package.json` without re-reviewing fails the check by design.
+   - **npm:** `cd sdks/typescript && npm publish --access public` publishes `@identities-ai/ratify-protocol@<version>`.
+   - **PyPI:** a v2 tag publishes `ratify-protocol-native-v2` first (`cd sdks/python-native-v2 && maturin sdist --out dist && maturin build --release --out dist && twine upload --skip-existing dist/*`), then `ratify-protocol` (`cd sdks/python && python -m build && twine upload --skip-existing dist/*`), whose `protocol-v2` extra pins the extension exactly. The manual path uploads the extension's sdist and this machine's wheel only; the release workflow's native wheel jobs add the other platforms. A v1 tag publishes `ratify-protocol` from `sdks/python` without the v2 extension. The name `ratify-protocol-v2` is never published.
+   - **crates.io:** `cd sdks/rust && cargo publish` publishes `ratify-protocol = "<version>"`.
+10. **GitHub release if `GITHUB_RELEASE=1`.** (Also handled by CI now; see §5.) Auto-generate release notes from commits since last tag, attach the `testvectors/v1/` bundle as a release asset, post to GitHub Releases.
+11. **Update downstream claims.** The documentation site and the project website each carry protocol facts (version, fixture count, scope count, SDK list) that are maintained outside this repository. Update them as part of release day, following each site's own release checklist. `check-release-sync.sh` cannot reach them; this step is the manual bridge.
 
     Stamp the `CHANGELOG.md` heading as `## <version> (unreleased)` **before** running `release-prepare`. That exact string is the only marker the script rewrites; with any other heading it changes nothing and reports success, so the release ships with its notes sitting under `Unreleased`.
 12. **Announce.** Optional: Slack/Discord bot post, HN submission draft, community channel update.
@@ -259,7 +270,7 @@ Publishing to four registries is not atomic. If step 9 fails partway through (np
 2. Documents which registries have the release and which don't.
 3. Does NOT roll back already-published versions (npm and PyPI do not generally allow un-publishing of installed packages; crates.io explicitly forbids it).
 4. Marks the release as "partial" in the GitHub release page.
-5. Requires manual reconciliation — typically by publishing a patch version (`v1.0.0-alpha.11`) with the missing SDKs.
+5. Requires manual reconciliation, typically by publishing a patch version (`v1.0.0-alpha.11`) with the missing SDKs.
 
 This is why steps 1-8 (preflight + test + tag) must all succeed before step 9 runs.
 
@@ -267,9 +278,9 @@ This is why steps 1-8 (preflight + test + tag) must all succeed before step 9 ru
 
 Wiring this up in GitHub Actions requires these repository secrets and variables:
 
-- `CARGO_REGISTRY_TOKEN` — crates.io API token.
-- `NPM_PUBLISH_ENABLED` — repository variable that enables the npm Trusted Publisher job.
-- `GITHUB_TOKEN` — automatic; used for the release.
+- `CARGO_REGISTRY_TOKEN`: crates.io API token.
+- `NPM_PUBLISH_ENABLED`: repository variable that enables the npm Trusted Publisher job.
+- `GITHUB_TOKEN`: automatic; used for the release.
 
 PyPI and npm publishing use GitHub Actions OIDC Trusted Publisher flows, so no long-lived PyPI or npm token is required.
 
@@ -290,14 +301,14 @@ release-prepare:
 release-tag:
 	@GOCACHE="$(GOCACHE)" PUBLISH="$(PUBLISH)" GITHUB_RELEASE="$(GITHUB_RELEASE)" ./scripts/release.sh tag "$(VERSION)"
 
-release:   # removed — prints the two-phase instructions and exits 1
+release:   # removed; prints the two-phase instructions and exits 1
 ```
 
 The release logic lives in:
 
-- `scripts/check-release-sync.sh` — fails if package versions, lockfiles, docs, or SDK constants drift.
-- `scripts/test-all.sh` — runs the same conformance and determinism gates as CI, with stricter local Go race tests.
-- `scripts/release.sh` — `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags; `publish` is the isolated break-glass registry publish (requires `RELEASE_CI_FAILED=1` so it cannot race the tag-triggered CI publish).
+- `scripts/check-release-sync.sh` fails if package versions, lockfiles, docs, or SDK constants drift.
+- `scripts/test-all.sh` runs the same conformance and determinism gates as CI, with stricter local Go race tests.
+- `scripts/release.sh`: `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags; `publish` is the isolated break-glass registry publish (requires `RELEASE_CI_FAILED=1` so it cannot race the tag-triggered CI publish).
 
 ## 6. Continuous integration
 
@@ -357,24 +368,27 @@ Only then do `make release-prepare VERSION=…` and `make release-tag VERSION=�
 
 ---
 
-## Appendix A — the release checklist
+## Appendix A: the release checklist
 
 ```bash
-# Phase 1 — from clean, up-to-date main:
+# Phase 1: from clean, up-to-date main:
 make release-prepare VERSION=v1.0.0-alpha.12
 #   branch release/v1.0.0-alpha.12 + version bumps + full gate + PR
+# Before the PR merges: fill every placeholder in docs/releases/<version>.md
+# (step 6a); this must print nothing:
+grep -nE '`<[a-z][^>]*>`' docs/releases/v1.0.0-alpha.12.md
 
-# Phase 2 — after the release PR merges:
+# Phase 2: after the release PR merges:
 git checkout main && git pull
 make release-tag VERSION=v1.0.0-alpha.12
 #   coordinated tags pushed; protocol tag triggers CI publishing
 
-# Phase 3 — verify the workflow fired:
+# Phase 3: verify the workflow fired:
 gh run list --workflow=release.yml --limit 1
 #   if no run appeared (see §5.3.1):
 gh workflow run release.yml -f tag=v1.0.0-alpha.12
 
-# Phase 4 — verify EVERY registry actually serves the new version.
+# Phase 4: verify EVERY registry actually serves the new version.
 # A green publish job is NOT proof: at alpha.13 a real 403 was masked as
 # success and only this step caught it. PyPI's index can lag ~1 minute.
 npm view @identities-ai/ratify-protocol version
@@ -384,13 +398,13 @@ curl -s https://pypi.org/pypi/ratify-protocol/json | python3 -c 'import sys,json
 gh release view <tag> --json assets --jq '[.assets[].name]'   # 6 C/C++ archives + testvectors
 ```
 
-**Never `git push --tags`** — it pushes every local tag in one push, which suppresses the workflow trigger (§5.3.1) and may push stray local tags. The script pushes the protocol tag alone, then the `sdk-*` tags.
+**Never `git push --tags`**: it pushes every local tag in one push, which suppresses the workflow trigger (§5.3.1) and may push stray local tags. The script pushes the protocol tag alone, then the `sdk-*` tags.
 
 ---
 
 ## 5. CI-driven publishing (tag-triggered)
 
-After the public launch, the canonical publishing path is **push a tag → CI publishes**. The workflow lives at [`.github/workflows/release.yml`](../.github/workflows/release.yml). Nothing on your laptop ever calls `cargo publish` / `twine upload` / `npm publish` — those commands run inside an ephemeral GitHub Actions runner, with credentials that GitHub Actions exclusively controls.
+After the public launch, the canonical publishing path is **push a tag → CI publishes**. The workflow lives at [`.github/workflows/release.yml`](../.github/workflows/release.yml). Nothing on your laptop ever calls `cargo publish` / `twine upload` / `npm publish`. Those commands run inside an ephemeral GitHub Actions runner, with credentials that GitHub Actions exclusively controls.
 
 This is a stronger trust model than the manual flow for three reasons:
 
@@ -453,14 +467,14 @@ These are configured once on the GitHub repo. See [`docs/REGISTRY_SETUP.md`](./R
 |-----------------------------|-----------------|----------------------------------------------------------------|
 | `CARGO_REGISTRY_TOKEN`      | publish-crates  | crates.io API token scoped to `publish-update` on **both** `ratify-protocol` and `ratify-c`. Single-crate scoping 403s the other publish (bit at alpha.13). |
 | `NPM_PUBLISH_ENABLED` (var) | publish-npm     | Repo variable. Set to `true` to activate the npm job after the npm org is approved. |
-| _(no secret for PyPI)_      | publish-pypi    | Trusted Publisher via OIDC — no long-lived secret stored anywhere. |
+| _(no secret for PyPI)_      | publish-pypi    | Trusted Publisher via OIDC; no long-lived secret is stored anywhere. |
 
-Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `crates-publish`, `npm-publish`). Adding a required reviewer to an environment turns that publish into a manual-approval step — useful for prod-grade releases.
+Each publish job runs in its own GitHub Actions environment (`pypi-publish`, `crates-publish`, `npm-publish`). Adding a required reviewer to an environment turns that publish into a manual-approval step, which is useful for prod-grade releases.
 
 ### 5.3 What `gate-tests` checks before any publish runs
 
 1. `go vet ./...` clean
-2. `go test -race -count=1 ./...` passes
+2. `go test -race -count=1 -timeout 40m ./...` passes
 3. `go mod tidy` produces no diff
 4. Test vectors regenerate byte-identical to committed
 5. `scripts/check-release-sync.sh` confirms package versions, lockfiles, docs, and SDK constants are all aligned
@@ -474,13 +488,13 @@ If any check fails, all publish jobs are skipped. No partial state is created. Y
 
 ### 5.3.1 If the Release workflow never started
 
-GitHub does not create push events when **more than three tags arrive in a single push**. The release script used to push the protocol tag and all five `sdk-*` tags together (six tags, one push), which silently suppressed the `v*` trigger — the tag landed on GitHub but no Release run appeared. This is why the v1.0.0-alpha.11 release had to be published via manual dispatch.
+GitHub does not create push events when **more than three tags arrive in a single push**. The release script used to push the protocol tag and all five `sdk-*` tags together (six tags, one push), which silently suppressed the `v*` trigger: the tag landed on GitHub but no Release run appeared. This is why the v1.0.0-alpha.11 release had to be published via manual dispatch.
 
 `scripts/release.sh` now pushes the protocol tag on its own (fires the trigger), then the `sdk-*` tags together (they trigger nothing). If a Release run still doesn't appear within a minute of the tag push:
 
 ```bash
 gh run list --workflow=release.yml --limit 1        # confirm nothing started
-gh workflow run release.yml -f tag=v1.0.0-alpha.11  # documented fallback — same gates, same publishes
+gh workflow run release.yml -f tag=v1.0.0-alpha.11  # documented fallback: same gates, same publishes
 ```
 
 The dispatch path is byte-equivalent to the tag path: `RELEASE_TAG` is normalized at the top of the workflow, and gate-tests re-run everything on a fresh runner either way.
@@ -490,12 +504,37 @@ The dispatch path is byte-equivalent to the tag path: `RELEASE_TAG` is normalize
 Publishing to four registries is not atomic. If PyPI succeeds and crates.io fails (or vice versa):
 
 1. **Do not delete the tag.** Same-version re-publishing is rejected by the successful registry but is idempotent.
-2. **Inspect the failed job.** crates.io / npm / PyPI all have specific error messages — usually network, transient quota, or "version already exists" (which means another runner published before this one).
+2. **Inspect the failed job.** crates.io / npm / PyPI all have specific error messages, usually network, transient quota, or "version already exists" (which means another runner published before this one).
 3. **Re-run the failed job from the GitHub Actions UI.** The successful jobs are skipped (PyPI rejects same-version upload cleanly with `skip-existing: true`; crates.io rejects with a clean error code; npm rejects with a clean error code).
 4. **If a published artifact is genuinely bad** (security issue, broken build), yank rather than unpublish. See [`docs/REGISTRY_SETUP.md`](./REGISTRY_SETUP.md) §6.
 
 ### 5.5 Pre-release vs stable
 
-The release workflow marks the GitHub Release as pre-release automatically if the tag contains `alpha`, `beta`, or `rc`. PyPI / crates.io / npm all understand semver pre-release suffixes natively — installers default to skipping them unless explicitly asked. This means alpha consumers self-select via `pip install ratify-protocol==1.0.0a10` (explicit) rather than catching alphas accidentally on `pip install ratify-protocol`.
+The release workflow marks the GitHub Release as pre-release automatically if the version has a prerelease suffix (anything after a `-`, such as `-beta.1`). PyPI / crates.io / npm all understand semver pre-release suffixes natively, but each resolves them differently while every release is a prerelease. npm installs the `latest` dist-tag, which only v1 releases move; v2 prereleases publish under `next`. Cargo never matches a 2.x prerelease from a 1.x requirement. pip skips prereleases only when a final release exists, so with none published, an unpinned `pip install ratify-protocol` resolves to the newest prerelease (`2.0.0b1` once it ships); v1 users pin `ratify-protocol<2`. The Go `/v2` module path keeps v1 importers on v1.
 
 This is the right behavior during the alpha series. When `v1.0.0` (stable) ships, the same workflow will produce a non-prerelease GitHub Release and the registries will surface it as the default install target.
+
+### 5.6 v1 maintenance after v2 is on main
+
+Once the v2 line is merged, `main` is v2 (its `go.mod` declares the `/v2`
+module path), so `make release-tag` from `main` publishes v2 only. A v1 fix
+ships from the `release/v1` branch, which starts at the last v1 tag: open the
+fix PR against `release/v1`, bump the five SDKs to the next
+`1.0.0-alpha.N` in a release PR against the same branch, then create the
+protocol tag and the `sdk-*` tags by hand on the merged commit. The tag runs
+the workflow file from that commit. npm dist-tags are chosen per version:
+v2 prereleases publish under `next`, a v2 final release under `latest`, and a
+v1 release under `latest` only while `latest` still holds a v1 version, and
+under `v1` once a v2 final release holds it. The publish job reads the
+current `latest` and fails rather than guess if it cannot.
+
+### 5.7 Promoting v2 to the default at 2.0.0
+
+`2.0.0` needs no change to how the release runs: a tag without a prerelease
+suffix publishes npm `latest`, is preferred by pip and Cargo, and is marked
+latest on GitHub. Before preparing it: move the `protocol-v2` extra's
+requirements into the base `dependencies` of `sdks/python/pyproject.toml`
+(keep the extra, empty or identical, so existing install commands still
+resolve), announce v1 support terms, and switch the developer docs and site
+to lead with v2. Import paths do not change (see
+[`PROTOCOL_V2_MIGRATION.md`](PROTOCOL_V2_MIGRATION.md#what-changes-at-200)).

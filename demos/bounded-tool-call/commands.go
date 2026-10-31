@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	ratify "github.com/identities-ai/ratify-protocol"
+	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
 
 func runIssue(args []string) error {
@@ -23,7 +23,7 @@ func runIssue(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("RATIFY — PORTABLE TOOL AUTHORIZATION")
+	fmt.Println("RATIFY PROTOCOL v1: PORTABLE TOOL AUTHORIZATION")
 	fmt.Println()
 	fmt.Println("Alice → Atlas   place_order up to $5,000 for 24 hours")
 	fmt.Println("Atlas → Scout   place_order up to $500 for 1 hour")
@@ -48,7 +48,7 @@ func runServe(args []string) error {
 		return fmt.Errorf("start gateway on %s: %w", *addr, err)
 	}
 	defer listener.Close()
-	fmt.Println("ACME SUPPLIES — AGENT TOOL GATEWAY")
+	fmt.Println("ACME SUPPLIES: AGENT TOOL GATEWAY (Ratify Protocol v1)")
 	fmt.Println()
 	fmt.Printf("Listening      http://%s\n", *addr)
 	fmt.Println("Protected tool place_order")
@@ -160,7 +160,7 @@ func printToolResponse(req toolRequest, response toolResponse) {
 	if response.Decision == "ALLOW" {
 		fmt.Printf("Executed     order %s created\n", response.OrderID)
 	} else {
-		fmt.Println("Executed     no — tool handler was not called")
+		fmt.Println("Executed     no, tool handler was not called")
 		fmt.Printf("Reason       %s\n", response.Reason)
 	}
 	fmt.Printf("Orders       %d\n", response.OrderCount)

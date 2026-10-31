@@ -13,7 +13,10 @@ ls dist/index.js dist/index.d.ts
 
 echo "Publishing @identities-ai/ratify-protocol@$(node -p "require('./package.json').version")..."
 VERSION=$(node -p "require('./package.json').version")
-if [[ "$VERSION" == *"-"* ]]; then
+if [[ "$VERSION" == 2.*-* ]]; then
+  # v2 prereleases stay on the next dist-tag; latest stays on v1 until 2.0.0.
+  npm publish --access public --tag next
+elif [[ "$VERSION" == *"-"* ]]; then
   TAG=$(echo "$VERSION" | sed 's/.*-\([a-zA-Z]*\).*/\1/')
   npm publish --access public --tag "$TAG"
   npm dist-tag add "@identities-ai/ratify-protocol@${VERSION}" latest

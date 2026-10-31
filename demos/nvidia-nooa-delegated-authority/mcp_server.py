@@ -43,7 +43,9 @@ from collections.abc import Callable
 from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
-from ratify_protocol.wire import decode_proof_bundle
+from pydantic import StrictInt
+from ratify_protocol.v2.limits_v2 import MAX_PROOF_BUNDLE_BYTES_V2
+from ratify_protocol.v2.protocol_v2 import decode_proof_bundle_v2
 
 from refund_service import BadRequest, DEFAULT_TENANT, RefundService
 
@@ -51,9 +53,9 @@ from refund_service import BadRequest, DEFAULT_TENANT, RefundService
 #: reserved ``io.modelcontextprotocol/*`` keys.
 PROOF_META_KEY = "com.ratifyprotocol/proof"
 
-#: Challenge length. ``generate_challenge()`` returns 32 cryptographically
-#: random bytes (SPEC 6.4); the SDK exports no constant for it, so it is named
-#: once here rather than written as a literal at the point of use.
+#: Challenge length. v2 challenges are exactly 32 random bytes (SPEC-v2); the
+#: SDK exports no constant for it, so it is named once here rather than written
+#: as a literal at the point of use.
 CHALLENGE_BYTES = 32
 
 #: W3C trace context, reserved by the MCP spec (SEP-414). Propagated opaquely:
@@ -80,21 +82,18 @@ BAGGAGE_KEY = "baggage"
 #: The first two bound the wire envelope; this one bounds what the receiver
 #: will decode and hand to a verifier. Comparing an envelope size against this
 #: number is a category error, so the size tests report the two margins
-#: separately. Sized to admit an alpha.16 maximum-depth chain with room to
-#: spare, and nothing beyond it.
+#: separately.
 #:
-#: 128 KiB, not 192 KiB, and the reason is worth stating. A base64 string is
-#: 4/3 the size of its payload, so a 192 KiB decoded ceiling corresponds to a
-#: 262,148-byte encoded one, four bytes above the 262,144-byte envelope limit
-#: the policy proposes. The receiver's bound would then be unreachable: every
-#: proof large enough to trip it is already large enough for OpenShell to
-#: refuse the request first, and a defense-in-depth check that can never fire
-#: is not defense in depth. At 128 KiB the encoded ceiling is 174,762 bytes,
-#: comfortably inside the envelope limit, so the two bounds are independently
-#: observable and the profile can demonstrate each one separately. A
-#: maximum-depth (8) chain is 88,990 raw bytes, so this still leaves 42,082
-#: bytes of headroom over the largest chain the protocol permits.
-MAX_PROOF_BYTES = 131_072
+#: Protocol v2 fixes this bound in the protocol itself:
+#: ``MAX_PROOF_BUNDLE_BYTES_V2`` is 128 KiB (131,072 bytes) and the maximum
+#: chain depth is 8. The receiver uses exactly that value, so it refuses
+#: nothing the protocol allows and admits nothing the protocol forbids. The
+#: reason it is 128 KiB and not larger still holds: a base64 string is 4/3 the
+#: size of its payload, so the encoded ceiling is 174,764 bytes, comfortably
+#: inside the 262,144-byte envelope limit the policy proposes, and the two
+#: bounds stay independently observable. The size of a maximum-depth v2 chain
+#: is measured by the transport tests rather than written down here.
+MAX_PROOF_BYTES = MAX_PROOF_BUNDLE_BYTES_V2
 
 #: The envelope limit this reference proposes for an OpenShell MCP endpoint.
 #: Recorded here so the size tests can report margin against the number the
@@ -124,8 +123,8 @@ def _meta_of(ctx: Context):
         return None
 
 
-def extract_proof(ctx: Context, arguments: dict[str, Any] | None = None):
-    """Pull the proof bundle out of ``_meta``, or refuse.
+def extract_proof(ctx: Context, arguments: dict[str, Any] | None = None) -> bytes:
+    """Pull the proof bundle's exact v2 wire bytes out of ``_meta``, or refuse.
 
     One authoritative carriage location, and only one.
 
@@ -165,10 +164,14 @@ def extract_proof(ctx: Context, arguments: dict[str, Any] | None = None):
     if len(decoded) > MAX_PROOF_BYTES:
         raise ProofCarriageError("authorization proof exceeds the receiver limit")
 
+    # A strict v2 decode here classifies a malformed proof at the transport
+    # boundary. The receiver decodes it again inside the verifier; the bytes,
+    # not this object, are what it verifies.
     try:
-        return decode_proof_bundle(decoded.decode("utf-8"))
-    except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:
+        decode_proof_bundle_v2(decoded)
+    except Exception as exc:  # noqa: BLE001 - every decode failure is malformed
         raise ProofCarriageError(f"malformed proof bundle: {exc}") from exc
+    return decoded
 
 
 def trace_context(ctx: Context) -> dict[str, str]:
@@ -266,8 +269,11 @@ def build_server(
     )
     async def refund_prepare(
         order_id: str,
-        amount: float,
+        # StrictInt: v2 amounts are integer micro-units, and a float is refused
+        # rather than coerced.
+        amount_micros: StrictInt,
         agent_id: str,
+        agent_public_key: dict[str, str],
         currency: str = "USD",
         tenant: str = DEFAULT_TENANT,
     ) -> dict[str, Any]:
@@ -275,17 +281,20 @@ def build_server(
             _quietly(dispatched, "refund.prepare")
         out = service.challenge(
             order_id=order_id,
-            amount=amount,
+            amount_micros=amount_micros,
             currency=currency,
             agent_id=agent_id,
+            agent_public_key=agent_public_key,
             tenant=tenant,
         )
         # Bytes do not survive JSON. The challenge is opaque to the agent
         # either way; it is a correlation handle, not a secret.
         return {
             "challenge": base64.b64encode(out["challenge"]).decode("ascii"),
+            "issued_at": out["issued_at"],
             "session_context": base64.b64encode(out["session_context"]).decode("ascii"),
             "expires_at": out["expires_at"],
+            "verifier_id": out["verifier_id"],
             "parsed": out["parsed"],
         }
 
@@ -314,8 +323,8 @@ def build_server(
                 f"challenge must decode to exactly {CHALLENGE_BYTES} bytes"
             )
 
-        bundle = extract_proof(ctx, arguments={"challenge": challenge})
-        decision = service.execute(challenge=raw_challenge, bundle=bundle)
+        proof = extract_proof(ctx, arguments={"challenge": challenge})
+        decision = service.execute(challenge=raw_challenge, proof=proof)
 
         # The receipt identifier travels back as an outcome. The receipt
         # itself stays in receiver-side audit state, and no proof material is
@@ -324,7 +333,7 @@ def build_server(
             "decision": decision["decision"],
             "status": decision["status"],
             "reason": decision["reason"],
-            "refunded": decision["refunded"],
+            "refunded_micros": decision["refunded_micros"],
             "receipt_id": decision["receipt_id"],
         }
         # Instrumentation only, and strictly after the fact. Deliberately not

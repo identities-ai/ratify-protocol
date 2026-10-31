@@ -1,19 +1,21 @@
 # Production transport profile backlog
 
 The current Google ADK profile proves delegated authority at an independent
-receiver over native Streamable HTTP MCP. It does not claim a production Google
-Cloud deployment or a Google-approved transport profile.
+receiver over native Streamable HTTP MCP, on Ratify Protocol v2 (2.0.0-beta.1
+line, tested against the in-tree 2.0.0b1 SDK). It does not claim a production
+Google Cloud deployment or a Google-approved transport profile.
 
 ## Definition of done
 
 Call this a production profile only when the presentation path uses a supported
 ADK/MCP extension point, deployed workload identity is bound to the expected
-Ratify agent, receiver state and retries survive multi-instance failure, and
-the profile has repeatable Agent Engine or equivalent deployment evidence.
+Ratify agent, the Protocol v2 Part B stores are durable with an independent
+checkpoint, receiver state and retries survive multi-instance failure, and the
+profile has repeatable Agent Engine or equivalent deployment evidence.
 
 ## Ordered work
 
-### P0 — native MCP metadata hook and telemetry contract
+### P0: native MCP metadata hook and telemetry contract
 
 The recommended lane now uses public `before_tool_callback` and `FunctionTool`
 APIs and carries the proof in namespaced MCP request metadata. The separately
@@ -36,7 +38,7 @@ redaction test are executable without private ADK internals.
 metadata through a public API, and Google telemetry/proxy preservation and
 redaction contracts are documented.
 
-### P0 — Agent Identity and transport binding
+### P0: Agent Identity and transport binding
 
 - Deploy the presenting workload with Google Agent Identity or the supported
   successor and authenticate the MCP transport with workload identity/mTLS.
@@ -48,18 +50,38 @@ redaction contracts are documented.
 **Exit criterion:** wrong workload, valid proof; right workload, wrong proof;
 and credential/proof theft cases all fail closed.
 
-### P0 — durable replay and exactly-once recovery
+### P0: durable Part B stores and an independent checkpoint
 
-- Move challenges and pending operations to an atomic shared store.
+The reference runs on the SDK's in-memory reference stores, which exist for
+tests only.
+
+- Replace the claim store, challenge issuance store, receipt log, security
+  journal, and approval ledger with durable, atomic, shared implementations
+  that meet the SPEC-v2 §7 contracts.
+- Run the checkpoint in an independent failure domain so a receipt is
+  acknowledged by something other than the receiver that wrote it.
 - Enforce per-workload quotas, TTL, restart safety, and multi-instance single
   consumption.
 - Add an idempotency/result ledger so a response lost after execution returns
   the recorded result without executing again.
 
 **Exit criterion:** failover, concurrency, and lost-response tests produce one
-business effect.
+business effect, and every released decision has a receipt acknowledged by an
+independent checkpoint.
 
-### P1 — Agent Engine and A2A execution
+### P0: signed status distribution
+
+- Run one status publisher per issuer with durable publisher state, persisted
+  before each signed object is published.
+- Distribute signed lists and pushes to every receiver and heartbeat them
+  before `next_update`; a receiver that misses the feed denies with
+  `status_stale`, by design.
+- Keep status keys in their own custody, separate from delegation keys.
+
+**Exit criterion:** revocation reaches every receiver within a stated bound,
+and a feed outage denies rather than allows.
+
+### P1: Agent Engine and A2A execution
 
 - Deploy the ADK agent to Vertex AI Agent Engine or the current supported
   production runtime.
@@ -72,10 +94,10 @@ business effect.
 **Exit criterion:** reproducible deployed evidence for workload → ADK → MCP
 receiver, plus separately labelled A2A evidence if implemented.
 
-### P1 — trust, revocation, operation maps, and failures
+### P1: trust, operation maps, and failures
 
-- Define root provisioning, rotation, revocation freshness, outage policy, and
-  receiver-owned configuration versioning.
+- Define root provisioning, rotation, status-key rotation (a new journal
+  epoch), outage policy, and receiver-owned configuration versioning.
 - Publish deterministic tool-to-scope/operation/resource/payload/constraint
   mappings.
 - Standardize machine-readable failures, including failure after execution.
@@ -83,7 +105,7 @@ receiver, plus separately labelled A2A evidence if implemented.
 **Exit criterion:** independent receiver implementation reaches the same
 authorization inputs and failure classes.
 
-### P1 — secure operations and observability
+### P1: secure operations and observability
 
 - Set TLS, proxy/body limits, timeouts, rate limits, secret rotation, and audit
   retention.
@@ -94,7 +116,21 @@ authorization inputs and failure classes.
 **Exit criterion:** deployment and log-capture review finds no sensitive proof
 material and exercises dependency outages.
 
-### P2 — conformance and compatibility
+### P1: verifier throughput
+
+The Python v2 SDK, with hybrid verification in its native extension,
+completes about 15 dual-root calls per second on the recorded host (see
+`FEDERATION_SCALE.md`), far below the v1 package that produced the
+one-million-call run.
+
+- Measure the same path with production-shaped stores, and with the Go or
+  Rust SDK where the receiver allows, before making any throughput claim.
+- Repeat the one-million-call tier only with durable stores that do not retain
+  every claim in memory.
+
+**Exit criterion:** a v2 scale result measured with production-shaped stores.
+
+### P2: conformance and compatibility
 
 - Test supported ADK, MCP SDK, Agent Engine, and Agent Identity versions.
 - Cover multiple receiver instances, proxy limits, version negotiation,

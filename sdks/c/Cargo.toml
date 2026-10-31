@@ -1,6 +1,6 @@
 [package]
 name = "ratify-c"
-version = "1.0.0-alpha.21"
+version = "2.0.0-beta.1"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -30,10 +30,27 @@ default = ["std"]
 std = []
 custom-entropy = ["getrandom/custom"]
 
+# Test-only: compiles a one-shot panic injection point into the C ABI panic
+# guard so tests/panic_containment.rs can drive the panic path of real
+# exports. Enabled for this crate's own tests through the self dev-dependency
+# below; never enable it in a shipped build.
+panic-test-hook = []
+
+# Test-only: exports the in-memory REFERENCE implementations of the Part B
+# stores and profile components (`ratify_v2_ref_*`) behind the C callback
+# interfaces, so the conformance runners drive every testvectors/v2 scenario
+# through the ABI. Not durable or production-safe; never enable it in a
+# shipped build. The header declares these symbols inside
+# `#if defined(RATIFY_V2_TEST_REFERENCE)`.
+test-reference = []
+
 [dependencies]
-ratify-protocol = { path = "../rust", version = "1.0.0-alpha.21" }
+ratify-protocol = { path = "../rust", version = "2.0.0-beta.1" }
+serde = "1"
 serde_json = "1"
 getrandom = { version = "0.2", features = [] }
+sha2 = "0.10"
+zeroize = "1.8"
 
 [build-dependencies]
 cbindgen = "0.27"
@@ -54,9 +71,29 @@ path = "tests/advanced.rs"
 name = "bounds"
 path = "tests/bounds.rs"
 
+[[test]]
+name = "v2_abi"
+path = "tests/v2_abi.rs"
+
+[[test]]
+name = "panic_containment"
+path = "tests/panic_containment.rs"
+
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+hex = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+sha3 = "0.10"
+# An emulated external signing provider for the external-signer tests
+# (a provider is outside the SDK; these never sign through the ABI).
+fips204 = "0.4.6"
+ed25519-dalek = "2"
+rand_core = "0.6"
+# Self dev-dependency: turns on the test-only panic hook for integration
+# tests. Under resolver 2 it does not leak into normal or release builds.
+ratify-c = { path = ".", features = ["panic-test-hook", "test-reference"] }
 
 # ---------------------------------------------------------------------------
 # Release profile: optimised for embedded / small-footprint targets.
@@ -67,7 +104,10 @@ serde_json = "1"
 opt-level    = "z"   # optimise for binary size (smallest output)
 lto          = true  # link-time optimisation removes dead code across crates
 codegen-units = 1    # single codegen unit enables maximum LTO effectiveness
-panic        = "abort"  # no stack-unwinding machinery; critical for no_std targets
+# Unwind, not abort: every exported function catches panics at the C ABI
+# boundary (src/guard.rs) and returns its internal-error code. With abort,
+# that containment is inert and any panic terminates the host process.
+panic        = "unwind"
 strip        = "symbols" # strip debug symbols from the final library
 
 # Debug builds keep full debug info and no size pressure.

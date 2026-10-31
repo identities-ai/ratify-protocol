@@ -10,40 +10,84 @@
 //! - Round-trip (to_json / from_json / re-verify)
 
 use ratify_c::{
+    ratify_agent_free,
+    ratify_agent_generate,
+    ratify_bundle_hash,
+    ratify_chain_hash,
+    ratify_challenge_claim_digest_v2,
+    ratify_challenge_generate,
+    ratify_challenge_store_check,
+    ratify_challenge_store_consume,
+    ratify_challenge_store_free,
+    ratify_challenge_store_issue,
+    ratify_challenge_store_new,
+    ratify_delegation_cert_free,
+    ratify_delegation_issue,
+    ratify_error_free,
+    ratify_human_root_free,
     // Core ops (needed for setup)
-    ratify_human_root_generate, ratify_human_root_free, ratify_human_root_id,
+    ratify_human_root_generate,
+    ratify_human_root_id,
     ratify_human_root_pub_key_json,
-    ratify_agent_generate, ratify_agent_free,
-    ratify_delegation_issue, ratify_delegation_cert_free,
-    ratify_challenge_generate, ratify_proof_bundle_create,
-    ratify_verify_bundle, ratify_verify_result_free, ratify_verify_result_is_valid,
-    ratify_string_free, ratify_error_free,
+    ratify_key_rotation_free,
+    ratify_key_rotation_from_json,
+    ratify_key_rotation_issue,
+    ratify_key_rotation_to_json,
+    ratify_key_rotation_verify,
+    ratify_policy_verdict_free,
+    ratify_policy_verdict_from_json,
+    ratify_policy_verdict_issue,
+    ratify_policy_verdict_to_json,
+    ratify_policy_verdict_verify,
+    ratify_proof_bundle_create,
+    ratify_protocol_claim_id_from_digest_v2,
+    ratify_protocol_claim_id_v2,
+    ratify_receipt_free,
+    ratify_receipt_from_json,
+    ratify_receipt_hash,
+    ratify_receipt_issue,
+    ratify_receipt_to_json,
+    ratify_receipt_verify,
+    ratify_revocation_list_contains,
+    ratify_revocation_list_free,
+    ratify_revocation_list_from_json,
+    ratify_revocation_list_issue,
+    ratify_revocation_list_to_json,
+    ratify_revocation_list_verify,
+    ratify_revocation_push_free,
+    ratify_revocation_push_from_json,
+    ratify_revocation_push_issue,
+    ratify_revocation_push_to_json,
+    ratify_revocation_push_verify,
+    ratify_scope_has,
+    ratify_scope_is_sensitive,
+    ratify_scope_vocabulary,
+    ratify_scopes_expand,
+    ratify_scopes_intersect,
+    ratify_scopes_validate,
+    ratify_session_token_free,
+    ratify_session_token_from_json,
     // Advanced ops
-    ratify_session_token_issue, ratify_session_token_verify,
-    ratify_session_token_to_json, ratify_session_token_from_json, ratify_session_token_free,
-    ratify_receipt_issue, ratify_receipt_verify,
-    ratify_bundle_hash, ratify_receipt_hash, ratify_chain_hash,
-    ratify_receipt_to_json, ratify_receipt_from_json, ratify_receipt_free,
-    ratify_revocation_list_issue, ratify_revocation_list_verify,
-    ratify_revocation_list_contains, ratify_revocation_list_to_json,
-    ratify_revocation_list_from_json, ratify_revocation_list_free,
-    ratify_revocation_push_issue, ratify_revocation_push_verify,
-    ratify_revocation_push_to_json, ratify_revocation_push_from_json, ratify_revocation_push_free,
-    ratify_witness_entry_issue, ratify_witness_entry_verify,
-    ratify_witness_entry_to_json, ratify_witness_entry_from_json, ratify_witness_entry_free,
-    ratify_key_rotation_issue, ratify_key_rotation_verify,
-    ratify_key_rotation_to_json, ratify_key_rotation_from_json, ratify_key_rotation_free,
-    ratify_scope_has, ratify_scope_is_sensitive, ratify_scope_vocabulary,
-    ratify_scopes_expand, ratify_scopes_intersect, ratify_scopes_validate,
-    ratify_challenge_store_new, ratify_challenge_store_free, ratify_challenge_store_issue,
-    ratify_challenge_store_check, ratify_challenge_store_consume,
-    ratify_policy_verdict_issue, ratify_policy_verdict_verify,
-    ratify_policy_verdict_to_json, ratify_policy_verdict_from_json, ratify_policy_verdict_free,
-    ratify_verifier_context_hash,
-    ratify_transaction_receipt_sign_party,
-    ratify_transaction_receipt_from_json, ratify_transaction_receipt_to_json,
+    ratify_session_token_issue,
+    ratify_session_token_to_json,
+    ratify_session_token_verify,
+    ratify_string_free,
     ratify_transaction_receipt_free,
-    RatifyStatus, RatifyVerifierContext, RatifyVerifyOptions,
+    ratify_transaction_receipt_from_json,
+    ratify_transaction_receipt_sign_party,
+    ratify_transaction_receipt_to_json,
+    ratify_verifier_context_hash,
+    ratify_verify_bundle,
+    ratify_verify_result_free,
+    ratify_verify_result_is_valid,
+    ratify_witness_entry_free,
+    ratify_witness_entry_from_json,
+    ratify_witness_entry_issue,
+    ratify_witness_entry_to_json,
+    ratify_witness_entry_verify,
+    RatifyStatus,
+    RatifyVerifierContext,
+    RatifyVerifyOptions,
 };
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -52,12 +96,276 @@ const NOW: i64 = 1800000000i64;
 const SECRET: &[u8] = b"ratify-test-session-secret-32by"; // 31 bytes — still valid (>= 1)
 const SECRET32: &[u8] = b"ratify-test-session-secret-32b!!"; // 32 bytes
 
+#[test]
+fn v2_claim_identifiers_match_shared_vectors_and_reject_malformed_inputs() {
+    let vector: serde_json::Value =
+        serde_json::from_str(include_str!("../../../testvectors/v2/challenge-claim.json")).unwrap();
+    let challenge = hex::decode(vector["challenge_hex"].as_str().unwrap()).unwrap();
+    let mut digest = [0u8; 48];
+    unsafe {
+        assert_eq!(
+            ratify_challenge_claim_digest_v2(
+                challenge.as_ptr(),
+                challenge.len(),
+                digest.as_mut_ptr(),
+                digest.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyOk
+        );
+    }
+    assert_eq!(
+        hex::encode(digest),
+        vector["expected_challenge_claim_digest_hex"]
+            .as_str()
+            .unwrap()
+    );
+    let mut cases = vec![vector["claim_id_input"].clone()];
+    cases[0]["expected_claim_id"] = vector["expected_claim_id"].clone();
+    cases.extend(
+        vector["additional_claim_id_cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .cloned(),
+    );
+    for case in cases {
+        let namespace = case["verifier_namespace"].as_str().unwrap().as_bytes();
+        let epoch = case["replay_epoch"].as_u64().unwrap();
+        let mut id = [0 as c_char; 65];
+        unsafe {
+            assert_eq!(
+                ratify_protocol_claim_id_v2(
+                    namespace.as_ptr(),
+                    namespace.len(),
+                    epoch,
+                    challenge.as_ptr(),
+                    challenge.len(),
+                    id.as_mut_ptr(),
+                    id.len(),
+                    std::ptr::null_mut()
+                ),
+                RatifyStatus::RatifyOk
+            );
+            assert_eq!(
+                CStr::from_ptr(id.as_ptr()).to_str().unwrap(),
+                case["expected_claim_id"].as_str().unwrap()
+            );
+            id.fill(0);
+            assert_eq!(
+                ratify_protocol_claim_id_from_digest_v2(
+                    namespace.as_ptr(),
+                    namespace.len(),
+                    epoch,
+                    digest.as_ptr(),
+                    digest.len(),
+                    id.as_mut_ptr(),
+                    id.len(),
+                    std::ptr::null_mut()
+                ),
+                RatifyStatus::RatifyOk
+            );
+            assert_eq!(
+                CStr::from_ptr(id.as_ptr()).to_str().unwrap(),
+                case["expected_claim_id"].as_str().unwrap()
+            );
+        }
+    }
+    unsafe {
+        digest.fill(0x7f);
+        assert_eq!(
+            ratify_challenge_claim_digest_v2(
+                challenge.as_ptr(),
+                31,
+                digest.as_mut_ptr(),
+                digest.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert_eq!(digest, [0u8; 48]);
+        digest.fill(0x7f);
+        assert_eq!(
+            ratify_challenge_claim_digest_v2(
+                std::ptr::null(),
+                32,
+                digest.as_mut_ptr(),
+                digest.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyErrNullPointer
+        );
+        assert_eq!(digest, [0u8; 48]);
+        let mut id = [0x7f as c_char; 65];
+        let namespace = b"verify-prod";
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                1 << 53,
+                challenge.as_ptr(),
+                challenge.len(),
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                [0xff].as_ptr(),
+                1,
+                7,
+                challenge.as_ptr(),
+                challenge.len(),
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyErrEncoding
+        );
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_from_digest_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                7,
+                digest.as_ptr(),
+                47,
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut()
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert_eq!(id[0], 0);
+        let mut err: *mut c_char = std::ptr::null_mut();
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                7,
+                challenge.as_ptr(),
+                31,
+                id.as_mut_ptr(),
+                id.len(),
+                &mut err,
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert!(!err.is_null());
+        assert!(CStr::from_ptr(err).to_str().unwrap().contains("length"));
+        ratify_error_free(err);
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                std::ptr::null(),
+                0,
+                7,
+                challenge.as_ptr(),
+                challenge.len(),
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrNullPointer
+        );
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                b"".as_ptr(),
+                0,
+                7,
+                challenge.as_ptr(),
+                challenge.len(),
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                7,
+                challenge.as_ptr(),
+                challenge.len(),
+                id.as_mut_ptr(),
+                64,
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+        assert_eq!(id[0], 0);
+        id[0] = 0x7f;
+        assert_eq!(
+            ratify_protocol_claim_id_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                7,
+                challenge.as_ptr(),
+                challenge.len(),
+                std::ptr::null_mut(),
+                65,
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrNullPointer
+        );
+        assert_eq!(
+            ratify_protocol_claim_id_from_digest_v2(
+                namespace.as_ptr(),
+                namespace.len(),
+                7,
+                std::ptr::null(),
+                48,
+                id.as_mut_ptr(),
+                id.len(),
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrNullPointer
+        );
+        assert_eq!(id[0], 0);
+        assert_eq!(
+            ratify_challenge_claim_digest_v2(
+                challenge.as_ptr(),
+                challenge.len(),
+                std::ptr::null_mut(),
+                48,
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrNullPointer
+        );
+        assert_eq!(
+            ratify_challenge_claim_digest_v2(
+                challenge.as_ptr(),
+                challenge.len(),
+                digest.as_mut_ptr(),
+                47,
+                std::ptr::null_mut(),
+            ),
+            RatifyStatus::RatifyErrBadArgument
+        );
+    }
+}
+
 macro_rules! cstr {
-    ($s:expr) => { CString::new($s).unwrap().as_ptr() };
+    ($s:expr) => {
+        CString::new($s).unwrap().as_ptr()
+    };
 }
 
 unsafe fn read_str(ptr: *mut c_char) -> String {
-    if ptr.is_null() { return String::new(); }
+    if ptr.is_null() {
+        return String::new();
+    }
     let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
     ratify_string_free(ptr);
     s
@@ -80,20 +388,46 @@ unsafe fn make_bundle() -> (
 
     let mut cert = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
-    ratify_delegation_issue(root, agent, cstr!("[\"meeting:attend\"]"), NOW, NOW + 3600, &mut cert, &mut err);
+    ratify_delegation_issue(
+        root,
+        agent,
+        cstr!("[\"meeting:attend\"]"),
+        NOW,
+        NOW + 3600,
+        &mut cert,
+        &mut err,
+    );
 
     let cert_json = ratify_c::ratify_delegation_cert_to_json(cert, &mut err);
     let mut challenge = [0u8; 32];
     ratify_challenge_generate(challenge.as_mut_ptr(), 32);
     let mut bundle = std::ptr::null_mut();
-    ratify_proof_bundle_create(agent, cert_json, challenge.as_ptr(), 32, NOW, &mut bundle, &mut err);
+    ratify_proof_bundle_create(
+        agent,
+        cert_json,
+        challenge.as_ptr(),
+        32,
+        NOW,
+        &mut bundle,
+        &mut err,
+    );
     ratify_string_free(cert_json);
 
     let bundle_json = ratify_c::ratify_proof_bundle_to_json(bundle, &mut err);
 
     let mut result = std::ptr::null_mut();
-    ratify_verify_bundle(bundle_json, cstr!("meeting:attend"), NOW, &mut result, &mut err);
-    assert_eq!(ratify_verify_result_is_valid(result), 1, "test setup: bundle must verify");
+    ratify_verify_bundle(
+        bundle_json,
+        cstr!("meeting:attend"),
+        NOW,
+        &mut result,
+        &mut err,
+    );
+    assert_eq!(
+        ratify_verify_result_is_valid(result),
+        1,
+        "test setup: bundle must verify"
+    );
 
     (root, agent, cert, bundle, bundle_json, result)
 }
@@ -122,10 +456,15 @@ unsafe fn make_token_and_turn(
     let mut tok = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
     let s = ratify_session_token_issue(
-        bundle, result, cstr!("sess-opts"),
-        NOW, NOW + 300,
-        SECRET.as_ptr(), SECRET.len(),
-        &mut tok, &mut err,
+        bundle,
+        result,
+        cstr!("sess-opts"),
+        NOW,
+        NOW + 300,
+        SECRET.as_ptr(),
+        SECRET.len(),
+        &mut tok,
+        &mut err,
     );
     assert_eq!(s, RatifyStatus::RatifyOk, "issue token: {}", read_str(err));
     let token_json = ratify_session_token_to_json(tok, &mut err);
@@ -140,8 +479,13 @@ unsafe fn make_token_and_turn(
         ratify_challenge_generate(turn_challenge.as_mut_ptr(), 32);
     } else {
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            turn_challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            turn_challenge.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "store issue: {}", read_str(err));
     }
@@ -150,7 +494,15 @@ unsafe fn make_token_and_turn(
     // pull its challenge_sig.
     let cert_json = ratify_c::ratify_delegation_cert_to_json(cert, &mut err);
     let mut turn_bundle = std::ptr::null_mut();
-    ratify_proof_bundle_create(agent, cert_json, turn_challenge.as_ptr(), 32, NOW, &mut turn_bundle, &mut err);
+    ratify_proof_bundle_create(
+        agent,
+        cert_json,
+        turn_challenge.as_ptr(),
+        32,
+        NOW,
+        &mut turn_bundle,
+        &mut err,
+    );
     ratify_string_free(cert_json);
     let turn_bundle_json = ratify_c::ratify_proof_bundle_to_json(turn_bundle, &mut err);
     ratify_c::ratify_proof_bundle_free(turn_bundle);
@@ -186,12 +538,16 @@ unsafe fn streamed_opts_call(
     let mut err = std::ptr::null_mut();
     let s = ratify_c::ratify_verify_streamed_turn_opts(
         token_json,
-        SECRET.as_ptr(), SECRET.len(),
-        challenge.as_ptr(), challenge.len(),
+        SECRET.as_ptr(),
+        SECRET.len(),
+        challenge.as_ptr(),
+        challenge.len(),
         NOW,
         sig_c.as_ptr(),
-        std::ptr::null(), 0, // presented session context: unbound
-        std::ptr::null(), 0, // presented stream id: unbound
+        std::ptr::null(),
+        0, // presented session context: unbound
+        std::ptr::null(),
+        0, // presented stream id: unbound
         0,
         &opts,
         store,
@@ -212,12 +568,22 @@ fn streamed_turn_opts_scope_allowed_and_denied() {
         let (root, agent, cert, token_json, challenge, sig_json) =
             make_token_and_turn(std::ptr::null_mut());
 
-        let (valid, _, reason) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), std::ptr::null());
+        let (valid, _, reason) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("meeting:attend"),
+            std::ptr::null(),
+        );
         assert!(valid, "granted scope must verify: {reason}");
 
-        let (valid, status, _) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("files:write"), std::ptr::null());
+        let (valid, status, _) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("files:write"),
+            std::ptr::null(),
+        );
         assert!(!valid);
         assert_eq!(status, "scope_denied");
 
@@ -234,13 +600,23 @@ fn streamed_turn_opts_single_use_replay_rejected() {
         let store = ratify_challenge_store_new(16);
         let (root, agent, cert, token_json, challenge, sig_json) = make_token_and_turn(store);
 
-        let (valid, _, reason) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        let (valid, _, reason) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("meeting:attend"),
+            store,
+        );
         assert!(valid, "first presentation must verify: {reason}");
 
         // Identical second presentation: single-use makes it a replay.
-        let (valid, status, reason) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        let (valid, status, reason) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("meeting:attend"),
+            store,
+        );
         assert!(!valid);
         assert_eq!(status, "invalid");
         assert!(reason.starts_with("unknown_challenge:"), "{reason}");
@@ -260,13 +636,23 @@ fn streamed_turn_opts_scope_denial_still_consumes() {
         let (root, agent, cert, token_json, challenge, sig_json) = make_token_and_turn(store);
 
         // Cryptographically valid but denied: the challenge is spent anyway.
-        let (valid, status, _) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("files:write"), store);
+        let (valid, status, _) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("files:write"),
+            store,
+        );
         assert!(!valid);
         assert_eq!(status, "scope_denied");
 
-        let (valid, status, reason) =
-            streamed_opts_call(token_json, &challenge, &sig_json, cstr!("meeting:attend"), store);
+        let (valid, status, reason) = streamed_opts_call(
+            token_json,
+            &challenge,
+            &sig_json,
+            cstr!("meeting:attend"),
+            store,
+        );
         assert!(!valid);
         assert_eq!(status, "invalid");
         assert!(reason.starts_with("unknown_challenge:"), "{reason}");
@@ -299,12 +685,16 @@ fn streamed_turn_opts_session_expectation_unmet() {
         let mut err = std::ptr::null_mut();
         let s = ratify_c::ratify_verify_streamed_turn_opts(
             token_json,
-            SECRET.as_ptr(), SECRET.len(),
-            challenge.as_ptr(), challenge.len(),
+            SECRET.as_ptr(),
+            SECRET.len(),
+            challenge.as_ptr(),
+            challenge.len(),
             NOW,
             sig_c.as_ptr(),
-            std::ptr::null(), 0,
-            std::ptr::null(), 0,
+            std::ptr::null(),
+            0,
+            std::ptr::null(),
+            0,
             0,
             &opts,
             std::ptr::null(),
@@ -336,23 +726,36 @@ fn session_token_issue_and_verify() {
         let mut tok = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         let s = ratify_session_token_issue(
-            bundle, result, cstr!("sess-001"),
-            NOW, NOW + 300,
-            SECRET.as_ptr(), SECRET.len(),
-            &mut tok, &mut err,
+            bundle,
+            result,
+            cstr!("sess-001"),
+            NOW,
+            NOW + 300,
+            SECRET.as_ptr(),
+            SECRET.len(),
+            &mut tok,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
         assert!(!tok.is_null());
 
         // Verify valid token
         let tok_json = ratify_session_token_to_json(tok, &mut err);
-        let vs = ratify_session_token_verify(tok_json, SECRET.as_ptr(), SECRET.len(), NOW, &mut err);
+        let vs =
+            ratify_session_token_verify(tok_json, SECRET.as_ptr(), SECRET.len(), NOW, &mut err);
         assert_eq!(vs, RatifyStatus::RatifyOk, "verify: {}", read_str(err));
 
         // Verify expired
-        let vs2 = ratify_session_token_verify(tok_json, SECRET.as_ptr(), SECRET.len(), NOW + 400, &mut err);
+        let vs2 = ratify_session_token_verify(
+            tok_json,
+            SECRET.as_ptr(),
+            SECRET.len(),
+            NOW + 400,
+            &mut err,
+        );
         assert_ne!(vs2, RatifyStatus::RatifyOk, "expired token must fail");
-        ratify_error_free(err); err = std::ptr::null_mut();
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
 
         // Verify wrong secret
         let vs3 = ratify_session_token_verify(tok_json, b"wrong".as_ptr(), 5, NOW, &mut err);
@@ -389,8 +792,15 @@ fn session_token_null_bundle_returns_error() {
         let mut tok = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         let s = ratify_session_token_issue(
-            std::ptr::null(), result, cstr!("sess"), NOW, NOW + 300,
-            SECRET.as_ptr(), SECRET.len(), &mut tok, &mut err,
+            std::ptr::null(),
+            result,
+            cstr!("sess"),
+            NOW,
+            NOW + 300,
+            SECRET.as_ptr(),
+            SECRET.len(),
+            &mut tok,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyErrNullPointer);
         ratify_error_free(err);
@@ -418,7 +828,16 @@ fn receipt_issue_verify_roundtrip() {
         let mut receipt = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         // Genesis receipt: prev_hash = NULL, len = 0
-        let s = ratify_receipt_issue(bundle, result, root, std::ptr::null(), 0, NOW, &mut receipt, &mut err);
+        let s = ratify_receipt_issue(
+            bundle,
+            result,
+            root,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut receipt,
+            &mut err,
+        );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
         assert!(!receipt.is_null());
 
@@ -435,8 +854,22 @@ fn receipt_issue_verify_roundtrip() {
 
         // Chain a second receipt using first's hash as prev_hash
         let mut receipt2 = std::ptr::null_mut();
-        let s2 = ratify_receipt_issue(bundle, result, root, h1.as_ptr(), 32, NOW + 1, &mut receipt2, &mut err);
-        assert_eq!(s2, RatifyStatus::RatifyOk, "chained receipt: {}", read_str(err));
+        let s2 = ratify_receipt_issue(
+            bundle,
+            result,
+            root,
+            h1.as_ptr(),
+            32,
+            NOW + 1,
+            &mut receipt2,
+            &mut err,
+        );
+        assert_eq!(
+            s2,
+            RatifyStatus::RatifyOk,
+            "chained receipt: {}",
+            read_str(err)
+        );
 
         // Round-trip from_json
         let mut receipt3 = std::ptr::null_mut();
@@ -467,7 +900,16 @@ fn receipt_from_json_rejects_malformed_wire() {
         let (root, agent, cert, bundle, bundle_json, result) = make_bundle();
         let mut err = std::ptr::null_mut();
         let mut receipt = std::ptr::null_mut();
-        let s = ratify_receipt_issue(bundle, result, root, std::ptr::null(), 0, NOW, &mut receipt, &mut err);
+        let s = ratify_receipt_issue(
+            bundle,
+            result,
+            root,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut receipt,
+            &mut err,
+        );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
         let rjson = ratify_receipt_to_json(receipt, &mut err);
         let valid = read_str(rjson); // frees rjson
@@ -477,21 +919,42 @@ fn receipt_from_json_rejects_malformed_wire() {
             let c = CString::new(valid.clone()).unwrap();
             let mut r = std::ptr::null_mut();
             let st = ratify_receipt_from_json(c.as_ptr(), &mut r, &mut err);
-            assert_eq!(st, RatifyStatus::RatifyOk, "valid receipt must decode: {}", read_str(err));
+            assert_eq!(
+                st,
+                RatifyStatus::RatifyOk,
+                "valid receipt must decode: {}",
+                read_str(err)
+            );
             ratify_receipt_free(r);
         }
 
         type Mut = (&'static str, fn(&mut serde_json::Value));
         let mutations: &[Mut] = &[
             ("wrong version", |v| v["version"] = serde_json::json!(2)),
-            ("empty verifier_id", |v| v["verifier_id"] = serde_json::json!("")),
-            ("unknown decision", |v| v["decision"] = serde_json::json!("approved")),
-            ("short bundle_hash", |v| v["bundle_hash"] = serde_json::json!("AAAA")),
-            ("short prev_hash", |v| v["prev_hash"] = serde_json::json!("AAAA")),
-            ("short verifier_pub.ed25519", |v| v["verifier_pub"]["ed25519"] = serde_json::json!("AAAA")),
-            ("short verifier_pub.ml_dsa_65", |v| v["verifier_pub"]["ml_dsa_65"] = serde_json::json!("AAAA")),
-            ("short signature.ed25519", |v| v["signature"]["ed25519"] = serde_json::json!("AAAA")),
-            ("short signature.ml_dsa_65", |v| v["signature"]["ml_dsa_65"] = serde_json::json!("AAAA")),
+            ("empty verifier_id", |v| {
+                v["verifier_id"] = serde_json::json!("")
+            }),
+            ("unknown decision", |v| {
+                v["decision"] = serde_json::json!("approved")
+            }),
+            ("short bundle_hash", |v| {
+                v["bundle_hash"] = serde_json::json!("AAAA")
+            }),
+            ("short prev_hash", |v| {
+                v["prev_hash"] = serde_json::json!("AAAA")
+            }),
+            ("short verifier_pub.ed25519", |v| {
+                v["verifier_pub"]["ed25519"] = serde_json::json!("AAAA")
+            }),
+            ("short verifier_pub.ml_dsa_65", |v| {
+                v["verifier_pub"]["ml_dsa_65"] = serde_json::json!("AAAA")
+            }),
+            ("short signature.ed25519", |v| {
+                v["signature"]["ed25519"] = serde_json::json!("AAAA")
+            }),
+            ("short signature.ml_dsa_65", |v| {
+                v["signature"]["ml_dsa_65"] = serde_json::json!("AAAA")
+            }),
         ];
         for (name, mutate) in mutations {
             let mut v: serde_json::Value = serde_json::from_str(&valid).unwrap();
@@ -500,9 +963,15 @@ fn receipt_from_json_rejects_malformed_wire() {
             let mut r = std::ptr::null_mut();
             let mut e = std::ptr::null_mut();
             let st = ratify_receipt_from_json(doc.as_ptr(), &mut r, &mut e);
-            assert_ne!(st, RatifyStatus::RatifyOk, "from_json accepted malformed receipt: {name}");
+            assert_ne!(
+                st,
+                RatifyStatus::RatifyOk,
+                "from_json accepted malformed receipt: {name}"
+            );
             assert!(r.is_null(), "receipt handle must stay null for: {name}");
-            if !e.is_null() { ratify_error_free(e); }
+            if !e.is_null() {
+                ratify_error_free(e);
+            }
         }
 
         ratify_receipt_free(receipt);
@@ -522,11 +991,17 @@ fn bundle_hash_and_chain_hash_are_32_bytes() {
         let mut h = [0u8; 32];
         let mut err = std::ptr::null_mut();
 
-        assert_eq!(ratify_bundle_hash(bundle, h.as_mut_ptr(), &mut err), RatifyStatus::RatifyOk);
+        assert_eq!(
+            ratify_bundle_hash(bundle, h.as_mut_ptr(), &mut err),
+            RatifyStatus::RatifyOk
+        );
         assert_ne!(h, [0u8; 32]);
 
         let mut ch = [0u8; 32];
-        assert_eq!(ratify_chain_hash(bundle, ch.as_mut_ptr(), &mut err), RatifyStatus::RatifyOk);
+        assert_eq!(
+            ratify_chain_hash(bundle, ch.as_mut_ptr(), &mut err),
+            RatifyStatus::RatifyOk
+        );
         assert_ne!(ch, [0u8; 32]);
 
         ratify_verify_result_free(result);
@@ -559,8 +1034,15 @@ fn revocation_list_issue_verify_contains() {
 
         // Check contains
         let root_id_c = CString::new(root_id.clone()).unwrap();
-        assert_eq!(ratify_revocation_list_contains(list, root_id_c.as_ptr()), 1, "must contain revoked cert");
-        assert_eq!(ratify_revocation_list_contains(list, cstr!("not-in-list")), 0);
+        assert_eq!(
+            ratify_revocation_list_contains(list, root_id_c.as_ptr()),
+            1,
+            "must contain revoked cert"
+        );
+        assert_eq!(
+            ratify_revocation_list_contains(list, cstr!("not-in-list")),
+            0
+        );
 
         // Serialise and verify signature
         let lj = ratify_revocation_list_to_json(list, &mut err);
@@ -595,7 +1077,14 @@ fn revocation_push_issue_verify_roundtrip() {
 
         let mut push = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
-        let s = ratify_revocation_push_issue(root, cstr!("[\"abc-cert-001\"]"), 1, NOW, &mut push, &mut err);
+        let s = ratify_revocation_push_issue(
+            root,
+            cstr!("[\"abc-cert-001\"]"),
+            1,
+            NOW,
+            &mut push,
+            &mut err,
+        );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
 
         let pj = ratify_revocation_push_to_json(push, &mut err);
@@ -628,8 +1117,22 @@ fn witness_entry_issue_verify_chain() {
 
         // Genesis entry
         let mut entry1 = std::ptr::null_mut();
-        let s = ratify_witness_entry_issue(root, data.as_ptr(), data.len(), NOW, std::ptr::null(), 0, &mut entry1, &mut err);
-        assert_eq!(s, RatifyStatus::RatifyOk, "issue genesis: {}", read_str(err));
+        let s = ratify_witness_entry_issue(
+            root,
+            data.as_ptr(),
+            data.len(),
+            NOW,
+            std::ptr::null(),
+            0,
+            &mut entry1,
+            &mut err,
+        );
+        assert_eq!(
+            s,
+            RatifyStatus::RatifyOk,
+            "issue genesis: {}",
+            read_str(err)
+        );
 
         let ej = ratify_witness_entry_to_json(entry1, &mut err);
         let root_pub = ratify_human_root_pub_key_json(root, &mut err);
@@ -664,7 +1167,14 @@ fn key_rotation_issue_verify_roundtrip() {
         let mut stmt = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         // Valid reasons: "routine" | "compromise_suspected" | "device_lost" | "recovery" | "other"
-        let s = ratify_key_rotation_issue(old_root, new_root, cstr!("routine"), NOW, &mut stmt, &mut err);
+        let s = ratify_key_rotation_issue(
+            old_root,
+            new_root,
+            cstr!("routine"),
+            NOW,
+            &mut stmt,
+            &mut err,
+        );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
 
         let sj = ratify_key_rotation_to_json(stmt, &mut err);
@@ -691,7 +1201,14 @@ fn key_rotation_null_old_root_returns_error() {
         ratify_human_root_generate(&mut new_root);
         let mut stmt = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
-        let s = ratify_key_rotation_issue(std::ptr::null(), new_root, cstr!("reason"), NOW, &mut stmt, &mut err);
+        let s = ratify_key_rotation_issue(
+            std::ptr::null(),
+            new_root,
+            cstr!("reason"),
+            NOW,
+            &mut stmt,
+            &mut err,
+        );
         assert_eq!(s, RatifyStatus::RatifyErrNullPointer);
         ratify_error_free(err);
         ratify_human_root_free(new_root);
@@ -705,10 +1222,25 @@ fn key_rotation_null_old_root_returns_error() {
 #[test]
 fn scope_has_present_and_absent() {
     unsafe {
-        assert_eq!(ratify_scope_has(cstr!("[\"meeting:attend\",\"meeting:speak\"]"), cstr!("meeting:attend")), 1);
-        assert_eq!(ratify_scope_has(cstr!("[\"meeting:attend\"]"), cstr!("meeting:record")), 0);
-        assert_eq!(ratify_scope_has(std::ptr::null(), cstr!("meeting:attend")), 0);
-        assert_eq!(ratify_scope_has(cstr!("[\"meeting:attend\"]"), std::ptr::null()), 0);
+        assert_eq!(
+            ratify_scope_has(
+                cstr!("[\"meeting:attend\",\"meeting:speak\"]"),
+                cstr!("meeting:attend")
+            ),
+            1
+        );
+        assert_eq!(
+            ratify_scope_has(cstr!("[\"meeting:attend\"]"), cstr!("meeting:record")),
+            0
+        );
+        assert_eq!(
+            ratify_scope_has(std::ptr::null(), cstr!("meeting:attend")),
+            0
+        );
+        assert_eq!(
+            ratify_scope_has(cstr!("[\"meeting:attend\"]"), std::ptr::null()),
+            0
+        );
     }
 }
 
@@ -716,15 +1248,43 @@ fn scope_has_present_and_absent() {
 fn scope_is_sensitive() {
     unsafe {
         // Sensitive scopes per SPEC §9.1
-        assert_eq!(ratify_scope_is_sensitive(cstr!("physical:actuate")), 1, "physical:actuate is sensitive");
-        assert_eq!(ratify_scope_is_sensitive(cstr!("drone:fly")), 1, "drone:fly is sensitive");
-        assert_eq!(ratify_scope_is_sensitive(cstr!("payments:authorize")), 1, "payments:authorize is sensitive");
-        assert_eq!(ratify_scope_is_sensitive(cstr!("execute:code")), 1, "execute:code is sensitive");
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("physical:actuate")),
+            1,
+            "physical:actuate is sensitive"
+        );
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("drone:fly")),
+            1,
+            "drone:fly is sensitive"
+        );
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("payments:authorize")),
+            1,
+            "payments:authorize is sensitive"
+        );
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("execute:code")),
+            1,
+            "execute:code is sensitive"
+        );
         // Non-sensitive scopes
-        assert_eq!(ratify_scope_is_sensitive(cstr!("meeting:attend")), 0, "meeting:attend is not sensitive");
-        assert_eq!(ratify_scope_is_sensitive(cstr!("robot:operate")), 0, "robot:operate is not sensitive");
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("meeting:attend")),
+            0,
+            "meeting:attend is not sensitive"
+        );
+        assert_eq!(
+            ratify_scope_is_sensitive(cstr!("robot:operate")),
+            0,
+            "robot:operate is not sensitive"
+        );
         // NULL safety
-        assert_eq!(ratify_scope_is_sensitive(std::ptr::null()), 0, "null must return 0");
+        assert_eq!(
+            ratify_scope_is_sensitive(std::ptr::null()),
+            0,
+            "null must return 0"
+        );
     }
 }
 
@@ -782,12 +1342,19 @@ fn scopes_intersect_basic() {
         let ptrs = [a.as_ptr(), b.as_ptr()];
         let mut err = std::ptr::null_mut();
         let result = ratify_scopes_intersect(ptrs.as_ptr(), 2, &mut err);
-        assert!(!result.is_null(), "intersect returned null: {}", read_str(err));
+        assert!(
+            !result.is_null(),
+            "intersect returned null: {}",
+            read_str(err)
+        );
         let s = read_str(result);
         let parsed: Vec<String> = serde_json::from_str(&s).unwrap();
         assert!(parsed.contains(&"meeting:attend".to_string()));
         assert!(parsed.contains(&"meeting:speak".to_string()));
-        assert!(!parsed.contains(&"meeting:record".to_string()), "record must be excluded");
+        assert!(
+            !parsed.contains(&"meeting:record".to_string()),
+            "record must be excluded"
+        );
     }
 }
 
@@ -799,54 +1366,83 @@ fn scopes_intersect_basic() {
 fn policy_verdict_issue_verify_roundtrip() {
     unsafe {
         let ctx = RatifyVerifierContext {
-            current_lat: 0.0, current_lon: 0.0, current_alt_m: 0.0, has_location: 0,
-            current_speed_mps: 0.0, has_speed: 0,
-            requested_amount: 0.0, requested_currency: std::ptr::null(), has_amount: 0,
-            rate_fn: None, rate_userdata: std::ptr::null_mut(),
+            current_lat: 0.0,
+            current_lon: 0.0,
+            current_alt_m: 0.0,
+            has_location: 0,
+            current_speed_mps: 0.0,
+            has_speed: 0,
+            requested_amount: 0.0,
+            requested_currency: std::ptr::null(),
+            has_amount: 0,
+            rate_fn: None,
+            rate_userdata: std::ptr::null_mut(),
         };
         let mut ctx_hash = [0u8; 32];
         let mut err = std::ptr::null_mut();
-        assert_eq!(ratify_verifier_context_hash(&ctx, ctx_hash.as_mut_ptr(), &mut err), RatifyStatus::RatifyOk);
+        assert_eq!(
+            ratify_verifier_context_hash(&ctx, ctx_hash.as_mut_ptr(), &mut err),
+            RatifyStatus::RatifyOk
+        );
 
         let mut verdict = std::ptr::null_mut();
         let s = ratify_policy_verdict_issue(
-            cstr!("verdict-001"), cstr!("agent-abc"), cstr!("meeting:attend"),
+            cstr!("verdict-001"),
+            cstr!("agent-abc"),
+            cstr!("meeting:attend"),
             1, // allow
-            ctx_hash.as_ptr(), 32,
-            NOW, NOW + 60,
-            SECRET32.as_ptr(), SECRET32.len(),
-            &mut verdict, &mut err,
+            ctx_hash.as_ptr(),
+            32,
+            NOW,
+            NOW + 60,
+            SECRET32.as_ptr(),
+            SECRET32.len(),
+            &mut verdict,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
 
         let vj = ratify_policy_verdict_to_json(verdict, &mut err);
         let vs = ratify_policy_verdict_verify(
             vj,
-            SECRET32.as_ptr(), SECRET32.len(),
-            cstr!("agent-abc"), cstr!("meeting:attend"),
-            ctx_hash.as_ptr(), 32,
-            NOW, &mut err,
+            SECRET32.as_ptr(),
+            SECRET32.len(),
+            cstr!("agent-abc"),
+            cstr!("meeting:attend"),
+            ctx_hash.as_ptr(),
+            32,
+            NOW,
+            &mut err,
         );
         assert_eq!(vs, RatifyStatus::RatifyOk, "verify: {}", read_str(err));
 
         // Wrong agent: must fail
         let vs2 = ratify_policy_verdict_verify(
             vj,
-            SECRET32.as_ptr(), SECRET32.len(),
-            cstr!("wrong-agent"), cstr!("meeting:attend"),
-            ctx_hash.as_ptr(), 32,
-            NOW, &mut err,
+            SECRET32.as_ptr(),
+            SECRET32.len(),
+            cstr!("wrong-agent"),
+            cstr!("meeting:attend"),
+            ctx_hash.as_ptr(),
+            32,
+            NOW,
+            &mut err,
         );
         assert_ne!(vs2, RatifyStatus::RatifyOk, "wrong agent must fail");
-        ratify_error_free(err); err = std::ptr::null_mut();
+        ratify_error_free(err);
+        err = std::ptr::null_mut();
 
         // Expired: must fail
         let vs3 = ratify_policy_verdict_verify(
             vj,
-            SECRET32.as_ptr(), SECRET32.len(),
-            cstr!("agent-abc"), cstr!("meeting:attend"),
-            ctx_hash.as_ptr(), 32,
-            NOW + 120, &mut err,
+            SECRET32.as_ptr(),
+            SECRET32.len(),
+            cstr!("agent-abc"),
+            cstr!("meeting:attend"),
+            ctx_hash.as_ptr(),
+            32,
+            NOW + 120,
+            &mut err,
         );
         assert_ne!(vs3, RatifyStatus::RatifyOk, "expired verdict must fail");
         ratify_error_free(err);
@@ -931,7 +1527,10 @@ fn transaction_receipt_sign_and_verify() {
 
         // Sign as the party
         let sig_json_ptr = ratify_transaction_receipt_sign_party(
-            receipt_json_c.as_ptr(), CString::new(agent2_id.clone()).unwrap().as_ptr(), agent2, &mut err,
+            receipt_json_c.as_ptr(),
+            CString::new(agent2_id.clone()).unwrap().as_ptr(),
+            agent2,
+            &mut err,
         );
         // sig_json_ptr might be null if signing fails due to the skeleton receipt; that's OK for this test
         // — we just verify the function doesn't crash and handles nulls safely
@@ -988,12 +1587,28 @@ fn base64_encode(input: &[u8]) -> String {
     let mut i = 0;
     while i < input.len() {
         let b0 = input[i] as usize;
-        let b1 = if i + 1 < input.len() { input[i+1] as usize } else { 0 };
-        let b2 = if i + 2 < input.len() { input[i+2] as usize } else { 0 };
+        let b1 = if i + 1 < input.len() {
+            input[i + 1] as usize
+        } else {
+            0
+        };
+        let b2 = if i + 2 < input.len() {
+            input[i + 2] as usize
+        } else {
+            0
+        };
         out.push(TABLE[b0 >> 2] as char);
         out.push(TABLE[((b0 & 3) << 4) | (b1 >> 4)] as char);
-        out.push(if i + 1 < input.len() { TABLE[((b1 & 0xf) << 2) | (b2 >> 6)] as char } else { '=' });
-        out.push(if i + 2 < input.len() { TABLE[b2 & 0x3f] as char } else { '=' });
+        out.push(if i + 1 < input.len() {
+            TABLE[((b1 & 0xf) << 2) | (b2 >> 6)] as char
+        } else {
+            '='
+        });
+        out.push(if i + 2 < input.len() {
+            TABLE[b2 & 0x3f] as char
+        } else {
+            '='
+        });
         i += 3;
     }
     out
@@ -1017,35 +1632,67 @@ fn challenge_store_semantics() {
         let mut err = std::ptr::null_mut();
 
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            challenge.as_mut_ptr(), &mut expires_at, &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            challenge.as_mut_ptr(),
+            &mut expires_at,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
         assert!(expires_at > NOW, "expiry must be after the test clock");
 
         // Peek does not consume.
         let s = ratify_challenge_store_check(
-            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err,
+            store,
+            challenge.as_ptr(),
+            32,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk);
 
         // Wrong session context fails without consuming.
         let ctx = [7u8; 32];
         let s = ratify_challenge_store_consume(
-            store, challenge.as_ptr(), 32, ctx.as_ptr(), 32, NOW, &mut err,
+            store,
+            challenge.as_ptr(),
+            32,
+            ctx.as_ptr(),
+            32,
+            NOW,
+            &mut err,
         );
         assert_ne!(s, RatifyStatus::RatifyOk, "wrong context must fail");
         let reason = read_str(err);
-        assert!(reason.contains("was not issued by this verifier"), "{reason}");
+        assert!(
+            reason.contains("was not issued by this verifier"),
+            "{reason}"
+        );
 
         // First consume succeeds; the second fails.
         let mut err2 = std::ptr::null_mut();
         let s = ratify_challenge_store_consume(
-            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err2,
+            store,
+            challenge.as_ptr(),
+            32,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut err2,
         );
         assert_eq!(s, RatifyStatus::RatifyOk);
         let s = ratify_challenge_store_consume(
-            store, challenge.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err2,
+            store,
+            challenge.as_ptr(),
+            32,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut err2,
         );
         assert_ne!(s, RatifyStatus::RatifyOk, "double consume must fail");
         ratify_error_free(err2);
@@ -1065,31 +1712,57 @@ fn challenge_store_consume_frees_capacity() {
         let mut err = std::ptr::null_mut();
 
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            first.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            first.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue 1: {}", read_str(err));
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            scratch.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "issue 2: {}", read_str(err));
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            scratch.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_ne!(s, RatifyStatus::RatifyOk, "issue at capacity must fail");
         ratify_error_free(err);
         err = std::ptr::null_mut();
 
         let s = ratify_challenge_store_consume(
-            store, first.as_ptr(), 32, std::ptr::null(), 0, NOW, &mut err,
+            store,
+            first.as_ptr(),
+            32,
+            std::ptr::null(),
+            0,
+            NOW,
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "consume: {}", read_str(err));
 
         let s = ratify_challenge_store_issue(
-            store, std::ptr::null(), 0, STORE_TTL,
-            scratch.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            std::ptr::null(),
+            0,
+            STORE_TTL,
+            scratch.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(
             s,
@@ -1118,8 +1791,13 @@ fn challenge_store_issue_validates_inputs() {
         // Session context must be empty or exactly 32 bytes.
         let short_ctx = [7u8; 5];
         let s = ratify_challenge_store_issue(
-            store, short_ctx.as_ptr(), 5, STORE_TTL,
-            challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            short_ctx.as_ptr(),
+            5,
+            STORE_TTL,
+            challenge.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyErrBadArgument);
         ratify_error_free(err);
@@ -1128,8 +1806,13 @@ fn challenge_store_issue_validates_inputs() {
         // TTL must be positive.
         for ttl in [0i64, -60] {
             let s = ratify_challenge_store_issue(
-                store, std::ptr::null(), 0, ttl,
-                challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+                store,
+                std::ptr::null(),
+                0,
+                ttl,
+                challenge.as_mut_ptr(),
+                std::ptr::null_mut(),
+                &mut err,
             );
             assert_eq!(s, RatifyStatus::RatifyErrBadArgument, "ttl {ttl} must fail");
             ratify_error_free(err);
@@ -1139,8 +1822,13 @@ fn challenge_store_issue_validates_inputs() {
         // A 32-byte session context is valid.
         let ctx = [7u8; 32];
         let s = ratify_challenge_store_issue(
-            store, ctx.as_ptr(), 32, STORE_TTL,
-            challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+            store,
+            ctx.as_ptr(),
+            32,
+            STORE_TTL,
+            challenge.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
 
@@ -1162,19 +1850,40 @@ unsafe fn make_bundle_with_store() -> (
 
     let mut cert = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
-    ratify_delegation_issue(root, agent, cstr!("[\"meeting:attend\"]"), NOW, NOW + 3600, &mut cert, &mut err);
+    ratify_delegation_issue(
+        root,
+        agent,
+        cstr!("[\"meeting:attend\"]"),
+        NOW,
+        NOW + 3600,
+        &mut cert,
+        &mut err,
+    );
 
     let store = ratify_challenge_store_new(16);
     let mut challenge = [0u8; 32];
     let s = ratify_challenge_store_issue(
-        store, std::ptr::null(), 0, STORE_TTL,
-        challenge.as_mut_ptr(), std::ptr::null_mut(), &mut err,
+        store,
+        std::ptr::null(),
+        0,
+        STORE_TTL,
+        challenge.as_mut_ptr(),
+        std::ptr::null_mut(),
+        &mut err,
     );
     assert_eq!(s, RatifyStatus::RatifyOk, "issue: {}", read_str(err));
 
     let cert_json = ratify_c::ratify_delegation_cert_to_json(cert, &mut err);
     let mut bundle = std::ptr::null_mut();
-    ratify_proof_bundle_create(agent, cert_json, challenge.as_ptr(), 32, NOW, &mut bundle, &mut err);
+    ratify_proof_bundle_create(
+        agent,
+        cert_json,
+        challenge.as_ptr(),
+        32,
+        NOW,
+        &mut bundle,
+        &mut err,
+    );
     ratify_string_free(cert_json);
     let bundle_json = ratify_c::ratify_proof_bundle_to_json(bundle, &mut err);
     ratify_c::ratify_proof_bundle_free(bundle);
@@ -1200,9 +1909,18 @@ unsafe fn verify_with_store(
     let mut result = std::ptr::null_mut();
     let mut err = std::ptr::null_mut();
     let s = ratify_c::ratify_verify_bundle_opts_with_challenge_store(
-        bundle_json, &opts, store, &mut result, &mut err,
+        bundle_json,
+        &opts,
+        store,
+        &mut result,
+        &mut err,
     );
-    assert_eq!(s, RatifyStatus::RatifyOk, "verify status: {}", read_str(err));
+    assert_eq!(
+        s,
+        RatifyStatus::RatifyOk,
+        "verify status: {}",
+        read_str(err)
+    );
     let valid = ratify_verify_result_is_valid(result) == 1;
     let status = read_str(ratify_c::ratify_verify_result_identity_status(result));
     let reason = read_str(ratify_c::ratify_verify_result_error_reason(result));
@@ -1219,7 +1937,8 @@ fn verify_with_challenge_store_replay_is_rejected() {
         assert!(valid, "first presentation must verify: {reason}");
 
         // Identical second presentation: single-use makes it a replay.
-        let (valid, status, reason) = verify_with_store(bundle_json, cstr!("meeting:attend"), store);
+        let (valid, status, reason) =
+            verify_with_store(bundle_json, cstr!("meeting:attend"), store);
         assert!(!valid);
         assert_eq!(status, "invalid");
         assert!(reason.starts_with("unknown_challenge:"), "{reason}");
@@ -1243,7 +1962,8 @@ fn verify_with_challenge_store_scope_denied_still_consumes() {
         assert_eq!(status, "scope_denied");
 
         // Retrying with the correct scope fails: the challenge is gone.
-        let (valid, status, reason) = verify_with_store(bundle_json, cstr!("meeting:attend"), store);
+        let (valid, status, reason) =
+            verify_with_store(bundle_json, cstr!("meeting:attend"), store);
         assert!(!valid);
         assert_eq!(status, "invalid");
         assert!(reason.starts_with("unknown_challenge:"), "{reason}");
@@ -1273,6 +1993,20 @@ fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+fn from_hex(value: &str) -> Vec<u8> {
+    value
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let hi = (pair[0] as char).to_digit(16).expect("valid hex") as u8;
+            let lo = (pair[1] as char).to_digit(16).expect("valid hex") as u8;
+            (hi << 4) | lo
+        })
+        .collect()
+}
+
 #[test]
 fn operation_context_known_answers() {
     unsafe {
@@ -1281,9 +2015,14 @@ fn operation_context_known_answers() {
         // All-NULL operation context.
         let mut empty_hash = [0u8; 32];
         let s = ratify_c::ratify_operation_context_hash(
-            std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
-            std::ptr::null(), 0,
-            empty_hash.as_mut_ptr(), &mut err,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+            empty_hash.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
         assert_eq!(to_hex(&empty_hash), KAT_EMPTY_OPERATION_HASH);
@@ -1292,10 +2031,14 @@ fn operation_context_known_answers() {
         let digest = [0xABu8; 32];
         let mut full_hash = [0u8; 32];
         let s = ratify_c::ratify_operation_context_hash(
-            cstr!("files:write"), cstr!("git.push"),
-            cstr!("git:github.com/acme/api"), cstr!("/src/handlers"),
-            digest.as_ptr(), 32,
-            full_hash.as_mut_ptr(), &mut err,
+            cstr!("files:write"),
+            cstr!("git.push"),
+            cstr!("git:github.com/acme/api"),
+            cstr!("/src/handlers"),
+            digest.as_ptr(),
+            32,
+            full_hash.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
         assert_eq!(to_hex(&full_hash), KAT_FULL_OPERATION_HASH);
@@ -1303,10 +2046,15 @@ fn operation_context_known_answers() {
         // Session context over the full operation hash.
         let mut session = [0u8; 32];
         let s = ratify_c::ratify_session_context_build(
-            cstr!("verifier-1"), cstr!("ws-42"), cstr!("agent-7"),
-            cstr!("sess-9"), cstr!("inv-3"),
-            full_hash.as_ptr(), 32,
-            session.as_mut_ptr(), &mut err,
+            cstr!("verifier-1"),
+            cstr!("ws-42"),
+            cstr!("agent-7"),
+            cstr!("sess-9"),
+            cstr!("inv-3"),
+            full_hash.as_ptr(),
+            32,
+            session.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyOk, "{}", read_str(err));
         assert_eq!(to_hex(&session), KAT_SESSION_CONTEXT);
@@ -1322,9 +2070,14 @@ fn operation_context_input_validation() {
         // 5-byte payload digest is rejected.
         let bad = [0u8; 5];
         let s = ratify_c::ratify_operation_context_hash(
-            std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
-            bad.as_ptr(), 5,
-            out.as_mut_ptr(), &mut err,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            bad.as_ptr(),
+            5,
+            out.as_mut_ptr(),
+            &mut err,
         );
         assert_ne!(s, RatifyStatus::RatifyOk, "5-byte digest must fail");
         ratify_error_free(err);
@@ -1333,10 +2086,15 @@ fn operation_context_input_validation() {
         // 16-byte request hash is rejected.
         let short = [0u8; 16];
         let s = ratify_c::ratify_session_context_build(
-            std::ptr::null(), std::ptr::null(), std::ptr::null(),
-            std::ptr::null(), std::ptr::null(),
-            short.as_ptr(), 16,
-            out.as_mut_ptr(), &mut err,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            short.as_ptr(),
+            16,
+            out.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyErrBadArgument);
         ratify_error_free(err);
@@ -1352,9 +2110,14 @@ fn operation_context_rejects_invalid_utf8() {
         let mut out = [0u8; 32];
         let bad = CString::new(vec![0xffu8, 0xfe]).unwrap();
         let s = ratify_c::ratify_operation_context_hash(
-            bad.as_ptr(), std::ptr::null(), std::ptr::null(), std::ptr::null(),
-            std::ptr::null(), 0,
-            out.as_mut_ptr(), &mut err,
+            bad.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+            out.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyErrEncoding);
         ratify_error_free(err);
@@ -1362,12 +2125,332 @@ fn operation_context_rejects_invalid_utf8() {
 
         let valid_hash = [0x11u8; 32];
         let s = ratify_c::ratify_session_context_build(
-            bad.as_ptr(), std::ptr::null(), std::ptr::null(),
-            std::ptr::null(), std::ptr::null(),
-            valid_hash.as_ptr(), 32,
-            out.as_mut_ptr(), &mut err,
+            bad.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            valid_hash.as_ptr(),
+            32,
+            out.as_mut_ptr(),
+            &mut err,
         );
         assert_eq!(s, RatifyStatus::RatifyErrEncoding);
         ratify_error_free(err);
+    }
+}
+
+#[test]
+fn v2_operation_and_session_context_match_shared_vector() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../testvectors/v2/operation-session-context.json"
+    ))
+    .unwrap();
+    unsafe {
+        let operation = &fixture["verify_api_operation_input"];
+        let mut err = std::ptr::null_mut();
+        let mut request_hash = [0u8; 32];
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            cstr!(operation["required_scope"].as_str().unwrap()),
+            cstr!(operation["operation"].as_str().unwrap()),
+            cstr!(operation["resource_id"].as_str().unwrap()),
+            cstr!(operation["requested_path"].as_str().unwrap()),
+            cstr!(operation["payload_digest"].as_str().unwrap()),
+            request_hash.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(
+            to_hex(&request_hash),
+            fixture["expected_verify_api_request_hash_hex"]
+                .as_str()
+                .unwrap()
+        );
+
+        for scope in fixture["invalid_required_scopes"].as_array().unwrap() {
+            err = std::ptr::null_mut();
+            let status = ratify_c::ratify_operation_context_v2_hash(
+                cstr!(scope.as_str().unwrap()),
+                cstr!("records.get"),
+                cstr!("customer/123"),
+                cstr!("/v1/customers/123"),
+                std::ptr::null(),
+                request_hash.as_mut_ptr(),
+                &mut err,
+            );
+            assert_eq!(
+                status,
+                RatifyStatus::RatifyErrBadArgument,
+                "scope {scope}: {}",
+                read_str(err)
+            );
+        }
+
+        let input = &fixture["input"];
+        let request_hash = from_hex(input["request_hash_hex"].as_str().unwrap());
+        let mut session_context = [0u8; 32];
+        let status = ratify_c::ratify_session_context_v2_build(
+            cstr!(input["verifier_id"].as_str().unwrap()),
+            cstr!(input["workspace_id"].as_str().unwrap()),
+            cstr!(input["agent_id"].as_str().unwrap()),
+            cstr!(input["session_id"].as_str().unwrap()),
+            cstr!(input["invocation_id"].as_str().unwrap()),
+            request_hash.as_ptr(),
+            request_hash.len(),
+            session_context.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(
+            to_hex(&session_context),
+            fixture["expected_session_context_hex"].as_str().unwrap()
+        );
+
+        for case in fixture["verify_api_payload_digest_decode_cases"]
+            .as_array()
+            .unwrap()
+        {
+            err = std::ptr::null_mut();
+            let encoded = case["encoded"]
+                .as_str()
+                .map(CString::new)
+                .transpose()
+                .unwrap();
+            let digest_ptr = encoded
+                .as_ref()
+                .map_or(std::ptr::null(), |text| text.as_ptr());
+            let mut actual = [0u8; 32];
+            let status = ratify_c::ratify_operation_context_v2_hash(
+                cstr!(operation["required_scope"].as_str().unwrap()),
+                cstr!(operation["operation"].as_str().unwrap()),
+                cstr!(operation["resource_id"].as_str().unwrap()),
+                cstr!(operation["requested_path"].as_str().unwrap()),
+                digest_ptr,
+                actual.as_mut_ptr(),
+                &mut err,
+            );
+            let valid = case["valid"].as_bool().unwrap();
+            assert_eq!(
+                status,
+                if valid {
+                    RatifyStatus::RatifyOk
+                } else {
+                    RatifyStatus::RatifyErrBadArgument
+                },
+                "case {}",
+                case["name"]
+            );
+            if valid && case["name"] == "canonical" {
+                assert_eq!(
+                    to_hex(&actual),
+                    fixture["expected_verify_api_request_hash_hex"]
+                        .as_str()
+                        .unwrap()
+                );
+            }
+            if !valid {
+                assert!(
+                    !read_str(err).is_empty(),
+                    "case {} must return an error",
+                    case["name"]
+                );
+            }
+        }
+
+        err = std::ptr::null_mut();
+        let empty_operation = &fixture["empty_payload_operation_input"];
+        let mut empty_request_hash = [0u8; 32];
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            cstr!(empty_operation["required_scope"].as_str().unwrap()),
+            cstr!(empty_operation["operation"].as_str().unwrap()),
+            cstr!(empty_operation["resource_id"].as_str().unwrap()),
+            cstr!(empty_operation["requested_path"].as_str().unwrap()),
+            std::ptr::null(),
+            empty_request_hash.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(
+            to_hex(&empty_request_hash),
+            fixture["expected_empty_request_hash_hex"].as_str().unwrap()
+        );
+
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_session_context_v2_build(
+            cstr!(input["verifier_id"].as_str().unwrap()),
+            cstr!(input["workspace_id"].as_str().unwrap()),
+            cstr!(input["agent_id"].as_str().unwrap()),
+            cstr!(input["session_id"].as_str().unwrap()),
+            cstr!(input["invocation_id"].as_str().unwrap()),
+            empty_request_hash.as_ptr(),
+            empty_request_hash.len(),
+            session_context.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyOk, "{}", read_str(err));
+        assert_eq!(
+            to_hex(&session_context),
+            fixture["expected_empty_session_context_hex"]
+                .as_str()
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn v2_operation_context_rejects_null_scope_and_noncanonical_payload_digest_text() {
+    unsafe {
+        let mut err = std::ptr::null_mut();
+        let mut out = [0u8; 32];
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            out.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrBadArgument);
+        assert!(read_str(err).contains("required scope"));
+
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            cstr!("data:read"),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            cstr!("sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+            out.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrBadArgument);
+        assert!(!read_str(err).is_empty());
+    }
+}
+
+#[test]
+fn v2_session_context_rejects_null_required_id_and_wrong_request_hash_length() {
+    unsafe {
+        let mut err: *mut c_char;
+        let mut out = [0u8; 32];
+        let request_hash = [0x11u8; 32];
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrNullPointer);
+        assert!(!read_str(err).is_empty());
+        let verifier =
+            CString::new("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+                .unwrap();
+        let workspace = CString::new("00000000-0000-4000-8000-000000000001").unwrap();
+        let agent =
+            CString::new("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+                .unwrap();
+        for (verifier, workspace, agent) in [
+            (std::ptr::null(), workspace.as_ptr(), agent.as_ptr()),
+            (verifier.as_ptr(), std::ptr::null(), agent.as_ptr()),
+            (verifier.as_ptr(), workspace.as_ptr(), std::ptr::null()),
+        ] {
+            err = std::ptr::null_mut();
+            let status = ratify_c::ratify_session_context_v2_build(
+                verifier,
+                workspace,
+                agent,
+                std::ptr::null(),
+                std::ptr::null(),
+                request_hash.as_ptr(),
+                32,
+                out.as_mut_ptr(),
+                &mut err,
+            );
+            assert_eq!(status, RatifyStatus::RatifyErrNullPointer);
+            assert!(!read_str(err).is_empty());
+        }
+        for len in [0, 31, 33] {
+            err = std::ptr::null_mut();
+            let ptr = if len == 0 {
+                std::ptr::null()
+            } else {
+                request_hash.as_ptr()
+            };
+            let status = ratify_c::ratify_session_context_v2_build(
+                verifier.as_ptr(),
+                workspace.as_ptr(),
+                agent.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                ptr,
+                len,
+                out.as_mut_ptr(),
+                &mut err,
+            );
+            assert_eq!(status, RatifyStatus::RatifyErrBadArgument);
+            assert!(!read_str(err).is_empty());
+        }
+
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_session_context_v2_build(
+            cstr!("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"),
+            workspace.as_ptr(),
+            agent.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            request_hash.as_ptr(),
+            32,
+            out.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrBadArgument);
+        assert!(!read_str(err).is_empty());
+
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_session_context_v2_build(
+            verifier.as_ptr(),
+            workspace.as_ptr(),
+            agent.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            request_hash.as_ptr(),
+            32,
+            std::ptr::null_mut(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrNullPointer);
+        assert!(!read_str(err).is_empty());
+
+        let invalid_utf8 = CString::new(vec![0xffu8]).unwrap();
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            invalid_utf8.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            out.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrEncoding);
+        assert!(!read_str(err).is_empty());
+
+        err = std::ptr::null_mut();
+        let status = ratify_c::ratify_operation_context_v2_hash(
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            invalid_utf8.as_ptr(),
+            out.as_mut_ptr(),
+            &mut err,
+        );
+        assert_eq!(status, RatifyStatus::RatifyErrEncoding);
+        assert!(!read_str(err).is_empty());
     }
 }

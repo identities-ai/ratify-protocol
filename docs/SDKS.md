@@ -2,7 +2,7 @@
 
 **Where Ratify Protocol reference implementations live, which languages are coming next, and exactly what any new implementation must pass to be considered conformant.**
 
-This document is for language SDK authors, external contributors, and anyone planning to ship a Ratify implementation. For the protocol itself see [`SPEC.md`](../SPEC.md). For testing methodology see [`TEST_PLAN.md`](TEST_PLAN.md).
+This document is for language SDK authors, external contributors, and anyone planning to ship a Ratify implementation. It describes the Protocol v1 conformance contract (including the v1-only SessionToken surface). The Protocol v2 contract is every file in [`testvectors/v2/`](../testvectors/v2/README.md) plus the cross-SDK fixtures (SPEC-v2 §8), recorded per SDK in [`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md). For the protocol itself see [`SPEC.md`](../SPEC.md). For testing methodology see [`TEST_PLAN.md`](TEST_PLAN.md).
 
 ---
 
@@ -18,21 +18,31 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 
 | Language | Package | Location | Test status |
 |---|---|---|---|
-| **Go** | `github.com/identities-ai/ratify-protocol` | module root | ✅ 79/79 fixtures + unit tests |
-| **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 79/79 fixtures |
-| **Python** | `ratify-protocol` (PyPI) | `sdks/python/` | ✅ 79/79 fixtures |
-| **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures |
-| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite |
-| Swift | — | planned (mobile wallet) | — |
-| Java / Kotlin | — | planned (Android / JVM) | — |
+| **Go** | `github.com/identities-ai/ratify-protocol/v2` (v1: `github.com/identities-ai/ratify-protocol`) | module root | ✅ 79/79 fixtures + unit tests; full `testvectors/v2` |
+| **TypeScript / JavaScript** | `@identities-ai/ratify-protocol` | `sdks/typescript/` | ✅ 79/79 fixtures; full `testvectors/v2` |
+| **Python** | `ratify-protocol` (PyPI; v2 at `ratify_protocol.v2` through the `protocol-v2` extra) | `sdks/python/` | ✅ 79/79 fixtures; full `testvectors/v2` |
+| **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
+| **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
+| Swift | n/a | planned (mobile wallet) | n/a |
+| Java / Kotlin | n/a | planned (Android / JVM) | n/a |
 
-### C / C++ SDK — shipped in v1.0.0-alpha.8
+This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
+(module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
+distribution (`2.0.0b1`) carries v1 at `ratify_protocol` and v2 at
+`ratify_protocol.v2`, and its `protocol-v2` extra installs the v2 native
+extension `ratify-protocol-native-v2`. The v1 native extra
+`ratify-protocol-native` stays on the v1 line (`1.0.0a21`), and a Python
+install that stays on v1 pins `ratify-protocol==1.0.0a21`, the v1 maintenance
+release `v1.0.0-alpha.21`. Per-SDK v2 vector coverage is recorded in
+[`V2_REFERENCE_COMPATIBILITY.md`](V2_REFERENCE_COMPATIBILITY.md).
+
+### C / C++ SDK (shipped in v1.0.0-alpha.8)
 
 The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). It ships as:
 
-- `libratify_c.a` — static library for firmware and embedded Linux
-- `libratify_c.so` / `libratify_c.dylib` — shared library for Linux / macOS
-- `include/ratify.h` — committed header; usable without the Rust toolchain
+- `libratify_c.a`: static library for firmware and embedded Linux
+- `libratify_c.so` / `libratify_c.dylib`: shared library for Linux / macOS
+- `include/ratify.h`: committed header; usable without the Rust toolchain
 
 **Supported targets:**
 
@@ -50,7 +60,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 
 **Conformance:** All 79 canonical fixtures pass through the C ABI across every fixture kind (verify, scope, revocation, revocation_push, key_rotation, session_token, transaction_receipt, witness_entry), plus the API test suite (44 tests), 33 advanced-surface tests, and 7 input-bound boundary tests. The C SDK proves conformance through this shared 79-fixture set; the cross-SDK byte-equivalence corpus (`testvectors/v1/cross_sdk_vectors.json`, checked hub-and-spoke against the Go reference) is consumed by Go, TypeScript, Python, and Rust, not by C.
 
-**FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration — Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
+**FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration: Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
 ## 3. Priority order for future language ports
 
@@ -70,7 +80,7 @@ Five SDKs are now shipped. The next ports expand platform coverage.
 
 ## 4. The conformance contract
 
-**Every Ratify SDK, in every language, MUST pass all fixtures at `testvectors/v1/` byte-for-byte.** That is the contract. Without it, an SDK may appear to work locally but silently diverge from the reference — producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
+**Every Ratify SDK, in every language, MUST pass all fixtures at `testvectors/v1/` byte-for-byte.** That is the contract. Without it, an SDK may appear to work locally but silently diverge from the reference, producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
 
 ### What conformance means, concretely
 
@@ -79,7 +89,7 @@ For every fixture in `testvectors/v1/*.json`:
 **Kind = `verify`:**
 - The SDK's canonical signing bytes (its `delegationSignBytes` equivalent) MUST produce hex output matching `expected.delegation_sign_bytes_hex[i]` for every cert in the chain.
 - The SDK's challenge signing bytes helper MUST match `expected.challenge_sign_bytes_hex`.
-- The SDK's `verifyBundle` equivalent, when called with the bundle and the `verify_options`, MUST produce a `VerifyResult` semantically equivalent to `expected.verify_result` (with `granted_scope` compared as a set, not as an ordered list — though in practice implementations SHOULD emit it lex-sorted).
+- The SDK's `verifyBundle` equivalent, when called with the bundle and the `verify_options`, MUST produce a `VerifyResult` semantically equivalent to `expected.verify_result` (with `granted_scope` compared as a set, not as an ordered list, although in practice implementations SHOULD emit it lex-sorted).
 - Error-path messages SHOULD match the Go reference format for cross-language tooling compatibility (e.g. `"bad_signature: cert 0: Ed25519 signature invalid"`).
 
 **Kind = `scope`:**
@@ -275,5 +285,18 @@ Each SDK version SHOULD track the protocol version it targets:
 - `1.0.0` after external security audit and the first stable fixture freeze.
 - `1.x.y` for backward-compatible SDK improvements within Protocol v1.
 - `2.0.0+` when Protocol v2 ships (and SDKs MAY support both v1 and v2 concurrently during the migration window).
+
+Where a language cannot carry both lines in one package without breaking
+existing v1 pins, v2 ships under a separate name: the Go module path
+`github.com/identities-ai/ratify-protocol/v2`. TypeScript, Rust, and Python
+carry both lines in one package, with v2 under a `v2` subpath or module
+(`ratify_protocol.v2` in Python). Python keeps v2's requirements out of the
+base install, in the `protocol-v2` extra (the native extension
+`ratify-protocol-native-v2` and the pinned `tzdata` release), because every
+published version is a prerelease: pip treats the newest one as current for
+an unpinned install, so a v1 user who upgrades lands on the v2 line and must
+keep v1's requirements. `scripts/check-release-sync.sh` checks that the
+packages of each line agree on one version and that README install pins match
+it.
 
 SDK releases include a mandatory CI gate: run the conformance suite for the targeted protocol version. Red = no release.

@@ -1,16 +1,16 @@
-# Ratify Protocol — Roadmap
+# Ratify Protocol roadmap
 
 Companion to [`SPEC.md`](../SPEC.md), [`EXPLAINED.md`](EXPLAINED.md), and [`AGENT_TO_AGENT.md`](AGENT_TO_AGENT.md).
 
 ---
 
-This roadmap has three buckets: **shipped** (in the current release), **planned** (backward-compatible, next releases), and **v2** (wire-breaking). Anything not listed is either in [Not planned](#not-planned-explicit-scope-boundary) or hasn't been proposed yet — see [How to propose additions](#how-to-propose-additions).
+This roadmap covers two protocol lines. **Protocol v1** ([`SPEC.md`](../SPEC.md)) has **shipped** features and **planned** backward-compatible additions. **Protocol v2** ([`SPEC-v2.md`](../SPEC-v2.md)) is the wire-breaking line: its [status](#protocol-v2-status) and the work [planned for 2.1](#planned-for-protocol-21) are below. Anything not listed is either in [Not planned](#not-planned-explicit-scope-boundary) or hasn't been proposed yet; see [How to propose additions](#how-to-propose-additions).
 
 ---
 
-## Shipped
+## Shipped (Protocol v1)
 
-All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.4; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++ — see [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
+All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-alpha.4; the C/C++ SDK and its full conformance landed across alpha.8–alpha.10. Legacy v1.0 bundles continue to verify in v1.1 verifiers. The canonical test-vector suite (`testvectors/v1/`) proves cross-SDK conformance across Go, TypeScript, Python, Rust, and C/C++. See [`CHANGELOG.md`](../CHANGELOG.md) for the count at each release.
 
 ### Continuous real-time interactions
 
@@ -18,7 +18,7 @@ All v1.1 features below are backward-compatible with v1.0 and shipped in v1.0.0-
 |---------|------|---------------|----------|
 | **Session binding** | §5.8, §6.4.2 | A 32-byte `session_context` in the challenge signable binds a bundle to one verifier. Prevents stolen bundles from being replayed at a different endpoint. | 2 |
 | **Stream sequence numbers** | §5.8, §6.4.2 | `stream_id` + `stream_seq` in the challenge signable detect replay, reorder, and omission within a multi-turn conversation. | 6 |
-| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature — no chain re-verification: one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; see docs/BENCHMARKS.md). | 5 |
+| **Session cert cache** | §5.13, §6.4.8 | After a full chain verification, the verifier issues an HMAC-based `SessionToken`. Subsequent turns verify the token + a fresh challenge signature, with no chain re-verification: one hybrid signature verification per turn instead of N+1 (50–75% less signature work depending on chain depth; see docs/BENCHMARKS.md). | 5 |
 | **Push-based revocation** | §5.11, §6.4.5 | Signed `RevocationPush` delta payload lets issuers push revocations to subscribed verifiers in real time. `ForceRevocationCheck` option forces a fresh check on high-stakes endpoints. | 1 |
 | **Challenge forwarding defense** | §15.1 | Session binding (above) defeats the attack where a malicious verifier V2 relays V1's challenge to an agent. The agent signs with V2's context; V1 rejects the mismatch. | 1 |
 
@@ -121,12 +121,12 @@ An earlier draft proposed a boolean `requires_disclosure` constraint (default `t
 - **Explicit revocation** with signed revocation lists. Verifiers cache and fail-closed on unreachability.
 - **Cryptographic tamper-evidence** per object. Every `DelegationCert`, `ProofBundle`, and `RevocationList` is signed; byte-level modification is detected.
 - **54 canonical scopes** organized by domain, plus wildcards and a `custom:` extension pattern.
-- **First-class constraints** (geo, time-window, speed, amount, rate) evaluated at verify time against caller-supplied context.
-- **Three key-custody modes** — self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
+- **First-class constraints** (geo, time-window, speed, amount, rate) evaluated at verify time against caller-supplied context. Geo and speed are v1-only until Protocol 2.1.
+- **Three key-custody modes:** self-custody (device-held keys), custodial (server-side envelope encryption), and delegated custody (enterprise IdP as root). Self-custody is the strongest mode; custodial users can upgrade to self-custody via `KeyRotationStatement` at any time. See `SPEC.md` §15.2.
 
 ---
 
-## Planned — next releases (backward-compatible)
+## Planned for v1 (backward-compatible)
 
 ### Agent-to-agent in real-time meeting surfaces
 
@@ -138,22 +138,55 @@ The `AGENT_TO_AGENT.md` doc covers mutual presentation patterns for API-layer in
 
 Current protocol handles this via mutual presentation (Pattern 1 in `AGENT_TO_AGENT.md`), but the meetings adapter needs to surface this clearly in the policy and dashboard layer: "Agent A (authorized by Alice at CorpX) spoke with Agent B (authorized by Bob at CorpY). Neither human was present."
 
-This is not a protocol gap — the chain verification handles it. It is a scope and audit surfacing decision. Recording here so the meetings adapter dashboard design accounts for agent-to-agent sessions explicitly.
+This is not a protocol gap; the chain verification handles it. It is a scope and audit surfacing decision. Recording here so the meetings adapter dashboard design accounts for agent-to-agent sessions explicitly.
 
 ---
 
-## v2.0 — future (wire-breaking, not yet started)
+## Protocol v2 status
 
-These features require changes to the wire format or new cryptographic primitives. They will not land until v2.0.0.
+Protocol v2 is a breaking, separately versioned line with its own corpus
+(`testvectors/v2/`) and its own packages next to v1. The `2.0.0-beta.1`
+prerelease freezes the wire format and SDK API across Go, TypeScript,
+Python, Rust and C. It brings verify-then-release decisions, signed status
+under a separate status key, stored and atomically claimed challenges,
+receipts in an acknowledged log, exact `custom:` scopes, extension evaluator
+profiles, integer-only numbers, wire limits, 49 error classes, typed and
+external signers, and deployment profiles. See
+[`PROTOCOL_V2_MIGRATION.md`](PROTOCOL_V2_MIGRATION.md).
 
-| Feature | Why v2 | Design intent |
-|---------|--------|--------------|
-| **Session-key derivation** | Requires X25519/ML-KEM hybrid key exchange — a new crypto primitive not in v1 | Pair Ratify proof-of-authorization with a hybrid KEX so both sides derive a shared session key in the same round-trip as verification. Analogous to TLS 1.3 combining certs + ECDHE. |
-| **Multi-sig / threshold delegation** | Changes `DelegationCert` wire format — breaks all v1 SDKs | `MultiSigDelegationCert` with a signer list + threshold. At least `threshold` distinct signers must produce valid hybrid signatures. For enterprise 2-of-3 quorum on high-value delegations. |
-| **Transparency log** | Significant operational scope — Certificate-Transparency-style infrastructure | Append-only log of revocation-list updates, operated by the issuer + external witnesses. Clients subscribe to the log and detect divergent views (selective suppression). |
-| **CBOR wire format** | Bandwidth optimization | For mobile, IoT, and bandwidth-sensitive paths. JSON remains canonical for v1. |
+| Milestone | Gate |
+|---------|------|
+| `2.0.0-beta.1` | Every SDK passes the beta gates of SPEC-v2 §8.1, and the pre-release security review is closed and recorded. External independent review is not a beta gate; the beta carries no production security claim. |
+| `2.0.0` | Interoperability with at least one implementation outside this repository, an external independent review with every critical and high finding fixed, and a recorded soak (SPEC-v2 §8.2). |
 
-v2 will ship with `testvectors/v2/` alongside v1 fixtures. A migration window of at least 12 months will let implementers support both.
+v1 remains available and pinned while v2 matures. Released v1 artifacts are
+never moved or replaced. v1 support terms will be announced with `2.0.0`.
+
+## Planned for Protocol 2.1
+
+These v1 capabilities have no v2.0 equivalent and stay v1-only until 2.1:
+
+| Feature | Why it waits for 2.1 |
+|---------|------|
+| **Session grants** (the successor to the v1 SessionToken), with per-turn request binding | v2 needs a verifier-held grant that keeps the release and receipt guarantees on every turn. |
+| **A2A mutual presentation profile** | Two independent v2 proofs do not establish one conversation; the profile needs its own binding. |
+| **HTTP transport and registry read bindings** | Registry lookup stays deployment code that feeds trust configuration until the bindings are specified. |
+| **Geo, speed and activation constraints** | They need integer coordinates and units, antimeridian and pole handling, conservative boundary rules, and measurement provenance. |
+
+Under consideration for 2.1: delegation subject restrictions
+(`delegation_subjects`, `max_delegation_depth`) and an OR-list of resources in
+one `resource_path` constraint.
+
+## Later (not scheduled)
+
+These ideas need new primitives or wire changes and are not scheduled for any release:
+
+| Feature | Why | Design intent |
+|---------|-----|--------------|
+| **Session-key derivation** | Requires X25519/ML-KEM hybrid key exchange, a new crypto primitive | Pair Ratify proof-of-authorization with a hybrid KEX so both sides derive a shared session key in the same round-trip as verification. Analogous to TLS 1.3 combining certs + ECDHE. |
+| **Multi-sig / threshold delegation** | Changes the delegation certificate wire format | A multi-signer delegation with a signer list and threshold. At least `threshold` distinct signers must produce valid hybrid signatures. For enterprise 2-of-3 quorum on high-value delegations. |
+| **Transparency log** | Significant operational scope (Certificate-Transparency-style infrastructure) | Append-only log of revocation-list updates, operated by the issuer and external witnesses. Clients subscribe to the log and detect divergent views (selective suppression). |
+| **CBOR wire format** | Bandwidth optimization | For mobile, IoT, and bandwidth-sensitive paths. JSON remains canonical. |
 
 ---
 
@@ -164,7 +197,7 @@ The following are reasonable questions about Ratify's scope; v1 and v2 do NOT at
 - **Zero-knowledge selective disclosure.** *"Prove Alice authorized me without revealing her identity."* Research-level; pair with an external ZK layer if needed.
 - **Confidential transaction amounts.** `TransactionReceipt.terms` is opaque to Ratify; hiding values is an application concern.
 - **Agent-to-human authentication.** Ratify proves agents to verifiers. It does not prove humans to agents (biometric / World ID territory).
-- **Arbitrary programmable policy language.** Use first-class `Constraint` objects for common bounds (geo, time, speed, amount, rate). For application-specific conditions (IP reputation, account state, inventory), use app policy around `Verify()`.
+- **Arbitrary programmable policy language.** Use first-class constraints for common bounds (time, amount, rate, resource path; geo and speed in v1 until 2.1) and, in v2, registered evaluator profiles. For application-specific conditions (IP reputation, account state, inventory), use application policy around verification (in v2, after release).
 
 ---
 

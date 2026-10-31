@@ -50,29 +50,59 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 import uvicorn
 from mcp.server.transport_security import TransportSecuritySettings
-from ratify_protocol import (
-    Constraint,
-    HybridPublicKey,
-    ProofBundle,
+from ratify_protocol.v2 import key_id_v2
+from ratify_protocol.v2.limits_v2 import MAX_DELEGATION_CHAIN_DEPTH
+from ratify_protocol.v2.protocol_v2 import encode_delegation_cert_v2
+from ratify_protocol.v2.scope import (
     SCOPE_IDENTITY_DELEGATE,
     SCOPE_PAYMENTS_RECEIVE,
     SCOPE_PAYMENTS_SEND,
-    sign_challenge,
-    verify_verification_receipt,
 )
-from ratify_protocol.wire import encode_delegation_cert, encode_proof_bundle
+from ratify_protocol.v2.types import HybridPublicKey
+from ratify_protocol.v2.verification_receipt_v2 import (
+    ReceiptV2Head,
+    verification_receipt_v2_digest,
+    verify_verification_receipt_v2,
+)
 
+from adversary import forge_presentation
+from agent_client import sign_presentation
 from mcp_server import build_server
-from ratify_protocol import derive_id
-
-from principal import new_agent, new_principal, sign_cert
-from refund_service import RefundService, canonical_resource_id
+from principal import (
+    StatusAuthority,
+    max_amount_micros,
+    new_agent,
+    new_principal,
+    resource_bound,
+    sign_cert,
+)
+from refund_service import LOG_ID, RefundService, canonical_resource_id, encode_public_key
 
 DAY = 24 * 3600
-LIMIT = 100.0
+#: 100.00 USD in integer micro-units.
+LIMIT = 100_000_000
 
-#: alpha.16 caps a delegation chain at 8 certificates (SPEC 5.1).
-MAX_CHAIN_DEPTH = 8
+#: v2 caps a delegation chain at 8 certificates.
+MAX_CHAIN_DEPTH = MAX_DELEGATION_CHAIN_DEPTH
+
+
+def receipts_verify(service: RefundService) -> bool:
+    """Every receipt verifies under the verifier key and links to the last."""
+    head = ReceiptV2Head(log_id=LOG_ID, verifier_id=service.verifier_id)
+    try:
+        for receipt in service.receipts:
+            verify_verification_receipt_v2(receipt, service.verifier_pub, head)
+            digest = verification_receipt_v2_digest(receipt)
+            head = ReceiptV2Head(
+                log_id=LOG_ID,
+                verifier_id=service.verifier_id,
+                sequence=receipt.sequence,
+                head_hash=digest,
+                accepted_digests={**head.accepted_digests, receipt.sequence: digest},
+            )
+    except Exception:  # noqa: BLE001 - any failure is "does not verify"
+        return False
+    return True
 
 #: Event types the runner adjudicates against. Named here so a typo in a
 #: recorder call is a KeyError at startup rather than a silently absent event.
@@ -110,7 +140,7 @@ def canaries(run_id: str) -> dict[str, str]:
         "traceparent": "00-" + (tag.lower() * 4)[:32] + "-" + (tag.lower() * 2)[:16] + "-01",
         "baggage": f"canary=BAGGAGE-{tag}",
         "proof_key": "com.ratifyprotocol",
-        "receipt_prefix": "refund-service:",
+        "receipt_prefix": f"{LOG_ID}:",
         "malformed_marker": f"MALFORMED-{tag}",
     }
 
@@ -205,11 +235,9 @@ class Recorder:
                     "execute": self.execute,
                     "inbound_proof_sha": list(self.inbound_proof_sha),
                     "inbound_proof_len": list(self.inbound_proof_len),
-                    "refunded_total": service.refunded_total,
+                    "refunded_total_micros": service.refunded_total_micros,
                     "receipts": len(service.receipts),
-                    "receipts_all_verify": all(
-                        verify_verification_receipt(r) is None for r in service.receipts
-                    ),
+                    "receipts_all_verify": receipts_verify(service),
                     "receipt_ids": list(service.receipt_ids),
                     "refusals": service.refusal_count,
                     "internal_errors": service.internal_errors,
@@ -261,7 +289,11 @@ class World:
         # A principal this receiver does not trust.
         self.rogue, self.rogue_priv = new_principal()
 
-        self.service = RefundService(trust_root=self.principal.public_key)
+        # Signed status, under a status key separate from the root key.
+        self.status = StatusAuthority(self.principal, now)
+        self.service = RefundService(
+            self.principal.public_key, self.status.status_pub, self.status
+        )
         self.resource_id = canonical_resource_id(tenant, order)
 
         def root_cert(subject_id, subject_pub, scope, constraints, issued=-60, expires=DAY,
@@ -279,10 +311,10 @@ class World:
             )
 
         def amount(value=LIMIT):
-            return Constraint(type="max_amount", max_amount=value, currency="USD")
+            return max_amount_micros(value)
 
         def resource(res_id):
-            return Constraint(type="resource_path", resource_id=res_id)
+            return resource_bound(res_id)
 
         agent_id, agent_pub = self.agent.id, self.agent.public_key
         self.certs: dict[str, list] = {}
@@ -323,7 +355,7 @@ class World:
 
         # Scope amplification: an intermediate that never held payments:send
         # subdelegates it anyway. Chains are ordered leaf-first.
-        mid, mid_priv = new_agent("intermediate")
+        mid, mid_priv = self._intermediate("intermediate")
         parent_no_send = root_cert(
             mid.id, mid.public_key,
             [SCOPE_PAYMENTS_RECEIVE, SCOPE_IDENTITY_DELEGATE],
@@ -340,7 +372,7 @@ class World:
 
         # Constraint amplification: the parent caps the amount, the child tries
         # to raise it.
-        mid2, mid2_priv = new_agent("intermediate-2")
+        mid2, mid2_priv = self._intermediate("intermediate-2")
         parent_capped = root_cert(
             mid2.id, mid2.public_key,
             [SCOPE_PAYMENTS_SEND, SCOPE_IDENTITY_DELEGATE],
@@ -357,6 +389,17 @@ class World:
 
         self.certs["max_depth"] = self._chain(MAX_CHAIN_DEPTH, amount, resource)
         self.certs["over_depth"] = self._chain(MAX_CHAIN_DEPTH + 1, amount, resource)
+
+    def _intermediate(self, name: str):
+        """An agent that also issues, with signed status the receiver admits.
+
+        v2 status is per issuer, so every intermediate issuer in a chain needs
+        a configured status key, or the chain fails closed as
+        status_unavailable before scope or constraints are ever reached."""
+        mid, mid_priv = new_agent(name)
+        authority = StatusAuthority(mid, self.now)
+        self.service.configure_issuer_status(mid.public_key, authority.status_pub, authority)
+        return mid, mid_priv
 
     def _chain(self, depth: int, amount, resource) -> list:
         """A ``depth``-certificate chain ending at the trusted principal.
@@ -376,7 +419,7 @@ class World:
                 subject_id, subject_pub = self.agent.id, self.agent.public_key
                 scope = [SCOPE_PAYMENTS_SEND]
             else:
-                mid, mid_priv = new_agent(f"hop-{hop}")
+                mid, mid_priv = self._intermediate(f"hop-{hop}")
                 subject_id, subject_pub = mid.id, mid.public_key
                 scope = [SCOPE_PAYMENTS_SEND, SCOPE_IDENTITY_DELEGATE]
             cert = sign_cert(
@@ -392,7 +435,7 @@ class World:
         chain.reverse()  # leaf first
         return chain
 
-    def delegate_to(self, agent_pub: HybridPublicKey, *, amount: float = LIMIT,
+    def delegate_to(self, agent_pub: HybridPublicKey, *, amount: int = LIMIT,
                     bind_resource: bool = True, order: str | None = None) -> tuple[str, str]:
         """Issue a delegation to a key the agent generated for itself.
 
@@ -402,14 +445,14 @@ class World:
         boundary, and the subject identifier is derived from the key rather than
         trusted from whatever the requester claimed it was.
         """
-        subject_id = derive_id(agent_pub)
-        constraints = [Constraint(type="max_amount", max_amount=amount, currency="USD")]
+        subject_id = key_id_v2(agent_pub)
+        constraints = [max_amount_micros(amount)]
         if bind_resource:
             resource_id = (
                 canonical_resource_id(self.canaries["tenant"], order)
                 if order else self.resource_id
             )
-            constraints.append(Constraint(type="resource_path", resource_id=resource_id))
+            constraints.append(resource_bound(resource_id))
         cert = sign_cert(
             issuer_id=self.principal.id,
             issuer_pub=self.principal.public_key,
@@ -421,33 +464,59 @@ class World:
             issued_at=self.now - 60,
             expires_at=self.now + DAY,
         )
-        return subject_id, encode_delegation_cert(cert)
+        return subject_id, base64.b64encode(encode_delegation_cert_v2(cert)).decode()
 
     # -- signing ----------------------------------------------------------
 
-    def sign(self, variant: str, challenge: bytes, session_context: bytes) -> str:
-        """Return a base64 presentation for ``variant``. Keys never leave here."""
-        if variant == "wrong_agent":
-            agent_id = self.other_agent.id
-            agent_pub = self.other_agent.public_key
-            agent_priv = self.other_agent_priv
-            certs = self.certs["valid"]
-        else:
-            agent_id = self.agent.id
-            agent_pub = self.agent.public_key
-            agent_priv = self.agent_priv
-            certs = self.certs[variant]
-        at = int(time.time())
-        bundle = ProofBundle(
-            agent_id=agent_id,
-            agent_pub_key=agent_pub,
-            delegations=list(certs),
-            challenge=challenge,
-            challenge_at=at,
-            challenge_sig=sign_challenge(challenge, at, agent_priv, session_context),
-            session_context=session_context,
+    def sign(self, variant: str, prepared: dict) -> str:
+        """Return a base64 presentation for ``variant``. Keys never leave here.
+
+        ``prepared`` is what refund.prepare returned: the challenge, the
+        receiver's issuance time, its session binding, and its verifier ID."""
+        fields = dict(
+            verifier_id=prepared["verifier_id"],
+            challenge=base64.b64decode(prepared["challenge"]),
+            challenge_at=int(prepared["issued_at"]),
+            session_context=base64.b64decode(prepared["session_context"]),
         )
-        return base64.b64encode(encode_proof_bundle(bundle).encode()).decode()
+        if variant == "over_depth":
+            # Nine certificates. The SDK will not sign a chain above the v2
+            # maximum, and the v2 codec will not decode one, so this is the
+            # wire an attacker would send: a signed maximum-depth presentation
+            # with one more certificate spliced into the chain.
+            wire = sign_presentation(
+                agent_id=self.agent.id,
+                agent_pub=self.agent.public_key,
+                agent_priv=self.agent_priv,
+                delegations=self.certs["max_depth"],
+                **fields,
+            )
+            obj = json.loads(wire)
+            obj["delegations"].append(
+                json.loads(encode_delegation_cert_v2(self.certs["over_depth"][-1]))
+            )
+            return base64.b64encode(
+                json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+            ).decode()
+        if variant == "wrong_agent":
+            # Another key presenting the agent's delegation. The SDK will not
+            # sign this, so it is built the way an attacker would build it.
+            wire = forge_presentation(
+                agent_id=self.other_agent.id,
+                agent_pub=self.other_agent.public_key,
+                signing_priv=self.other_agent_priv,
+                delegations=self.certs["valid"],
+                **fields,
+            )
+        else:
+            wire = sign_presentation(
+                agent_id=self.agent.id,
+                agent_pub=self.agent.public_key,
+                agent_priv=self.agent_priv,
+                delegations=self.certs[variant],
+                **fields,
+            )
+        return base64.b64encode(wire).decode()
 
 
 def control_handler(world: World, recorder: Recorder, snapshots: dict):
@@ -479,6 +548,7 @@ def control_handler(world: World, recorder: Recorder, snapshots: dict):
                     {
                         "run_id": world.run_id,
                         "agent_id": world.agent.id,
+                        "agent_public_key": encode_public_key(world.agent.public_key),
                         "other_agent_id": world.other_agent.id,
                         "principal_id": world.principal.id,
                         "resource_id": world.resource_id,
@@ -493,11 +563,7 @@ def control_handler(world: World, recorder: Recorder, snapshots: dict):
             try:
                 body = self._body()
                 if self.path.startswith("/sign"):
-                    proof = world.sign(
-                        body["variant"],
-                        base64.b64decode(body["challenge"]),
-                        base64.b64decode(body["session_context"]),
-                    )
+                    proof = world.sign(body["variant"], body["prepared"])
                     return self._send(
                         {
                             "proof": proof,
@@ -512,21 +578,23 @@ def control_handler(world: World, recorder: Recorder, snapshots: dict):
                     )
                     subject_id, encoded = world.delegate_to(
                         pub,
-                        amount=float(body.get("amount", LIMIT)),
+                        amount=int(body.get("amount_micros", LIMIT)),
                         bind_resource=bool(body.get("bind_resource", True)),
                         order=body.get("order"),
                     )
                     return self._send({"subject_id": subject_id, "delegation": encoded})
                 if self.path.startswith("/revoke"):
-                    # Revoke every certificate in a named chain.
+                    # Revoke every certificate in a named chain, by signed
+                    # status from the principal's status key. Each variant
+                    # used here is a single root-issued certificate.
                     for cert in world.certs[body["variant"]]:
-                        world.service.revoke(cert.cert_id)
+                        world.status.revoke(cert.cert_id, int(time.time()))
                     return self._send({"revoked": body["variant"]})
                 if self.path.startswith("/break-revocation"):
-                    world.service.break_revocation(body.get("message", "provider unreachable"))
+                    world.service.break_status_feed(body.get("message", "status feed unreachable"))
                     return self._send({"broken": True})
                 if self.path.startswith("/fix-revocation"):
-                    world.service._revocation.error = None
+                    world.service.status.error = None
                     return self._send({"broken": False})
                 if self.path.startswith("/break-observer"):
                     snapshots["observer_raises"] = True
@@ -560,9 +628,9 @@ def build_app(world: World, recorder: Recorder, snapshots: dict, mcp_host: str, 
         recorder.prepared(resource_id)
         return _challenge(**kw)
 
-    def execute(*, challenge, bundle):  # noqa: A002 - matches the receiver's signature
+    def execute(*, challenge, proof):  # noqa: A002 - matches the receiver's signature
         recorder.executed()
-        decision = _execute(challenge=challenge, bundle=bundle)
+        decision = _execute(challenge=challenge, proof=proof)
         recorder.decided(decision)
         return decision
 

@@ -6,7 +6,7 @@ name: Release
 # anything was published.
 run-name: >-
   ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run)
-      && format('Dry run {0} — verifies artifacts, publishes nothing', inputs.tag)
+      && format('Dry run {0}{1} — verifies artifacts, publishes nothing', inputs.tag, inputs.ref != '' && format(' at {0}', inputs.ref) || '')
       || format('Release {0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
 
 # Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
@@ -33,12 +33,27 @@ on:
         required: false
         default: false
         type: boolean
+      ref:
+        description: 'Dry run only: full 40-character commit SHA to build instead of the tag'
+        required: false
+        default: ''
+        type: string
 
 env:
   # Normalise the ref so both push and workflow_dispatch use the same variable.
   # For push: github.ref_name = "v1.0.0-alpha.8"
   # For workflow_dispatch: inputs.tag = "v1.0.0-alpha.8"
+  # Every job checks out $RELEASE_REF (the tag), never the workflow ref, and
+  # then proves HEAD is the commit the tag points to on origin. A manual run
+  # started from a branch therefore builds, tests, and publishes the tagged
+  # tree, not the branch head.
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  # What every job checks out and verifies. Always the release tag, except
+  # that a dry run may name one exact commit SHA, so the artifact path of a
+  # version that has no tag yet can be rehearsed. A SHA, not a branch, so
+  # every job builds the same commit even if the branch moves during the run.
+  # A run that publishes never reads inputs.ref.
+  RELEASE_REF: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run && inputs.ref != '') && inputs.ref || format('refs/tags/{0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
 
 permissions:
   contents: read
@@ -56,8 +71,54 @@ jobs:
   gate-tests:
     name: Gate — all tests must pass
     runs-on: ubuntu-latest
+    outputs:
+      line: ${{ steps.line.outputs.line }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
+
+      # This tree carries two release lines. A v2.* tag releases the v2 line
+      # (TypeScript, Rust, C, Go module /v2, ratify-protocol from sdks/python
+      # with the v2 native extension ratify-protocol-native-v2). A v1.* tag
+      # releases the v1 line (ratify-protocol and its native extra, plus the
+      # other SDKs only if they are also at that version).
+      # Publish jobs read this output so one tag never publishes the other
+      # line's packages.
+      - name: release line
+        id: line
+        run: |
+          case "$RELEASE_TAG" in
+            v1.*) echo "line=v1" >> "$GITHUB_OUTPUT" ;;
+            v2.*) echo "line=v2" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::tag $RELEASE_TAG is on neither the v1 nor the v2 line"; exit 1 ;;
+          esac
+
+      # The tagged tree must pass the same public-content check as PR CI,
+      # so a tag pushed or dispatched outside the PR flow cannot publish it.
+      - name: public content check
+        run: python3 scripts/check-public-content.py
 
       # Go
       - uses: actions/setup-go@v7
@@ -67,7 +128,7 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: go test
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -timeout 40m ./...
       - name: go mod tidy must be clean
         run: |
           go mod tidy
@@ -132,6 +193,24 @@ jobs:
           RATIFY_REQUIRE_NATIVE: '1'
         run: pytest -v
 
+      # Python v2 (ratify_protocol.v2, installed through the [protocol-v2]
+      # extra). Signing is native-only and the extra pins the native extension
+      # exactly, so it is built and installed first and the v2 suite runs with
+      # it required.
+      - name: Build and install the v2 native Python extension
+        working-directory: sdks/python-native-v2
+        run: |
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: Python v2 install
+        working-directory: sdks/python
+        run: pip install -e '.[dev,protocol-v2]'
+      - name: Python v2 full test suite (native required)
+        working-directory: sdks/python
+        env:
+          RATIFY_REQUIRE_NATIVE: '1'
+        run: pytest -v tests_v2
+
       # Rust
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -157,26 +236,50 @@ jobs:
       - name: C/C++ advanced API tests
         working-directory: sdks/c
         run: cargo test --test advanced
+      - name: C/C++ v2 ABI tests (testvectors/v2)
+        working-directory: sdks/c
+        run: cargo test --test v2_abi
+      - name: C v2 ABI smoke test (system C compiler, testvectors/v2)
+        run: ./sdks/c/scripts/test-v2-c-abi.sh
 
       # Tag ↔ SDK version coherence: the pushed tag must match every SDK's
-      # declared version. The release-sync script already proves cross-SDK
-      # alignment; here we prove the tag matches that aligned version.
+      # declared version. The release-sync script already proves alignment
+      # within each line; here we prove the tag matches that line's version.
+      # A v2 tag checks the v2 packages, ratify-protocol and the v2 native
+      # extension. A v1 tag checks the v1 Python packages and every other SDK,
+      # so it fails
+      # while those SDKs are on the v2 line rather than releasing them under a
+      # v1 tag.
       - name: tag matches SDK versions
+        env:
+          LINE: ${{ steps.line.outputs.line }}
         run: |
           set -eu
-          tag="$RELEASE_TAG"          # e.g. v1.0.0-alpha.6
-          tag_clean="${tag#v}"                     # 1.0.0-alpha.6
-          rust_version=$(grep -E '^version = "' sdks/rust/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
-          c_version=$(grep -E '^version = "' sdks/c/Cargo.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          tag="$RELEASE_TAG"          # e.g. v2.0.0-alpha.1
+          tag_clean="${tag#v}"                     # 2.0.0-alpha.1
+          ver() { grep -E '^version = "' "$1" | head -1 | sed -E 's/.*"(.*)".*/\1/'; }
+          rust_version=$(ver sdks/rust/Cargo.toml)
+          c_version=$(ver sdks/c/Cargo.toml)
           ts_version=$(node -p "require('./sdks/typescript/package.json').version")
-          py_version=$(grep -E '^version = "' sdks/python/pyproject.toml | head -1 | sed -E 's/.*"(.*)".*/\1/')
-          # Python uses PEP 440 form (1.0.0a6) — accept either form.
+          # Python uses PEP 440 form (2.0.0a1) — accept either form.
           py_clean_from_tag=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
           [ "$rust_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ rust $rust_version"; exit 1; }
           [ "$c_version"    = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ c $c_version"; exit 1; }
           [ "$ts_version"   = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ ts $ts_version"; exit 1; }
-          [ "$py_version"   = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
-          echo "✓ tag $tag matches all SDK versions"
+          if [ "$LINE" = "v2" ]; then
+            go_module=$(go list -m)
+            py_version=$(ver sdks/python/pyproject.toml)
+            native_v2_version=$(ver sdks/python-native-v2/Cargo.toml)
+            [ "$go_module" = "github.com/identities-ai/ratify-protocol/v2" ] || { echo "::error::v2 tag but Go module is $go_module"; exit 1; }
+            [ "$py_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
+            [ "$native_v2_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ python-native-v2 $native_v2_version"; exit 1; }
+          else
+            py_version=$(ver sdks/python/pyproject.toml)
+            native_version=$(ver sdks/python-native/Cargo.toml)
+            [ "$py_version" = "$py_clean_from_tag" ] || { echo "::error::tag pep440 $py_clean_from_tag ≠ py $py_version"; exit 1; }
+            [ "$native_version" = "$tag_clean" ] || { echo "::error::tag $tag_clean ≠ python-native $native_version"; exit 1; }
+          fi
+          echo "✓ tag $tag matches all $LINE SDK versions"
 
   # ──────────────────────────────────────────────────────────────────────────
   # PyPI — Trusted Publisher (OIDC). No long-lived secret. Requires that the
@@ -186,7 +289,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-pypi:
     name: Publish to PyPI
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v1' }}
     needs: gate-tests
     runs-on: ubuntu-latest
     environment:
@@ -197,6 +300,29 @@ jobs:
       contents: read   # required by actions/checkout to read the repo
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -249,6 +375,7 @@ jobs:
   build-pypi-native:
     name: Build native extra wheels
     needs: gate-tests
+    if: needs.gate-tests.outputs.line == 'v1'
     permissions:
       contents: read
     strategy:
@@ -266,6 +393,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -296,6 +446,29 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -345,6 +518,29 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -366,6 +562,252 @@ jobs:
           packages-dir: dist
           skip-existing: true
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Python on the v2 line: ratify-protocol from sdks/python (v1 at the package
+  # root, v2 at ratify_protocol.v2) and the v2 native extension
+  # ratify-protocol-native-v2 that its [protocol-v2] extra pins. These mirror
+  # the v1 Python jobs above and run only for v2 tags. The base requirements of
+  # ratify-protocol stay the v1 ones, so a v1 install that resolves to this
+  # release is unaffected. ratify-protocol keeps its existing trusted
+  # publisher; ratify-protocol-native-v2 needs its own before the first v2
+  # release; see docs/REGISTRY_SETUP.md. The distribution name
+  # ratify-protocol-v2 is never published.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-pypi-v2:
+    name: Publish ratify-protocol (v2 line) to PyPI
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v2' }}
+    # The [protocol-v2] extra pins ratify-protocol-native-v2 exactly, so the
+    # native package must be on PyPI first or the extra is uninstallable.
+    needs: [gate-tests, publish-pypi-native-v2]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol/
+    permissions:
+      id-token: write  # required for OIDC exchange with PyPI
+      contents: read   # required by actions/checkout to read the repo
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: build sdist + wheel
+        working-directory: sdks/python
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -lh dist/
+      - name: assert the wheel is platform-independent
+        working-directory: sdks/python
+        run: |
+          if ! ls dist/*-py3-none-any.whl >/dev/null 2>&1; then
+            echo "::error::ratify-protocol must publish a py3-none-any wheel."
+            ls -l dist/
+            exit 1
+          fi
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdks/python/dist
+          skip-existing: true
+
+  # Builds wheels only; no environment and no id-token, for the same reason as
+  # build-pypi-native.
+  build-pypi-native-v2:
+    name: Build v2 native extra wheels
+    needs: gate-tests
+    if: needs.gate-tests.outputs.line == 'v2'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64,               manylinux: auto }
+          - { os: ubuntu-latest,  target: aarch64,              manylinux: auto }
+          - { os: macos-latest,   target: aarch64-apple-darwin, manylinux: auto }
+          - { os: macos-latest,   target: x86_64-apple-darwin,  manylinux: auto }
+          - { os: windows-latest, target: x64,                  manylinux: auto }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          working-directory: sdks/python-native-v2
+      # The artifact prefix differs from the v1 job's so neither download
+      # pattern can pick up the other line's wheels.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-v2-wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: sdks/python-native-v2/dist
+
+  verify-pypi-native-v2:
+    name: Verify the v2 native wheel set
+    needs: build-pypi-native-v2
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-v2-wheels-*
+          merge-multiple: true
+          path: dist
+      - name: build sdist
+        working-directory: sdks/python-native-v2
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      - name: the merged artifact set must be complete and flat
+        run: |
+          set -euo pipefail
+          echo "dist/ contains:"; ls -la dist/
+          wheels=$(find dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')
+          sdists=$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l | tr -d ' ')
+          nested=$(find dist -mindepth 2 | wc -l | tr -d ' ')
+          test "$wheels" = "5" || { echo "::error::expected 5 wheels, found $wheels; merge-multiple did not flatten every matrix leg"; exit 1; }
+          test "$sdists" = "1" || { echo "::error::expected 1 sdist, found $sdists"; exit 1; }
+          test "$nested" = "0" || { echo "::error::dist/ has nested paths; merge-multiple left artifacts in per-name directories"; exit 1; }
+          for tag in manylinux_2_17_x86_64 manylinux_2_17_aarch64 macosx_.*arm64 macosx_.*x86_64 win_amd64; do
+            find dist -maxdepth 1 -name '*.whl' | grep -qE "$tag" || { echo "::error::no wheel matching platform tag $tag"; exit 1; }
+          done
+          echo "5 wheels, 1 sdist, flat, every platform present"
+
+  publish-pypi-native-v2:
+    name: Publish v2 native extra to PyPI
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    needs: verify-pypi-native-v2
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-publish
+      url: https://pypi.org/project/ratify-protocol-native-v2/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-v2-wheels-*
+          merge-multiple: true
+          path: dist
+      - name: build sdist
+        working-directory: sdks/python-native-v2
+        run: |
+          python -m pip install 'maturin>=1.7,<2'
+          maturin sdist --out ../../dist
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
   publish-crates:
     name: Publish to crates.io
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
@@ -376,6 +818,29 @@ jobs:
       url: https://crates.io/crates/ratify-protocol
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -441,6 +906,29 @@ jobs:
       id-token: write  # required for OIDC exchange with npm Trusted Publisher
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -460,19 +948,52 @@ jobs:
         working-directory: sdks/typescript
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          # Skip gracefully if this version is already published (re-run safety).
-          # The normal publish path uses --tag latest, so if we're skipping an
-          # already-published version, latest was already set correctly.
-          if npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>/dev/null | grep -qF "$VERSION"; then
-            echo "Version ${VERSION} already published — skipping."
+          # v2 prereleases (2.x.y-alpha/beta/rc) publish under the next
+          # dist-tag (matching publishConfig.tag) so they never become latest
+          # by accident and an unpinned install keeps resolving to v1 until
+          # 2.0.0. A v2 final release publishes as latest. A v1 release
+          # publishes as latest only while latest is still a v1 version; once
+          # a v2 final release holds latest, v1 maintenance releases publish
+          # under the v1 dist-tag and never take latest back.
+          case "$VERSION" in
+            2.*-*) DIST_TAG=next ;;
+            1.*)
+              current_latest=$(npm view @identities-ai/ratify-protocol dist-tags.latest) || {
+                echo "::error::cannot read the latest dist-tag; refusing to guess"; exit 1; }
+              case "$current_latest" in
+                1.*) DIST_TAG=latest ;;
+                2.*) DIST_TAG=v1 ;;
+                *)   echo "::error::unexpected latest dist-tag '$current_latest'"; exit 1 ;;
+              esac
+              ;;
+            *)     DIST_TAG=latest ;;
+          esac
+          # Re-run safety: if this version is already published, do not
+          # publish again, but confirm the dist-tag points at it. A version
+          # left under the wrong tag fails here instead of passing silently.
+          # npm view fails with E404 for a version that does not exist yet.
+          # Any other failure means the registry could not be read, which
+          # stops the job rather than guessing.
+          if published=$(npm view "@identities-ai/ratify-protocol@${VERSION}" version 2>view.err); then
+            :
+          elif grep -q "E404" view.err; then
+            published=""
+          else
+            cat view.err
+            echo "::error::cannot read ${VERSION} from the registry; refusing to guess"; exit 1
+          fi
+          if [ "$published" = "$VERSION" ]; then
+            tagged=$(npm view @identities-ai/ratify-protocol "dist-tags.${DIST_TAG}") || {
+              echo "::error::cannot read the ${DIST_TAG} dist-tag"; exit 1; }
+            if [ "$tagged" != "$VERSION" ]; then
+              echo "::error::${VERSION} is published but dist-tag ${DIST_TAG} is '${tagged}'. Repair with: npm dist-tag add @identities-ai/ratify-protocol@${VERSION} ${DIST_TAG}"
+              exit 1
+            fi
+            echo "Version ${VERSION} already published under ${DIST_TAG}; skipping."
             exit 0
           fi
-          # Publish with --tag latest in a single OIDC-authenticated command.
-          # Pre-release versions get tagged latest so
-          # 'npm install @identities-ai/ratify-protocol' always resolves to
-          # the newest published version. Stable 1.0.0 will naturally become
-          # latest when it ships.
-          npm publish --access public --provenance --tag latest
+          echo "publishing $VERSION under dist-tag $DIST_TAG"
+          npm publish --access public --provenance --tag "$DIST_TAG"
 
   # ──────────────────────────────────────────────────────────────────────────
   # Go: nothing to do. Tag push + pkg.go.dev auto-discovery handle it.
@@ -490,9 +1011,15 @@ jobs:
         # prompt pkg.go.dev to index the version sooner. Failures here are
         # non-fatal — pkg.go.dev will pick it up eventually either way.
         continue-on-error: true
+        # v2+ tags live under the /v2 module path (Go semantic import
+        # versioning); the bare path only resolves v0/v1 tags.
         run: |
           tag="$RELEASE_TAG"
-          curl -fsSL "https://proxy.golang.org/github.com/identities-ai/ratify-protocol/@v/${tag}.info" || true
+          case "$tag" in
+            v2.*) module="github.com/identities-ai/ratify-protocol/v2" ;;
+            *)    module="github.com/identities-ai/ratify-protocol" ;;
+          esac
+          curl -fsSL "https://proxy.golang.org/${module}/@v/${tag}.info" || true
 
   # ──────────────────────────────────────────────────────────────────────────
   # Pre-built C/C++ libraries — cross-compile for common targets and upload
@@ -516,6 +1043,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -558,21 +1108,48 @@ jobs:
           path: sdks/c/dist/${{ env.ARCHIVE_FILE }}
           retention-days: 1
 
-  # GitHub Release — last, and only once every registry publish has
-  # succeeded. Attaches the testvectors/v1 bundle and pre-built C libraries
-  # as release assets. Every build and publish job is listed in needs, so a
-  # failure anywhere upstream blocks the release: a publish job whose build
-  # failed is itself only "skipped".
+  # GitHub Release — last, and only once every registry publish for this
+  # release line has succeeded. Attaches the testvectors/v1 bundle and
+  # pre-built C libraries as release assets.
+  #
+  # always() lets the job run when the other release line's jobs were skipped
+  # by their line condition. Every build, verify and publish job is listed in
+  # needs, so a failure anywhere upstream is visible here: a publish job whose
+  # build failed is itself only "skipped", and the failed build is what blocks
+  # the release.
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-crates, publish-npm, publish-go, build-c-binaries]
+    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: verify checkout is the release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/*)
+              refs=$(git ls-remote --tags origin)
+              want=$(awk -v r="${RELEASE_REF}^{}" '$2 == r { print $1 }' <<<"$refs")
+              [ -n "$want" ] || want=$(awk -v r="${RELEASE_REF}" '$2 == r { print $1 }' <<<"$refs") ;;
+            *)
+              # Dry run at a commit: it must be a full SHA, checked out exactly.
+              [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "::error::ref must be a full 40-character commit SHA, got '$RELEASE_REF'"; exit 1; }
+              want="$RELEASE_REF" ;;
+          esac
+          got=$(git rev-parse HEAD)
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "::error::checked out $got but $RELEASE_REF points to ${want:-nothing}"
+            exit 1
+          fi
+          echo "checked out $got = $RELEASE_REF"
       - name: Download C library artifacts
         uses: actions/download-artifact@v8
         with:
@@ -593,10 +1170,39 @@ jobs:
           tag="$RELEASE_TAG"          # v1.0.0-alpha.7
           tag_clean="${tag#v}"                     # 1.0.0-alpha.7
           py_version=$(echo "$tag_clean" | sed -E 's/-alpha\.([0-9]+)/a\1/; s/-beta\.([0-9]+)/b\1/; s/-rc\.([0-9]+)/rc\1/')
+          # v2 uses the /v2 Go module path and the [protocol-v2] extra of the
+          # ratify-protocol Python distribution.
+          # The summary, spec, and fixture lines are per release line. A v2
+          # summary states only what the v2 corpus verifies at this tag.
+          case "$tag" in
+            v2.*)
+              go_module="github.com/identities-ai/ratify-protocol/v2"; py_spec="\"ratify-protocol[protocol-v2]==${py_version}\""
+              spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
+              case "$tag_clean" in
+                *-*) summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+                *)   summary="Protocol v2. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+              esac
+              ;;
+            *)
+              go_module="github.com/identities-ai/ratify-protocol";    py_spec="ratify-protocol==${py_version}"
+              spec_file="SPEC.md"; vectors_dir="testvectors/v1"
+              summary="Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204) signatures; both must verify. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++."
+              ;;
+          esac
           {
             echo "TAG=$tag"
             echo "TAG_CLEAN=$tag_clean"
-            echo "PY_VERSION=$py_version"
+            echo "GO_MODULE=$go_module"
+            echo "PY_SPEC=$py_spec"
+            echo "SPEC_FILE=$spec_file"
+            echo "VECTORS_DIR=$vectors_dir"
+            echo "SUMMARY=$summary"
+            # Any version with a prerelease component (alpha, beta, rc,
+            # preview, ...) is a GitHub prerelease.
+            case "$tag_clean" in
+              *-*) echo "PRERELEASE=true" ;;
+              *)   echo "PRERELEASE=false" ;;
+            esac
           } >> "$GITHUB_ENV"
       - name: create release
         uses: softprops/action-gh-release@v3
@@ -604,23 +1210,23 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}   # required for workflow_dispatch (no tag in ref)
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(env.RELEASE_TAG, 'alpha') || contains(env.RELEASE_TAG, 'beta') || contains(env.RELEASE_TAG, 'rc') }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
           files: |
             ratify-testvectors-*.tar.gz
             c-artifacts/*
           body: |
             ## Ratify Protocol ${{ env.RELEASE_TAG }}
 
-            Open cryptographic trust protocol for AI agent authorization. Hybrid Ed25519 + ML-DSA-65 (NIST FIPS 204) signatures; both must verify. Full canonical conformance fixture suite (see testvectors/v1), byte-for-byte interoperable across Go, TypeScript, Python, Rust, and C/C++.
+            ${{ env.SUMMARY }}
 
             ### Install
 
             ```bash
             # Go
-            go get github.com/identities-ai/ratify-protocol@${{ env.TAG }}
+            go get ${{ env.GO_MODULE }}@${{ env.TAG }}
 
             # Python
-            pip install ratify-protocol==${{ env.PY_VERSION }}
+            pip install ${{ env.PY_SPEC }}
 
             # Rust
             cargo add ratify-protocol@${{ env.TAG_CLEAN }}
@@ -635,12 +1241,12 @@ jobs:
             ### Links
 
             - Full developer documentation: [docs.identities.ai](https://docs.identities.ai)
-            - Normative specification: [SPEC.md](https://github.com/identities-ai/ratify-protocol/blob/main/SPEC.md)
+            - Normative specification: [${{ env.SPEC_FILE }}](https://github.com/identities-ai/ratify-protocol/blob/${{ env.TAG }}/${{ env.SPEC_FILE }})
             - Threat model: [docs/EXPLAINED.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/EXPLAINED.md)
-            - Conformance fixtures: bundled as `ratify-testvectors-${{ env.TAG }}.tar.gz` below
+            - Conformance fixtures: `${{ env.VECTORS_DIR }}`, bundled in `ratify-testvectors-${{ env.TAG }}.tar.gz` below
 
             ### Legal
 
-            - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities AI, Inc.
+            - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities.AI, Inc.
             - **Patent:** U.S. patent application pending.
             - **License:** Apache-2.0 (code) · CC-BY-4.0 (specification); see [docs/LICENSES.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/LICENSES.md).

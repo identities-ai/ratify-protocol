@@ -129,6 +129,6 @@ The principal-signed certificate carries the issuer and agent identities, `data:
 
 ## Evidence, security status, and limitations
 
-The tested dependency pins are Ratify `1.0.0-alpha.20`, classifier.dev's documented dimensions API, Wrangler `4.135.0`, Vite `8.3.0`, and the Cloudflare Workers runtime supplied by the gate. The reference is not a production CRM, identity issuer, revocation service, audit system, or classifier accuracy benchmark.
+This profile describes the published Protocol v1 reference. A Protocol v2 port passed its local gate on a pre-release branch of the source repository against an unpublished local SDK build; it is not yet published. The tested dependency pins are Ratify `1.0.0-alpha.20`, classifier.dev's documented dimensions API, Wrangler `4.135.0`, Vite `8.3.0`, and the Cloudflare Workers runtime supplied by the gate. The reference is not a production CRM, identity issuer, revocation service, audit system, or classifier accuracy benchmark.
 
 The principal and agent keys are public fixtures. Issuance is simulated, revocation is local to the demo, the customer directory is deterministic, and the local rate gate is not a multi-region availability design. Replace all of these before production. Review classifier.dev's privacy and commercial terms before sending real ticket text. Ratify verifies delegated authority; it does not prove classifier accuracy or compel a receiver to execute.

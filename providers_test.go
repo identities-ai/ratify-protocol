@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/identities-ai/ratify-protocol"
+	. "github.com/identities-ai/ratify-protocol/v2"
 )
 
 // providerBundle builds a known-good single-cert ProofBundle used as the

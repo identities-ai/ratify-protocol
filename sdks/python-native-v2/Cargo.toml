@@ -1,0 +1,23 @@
+[package]
+name = "ratify-protocol-native-v2"
+# Lockstep with the ratify-protocol Python SDK, whose [protocol-v2] extra pins
+# this extension exactly (2.0.0b1 in PEP 440 form).
+version = "2.0.0-beta.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"
+repository = "https://github.com/identities-ai/ratify-protocol"
+publish = false
+
+[lib]
+name = "ratify_protocol_native_v2"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
+ratify-protocol = { path = "../rust" }
+# Pinned to the versions the Rust core resolves, so the extension signs with the
+# same constant-time ML-DSA-65 and Ed25519 implementations.
+ed25519-dalek = { version = "=2.2.0", features = ["zeroize"] }
+fips204 = "=0.4.6"
+zeroize = "1"

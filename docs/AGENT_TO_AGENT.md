@@ -12,13 +12,13 @@ Ratify is symmetric in both directions: the same data structures and verifier al
 
 ## Why agent-to-agent is a first-class concern
 
-In 2026–2028, the dominant traffic shape of AI interactions is no longer human-to-AI. It is AI-to-AI. When your scheduling agent talks to someone else's scheduling agent about a meeting, when your buyer agent transacts with a seller agent about a purchase, when one MCP server invokes tools on another on behalf of a shared user — none of these have a human in the loop at the moment of the interaction. The trust layer must work without one.
+In 2026–2028, the dominant traffic shape of AI interactions is no longer human-to-AI. It is AI-to-AI. When your scheduling agent talks to someone else's scheduling agent about a meeting, when your buyer agent transacts with a seller agent about a purchase, when one MCP server invokes tools on another on behalf of a shared user, none of these have a human in the loop at the moment of the interaction. The trust layer must work without one.
 
-Ratify handles this by making agents first-class cryptographic entities with their own hybrid keypairs. An agent can be a *subject* of a delegation (it receives authority), an *issuer* of a delegation (it sub-delegates), or both simultaneously. The protocol guarantees that any authority passed through the chain cannot exceed what was originally granted — §9.3 effective-scope intersection enforces this.
+Ratify handles this by making agents first-class cryptographic entities with their own hybrid keypairs. An agent can be a *subject* of a delegation (it receives authority), an *issuer* of a delegation (it sub-delegates), or both simultaneously. The protocol guarantees that any authority passed through the chain cannot exceed what was originally granted; §9.3 effective-scope intersection enforces this.
 
 ---
 
-## Pattern 1 — Mutual presentation
+## Pattern 1: Mutual presentation
 
 Agent A (acting for Alice) interacts with Agent B (acting for Bob). Each side needs cryptographic proof that the other is authorized for this interaction.
 
@@ -72,8 +72,8 @@ Agent A ─── connection setup ───── Agent B
 
 - **Identity binding:** A's claim *"I'm Alice's agent"* is verifiable by Bob's side with no OAuth flow, no platform-level trust, no shared vendor.
 - **Scope authority:** Alice's cert says what A is allowed to do; if Alice granted `meeting:*` but this interaction requires `meeting:record`, B rejects A's request.
-- **Liveness:** The challenge signatures prove A's (and B's) private keys are live right now. A stolen but revoked cert cannot be used here — revocation check fails.
-- **Mutual authentication:** Each side gets the same guarantees about the other. Neither side can impersonate their counterparty even over a compromised channel (the transport is uplifted by the hybrid signatures regardless of TLS state).
+- **Liveness:** The challenge signatures prove A's (and B's) private keys are live right now. A stolen but revoked cert cannot be used here, because the revocation check fails.
+- **Mutual verification:** Each side independently verifies the other's delegated authority and live key possession for a challenge that side issued. On its own this does not bind the two presentations into one conversation, and it does not stop a party from relaying a challenge it received to someone else. Bind each presentation to the shared session (the session context in Protocol v2) and run the exchange over an authenticated, encrypted channel. A dedicated mutual-presentation profile for Protocol v2 is planned for v2.1.
 
 ### When to use
 
@@ -83,11 +83,11 @@ Agent A ─── connection setup ───── Agent B
 
 ### What it doesn't solve
 
-Transport confidentiality — use TLS underneath. Metadata privacy — both sides learn each other's `human_id`. Ratify does not attempt to hide *that* Alice is talking to Bob; it only ensures neither can impersonate.
+Transport confidentiality: use TLS underneath. Metadata privacy: both sides learn each other's `human_id`. Ratify does not attempt to hide *that* Alice is talking to Bob; it only ensures neither can impersonate.
 
 ---
 
-## Pattern 2 — Sub-delegation
+## Pattern 2: Sub-delegation
 
 An organization's tenant admin delegates to a mid-tier agent, which further delegates to a leaf agent that actually performs the work. Each hop narrows the scope.
 
@@ -138,7 +138,7 @@ Verifier runs Verify():
 
 ### What's enforced
 
-- **Scope narrowing is monotonic.** No matter what `cert[i]` claims, the effective scope at the leaf is the intersection — cannot exceed the root.
+- **Scope narrowing is monotonic.** No matter what `cert[i]` claims, the effective scope at the leaf is the intersection and cannot exceed the root.
 - **`identity:delegate` is required to sub-delegate.** If the tenant admin had not granted `identity:delegate` to the org agent, the org agent could still sign a cert[org→dept], but a conformant verifier rejects the chain with `delegation_not_authorized`. The grant must be explicit; wildcards never introduce `identity:delegate` because it is a sensitive scope.
 - **Shorter TTLs at leaf levels are good practice.** Even if the tenant admin issued a 30-day cert, the leaf cert being 24 hours limits the blast radius of leaf-key compromise.
 - **Any cert in the chain can be revoked.** Revocation of `cert[org→dept]` at minute 5 invalidates the leaf's ability to present *any* bundle from minute ~6 onward (once the revocation list propagates).
@@ -146,7 +146,7 @@ Verifier runs Verify():
 ### When to use
 
 - Enterprise deployments where a tenant admin grants broad authority to a platform, which then fans out to specific bots or automation targets.
-- Agent frameworks (LangChain, AutoGen) where a parent agent routes subtasks to child agents — the Ratify chain mirrors the task decomposition.
+- Agent frameworks (LangChain, AutoGen) where a parent agent routes subtasks to child agents; the Ratify chain mirrors the task decomposition.
 - Multi-tenant SaaS where each customer's admin is the root of trust within their own tenant.
 
 ### Chain depth limit
@@ -155,9 +155,9 @@ Verifier runs Verify():
 
 ---
 
-## Pattern 3 — Transaction receipt
+## Pattern 3: Transaction receipt
 
-Two agents conclude a bounded, high-stakes transaction. Both parties want a cryptographic artifact that survives the session — a receipt they can produce months later to prove *who committed to what, when, with what authority.*
+Two agents conclude a bounded, high-stakes transaction. Both parties want a cryptographic artifact that survives the session: a receipt they can produce months later to prove *who committed to what, when, with what authority.*
 
 ### Sequence
 
@@ -222,7 +222,7 @@ Alice's buyer agent (A)                    Acme's seller agent (B)
 Six months after the transaction, either party can produce this artifact and a third-party auditor can verify:
 
 - **Who committed:** The ids inside cert_chain_A and cert_chain_B resolve to Alice and Acme respectively.
-- **What they committed to:** The exact `terms` JSON — any change produces different canonical bytes, which fails both signatures.
+- **What they committed to:** The exact `terms` JSON. Any change produces different canonical bytes, which fails both signatures.
 - **With what authority:** The scope on each cert is cryptographically binding. If the terms included something outside cert_chain_A's scope, the application layer should have rejected the transaction at signing time.
 - **At what time:** `timestamp` is advisory; the cryptographic anchor is `expires_at` on each cert. If a cert was expired at the moment of transaction, its signature is still mathematically valid but the transaction is disputable.
 - **That it wasn't revoked:** If optional revocation-state snapshots are included, the auditor can confirm neither cert was in the revocation list at transaction time.
@@ -256,11 +256,11 @@ Each side's verifier checks `now ∈ [issued_at, expires_at]` using *their own c
 
 - Run NTP on every Ratify-using process.
 - Use `CHALLENGE_WINDOW_SECONDS` (300s) as the effective skew tolerance for challenge freshness.
-- Prefer short cert TTLs (hours, not weeks) for high-stakes transactions — skew matters more when the window is short.
+- Prefer short cert TTLs (hours, not weeks) for high-stakes transactions, because skew matters more when the window is short.
 
 ### Key rotation mid-interaction
 
-If Alice rotates her root key while Agent A is mid-interaction with Agent B, Agent A's cert is still valid until its own expiry (unless Alice explicitly revoked it). B's verifier will still accept it. If Alice wants rotation to take effect immediately, she must also revoke outstanding certs — key rotation alone does not implicitly revoke prior grants.
+If Alice rotates her root key while Agent A is mid-interaction with Agent B, Agent A's cert is still valid until its own expiry (unless Alice explicitly revoked it). B's verifier will still accept it. If Alice wants rotation to take effect immediately, she must also revoke outstanding certs, because key rotation alone does not implicitly revoke prior grants.
 
 ### Multi-party agreements
 

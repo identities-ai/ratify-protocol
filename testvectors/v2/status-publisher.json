@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "description": "Minimal signed-status publisher (SPEC-v2 §5.4). A publisher binds an issuer's complete key to a separate status key and produces a genesis full list, same-sequence heartbeats, and revocations as a push plus the cumulative full list at the next sequence. Each produced object MUST verify under the status key with the typed revocation verifiers (codes 0x0003, 0x0005) and is described here by its signed fields; signature bytes may differ because ML-DSA-65 signing may be hedged.",
+  "status_policy": {
+    "max_list_lifetime_seconds": 7200,
+    "max_status_age_seconds": 7200,
+    "clock_skew_seconds": 5
+  },
+  "operations": {
+    "genesis": "publish the first full list at at. Publications are numbered from 0 in step order",
+    "heartbeat": "re-sign the current sequence and revoked set with updated_at = at; refused when at is not later than the last list's updated_at",
+    "ingest": "apply the list or push of publication number publication to the journal at now = at under status_policy; the operation succeeds",
+    "revoke": "revoke cert_ids at at: a push with exactly those IDs (sorted) and the cumulative full list, both at the next sequence; refused for an empty, duplicate or already revoked ID",
+    "setup": "build the authenticated role configuration, a SecurityJournalV2: genesis, record every role_keys entry (keys.json names) under its role in order, then configure status_key at epoch 1 for the issuer named by status_configured_for (skipped when empty). journal_setup configured = that configuration was accepted, rejected = the journal refused it (cross-role reuse), not_configured = skipped. Then construct the publisher from that anchored journal, the issuer key, the status signer and lifetime_seconds. The publisher never takes a caller list of other keys. publisher ok = constructed; refused = configuration_invalid and no object is signed, because the status key or either component equals the key ID or a component of any recorded non-status key, the issuer key is not recorded under a non-status role, or the status key is not the issuer's highest-epoch configured status key. The same journal ingests the published objects",
+    "status": "derive the status of (issuer, cert_id) from the journal at now = at: not_revoked, revoked, or indeterminate with reason stale or unavailable"
+  },
+  "scenarios": [
+    {
+      "name": "genesis_list",
+      "description": "the genesis list is sequence 1 with an empty revoked set and makes every certificate not_revoked while fresh",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "ok",
+      "journal_setup": "configured",
+      "steps": [
+        {
+          "op": "genesis",
+          "at": 1799992800,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799992800,
+              "next_update": 1799996400,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992801,
+          "publication": 0,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992801,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "not_revoked"
+          }
+        }
+      ]
+    },
+    {
+      "name": "heartbeat_extends_freshness",
+      "description": "a same-sequence heartbeat with a later updated_at keeps status current past the genesis next_update; a heartbeat that does not move forward is refused",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "ok",
+      "journal_setup": "configured",
+      "steps": [
+        {
+          "op": "genesis",
+          "at": 1799992800,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799992800,
+              "next_update": 1799996400,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992801,
+          "publication": 0,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "heartbeat",
+          "at": 1799994600,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799994600,
+              "next_update": 1799998200,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799994601,
+          "publication": 1,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799996500,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "not_revoked"
+          }
+        },
+        {
+          "op": "heartbeat",
+          "at": 1799994600,
+          "expect": {
+            "result": "refused"
+          }
+        },
+        {
+          "op": "heartbeat",
+          "at": 1799993800,
+          "expect": {
+            "result": "refused"
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoked_entry",
+      "description": "a revocation publishes a push and the cumulative list at sequence 2; the revoked certificate is revoked and others stay current",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "ok",
+      "journal_setup": "configured",
+      "steps": [
+        {
+          "op": "genesis",
+          "at": 1799992800,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799992800,
+              "next_update": 1799996400,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992801,
+          "publication": 0,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992810,
+          "cert_ids": [
+            "cert-leaf"
+          ],
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 2,
+              "updated_at": 1799992810,
+              "next_update": 1799996410,
+              "revoked": [
+                "cert-leaf"
+              ]
+            },
+            "push": {
+              "sequence": 2,
+              "pushed_at": 1799992810,
+              "revoked": [
+                "cert-leaf"
+              ]
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992811,
+          "publication": 1,
+          "object": "push",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992811,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "revoked"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992811,
+          "cert_id": "cert-root",
+          "expect": {
+            "status": "not_revoked"
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992812,
+          "publication": 1,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992812,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "revoked"
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992820,
+          "cert_ids": [
+            "cert-leaf"
+          ],
+          "expect": {
+            "result": "refused"
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992820,
+          "expect": {
+            "result": "refused"
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992820,
+          "cert_ids": [
+            "cert-a",
+            "cert-a"
+          ],
+          "expect": {
+            "result": "refused"
+          }
+        }
+      ]
+    },
+    {
+      "name": "missing_update",
+      "description": "a verifier that misses sequence 2 and sees the push at sequence 3 has a gap: the pushed certificate is revoked, everything else is unavailable until the sequence 3 list reconciles it",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "ok",
+      "journal_setup": "configured",
+      "steps": [
+        {
+          "op": "genesis",
+          "at": 1799992800,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799992800,
+              "next_update": 1799996400,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992801,
+          "publication": 0,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992810,
+          "cert_ids": [
+            "cert-a"
+          ],
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 2,
+              "updated_at": 1799992810,
+              "next_update": 1799996410,
+              "revoked": [
+                "cert-a"
+              ]
+            },
+            "push": {
+              "sequence": 2,
+              "pushed_at": 1799992810,
+              "revoked": [
+                "cert-a"
+              ]
+            }
+          }
+        },
+        {
+          "op": "revoke",
+          "at": 1799992820,
+          "cert_ids": [
+            "cert-b"
+          ],
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 3,
+              "updated_at": 1799992820,
+              "next_update": 1799996420,
+              "revoked": [
+                "cert-a",
+                "cert-b"
+              ]
+            },
+            "push": {
+              "sequence": 3,
+              "pushed_at": 1799992820,
+              "revoked": [
+                "cert-b"
+              ]
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992821,
+          "publication": 2,
+          "object": "push",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992821,
+          "cert_id": "cert-b",
+          "expect": {
+            "status": "revoked"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992821,
+          "cert_id": "cert-a",
+          "expect": {
+            "status": "indeterminate",
+            "reason": "unavailable"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992821,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "indeterminate",
+            "reason": "unavailable"
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992822,
+          "publication": 2,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992822,
+          "cert_id": "cert-a",
+          "expect": {
+            "status": "revoked"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799992822,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "not_revoked"
+          }
+        }
+      ]
+    },
+    {
+      "name": "offline_expiry",
+      "description": "a publisher that stops heartbeating leaves status stale exactly at next_update; a later heartbeat restores current status",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "ok",
+      "journal_setup": "configured",
+      "steps": [
+        {
+          "op": "genesis",
+          "at": 1799992800,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799992800,
+              "next_update": 1799996400,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799992801,
+          "publication": 0,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799996399,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "not_revoked"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799996400,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "indeterminate",
+            "reason": "stale"
+          }
+        },
+        {
+          "op": "heartbeat",
+          "at": 1799996460,
+          "expect": {
+            "result": "published",
+            "list": {
+              "sequence": 1,
+              "updated_at": 1799996460,
+              "next_update": 1800000060,
+              "revoked": []
+            }
+          }
+        },
+        {
+          "op": "ingest",
+          "at": 1799996461,
+          "publication": 1,
+          "object": "list",
+          "expect": {
+            "result": "applied"
+          }
+        },
+        {
+          "op": "status",
+          "at": 1799996461,
+          "cert_id": "cert-leaf",
+          "expect": {
+            "status": "not_revoked"
+          }
+        }
+      ]
+    },
+    {
+      "name": "status_key_is_issuer_key",
+      "description": "a status key equal to the issuer key is refused by the publisher before any signature, and the role journal refuses to configure it",
+      "issuer": "root",
+      "status_key": "root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_other_role_key",
+      "description": "a status key equal to a recorded intermediate issuer key is refused by the publisher and the journal",
+      "issuer": "root",
+      "status_key": "intermediate",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_unlisted_root_key",
+      "description": "the intermediate's publisher is given the organization root key as its status key; no caller list names the root, but the role configuration records it, so the publisher refuses",
+      "issuer": "intermediate",
+      "status_key": "root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "intermediate",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_agent_key",
+      "description": "a status key equal to a recorded agent key is refused by the publisher and the journal",
+      "issuer": "root",
+      "status_key": "agent",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_is_verifier_key",
+      "description": "a status key equal to a recorded verifier key is refused by the publisher and the journal",
+      "issuer": "root",
+      "status_key": "verifier",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "rejected",
+      "steps": []
+    },
+    {
+      "name": "status_key_not_configured",
+      "description": "a role-separated status key that the role configuration never bound to the issuer is refused",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "not_configured",
+      "steps": []
+    },
+    {
+      "name": "status_key_configured_for_other_issuer",
+      "description": "a status key bound to a different issuer in the role configuration is refused for this issuer",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "root",
+          "role": "issuer"
+        },
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "intermediate",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "configured",
+      "steps": []
+    },
+    {
+      "name": "issuer_not_in_role_configuration",
+      "description": "the role configuration does not record the issuer key under a non-status role: the publisher refuses although the status key is configured for that issuer",
+      "issuer": "root",
+      "status_key": "status_root",
+      "role_keys": [
+        {
+          "key": "intermediate",
+          "role": "delegation"
+        },
+        {
+          "key": "agent",
+          "role": "delegation"
+        },
+        {
+          "key": "verifier",
+          "role": "verifier"
+        }
+      ],
+      "status_configured_for": "root",
+      "lifetime_seconds": 3600,
+      "publisher": "refused",
+      "journal_setup": "configured",
+      "steps": []
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+Ratify Protocol v2 external signer
+issuer provider signed: mode=direct message=77 bytes context=ratify-protocol/2/0001
+delegation: signature verified by the SDK (true)
+agent provider signed: mode=direct message=77 bytes context=ratify-protocol/2/0002
+proof bundle: signatures verified by the SDK (true)
+faulty provider: refused (invalid_signature)

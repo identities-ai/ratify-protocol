@@ -15,9 +15,7 @@ func TestMaxRateNegativeCounterFailsClosed(t *testing.T) {
 	for _, n := range []int{-1, -1 << 31} {
 		ctx := VerifierContext{InvocationsInWindow: func(string, int64) int { return n }}
 		err := evaluateConstraint(c, "cert", ctx, time.Unix(1800000000, 0))
-		// verify.go routes to constraint_unverifiable on this error type.
-		var u unverifiableError
-		if !errors.As(err, &u) {
+		if !errors.Is(err, ErrConstraintUnverifiable) {
 			t.Fatalf("count %d: got %v, want constraint_unverifiable", n, err)
 		}
 	}

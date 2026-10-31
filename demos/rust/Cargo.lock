@@ -358,11 +358,12 @@ dependencies = [
 
 [[package]]
 name = "ratify-protocol"
-version = "1.0.0-alpha.21"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64",
  "chrono",
  "chrono-tz",
+ "curve25519-dalek",
  "ed25519-dalek",
  "fips204",
  "hex",
@@ -371,6 +372,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sha3",
+ "zeroize",
 ]
 
 [[package]]

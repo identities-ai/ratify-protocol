@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol"
-version = "1.0.0-alpha.21"
+version = "2.0.0-beta.1"
 edition = "2021"
 authors = ["Identities AI, Inc. <hello@identities.ai>"]
 license = "Apache-2.0"
@@ -14,10 +14,11 @@ categories = ["cryptography", "authentication"]
 
 [features]
 default = ["std"]
-std = ["serde_json"]
+std = ["serde_json", "sha3"]
 
 [dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+curve25519-dalek = "4.1"
 fips204 = "0.4.6"
 rand_core = { version = "0.6" }
 sha2 = "0.10"
@@ -28,9 +29,13 @@ base64 = "0.22"
 hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono-tz = "0.9"
+sha3 = { version = "0.10", optional = true }
+zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 serde_json = "1"
+sha3 = "0.10"
+proptest = "1"
 
 [lib]
 name = "ratify_protocol"

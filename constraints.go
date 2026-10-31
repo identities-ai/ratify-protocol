@@ -242,6 +242,7 @@ func evaluateConstraint(c Constraint, certID string, ctx VerifierContext, now ti
 type unverifiableError struct{ reason string }
 
 func (e unverifiableError) Error() string { return "constraint_unverifiable: " + e.reason }
+func (e unverifiableError) Unwrap() error { return ErrConstraintUnverifiable }
 
 func errConstraintUnverifiable(reason string) error { return unverifiableError{reason: reason} }
 

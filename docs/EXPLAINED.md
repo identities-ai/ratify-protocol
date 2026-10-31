@@ -12,7 +12,7 @@ As agents cross this "transaction horizon," two structural problems emerge:
 1. **The Claim-of-Authorization Gap:** When an agent says, "I am Alice's agent," the receiving party (the verifier) has no cryptographic way to verify that claim. Today, trust reduces to "the AI says so."
 2. **Agent-to-Agent Dominance:** As multi-agent systems proliferate, the trust layer must work entirely without a human present at the moment of the transaction.
 
-Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long* — across voice, video, API, and Physical AI.
+Ratify is a cryptographic primitive designed to bridge this gap. It produces a signed, verifiable proof of *who authorized what, within which bounds, and for how long*, across voice, video, API, and Physical AI.
 
 ---
 
@@ -24,12 +24,12 @@ Ratify operates through three simple, symmetric verbs:
 A principal (human or another agent) signs a **DelegationCert**. This certificate binds the principal's identity to the agent's identity and specifies a set of **Scopes** (allowed actions), **Constraints** (conditions like "only for amount < $100"), and an expiration date.
 
 ### PRESENT: The agent proves its authorization.
-When the agent wants to perform an action, it collects its delegation certs and signs a fresh **Challenge** from the verifier using its own private key. This collection—the delegation chain plus the fresh signature—is a **ProofBundle**.
+When the agent wants to perform an action, it collects its delegation certs and signs a fresh **Challenge** from the verifier using its own private key. This collection (the delegation chain plus the fresh signature) is a **ProofBundle**.
 
 ### VERIFY: The third party checks the proof.
 The verifier runs the Ratify verifier algorithm on the ProofBundle. If the signatures match, the timestamps are valid, the scopes cover the requested action, and the liveness check (the challenge) passes, the verifier returns a deterministic **YES**.
 
-One distinction worth internalizing: that YES is stateless cryptographic verification, which is not by itself replay-safe task acceptance — within the challenge freshness window, a captured bundle would verify again. A verifier that issues its own challenges makes each one single-use with a challenge store (SPEC §10; every SDK ships one), so a bundle is *accepted* at most once. A verifier that lets clients self-issue challenges keeps only the freshness bound and needs request-level deduplication on top.
+One distinction worth internalizing: that YES is stateless cryptographic verification, which is not by itself replay-safe task acceptance. Within the challenge freshness window, a captured bundle would verify again. A verifier that issues its own challenges makes each one single-use with a challenge store (SPEC §10; every SDK ships one), so a bundle is *accepted* at most once. A verifier that lets clients self-issue challenges keeps only the freshness bound and needs request-level deduplication on top.
 
 ---
 
@@ -37,11 +37,11 @@ One distinction worth internalizing: that YES is stateless cryptographic verific
 
 "Harvest now, decrypt later" is a threat to encrypted data. Ratify signs and does not encrypt, so the corresponding risk is a future forgery: if today's assumptions fail, an adversary could try to forge new authorization proofs.
 
-Ratify answers this by requiring **hybrid signatures** for every object in the protocol:
+Ratify answers this by requiring **hybrid signatures** for every object in the protocol, in both protocol lines:
 - **Ed25519 (RFC 8032):** High-performance, classical elliptic-curve signatures.
 - **ML-DSA-65 (NIST FIPS 204):** Post-quantum lattice-based signatures.
 
-**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, a forger still has to forge the ML-DSA-65 signature. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still has to be forged.
+**Both signatures must verify.** If a quantum computer eventually breaks Ed25519, a forger still has to forge the ML-DSA-65 signature. If a flaw is found in the newer ML-DSA-65 algorithm, the Ed25519 signature still has to be forged. Protocol v2 additionally signs a domain-separated message that names the object type, with a fixed ML-DSA-65 context per type (SPEC-v2 §3).
 
 ---
 
@@ -59,7 +59,7 @@ When the Travel Agent presents the proof to the Airline, the Airline can see the
 ### Resource-bound authority (the `resource_path` constraint)
 Scopes answer *what* an agent may do; the `resource_path` constraint answers *where*. It binds a delegation to one resource (a repository, workspace, channel, or device) named by an opaque `resource_id`, and optionally to a `path_prefix` inside that resource. A scope of `files:write` grants file writes anywhere; `files:write` paired with `resource_path{repo R, /docs}` grants writes only under `/docs` of repository R.
 
-Two properties make it safe to hand down a sub-delegation chain. The `resource_id` is compared **byte-for-byte** (the verifier never fetches, decodes, or normalizes it), and `path_prefix` matches only on **segment boundaries**, so `/src` covers `/src` and `/src/a.ts` but never `/src-old`. Because verification evaluates every cert's constraints conjunctively against the same requested resource, effective authority can stay the same or narrow down the chain but never widen: a child may carry a broader prefix on the same resource and still verify, yet gains nothing because the request must still satisfy every hop upstream, while a child naming a different resource or a same-resource prefix that does not nest makes the chain jointly unsatisfiable and fails closed. Downstream escape is impossible by construction, not by a special rule. `resource_path` is one of the eight canonical constraint types (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`); the verifier receives the requested resource and path through its `VerifierContext`.
+Two properties make it safe to hand down a sub-delegation chain. The `resource_id` is compared **byte-for-byte** (the verifier never fetches, decodes, or normalizes it), and `path_prefix` matches only on **segment boundaries**, so `/src` covers `/src` and `/src/a.ts` but never `/src-old`. Because verification evaluates every cert's constraints conjunctively against the same requested resource, effective authority can stay the same or narrow down the chain but never widen: a child may carry a broader prefix on the same resource and still verify, yet gains nothing because the request must still satisfy every hop upstream, while a child naming a different resource or a same-resource prefix that does not nest makes the chain jointly unsatisfiable and fails closed. Downstream escape is impossible by construction, not by a special rule. In Protocol v1, `resource_path` is one of the eight canonical constraint types (`geo_circle`, `geo_polygon`, `geo_bbox`, `time_window`, `max_speed_mps`, `max_amount`, `max_rate`, `resource_path`), and the verifier receives the requested resource and path through its `VerifierContext`. Protocol v2 has a closed registry of five types (`time_window`, `max_amount` in integer micro-units, `max_rate`, `resource_path`, `ratify.receiver_audience`) plus registered extension evaluator profiles; the geo and speed types are v1-only until Protocol 2.1.
 
 ---
 
@@ -77,15 +77,15 @@ Two properties make it safe to hand down a sub-delegation chain. The `resource_i
 
 ## 6. SDK Provider Interfaces
 
-The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal — every conformant SDK implements it identically, and the same 79 fixtures regenerate byte-identical across languages.
+The verifier's cryptographic core (chain check, hybrid signature, scope intersection, constraint evaluation) is universal: every conformant SDK implements it identically, and the same 79 fixtures regenerate byte-identical across languages.
 
 But three of the verifier's responsibilities are inherently operational, and a single static spec cannot pin them down:
 
-1. **Revocation freshness** — a CRL file polled once an hour is fine for a low-throughput verifier; a high-throughput payment endpoint needs sub-second push propagation.
-2. **Policy evaluation** — quotas, geo-tagged kill switches, runtime overrides. These are stateful and verifier-local; they don't belong in a signed cert.
-3. **Audit retention** — a developer's local log file is enough for staging; SOC2/ISO compliance requires a signed, append-only ledger.
+1. **Revocation freshness.** A CRL file polled once an hour is fine for a low-throughput verifier; a high-throughput payment endpoint needs sub-second push propagation.
+2. **Policy evaluation.** Quotas, geo-tagged kill switches, runtime overrides. These are stateful and verifier-local; they don't belong in a signed cert.
+3. **Audit retention.** A developer's local log file is enough for staging; SOC2/ISO compliance requires a signed, append-only ledger.
 
-The SDKs expose three pluggable hooks for these — `RevocationProvider`, `PolicyProvider`, `AuditProvider` — defined in SPEC §17. Each SDK ships with a no-op default; commercial verifiers (such as Ratify Verify) supply higher-performance, stateful implementations against the same interface. Bundles verified against one provider stack and bundles verified against another are byte-identical: the wire format does not change.
+The SDKs expose three pluggable hooks for these, defined in SPEC §17: `RevocationProvider`, `PolicyProvider`, and `AuditProvider`. Each SDK ships with a no-op default; commercial verifiers (such as Ratify Verify) supply higher-performance, stateful implementations against the same interface. Bundles verified against one provider stack and bundles verified against another are byte-identical: the wire format does not change.
 
 This is the build-vs-buy boundary, in one diagram:
 
@@ -110,18 +110,18 @@ an exact opaque string and fails closed when no evaluator is registered. The
 naming rule prevents collisions; it does not add network lookup or make Ratify
 a runtime dependency.
 
-A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface — latency, compliance posture, integration ergonomics — not in cryptography.
+A bundle moves freely across all five SDKs. Where verifiers differ is in operational surface (latency, compliance posture, integration ergonomics), not in cryptography.
 
 ### Open references and managed surface adapters
 
 Open, executable profiles under [`references/`](../references/README.md) show how
 Ratify composes with specific agent frameworks, transports, and runtimes. They
 are interoperability references: inspectable patterns, deterministic gates,
-and evidence—not hosted services or production support commitments.
+and evidence, not hosted services or production support commitments.
 
 The protocol contract stops at the `ProofBundle` wire format and verifier
-semantics. Production last-mile adapters—such as supported Zoom, Twilio, or API
-gateway deployments—plus managed trust configuration, revocation, policy,
+semantics. Production last-mile adapters (such as supported Zoom, Twilio, or API
+gateway deployments), plus managed trust configuration, revocation, policy,
 audit, observability, and availability belong to Ratify Verify's commercial
 surface. Ratify Verify does not introduce a proprietary proof format, and the
 specification does not prevent anyone from building or operating an adapter.

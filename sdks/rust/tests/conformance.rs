@@ -703,5 +703,5 @@ fn hybrid_keypair_from_seeds_matches_go_reference() {
     let (again, _) = ratify_protocol::crypto::hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
     assert_eq!(pub_key.ed25519, again.ed25519);
     assert_eq!(pub_key.ml_dsa_65, again.ml_dsa_65);
-    assert_eq!(priv_key.ed25519, ed_seed.to_vec());
+    assert_eq!(priv_key.ed25519(), &ed_seed[..]);
 }

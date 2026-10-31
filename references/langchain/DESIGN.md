@@ -1,8 +1,9 @@
 # LangChain delegated-authority reference design
 
-**Status:** implemented and independently tested draft reference. This is
-not a LangChain partnership, LangChain-approved integration, or LangChain
-reference architecture.
+**Status:** implemented and independently tested draft reference on Ratify
+Protocol v2 (2.0.0-beta.1 line, tested against the in-tree 2.0.0b1 SDK). This
+is not a LangChain partnership, LangChain-approved integration, or LangChain
+reference architecture. The v1 design is kept in [`v1/DESIGN.md`](v1/DESIGN.md).
 
 ## Question
 
@@ -28,8 +29,8 @@ The names describe different layers and should not be collapsed:
 | LangChain MCP adapters | Convert MCP tools to LangChain tools; connect over Streamable HTTP; intercept calls and add per-call arguments or headers | Transport credentials identify or authenticate a caller but do not prove the principal's bounded intent for one operation |
 | LangSmith Agent Server | Deploy assistants, threads, runs, persistence, and task queues | Agent Server access control governs LangSmith resources, not an external receiver's protected business operation |
 | LangSmith custom auth | Authenticate requests and authorize access to threads, assistants, runs, and related resources; pass user-scoped credentials into agent context | Bearer credentials forwarded on a user's behalf remain ambient credentials and receiver-local policy inputs |
-| Ratify | Present a signed delegation chain and fresh, operation-bound proof | Ratify does not authenticate the transport, orchestrate the agent, define local policy, or require execution |
-| Receiver policy/tool | Reconstruct the requested operation, pin trust, verify, apply local policy, and execute | The receiver remains the final decision maker |
+| Ratify | Present a signed delegation chain and fresh, operation-bound proof; sign status and receipts | Ratify does not authenticate the transport, orchestrate the agent, define local policy, or require execution |
+| Receiver policy/tool | Reconstruct the requested operation, pin trust, verify, release, apply local policy, and execute | The receiver remains the final decision maker |
 
 ## Native integration seam
 
@@ -66,9 +67,9 @@ Principal
                   v
 LangChain commander
   signs commander -> infrastructure specialist
-        scope: custom:infra:provision
+        scope: custom:infra:provision (one exact custom scope)
         resource: gcp:projects/customer-project/regions/us-central1
-        extension constraint: max_nodes = 1
+        constraint: com.ratifyprotocol.max_count {"counter":"nodes","max":1}
                   |
                   v
 LangChain create_agent (real agent loop, scripted model in the gate)
@@ -83,12 +84,15 @@ Public MCP tool interceptor
                   v
 Independent Streamable HTTP MCP receiver
   authenticates the transport separately
-  pins the accepted root and expected agent out of band
+  pins the complete root key and expected agent key out of band
   reconstructs the operation from MCP tool arguments
   binds verifier, workspace, agent, session, invocation, and operation hash
-  atomically consumes the challenge
-  checks chain, scope, resource, node ceiling, expiry, revocation, and freshness
-  invokes the protected handler only after ALLOW
+  issues the challenge through the SDK helper, which persists it first
+  ingests each issuer's signed status list into its security journal
+  claims the challenge once and checks chain, scope, resource, node ceiling,
+    expiry, signed status, and freshness
+  appends a signed receipt; the checkpoint acknowledges it; releases
+  invokes the protected handler only for a released allow
 ```
 
 An optional Jev adapter can sit before the LangChain loop. It sends the current
@@ -108,13 +112,25 @@ interceptor and receiver verification path runs afterward.
 - The receiver reconstructs canonical payload bytes from validated business
   arguments. The presenter cannot supply its own operation digest.
 - Challenge issuance and protected execution are distinct HTTP operations.
-  The challenge is single-use and bound to the exact operation.
+  The challenge is single-use and bound to the exact operation. The SDK
+  issuance helper persists it before it is returned, and the claim store
+  refuses a second claim even if the receiver's own pending table is restored.
+- Revocation status is accepted only when it is signed by the issuer's
+  configured status key, which is role-separated from every delegation,
+  agent, and verifier key. Missing, unauthenticated, or stale status denies.
+- A verification result is not actionable on its own. The receiver appends
+  the signed receipt, waits for the checkpoint acknowledgement, and runs the
+  handler only for a released allow that is still current at its clock.
+- The node ceiling is the standard `com.ratifyprotocol.max_count/v1`
+  extension profile, registered explicitly by the receiver. The requested
+  count comes from the validated business arguments, never from the proof.
 - Transport authentication is independent from delegated-authority proof.
   Possession of the transport credential is insufficient to execute.
 - Proof headers are application metadata, not an MCP authorization proposal.
   The implemented boundary rejects duplicate security headers and presentations
-  over 64 KiB. The current two-hop hybrid presentation is about 28 KB, already
-  above common 8 KiB proxy defaults. A production profile must align limits and
+  over 64 KiB. The current two-hop v2 presentation is 28,408 bytes on the wire
+  and 37,880 bytes as the base64 header value, already above common 8 KiB
+  proxy defaults. A production profile must align limits and
   log redaction across every hop, or move the proof to a maintainer-reviewed MCP
   metadata/body carrier.
 - Protected execution is at-most-once. A production tool needs an idempotency
@@ -134,7 +150,9 @@ unchanged:
 - excessive node count;
 - wrong region/resource;
 - expired delegation;
-- revoked leaf delegation;
+- revoked leaf delegation (signed status list);
+- status signed by an unconfigured key, and stale status;
+- an unacknowledged receipt (decision not released);
 - replayed presentation;
 - operation altered after challenge issuance;
 - wrong presenting agent;
@@ -146,9 +164,16 @@ unchanged:
 - concurrent duplicate request identifiers; and
 - receiver transport denial.
 
-The gate creates a clean virtual environment, installs exact public package
-pins, rejects a Ratify import from the repository SDK, and requires the exact
-expected test count with zero skips, failures, or errors.
+The gate creates a clean virtual environment, builds and installs the v2 SDK
+from this repository (until 2.0.0-beta.1 is published), installs exact
+platform pins, rejects an SDK import from the source tree and the presence of
+the v1 package, and requires the exact expected test count with zero skips,
+failures, or errors.
+
+The claim store, receipt log, checkpoint, challenge issuance store and
+security journal are the SDK's in-memory reference stores. They make the gate
+deterministic and are labelled development only; they are not a production
+claim.
 
 ## Non-claims
 
@@ -168,3 +193,4 @@ for proving the receiver-side boundary.
 - LangSmith Agent Server: <https://docs.langchain.com/langsmith/agent-server>
 - LangChain unit testing: <https://docs.langchain.com/oss/python/langchain/test/unit-testing>
 - Ratify Protocol: <https://github.com/identities-ai/ratify-protocol>
+- Ratify Protocol v2 specification: [`SPEC-v2.md`](../../SPEC-v2.md)

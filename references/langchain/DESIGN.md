@@ -164,10 +164,9 @@ unchanged:
 - concurrent duplicate request identifiers; and
 - receiver transport denial.
 
-The gate creates a clean virtual environment, builds and installs the v2 SDK
-from this repository (until 2.0.0-beta.1 is published), installs exact
-platform pins, rejects an SDK import from the source tree and the presence of
-the v1 package, and requires the exact expected test count with zero skips,
+The gate creates a clean virtual environment, installs the published v2 SDK
+and exact platform pins, rejects an SDK import from the source tree, and
+requires the exact expected test count with zero skips,
 failures, or errors.
 
 The claim store, receipt log, checkpoint, challenge issuance store and

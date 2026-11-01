@@ -4,13 +4,11 @@
 partnership, LangChain-approved integration, or LangChain reference architecture.
 
 - **Protocol line:** v2 (2.0.0-beta.1)
-- **Tested against:** the in-tree Python v2 SDK (`ratify_protocol.v2` from
-  `ratify-protocol` 2.0.0b1 with its `protocol-v2` extra, and
-  `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
-  2.0.0-beta.1 is published. The deterministic gate is 34/34 green; see
-  [`evidence/reference-evidence.md`](evidence/reference-evidence.md). That
-  recorded run predates the move of the v2 SDK into the `ratify-protocol`
-  distribution on 2026-10-28.
+- **Tested against:** published `ratify-protocol[protocol-v2]==2.0.0b1`,
+  including `ratify-protocol-native-v2==2.0.0b1`. The deterministic gate
+  passed 34/34 on 2026-10-31; see the
+  [post-release record](../../docs/evidence/v2-published-beta1-2026-10-31.md)
+  and [earlier in-tree record](evidence/reference-evidence.md).
 - **Protocol v1 history:** the v1 version of this reference (Ratify
   `1.0.0a19`, 28/28 gate) is kept unchanged in [`v1/`](v1/README.md).
 
@@ -148,11 +146,10 @@ Streamable HTTP MCP receiver. It needs no model API key or paid service. It
 requires exactly 34 passing tests and fails on a skipped, xfail, missing, or
 additional test. See [`evidence/reference-evidence.md`](evidence/reference-evidence.md).
 
-**Release pin.** The SDK dependency moves to the published
-`"ratify-protocol[protocol-v2]==2.0.0b1"` (2.0.0-beta.1), which brings
-`ratify-protocol-native-v2` 2.0.0b1 with it, when it is released; the lines to change are marked `RATIFY_V2_PIN` in
-`requirements.txt` and `run-reference-check.sh`. The 34/34 result has not yet
-been reproduced against the published packages.
+**Release pin.** The gate installs
+`ratify-protocol[protocol-v2]==2.0.0b1`, which brings
+`ratify-protocol-native-v2==2.0.0b1` with it. The published-package
+run passed 34/34.
 
 ## Boundary
 
@@ -232,7 +229,7 @@ tool selection, but add no authority guarantee.
 - `mcp==1.30.0`
 - `pytest==9.0.3`
 - `pytest-asyncio==1.4.0`
-- `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
+- `ratify-protocol[protocol-v2]==2.0.0b1` and `ratify-protocol-native-v2==2.0.0b1` (published)
 
 ## Which path should I use?
 

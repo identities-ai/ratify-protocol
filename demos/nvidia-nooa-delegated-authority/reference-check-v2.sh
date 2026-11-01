@@ -54,14 +54,9 @@ echo "==> venv ($("$PY" -V))"
 # Where the Ratify v2 SDK comes from. `local` builds the native signing
 # extension (ratify-protocol-native-v2, Rust, via maturin) and installs
 # ratify-protocol with its protocol-v2 extra from this checkout: it proves the
-# reference against the code in the tree. `published` installs the released packages and is what the
-# final evidence must use.
-#
-# TODO(RATIFY_V2_PIN): switch the default to `published` once
-# ratify-protocol and ratify-protocol-native-v2 2.0.0-beta.1 (PEP 440:
-# 2.0.0b1) are on PyPI, and re-record the evidence from that run.
-RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_V2_VERSION="${RATIFY_V2_VERSION:-2.0.0b1}"  # TODO(RATIFY_V2_PIN)
+# reference against the code in the tree. `published` installs the released packages.
+RATIFY_SDK="${RATIFY_SDK:-published}"
+RATIFY_V2_VERSION="${RATIFY_V2_VERSION:-2.0.0b1}"
 case "$RATIFY_SDK" in
   local)
       "$VENV/bin/pip" install --quiet 'maturin>=1.7,<2'

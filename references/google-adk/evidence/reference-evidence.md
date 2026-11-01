@@ -37,7 +37,7 @@ one-million-call run, September 2026) is kept unchanged in
 | Google ADK | `2.6.3` |
 | MCP Python SDK | `1.30.0` |
 | pytest | `9.0.3` |
-| Requirements SHA-256 | `ad893c26a8f6957b9c48a1663228f32d34531f77cf6a3b8173729b87875a396a` |
+| Requirements SHA-256 | `44df1425487010140cd265892c426795980a83a4cfb105af1060593fdff6396e` (current file; comment-only update after this in-tree run) |
 
 ## Reproduction
 

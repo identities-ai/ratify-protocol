@@ -4,13 +4,11 @@
 partnership, Google-approved integration, or Google reference architecture.
 
 - **Protocol line:** v2 (2.0.0-beta.1)
-- **Tested against:** the in-tree Python v2 SDK (`ratify_protocol.v2` from
-  `ratify-protocol` 2.0.0b1 with its `protocol-v2` extra, and
-  `ratify-protocol-native-v2` 2.0.0b1, built from this repository) until
-  2.0.0-beta.1 is published. The deterministic gate is 58/58 green; see
-  [`evidence/reference-evidence.md`](evidence/reference-evidence.md). That
-  recorded run predates the move of the v2 SDK into the `ratify-protocol`
-  distribution on 2026-10-28.
+- **Tested against:** published `ratify-protocol[protocol-v2]==2.0.0b1`,
+  including `ratify-protocol-native-v2==2.0.0b1`. The deterministic gate
+  passed 58/58 on 2026-10-31; see the
+  [post-release record](../../docs/evidence/v2-published-beta1-2026-10-31.md)
+  and [earlier in-tree record](evidence/reference-evidence.md).
 - **Protocol v1 history:** the v1 version of this reference (Ratify
   `1.0.0a20`, 49/49 gate, one-million-call endurance run) is kept unchanged in
   [`v1/`](v1/README.md).
@@ -143,26 +141,26 @@ From the Ratify repository root:
 ```
 
 The script creates an isolated virtual environment (`references/google-adk/.venv`,
-or `RATIFY_REFERENCE_VENV`), builds `ratify-protocol-native-v2` and installs
-`ratify-protocol` with its `protocol-v2` extra from this repository, installs
+or `RATIFY_REFERENCE_VENV`), installs the published
+`ratify-protocol[protocol-v2]==2.0.0b1` package and its native dependency, then
+installs
 the pinned platform packages in `requirements.txt`, refuses to run if the SDK
 resolves from the source tree, runs the
 deterministic adversarial suite, and then runs the dual-root HTTP MCP
 demonstration. It requires exactly 58 passing tests and fails if any test is
 skipped, xfail, missing, or unexpectedly added.
 
-**Release pin.** The SDK dependency moves to the published
-`"ratify-protocol[protocol-v2]==2.0.0b1"` (2.0.0-beta.1), which brings
-`ratify-protocol-native-v2` 2.0.0b1 with it, when it is released; the lines to change are marked `RATIFY_V2_PIN` in
-`requirements.txt` and `run-reference-check.sh`. The 58/58 result has not yet
-been reproduced against the published packages.
+**Release pin.** The gate installs
+`ratify-protocol[protocol-v2]==2.0.0b1`, which brings
+`ratify-protocol-native-v2==2.0.0b1` with it. The published-package
+run passed 58/58.
 
 Tested pins:
 
 - `google-adk==2.6.3`
 - `mcp==1.30.0`
 - `pytest==9.0.3`
-- `ratify-protocol` (with the `protocol-v2` extra) and `ratify-protocol-native-v2` 2.0.0b1 (in-tree build)
+- `ratify-protocol[protocol-v2]==2.0.0b1` and `ratify-protocol-native-v2==2.0.0b1` (published)
 
 The deterministic path needs no API key, Google Cloud project, or paid
 service. It drives the real ADK runner with a scripted model double, so ADK
@@ -412,7 +410,7 @@ was not run for the recorded v2 evidence.
 - This is deliberately one concrete infrastructure-tool profile, not a claim
   that arbitrary MCP schemas can be wrapped without an explicit authority map.
 - Dependencies are version-pinned but not installed with artifact hashes, and
-  the v2 SDK is built from this repository until 2.0.0-beta.1 is published.
+  the gate installs the published 2.0.0-beta.1 SDK.
 - The local profile uses one static transport token. Any holder can consume the
   bounded 128-operation pending capacity until its five-minute TTL expires;
   production deployments need per-workload authentication and rate limits.

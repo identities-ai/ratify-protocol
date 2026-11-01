@@ -2,11 +2,11 @@
 
 - **Profile:** [`../google-adk/`](../google-adk/README.md)
 - **Protocol line:** v2 (2.0.0-beta.1)
-- **Status:** Independent draft ported to Protocol v2; 58/58 deterministic gate green against the in-tree v2 SDK; dual-root composition profile executed; 10, 100, and 1,000 exact-call tiers measured; not yet re-run against the published 2.0.0-beta.1 packages
-- **Ratify:** `ratify-protocol` 2.0.0b1 with its `protocol-v2` extra (`ratify_protocol.v2`) and `ratify-protocol-native-v2` 2.0.0b1, built from this repository; pins to the published `ratify-protocol[protocol-v2]==2.0.0b1` (2.0.0-beta.1) at release
+- **Status:** Independent draft ported to Protocol v2; 58/58 deterministic gate green against published `2.0.0b1` packages on 2026-10-31; dual-root composition profile executed; 10, 100, and 1,000 exact-call tiers measured on the earlier in-tree build
+- **Ratify:** Published `ratify-protocol[protocol-v2]==2.0.0b1`, including `ratify-protocol-native-v2==2.0.0b1`
 - **Platform:** `google-adk==2.6.3`, `mcp==1.30.0`
 - **Gate:** `./references/google-adk/run-reference-check.sh`
-- **Evidence:** [`../google-adk/evidence/reference-evidence.md`](../google-adk/evidence/reference-evidence.md)
+- **Evidence:** [Published-package gate](../../docs/evidence/v2-published-beta1-2026-10-31.md); [earlier in-tree record](../google-adk/evidence/reference-evidence.md)
 - **Federation and scale:** [`../google-adk/FEDERATION_SCALE.md`](../google-adk/FEDERATION_SCALE.md)
 - **Scale command:** `cd references/google-adk && python -m authority_reference.scale_benchmark --calls 10,100,1000 --workers 8`
 - **Production backlog:** [`../google-adk/PRODUCTION_GAPS.md`](../google-adk/PRODUCTION_GAPS.md)

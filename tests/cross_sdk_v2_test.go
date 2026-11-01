@@ -176,7 +176,7 @@ var v2CrossSDKKinds = []string{
 }
 
 func TestV2CrossSDKFixtures(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("testvectors", "v2", "cross-sdk", "*.json"))
+	paths, err := filepath.Glob(filepath.Join("..", "testvectors", "v2", "cross-sdk", "*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

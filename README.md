@@ -575,12 +575,11 @@ ratify-protocol/
 ├── *_v2.go                Protocol v2: wire, signing, verify, release, status, receipts
 ├── v2reference/           In-memory Part B reference stores (tests and examples only)
 ├── receipt_verify.go      TransactionReceipt verification (§5.14)
-├── ratify_test.go         Unit tests + conformance-suite loader
-├── fuzz_test.go           Fuzz harness
+├── *_test.go              Internal tests (package ratify), with the code they test
 ├── bench_verify_test.go   Benchmarks backing docs/BENCHMARKS.md
-├── cross_sdk_test.go      NxN cross-SDK byte-equivalence tests
-├── levers_test.go         Verifier option / policy lever tests
-├── providers_test.go      Provider interface (§17) tests
+├── tests/                 Public-API tests (package ratify_test): conformance
+│                          suites for testvectors/v1 and v2, cross-SDK
+│                          fixtures, fuzz harness, levers, providers
 ├── go.mod
 │
 ├── Makefile               test-all / release-check / release targets

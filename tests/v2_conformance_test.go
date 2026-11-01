@@ -27,7 +27,7 @@ import (
 
 func loadV2Vector(t *testing.T, name string, v any) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testvectors", "v2", name))
+	data, err := os.ReadFile(filepath.Join("..", "testvectors", "v2", name))
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}

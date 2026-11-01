@@ -17,7 +17,7 @@ import (
 // limit+1. The size gate must be the first check: an over-limit input fails
 // with the named limit, and an at-limit input never does.
 func TestV2ConformanceLimits(t *testing.T) {
-	raw, err := os.ReadFile("testvectors/v2/limits.json")
+	raw, err := os.ReadFile("../testvectors/v2/limits.json")
 	if err != nil {
 		t.Fatal(err)
 	}

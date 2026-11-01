@@ -221,7 +221,7 @@ for lock_file in ("demos/rust/Cargo.lock", "examples/v2/rust/Cargo.lock",
                   "sdks/python/bench_v2/rust/Cargo.lock"):
     bump_lock(lock_file, ("ratify-protocol",))
 bump_npm_file_dep("examples/v2/typescript/package-lock.json", "../../../sdks/typescript")
-bump_npm_file_dep("references/github-copilot/package-lock.json", "../../sdks/typescript")
+# Copilot pins the last published npm package and advances only after release.
 
 # The cross-SDK fixture generator records a development build of this version.
 cross_sdk = read("cmd/ratify-v2-cross-sdk/main.go")

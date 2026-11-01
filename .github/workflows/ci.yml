@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, release/v1]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, release/v1]
 
 # Every job here checks out and runs tests. None writes to the repository, opens
 # issues, or publishes anything, so the token gets read access to contents and
@@ -61,6 +61,12 @@ jobs:
 
       - name: check release metadata
         run: ./scripts/check-release-sync.sh
+
+      # Every tracked file ships in release archives and Go module zips, and
+      # nothing can be recalled from those. See CONTRIBUTING.md for what never
+      # lands here.
+      - name: Public content
+        run: python3 scripts/check-public-content.py
 
       # A reference README that drifts from the required structure is not a
       # style problem: the sections exist to answer a new reader's questions in

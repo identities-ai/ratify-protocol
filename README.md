@@ -39,7 +39,7 @@ JSON wire format. No blockchain. No bearer tokens. No central issuer. Open spec 
 - **Protocol v2** ([`SPEC-v2.md`](SPEC-v2.md)) is in beta (`2.0.0-beta.1`, a prerelease). It is not backward compatible with v1. Every SDK runs the full shared `testvectors/v2` corpus (26 vector files plus cross-SDK fixtures from all five SDKs). Review so far is the project's own pre-release security review; external independent review and outside interoperability are gates for `2.0.0`, so v2 carries no production security claim yet.
 - **Protocol v1** ([`SPEC.md`](SPEC.md)) is alpha, validated by 79 canonical test vectors in every SDK. It remains available and pinned; v1 support terms will be announced with v2 `2.0.0`.
 
-Counts and feature descriptions in this README describe `main` (the development branch). Install commands pin the versions prepared in this tree: `2.0.0-beta.1` on the v2 line (Go, TypeScript, Rust, C/C++, and Python, whose `ratify-protocol` distribution carries v1 at `ratify_protocol` and v2 at `ratify_protocol.v2`), and `1.0.0a21` for a Python install that stays on v1. A pin installs only once its release appears on [Releases](https://github.com/identities-ai/ratify-protocol/releases), which also lists each release's notes and exact fixture set. The v1 maintenance release is `v1.0.0-alpha.21`.
+Counts and feature descriptions in this README describe `main` (the development branch). Install commands pin the published releases: `2.0.0-beta.1` on the v2 line (Go, TypeScript, Rust, C/C++, and Python, whose `ratify-protocol` distribution carries v1 at `ratify_protocol` and v2 at `ratify_protocol.v2`), and `1.0.0a21` for a Python install that stays on v1. An unpinned `pip install ratify-protocol` or `cargo add ratify-protocol` resolves to the v2 beta, because every earlier release is a prerelease; npm's default stays on v1. [Releases](https://github.com/identities-ai/ratify-protocol/releases) lists each release's notes and exact fixture set. The v1 maintenance release is `v1.0.0-alpha.21`.
 
 Ratify Protocol™ and the Ratify logo are trademarks of Identities.AI, Inc. U.S. patent application pending.
 
@@ -93,7 +93,7 @@ HTTP and registry bindings, and the geo and speed constraints.
 | TypeScript | `npm install @identities-ai/ratify-protocol@2.0.0-beta.1` (dist-tag `next`; import `@identities-ai/ratify-protocol/v2`) | `npm install @identities-ai/ratify-protocol@1.0.0-alpha.21` |
 | Python | `pip install "ratify-protocol[protocol-v2]==2.0.0b1"` (import `ratify_protocol.v2`) | `pip install ratify-protocol==1.0.0a21` |
 | Rust | `cargo add ratify-protocol@2.0.0-beta.1` (module `ratify_protocol::v2`) | `ratify-protocol = "=1.0.0-alpha.21"` |
-| C/C++ | `ratify-c` 2.x: build `sdks/c` (`ratify_v2_*` ABI in `ratify.h`) | the `1.0.0-alpha.21` release archive |
+| C/C++ | `ratify-c` 2.0.0-beta.1 release archive (`ratify_v2_*` ABI in `ratify.h`), or build `sdks/c` | the `1.0.0-alpha.21` release archive |
 
 Start here:
 

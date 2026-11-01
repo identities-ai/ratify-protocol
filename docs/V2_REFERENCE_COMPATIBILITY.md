@@ -48,7 +48,8 @@ rewritten as a v2 result.
 
 The published `2.0.0-beta.1` package gates passed on 2026-10-31: Google ADK
 58/58, LangChain 34/34, A2A 8/8, GitHub Copilot 13/13, NVIDIA NOOA
-192/192, and the edge sentinel 32/32 against the macOS arm64 C release
+192/192, the live NVIDIA OpenShell profile 64/64 gates (52/52 required
+cases, one run), and the edge sentinel 32/32 against the macOS arm64 C release
 archive. See the [published-package evidence](evidence/v2-published-beta1-2026-10-31.md).
 The in-tree results in the table above remain dated historical results.
 

@@ -15,17 +15,9 @@ nooa==0.0.8
 mcp==2.0.0
 uvicorn==0.52.1
 
-# The Ratify Protocol v2 Python SDK's runtime requirements, locked rather than
-# resolved at build time. The SDK itself (ratify-protocol, pure Python; v2 is
-# ratify_protocol.v2) and its native signing extension
-# (ratify-protocol-native-v2, a Rust wheel built for the sandbox's Linux
-# architecture) are installed from this checkout by run-openshell-profile.sh in
-# its default `local` mode, without dependencies.
-#
-# TODO(RATIFY_V2_PIN): once 2.0.0-beta.1 is on PyPI, uncomment this pin, rerun
-# ./stage-lock.sh, and run the profile with RATIFY_SDK=published. The
-# protocol-v2 extra brings ratify-protocol-native-v2==2.0.0b1 with it.
-# ratify-protocol[protocol-v2]==2.0.0b1
+# The published Python SDK and matching native signing wheel. The protocol-v2
+# extra brings ratify-protocol-native-v2==2.0.0b1 into the lock.
+ratify-protocol[protocol-v2]==2.0.0b1
 #
 # Protocol v1 evidence (2026-08) was recorded against ratify-protocol==1.0.0a20
 # with cryptography and pqcrypto.

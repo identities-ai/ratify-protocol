@@ -40,11 +40,17 @@ rewritten as a v2 result.
 | Classifier.dev | `references/classifier-dev` and the public [`ratify-classifier-reference`](https://github.com/identities-ai/ratify-classifier-reference) repository | Upgrade classifier-to-scope mapping and receiver path; run model-output adversarial cases, policy refusal cases, shared v2 vectors and deploy-independent tests | v1 published reference (alpha.20). A v2 port passed its local gate (6/6, 2026-10-22) on a pre-release branch against an unpublished local SDK build; not yet published |
 | Maritime | Public [`ratify-maritime-reference`](https://github.com/identities-ai/ratify-maritime-reference) repository | Upgrade Python pin and constrained maritime authorization examples; run offline and simulator/evidence gates; do not claim live hardware compatibility without fresh run | Alpha.16/17 v1 evidence; v2 pending |
 | Agent Relay | Public [`ratify-agent-relay-harness`](https://github.com/identities-ai/ratify-agent-relay-harness) repository and its published evidence | Keep the 2026-08-19 run as historical evidence for its pinned v1 version. The later network-denied rerun validates only offline harness reproduction. A v2 compatibility result requires a new versioned adapter and run. | Historical v1 result retained; v2 not run |
-| Receiver SDK | Public [`ratify-receiver`](https://github.com/identities-ai/ratify-receiver) repository | Keep v1 API pinned; add explicit v2 profile, fail-closed decision enforcement, v2 challenge/session/action binding and vectors; package tests | Not started |
+| Receiver SDK | Public [`ratify-receiver`](https://github.com/identities-ai/ratify-receiver) repository | A Protocol v2 adapter needs the future Verify v2 API and its own executable tests | The published `0.1.4` helper targets the development-only Verify v1 API and Protocol v1. Ratify Verify is not publicly available; its launch API will use Protocol v2 by default. No v2 compatibility claim. |
 | Ratify developer docs | docs.ratifyprotocol.com | Explain the v2 break, pin-v1 choice, migration sequence, all v2 integrations, boundaries and no-guarantee language. v2 code samples render the tested programs in `examples/v2` (single source) | Docs site v2 pages follow the package release; the upgrade guide in this repository is `docs/PROTOCOL_V2_MIGRATION.md` |
 | Ratify Labs catalog | Public reference catalog | Per-reference v1/v2 status and links; never advertise untested v2 paths | Not started |
 | Protocol demos and examples | `demos/*` (v1), `examples/v2/*` (v2) | V2 examples plus preserved v1 demos; run every demo gate and verify command documentation | v2 tested: `examples/v2/<lang>/test.sh` runs the same four programs in Go, TypeScript, Python, Rust and C and diffs the output against `examples/v2/expected` (4/4 in each language, 2026-10-22; C also under ASan and UBSan); wired into CI. `demos/*` remain v1 only |
 | Registry and discovery | `references/registry/*`, `references/README.md`, root README | Versioned profiles, executable gate, exact tested package versions, review state and working links | Every registry entry states a Protocol line; `scripts/check-reference-versions.py` enforces the allowed v2 versions and that each named gate exists; `references/README.md` lists the v2 gate per reference |
+
+The published `2.0.0-beta.1` package gates passed on 2026-10-31: Google ADK
+58/58, LangChain 34/34, A2A 8/8, GitHub Copilot 13/13, NVIDIA NOOA
+192/192, and the edge sentinel 32/32 against the macOS arm64 C release
+archive. See the [published-package evidence](evidence/v2-published-beta1-2026-10-31.md).
+The in-tree results in the table above remain dated historical results.
 
 ## Protocol v2 vector coverage on this branch
 

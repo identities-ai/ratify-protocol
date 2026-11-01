@@ -545,7 +545,7 @@ verification semantics; there is no managed-only wire format.
 | **Report a security issue** | [`SECURITY.md`](SECURITY.md) (do not open a public issue) |
 | **Cite Ratify in academic work** | [`CITATION.cff`](CITATION.cff) (GitHub renders BibTeX, APA and Chicago) |
 
-This README is the entry point. **[docs.ratifyprotocol.com](https://docs.ratifyprotocol.com) covers per-language quickstarts in depth, integration guides for each surface, the managed Ratify Verify product, and the commercial API reference.**
+This README is the entry point. **[docs.ratifyprotocol.com](https://docs.ratifyprotocol.com) covers per-language quickstarts, integration guides, and the Ratify Verify product under development. Verify is not yet publicly available and will use Protocol v2 by default when it launches.**
 
 ---
 

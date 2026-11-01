@@ -11,17 +11,16 @@ project, not an NVIDIA partnership, NVIDIA-approved integration, or NVIDIA
 reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
-[v2 evidence record](evidence-v2-2026-10-29.md) ·
+[published v2 evidence](../../docs/evidence/v2-published-beta1-2026-10-31.md) ·
 [v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json)
 
-**Protocol line.** The reference runs on Ratify Protocol v2, built from this
-source tree ahead of the published `2.0.0-beta.1` packages. Its deterministic
-gate passes 192/192 on v2, and one live OpenShell profile run passed 64/64
-gates (52 required cases), both on 2026-10-29 against `ratify-protocol`
-`2.0.0b1` with its `protocol-v2` extra, built from this tree, and the SDK's
-in-memory reference stores, which are for development only. The Protocol v1 results (181 tests; the live
-OpenShell profile at 64/64 gates against `ratify-protocol==1.0.0a20`) are kept
-as dated history. Details: the [current record](evidence-v2-2026-10-29.md) (2026-10-29), the [record on the separate `ratify-protocol-v2` build](evidence-v2-2026-10-27.md) (2026-10-27) and the [first v2 record](evidence-v2-2026-10-22.md) (alpha.1 build). Geofence, speed and
+**Protocol line.** The reference runs on Ratify Protocol v2. Its deterministic
+gate passed 192/192 on 2026-10-31 against the published
+`ratify-protocol[protocol-v2]==2.0.0b1` package. A live OpenShell
+profile passed 64/64 gates (52 required cases) on 2026-10-31 against the
+published package. Both use development-only in-memory reference stores. The Protocol v1
+results remain dated history. Details: the [published-package gate and live run](../../docs/evidence/v2-published-beta1-2026-10-31.md),
+the [earlier in-tree live run](evidence-v2-2026-10-29.md), and the [v1 record](../../docs/evidence/nvidia-reference-evidence.md). Geofence, speed and
 kinematic constraints are Protocol v1 features; they return in v2.1.
 
 ## Why would a developer or enterprise need this?
@@ -115,10 +114,10 @@ behind it. Neither substitutes for the other.
 | Replayed proof | Deny | Not invoked again |
 | Untrusted principal | Deny | Not invoked |
 
-On Protocol v2, 192 tests pass with zero skips against the `2.0.0b1` SDK built
-from this tree, and one live OpenShell profile run on that build passed 64 of
-64 gates; see
-[the v2 evidence records](evidence-v2-2026-10-29.md) ([first v2 record](evidence-v2-2026-10-22.md)). On Protocol v1, 181 tests passed
+On Protocol v2, 192 tests pass with zero skips against the published `2.0.0b1`
+SDK; a live OpenShell profile against that package passed 64 of 64
+gates. See the [published-package gate and live run](../../docs/evidence/v2-published-beta1-2026-10-31.md)
+and [earlier in-tree live run](evidence-v2-2026-10-29.md). On Protocol v1, 181 tests passed
 against both the in-tree SDK and the published package, and the live OpenShell
 profile passed 64 of 64 gates; see
 [the v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json).

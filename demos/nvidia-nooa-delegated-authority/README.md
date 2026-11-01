@@ -4,17 +4,15 @@
 
 A working reference contribution for [NOOA](https://github.com/NVIDIA-NeMo/labs-OO-Agents) and NVIDIA's open agent-security stack, built on [Ratify Protocol](https://github.com/identities-ai/ratify-protocol).
 
-**Protocol line.** This reference runs on Ratify Protocol v2, built from this source tree (`ratify_protocol.v2` from `ratify-protocol` `2.0.0b1` with its `protocol-v2` extra, and `ratify-protocol-native-v2` `2.0.0b1`, ahead of the published `2.0.0-beta.1` packages). Its deterministic gate passes 192/192 on v2, and one live OpenShell profile run passed 64/64 gates (52 required cases), both on 2026-10-29 against that package built from this checkout, pre-release. The Protocol v1 results (181 tests, and the live OpenShell profile at 64/64 gates on `ratify-protocol==1.0.0a20`) are kept as dated history in [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md). The v2 records are [`references/nvidia-nooa-openshell/evidence-v2-2026-10-29.md`](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-29.md) (current: deterministic gate and live profile), [`references/nvidia-nooa-openshell/evidence-v2-2026-10-27.md`](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-27.md) (the earlier separate `ratify-protocol-v2` distribution) and [`references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md`](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md) (first v2 record and the live profile).
+**Protocol line.** This reference runs on Ratify Protocol v2. Its deterministic gate passed 192/192 and its live OpenShell profile passed 64/64 gates (52 required cases) on 2026-10-31 with the published `ratify-protocol[protocol-v2]==2.0.0b1` package. The Protocol v1 results remain dated history in [`docs/evidence/nvidia-reference-evidence.md`](../../docs/evidence/nvidia-reference-evidence.md). See the [published-package evidence](../../docs/evidence/v2-published-beta1-2026-10-31.md) and [earlier in-tree v2 record](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-29.md).
 
 **Development only.** The receiver uses the SDK's in-memory reference stores for its claim store, receipt log, checkpoint, security journal and challenge issuance. They are not durable, do not survive a restart, and share the verifier's failure domain. A production receiver supplies durable Part B stores and an independent checkpoint (SPEC-v2 §7).
 
-No API key, no model, no paid service. Until the v2 packages are published, the native signing extension builds from source, which needs a Rust toolchain:
+No API key, no model, no paid service. Install the published v2 package:
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install 'maturin>=1.7,<2'
-(cd sdks/python-native-v2 && maturin build --release --out ../../dist-native)
-pip install dist-native/*.whl -e 'sdks/python[protocol-v2]'   # TODO(RATIFY_V2_PIN): pip install "ratify-protocol[protocol-v2]==2.0.0b1"
+pip install 'ratify-protocol[protocol-v2]==2.0.0b1'
 
 python demos/nvidia-nooa-delegated-authority/scenarios.py
 python -m pytest demos/nvidia-nooa-delegated-authority/test_verification.py -q
@@ -166,9 +164,9 @@ PYTHON=/opt/homebrew/bin/python3.12 \
 ./demos/nvidia-nooa-delegated-authority/run-openshell-profile.sh
 ```
 
-`RATIFY_SDK=published` is reserved for the published `2.0.0-beta.1` packages and does not work until they are on PyPI and pinned in `sandbox-requirements.in` (`TODO(RATIFY_V2_PIN)`).
+The profile defaults to the published `2.0.0b1` package. Set `RATIFY_SDK=local` only to test an in-tree build.
 
-**Status on Protocol v2.** One live run on 2026-10-22 passed 64/64 gates with all 52 required cases, against the v2 SDK built from this checkout (pre-release; not yet repeated against published packages, and the v1 concurrent and failure-injection campaigns were not repeated). See the [v2 evidence record](../../references/nvidia-nooa-openshell/evidence-v2-2026-10-22.md).
+**Status on Protocol v2.** The 2026-10-31 live run against the published package passed 64/64 gates with all 52 required cases. The v1 concurrent and failure-injection campaigns were not repeated. See the [published-package evidence](../../docs/evidence/v2-published-beta1-2026-10-31.md).
 
 > NOOA agent → proof-carrying MCP Streamable HTTP → OpenShell destination, method, and tool enforcement → an independent MCP receiver → Ratify semantic authorization → consequential action → signed receipt
 
@@ -244,7 +242,7 @@ A reference that overstates itself is worse than no reference, so the limits are
 
 ## Environment
 
-Requires Ratify Protocol v2: `ratify-protocol` `2.0.0b1` with its `protocol-v2` extra, and `ratify-protocol-native-v2` `2.0.0b1`, built from this checkout (TODO(RATIFY_V2_PIN): the published `2.0.0-beta.1` packages). All 192 tests pass with `nooa==0.0.8`, `mcp==2.0.0` and `uvicorn==0.52.1` on Python 3.12 via `reference-check-v2.sh`, which fails on any skip and asserts that `ratify_protocol.v2` resolves inside this repository in `local` mode (outside it in `published` mode). The receiving service uses only the Python standard library plus the SDK, because a protocol reference should not need a web framework to be understood. Apache-2.0.
+Requires the published `ratify-protocol[protocol-v2]==2.0.0b1` package, which pins `ratify-protocol-native-v2==2.0.0b1`. All 192 tests pass with `nooa==0.0.8`, `mcp==2.0.0` and `uvicorn==0.52.1` on Python 3.12 via `reference-check-v2.sh`, which fails on any skip and checks that the SDK loads outside this repository. The receiving service uses only the Python standard library plus the SDK. Apache-2.0.
 
 ## Beyond this reference
 

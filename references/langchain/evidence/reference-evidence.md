@@ -29,7 +29,7 @@ unchanged in [`../v1/evidence/reference-evidence.md`](../v1/evidence/reference-e
 | MCP Python SDK | `1.30.0` |
 | pytest | `9.0.3` |
 | pytest-asyncio | `1.4.0` |
-| Requirements SHA-256 | `46ad5fc4b2594ef34d700ea0fc5de56b7ed51ff32efd9759e87bd6bcd7bc8431` |
+| Requirements SHA-256 | `cb0a57e861ac572abc903018fef8ca4530958516a35c08b73a7c8c84c586c5dc` (current file; comment-only update after this in-tree run) |
 
 ## Reproduction
 

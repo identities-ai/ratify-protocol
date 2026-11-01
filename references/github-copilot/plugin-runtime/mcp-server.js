@@ -36644,7 +36644,7 @@ var StdioServerTransport = class {
   }
 };
 
-// ../../sdks/typescript/dist/errors_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/errors_v2.js
 var V2_ERROR_CLASSES = Object.freeze([
   "malformed",
   "unsupported_object_type",
@@ -36787,7 +36787,7 @@ async function classifiedAsync(v2Class, fn) {
   }
 }
 
-// ../../sdks/typescript/dist/limits_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/limits_v2.js
 var MAX_DELEGATION_CERT_BYTES_V2 = 32 << 10;
 var MAX_PROOF_BUNDLE_BYTES_V2 = 128 << 10;
 var MAX_KEY_ROTATION_STATEMENT_BYTES_V2 = 32 << 10;
@@ -36805,7 +36805,7 @@ function checkV2WireSize(data, object3, limitName, limit) {
   }
 }
 
-// ../../sdks/typescript/dist/clock_bounds_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/clock_bounds_v2.js
 var V2_MAX_TIMESTAMP_SECONDS = 253402300799;
 var V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS = 86400;
 var V2_MAX_RATE_WINDOW_SECONDS = 86400;
@@ -36814,7 +36814,7 @@ function validV2Timestamp(t) {
   return Number.isSafeInteger(t) && t >= 0 && t <= V2_MAX_TIMESTAMP_SECONDS;
 }
 
-// ../../sdks/typescript/dist/types.js
+// node_modules/@identities-ai/ratify-protocol/dist/types.js
 var MAX_DELEGATION_CHAIN_DEPTH = 8;
 var MAX_SCOPES_PER_CERT = 128;
 var MAX_CONSTRAINTS_PER_CERT = 32;
@@ -36822,7 +36822,7 @@ var MAX_SCOPE_LENGTH_BYTES = 256;
 var MAX_IDENTIFIER_LENGTH_BYTES = 512;
 var MAX_JSON_NESTING_DEPTH = 16;
 
-// ../../sdks/typescript/dist/json_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/json_v2.js
 var MAX_SAFE_INTEGER_V2 = Number.MAX_SAFE_INTEGER;
 var utf8Strict = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 var utf8Encoder = new TextEncoder();
@@ -37541,7 +37541,7 @@ function canonicalJSONV2(v) {
   return utf8(encodeInto(v, false));
 }
 
-// ../../sdks/typescript/node_modules/@noble/ed25519/index.js
+// node_modules/@noble/ed25519/index.js
 var ed25519_CURVE = {
   p: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn,
   n: 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn,
@@ -38000,7 +38000,7 @@ var wNAF = (n) => {
   return { p, f };
 };
 
-// ../../sdks/typescript/node_modules/@noble/curves/utils.js
+// node_modules/@noble/curves/utils.js
 function abool(value, title = "") {
   if (typeof value !== "boolean") {
     const prefix = title && `"${title}" `;
@@ -38009,7 +38009,7 @@ function abool(value, title = "") {
   return value;
 }
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/_u64.js
+// node_modules/@noble/post-quantum/node_modules/@noble/hashes/_u64.js
 var U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
 var _32n = /* @__PURE__ */ BigInt(32);
 function fromBig(n, le = false) {
@@ -38032,7 +38032,7 @@ var rotlSL = (h2, l, s) => l << s | h2 >>> 32 - s;
 var rotlBH = (h2, l, s) => l << s - 32 | h2 >>> 64 - s;
 var rotlBL = (h2, l, s) => h2 << s - 32 | l >>> 64 - s;
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/utils.js
+// node_modules/@noble/post-quantum/node_modules/@noble/hashes/utils.js
 function isBytes2(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -38133,7 +38133,7 @@ var oidNist = (suffix) => ({
   oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
 });
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/node_modules/@noble/hashes/sha3.js
+// node_modules/@noble/post-quantum/node_modules/@noble/hashes/sha3.js
 var _0n = BigInt(0);
 var _1n = BigInt(1);
 var _2n = BigInt(2);
@@ -38334,7 +38334,7 @@ var genShake = (suffix, blockLen, outputLen, info = {}) => createHasher((opts = 
 var shake128 = /* @__PURE__ */ genShake(31, 168, 16, /* @__PURE__ */ oidNist(11));
 var shake256 = /* @__PURE__ */ genShake(31, 136, 32, /* @__PURE__ */ oidNist(12));
 
-// ../../sdks/typescript/node_modules/@noble/curves/abstract/fft.js
+// node_modules/@noble/curves/abstract/fft.js
 function checkU32(n) {
   if (!Number.isSafeInteger(n) || n < 0 || n > 4294967295)
     throw new Error("wrong u32 integer:" + n);
@@ -38419,7 +38419,7 @@ var FFTCore = (F2, coreOpts) => {
   };
 };
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/utils.js
+// node_modules/@noble/post-quantum/utils.js
 var abytesDoc = abytes2;
 var randomBytes3 = randomBytes2;
 function equalBytes(a, b) {
@@ -38542,7 +38542,7 @@ function getMessagePrehash(hash2, msg, ctx = EMPTY) {
   return concatBytes3(new Uint8Array([1, ctx.length]), ctx, hash2.oid, hashed);
 }
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/_crystals.js
+// node_modules/@noble/post-quantum/_crystals.js
 var genCrystals = (opts) => {
   const { newPoly: newPoly2, N: N3, Q: Q2, F: F2, ROOT_OF_UNITY: ROOT_OF_UNITY2, brvBits, isKyber } = opts;
   const mod = (a, modulo = Q2) => {
@@ -38662,7 +38662,7 @@ var createXofShake = (shake) => (seed2, blockLen) => {
 var XOF128 = /* @__PURE__ */ createXofShake(shake128);
 var XOF256 = /* @__PURE__ */ createXofShake(shake256);
 
-// ../../sdks/typescript/node_modules/@noble/post-quantum/ml-dsa.js
+// node_modules/@noble/post-quantum/ml-dsa.js
 function validateInternalOpts(opts) {
   validateOpts(opts);
   if (opts.externalMu !== void 0)
@@ -39183,7 +39183,7 @@ var ml_dsa65 = /* @__PURE__ */ (() => getDilithium({
   securityLevel: 192
 }))();
 
-// ../../sdks/typescript/node_modules/@noble/hashes/esm/utils.js
+// node_modules/@noble/hashes/esm/utils.js
 function isBytes3(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
@@ -39265,7 +39265,7 @@ function createXOFer(hashCons) {
   return hashC;
 }
 
-// ../../sdks/typescript/node_modules/@noble/hashes/esm/_md.js
+// node_modules/@noble/hashes/esm/_md.js
 function setBigUint64(view, byteOffset, value, isLE3) {
   if (typeof view.setBigUint64 === "function")
     return view.setBigUint64(byteOffset, value, isLE3);
@@ -39421,7 +39421,7 @@ var SHA512_IV = /* @__PURE__ */ Uint32Array.from([
   327033209
 ]);
 
-// ../../sdks/typescript/node_modules/@noble/hashes/esm/_u64.js
+// node_modules/@noble/hashes/esm/_u64.js
 var U32_MASK642 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
 var _32n2 = /* @__PURE__ */ BigInt(32);
 function fromBig2(n, le = false) {
@@ -39460,7 +39460,7 @@ var add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0
 var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
 var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
 
-// ../../sdks/typescript/node_modules/@noble/hashes/esm/sha2.js
+// node_modules/@noble/hashes/esm/sha2.js
 var SHA256_K = /* @__PURE__ */ Uint32Array.from([
   1116352408,
   1899447441,
@@ -39819,7 +39819,7 @@ var SHA384 = class extends SHA512 {
 var sha256 = /* @__PURE__ */ createHasher2(() => new SHA256());
 var sha384 = /* @__PURE__ */ createHasher2(() => new SHA384());
 
-// ../../sdks/typescript/dist/resource_path.js
+// node_modules/@identities-ai/ratify-protocol/dist/resource_path.js
 var MAX_SAFE_INTEGER_VALUE = Number.MAX_SAFE_INTEGER;
 var _utf8 = new TextEncoder();
 function normalizeResourcePath(p) {
@@ -39907,7 +39907,7 @@ function validateParamsValue(v, depth) {
   throw new Error(`params value of type ${typeof v} is outside the restricted value model`);
 }
 
-// ../../sdks/typescript/dist/crypto.js
+// node_modules/@identities-ai/ratify-protocol/dist/crypto.js
 async function hybridKeypairFromSeeds(edSeed, mlSeed) {
   if (edSeed.length !== 32)
     throw new Error(`Ed25519 seed must be 32 bytes, got ${edSeed.length}`);
@@ -39921,7 +39921,7 @@ async function hybridKeypairFromSeeds(edSeed, mlSeed) {
   };
 }
 
-// ../../sdks/typescript/dist/sha384_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/sha384_v2.js
 var nodeCrypto = globalThis.process?.getBuiltinModule?.("node:crypto");
 function sha384V2(data) {
   if (nodeCrypto === void 0)
@@ -39929,7 +39929,7 @@ function sha384V2(data) {
   return new Uint8Array(nodeCrypto.createHash("sha384").update(data).digest());
 }
 
-// ../../sdks/typescript/node_modules/@noble/hashes/esm/sha3.js
+// node_modules/@noble/hashes/esm/sha3.js
 var _0n2 = BigInt(0);
 var _1n2 = BigInt(1);
 var _2n2 = BigInt(2);
@@ -40110,7 +40110,7 @@ var Keccak2 = class _Keccak extends Hash {
 var genShake2 = (suffix, blockLen, outputLen) => createXOFer((opts = {}) => new Keccak2(blockLen, suffix, opts.dkLen === void 0 ? outputLen : opts.dkLen, true));
 var shake2562 = /* @__PURE__ */ (() => genShake2(31, 136, 256 / 8))();
 
-// ../../sdks/typescript/dist/crypto_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/crypto_v2.js
 var KEY_ID_V2_DOMAIN = new TextEncoder().encode("ratify-key-id-v2\0");
 var SIGNATURE_V2_DOMAIN = new TextEncoder().encode("ratify-protocol-signature\0");
 var ML_DSA_V2_CERT_CONTEXT = new TextEncoder().encode("ratify-protocol/2/0001");
@@ -40271,7 +40271,7 @@ async function verifyV2StatementReason(code, signable, sig, pub) {
   }
 }
 
-// ../../sdks/typescript/dist/signer_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/signer_v2.js
 function keyIDV22(pub) {
   try {
     return keyIDV2(pub);
@@ -40409,7 +40409,7 @@ async function signV2StatementWithSigner(objectType2, signable, signer, pub, opt
   return copy;
 }
 
-// ../../sdks/typescript/dist/scope.js
+// node_modules/@identities-ai/ratify-protocol/dist/scope.js
 var SCOPE_MEETING_ATTEND = "meeting:attend";
 var SCOPE_MEETING_SPEAK = "meeting:speak";
 var SCOPE_MEETING_VIDEO = "meeting:video";
@@ -40564,7 +40564,7 @@ function scopeWildcards() {
   return Object.freeze(out);
 }
 
-// ../../sdks/typescript/dist/scope_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/scope_v2.js
 var VALID = new Set(vocabulary());
 var WILDCARDS = new Map(Object.entries(scopeWildcards()));
 function isValidScopeV2(s) {
@@ -40588,7 +40588,7 @@ function validateScopesV2(scopes) {
   return null;
 }
 
-// ../../sdks/typescript/dist/constraints_v2.js
+// node_modules/@identities-ai/ratify-protocol/dist/constraints_v2.js
 var CONSTRAINT_TIME_WINDOW_V2 = "time_window";
 var CONSTRAINT_MAX_AMOUNT_V2 = "max_amount";
 var CONSTRAINT_MAX_RATE_V2 = "max_rate";
@@ -40872,7 +40872,7 @@ function parseHHMMV2(s) {
   return h2 * 60 + m;
 }
 
-// ../../sdks/typescript/dist/protocol_v2_wire.js
+// node_modules/@identities-ai/ratify-protocol/dist/protocol_v2_wire.js
 function validV2ID(id2) {
   return typeof id2 === "string" && /^[0-9a-f]{64}$/.test(id2);
 }

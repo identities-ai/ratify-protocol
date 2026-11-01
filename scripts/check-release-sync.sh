@@ -210,11 +210,20 @@ for lock_file in ("demos/rust/Cargo.lock", "examples/v2/rust/Cargo.lock",
     if not entry or entry.group(1) != ts_version:
         got = entry.group(1) if entry else "missing"
         fail(f"{lock_file} ratify-protocol {got} does not match {ts_version}")
-for lock_file, key in (("examples/v2/typescript/package-lock.json", "../../../sdks/typescript"),
-                       ("references/github-copilot/package-lock.json", "../../sdks/typescript")):
-    got = json.loads(read(lock_file)).get("packages", {}).get(key, {}).get("version", "missing")
-    if got != ts_version:
-        fail(f"{lock_file} in-tree SDK entry {got} does not match {ts_version}")
+lock_file = "examples/v2/typescript/package-lock.json"
+got = json.loads(read(lock_file)).get("packages", {}).get("../../../sdks/typescript", {}).get("version", "missing")
+if got != ts_version:
+    fail(f"{lock_file} in-tree SDK entry {got} does not match {ts_version}")
+lock_file = "references/github-copilot/package-lock.json"
+published = json.loads(read(lock_file)).get("packages", {}).get("node_modules/@identities-ai/ratify-protocol", {})
+copilot_pin = json.loads(read("references/github-copilot/package.json")).get("dependencies", {}).get("@identities-ai/ratify-protocol", "")
+# A reference may stay on the last published release while the next SDK is
+# being prepared. Check its manifest and lockfile against each other.
+if (not re.fullmatch(r"2\.\d+\.\d+(?:-[a-z]+\.\d+)?", copilot_pin)
+        or published.get("version") != copilot_pin
+        or not published.get("resolved", "").startswith("https://registry.npmjs.org/")
+        or not published.get("integrity")):
+    fail(f"{lock_file} published SDK entry does not match its exact package.json pin")
 cross_sdk_default = re.search(r'"sdk-version", "([^"]+)\+dev"', read("cmd/ratify-v2-cross-sdk/main.go"))
 if not cross_sdk_default or cross_sdk_default.group(1) != ts_version:
     got = cross_sdk_default.group(1) if cross_sdk_default else "missing"

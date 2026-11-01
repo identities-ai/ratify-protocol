@@ -4,7 +4,7 @@
 
 This independent Ratify draft uses A2A 1.0 messages to carry a bounded provisioning request and its proof to a receiving agent. The receiver verifies the exact operation before calling its protected provisioner. It is a discussion artifact, not an A2A-approved extension, Google integration, Cisco integration, or production deployment. [Run it](#use-it-now) · [Inspect the evidence](#what-the-reference-proves) · [Choose a path](#which-path-should-i-use)
 
-> **Protocol line: Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease), one-directional only.** The calling agent presents one proof and the receiver verifies it. Protocol v2.0 has no mutual presentation profile, so the receiver-to-caller proof, the A2A mutual-presentation carrier, and the `verification_result` object of v1 §11.1 remain v1-only until Protocol 2.1. Two independent v2 proofs would not establish one conversation. The gate builds the v2 SDK from this repository, so it tests the tree it ships with (see [Use it now](#use-it-now)). The v1 (`1.0.0a20`) results are kept as dated history in [EVIDENCE.md](EVIDENCE.md).
+> **Protocol line: Ratify Protocol v2 (`2.0.0-beta.1`, a prerelease), one-directional only.** The calling agent presents one proof and the receiver verifies it. Protocol v2.0 has no mutual presentation profile, so the receiver-to-caller proof, the A2A mutual-presentation carrier, and the `verification_result` object of v1 §11.1 remain v1-only until Protocol 2.1. Two independent v2 proofs would not establish one conversation. The gate passed 8/8 against the published v2 Python package on 2026-10-31 (see the [post-release record](../../docs/evidence/v2-published-beta1-2026-10-31.md)). The v1 (`1.0.0a20`) results are kept as dated history in [EVIDENCE.md](EVIDENCE.md).
 
 ![A2A handoff, receiver challenge, and two possible outcomes](visuals/a2a-authority.svg)
 
@@ -147,7 +147,7 @@ The A2A `DataPart`, message ID, header, and metadata placement are carrier detai
 | [`serve.py`](serve.py) | Separate HTTPS receiver entry point for the network gate |
 | [`wire_client.mjs`](wire_client.mjs) | Independent Node A2A JSON-RPC caller for the network gate |
 | [`tests/test_poc.py`](tests/test_poc.py) | A2A wire allow and deny assertions with protected-call counts |
-| [`requirements.txt`](requirements.txt) | A2A and test pins; the v2 SDK is built from this repository until published |
+| [`requirements.txt`](requirements.txt) | A2A and test pins; the gate installs the published v2 SDK separately |
 | [`run-reference-check.sh`](run-reference-check.sh) | Clean-checkout gate; [`../../scripts/a2a-reference-check.sh`](../../scripts/a2a-reference-check.sh) runs it |
 | [`AGNTCY_A2A_FIT.md`](AGNTCY_A2A_FIT.md) | Short layer comparison and questions for maintainers |
 | [`EVIDENCE.md`](EVIDENCE.md) | Dated evidence records: the current v2 run and the earlier v2 and v1 runs |
@@ -164,6 +164,6 @@ On 2026-10-29 the gate ran locally with `a2a-sdk==1.2.2`, `ratify-protocol` `2.0
 - The challenge and pending-operation stores are in-memory in one receiver process. An authenticated caller can occupy the 128 pending-operation slots or reserve a predictable request ID for up to five minutes. The executor does not support cancellation; the A2A SDK may mark a waiting task canceled without releasing its pending challenge before that TTL. Multi-replica atomicity, durable revocation, key custody, rate limits, and production audit storage are not implemented.
 - The protected provisioner is in-memory and creates no cloud resource. A real executor must ensure the verified logical resource maps to the actual resource it changes.
 - The network test runs separate caller and receiver processes on one host and uses an independent Node JSON-RPC client. It does not prove interoperability with another vendor's deployed A2A agent or use a second vendor's SDK.
-- The v2 SDK is the `2.0.0-beta.1` prerelease, built from this repository; the result has not yet been repeated against the published packages. Protocol v2 review so far is the project's own pre-release security review; external independent review is a gate for `2.0.0`.
+- The v2 SDK is the published `2.0.0-beta.1` prerelease. The 8/8 gate passed against its Python package. Protocol v2 review so far is the project's own pre-release security review; external independent review is a gate for `2.0.0`.
 
 Sources: [A2A extensions](https://a2a-protocol.org/latest/topics/extensions/), [A2A authorization scope](https://a2a-protocol.org/latest/specification/), [AGNTCY identity](https://spec.identity.agntcy.org/docs/intro/).

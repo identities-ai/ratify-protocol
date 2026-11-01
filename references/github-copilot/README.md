@@ -11,13 +11,14 @@ exact resource before the protected handler runs.
 It is an independent Ratify Protocol project, not a GitHub- or
 Microsoft-endorsed integration.
 
-**Protocol line.** This reference now runs on Ratify Protocol v2, built from
-this source tree (the TypeScript SDK prerelease, ahead of the published
-`2.0.0-beta.1` packages). Its deterministic gate passes 13/13 on v2. The native
+**Protocol line.** This reference now runs on the published Ratify Protocol
+`2.0.0-beta.1` TypeScript SDK. Its deterministic gate passed 13/13 on
+2026-10-31. The native
 GitHub Copilot CLI 1.0.80 runs recorded in
 [`reference-evidence.md`](reference-evidence.md) were executed on Protocol v1
 (`1.0.0-alpha.19`) on 2026-08-14 and have not been repeated on v2. The plugin
-installed from `main` stays on Protocol v1 until this v2 port is merged.
+installed from the previous release stayed on Protocol v1; this v2 port uses
+the published beta package.
 The v2 receiver uses the SDK's in-memory reference stores, which are for
 development only.
 
@@ -327,8 +328,8 @@ path; Ratify Verify is not yet offered here as a generally available service.
 
 ## What is cryptographically bound?
 
-The Ratify Protocol v2 TypeScript SDK (`@identities-ai/ratify-protocol/v2`,
-built from this tree) verifies:
+The published Ratify Protocol v2 TypeScript SDK
+(`@identities-ai/ratify-protocol@2.0.0-beta.1`, import `/v2`) verifies:
 
 - the hybrid-signed delegation chain, with 64-hex key IDs that must match the
   complete keys they name;

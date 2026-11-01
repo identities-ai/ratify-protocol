@@ -194,19 +194,20 @@ note "openshell CLI $CLI_V"
 
 VENV="$WORK/venv"
 "$PYBIN" -m venv "$VENV" >/dev/null
-# The receiver and control plane run on the host against Ratify Protocol v2
-# from this checkout: the native signing extension is built with maturin (needs
-# a Rust toolchain) and ratify-protocol is installed editable with its
-# protocol-v2 extra.
-# TODO(RATIFY_V2_PIN): in published mode, install the 2.0.0-beta.1 packages here.
-"$VENV/bin/pip" -q install 'maturin>=1.7,<2' >/dev/null 2>&1
-( cd "$REPO/sdks/python-native-v2" && "$VENV/bin/maturin" build --release --quiet --out "$WORK/host-wheel" ) \
-  > "$WORK/host-wheel.log" 2>&1 || { tail -15 "$WORK/host-wheel.log"; fail_now "could not build the v2 native extension for the host"; }
-"$VENV/bin/pip" -q install "$WORK"/host-wheel/*.whl >/dev/null 2>&1
-"$VENV/bin/pip" -q install -e "$REPO/sdks/python[protocol-v2]" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
+RATIFY_SDK="${RATIFY_SDK:-published}"
+RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-2.0.0b1}"
+if [ "$RATIFY_SDK" = published ]; then
+  "$VENV/bin/pip" -q install "ratify-protocol[protocol-v2]==${RATIFY_SDK_VERSION}" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
+else
+  "$VENV/bin/pip" -q install 'maturin>=1.7,<2' >/dev/null 2>&1
+  ( cd "$REPO/sdks/python-native-v2" && "$VENV/bin/maturin" build --release --quiet --out "$WORK/host-wheel" ) \
+    > "$WORK/host-wheel.log" 2>&1 || { tail -15 "$WORK/host-wheel.log"; fail_now "could not build the v2 native extension for the host"; }
+  "$VENV/bin/pip" -q install "$WORK"/host-wheel/*.whl >/dev/null 2>&1
+  "$VENV/bin/pip" -q install -e "$REPO/sdks/python[protocol-v2]" "$MCP_PIN" "$UVICORN_PIN" >/dev/null 2>&1
+fi
 "$VENV/bin/python" -c "import ratify_protocol.v2, sys; sys.exit(0 if ratify_protocol.v2.NATIVE_AVAILABLE else 1)" \
   || fail_now "ratify_protocol.v2 native signing is not importable in the receiver venv"
-note "receiver venv ready (ratify-protocol[protocol-v2] from checkout, $MCP_PIN, $UVICORN_PIN)"
+note "receiver venv ready (ratify sdk source=$RATIFY_SDK, $MCP_PIN, $UVICORN_PIN)"
 
 # --- 2. dynamic ports -------------------------------------------------------
 GW_PORT="$(freeport)"; GW_HEALTH="$(freeport)"; MCP_PORT="$(freeport)"; CTRL_PORT="$(freeport)"
@@ -239,18 +240,12 @@ mkdir -p "$DEPS_DIR"
 LOCK="$HERE/sandbox-requirements.lock"
 [ -f "$LOCK" ] || fail_now "sandbox-requirements.lock is missing; run ./stage-lock.sh"
 
-# Where the Ratify SDK in the sandbox image comes from. `local` builds it from this
-# checkout, which is what every pre-release run has used and what proves the
-# reference against the code in the tree. `published` takes it from the lock, which
-# is what the *final* evidence must use: an image built from the checkout proves the
-# checkout, not the package a reader installs.
+# Where the Ratify SDK in the sandbox image comes from. `published` is the
+# default and takes the hash-verified package from the lock. `local` builds
+# the SDK from this checkout for development runs.
 #
 # The pin in sandbox-requirements.in names a published release, and the lock is
-# staged from it with ./stage-lock.sh. To run against that published package
-# rather than the checkout:
-#   RATIFY_SDK=published ./run-openshell-profile.sh
-RATIFY_SDK="${RATIFY_SDK:-local}"
-RATIFY_SDK_VERSION="${RATIFY_SDK_VERSION:-2.0.0b1}"  # TODO(RATIFY_V2_PIN)
+# staged from it with ./stage-lock.sh.
 case "$RATIFY_SDK" in
   local)
       # Protocol v2 needs two distributions in the sandbox: ratify-protocol
@@ -274,7 +269,7 @@ case "$RATIFY_SDK" in
 uv pip install -q --python /usr/bin/python3 --target /out/site --no-deps /wheels/*.whl /build' ;;
   published)
       grep -qi "^ratify-protocol==${RATIFY_SDK_VERSION}" "$LOCK" || fail_now \
-        "RATIFY_SDK=published needs ratify-protocol==${RATIFY_SDK_VERSION} in the lock; uncomment it in sandbox-requirements.in and run ./stage-lock.sh"
+        "RATIFY_SDK=published needs ratify-protocol==${RATIFY_SDK_VERSION} in the lock; run ./stage-lock.sh"
       SDK_MOUNT=()
       # Nothing to do: the lock install below already placed the published,
       # hash-verified package. No checkout is mounted at all.

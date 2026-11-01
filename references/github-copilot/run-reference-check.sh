@@ -3,17 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Protocol v2. The reference depends on the TypeScript SDK in this tree through
-# a file: dependency, so the gate builds that SDK first and proves the
-# reference against the code in the checkout.
-# TODO(RATIFY_V2_PIN): when @identities-ai/ratify-protocol 2.0.0-beta.1 is
-# published, pin it exactly in package.json, drop this build step, and record
-# the published-package run in reference-evidence.md.
-SDK="../../sdks/typescript"
-if [ ! -d "$SDK/node_modules" ]; then
-    (cd "$SDK" && npm ci --no-audit --no-fund)
-fi
-(cd "$SDK" && npm run build --silent)
+# Protocol v2. package.json pins the published TypeScript beta exactly.
 
 npm ci --no-fund
 

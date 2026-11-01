@@ -11,8 +11,8 @@ Every registry entry states a `Protocol line` (v1 or v2). The rules differ:
 
 - v1: requirements.txt pins exactly one `ratify-protocol==1.0.0aN`, and the
   registry entry and README name that version and no other.
-- v2: the SDK is built from this repository until the v2 release is published,
-  so there is no Ratify pin to compare against. Instead every v2 version a
+- v2: Python and TypeScript gates pin the published v2 packages; C gates can
+  accept a release archive or a local build. Every v2 version a
   reference states (registry entry, README, evidence, metadata, requirements,
   gate script) must be either the version in this tree
   (sdks/python/pyproject.toml) or the release the reference is waiting for

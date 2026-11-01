@@ -328,8 +328,8 @@ path; Ratify Verify is not yet offered here as a generally available service.
 
 ## What is cryptographically bound?
 
-The Ratify Protocol v2 TypeScript SDK (`@identities-ai/ratify-protocol/v2`,
-built from this tree) verifies:
+The published Ratify Protocol v2 TypeScript SDK
+(`@identities-ai/ratify-protocol@2.0.0-beta.1`, import `/v2`) verifies:
 
 - the hybrid-signed delegation chain, with 64-hex key IDs that must match the
   complete keys they name;

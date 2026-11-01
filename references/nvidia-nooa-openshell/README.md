@@ -16,11 +16,11 @@ reference architecture.
 
 **Protocol line.** The reference runs on Ratify Protocol v2. Its deterministic
 gate passed 192/192 on 2026-10-31 against the published
-`ratify-protocol[protocol-v2]==2.0.0b1` package. An earlier live OpenShell
+`ratify-protocol[protocol-v2]==2.0.0b1` package. A live OpenShell
 profile passed 64/64 gates (52 required cases) on 2026-10-31 against the
 published package. Both use development-only in-memory reference stores. The Protocol v1
-results remain dated history. Details: the [published-package gate](../../docs/evidence/v2-published-beta1-2026-10-31.md),
-the [earlier live record](evidence-v2-2026-10-29.md), and the [v1 record](../../docs/evidence/nvidia-reference-evidence.md). Geofence, speed and
+results remain dated history. Details: the [published-package gate and live run](../../docs/evidence/v2-published-beta1-2026-10-31.md),
+the [earlier in-tree live run](evidence-v2-2026-10-29.md), and the [v1 record](../../docs/evidence/nvidia-reference-evidence.md). Geofence, speed and
 kinematic constraints are Protocol v1 features; they return in v2.1.
 
 ## Why would a developer or enterprise need this?
@@ -116,8 +116,8 @@ behind it. Neither substitutes for the other.
 
 On Protocol v2, 192 tests pass with zero skips against the published `2.0.0b1`
 SDK; a live OpenShell profile against that package passed 64 of 64
-gates. See the [published-package gate](../../docs/evidence/v2-published-beta1-2026-10-31.md)
-and [earlier live record](evidence-v2-2026-10-29.md). On Protocol v1, 181 tests passed
+gates. See the [published-package gate and live run](../../docs/evidence/v2-published-beta1-2026-10-31.md)
+and [earlier in-tree live run](evidence-v2-2026-10-29.md). On Protocol v1, 181 tests passed
 against both the in-tree SDK and the published package, and the live OpenShell
 profile passed 64 of 64 gates; see
 [the v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json).

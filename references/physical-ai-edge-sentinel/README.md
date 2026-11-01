@@ -117,13 +117,13 @@ The deterministic gate runs a 32-row scenario matrix against the test builds wit
 | receiver state restored from an earlier copy | receiver stays recovering, refuses everything | not fired |
 | root key reused as the status key | publisher and receiver both refuse | not applicable |
 
-The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evidence.md). The local gate result is **32 passed, 0 failed, 0 skipped**, with 5 actuator invocations in total, all to the mock.
+The full table, including the recovery rows, is in [`docs/evidence.md`](docs/evidence.md). The gate also passed **32 rows, 0 failed, 0 skipped** against the published macOS arm64 C archive on 2026-10-31, with 5 mock actuator invocations; see the [published-package evidence](../../docs/evidence/v2-published-beta1-2026-10-31.md).
 
 ## Use it now
 
-Prerequisites: a C compiler, `make`, and a Ratify C SDK `2.0.0-beta.1` tree containing `include/ratify.h` and `lib/libratify_c.a`, built from `sdks/c` in this repository. The gate needs no Arduino, model API, cloud account, or RTC.
+Prerequisites: a C compiler, `make`, and a Ratify C SDK `2.0.0-beta.1` directory containing `include/ratify.h` and `lib/libratify_c.a`. Use the [published release archive](https://github.com/identities-ai/ratify-protocol/releases/tag/v2.0.0-beta.1) for your platform or build from `sdks/c` in this repository. The gate needs no Arduino, model API, cloud account, or RTC.
 
-1. Clone the protocol repository and build the C SDK:
+1. Download and extract a matching `ratify-c` release archive, or clone the protocol repository and build the C SDK:
 
    ```sh
    git clone https://github.com/identities-ai/ratify-protocol

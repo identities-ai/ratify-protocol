@@ -4,9 +4,9 @@
   "status": "independent Ratify reference; not reviewed or endorsed by GitHub or Microsoft",
   "platform": "GitHub Copilot plugin, Agent Skill, and MCP server",
   "endorsement": "self-authored, no platform endorsement",
-  "evidence": "reference-evidence.md",
+  "evidence": "../../docs/evidence/v2-published-beta1-2026-10-31.md",
   "tests": 13,
   "skips": 0,
   "gate": "./run-reference-check.sh",
-  "protocol": "v2 (SDK built from this tree; development-only reference stores)"
+  "protocol": "v2 (published npm SDK 2.0.0-beta.1; development-only reference stores)"
 }

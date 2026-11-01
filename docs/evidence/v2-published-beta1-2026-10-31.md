@@ -14,6 +14,8 @@ outside the checkout and failed on skipped tests or an unexpected test count.
 | NVIDIA NOOA live OpenShell | Same PyPI packages in the sandbox | 64/64 gates, 52/52 required cases | One live profile on arm64 macOS with Docker and OpenShell CLI 0.0.102; no linux/amd64 run |
 | Physical AI edge sentinel | GitHub release `ratify-c-v2.0.0-beta.1-macos-aarch64.tar.gz` | 32/32 | macOS arm64 gate with mock actuator; no fresh Pi or Arduino run |
 
+GitHub Copilot machine-readable gate result: Result: 13 passed, 0 failed, 0 skipped.
+
 All counts had zero skips. The reference stores are development-only. The
 earlier in-tree physical hardware runs remain recorded in their own dated
 evidence files; this record does not turn them into published-package or

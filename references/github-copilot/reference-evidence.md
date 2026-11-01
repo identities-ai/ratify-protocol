@@ -1,5 +1,10 @@
 # Reference evidence
 
+The gate was re-run against the published `@identities-ai/ratify-protocol`
+`2.0.0-beta.1` package on 2026-10-31: 13 passed, 0 failed, 0 skipped. See
+[`docs/evidence/v2-published-beta1-2026-10-31.md`](../../docs/evidence/v2-published-beta1-2026-10-31.md).
+The dated sections below are earlier in-tree runs and stay as written.
+
 ## Protocol v2 (2026-10-27)
 
 Executed 2026-10-27 on macOS arm64, Node.js 26.10.0, npm 11.19.1, against the

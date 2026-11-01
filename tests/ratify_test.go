@@ -668,7 +668,7 @@ type fixtureStreamContext struct {
 // contract: any JS/Python/Rust implementation can consume the same files
 // and run the same checks.
 func TestConformanceVectors(t *testing.T) {
-	dir := "testvectors/v1"
+	dir := "../testvectors/v1"
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("read %s: %v — run 'go run ./cmd/ratify-testvectors' first", dir, err)

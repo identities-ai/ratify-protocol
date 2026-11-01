@@ -807,7 +807,7 @@ func TestV2CancellationAfterClaimLeavesClaimRecoverable(t *testing.T) {
 		Bundles      map[string]string             `json:"bundles_b64"`
 		Requests     map[string]v2LifecycleRequest `json:"requests"`
 	}
-	data, err := os.ReadFile(filepath.Join("testvectors", "v2", "lifecycle-scenarios.json"))
+	data, err := os.ReadFile(filepath.Join("..", "testvectors", "v2", "lifecycle-scenarios.json"))
 	if err != nil || json.Unmarshal(data, &f) != nil {
 		t.Fatalf("load lifecycle vectors: %v", err)
 	}

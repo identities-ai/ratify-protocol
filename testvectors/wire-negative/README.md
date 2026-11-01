@@ -48,7 +48,7 @@ followed by a verification that reports the bundle valid — and for
 
 - TypeScript: `sdks/typescript/test/wire.test.ts`
 - Python: `sdks/python/tests/test_wire.py`
-- Go: `wire_check_test.go` (module root)
+- Go: `tests/wire_check_test.go`
 - Rust: `sdks/rust/tests/wire_negative.rs`
 - C: `sdks/c/tests/api.rs` (drives the public `ratify_verify_bundle` and
   session-token JSON functions)

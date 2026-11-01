@@ -20,7 +20,7 @@
 
 ## Layer 1: Unit Tests (Go)
 
-Location: `ratify_test.go` (at the repo root; the "6 tests" figure below is planning-era, and this plan expands to ~35).
+Location: `tests/ratify_test.go` (public-API tests live in `tests/`; the "6 tests" figure below is planning-era, and this plan expands to ~35).
 
 ### 1.1 Happy path: extend current `TestDelegationRoundTrip`
 
@@ -134,7 +134,7 @@ Every output of `ExpandScopes` must satisfy `ValidateScopes` without error.
 
 This is the single highest-leverage test artifact for the open-source launch. Without cross-language test vectors, no JS or Python implementation can be verified correct.
 
-**Status:** ✅ Implemented on `main`. **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
+**Status:** ✅ Implemented on `main`. **79 fixtures** generated and committed at `testvectors/v1/*.json`. Generator: `cmd/ratify-testvectors/main.go`. Conformance test: `TestConformanceVectors` in `tests/ratify_test.go` loads every fixture and validates `Verify()` output; mirrored in each SDK's conformance harness (TS / Python / Rust / C). The v1.1 fixtures are not part of a public protocol tag until the next release.
 
 ### 3.1 Location
 
@@ -329,7 +329,7 @@ go test -run TestConformanceVectors ./...
 
 There is no single driver script. Each SDK owns its conformance harness and loads the fixtures directly from `testvectors/v1/`:
 
-- Go: `TestConformanceVectors` in `ratify_test.go`.
+- Go: `TestConformanceVectors` in `tests/ratify_test.go`.
 - TypeScript: `sdks/typescript/test/conformance.test.ts`.
 - Python: `sdks/python/tests/test_conformance.py`.
 - Rust: `sdks/rust/tests/conformance.rs`.
@@ -423,7 +423,7 @@ Location: `api/ratify_handlers_test.go` (to be written).
 
 ### 6.1 Scope narrowing in multi-cert chains ✅ Resolved
 
-**Status:** Fixed in `verify.go`. Effective granted scope is the intersection of every cert's expanded scope set via `IntersectScopes`. Sensitive scopes never ride wildcards through any level. Four tests in `ratify_test.go` cover the adversarial and positive cases:
+**Status:** Fixed in `verify.go`. Effective granted scope is the intersection of every cert's expanded scope set via `IntersectScopes`. Sensitive scopes never ride wildcards through any level. Four tests in `tests/ratify_test.go` cover the adversarial and positive cases:
 
 - `TestScopeNarrowingDepth2Escalation`: intermediate grants `files:write` without receiving it; rejected
 - `TestScopeNarrowingDepth2Legitimate`: human grants `meeting:*`, intermediate narrows to `meeting:attend`; valid

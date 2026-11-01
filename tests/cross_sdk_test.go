@@ -26,7 +26,7 @@ func TestCrossSDKByteEquivalence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	path := filepath.Join(wd, "testvectors", "v1", "cross_sdk_vectors.json")
+	path := filepath.Join(wd, "..", "testvectors", "v1", "cross_sdk_vectors.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)

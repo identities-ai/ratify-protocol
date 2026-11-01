@@ -36,7 +36,7 @@ type negativeDoc struct {
 
 func loadNegativeCases(t *testing.T) []negativeCase {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testvectors", "wire-negative", "cases.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "testvectors", "wire-negative", "cases.json"))
 	if err != nil {
 		t.Fatalf("read corpus: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestWireEncodersIntegerDomain(t *testing.T) {
 // and that round-trips: encode(decode(fixture)) re-decodes to an equal
 // document and passes CheckWireJSON.
 func TestWireEncodersRoundTripFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testvectors", "v1", "happy_path_depth_1.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "testvectors", "v1", "happy_path_depth_1.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestWireEncodersRoundTripFixture(t *testing.T) {
 // Exponent notation on a legitimate float field still decodes through the
 // strict path — the lexical rule applies to integer fields only.
 func TestFloatFieldsAcceptExponentForm(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testvectors", "v1", "constraint_geo_circle_inside.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "testvectors", "v1", "constraint_geo_circle_inside.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

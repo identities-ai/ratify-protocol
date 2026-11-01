@@ -25,7 +25,7 @@ The following files are produced by `go run ./cmd/ratify-v2-vectors` from the
 repository root (source: `internal/v2vectors`). Output is deterministic: Ed25519
 is deterministic and ML-DSA-65 is signed without hedging. Expected results are
 written in the generator from SPEC-v2 rules, not read back from the verifier;
-`v2_conformance_test.go` then requires the Go reference to agree with every
+`tests/v2_conformance_test.go` then requires the Go reference to agree with every
 vector, and `internal/v2vectors` fails if any committed file differs from the
 generator output. `key-rotation-signature.json` is also produced by this
 generator (byte-identical to its first publication);
@@ -78,7 +78,7 @@ timestamps relative to the fixed evaluation time `1800000000`, follows the
 values below so verifiers can recompute every digest. The producer MUST
 verify its own output before writing it. The Go fixture is written by
 `go run ./cmd/ratify-v2-cross-sdk -out testvectors/v2/cross-sdk/go.json` and
-verified by `TestV2CrossSDKFixtures` (`cross_sdk_v2_test.go`).
+verified by `TestV2CrossSDKFixtures` (`tests/cross_sdk_v2_test.go`).
 
 ### File schema
 

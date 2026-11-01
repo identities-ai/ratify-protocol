@@ -11,7 +11,7 @@ project, not an NVIDIA partnership, NVIDIA-approved integration, or NVIDIA
 reference architecture.
 
 [Run it](../../demos/nvidia-nooa-delegated-authority/README.md) ·
-[v2 evidence record](evidence-v2-2026-10-29.md) ·
+[published v2 evidence](../../docs/evidence/v2-published-beta1-2026-10-31.md) ·
 [v1 evidence record](../../docs/evidence/nvidia-reference-evidence.json)
 
 **Protocol line.** The reference runs on Ratify Protocol v2. Its deterministic

@@ -6,9 +6,9 @@
   "endorsement": "self-authored, no platform endorsement",
   "agent_adapter": "../../adk/edge_agent.py",
   "agent_adapter_protocol": "v1 only: speaks the Protocol v1 receiver interface and does not work with this v2 receiver; not ported",
-  "evidence": "docs/evidence.md",
+  "evidence": "docs/evidence-published-beta1-2026-10-31.md",
   "tests": 32,
   "skips": 0,
   "gate": "./run-reference-check.sh",
-  "protocol": "v2 2.0.0-beta.1 through the C ABI (SDK built from this tree; prerelease)"
+  "protocol": "v2 2.0.0-beta.1 through the published macOS arm64 C archive (prerelease)"
 }

@@ -18,3 +18,17 @@ class ConsumedTest {
         }
     }
 }
+
+/** The published KEY_STORAGE.md vector is exactly what the SDK writes (host only: it reads the doc). */
+class KeyStorageDocTest {
+    @org.junit.Test
+    fun publishedVectorMatchesTheSdk() {
+        val root = java.io.File(System.getProperty("ratify.corpus")!!)
+        Corpus.read = { java.io.File(root, it).readBytes() }
+        val doc = java.io.File(root, "../sdks/kotlin/KEY_STORAGE.md").readText()
+        val line = doc.lines().first { it.startsWith("5246594b") }
+        val key = Fixture.privateKey("root")
+        org.junit.Assert.assertEquals(line, key.storageRecord().hex())
+        org.junit.Assert.assertTrue(doc.contains("has key ID `${key.keyId}`"))
+    }
+}

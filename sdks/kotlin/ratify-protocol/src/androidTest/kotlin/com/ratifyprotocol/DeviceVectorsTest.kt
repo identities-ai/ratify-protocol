@@ -28,5 +28,7 @@ class DeviceVectorsTest {
     @Test fun panicPoisonsOnlyThatHandle() = PanicVectors.poisonsOnlyThatHandle()
     @Test fun signingPoisonsTheKey() = PanicVectors.signingPoisonsTheKey()
     @Test fun internalKindsPinned() = PanicVectors.kindsPinned()
+    @Test fun storageRecordRoundTrip() = KeyStorageVectors.roundTripAndLayout()
+    @Test fun storageRecordRefusals() = KeyStorageVectors.refusals()
     @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
 }

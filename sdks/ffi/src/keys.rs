@@ -41,10 +41,8 @@ impl From<FfiPublicKey> for HybridPublicKey {
 #[derive(uniffi::Object)]
 pub struct FfiSoftwareKey {
     pub(crate) poison: Poison,
-    #[allow(dead_code)] // read by the storage record (next milestone)
-    ed_seed: Zeroizing<[u8; 32]>,
-    #[allow(dead_code)] // read by the storage record (next milestone)
-    ml_seed: Zeroizing<[u8; 32]>,
+    pub(crate) ed_seed: Zeroizing<[u8; 32]>,
+    pub(crate) ml_seed: Zeroizing<[u8; 32]>,
     pub(crate) private: HybridPrivateKey,
     pub(crate) public: HybridPublicKey,
     key_id: String,
@@ -63,6 +61,14 @@ fn seed32(b: &[u8], name: &str) -> FfiResult<Zeroizing<[u8; 32]>> {
 }
 
 impl FfiSoftwareKey {
+    pub(crate) fn key_id_str(&self) -> String {
+        self.key_id.clone()
+    }
+
+    pub(crate) fn from_seed_slices(ed: &[u8], ml: &[u8]) -> FfiResult<Arc<Self>> {
+        Self::build(seed32(ed, "ed25519 seed")?, seed32(ml, "ml-dsa-65 seed")?)
+    }
+
     fn build(ed_seed: Zeroizing<[u8; 32]>, ml_seed: Zeroizing<[u8; 32]>) -> FfiResult<Arc<Self>> {
         let (public, private) = hybrid_keypair_from_seeds(&ed_seed, &ml_seed);
         let key_id = key_id_v2(&public)?;

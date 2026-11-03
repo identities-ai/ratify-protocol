@@ -18,6 +18,7 @@ mod rotation;
 mod scope;
 mod sign;
 mod status;
+mod storage;
 mod verify;
 
 pub use archival::*;
@@ -29,4 +30,5 @@ pub use rotation::*;
 pub use scope::*;
 pub use sign::*;
 pub use status::*;
+pub use storage::*;
 pub use verify::*;

@@ -473,6 +473,22 @@ private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -1387,6 +1403,11 @@ protocol FfiSoftwareKeyProtocol: AnyObject, Sendable {
     
     func signWitnessEntry(entry: FfiWitnessEntry) throws  -> FfiWitnessEntry
     
+    /**
+     * This key's type 0x01 storage record (its two seeds).
+     */
+    func storageRecord() throws  -> Data
+    
 }
 /**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
@@ -1466,6 +1487,19 @@ static func generate()throws  -> FfiSoftwareKey  {
     return try  FfiConverterTypeFfiSoftwareKey_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_generate(uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Load a software key from its type 0x01 storage record. The key is
+     * re-derived from the seeds and must match the recorded key ID.
+     */
+static func fromStorageRecord(data: Data)throws  -> FfiSoftwareKey  {
+    return try  FfiConverterTypeFfiSoftwareKey_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_from_storage_record(
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 })
 }
@@ -1586,6 +1620,18 @@ func signWitnessEntry(entry: FfiWitnessEntry)throws  -> FfiWitnessEntry  {
     uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_witness_entry(
             self.uniffiCloneHandle(),
         FfiConverterTypeFfiWitnessEntry_lower(entry),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * This key's type 0x01 storage record (its two seeds).
+     */
+func storageRecord()throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_storage_record(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3585,6 +3631,140 @@ func FfiConverterTypeFfiStatusState_lower(_ value: FfiStatusState) -> RustBuffer
 }
 
 
+/**
+ * One record field. Seed values are key material; the caller wipes them.
+ */
+struct FfiStorageField: Equatable, Hashable {
+    var tag: UInt8
+    var value: Data
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(tag: UInt8, value: Data) {
+        self.tag = tag
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStorageField: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStorageField: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStorageField {
+        return
+            try FfiStorageField(
+                tag: FfiConverterUInt8.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStorageField, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.tag, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageField_lift(_ buf: RustBuffer) throws -> FfiStorageField {
+    return try FfiConverterTypeFfiStorageField.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageField_lower(_ value: FfiStorageField) -> RustBuffer {
+    return FfiConverterTypeFfiStorageField.lower(value)
+}
+
+
+/**
+ * A parsed, validated storage record.
+ */
+struct FfiStorageRecord: Equatable, Hashable {
+    var recordType: UInt8
+    var keyId: String
+    /**
+     * Fields in canonical order for the record type.
+     */
+    var fields: [FfiStorageField]
+    /**
+     * The cleartext header bytes (the Android AES-GCM associated data).
+     */
+    var header: Data
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(recordType: UInt8, keyId: String, 
+        /**
+         * Fields in canonical order for the record type.
+         */fields: [FfiStorageField], 
+        /**
+         * The cleartext header bytes (the Android AES-GCM associated data).
+         */header: Data) {
+        self.recordType = recordType
+        self.keyId = keyId
+        self.fields = fields
+        self.header = header
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStorageRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStorageRecord: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStorageRecord {
+        return
+            try FfiStorageRecord(
+                recordType: FfiConverterUInt8.read(from: &buf), 
+                keyId: FfiConverterString.read(from: &buf), 
+                fields: FfiConverterSequenceTypeFfiStorageField.read(from: &buf), 
+                header: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStorageRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.recordType, into: &buf)
+        FfiConverterString.write(value.keyId, into: &buf)
+        FfiConverterSequenceTypeFfiStorageField.write(value.fields, into: &buf)
+        FfiConverterData.write(value.header, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageRecord_lift(_ buf: RustBuffer) throws -> FfiStorageRecord {
+    return try FfiConverterTypeFfiStorageRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageRecord_lower(_ value: FfiStorageRecord) -> RustBuffer {
+    return FfiConverterTypeFfiStorageRecord.lower(value)
+}
+
+
 struct FfiTransactionReceipt: Equatable, Hashable {
     var version: Int64
     var transactionId: String
@@ -5057,6 +5237,31 @@ fileprivate struct FfiConverterSequenceTypeFfiStatusObservation: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFfiStorageField: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiStorageField]
+
+    static func write(_ value: [FfiStorageField], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiStorageField.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiStorageField] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiStorageField]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiStorageField.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFfiTransactionReceiptParty: FfiConverterRustBuffer {
     typealias SwiftType = [FfiTransactionReceiptParty]
 
@@ -5733,6 +5938,30 @@ func ffiTransitionRevocationStatusEpoch(state: FfiStatusState, issuerId: String,
     )
 })
 }
+/**
+ * Encode a record of any type, validating it against its schema.
+ */
+func ffiEncodeStorageRecord(recordType: UInt8, keyId: String, fields: [FfiStorageField])throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_storage_record(
+        FfiConverterUInt8.lower(recordType),
+        FfiConverterString.lower(keyId),
+        FfiConverterSequenceTypeFfiStorageField.lower(fields),uniffiCallStatus
+    )
+})
+}
+/**
+ * Parse and validate any record type.
+ */
+func ffiParseStorageRecord(data: Data)throws  -> FfiStorageRecord  {
+    return try  FfiConverterTypeFfiStorageRecord_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
 func ffiBundleHash(bundle: FfiProofBundle)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -6263,6 +6492,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch() != 56233) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record() != 54282) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record() != 64984) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6440,6 +6675,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_witness_entry() != 433) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_storage_record() != 12496) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisigncontext_is_cancelled() != 31943) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6462,6 +6700,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_generate() != 1536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_storage_record() != 64922) {
         return InitializationResult.apiChecksumMismatch
     }
 

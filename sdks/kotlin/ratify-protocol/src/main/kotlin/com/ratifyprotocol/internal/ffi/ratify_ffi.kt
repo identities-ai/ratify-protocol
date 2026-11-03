@@ -815,6 +815,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_challenge_claim_digest(
@@ -933,6 +937,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_witness_entry(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_storage_record(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffisigncontext_is_cancelled(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffisigner_public_key(
@@ -948,6 +954,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_seeds(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_generate(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_storage_record(
     ): Int
     external fun ffi_ratify_protocol_ffi_uniffi_contract_version(
     ): Int
@@ -1004,6 +1012,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_generate(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_from_storage_record(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_key_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_public_key(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1025,6 +1035,8 @@ internal object UniffiLib {
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_verification_receipt(`ptr`: Long,`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_witness_entry(`ptr`: Long,`entry`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_storage_record(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_clone_ffisigncontext(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -1147,6 +1159,10 @@ internal object UniffiLib {
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_status_for_cert(`state`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`certId`: RustBuffer.ByValue,`statusKeyEpoch`: Long,`statusKey`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_transition_revocation_status_epoch(`state`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`nextEpoch`: Long,`nextStatusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_storage_record(`recordType`: Byte,`keyId`: RustBuffer.ByValue,`fields`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1505,6 +1521,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch() and 0xFFFF) != 56233) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record() and 0xFFFF) != 54282) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record() and 0xFFFF) != 64984) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() and 0xFFFF) != 51989) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1682,6 +1704,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_witness_entry() and 0xFFFF) != 433) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_storage_record() and 0xFFFF) != 12496) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisigncontext_is_cancelled() and 0xFFFF) != 31943) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1704,6 +1729,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_generate() and 0xFFFF) != 1536) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_storage_record() and 0xFFFF) != 64922) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1892,6 +1920,33 @@ private class JavaLangRefCleanable(
     val cleanable: java.lang.ref.Cleaner.Cleanable
 ) : UniffiCleaner.Cleanable {
     override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterUByte: FfiConverter<UByte, Byte> {
+    override fun lift(value: Byte): UByte {
+        return value.toUByte()
+    }
+
+    fun lift(value: Int): UByte {
+        return value.toUByte()
+    }
+
+    override fun read(buf: ByteBuffer): UByte {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: UByte): Byte {
+        return value.toByte()
+    }
+
+    override fun allocationSize(value: UByte) = 1UL
+
+    override fun write(value: UByte, buf: ByteBuffer) {
+        buf.put(value.toByte())
+    }
 }
 
 /**
@@ -3487,6 +3542,11 @@ internal interface FfiSoftwareKeyInterface {
     
     fun `signWitnessEntry`(`entry`: FfiWitnessEntry): FfiWitnessEntry
     
+    /**
+     * This key's type 0x01 storage record (its two seeds).
+     */
+    fun `storageRecord`(): kotlin.ByteArray
+    
     companion object
 }
 
@@ -3771,6 +3831,23 @@ internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInt
     
 
     
+    /**
+     * This key's type 0x01 storage record (its two seeds).
+     */
+    @Throws(FfiException::class)override fun `storageRecord`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_storage_record(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
 
     
 
@@ -3805,6 +3882,23 @@ internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInt
     UniffiLib.uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_generate(
     
         _status)
+}
+    )
+    }
+    
+
+        
+    /**
+     * Load a software key from its type 0x01 storage record. The key is
+     * re-derived from the seeds and must match the recorded key ID.
+     */
+    @Throws(FfiException::class) fun `fromStorageRecord`(`data`: kotlin.ByteArray): FfiSoftwareKey {
+            return FfiConverterTypeFfiSoftwareKey.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_from_storage_record(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
 }
     )
     }
@@ -5459,6 +5553,104 @@ internal object FfiConverterTypeFfiStatusState: FfiConverterRustBuffer<FfiStatus
 
 
 
+/**
+ * One record field. Seed values are key material; the caller wipes them.
+ */
+internal data class FfiStorageField (
+    var `tag`: kotlin.UByte
+    , 
+    var `value`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStorageField: FfiConverterRustBuffer<FfiStorageField> {
+    override fun read(buf: ByteBuffer): FfiStorageField {
+        return FfiStorageField(
+            FfiConverterUByte.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStorageField) = (
+            FfiConverterUByte.allocationSize(value.`tag`) +
+            FfiConverterByteArray.allocationSize(value.`value`)
+    )
+
+    override fun write(value: FfiStorageField, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`tag`, buf)
+            FfiConverterByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
+/**
+ * A parsed, validated storage record.
+ */
+internal data class FfiStorageRecord (
+    var `recordType`: kotlin.UByte
+    , 
+    var `keyId`: kotlin.String
+    , 
+    /**
+     * Fields in canonical order for the record type.
+     */
+    var `fields`: List<FfiStorageField>
+    , 
+    /**
+     * The cleartext header bytes (the Android AES-GCM associated data).
+     */
+    var `header`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStorageRecord: FfiConverterRustBuffer<FfiStorageRecord> {
+    override fun read(buf: ByteBuffer): FfiStorageRecord {
+        return FfiStorageRecord(
+            FfiConverterUByte.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeFfiStorageField.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStorageRecord) = (
+            FfiConverterUByte.allocationSize(value.`recordType`) +
+            FfiConverterString.allocationSize(value.`keyId`) +
+            FfiConverterSequenceTypeFfiStorageField.allocationSize(value.`fields`) +
+            FfiConverterByteArray.allocationSize(value.`header`)
+    )
+
+    override fun write(value: FfiStorageRecord, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`recordType`, buf)
+            FfiConverterString.write(value.`keyId`, buf)
+            FfiConverterSequenceTypeFfiStorageField.write(value.`fields`, buf)
+            FfiConverterByteArray.write(value.`header`, buf)
+    }
+}
+
+
+
 internal data class FfiTransactionReceipt (
     var `version`: kotlin.Long
     , 
@@ -6998,6 +7190,34 @@ internal object FfiConverterSequenceTypeFfiStatusObservation: FfiConverterRustBu
 /**
  * @suppress
  */
+internal object FfiConverterSequenceTypeFfiStorageField: FfiConverterRustBuffer<List<FfiStorageField>> {
+    override fun read(buf: ByteBuffer): List<FfiStorageField> {
+        val len = buf.getInt()
+        return List<FfiStorageField>(len) {
+            FfiConverterTypeFfiStorageField.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiStorageField>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiStorageField.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiStorageField>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiStorageField.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterSequenceTypeFfiTransactionReceiptParty: FfiConverterRustBuffer<List<FfiTransactionReceiptParty>> {
     override fun read(buf: ByteBuffer): List<FfiTransactionReceiptParty> {
         val len = buf.getInt()
@@ -7925,6 +8145,38 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         FfiConverterString.lower(`issuerId`),
         FfiConverterULong.lower(`nextEpoch`),
         FfiConverterTypeFfiPublicKey.lower(`nextStatusKey`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Encode a record of any type, validating it against its schema.
+         */
+    @Throws(FfiException::class) internal fun `ffiEncodeStorageRecord`(`recordType`: kotlin.UByte, `keyId`: kotlin.String, `fields`: List<FfiStorageField>): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_storage_record(
+    
+        
+        FfiConverterUByte.lower(`recordType`),
+        FfiConverterString.lower(`keyId`),
+        FfiConverterSequenceTypeFfiStorageField.lower(`fields`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parse and validate any record type.
+         */
+    @Throws(FfiException::class) internal fun `ffiParseStorageRecord`(`data`: kotlin.ByteArray): FfiStorageRecord {
+            return FfiConverterTypeFfiStorageRecord.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
 }
     )
     }

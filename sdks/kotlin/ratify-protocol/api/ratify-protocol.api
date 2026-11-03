@@ -1,3 +1,11 @@
+public final class com/ratifyprotocol/AndroidKeyStore {
+	public fun <init> (Landroid/content/Context;ZI)V
+	public synthetic fun <init> (Landroid/content/Context;ZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun delete (Ljava/lang/String;)V
+	public final fun load (Ljava/lang/String;)Lcom/ratifyprotocol/SoftwarePrivateKey;
+	public final fun save (Lcom/ratifyprotocol/SoftwarePrivateKey;)V
+}
+
 public final class com/ratifyprotocol/ArchivalKt {
 	public static final fun statementBodyDigest-vckuEUM (S[B)[B
 	public static final fun statusEvidenceDigest-vckuEUM (SLcom/ratifyprotocol/StatusObject;)[B
@@ -224,6 +232,28 @@ public final class com/ratifyprotocol/KeyRotationStatement {
 	public final fun getSequence ()J
 	public final fun getVersion ()J
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/KeyStorageKt {
+	public static final fun softwarePrivateKeyFromStorageRecord ([B)Lcom/ratifyprotocol/SoftwarePrivateKey;
+	public static final fun storageRecord (Lcom/ratifyprotocol/SoftwarePrivateKey;)[B
+}
+
+public final class com/ratifyprotocol/KeyStorageRecord {
+	public fun <init> ([B)V
+	public final fun getHeader ()[B
+	public final fun getKeyId ()Ljava/lang/String;
+	public final fun getRecordType ()Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
+}
+
+public final class com/ratifyprotocol/KeyStorageRecord$RecordType : java/lang/Enum {
+	public static final field ANDROID_SPLIT Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
+	public static final field SECURE_ENCLAVE_HYBRID Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
+	public static final field SOFTWARE Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
+	public final fun getCode-w2LRezQ ()B
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
+	public static fun values ()[Lcom/ratifyprotocol/KeyStorageRecord$RecordType;
 }
 
 public final class com/ratifyprotocol/KeysKt {

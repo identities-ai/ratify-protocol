@@ -142,16 +142,25 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
+    "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
+    "KeychainKeyStore": "Keychain storage of software keys (plan §4.3); SDK-only",
     "InternalErrorKind": "kind of RatifyError.internal (plan §2.2)",
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
+    "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
+    "AndroidKeyStore": "Keystore-wrapped storage of software keys (plan §4.3); SDK-only",
+    "KeyStorageKt": "file facade",
     "RotationAcceptance": "the (journal, result) tuple of accept_key_rotation_statement_v2",
     "InternalErrorKind": "kind of RatifyException.Internal (plan §2.2)",
     "RatifyException": "the sealed error family (plan §2.2)",
     "RatifyException.Signing": "signing errors (plan §2.2); V2SignError is mapped in M2",
     "RatifyException.Internal": "internal errors (plan §2.2)",
     "errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
+    "storageRecord": "the key's storage record (plan §4.3)",
+    "softwarePrivateKeyFromStorageRecord": "load a key from its storage record (plan §4.3)",
 }
 
 
@@ -176,6 +185,15 @@ EXTRA_MEMBERS = {
     "SigningErrorKind.spelling": "the FFI spelling of the kind",
     "RotationAcceptance.journal": "tuple field", "RotationAcceptance.result": "tuple field",
     "RotationAcceptance.error": "tuple field",
+    "KeyStorageRecord.recordType": "storage record", "KeyStorageRecord.keyId": "storage record",
+    "KeyStorageRecord.header": "storage record", "KeyStorageRecord.RecordType.code": "storage record type code",
+    "KeyStorageRecord.RecordType.software": "record type", "KeyStorageRecord.RecordType.secureEnclaveHybrid": "record type",
+    "KeyStorageRecord.RecordType.androidSplit": "record type", "KeyStorageRecord.RecordType.SOFTWARE": "record type",
+    "KeyStorageRecord.RecordType.SECURE_ENCLAVE_HYBRID": "record type", "KeyStorageRecord.RecordType.ANDROID_SPLIT": "record type",
+    "KeychainKeyStore.service": "Keychain service name", "KeychainKeyStore.accessGroup": "Keychain access group",
+    "KeychainKeyStore.save": "store", "KeychainKeyStore.load": "store", "KeychainKeyStore.delete": "store",
+    "AndroidKeyStore.save": "store", "AndroidKeyStore.load": "store", "AndroidKeyStore.delete": "store",
+    "SoftwarePrivateKey.storageRecord": "the key's storage record (plan §4.3)",
     "SoftwarePrivateKey.keyId": "convenience: key_id_v2 of publicKey, computed once at load",
     "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
     "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",

@@ -30,6 +30,8 @@ public final class SoftwarePrivateKey: Sendable {
     /// `key_id_v2` of the public key (64 lowercase hex characters).
     public let keyId: String
 
+    convenience init(handle: FfiSoftwareKey) throws(RatifyError) { try self.init(handle) }
+
     private init(_ handle: FfiSoftwareKey) throws(RatifyError) {
         self.handle = handle
         self.publicKey = HybridPublicKey(try ffi { try handle.publicKey() })

@@ -7207,9 +7207,9 @@
  },
  "V2SignError::class": {
   "kind": "fn",
-  "kotlin": "RatifyException.errorClass",
+  "kotlin": "RatifyException.Signing.errorClass",
   "status": "mapped",
-  "swift": "RatifyError.errorClass"
+  "swift": "RatifyError.signing"
  },
  "V2SignError::clone": {
   "kind": "fn",

@@ -19,11 +19,22 @@ public class KeyStorageRecord(data: ByteArray) {
         ANDROID_SPLIT(0x03u),
     }
 
-    private val r = ffi { ffiParseStorageRecord(data) }
-    public val recordType: RecordType =
-        RecordType.entries.firstOrNull { it.code == r.recordType } ?: throw RatifyException.Protocol(ErrorClass.MALFORMED, "unknown record type")
-    public val keyId: String = r.keyId
-    private val h = r.header.copyOf()
+    public val recordType: RecordType
+    public val keyId: String
+    private val h: ByteArray
+
+    init {
+        // Keep only the header facts; the parsed fields (key material) are wiped at once.
+        val r = ffi { ffiParseStorageRecord(data) }
+        try {
+            recordType = RecordType.entries.firstOrNull { it.code == r.recordType }
+                ?: throw RatifyException.Protocol(ErrorClass.MALFORMED, "unknown record type")
+            keyId = r.keyId
+            h = r.header.copyOf()
+        } finally {
+            r.fields.forEach { it.value.fill(0) }
+        }
+    }
 
     /** The cleartext header bytes (bound as associated data where encrypted). */
     public val header: ByteArray get() = h.copyOf()

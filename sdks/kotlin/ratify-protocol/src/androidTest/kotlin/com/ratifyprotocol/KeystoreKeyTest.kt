@@ -3,12 +3,10 @@ package com.ratifyprotocol
 import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.ratifyprotocol.internal.ffi.FfiSignContext
-import com.ratifyprotocol.internal.ffi.FfiSignRequest
-import com.ratifyprotocol.internal.ffi.FfiSignature
-import com.ratifyprotocol.internal.ffi.FfiSigner
 import com.ratifyprotocol.internal.ffi.FfiCancelToken
-import com.ratifyprotocol.internal.ffi.ffiSignDelegationCertWithSigner
+import com.ratifyprotocol.internal.ffi.FfiEd25519Signer
+import com.ratifyprotocol.internal.ffi.FfiSignContext
+import com.ratifyprotocol.internal.ffi.ffiSignDelegationCertWithSplitKey
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -60,42 +58,58 @@ class KeystoreKeyTest {
         assertEquals(null, store.loadKeystoreKey(key.keyId))
     }
 
-    /** Every bad component the platform signer could return is refused. */
+    /**
+     * Every bad component the platform could return is refused. The Keystore
+     * Ed25519 half is the only one the platform returns: ML-DSA-65 is signed
+     * in Rust from the seed over the core's message and context.
+     */
     @Test
     fun badComponentsAreRefused() {
         if (Build.VERSION.SDK_INT < 33) return
         val key = KeystoreKey.generate()
         val other = KeystoreKey.generate()
         try {
-            val inner = key.ffiSigner()
-            val alt = other.ffiSigner()
-            fun tamper(mutate: (FfiSignRequest, FfiSignContext) -> FfiSignature) = object : FfiSigner {
-                override fun publicKey() = inner.publicKey()
-                override fun mode() = inner.mode()
-                override fun sign(request: FfiSignRequest, context: FfiSignContext) = mutate(request, context)
+            val real = key.ed25519Half()
+            val otherHalf = other.ed25519Half()
+            fun tamper(mutate: (ByteArray, FfiSignContext) -> ByteArray) = object : FfiEd25519Signer {
+                override fun sign(message: ByteArray, context: FfiSignContext) = mutate(message, context)
             }
-            fun flip(b: ByteArray) = b.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }
-            val cases = mapOf<String, (FfiSignRequest, FfiSignContext) -> FfiSignature>(
-                "missing ML-DSA" to { r, c -> inner.sign(r, c).let { FfiSignature(it.ed25519, ByteArray(0)) } },
-                "malformed ML-DSA" to { r, c -> inner.sign(r, c).let { FfiSignature(it.ed25519, it.mlDsa65.copyOf(it.mlDsa65.size - 1)) } },
-                "wrong context" to { r, c ->
-                    inner.sign(FfiSignRequest(r.mode, r.message, "ratify-v2-wrong-context".toByteArray(), r.mlDsaMu, r.publicKey, r.keyId), c)
-                },
-                "wrong-key ML-DSA" to { r, c ->
-                    val o = alt.sign(FfiSignRequest(r.mode, r.message, r.mlDsaContext, r.mlDsaMu, alt.publicKey(), ffi { other.keyId }), c)
-                    FfiSignature(inner.sign(r, c).ed25519, o.mlDsa65)
-                },
-                "flipped Ed25519" to { r, c -> inner.sign(r, c).let { FfiSignature(flip(it.ed25519), it.mlDsa65) } },
+            val cases = mapOf<String, (ByteArray, FfiSignContext) -> ByteArray>(
+                "missing Ed25519" to { _, _ -> ByteArray(0) },
+                "malformed Ed25519" to { m, c -> real.sign(m, c).copyOf(63) },
+                "flipped Ed25519" to { m, c -> real.sign(m, c).also { it[0] = (it[0].toInt() xor 1).toByte() } },
+                "valid Ed25519 from a different key" to { m, c -> otherHalf.sign(m, c) },
+                "Ed25519 over another message" to { m, c -> real.sign(m.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }, c) },
             )
             for ((name, mutate) in cases) {
                 val got = classOf {
-                    ffi { ffiSignDelegationCertWithSigner(FfiCancelToken(null), cert(key.publicKey, key.keyId).toFfi(), tamper(mutate)) }
+                    ffi { ffiSignDelegationCertWithSplitKey(FfiCancelToken(null), cert(key.publicKey, key.keyId).toFfi(), key.split, tamper(mutate)) }
                 }
                 assertEquals(name, "invalid_signature", got)
             }
         } finally {
             key.deleteKeystoreEntry()
             other.deleteKeystoreEntry()
+        }
+    }
+
+    /** A software root rotates into a Keystore key, and the core verifies both halves. */
+    @Test
+    fun softwareRootRotatesIntoKeystore() = runBlocking {
+        if (Build.VERSION.SDK_INT < 33) return@runBlocking
+        val software = SoftwarePrivateKey.generate()
+        val platform = KeystoreKey.generate()
+        try {
+            val v = Corpus.load("key-rotation-signature.json")
+            val stmt = KeyRotationStatement(2, v.getString("authority_id"), 1, v.getString("role"), 1, ByteArray(48),
+                software.publicKey, platform.publicKey, software.keyId, platform.keyId, 1_800_000_000, 1_800_000_000,
+                HybridSignature(ByteArray(0), ByteArray(0)), HybridSignature(ByteArray(0), ByteArray(0)))
+            val signed = signKeyRotationStatement(stmt, SigningKey.Software(software), SigningKey.Platform(platform))
+            val signable = keyRotationStatementSignableBytes(signed)
+            verifyStatement(ObjectType.KEY_ROTATION_AUTHORIZATION, signable, signed.oldSignature, software.publicKey)
+            verifyStatement(ObjectType.KEY_ROTATION_PROOF_OF_POSSESSION, signable, signed.newSignature, platform.publicKey)
+        } finally {
+            platform.deleteKeystoreEntry()
         }
     }
 }

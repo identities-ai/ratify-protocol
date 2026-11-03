@@ -1,5 +1,7 @@
 package com.ratifyprotocol
 
+import android.annotation.SuppressLint
+import com.ratifyprotocol.internal.ffi.FfiEd25519Signer
 import com.ratifyprotocol.internal.ffi.FfiPublicKey
 import com.ratifyprotocol.internal.ffi.FfiSignContext
 import com.ratifyprotocol.internal.ffi.FfiSignRequest
@@ -7,6 +9,16 @@ import com.ratifyprotocol.internal.ffi.FfiSignature
 import com.ratifyprotocol.internal.ffi.FfiSigner
 import com.ratifyprotocol.internal.ffi.FfiSignerException
 import com.ratifyprotocol.internal.ffi.FfiSignerMode
+import com.ratifyprotocol.internal.ffi.FfiSoftwareKey
+import com.ratifyprotocol.internal.ffi.FfiSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignDelegationCertWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignKeyRotationStatementWithSlots
+import com.ratifyprotocol.internal.ffi.ffiSignProofBundleWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignRevocationListWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignRevocationPushWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignTransactionReceiptPartyWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignVerificationReceiptWithSplitKey
+import com.ratifyprotocol.internal.ffi.ffiSignWitnessEntryWithSplitKey
 import com.ratifyprotocol.internal.ffi.ffiSignDelegationCertWithSigner
 import com.ratifyprotocol.internal.ffi.ffiSignKeyRotationStatementWithSigners
 import com.ratifyprotocol.internal.ffi.ffiSignPreparedVerificationReceiptWithSigner
@@ -215,64 +227,98 @@ public suspend fun signTransactionReceiptParty(receipt: TransactionReceipt, part
 }
 
 // Typed signing with any SigningKey (suspending: a platform key may need the user).
-public suspend fun signDelegationCert(cert: DelegationCert, with: SigningKey): DelegationCert {
-    if (with is SigningKey.Software) return signDelegationCert(cert, with.key)
-    val c = cert.toFfi()
-    val s = with.ffiSigner()!!
-    return DelegationCert(onWorker { t -> ffi { ffiSignDelegationCertWithSigner(t, c, s) } })
+// A Keystore key signs through Rust-internal typed functions only: the core
+// computes the message, the seed half signs it in Rust, and only the
+// Keystore Ed25519 half calls back.
+
+@SuppressLint("NewApi") // SigningKey.Platform can only be constructed on API 33+.
+private fun platform(k: SigningKey.Platform) = k.key.split to k.key.ed25519Half()
+
+public suspend fun signDelegationCert(cert: DelegationCert, with: SigningKey): DelegationCert = when (with) {
+    is SigningKey.Software -> signDelegationCert(cert, with.key)
+    is SigningKey.External -> signDelegationCert(cert, with.signer)
+    is SigningKey.Platform -> {
+        val c = cert.toFfi(); val (k, e) = platform(with)
+        DelegationCert(onWorker { t -> ffi { ffiSignDelegationCertWithSplitKey(t, c, k, e) } })
+    }
 }
-public suspend fun signProofBundle(bundle: ProofBundle, with: SigningKey): ProofBundle {
-    if (with is SigningKey.Software) return signProofBundle(bundle, with.key)
-    val b = bundle.toFfi()
-    val s = with.ffiSigner()!!
-    return ProofBundle(onWorker { t -> ffi { ffiSignProofBundleWithSigner(t, b, s) } })
+public suspend fun signProofBundle(bundle: ProofBundle, with: SigningKey): ProofBundle = when (with) {
+    is SigningKey.Software -> signProofBundle(bundle, with.key)
+    is SigningKey.External -> signProofBundle(bundle, with.signer)
+    is SigningKey.Platform -> {
+        val b = bundle.toFfi(); val (k, e) = platform(with)
+        ProofBundle(onWorker { t -> ffi { ffiSignProofBundleWithSplitKey(t, b, k, e) } })
+    }
 }
-public suspend fun signRevocationList(list: RevocationList, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationList {
-    if (with is SigningKey.Software) return signRevocationList(list, boundIssuerId, boundStatusKey, with.key)
-    val l = list.toFfi()
-    val k = boundStatusKey.toFfi()
-    val s = with.ffiSigner()!!
-    return RevocationList(onWorker { t -> ffi { ffiSignRevocationListWithSigner(t, l, boundIssuerId, k, s) } })
-}
-public suspend fun signRevocationPush(push: RevocationPush, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationPush {
-    if (with is SigningKey.Software) return signRevocationPush(push, boundIssuerId, boundStatusKey, with.key)
-    val p = push.toFfi()
-    val k = boundStatusKey.toFfi()
-    val s = with.ffiSigner()!!
-    return RevocationPush(onWorker { t -> ffi { ffiSignRevocationPushWithSigner(t, p, boundIssuerId, k, s) } })
-}
+public suspend fun signRevocationList(list: RevocationList, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationList =
+    when (with) {
+        is SigningKey.Software -> signRevocationList(list, boundIssuerId, boundStatusKey, with.key)
+        is SigningKey.External -> signRevocationList(list, boundIssuerId, boundStatusKey, with.signer)
+        is SigningKey.Platform -> {
+            val l = list.toFfi(); val bk = boundStatusKey.toFfi(); val (k, e) = platform(with)
+            RevocationList(onWorker { t -> ffi { ffiSignRevocationListWithSplitKey(t, l, boundIssuerId, bk, k, e) } })
+        }
+    }
+public suspend fun signRevocationPush(push: RevocationPush, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationPush =
+    when (with) {
+        is SigningKey.Software -> signRevocationPush(push, boundIssuerId, boundStatusKey, with.key)
+        is SigningKey.External -> signRevocationPush(push, boundIssuerId, boundStatusKey, with.signer)
+        is SigningKey.Platform -> {
+            val p = push.toFfi(); val bk = boundStatusKey.toFfi(); val (k, e) = platform(with)
+            RevocationPush(onWorker { t -> ffi { ffiSignRevocationPushWithSplitKey(t, p, boundIssuerId, bk, k, e) } })
+        }
+    }
 
 /**
- * Both keys must be the same kind: two software keys, or two signers
- * (external or platform). A software/signer mix is `configuration_invalid`,
- * as in every SDK: the core exports no software signer to pair with one.
+ * Sign a rotation with any combination of key kinds for the old and new
+ * halves, such as a software root moving into hardware. The core computes
+ * both requests and verifies both results.
  */
 public suspend fun signKeyRotationStatement(statement: KeyRotationStatement, oldKey: SigningKey, newKey: SigningKey): KeyRotationStatement {
     if (oldKey is SigningKey.Software && newKey is SigningKey.Software) return signKeyRotationStatement(statement, oldKey.key, newKey.key)
-    val o = oldKey.ffiSigner()
-    val n = newKey.ffiSigner()
-    if (o == null || n == null) {
-        throw RatifyException.Signing(ErrorClass.CONFIGURATION_INVALID, SigningErrorKind.INVALID_SIGNER_KEY,
-            "a rotation's old and new keys must both be software keys or both be signers")
-    }
     val st = statement.toFfi()
-    return KeyRotationStatement(onWorker { t -> ffi { ffiSignKeyRotationStatementWithSigners(t, st, o, n) } })
+    val o = slot(oldKey)
+    val n = slot(newKey)
+    return KeyRotationStatement(onWorker { t ->
+        ffi { ffiSignKeyRotationStatementWithSlots(t, st, o.software, o.signer, o.split, o.splitEd25519, n.software, n.signer, n.split, n.splitEd25519) }
+    })
 }
-public suspend fun signWitnessEntry(entry: WitnessEntry, with: SigningKey): WitnessEntry {
-    if (with is SigningKey.Software) return signWitnessEntry(entry, with.key)
-    val e = entry.toFfi()
-    val s = with.ffiSigner()!!
-    return WitnessEntry(onWorker { t -> ffi { ffiSignWitnessEntryWithSigner(t, e, s) } })
+
+private class Slot(
+    val software: FfiSoftwareKey? = null,
+    val signer: FfiSigner? = null,
+    val split: FfiSplitKey? = null,
+    val splitEd25519: FfiEd25519Signer? = null,
+)
+
+private fun slot(k: SigningKey): Slot = when (k) {
+    is SigningKey.Software -> Slot(software = k.key.handle)
+    is SigningKey.External -> Slot(signer = SignerBridge(k.signer))
+    is SigningKey.Platform -> platform(k).let { (key, e) -> Slot(split = key, splitEd25519 = e) }
 }
-public suspend fun signVerificationReceipt(receipt: VerificationReceipt, with: SigningKey): VerificationReceipt {
-    if (with is SigningKey.Software) return signVerificationReceipt(receipt, with.key)
-    val r = receipt.toFfi()
-    val s = with.ffiSigner()!!
-    return VerificationReceipt(onWorker { t -> ffi { ffiSignVerificationReceiptWithSigner(t, r, s) } })
+
+public suspend fun signWitnessEntry(entry: WitnessEntry, with: SigningKey): WitnessEntry = when (with) {
+    is SigningKey.Software -> signWitnessEntry(entry, with.key)
+    is SigningKey.External -> signWitnessEntry(entry, with.signer)
+    is SigningKey.Platform -> {
+        val en = entry.toFfi(); val (k, e) = platform(with)
+        WitnessEntry(onWorker { t -> ffi { ffiSignWitnessEntryWithSplitKey(t, en, k, e) } })
+    }
 }
-public suspend fun signTransactionReceiptParty(receipt: TransactionReceipt, partyId: String, with: SigningKey): TransactionReceiptSignature {
-    if (with is SigningKey.Software) return signTransactionReceiptParty(receipt, partyId, with.key)
-    val r = receipt.toFfi()
-    val s = with.ffiSigner()!!
-    return TransactionReceiptSignature(onWorker { t -> ffi { ffiSignTransactionReceiptPartyWithSigner(t, r, partyId, s) } })
+public suspend fun signVerificationReceipt(receipt: VerificationReceipt, with: SigningKey): VerificationReceipt = when (with) {
+    is SigningKey.Software -> signVerificationReceipt(receipt, with.key)
+    is SigningKey.External -> signVerificationReceipt(receipt, with.signer)
+    is SigningKey.Platform -> {
+        val r = receipt.toFfi(); val (k, e) = platform(with)
+        VerificationReceipt(onWorker { t -> ffi { ffiSignVerificationReceiptWithSplitKey(t, r, k, e) } })
+    }
 }
+public suspend fun signTransactionReceiptParty(receipt: TransactionReceipt, partyId: String, with: SigningKey): TransactionReceiptSignature =
+    when (with) {
+        is SigningKey.Software -> signTransactionReceiptParty(receipt, partyId, with.key)
+        is SigningKey.External -> signTransactionReceiptParty(receipt, partyId, with.signer)
+        is SigningKey.Platform -> {
+            val r = receipt.toFfi(); val (k, e) = platform(with)
+            TransactionReceiptSignature(onWorker { t -> ffi { ffiSignTransactionReceiptPartyWithSplitKey(t, r, partyId, k, e) } })
+        }
+    }

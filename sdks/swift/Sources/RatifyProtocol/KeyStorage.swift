@@ -17,17 +17,22 @@ public struct KeyStorageRecord: Sendable {
     public let keyId: String
     /// The cleartext header bytes (bound as associated data where encrypted).
     public let header: Data
-    let fields: [UInt8: Data]
 
     /// Parse and validate a record. Throws `malformed` for any deviation
-    /// from the documented format.
+    /// from the documented format. Only the header facts are kept.
     public init(_ data: Data) throws(RatifyError) {
-        let r = try ffi { try ffiParseStorageRecord(data: data) }
-        guard let t = RecordType(rawValue: r.recordType) else { throw .protocol(.malformed, message: "unknown record type") }
-        recordType = t
+        let r = try Self.parse(data)
+        recordType = r.type
         keyId = r.keyId
         header = r.header
-        fields = Dictionary(uniqueKeysWithValues: r.fields.map { ($0.tag, $0.value) })
+    }
+
+    /// The full parse, fields included, for the SDK's own loaders. The
+    /// caller keeps the fields only as long as it needs them.
+    static func parse(_ data: Data) throws(RatifyError) -> (type: RecordType, keyId: String, header: Data, fields: [UInt8: Data]) {
+        let r = try ffi { try ffiParseStorageRecord(data: data) }
+        guard let t = RecordType(rawValue: r.recordType) else { throw .protocol(.malformed, message: "unknown record type") }
+        return (t, r.keyId, r.header, Dictionary(uniqueKeysWithValues: r.fields.map { ($0.tag, $0.value) }))
     }
 }
 

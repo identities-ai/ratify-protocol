@@ -122,7 +122,8 @@ enum SigningRunner {
                 ok = v.s("expected") == "sign" && classOf { try Ratify.verifyDelegationCertSignature(signed) } == "ok"
                 detail = "signed"
             } catch {
-                if case .signing(_, .issuerDuty, _) = error { ok = v.s("expected") == "reject" && signer.calls == 0 } else { ok = false }
+                // V2SignError::class: an issuer-duty refusal is always `malformed`.
+                if case .signing(.malformed, .issuerDuty, _) = error { ok = v.s("expected") == "reject" && signer.calls == 0 } else { ok = false }
                 detail = "\(error), \(signer.calls) signer calls"
             }
             t.check("issuer-duties", name, ok, detail)

@@ -46,6 +46,19 @@ fn contained<T>(body: impl FnOnce() -> FfiResult<T>) -> Result<FfiResult<T>, ()>
     }
 }
 
+impl Poison {
+    pub(crate) fn is_set(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+pub(crate) fn poisoned() -> FfiError {
+    FfiError::Internal {
+        kind: "poisoned".into(),
+        detail: "this handle is unusable after a panic".into(),
+    }
+}
+
 fn panicked() -> FfiError {
     FfiError::Internal {
         kind: "panic".into(),

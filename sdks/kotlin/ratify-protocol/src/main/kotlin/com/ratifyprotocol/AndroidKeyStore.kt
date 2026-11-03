@@ -33,6 +33,10 @@ public class AndroidKeyStore(
     private val hasStrongBox = Build.VERSION.SDK_INT >= 28 &&
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
 
+    private companion object {
+        val saveLock = Any()
+    }
+
     private fun file(keyId: String): File {
         if (!validId(keyId)) throw RatifyException.Protocol(ErrorClass.MALFORMED, "not a v2 key ID")
         return File(dir, "$keyId.key")
@@ -77,17 +81,35 @@ public class AndroidKeyStore(
 
     internal fun saveRecord(keyId: String, record: ByteArray) {
         val f = file(keyId)
-        if (f.exists()) throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "a key with this ID is already stored")
         try {
-            val header = KeyStorageRecord(record).header
-            val wrap = createWrapKey(keyId)
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrap) }
-            cipher.updateAAD(header)
-            val sealed = cipher.doFinal(record, header.size, record.size - header.size)
-            dir.mkdirs()
-            val tmp = File(dir, "$keyId.tmp")
-            tmp.writeBytes(header + cipher.iv + sealed)
-            if (!tmp.renameTo(f)) throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "could not store the key file")
+            // One save at a time in this process: two saves of one ID must not
+            // replace each other's wrap key.
+            synchronized(saveLock) {
+                if (f.exists()) throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "a key with this ID is already stored")
+                val header = KeyStorageRecord(record).header
+                // A wrap key with no file is left over from an interrupted save.
+                keystore().let { if (it.containsAlias(alias(keyId))) it.deleteEntry(alias(keyId)) }
+                val wrap = createWrapKey(keyId)
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrap) }
+                cipher.updateAAD(header)
+                val sealed = cipher.doFinal(record, header.size, record.size - header.size)
+                dir.mkdirs()
+                val tmp = File.createTempFile("$keyId.", ".tmp", dir)
+                try {
+                    tmp.writeBytes(header + cipher.iv + sealed)
+                    // A move without REPLACE_EXISTING refuses an existing key file.
+                    // (Android's SELinux policy denies hard links in app storage.)
+                    // Saves are serialized in this process; two processes of one
+                    // app saving the same key at once is the remaining window.
+                    try {
+                        java.nio.file.Files.move(tmp.toPath(), f.toPath())
+                    } catch (e: java.nio.file.FileAlreadyExistsException) {
+                        throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "a key with this ID is already stored")
+                    }
+                } finally {
+                    tmp.delete()
+                }
+            }
         } finally {
             record.fill(0)
         }
@@ -117,6 +139,14 @@ public class AndroidKeyStore(
         val f = file(keyId)
         if (!f.exists()) return null
         val bytes = f.readBytes()
+        try {
+            return open(keyId, bytes)
+        } finally {
+            bytes.fill(0)
+        }
+    }
+
+    private fun open(keyId: String, bytes: ByteArray): ByteArray {
         val bad = { m: String -> RatifyException.Protocol(ErrorClass.MALFORMED, "stored key file: $m") }
         if (bytes.size < 8) throw bad("truncated")
         val headerLen = 8 + (((bytes[6].toInt() and 0xFF) shl 8) or (bytes[7].toInt() and 0xFF))

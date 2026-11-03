@@ -8,7 +8,6 @@ import androidx.annotation.RequiresApi
 import com.ratifyprotocol.internal.ffi.FfiEd25519Signer
 import com.ratifyprotocol.internal.ffi.FfiSignContext
 import com.ratifyprotocol.internal.ffi.FfiSignerException
-import com.ratifyprotocol.internal.ffi.FfiSigner
 import com.ratifyprotocol.internal.ffi.FfiSplitKey
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -28,7 +27,7 @@ import java.util.UUID
  * verifies both returned components before using them.
  */
 @RequiresApi(33)
-public class KeystoreKey private constructor(private val split: FfiSplitKey, private val alias: String) {
+public class KeystoreKey private constructor(internal val split: FfiSplitKey, private val alias: String) {
     public val publicKey: HybridPublicKey = HybridPublicKey(ffi { split.publicKey() })
     public val keyId: String = ffi { split.keyId() }
 
@@ -60,7 +59,7 @@ public class KeystoreKey private constructor(private val split: FfiSplitKey, pri
     public fun storageRecord(): ByteArray = ffi { split.storageRecord(alias) }
 
     /** The Keystore half: signs the SDK's 77-byte message with Ed25519. */
-    private inner class Ed25519Half : FfiEd25519Signer {
+    internal inner class Ed25519Half : FfiEd25519Signer {
         override fun sign(message: ByteArray, context: FfiSignContext): ByteArray =
             try {
                 Signature.getInstance("Ed25519").run {
@@ -73,7 +72,7 @@ public class KeystoreKey private constructor(private val split: FfiSplitKey, pri
             }
     }
 
-    internal fun ffiSigner(): FfiSigner = ffi { split.signer(Ed25519Half()) }
+    internal fun ed25519Half(): FfiEd25519Signer = Ed25519Half()
 
     /** Remove the Keystore half of a key that was never stored (tests, failed setup). */
     internal fun deleteKeystoreEntry() {
@@ -138,13 +137,5 @@ public sealed class SigningKey {
     public class External(public val signer: ExternalSigner) : SigningKey()
 
     /** A Keystore split-custody key (API 33+). */
-    public class Platform @RequiresApi(33) constructor(key: KeystoreKey) : SigningKey() {
-        internal val ffiSigner: FfiSigner = key.ffiSigner()
-    }
-
-    internal fun ffiSigner(): FfiSigner? = when (this) {
-        is Software -> null
-        is External -> SignerBridge(signer)
-        is Platform -> ffiSigner
-    }
+    public class Platform @RequiresApi(33) constructor(internal val key: KeystoreKey) : SigningKey()
 }

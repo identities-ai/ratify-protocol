@@ -20,7 +20,7 @@ required-features = ["bindgen"]
 bindgen = ["uniffi/cli"]
 # Test-only: a one-shot panic injection point in every guarded export,
 # armed by the C symbol `ratify_ffi_test_arm_panic`. Never in a shipped build.
-test-hooks = ["dep:ed25519-dalek"]
+test-hooks = []
 
 [dependencies]
 # Exact pin: this crate wraps one core version; release-sync checks it.
@@ -29,11 +29,10 @@ uniffi = "=0.32.2"
 thiserror = "2"
 getrandom = "0.2"
 zeroize = "1.8"
-# The ML-DSA-65 half of an Android split-custody key (build plan §4.2).
+# The ML-DSA-65 half of an Android split-custody key, and the software half
+# of a mixed rotation, both inside typed signing only (build plan §4.2).
 fips204 = "0.4.6"
-# Test-hooks only: an emulated external provider for the Swift and Kotlin
-# tests, outside the SDK signing path (the SDK exports no raw signer).
-ed25519-dalek = { version = "2.1", optional = true }
+ed25519-dalek = "2.1"
 
 [dev-dependencies]
 ed25519-dalek = "2.1"

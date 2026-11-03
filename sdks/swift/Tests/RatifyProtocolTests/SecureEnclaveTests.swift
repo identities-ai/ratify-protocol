@@ -90,6 +90,11 @@ final class SecureEnclaveTests: XCTestCase {
                 return s
             }),
             ("flipped Ed25519", { r, k in var s = try k.sign(r); s.ed25519[0] ^= 1; return s }),
+            ("valid Ed25519 from a different key", { r, k in
+                var s = try k.sign(r)
+                s.ed25519 = try other.sign(SignRequestForTest.retarget(r, to: other)).ed25519
+                return s
+            }),
         ]
         for (name, mutate) in cases {
             do {
@@ -99,6 +104,24 @@ final class SecureEnclaveTests: XCTestCase {
                 XCTAssertEqual(error.errorClass, .invalidSignature, "\(name): \(error)")
             }
         }
+    }
+
+    /// A software root rotates into the Secure Enclave; the core verifies both halves.
+    func testSoftwareRootRotatesIntoTheSecureEnclave() async throws {
+        guard #available(iOS 26, macOS 26, *), SecureEnclave.isAvailable else { return }
+        let software = try SoftwarePrivateKey.generate()
+        let platform = try SecureEnclaveKey.generate(accessControl: Self.testAccess())
+        let v = Corpus.load("key-rotation-signature.json")
+        let stmt = KeyRotationStatement(version: 2, authorityId: v.s("authority_id"), recoveryEpoch: 1, role: v.s("role"),
+                                        sequence: 1, previousStatementHash: Data(count: 48), oldKey: software.publicKey,
+                                        newKey: platform.publicKey, oldKeyId: software.keyId, newKeyId: platform.keyId,
+                                        issuedAt: 1_800_000_000, notBefore: 1_800_000_000,
+                                        oldSignature: HybridSignature(ed25519: Data(), mlDsa65: Data()),
+                                        newSignature: HybridSignature(ed25519: Data(), mlDsa65: Data()))
+        let signed = try await Ratify.signKeyRotationStatement(stmt, oldKey: .software(software), newKey: .platform(PlatformKey(platform)))
+        let signable = try Ratify.keyRotationStatementSignableBytes(signed)
+        XCTAssertNoThrow(try Ratify.verifyStatement(.keyRotationAuthorization, signable: signable, signature: signed.oldSignature, publicKey: software.publicKey))
+        XCTAssertNoThrow(try Ratify.verifyStatement(.keyRotationProofOfPossession, signable: signable, signature: signed.newSignature, publicKey: platform.publicKey))
     }
 
     /// CryptoKit's software ML-DSA-65 derives the same public key from each

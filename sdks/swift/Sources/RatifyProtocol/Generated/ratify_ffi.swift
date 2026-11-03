@@ -1905,11 +1905,6 @@ protocol FfiSplitKeyProtocol: AnyObject, Sendable {
     func publicKey() throws  -> FfiPublicKey
     
     /**
-     * The SDK-internal composite signer over this key and its Keystore half.
-     */
-    func signer(ed25519: FfiEd25519Signer) throws  -> FfiSigner
-    
-    /**
      * This key's type 0x03 storage record, naming its Keystore alias.
      */
     func storageRecord(keystoreAlias: String) throws  -> Data
@@ -2010,19 +2005,6 @@ func publicKey()throws  -> FfiPublicKey  {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_ffisplitkey_public_key(
             self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-    
-    /**
-     * The SDK-internal composite signer over this key and its Keystore half.
-     */
-func signer(ed25519: FfiEd25519Signer)throws  -> FfiSigner  {
-    return try  FfiConverterTypeFfiSigner_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
-        uniffiCallStatus in
-    uniffi_ratify_protocol_ffi_fn_method_ffisplitkey_signer(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
     )
 })
 }
@@ -5321,6 +5303,102 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiEd25519Signer: FfiConverterRustBuffer {
+    typealias SwiftType = FfiEd25519Signer?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiEd25519Signer.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiEd25519Signer.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiSigner: FfiConverterRustBuffer {
+    typealias SwiftType = FfiSigner?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiSigner.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiSigner.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiSoftwareKey: FfiConverterRustBuffer {
+    typealias SwiftType = FfiSoftwareKey?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiSoftwareKey.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiSoftwareKey.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiSplitKey: FfiConverterRustBuffer {
+    typealias SwiftType = FfiSplitKey?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiSplitKey.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiSplitKey.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiProofBundle: FfiConverterRustBuffer {
     typealias SwiftType = FfiProofBundle?
 
@@ -6279,6 +6357,122 @@ func ffiSignWitnessEntryWithSigner(cancel: FfiCancelToken, entry: FfiWitnessEntr
     )
 })
 }
+func ffiSignDelegationCertWithSplitKey(cancel: FfiCancelToken, cert: FfiDelegationCert, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiDelegationCert  {
+    return try  FfiConverterTypeFfiDelegationCert_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_delegation_cert_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiDelegationCert_lower(cert),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+/**
+ * Sign a key-rotation statement with any combination of key kinds for the
+ * old (0x0004) and new (0x0009) halves, such as a software root moving
+ * into hardware. The core computes both requests and verifies both results.
+ */
+func ffiSignKeyRotationStatementWithSlots(cancel: FfiCancelToken, statement: FfiKeyRotationStatement, oldSoftware: FfiSoftwareKey?, oldSigner: FfiSigner?, oldSplit: FfiSplitKey?, oldSplitEd25519: FfiEd25519Signer?, newSoftware: FfiSoftwareKey?, newSigner: FfiSigner?, newSplit: FfiSplitKey?, newSplitEd25519: FfiEd25519Signer?)throws  -> FfiKeyRotationStatement  {
+    return try  FfiConverterTypeFfiKeyRotationStatement_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_key_rotation_statement_with_slots(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),
+        FfiConverterOptionTypeFfiSoftwareKey.lower(oldSoftware),
+        FfiConverterOptionTypeFfiSigner.lower(oldSigner),
+        FfiConverterOptionTypeFfiSplitKey.lower(oldSplit),
+        FfiConverterOptionTypeFfiEd25519Signer.lower(oldSplitEd25519),
+        FfiConverterOptionTypeFfiSoftwareKey.lower(newSoftware),
+        FfiConverterOptionTypeFfiSigner.lower(newSigner),
+        FfiConverterOptionTypeFfiSplitKey.lower(newSplit),
+        FfiConverterOptionTypeFfiEd25519Signer.lower(newSplitEd25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignPreparedVerificationReceiptWithSplitKey(cancel: FfiCancelToken, data: Data, head: FfiReceiptHead, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_prepared_verification_receipt_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterData.lower(data),
+        FfiConverterTypeFfiReceiptHead_lower(head),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignProofBundleWithSplitKey(cancel: FfiCancelToken, bundle: FfiProofBundle, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiProofBundle  {
+    return try  FfiConverterTypeFfiProofBundle_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_proof_bundle_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiProofBundle_lower(bundle),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignRevocationListWithSplitKey(cancel: FfiCancelToken, list: FfiRevocationList, boundIssuerId: String, boundStatusKey: FfiPublicKey, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiRevocationList  {
+    return try  FfiConverterTypeFfiRevocationList_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_revocation_list_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignRevocationPushWithSplitKey(cancel: FfiCancelToken, push: FfiRevocationPush, boundIssuerId: String, boundStatusKey: FfiPublicKey, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiRevocationPush  {
+    return try  FfiConverterTypeFfiRevocationPush_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_revocation_push_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignTransactionReceiptPartyWithSplitKey(cancel: FfiCancelToken, receipt: FfiTransactionReceipt, partyId: String, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiTransactionReceiptSignature  {
+    return try  FfiConverterTypeFfiTransactionReceiptSignature_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_transaction_receipt_party_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),
+        FfiConverterString.lower(partyId),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignVerificationReceiptWithSplitKey(cancel: FfiCancelToken, receipt: FfiVerificationReceipt, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_verification_receipt_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
+func ffiSignWitnessEntryWithSplitKey(cancel: FfiCancelToken, entry: FfiWitnessEntry, key: FfiSplitKey, ed25519: FfiEd25519Signer)throws  -> FfiWitnessEntry  {
+    return try  FfiConverterTypeFfiWitnessEntry_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_witness_entry_with_split_key(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiWitnessEntry_lower(entry),
+        FfiConverterTypeFfiSplitKey_lower(key),
+        FfiConverterTypeFfiEd25519Signer_lower(ed25519),uniffiCallStatus
+    )
+})
+}
 func ffiApplyRevocationList(state: FfiStatusState, list: FfiRevocationList, boundIssuerId: String, statusKeyEpoch: UInt64, statusKey: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusState  {
     return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -6881,6 +7075,33 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_signer() != 53719) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_delegation_cert_with_split_key() != 25954) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_key_rotation_statement_with_slots() != 60101) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_prepared_verification_receipt_with_split_key() != 6121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_proof_bundle_with_split_key() != 4769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_revocation_list_with_split_key() != 32029) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_revocation_push_with_split_key() != 35153) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_transaction_receipt_party_with_split_key() != 20103) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_verification_receipt_with_split_key() != 30934) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_split_key() != 18973) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list() != 33860) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7101,9 +7322,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisplitkey_public_key() != 10581) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisplitkey_signer() != 43917) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisplitkey_storage_record() != 3470) {

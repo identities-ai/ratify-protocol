@@ -122,7 +122,9 @@ object SigningVectors {
                 val signed = signDelegationCert(cert, signer)
                 (v.getString("expected") == "sign" && classOf { verifyDelegationCertSignature(signed) } == "ok") to "signed"
             } catch (e: RatifyException.Signing) {
-                (v.getString("expected") == "reject" && e.kind == SigningErrorKind.ISSUER_DUTY && signer.calls == 0) to
+                // V2SignError::class: an issuer-duty refusal is always `malformed`.
+                (v.getString("expected") == "reject" && e.kind == SigningErrorKind.ISSUER_DUTY && e.errorClass == ErrorClass.MALFORMED &&
+                    signer.calls == 0) to
                     "$e, ${signer.calls} signer calls"
             }
             t.check("issuer-duties", v.getString("name"), ok) { detail }

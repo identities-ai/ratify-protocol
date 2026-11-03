@@ -65,15 +65,17 @@ public final class SecureEnclaveKey: Sendable {
     /// re-derived and must match both the recorded ML-DSA public key and the
     /// recorded key ID.
     public convenience init(storageRecord: Data, authenticationContext: LAContext? = nil) throws(RatifyError) {
-        let r = try KeyStorageRecord(storageRecord)
-        guard r.recordType == .secureEnclaveHybrid else {
+        let r = try KeyStorageRecord.parse(storageRecord)
+        guard r.type == .secureEnclaveHybrid else {
             throw .protocol(.malformed, message: "record is not a Secure Enclave key")
         }
         let mldsa: SecureEnclave.MLDSA65.PrivateKey
         do { mldsa = try SecureEnclave.MLDSA65.PrivateKey(dataRepresentation: r.fields[0x04]!, authenticationContext: authenticationContext) } catch {
             throw .protocol(.configurationInvalid, message: "the Secure Enclave refused the key (another device, or deleted): \(error)")
         }
-        try self.init(mldsa: mldsa, edSeed: r.fields[0x01]!)
+        var edSeed = r.fields[0x01]!
+        defer { edSeed.resetBytes(in: 0..<edSeed.count) }
+        try self.init(mldsa: mldsa, edSeed: Data(edSeed))
         guard publicKey.mlDsa65 == r.fields[0x03]!, keyId == r.keyId else {
             throw .protocol(.keyIdMismatch, message: "the stored key derives a key other than the recorded one")
         }
@@ -154,20 +156,26 @@ extension Ratify {
         if case let .software(k) = key { return try signRevocationPush(push, boundIssuerId: boundIssuerId, boundStatusKey: boundStatusKey, key: k) }
         return try await signRevocationPush(push, boundIssuerId: boundIssuerId, boundStatusKey: boundStatusKey, signer: external(key)!)
     }
-    /// Both keys must be the same kind: two software keys, or two signers
-    /// (external or platform). A software/signer mix is `configurationInvalid`,
-    /// as in every SDK: the core exports no software signer to pair with one.
+    /// Sign a rotation with any combination of key kinds for the old and new
+    /// halves, such as a software root moving into the Secure Enclave. The
+    /// core computes both requests and verifies both results.
     public static func signKeyRotationStatement(_ statement: KeyRotationStatement, oldKey: SigningKey,
                                                 newKey: SigningKey) async throws(RatifyError) -> KeyRotationStatement {
-        switch (oldKey, newKey, external(oldKey), external(newKey)) {
-        case let (.software(o), .software(n), _, _):
+        if case let .software(o) = oldKey, case let .software(n) = newKey {
             return try signKeyRotationStatement(statement, oldKey: o, newKey: n)
-        case let (_, _, o?, n?):
-            return try await signKeyRotationStatement(statement, oldSigner: o, newSigner: n)
-        default:
-            throw .signing(.configurationInvalid, kind: .invalidSignerKey,
-                           message: "a rotation's old and new keys must both be software keys or both be signers")
         }
+        func slot(_ k: SigningKey) -> (FfiSoftwareKey?, FfiSigner?) {
+            if case let .software(s) = k { return (s.handle, nil) }
+            return (nil, SignerBridge(external(k)!))
+        }
+        let st = statement.ffi
+        let (os, oe) = slot(oldKey), (ns, ne) = slot(newKey)
+        return KeyRotationStatement(try await onWorker { t throws(RatifyError) in
+            try ffi {
+                try ffiSignKeyRotationStatementWithSlots(cancel: t, statement: st, oldSoftware: os, oldSigner: oe, oldSplit: nil,
+                                                         oldSplitEd25519: nil, newSoftware: ns, newSigner: ne, newSplit: nil, newSplitEd25519: nil)
+            }
+        })
     }
     public static func signWitnessEntry(_ entry: WitnessEntry, with key: SigningKey) async throws(RatifyError) -> WitnessEntry {
         if case let .software(k) = key { return try signWitnessEntry(entry, key: k) }

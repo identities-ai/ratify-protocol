@@ -423,3 +423,117 @@ pub fn ffi_sign_transaction_receipt_party_with_signer(
         })
     })
 }
+
+// ---- shared typed signing over any FfiSigner (callers guard) --
+
+pub(crate) fn sign_delegation_cert(
+    c: &FfiCancelToken,
+    cert: FfiDelegationCert,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiDelegationCert> {
+    Ok(
+        (&core::sign_delegation_cert_v2_with_signer(c.context(), &cert.into(), &Foreign(s))?)
+            .into(),
+    )
+}
+pub(crate) fn sign_proof_bundle(
+    c: &FfiCancelToken,
+    bundle: FfiProofBundle,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiProofBundle> {
+    Ok((&core::sign_proof_bundle_v2_with_signer(c.context(), &bundle.into(), &Foreign(s))?).into())
+}
+pub(crate) fn sign_revocation_list(
+    c: &FfiCancelToken,
+    list: FfiRevocationList,
+    issuer: String,
+    key: FfiPublicKey,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiRevocationList> {
+    Ok((&core::sign_revocation_list_v2_with_signer(
+        c.context(),
+        &list.into(),
+        &issuer,
+        &key.into(),
+        &Foreign(s),
+    )?)
+        .into())
+}
+pub(crate) fn sign_revocation_push(
+    c: &FfiCancelToken,
+    push: FfiRevocationPush,
+    issuer: String,
+    key: FfiPublicKey,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiRevocationPush> {
+    Ok((&core::sign_revocation_push_v2_with_signer(
+        c.context(),
+        &push.into(),
+        &issuer,
+        &key.into(),
+        &Foreign(s),
+    )?)
+        .into())
+}
+pub(crate) fn sign_key_rotation_statement(
+    c: &FfiCancelToken,
+    st: FfiKeyRotationStatement,
+    old: Arc<dyn FfiSigner>,
+    new: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiKeyRotationStatement> {
+    Ok((&core::sign_key_rotation_statement_v2_with_signers(
+        c.context(),
+        &st.into(),
+        &Foreign(old),
+        &Foreign(new),
+    )?)
+        .into())
+}
+pub(crate) fn sign_witness_entry(
+    c: &FfiCancelToken,
+    e: FfiWitnessEntry,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiWitnessEntry> {
+    Ok((&core::sign_witness_entry_v2_with_signer(c.context(), &e.into(), &Foreign(s))?).into())
+}
+pub(crate) fn sign_verification_receipt(
+    c: &FfiCancelToken,
+    r: FfiVerificationReceipt,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiVerificationReceipt> {
+    Ok(
+        (&core::sign_verification_receipt_v2_with_signer(c.context(), &r.into(), &Foreign(s))?)
+            .into(),
+    )
+}
+pub(crate) fn sign_prepared_verification_receipt(
+    c: &FfiCancelToken,
+    data: Vec<u8>,
+    head: FfiReceiptHead,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiVerificationReceipt> {
+    Ok((&core::sign_prepared_verification_receipt_v2_with_signer(
+        c.context(),
+        &data,
+        &head.into(),
+        &Foreign(s),
+    )?)
+        .into())
+}
+pub(crate) fn sign_transaction_receipt_party(
+    c: &FfiCancelToken,
+    r: FfiTransactionReceipt,
+    party: String,
+    s: Arc<dyn FfiSigner>,
+) -> FfiResult<FfiTransactionReceiptSignature> {
+    let sig = core::sign_transaction_receipt_party_v2_with_signer(
+        c.context(),
+        &r.into(),
+        &party,
+        &Foreign(s),
+    )?;
+    Ok(FfiTransactionReceiptSignature {
+        party_id: sig.party_id,
+        signature: (&sig.signature).into(),
+    })
+}

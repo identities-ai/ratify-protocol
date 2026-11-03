@@ -50,8 +50,6 @@ The v2 SDK set is Go, TypeScript, Python, Rust, and C. Each implements all of Pa
 - An SDK MAY also export the stages of the live verifier separately (pre-claim checks, claim, local evaluation, audience, rate, finalization). No exported stage accepts a status result from outside the evidence path of §6.5, and no stage output is actionable: only `ReleaseV2Decision` (§6.9) yields an actionable decision.
 - Every SDK exports a function that computes `key_id_v2` (§2.3).
 
-**Platform bindings.** A language binding over a version-locked Ratify v2 SDK MAY expose a declared subset of that SDK's public operations. It is not an additional v2 SDK in the five-SDK set above and MUST NOT claim conformance to the complete Part A and Part B SDK profile or advertise verifier or released-decision capabilities it does not expose. Its published API inventory MUST identify every exposed operation and its underlying SDK version. For every shared v2 vector applicable to an exposed operation, the binding MUST run that vector through its own public API with no skip, preserving the underlying SDK's bytes, results, error classes, and signing-failure semantics; its release record MUST list the applicable files and results. Operations outside the declared subset inherit no binding-level conformance claim. Provider and platform-custody claims additionally require executable evidence for each claimed provider under §3.2 and §8. Rust SDK conformance evidence remains the evidence for the underlying implementation; binding and provider tests establish only the exposed boundary and provider behavior. A binding MUST preserve §3.2's typed-signing restriction and MUST NOT export caller-selected signing or a local signer.
-
 # Part A: Protocol
 
 ## 2. Terms, encoding, and bounds

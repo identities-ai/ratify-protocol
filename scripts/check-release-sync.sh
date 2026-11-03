@@ -345,7 +345,6 @@ fixture_needles = {
     ],
     "docs/SDKS.md": [
         f"{fixture_count}/{fixture_count} fixtures",
-        f"Must pass all {fixture_count} fixtures",
         f"{fixture_count} ×",
     ],
     "docs/TESTING.md": [

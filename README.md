@@ -511,8 +511,8 @@ The 79 fixtures in `testvectors/v1/` are the canonical Protocol v1 conformance s
 | `ratify-protocol` | Python | ✅ 79/79 v1; full `testvectors/v2` (`ratify_protocol.v2`) | `pip install "ratify-protocol[protocol-v2]==2.0.0b1"` (v1 only: `pip install ratify-protocol==1.0.0a21`) |
 | `ratify-protocol` | Rust | ✅ 79/79 v1; full `testvectors/v2` | `cargo add ratify-protocol@2.0.0-beta.1` |
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full v1 C ABI conformance; full `testvectors/v2` through the `ratify_v2_*` ABI, including the stateful verifier (also run on armv7 Linux) | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
-| *Swift* (iOS, macOS) | Swift | planned: v2 platform binding over the Rust SDK ([SPEC-v2 §1.3](SPEC-v2.md#13-sdk-implementation-profile)) | n/a |
-| *Kotlin* (Android) | Kotlin | planned: v2 platform binding over the Rust SDK ([SPEC-v2 §1.3](SPEC-v2.md#13-sdk-implementation-profile)) | n/a |
+| *Swift* (iOS, macOS) | Swift | planned: full v2 SDK built over the Rust SDK, like C | n/a |
+| *Kotlin* (Android) | Kotlin | planned: full v2 SDK built over the Rust SDK, like C | n/a |
 
 The Conformance column describes `main`; a published release's exact fixture set is in its [release notes](https://github.com/identities-ai/ratify-protocol/releases). Between a feature merging and the next tag, `main` may be ahead of what the install commands deliver.
 

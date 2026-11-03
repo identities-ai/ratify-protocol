@@ -13,9 +13,17 @@ import XCTest
 /// and every SDK's generic runner verifies the committed files.
 final class ProviderEvidenceTests: XCTestCase {
     static func machine() -> String {
+        #if os(macOS)
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        var model = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.model", &model, &size, nil, 0)
+        return String(cString: model)
+        #else
         var info = utsname()
         uname(&info)
         return withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        #endif
     }
 
     static func osBuild() -> String {
@@ -80,6 +88,10 @@ final class ProviderEvidenceTests: XCTestCase {
             ],
         ]
         let json = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys, .prettyPrinted])
+        // Where the run can reach a directory (macOS), it may also write the file.
+        if let dir = ProcessInfo.processInfo.environment["RATIFY_EVIDENCE_DIR"] {
+            try json.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(platformName)-secure-enclave.json"))
+        }
         print("RATIFY-PROVIDER-EVIDENCE-BEGIN \(platformName)-secure-enclave")
         print(json.base64EncodedString())
         print("RATIFY-PROVIDER-EVIDENCE-END")

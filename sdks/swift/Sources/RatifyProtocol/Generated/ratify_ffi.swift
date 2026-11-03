@@ -1594,7 +1594,8 @@ protocol FfiSoftwareKeyProtocol: AnyObject, Sendable {
     func signDelegationCert(cert: FfiDelegationCert) throws  -> FfiDelegationCert
     
     /**
-     * Sign as the old key; `new_key` signs the proof of possession.
+     * Sign as the old key; `new_key` signs the proof of possession. A panic
+     * poisons both keys.
      */
     func signKeyRotationStatement(statement: FfiKeyRotationStatement, newKey: FfiSoftwareKey) throws  -> FfiKeyRotationStatement
     
@@ -1744,7 +1745,8 @@ func signDelegationCert(cert: FfiDelegationCert)throws  -> FfiDelegationCert  {
 }
     
     /**
-     * Sign as the old key; `new_key` signs the proof of possession.
+     * Sign as the old key; `new_key` signs the proof of possession. A panic
+     * poisons both keys.
      */
 func signKeyRotationStatement(statement: FfiKeyRotationStatement, newKey: FfiSoftwareKey)throws  -> FfiKeyRotationStatement  {
     return try  FfiConverterTypeFfiKeyRotationStatement_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
@@ -7276,7 +7278,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_delegation_cert() != 14821) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_key_rotation_statement() != 17560) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_key_rotation_statement() != 7994) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_prepared_verification_receipt() != 25902) {

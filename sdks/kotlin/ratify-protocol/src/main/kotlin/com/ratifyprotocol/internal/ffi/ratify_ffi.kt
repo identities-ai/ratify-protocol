@@ -1800,7 +1800,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_delegation_cert() and 0xFFFF) != 14821) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_key_rotation_statement() and 0xFFFF) != 17560) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_key_rotation_statement() and 0xFFFF) != 7994) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_prepared_verification_receipt() and 0xFFFF) != 25902) {
@@ -3988,7 +3988,8 @@ internal interface FfiSoftwareKeyInterface {
     fun `signDelegationCert`(`cert`: FfiDelegationCert): FfiDelegationCert
     
     /**
-     * Sign as the old key; `new_key` signs the proof of possession.
+     * Sign as the old key; `new_key` signs the proof of possession. A panic
+     * poisons both keys.
      */
     fun `signKeyRotationStatement`(`statement`: FfiKeyRotationStatement, `newKey`: FfiSoftwareKey): FfiKeyRotationStatement
     
@@ -4166,7 +4167,8 @@ internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInt
 
     
     /**
-     * Sign as the old key; `new_key` signs the proof of possession.
+     * Sign as the old key; `new_key` signs the proof of possession. A panic
+     * poisons both keys.
      */
     @Throws(FfiException::class)override fun `signKeyRotationStatement`(`statement`: FfiKeyRotationStatement, `newKey`: FfiSoftwareKey): FfiKeyRotationStatement {
             return FfiConverterTypeFfiKeyRotationStatement.lift(

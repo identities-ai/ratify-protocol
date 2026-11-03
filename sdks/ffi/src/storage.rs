@@ -148,9 +148,31 @@ pub(crate) fn encode(
     Ok(out)
 }
 
+/// A parsed record whose field values are wiped when dropped (also on a
+/// failed or partial parse). Loaders use this; only the explicit FFI parse
+/// export copies values out.
+pub(crate) struct SecretRecord {
+    pub record_type: u8,
+    pub key_id: String,
+    pub header: Vec<u8>,
+    pub fields: Vec<(u8, Zeroizing<Vec<u8>>)>,
+}
+
+impl SecretRecord {
+    /// The value of a schema-validated field.
+    pub(crate) fn field(&self, tag: u8) -> &[u8] {
+        &self
+            .fields
+            .iter()
+            .find(|(t, _)| *t == tag)
+            .expect("schema-validated")
+            .1
+    }
+}
+
 /// Parse and validate a record (format only; key ID binding is checked by
 /// the loader that derives the key).
-pub(crate) fn parse(data: &[u8]) -> FfiResult<FfiStorageRecord> {
+pub(crate) fn parse_secret(data: &[u8]) -> FfiResult<SecretRecord> {
     let take = |at: &mut usize, n: usize| -> FfiResult<&[u8]> {
         let end = at
             .checked_add(n)
@@ -183,10 +205,10 @@ pub(crate) fn parse(data: &[u8]) -> FfiResult<FfiStorageRecord> {
     if count != schema.len() {
         return Err(malformed("wrong number of fields for the record type"));
     }
-    let mut fields = Vec::with_capacity(count);
+    let mut fields: Vec<(u8, Zeroizing<Vec<u8>>)> = Vec::with_capacity(count);
     for (want_tag, want_len) in schema {
         let tag = take(&mut at, 1)?[0];
-        if fields.iter().any(|f: &FfiStorageField| f.tag == tag) {
+        if fields.iter().any(|(t, _)| *t == tag) {
             return Err(malformed(format!("duplicate field {tag:#04x}")));
         }
         if tag != *want_tag {
@@ -202,28 +224,36 @@ pub(crate) fn parse(data: &[u8]) -> FfiResult<FfiStorageRecord> {
                 "field {tag:#04x} has the wrong length {len}"
             )));
         }
-        fields.push(FfiStorageField {
-            tag,
-            value: take(&mut at, len)?.to_vec(),
-        });
+        fields.push((tag, Zeroizing::new(take(&mut at, len)?.to_vec())));
     }
     if at != data.len() {
         return Err(malformed("trailing bytes"));
     }
-    Ok(FfiStorageRecord {
+    Ok(SecretRecord {
         record_type,
         key_id: id,
-        fields,
         header,
+        fields,
     })
 }
 
-fn field(r: &FfiStorageRecord, tag: u8) -> &[u8] {
-    &r.fields
-        .iter()
-        .find(|f| f.tag == tag)
-        .expect("schema-validated")
-        .value
+/// The FFI form of a parsed record (field values copied out for the caller,
+/// which wipes them).
+pub(crate) fn parse(data: &[u8]) -> FfiResult<FfiStorageRecord> {
+    let r = parse_secret(data)?;
+    Ok(FfiStorageRecord {
+        record_type: r.record_type,
+        key_id: r.key_id.clone(),
+        header: r.header.clone(),
+        fields: r
+            .fields
+            .iter()
+            .map(|(tag, v)| FfiStorageField {
+                tag: *tag,
+                value: v.to_vec(),
+            })
+            .collect(),
+    })
 }
 
 /// Parse and validate any record type.
@@ -271,7 +301,7 @@ impl FfiSoftwareKey {
     pub fn from_storage_record(data: Vec<u8>) -> FfiResult<Arc<Self>> {
         call(|| {
             let data = Zeroizing::new(data);
-            let r = parse(&data)?;
+            let r = parse_secret(&data)?;
             if r.record_type != TYPE_SOFTWARE {
                 return Err(malformed(format!(
                     "record type {:#04x} is not a software key",
@@ -279,8 +309,8 @@ impl FfiSoftwareKey {
                 )));
             }
             let key = FfiSoftwareKey::from_seed_slices(
-                field(&r, TAG_ED25519_SEED),
-                field(&r, TAG_MLDSA65_SEED),
+                r.field(TAG_ED25519_SEED),
+                r.field(TAG_MLDSA65_SEED),
             )?;
             if key.key_id_str() != r.key_id {
                 return Err(protocol(

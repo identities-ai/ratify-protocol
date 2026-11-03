@@ -14,7 +14,7 @@ use zeroize::Zeroizing;
 
 use crate::context::FfiCancelToken;
 use crate::error::{protocol, FfiResult};
-use crate::guard::{call, call_on, Poison};
+use crate::guard::{call, call_on, call_with, Poison};
 use crate::keys::FfiPublicKey;
 use crate::keys::FfiSoftwareKey;
 use crate::objects::*;
@@ -89,23 +89,16 @@ impl FfiSplitKey {
     pub fn from_storage_record(data: Vec<u8>) -> FfiResult<Arc<Self>> {
         call(move || {
             let data = Zeroizing::new(data);
-            let r = storage::parse(&data)?;
+            let r = storage::parse_secret(&data)?;
             if r.record_type != TYPE_ANDROID_SPLIT {
                 return Err(protocol(
                     V2ErrorClass::Malformed,
                     "key storage record: not an Android split-custody key",
                 ));
             }
-            let get = |t: u8| {
-                r.fields
-                    .iter()
-                    .find(|f| f.tag == t)
-                    .map(|f| f.value.clone())
-                    .unwrap_or_default()
-            };
             let key = Self::build(
-                &Zeroizing::new(get(TAG_MLDSA65_SEED)),
-                get(TAG_ED25519_PUBLIC),
+                r.field(TAG_MLDSA65_SEED),
+                r.field(TAG_ED25519_PUBLIC).to_vec(),
             )?;
             if key.key_id != r.key_id {
                 return Err(protocol(
@@ -282,6 +275,17 @@ fn slot(
     }
 }
 
+fn slot_poisons<'a>(
+    software: &[&'a Option<Arc<FfiSoftwareKey>>],
+    split: &[&'a Option<Arc<FfiSplitKey>>],
+) -> Vec<&'a Poison> {
+    software
+        .iter()
+        .filter_map(|k| k.as_ref().map(|k| &k.poison))
+        .chain(split.iter().filter_map(|k| k.as_ref().map(|k| &k.poison)))
+        .collect()
+}
+
 /// Sign a key-rotation statement with any combination of key kinds for the
 /// old (0x0004) and new (0x0009) halves, such as a software root moving
 /// into hardware. The core computes both requests and verifies both results.
@@ -299,23 +303,27 @@ pub fn ffi_sign_key_rotation_statement_with_slots(
     new_split: Option<Arc<FfiSplitKey>>,
     new_split_ed25519: Option<Arc<dyn FfiEd25519Signer>>,
 ) -> FfiResult<FfiKeyRotationStatement> {
-    call(|| {
-        let old = slot(
-            old_software,
-            old_signer,
-            old_split,
-            old_split_ed25519,
-            "old",
-        )?;
-        let new = slot(
-            new_software,
-            new_signer,
-            new_split,
-            new_split_ed25519,
-            "new",
-        )?;
-        typed::sign_key_rotation_statement(&cancel, statement, old, new)
-    })
+    // Every key handle in either slot is poisoned if the signing panics.
+    call_with(
+        &slot_poisons(&[&old_software, &new_software], &[&old_split, &new_split]),
+        || {
+            let old = slot(
+                old_software.clone(),
+                old_signer,
+                old_split.clone(),
+                old_split_ed25519,
+                "old",
+            )?;
+            let new = slot(
+                new_software.clone(),
+                new_signer,
+                new_split.clone(),
+                new_split_ed25519,
+                "new",
+            )?;
+            typed::sign_key_rotation_statement(&cancel, statement, old, new)
+        },
+    )
 }
 
 // ---- typed signing with a split-custody key (blocking; run on an SDK worker) --
@@ -327,7 +335,9 @@ pub fn ffi_sign_delegation_cert_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiDelegationCert> {
-    call(|| typed::sign_delegation_cert(&cancel, cert, Composite::signer(&key, ed25519)?))
+    call_with(&[&key.poison], || {
+        typed::sign_delegation_cert(&cancel, cert, Composite::signer(&key, ed25519)?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_proof_bundle_with_split_key(
@@ -336,7 +346,9 @@ pub fn ffi_sign_proof_bundle_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiProofBundle> {
-    call(|| typed::sign_proof_bundle(&cancel, bundle, Composite::signer(&key, ed25519)?))
+    call_with(&[&key.poison], || {
+        typed::sign_proof_bundle(&cancel, bundle, Composite::signer(&key, ed25519)?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_revocation_list_with_split_key(
@@ -347,7 +359,7 @@ pub fn ffi_sign_revocation_list_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiRevocationList> {
-    call(|| {
+    call_with(&[&key.poison], || {
         typed::sign_revocation_list(
             &cancel,
             list,
@@ -366,7 +378,7 @@ pub fn ffi_sign_revocation_push_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiRevocationPush> {
-    call(|| {
+    call_with(&[&key.poison], || {
         typed::sign_revocation_push(
             &cancel,
             push,
@@ -383,7 +395,9 @@ pub fn ffi_sign_witness_entry_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiWitnessEntry> {
-    call(|| typed::sign_witness_entry(&cancel, entry, Composite::signer(&key, ed25519)?))
+    call_with(&[&key.poison], || {
+        typed::sign_witness_entry(&cancel, entry, Composite::signer(&key, ed25519)?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_verification_receipt_with_split_key(
@@ -392,7 +406,9 @@ pub fn ffi_sign_verification_receipt_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiVerificationReceipt> {
-    call(|| typed::sign_verification_receipt(&cancel, receipt, Composite::signer(&key, ed25519)?))
+    call_with(&[&key.poison], || {
+        typed::sign_verification_receipt(&cancel, receipt, Composite::signer(&key, ed25519)?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_prepared_verification_receipt_with_split_key(
@@ -402,7 +418,7 @@ pub fn ffi_sign_prepared_verification_receipt_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiVerificationReceipt> {
-    call(|| {
+    call_with(&[&key.poison], || {
         typed::sign_prepared_verification_receipt(
             &cancel,
             data,
@@ -419,7 +435,7 @@ pub fn ffi_sign_transaction_receipt_party_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiTransactionReceiptSignature> {
-    call(|| {
+    call_with(&[&key.poison], || {
         typed::sign_transaction_receipt_party(
             &cancel,
             receipt,
@@ -600,6 +616,69 @@ mod tests {
         assert!(
             matches!(r, Err(crate::error::FfiError::Signing { .. })),
             "{r:?}"
+        );
+    }
+}
+
+#[cfg(all(test, feature = "test-hooks"))]
+mod poison_tests {
+    use super::*;
+    use crate::context::FfiCancelToken;
+
+    /// A panic inside a mixed-rotation signing poisons every key it was given.
+    #[test]
+    fn a_panic_poisons_every_participating_key() {
+        let old = FfiSoftwareKey::from_seeds(vec![1; 32], vec![2; 32]).unwrap();
+        let new = FfiSoftwareKey::from_seeds(vec![3; 32], vec![4; 32]).unwrap();
+        let bystander = FfiSoftwareKey::from_seeds(vec![5; 32], vec![6; 32]).unwrap();
+        let stmt = FfiKeyRotationStatement {
+            version: 2,
+            authority_id: "11223344556677889900aabbccddeeff".into(),
+            recovery_epoch: 1,
+            role: "organization_root".into(),
+            sequence: 1,
+            previous_statement_hash: vec![0; 48],
+            old_key: old.public_key().unwrap(),
+            new_key: new.public_key().unwrap(),
+            old_key_id: old.key_id().unwrap(),
+            new_key_id: new.key_id().unwrap(),
+            issued_at: 1_800_000_000,
+            not_before: 1_800_000_000,
+            old_signature: FfiSignature {
+                ed25519: vec![],
+                ml_dsa_65: vec![],
+            },
+            new_signature: FfiSignature {
+                ed25519: vec![],
+                ml_dsa_65: vec![],
+            },
+        };
+        let token = FfiCancelToken::new(None).unwrap();
+        crate::guard::test_hooks::ratify_ffi_test_arm_panic();
+        let r = ffi_sign_key_rotation_statement_with_slots(
+            token,
+            stmt,
+            Some(old.clone()),
+            None,
+            None,
+            None,
+            Some(new.clone()),
+            None,
+            None,
+            None,
+        );
+        assert!(
+            matches!(r, Err(crate::error::FfiError::Internal { ref kind, .. }) if kind == "panic"),
+            "{r:?}"
+        );
+        for k in [&old, &new] {
+            assert!(
+                matches!(k.key_id(), Err(crate::error::FfiError::Internal { ref kind, .. }) if kind == "poisoned")
+            );
+        }
+        assert!(
+            bystander.key_id().is_ok(),
+            "an uninvolved key is unaffected"
         );
     }
 }

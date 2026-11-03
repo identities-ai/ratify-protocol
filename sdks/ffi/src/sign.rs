@@ -213,13 +213,14 @@ impl FfiSoftwareKey {
                 .into())
         })
     }
-    /// Sign as the old key; `new_key` signs the proof of possession.
+    /// Sign as the old key; `new_key` signs the proof of possession. A panic
+    /// poisons both keys.
     pub fn sign_key_rotation_statement(
         &self,
         statement: FfiKeyRotationStatement,
         new_key: Arc<FfiSoftwareKey>,
     ) -> FfiResult<FfiKeyRotationStatement> {
-        call_on(&self.poison, || {
+        crate::guard::call_with(&[&self.poison, &new_key.poison], || {
             Ok((&core::sign_key_rotation_statement_v2(
                 &statement.into(),
                 &self.private,

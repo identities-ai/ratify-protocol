@@ -86,6 +86,23 @@ pub(crate) fn call_on<T>(poison: &Poison, body: impl FnOnce() -> FfiResult<T>) -
     })
 }
 
+/// Guard a free function that receives SDK key handles: refuse it if any of
+/// them is poisoned, and poison every one of them when its body panics.
+pub(crate) fn call_with<T>(
+    handles: &[&Poison],
+    body: impl FnOnce() -> FfiResult<T>,
+) -> FfiResult<T> {
+    if handles.iter().any(|p| p.is_set()) {
+        return Err(poisoned());
+    }
+    contained(body).unwrap_or_else(|()| {
+        for p in handles {
+            p.0.store(true, Ordering::SeqCst);
+        }
+        Err(panicked())
+    })
+}
+
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -163,6 +180,15 @@ mod tests {
         assert!(matches!(again, Err(FfiError::Internal { ref kind, .. }) if kind == "poisoned"));
         let other = Poison::default();
         assert_eq!(call_on(&other, || Ok(2)).ok(), Some(2));
+        let (a, b) = (Poison::default(), Poison::default());
+        let r: FfiResult<()> = call_with(&[&a, &b], || panic!("boom"));
+        assert!(matches!(r, Err(FfiError::Internal { ref kind, .. }) if kind == "panic"));
+        assert!(
+            a.is_set() && b.is_set(),
+            "every participating handle is poisoned"
+        );
+        let refused: FfiResult<i32> = call_with(&[&Poison::default(), &a], || Ok(1));
+        assert!(matches!(refused, Err(FfiError::Internal { ref kind, .. }) if kind == "poisoned"));
         let free: FfiResult<()> = call(|| panic!("boom"));
         assert!(matches!(free, Err(FfiError::Internal { ref kind, .. }) if kind == "panic"));
         assert_eq!(call(|| Ok(3)).ok(), Some(3));

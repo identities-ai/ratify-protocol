@@ -54,7 +54,15 @@ fn check(
     if !returns_ffi_result(&sig.output) {
         errors.push(format!("{name}: must return FfiResult"));
     }
-    let want = if sig.receiver().is_some() {
+    // A function that receives an SDK key handle (besides its receiver) must
+    // poison every participating handle on a panic.
+    let takes_key = sig.inputs.iter().any(|a| {
+        let t = a.to_token_stream().to_string().replace(' ', "");
+        t.contains("Arc<FfiSoftwareKey>") || t.contains("Arc<FfiSplitKey>")
+    });
+    let want = if takes_key {
+        "call_with"
+    } else if sig.receiver().is_some() {
         "call_on"
     } else {
         "call"

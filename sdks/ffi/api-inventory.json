@@ -2965,13 +2965,15 @@
  },
  "KeyRotationV2AcceptedEntry": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationAcceptedEntry",
+  "status": "mapped",
+  "swift": "RotationAcceptedEntry"
  },
  "KeyRotationV2AcceptedEntry::body_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationAcceptedEntry.bodyDigest",
+  "status": "mapped",
+  "swift": "RotationAcceptedEntry.bodyDigest"
  },
  "KeyRotationV2AcceptedEntry::clone": {
   "kind": "fn",
@@ -2985,23 +2987,27 @@
  },
  "KeyRotationV2AcceptedEntry::old_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationAcceptedEntry.oldKey",
+  "status": "mapped",
+  "swift": "RotationAcceptedEntry.oldKey"
  },
  "KeyRotationV2AcceptedEntry::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationAcceptedEntry.sequence",
+  "status": "mapped",
+  "swift": "RotationAcceptedEntry.sequence"
  },
  "KeyRotationV2Journal": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationJournal",
+  "status": "mapped",
+  "swift": "RotationJournal"
  },
  "KeyRotationV2Journal::accepted": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationJournal.accepted",
+  "status": "mapped",
+  "swift": "RotationJournal.accepted"
  },
  "KeyRotationV2Journal::clone": {
   "kind": "fn",
@@ -3015,13 +3021,15 @@
  },
  "KeyRotationV2Journal::frozen": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationJournal.frozen",
+  "status": "mapped",
+  "swift": "RotationJournal.frozen"
  },
  "KeyRotationV2Journal::state": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationJournal.state",
+  "status": "mapped",
+  "swift": "RotationJournal.state"
  },
  "KeyRotationV2State": {
   "kind": "struct",
@@ -8361,8 +8369,9 @@
  },
  "accept_key_rotation_statement_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "acceptKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.acceptKeyRotationStatement"
  },
  "apply_revocation_list_to_journal_v2": {
   "kind": "fn",
@@ -8730,8 +8739,9 @@
  },
  "new_key_rotation_v2_journal": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "newKeyRotationJournal",
+  "status": "mapped",
+  "swift": "Ratify.newKeyRotationJournal"
  },
  "new_v2_status_publisher": {
   "kind": "fn",
@@ -8799,8 +8809,9 @@
  },
  "recover_key_rotation_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "recoverKeyRotation",
+  "status": "mapped",
+  "swift": "Ratify.recoverKeyRotation"
  },
  "register_key_role_v2": {
   "kind": "fn",

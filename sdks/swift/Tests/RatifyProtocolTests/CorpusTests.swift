@@ -22,6 +22,8 @@ final class CorpusTests: XCTestCase {
         "external-signer.json": SigningRunner.externalSigner,
         "archival.json": ArchivalRunner.archival,
         "digest-functions.json": ArchivalRunner.digestFunctions,
+        "log-sequences.json": LogsRunner.logSequences,
+        "rotation-sequences.json": LogsRunner.rotationSequences,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
@@ -34,8 +36,6 @@ final class CorpusTests: XCTestCase {
         "device-state.json": "M3",
         "evaluator-profiles.json": "M3",
         "lifecycle-scenarios.json": "M3",
-        "log-sequences.json": "M2",
-        "rotation-sequences.json": "M2",
         "security-journal.json": "M2",
         "status-publisher.json": "M2",
         "status-sequences.json": "M2",

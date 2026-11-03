@@ -28,6 +28,8 @@ object CorpusRunners {
         "external-signer.json" to { SigningVectors.externalSigner() },
         "archival.json" to ArchivalVectors::archival,
         "digest-functions.json" to ArchivalVectors::digestFunctions,
+        "log-sequences.json" to LogsVectors::logSequences,
+        "rotation-sequences.json" to LogsVectors::rotationSequences,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -40,8 +42,6 @@ object CorpusRunners {
         "device-state.json" to "M3",
         "evaluator-profiles.json" to "M3",
         "lifecycle-scenarios.json" to "M3",
-        "log-sequences.json" to "M2",
-        "rotation-sequences.json" to "M2",
         "security-journal.json" to "M2",
         "status-publisher.json" to "M2",
         "status-sequences.json" to "M2",

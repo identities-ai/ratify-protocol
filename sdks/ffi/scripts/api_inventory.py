@@ -146,6 +146,7 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "RotationAcceptance": "the (journal, result) tuple of accept_key_rotation_statement_v2",
     "InternalErrorKind": "kind of RatifyException.Internal (plan §2.2)",
     "RatifyException": "the sealed error family (plan §2.2)",
     "RatifyException.Signing": "signing errors (plan §2.2); V2SignError is mapped in M2",
@@ -173,6 +174,8 @@ EXTRA_MEMBERS = {
     "RatifyException.Protocol.errorClass": "the §2.7 class (plan §2.2)",
     "InternalErrorKind.spelling": "the FFI spelling of the kind",
     "SigningErrorKind.spelling": "the FFI spelling of the kind",
+    "RotationAcceptance.journal": "tuple field", "RotationAcceptance.result": "tuple field",
+    "RotationAcceptance.error": "tuple field",
     "SoftwarePrivateKey.keyId": "convenience: key_id_v2 of publicKey, computed once at load",
     "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
     "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",

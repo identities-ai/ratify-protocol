@@ -2,7 +2,8 @@
 //! with their signatures verified. Never an authorization decision.
 
 use ratify_protocol::v2::{
-    self as core, ArchivalProofBundleResultV2, ArchivalVerificationV2, StatusEvidenceObjectV2, V2ErrorClass,
+    self as core, ArchivalProofBundleResultV2, ArchivalVerificationV2, StatusEvidenceObjectV2,
+    V2ErrorClass,
 };
 
 use crate::error::{protocol, FfiResult};
@@ -68,7 +69,10 @@ impl TryFrom<FfiArchivalProofBundleResult> for ArchivalProofBundleResultV2 {
         let error_class = match r.error_class {
             None => None,
             Some(c) => Some(V2ErrorClass::parse(&c).ok_or_else(|| {
-                protocol(V2ErrorClass::Malformed, format!("{c} is not a SPEC-v2 error class"))
+                protocol(
+                    V2ErrorClass::Malformed,
+                    format!("{c} is not a SPEC-v2 error class"),
+                )
             })?),
         };
         Ok(ArchivalProofBundleResultV2 {
@@ -89,7 +93,9 @@ pub fn ffi_verify_archival_proof_bundle(data: Vec<u8>) -> FfiResult<FfiArchivalP
 }
 /// The language-neutral JSON of an archival proof-bundle result.
 #[uniffi::export]
-pub fn ffi_archival_proof_bundle_result_json(result: FfiArchivalProofBundleResult) -> FfiResult<Vec<u8>> {
+pub fn ffi_archival_proof_bundle_result_json(
+    result: FfiArchivalProofBundleResult,
+) -> FfiResult<Vec<u8>> {
     call(|| Ok(ArchivalProofBundleResultV2::try_from(result)?.to_json()?))
 }
 #[uniffi::export]
@@ -102,7 +108,9 @@ pub fn ffi_verify_archival_revocation_list(
     issuer_id: String,
     status_key: FfiPublicKey,
 ) -> FfiResult<FfiArchivalVerification> {
-    call(|| Ok(core::verify_archival_revocation_list_v2(&data, &issuer_id, &status_key.into())?.into()))
+    call(|| {
+        Ok(core::verify_archival_revocation_list_v2(&data, &issuer_id, &status_key.into())?.into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_archival_revocation_push(
@@ -110,14 +118,21 @@ pub fn ffi_verify_archival_revocation_push(
     issuer_id: String,
     status_key: FfiPublicKey,
 ) -> FfiResult<FfiArchivalVerification> {
-    call(|| Ok(core::verify_archival_revocation_push_v2(&data, &issuer_id, &status_key.into())?.into()))
+    call(|| {
+        Ok(core::verify_archival_revocation_push_v2(&data, &issuer_id, &status_key.into())?.into())
+    })
 }
 #[uniffi::export]
-pub fn ffi_verify_archival_key_rotation_statement(data: Vec<u8>) -> FfiResult<FfiArchivalVerification> {
+pub fn ffi_verify_archival_key_rotation_statement(
+    data: Vec<u8>,
+) -> FfiResult<FfiArchivalVerification> {
     call(|| Ok(core::verify_archival_key_rotation_statement_v2(&data)?.into()))
 }
 #[uniffi::export]
-pub fn ffi_verify_archival_witness_entry(data: Vec<u8>, witness_key: FfiPublicKey) -> FfiResult<FfiArchivalVerification> {
+pub fn ffi_verify_archival_witness_entry(
+    data: Vec<u8>,
+    witness_key: FfiPublicKey,
+) -> FfiResult<FfiArchivalVerification> {
     call(|| Ok(core::verify_archival_witness_entry_v2(&data, &witness_key.into())?.into()))
 }
 #[uniffi::export]
@@ -128,14 +143,24 @@ pub fn ffi_verify_archival_verification_receipt(
     call(|| Ok(core::verify_archival_verification_receipt_v2(&data, &verifier_key.into())?.into()))
 }
 #[uniffi::export]
-pub fn ffi_verify_archival_transaction_receipt(data: Vec<u8>) -> FfiResult<FfiArchivalVerification> {
+pub fn ffi_verify_archival_transaction_receipt(
+    data: Vec<u8>,
+) -> FfiResult<FfiArchivalVerification> {
     call(|| Ok(core::verify_archival_transaction_receipt_v2(&data)?.into()))
 }
 
 /// `StatementBodyDigestV2` under an explicit object type code (SPEC-v2 §4).
 #[uniffi::export]
-pub fn ffi_statement_body_digest(object_type_code: u16, signable_body: Vec<u8>) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::statement_body_digest_v2(object_type_code, &signable_body)?))
+pub fn ffi_statement_body_digest(
+    object_type_code: u16,
+    signable_body: Vec<u8>,
+) -> FfiResult<Vec<u8>> {
+    call(|| {
+        Ok(core::statement_body_digest_v2(
+            object_type_code,
+            &signable_body,
+        )?)
+    })
 }
 
 /// A status object: a full revocation list or an incremental push.
@@ -148,13 +173,18 @@ pub enum FfiStatusObject {
 /// `StatusEvidenceDigest` under an explicit object type code: 0x0003
 /// requires a list and 0x0005 a push.
 #[uniffi::export]
-pub fn ffi_status_evidence_digest(object_type_code: u16, object: FfiStatusObject) -> FfiResult<Vec<u8>> {
+pub fn ffi_status_evidence_digest(
+    object_type_code: u16,
+    object: FfiStatusObject,
+) -> FfiResult<Vec<u8>> {
     call(|| match object {
-        FfiStatusObject::List { list } => {
-            Ok(core::status_evidence_digest_v2(object_type_code, StatusEvidenceObjectV2::List(&list.into()))?)
-        }
-        FfiStatusObject::Push { push } => {
-            Ok(core::status_evidence_digest_v2(object_type_code, StatusEvidenceObjectV2::Push(&push.into()))?)
-        }
+        FfiStatusObject::List { list } => Ok(core::status_evidence_digest_v2(
+            object_type_code,
+            StatusEvidenceObjectV2::List(&list.into()),
+        )?),
+        FfiStatusObject::Push { push } => Ok(core::status_evidence_digest_v2(
+            object_type_code,
+            StatusEvidenceObjectV2::Push(&push.into()),
+        )?),
     })
 }

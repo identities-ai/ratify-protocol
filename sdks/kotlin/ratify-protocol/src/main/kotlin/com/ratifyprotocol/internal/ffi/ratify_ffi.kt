@@ -767,6 +767,12 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_accept_key_rotation_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_new_key_rotation_journal(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_key_rotation(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes(
@@ -1082,6 +1088,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_witness_entry(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_accept_key_rotation_statement(`statement`: RustBuffer.ByValue,`journal`: RustBuffer.ByValue,`now`: Long,`futureSkew`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_new_key_rotation_journal(`authorityId`: RustBuffer.ByValue,`recoveryEpoch`: Long,`role`: RustBuffer.ByValue,`genesisKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_recover_key_rotation(`journal`: RustBuffer.ByValue,`newRecoveryEpoch`: Long,`newGenesisKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_canonical_json(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_expand_scopes(`scopes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1395,6 +1407,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry() and 0xFFFF) != 43520) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_accept_key_rotation_statement() and 0xFFFF) != 43780) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_new_key_rotation_journal() and 0xFFFF) != 26960) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_key_rotation() and 0xFFFF) != 59614) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json() and 0xFFFF) != 20450) {
@@ -4578,6 +4599,186 @@ internal object FfiConverterTypeFfiRevocationPush: FfiConverterRustBuffer<FfiRev
 
 
 /**
+ * The next journal and what the statement did. Exactly one of `result`
+ * and `error` is set; `error` is a protocol error.
+ */
+internal data class FfiRotationAcceptance (
+    var `journal`: FfiRotationJournal
+    , 
+    var `result`: FfiLogResult?
+    , 
+    var `error`: FfiRotationRefusal?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRotationAcceptance: FfiConverterRustBuffer<FfiRotationAcceptance> {
+    override fun read(buf: ByteBuffer): FfiRotationAcceptance {
+        return FfiRotationAcceptance(
+            FfiConverterTypeFfiRotationJournal.read(buf),
+            FfiConverterOptionalTypeFfiLogResult.read(buf),
+            FfiConverterOptionalTypeFfiRotationRefusal.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRotationAcceptance) = (
+            FfiConverterTypeFfiRotationJournal.allocationSize(value.`journal`) +
+            FfiConverterOptionalTypeFfiLogResult.allocationSize(value.`result`) +
+            FfiConverterOptionalTypeFfiRotationRefusal.allocationSize(value.`error`)
+    )
+
+    override fun write(value: FfiRotationAcceptance, buf: ByteBuffer) {
+            FfiConverterTypeFfiRotationJournal.write(value.`journal`, buf)
+            FfiConverterOptionalTypeFfiLogResult.write(value.`result`, buf)
+            FfiConverterOptionalTypeFfiRotationRefusal.write(value.`error`, buf)
+    }
+}
+
+
+
+/**
+ * One accepted rotation, retained for replay and fork checks.
+ */
+internal data class FfiRotationAcceptedEntry (
+    var `sequence`: kotlin.Long
+    , 
+    var `bodyDigest`: kotlin.ByteArray
+    , 
+    var `oldKey`: FfiPublicKey
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRotationAcceptedEntry: FfiConverterRustBuffer<FfiRotationAcceptedEntry> {
+    override fun read(buf: ByteBuffer): FfiRotationAcceptedEntry {
+        return FfiRotationAcceptedEntry(
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRotationAcceptedEntry) = (
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`bodyDigest`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`oldKey`)
+    )
+
+    override fun write(value: FfiRotationAcceptedEntry, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`bodyDigest`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`oldKey`, buf)
+    }
+}
+
+
+
+/**
+ * Caller-persisted continuity state for one authority.
+ */
+internal data class FfiRotationJournal (
+    var `state`: FfiRotationState
+    , 
+    var `accepted`: List<FfiRotationAcceptedEntry>
+    , 
+    var `frozen`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRotationJournal: FfiConverterRustBuffer<FfiRotationJournal> {
+    override fun read(buf: ByteBuffer): FfiRotationJournal {
+        return FfiRotationJournal(
+            FfiConverterTypeFfiRotationState.read(buf),
+            FfiConverterSequenceTypeFfiRotationAcceptedEntry.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRotationJournal) = (
+            FfiConverterTypeFfiRotationState.allocationSize(value.`state`) +
+            FfiConverterSequenceTypeFfiRotationAcceptedEntry.allocationSize(value.`accepted`) +
+            FfiConverterBoolean.allocationSize(value.`frozen`)
+    )
+
+    override fun write(value: FfiRotationJournal, buf: ByteBuffer) {
+            FfiConverterTypeFfiRotationState.write(value.`state`, buf)
+            FfiConverterSequenceTypeFfiRotationAcceptedEntry.write(value.`accepted`, buf)
+            FfiConverterBoolean.write(value.`frozen`, buf)
+    }
+}
+
+
+
+/**
+ * A refused rotation statement: its §2.7 class and diagnostic.
+ */
+internal data class FfiRotationRefusal (
+    var `class`: kotlin.String
+    , 
+    var `detail`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRotationRefusal: FfiConverterRustBuffer<FfiRotationRefusal> {
+    override fun read(buf: ByteBuffer): FfiRotationRefusal {
+        return FfiRotationRefusal(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRotationRefusal) = (
+            FfiConverterString.allocationSize(value.`class`) +
+            FfiConverterString.allocationSize(value.`detail`)
+    )
+
+    override fun write(value: FfiRotationRefusal, buf: ByteBuffer) {
+            FfiConverterString.write(value.`class`, buf)
+            FfiConverterString.write(value.`detail`, buf)
+    }
+}
+
+
+
+/**
  * Caller-authenticated rotation state for one authority and role.
  */
 internal data class FfiRotationState (
@@ -6093,6 +6294,70 @@ internal object FfiConverterOptionalTypeFfiProofBundle: FfiConverterRustBuffer<F
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiRotationRefusal: FfiConverterRustBuffer<FfiRotationRefusal?> {
+    override fun read(buf: ByteBuffer): FfiRotationRefusal? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiRotationRefusal.read(buf)
+    }
+
+    override fun allocationSize(value: FfiRotationRefusal?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiRotationRefusal.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiRotationRefusal?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiRotationRefusal.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterOptionalTypeFfiLogResult: FfiConverterRustBuffer<FfiLogResult?> {
+    override fun read(buf: ByteBuffer): FfiLogResult? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiLogResult.read(buf)
+    }
+
+    override fun allocationSize(value: FfiLogResult?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiLogResult.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiLogResult?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiLogResult.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalMapStringTypeFfiParamsValue: FfiConverterRustBuffer<Map<kotlin.String, FfiParamsValue>?> {
     override fun read(buf: ByteBuffer): Map<kotlin.String, FfiParamsValue>? {
         if (buf.get().toInt() == 0) {
@@ -6227,6 +6492,34 @@ internal object FfiConverterSequenceTypeFfiDelegationCert: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFfiDelegationCert.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiRotationAcceptedEntry: FfiConverterRustBuffer<List<FfiRotationAcceptedEntry>> {
+    override fun read(buf: ByteBuffer): List<FfiRotationAcceptedEntry> {
+        val len = buf.getInt()
+        return List<FfiRotationAcceptedEntry>(len) {
+            FfiConverterTypeFfiRotationAcceptedEntry.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiRotationAcceptedEntry>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiRotationAcceptedEntry.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiRotationAcceptedEntry>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiRotationAcceptedEntry.write(it, buf)
         }
     }
 }
@@ -6876,6 +7169,50 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     
         
         FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiAcceptKeyRotationStatement`(`statement`: FfiKeyRotationStatement, `journal`: FfiRotationJournal, `now`: kotlin.Long, `futureSkew`: kotlin.Long): FfiRotationAcceptance {
+            return FfiConverterTypeFfiRotationAcceptance.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_accept_key_rotation_statement(
+    
+        
+        FfiConverterTypeFfiKeyRotationStatement.lower(`statement`),
+        FfiConverterTypeFfiRotationJournal.lower(`journal`),
+        FfiConverterLong.lower(`now`),
+        FfiConverterLong.lower(`futureSkew`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiNewKeyRotationJournal`(`authorityId`: kotlin.String, `recoveryEpoch`: kotlin.Long, `role`: kotlin.String, `genesisKey`: FfiPublicKey): FfiRotationJournal {
+            return FfiConverterTypeFfiRotationJournal.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_new_key_rotation_journal(
+    
+        
+        FfiConverterString.lower(`authorityId`),
+        FfiConverterLong.lower(`recoveryEpoch`),
+        FfiConverterString.lower(`role`),
+        FfiConverterTypeFfiPublicKey.lower(`genesisKey`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiRecoverKeyRotation`(`journal`: FfiRotationJournal, `newRecoveryEpoch`: kotlin.Long, `newGenesisKey`: FfiPublicKey): FfiRotationJournal {
+            return FfiConverterTypeFfiRotationJournal.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_recover_key_rotation(
+    
+        
+        FfiConverterTypeFfiRotationJournal.lower(`journal`),
+        FfiConverterLong.lower(`newRecoveryEpoch`),
+        FfiConverterTypeFfiPublicKey.lower(`newGenesisKey`),_status)
 }
     )
     }

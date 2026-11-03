@@ -2575,6 +2575,247 @@ func FfiConverterTypeFfiRevocationPush_lower(_ value: FfiRevocationPush) -> Rust
 
 
 /**
+ * The next journal and what the statement did. Exactly one of `result`
+ * and `error` is set; `error` is a protocol error.
+ */
+struct FfiRotationAcceptance: Equatable, Hashable {
+    var journal: FfiRotationJournal
+    var result: FfiLogResult?
+    var error: FfiRotationRefusal?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(journal: FfiRotationJournal, result: FfiLogResult?, error: FfiRotationRefusal?) {
+        self.journal = journal
+        self.result = result
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiRotationAcceptance: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiRotationAcceptance: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiRotationAcceptance {
+        return
+            try FfiRotationAcceptance(
+                journal: FfiConverterTypeFfiRotationJournal.read(from: &buf), 
+                result: FfiConverterOptionTypeFfiLogResult.read(from: &buf), 
+                error: FfiConverterOptionTypeFfiRotationRefusal.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiRotationAcceptance, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiRotationJournal.write(value.journal, into: &buf)
+        FfiConverterOptionTypeFfiLogResult.write(value.result, into: &buf)
+        FfiConverterOptionTypeFfiRotationRefusal.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationAcceptance_lift(_ buf: RustBuffer) throws -> FfiRotationAcceptance {
+    return try FfiConverterTypeFfiRotationAcceptance.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationAcceptance_lower(_ value: FfiRotationAcceptance) -> RustBuffer {
+    return FfiConverterTypeFfiRotationAcceptance.lower(value)
+}
+
+
+/**
+ * One accepted rotation, retained for replay and fork checks.
+ */
+struct FfiRotationAcceptedEntry: Equatable, Hashable {
+    var sequence: Int64
+    var bodyDigest: Data
+    var oldKey: FfiPublicKey
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(sequence: Int64, bodyDigest: Data, oldKey: FfiPublicKey) {
+        self.sequence = sequence
+        self.bodyDigest = bodyDigest
+        self.oldKey = oldKey
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiRotationAcceptedEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiRotationAcceptedEntry: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiRotationAcceptedEntry {
+        return
+            try FfiRotationAcceptedEntry(
+                sequence: FfiConverterInt64.read(from: &buf), 
+                bodyDigest: FfiConverterData.read(from: &buf), 
+                oldKey: FfiConverterTypeFfiPublicKey.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiRotationAcceptedEntry, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterData.write(value.bodyDigest, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.oldKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationAcceptedEntry_lift(_ buf: RustBuffer) throws -> FfiRotationAcceptedEntry {
+    return try FfiConverterTypeFfiRotationAcceptedEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationAcceptedEntry_lower(_ value: FfiRotationAcceptedEntry) -> RustBuffer {
+    return FfiConverterTypeFfiRotationAcceptedEntry.lower(value)
+}
+
+
+/**
+ * Caller-persisted continuity state for one authority.
+ */
+struct FfiRotationJournal: Equatable, Hashable {
+    var state: FfiRotationState
+    var accepted: [FfiRotationAcceptedEntry]
+    var frozen: Bool
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(state: FfiRotationState, accepted: [FfiRotationAcceptedEntry], frozen: Bool) {
+        self.state = state
+        self.accepted = accepted
+        self.frozen = frozen
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiRotationJournal: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiRotationJournal: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiRotationJournal {
+        return
+            try FfiRotationJournal(
+                state: FfiConverterTypeFfiRotationState.read(from: &buf), 
+                accepted: FfiConverterSequenceTypeFfiRotationAcceptedEntry.read(from: &buf), 
+                frozen: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiRotationJournal, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiRotationState.write(value.state, into: &buf)
+        FfiConverterSequenceTypeFfiRotationAcceptedEntry.write(value.accepted, into: &buf)
+        FfiConverterBool.write(value.frozen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationJournal_lift(_ buf: RustBuffer) throws -> FfiRotationJournal {
+    return try FfiConverterTypeFfiRotationJournal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationJournal_lower(_ value: FfiRotationJournal) -> RustBuffer {
+    return FfiConverterTypeFfiRotationJournal.lower(value)
+}
+
+
+/**
+ * A refused rotation statement: its §2.7 class and diagnostic.
+ */
+struct FfiRotationRefusal: Equatable, Hashable {
+    var `class`: String
+    var detail: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(`class`: String, detail: String) {
+        self.`class` = `class`
+        self.detail = detail
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiRotationRefusal: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiRotationRefusal: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiRotationRefusal {
+        return
+            try FfiRotationRefusal(
+                class: FfiConverterString.read(from: &buf), 
+                detail: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiRotationRefusal, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.`class`, into: &buf)
+        FfiConverterString.write(value.detail, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationRefusal_lift(_ buf: RustBuffer) throws -> FfiRotationRefusal {
+    return try FfiConverterTypeFfiRotationRefusal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationRefusal_lower(_ value: FfiRotationRefusal) -> RustBuffer {
+    return FfiConverterTypeFfiRotationRefusal.lower(value)
+}
+
+
+/**
  * Caller-authenticated rotation state for one authority and role.
  */
 struct FfiRotationState: Equatable, Hashable {
@@ -4168,6 +4409,54 @@ fileprivate struct FfiConverterOptionTypeFfiProofBundle: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiRotationRefusal: FfiConverterRustBuffer {
+    typealias SwiftType = FfiRotationRefusal?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiRotationRefusal.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiRotationRefusal.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiLogResult: FfiConverterRustBuffer {
+    typealias SwiftType = FfiLogResult?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiLogResult.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiLogResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionDictionaryStringTypeFfiParamsValue: FfiConverterRustBuffer {
     typealias SwiftType = [String: FfiParamsValue]?
 
@@ -4284,6 +4573,31 @@ fileprivate struct FfiConverterSequenceTypeFfiDelegationCert: FfiConverterRustBu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFfiDelegationCert.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFfiRotationAcceptedEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiRotationAcceptedEntry]
+
+    static func write(_ value: [FfiRotationAcceptedEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiRotationAcceptedEntry.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiRotationAcceptedEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiRotationAcceptedEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiRotationAcceptedEntry.read(from: &buf))
         }
         return seq
     }
@@ -4767,6 +5081,38 @@ func ffiDecodeWitnessEntry(data: Data)throws  -> FfiWitnessEntry  {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_decode_witness_entry(
         FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiAcceptKeyRotationStatement(statement: FfiKeyRotationStatement, journal: FfiRotationJournal, now: Int64, futureSkew: Int64)throws  -> FfiRotationAcceptance  {
+    return try  FfiConverterTypeFfiRotationAcceptance_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_accept_key_rotation_statement(
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),
+        FfiConverterTypeFfiRotationJournal_lower(journal),
+        FfiConverterInt64.lower(now),
+        FfiConverterInt64.lower(futureSkew),uniffiCallStatus
+    )
+})
+}
+func ffiNewKeyRotationJournal(authorityId: String, recoveryEpoch: Int64, role: String, genesisKey: FfiPublicKey)throws  -> FfiRotationJournal  {
+    return try  FfiConverterTypeFfiRotationJournal_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_new_key_rotation_journal(
+        FfiConverterString.lower(authorityId),
+        FfiConverterInt64.lower(recoveryEpoch),
+        FfiConverterString.lower(role),
+        FfiConverterTypeFfiPublicKey_lower(genesisKey),uniffiCallStatus
+    )
+})
+}
+func ffiRecoverKeyRotation(journal: FfiRotationJournal, newRecoveryEpoch: Int64, newGenesisKey: FfiPublicKey)throws  -> FfiRotationJournal  {
+    return try  FfiConverterTypeFfiRotationJournal_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_recover_key_rotation(
+        FfiConverterTypeFfiRotationJournal_lower(journal),
+        FfiConverterInt64.lower(newRecoveryEpoch),
+        FfiConverterTypeFfiPublicKey_lower(newGenesisKey),uniffiCallStatus
     )
 })
 }
@@ -5366,6 +5712,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry() != 43520) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_accept_key_rotation_statement() != 43780) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_new_key_rotation_journal() != 26960) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_key_rotation() != 59614) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json() != 20450) {

@@ -405,6 +405,32 @@ public final class com/ratifyprotocol/RevocationPush {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/RotationAcceptance {
+	public final fun getError ()Lcom/ratifyprotocol/RatifyException$Protocol;
+	public final fun getJournal ()Lcom/ratifyprotocol/RotationJournal;
+	public final fun getResult ()Lcom/ratifyprotocol/LogResult;
+}
+
+public final class com/ratifyprotocol/RotationAcceptedEntry {
+	public fun <init> (J[BLcom/ratifyprotocol/HybridPublicKey;)V
+	public final fun getBodyDigest ()[B
+	public final fun getOldKey ()Lcom/ratifyprotocol/HybridPublicKey;
+	public final fun getSequence ()J
+}
+
+public final class com/ratifyprotocol/RotationJournal {
+	public fun <init> (Lcom/ratifyprotocol/RotationState;Ljava/util/List;Z)V
+	public final fun getAccepted ()Ljava/util/List;
+	public final fun getFrozen ()Z
+	public final fun getState ()Lcom/ratifyprotocol/RotationState;
+}
+
+public final class com/ratifyprotocol/RotationKt {
+	public static final fun acceptKeyRotationStatement (Lcom/ratifyprotocol/KeyRotationStatement;Lcom/ratifyprotocol/RotationJournal;JJ)Lcom/ratifyprotocol/RotationAcceptance;
+	public static final fun newKeyRotationJournal (Ljava/lang/String;JLjava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/RotationJournal;
+	public static final fun recoverKeyRotation (Lcom/ratifyprotocol/RotationJournal;JLcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/RotationJournal;
+}
+
 public final class com/ratifyprotocol/RotationState {
 	public fun <init> (Ljava/lang/String;JLjava/lang/String;J[BLcom/ratifyprotocol/HybridPublicKey;Ljava/util/List;)V
 	public final fun getAuthorityId ()Ljava/lang/String;

@@ -85,6 +85,42 @@ pub mod test_hooks {
         ARMED.store(true, Ordering::SeqCst);
     }
 
+    /// An emulated external signing provider (test builds only): signs `M`
+    /// with Ed25519 and `M` with ML-DSA-65 under `ctx` (direct mode), from
+    /// the two 32-byte seeds, the way an HSM or KMS outside the SDK would.
+    /// Writes 64 + 3309 bytes and returns 0, or returns -1.
+    ///
+    /// # Safety
+    /// Pointers must be valid for the stated lengths.
+    #[no_mangle]
+    pub unsafe extern "C" fn ratify_ffi_test_provider_sign(
+        ed_seed: *const u8,
+        ml_seed: *const u8,
+        msg: *const u8,
+        msg_len: usize,
+        ctx: *const u8,
+        ctx_len: usize,
+        out_ed: *mut u8,
+        out_ml: *mut u8,
+    ) -> i32 {
+        use ed25519_dalek::Signer as _;
+        use fips204::traits::{SerDes, Signer as _};
+        let r = std::panic::catch_unwind(|| {
+            let ed: [u8; 32] = std::slice::from_raw_parts(ed_seed, 32).try_into().ok()?;
+            let ml: [u8; 32] = std::slice::from_raw_parts(ml_seed, 32).try_into().ok()?;
+            let m = std::slice::from_raw_parts(msg, msg_len);
+            let c = std::slice::from_raw_parts(ctx, ctx_len);
+            let (_, private) = ratify_protocol::hybrid_keypair_from_seeds(&ed, &ml);
+            let es = ed25519_dalek::SigningKey::from_bytes(&ed).sign(m).to_bytes();
+            let sk: [u8; fips204::ml_dsa_65::SK_LEN] = private.ml_dsa_65().try_into().ok()?;
+            let ms = fips204::ml_dsa_65::PrivateKey::try_from_bytes(sk).ok()?.try_sign(m, c).ok()?;
+            std::ptr::copy_nonoverlapping(es.as_ptr(), out_ed, 64);
+            std::ptr::copy_nonoverlapping(ms.as_ptr(), out_ml, ms.len());
+            Some(())
+        });
+        if matches!(r, Ok(Some(()))) { 0 } else { -1 }
+    }
+
     pub(super) fn fire() {
         if ARMED.swap(false, Ordering::SeqCst) {
             panic!("injected test panic");

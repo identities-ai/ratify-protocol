@@ -462,7 +462,13 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 
 
 // Public interface members begin here.
-
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -939,6 +945,416 @@ func FfiConverterTypeFfiContextPolicy_lower(_ value: FfiContextPolicy) -> UInt64
 
 
 /**
+ * The signing call's context, as seen by an external signer: it can only
+ * observe cancellation.
+ */
+protocol FfiSignContextProtocol: AnyObject, Sendable {
+    
+    /**
+     * Whether the caller cancelled the signing call (or its deadline passed).
+     */
+    func isCancelled() throws  -> Bool
+    
+}
+/**
+ * The signing call's context, as seen by an external signer: it can only
+ * observe cancellation.
+ */
+class FfiSignContext: FfiSignContextProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffisigncontext(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffisigncontext(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Whether the caller cancelled the signing call (or its deadline passed).
+     */
+func isCancelled()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisigncontext_is_cancelled(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiSignContext: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiSignContext
+
+    static func lift(_ handle: UInt64) throws -> FfiSignContext {
+        return FfiSignContext(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiSignContext) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiSignContext {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiSignContext, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignContext_lift(_ handle: UInt64) throws -> FfiSignContext {
+    return try FfiConverterTypeFfiSignContext.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignContext_lower(_ value: FfiSignContext) -> UInt64 {
+    return FfiConverterTypeFfiSignContext.lower(value)
+}
+
+
+
+
+
+
+/**
+ * An app-held key that signs through the platform or a remote provider.
+ * Implemented in Swift and Kotlin by the SDK's bridge over the public
+ * `ExternalSigner`; called on an SDK worker thread.
+ */
+protocol FfiSigner: AnyObject, Sendable {
+    
+    func publicKey()  -> FfiPublicKey
+    
+    func mode()  -> FfiSignerMode
+    
+    func sign(request: FfiSignRequest, context: FfiSignContext) throws  -> FfiSignature
+    
+}
+/**
+ * An app-held key that signs through the platform or a remote provider.
+ * Implemented in Swift and Kotlin by the SDK's bridge over the public
+ * `ExternalSigner`; called on an SDK worker thread.
+ */
+class FfiSignerImpl: FfiSigner, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffisigner(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffisigner(handle, $0) }
+    }
+
+    
+
+    
+func publicKey() -> FfiPublicKey  {
+    return try!  FfiConverterTypeFfiPublicKey_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisigner_public_key(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+func mode() -> FfiSignerMode  {
+    return try!  FfiConverterTypeFfiSignerMode_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisigner_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+func sign(request: FfiSignRequest, context: FfiSignContext)throws  -> FfiSignature  {
+    return try  FfiConverterTypeFfiSignature_lift(try rustCallWithError(FfiConverterTypeFfiSignerError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisigner_sign(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiSignRequest_lower(request),
+        FfiConverterTypeFfiSignContext_lower(context),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceFfiSigner {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFfiSigner = UniffiVTableCallbackInterfaceFfiSigner(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeFfiSigner.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface FfiSigner: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeFfiSigner.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface FfiSigner: handle missing in uniffiClone")
+            }
+        },
+        publicKey: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> FfiPublicKey in
+                guard let uniffiObj = try? FfiConverterTypeFfiSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.publicKey(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeFfiPublicKey_lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        mode: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> FfiSignerMode in
+                guard let uniffiObj = try? FfiConverterTypeFfiSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.mode(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeFfiSignerMode_lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sign: { (
+            uniffiHandle: UInt64,
+            request: RustBuffer,
+            context: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> FfiSignature in
+                guard let uniffiObj = try? FfiConverterTypeFfiSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.sign(
+                     request: try FfiConverterTypeFfiSignRequest_lift(request),
+                     context: try FfiConverterTypeFfiSignContext_lift(context)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeFfiSignature_lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeFfiSignerError_lower
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFfiSigner> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFfiSigner>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitFfiSigner() {
+    uniffi_ratify_protocol_ffi_fn_init_callback_vtable_ffisigner(UniffiCallbackInterfaceFfiSigner.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiSigner: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<FfiSigner>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiSigner
+
+    static func lift(_ handle: UInt64) throws -> FfiSigner {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return FfiSignerImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    static func lower(_ value: FfiSigner) -> UInt64 {
+         if let rustImpl = value as? FfiSignerImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiSigner {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiSigner, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSigner_lift(_ handle: UInt64) throws -> FfiSigner {
+    return try FfiConverterTypeFfiSigner.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSigner_lower(_ value: FfiSigner) -> UInt64 {
+    return FfiConverterTypeFfiSigner.lower(value)
+}
+
+
+
+
+
+
+/**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
  * documented storage form) plus the derived key pair. Seeds are wiped on drop
  * and never cross the FFI boundary on their own: storage (next milestone)
@@ -949,6 +1365,27 @@ protocol FfiSoftwareKeyProtocol: AnyObject, Sendable {
     func keyId() throws  -> String
     
     func publicKey() throws  -> FfiPublicKey
+    
+    func signDelegationCert(cert: FfiDelegationCert) throws  -> FfiDelegationCert
+    
+    /**
+     * Sign as the old key; `new_key` signs the proof of possession.
+     */
+    func signKeyRotationStatement(statement: FfiKeyRotationStatement, newKey: FfiSoftwareKey) throws  -> FfiKeyRotationStatement
+    
+    func signPreparedVerificationReceipt(data: Data, head: FfiReceiptHead) throws  -> FfiVerificationReceipt
+    
+    func signProofBundle(bundle: FfiProofBundle) throws  -> FfiProofBundle
+    
+    func signRevocationList(list: FfiRevocationList, boundIssuerId: String, boundStatusKey: FfiPublicKey) throws  -> FfiRevocationList
+    
+    func signRevocationPush(push: FfiRevocationPush, boundIssuerId: String, boundStatusKey: FfiPublicKey) throws  -> FfiRevocationPush
+    
+    func signTransactionReceiptParty(receipt: FfiTransactionReceipt, partyId: String) throws  -> FfiTransactionReceiptSignature
+    
+    func signVerificationReceipt(receipt: FfiVerificationReceipt) throws  -> FfiVerificationReceipt
+    
+    func signWitnessEntry(entry: FfiWitnessEntry) throws  -> FfiWitnessEntry
     
 }
 /**
@@ -1049,6 +1486,106 @@ func publicKey()throws  -> FfiPublicKey  {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_public_key(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+func signDelegationCert(cert: FfiDelegationCert)throws  -> FfiDelegationCert  {
+    return try  FfiConverterTypeFfiDelegationCert_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_delegation_cert(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiDelegationCert_lower(cert),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Sign as the old key; `new_key` signs the proof of possession.
+     */
+func signKeyRotationStatement(statement: FfiKeyRotationStatement, newKey: FfiSoftwareKey)throws  -> FfiKeyRotationStatement  {
+    return try  FfiConverterTypeFfiKeyRotationStatement_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_key_rotation_statement(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),
+        FfiConverterTypeFfiSoftwareKey_lower(newKey),uniffiCallStatus
+    )
+})
+}
+    
+func signPreparedVerificationReceipt(data: Data, head: FfiReceiptHead)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_prepared_verification_receipt(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(data),
+        FfiConverterTypeFfiReceiptHead_lower(head),uniffiCallStatus
+    )
+})
+}
+    
+func signProofBundle(bundle: FfiProofBundle)throws  -> FfiProofBundle  {
+    return try  FfiConverterTypeFfiProofBundle_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_proof_bundle(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+})
+}
+    
+func signRevocationList(list: FfiRevocationList, boundIssuerId: String, boundStatusKey: FfiPublicKey)throws  -> FfiRevocationList  {
+    return try  FfiConverterTypeFfiRevocationList_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_revocation_list(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),uniffiCallStatus
+    )
+})
+}
+    
+func signRevocationPush(push: FfiRevocationPush, boundIssuerId: String, boundStatusKey: FfiPublicKey)throws  -> FfiRevocationPush  {
+    return try  FfiConverterTypeFfiRevocationPush_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_revocation_push(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),uniffiCallStatus
+    )
+})
+}
+    
+func signTransactionReceiptParty(receipt: FfiTransactionReceipt, partyId: String)throws  -> FfiTransactionReceiptSignature  {
+    return try  FfiConverterTypeFfiTransactionReceiptSignature_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_transaction_receipt_party(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),
+        FfiConverterString.lower(partyId),uniffiCallStatus
+    )
+})
+}
+    
+func signVerificationReceipt(receipt: FfiVerificationReceipt)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_verification_receipt(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+    
+func signWitnessEntry(entry: FfiWitnessEntry)throws  -> FfiWitnessEntry  {
+    return try  FfiConverterTypeFfiWitnessEntry_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_sign_witness_entry(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiWitnessEntry_lower(entry),uniffiCallStatus
     )
 })
 }
@@ -2021,6 +2558,97 @@ func FfiConverterTypeFfiSessionContextInputs_lift(_ buf: RustBuffer) throws -> F
 #endif
 func FfiConverterTypeFfiSessionContextInputs_lower(_ value: FfiSessionContextInputs) -> RustBuffer {
     return FfiConverterTypeFfiSessionContextInputs.lower(value)
+}
+
+
+/**
+ * What the SDK asks an external signer to sign.
+ */
+struct FfiSignRequest: Equatable, Hashable {
+    var mode: FfiSignerMode
+    /**
+     * The 77-byte signing message `M` (always present; Ed25519 signs it).
+     */
+    var message: Data
+    /**
+     * The 22-byte ML-DSA-65 context, in direct mode.
+     */
+    var mlDsaContext: Data?
+    /**
+     * The external `mu`, in external-mu mode.
+     */
+    var mlDsaMu: Data?
+    var publicKey: FfiPublicKey
+    var keyId: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(mode: FfiSignerMode, 
+        /**
+         * The 77-byte signing message `M` (always present; Ed25519 signs it).
+         */message: Data, 
+        /**
+         * The 22-byte ML-DSA-65 context, in direct mode.
+         */mlDsaContext: Data?, 
+        /**
+         * The external `mu`, in external-mu mode.
+         */mlDsaMu: Data?, publicKey: FfiPublicKey, keyId: String) {
+        self.mode = mode
+        self.message = message
+        self.mlDsaContext = mlDsaContext
+        self.mlDsaMu = mlDsaMu
+        self.publicKey = publicKey
+        self.keyId = keyId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiSignRequest: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiSignRequest: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiSignRequest {
+        return
+            try FfiSignRequest(
+                mode: FfiConverterTypeFfiSignerMode.read(from: &buf), 
+                message: FfiConverterData.read(from: &buf), 
+                mlDsaContext: FfiConverterOptionData.read(from: &buf), 
+                mlDsaMu: FfiConverterOptionData.read(from: &buf), 
+                publicKey: FfiConverterTypeFfiPublicKey.read(from: &buf), 
+                keyId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiSignRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiSignerMode.write(value.mode, into: &buf)
+        FfiConverterData.write(value.message, into: &buf)
+        FfiConverterOptionData.write(value.mlDsaContext, into: &buf)
+        FfiConverterOptionData.write(value.mlDsaMu, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.publicKey, into: &buf)
+        FfiConverterString.write(value.keyId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignRequest_lift(_ buf: RustBuffer) throws -> FfiSignRequest {
+    return try FfiConverterTypeFfiSignRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignRequest_lower(_ value: FfiSignRequest) -> RustBuffer {
+    return FfiConverterTypeFfiSignRequest.lower(value)
 }
 
 
@@ -3017,6 +3645,171 @@ func FfiConverterTypeFfiParamsValue_lower(_ value: FfiParamsValue) -> RustBuffer
 }
 
 
+
+/**
+ * Why an external signer did not return a signature.
+ */
+
+enum FfiSignerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    /**
+     * The provider failed or refused.
+     */
+    case Provider(detail: String
+    )
+    /**
+     * The signer observed cancellation and stopped.
+     */
+    case Cancelled
+
+    
+
+    
+
+    
+    var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension FfiSignerError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiSignerError: FfiConverterRustBuffer {
+    typealias SwiftType = FfiSignerError
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiSignerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Provider(
+            detail: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Cancelled
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiSignerError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Provider(detail):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(detail, into: &buf)
+            
+        
+        case .Cancelled:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignerError_lift(_ buf: RustBuffer) throws -> FfiSignerError {
+    return try FfiConverterTypeFfiSignerError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignerError_lower(_ value: FfiSignerError) -> RustBuffer {
+    return FfiConverterTypeFfiSignerError.lower(value)
+}
+
+
+/**
+ * How an external signer computes ML-DSA-65 (SPEC-v2 §3.2).
+ */
+
+enum FfiSignerMode: Equatable, Hashable {
+    
+    /**
+     * The provider signs `M` with the supplied context.
+     */
+    case direct
+    /**
+     * The provider signs the supplied external `mu`.
+     */
+    case externalMu
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiSignerMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiSignerMode: FfiConverterRustBuffer {
+    typealias SwiftType = FfiSignerMode
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiSignerMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .direct
+        
+        case 2: return .externalMu
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiSignerMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .direct:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .externalMu:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignerMode_lift(_ buf: RustBuffer) throws -> FfiSignerMode {
+    return try FfiConverterTypeFfiSignerMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiSignerMode_lower(_ value: FfiSignerMode) -> RustBuffer {
+    return FfiConverterTypeFfiSignerMode.lower(value)
+}
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3692,6 +4485,103 @@ func ffiValidateScopes(scopes: [String])throws   {try rustCallWithError(FfiConve
     )
 }
 }
+func ffiSignDelegationCertWithSigner(cancel: FfiCancelToken, cert: FfiDelegationCert, signer: FfiSigner)throws  -> FfiDelegationCert  {
+    return try  FfiConverterTypeFfiDelegationCert_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_delegation_cert_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiDelegationCert_lower(cert),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignKeyRotationStatementWithSigners(cancel: FfiCancelToken, statement: FfiKeyRotationStatement, oldSigner: FfiSigner, newSigner: FfiSigner)throws  -> FfiKeyRotationStatement  {
+    return try  FfiConverterTypeFfiKeyRotationStatement_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_key_rotation_statement_with_signers(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),
+        FfiConverterTypeFfiSigner_lower(oldSigner),
+        FfiConverterTypeFfiSigner_lower(newSigner),uniffiCallStatus
+    )
+})
+}
+func ffiSignPreparedVerificationReceiptWithSigner(cancel: FfiCancelToken, data: Data, head: FfiReceiptHead, signer: FfiSigner)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_prepared_verification_receipt_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterData.lower(data),
+        FfiConverterTypeFfiReceiptHead_lower(head),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignProofBundleWithSigner(cancel: FfiCancelToken, bundle: FfiProofBundle, signer: FfiSigner)throws  -> FfiProofBundle  {
+    return try  FfiConverterTypeFfiProofBundle_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_proof_bundle_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiProofBundle_lower(bundle),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignRevocationListWithSigner(cancel: FfiCancelToken, list: FfiRevocationList, boundIssuerId: String, boundStatusKey: FfiPublicKey, signer: FfiSigner)throws  -> FfiRevocationList  {
+    return try  FfiConverterTypeFfiRevocationList_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_revocation_list_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignRevocationPushWithSigner(cancel: FfiCancelToken, push: FfiRevocationPush, boundIssuerId: String, boundStatusKey: FfiPublicKey, signer: FfiSigner)throws  -> FfiRevocationPush  {
+    return try  FfiConverterTypeFfiRevocationPush_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_revocation_push_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(boundStatusKey),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignTransactionReceiptPartyWithSigner(cancel: FfiCancelToken, receipt: FfiTransactionReceipt, partyId: String, signer: FfiSigner)throws  -> FfiTransactionReceiptSignature  {
+    return try  FfiConverterTypeFfiTransactionReceiptSignature_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_transaction_receipt_party_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),
+        FfiConverterString.lower(partyId),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignVerificationReceiptWithSigner(cancel: FfiCancelToken, receipt: FfiVerificationReceipt, signer: FfiSigner)throws  -> FfiVerificationReceipt  {
+    return try  FfiConverterTypeFfiVerificationReceipt_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_verification_receipt_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
+func ffiSignWitnessEntryWithSigner(cancel: FfiCancelToken, entry: FfiWitnessEntry, signer: FfiSigner)throws  -> FfiWitnessEntry  {
+    return try  FfiConverterTypeFfiWitnessEntry_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_sign_witness_entry_with_signer(
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterTypeFfiWitnessEntry_lower(entry),
+        FfiConverterTypeFfiSigner_lower(signer),uniffiCallStatus
+    )
+})
+}
 func ffiBundleHash(bundle: FfiProofBundle)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -4125,6 +5015,33 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() != 44631) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_delegation_cert_with_signer() != 65152) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_key_rotation_statement_with_signers() != 55651) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_prepared_verification_receipt_with_signer() != 51806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_proof_bundle_with_signer() != 59328) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_revocation_list_with_signer() != 6438) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_revocation_push_with_signer() != 46135) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_transaction_receipt_party_with_signer() != 54907) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_verification_receipt_with_signer() != 28888) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_signer() != 53719) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4272,6 +5189,45 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() != 50866) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_delegation_cert() != 14821) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_key_rotation_statement() != 17560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_prepared_verification_receipt() != 25902) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_proof_bundle() != 49306) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_revocation_list() != 4691) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_revocation_push() != 32918) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_transaction_receipt_party() != 12498) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_verification_receipt() != 34626) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_sign_witness_entry() != 433) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisigncontext_is_cancelled() != 31943) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisigner_public_key() != 49242) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisigner_mode() != 60281) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisigner_sign() != 32962) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 4070) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4285,6 +5241,7 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitFfiSigner()
     return InitializationResult.ok
 }()
 

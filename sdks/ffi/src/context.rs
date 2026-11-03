@@ -168,7 +168,6 @@ impl FfiCancelToken {
 
 impl FfiCancelToken {
     /// The context passed to core calls made under this token.
-    #[allow(dead_code)] // used by the callback-invoking operations (next milestone)
     pub(crate) fn context(&self) -> &ratify_protocol::v2::V2Context {
         &self.ctx
     }

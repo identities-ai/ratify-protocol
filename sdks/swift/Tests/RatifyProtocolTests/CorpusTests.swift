@@ -7,7 +7,7 @@ import XCTest
 /// and must report a nonzero case count for its entry. A new corpus file, or
 /// a runner that stops executing, fails here. At full parity `pending` is empty.
 final class CorpusTests: XCTestCase {
-    static let runners: [String: @Sendable () throws -> Void] = [
+    static let runners: [String: @Sendable () async throws -> Void] = [
         "annex-a.json": AnnexARunner.run,
         "keys.json": KeysRunner.run,
         "limits.json": LimitsRunner.run,
@@ -15,6 +15,11 @@ final class CorpusTests: XCTestCase {
         "objects.json": ObjectsRunner.objects,
         "object-negatives.json": ObjectsRunner.negatives,
         "hedged-signatures.json": ObjectsRunner.hedged,
+        "delegation-signature.json": SigningRunner.delegationSignature,
+        "derive-external-mu.py": SigningRunner.deriveExternalMu,
+        "key-rotation-signature.json": SigningRunner.keyRotationSignature,
+        "issuer-duties.json": SigningRunner.issuerDuties,
+        "external-signer.json": SigningRunner.externalSigner,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
@@ -25,14 +30,9 @@ final class CorpusTests: XCTestCase {
         "challenge-issuance.json": "M3",
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
-        "delegation-signature.json": "M2",
-        "derive-external-mu.py": "M2",
         "device-state.json": "M3",
         "digest-functions.json": "M2",
         "evaluator-profiles.json": "M3",
-        "external-signer.json": "M2",
-        "issuer-duties.json": "M2",
-        "key-rotation-signature.json": "M2",
         "lifecycle-scenarios.json": "M3",
         "log-sequences.json": "M2",
         "rotation-sequences.json": "M2",
@@ -43,14 +43,14 @@ final class CorpusTests: XCTestCase {
         "verifier-ordering.json": "M3",
     ]
 
-    func testCorpus() throws {
+    func testCorpus() async throws {
         let entries = Set(try FileManager.default.contentsOfDirectory(atPath: Corpus.dir.path))
         let consumed = Set(Self.runners.keys)
         XCTAssertTrue(consumed.isDisjoint(with: Self.pending.keys), "an entry is both consumed and pending")
         XCTAssertEqual(consumed.union(Self.pending.keys), entries, "runners + pending must equal the corpus")
         Manifest.reset()
         for (file, run) in Self.runners.sorted(by: { $0.key < $1.key }) {
-            try run()
+            try await run()
             XCTAssertGreaterThan(Manifest.count(file), 0, "\(file): runner reported no executed cases")
         }
     }

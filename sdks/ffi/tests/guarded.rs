@@ -105,6 +105,16 @@ fn every_export_is_fallible_and_guarded() {
                         }
                     }
                 }
+                // A foreign trait: its methods are implemented in Swift and
+                // Kotlin, so they are exports without a Rust body to guard.
+                Item::Trait(tr) if is_export(&tr.attrs) => {
+                    let ty = tr.ident.to_string().to_lowercase();
+                    for it in tr.items {
+                        if let syn::TraitItem::Fn(m) = it {
+                            found.insert(format!("method_{ty}_{}", m.sig.ident));
+                        }
+                    }
+                }
                 _ => {}
             }
         }

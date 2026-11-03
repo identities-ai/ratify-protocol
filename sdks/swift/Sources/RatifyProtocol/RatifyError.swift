@@ -5,7 +5,7 @@ import Foundation
 /// a previous panic left unusable, and is never a protocol result.
 public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible {
     case `protocol`(ErrorClass, message: String)
-    case signing(ErrorClass, kind: String, message: String)
+    case signing(ErrorClass, kind: SigningErrorKind, message: String)
     case `internal`(InternalErrorKind, message: String)
 
     /// The §2.7 class, or nil for an internal error.
@@ -19,10 +19,31 @@ public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case let .protocol(c, m): return "\(m) (\(c.rawValue))"
-        case let .signing(c, k, m): return "\(m) (\(c.rawValue), \(k))"
+        case let .signing(c, k, m): return "\(m) (\(c.rawValue), \(k.rawValue))"
         case let .internal(k, m): return "internal \(k.rawValue): \(m)"
         }
     }
+}
+
+/// Why a signing call refused or failed (SPEC-v2 §3.2). Each maps to one
+/// §2.7 class, carried alongside it.
+public enum SigningErrorKind: String, Sendable, CaseIterable {
+    /// The object fails its schema, bounds or encoding.
+    case invalidObject = "invalid_object"
+    /// An issuer duty (SPEC-v2 §5.1, §5.4) refuses the object.
+    case issuerDuty = "issuer_duty"
+    /// The signer's key is not the key the object names for this role.
+    case keyBinding = "key_binding"
+    /// The signer reported an invalid public key or private key material.
+    case invalidSignerKey = "invalid_signer_key"
+    /// The signer reported a mode the SDK does not implement.
+    case unsupportedMode = "unsupported_mode"
+    /// The provider failed or refused.
+    case provider
+    /// The call was cancelled; any late signature was discarded.
+    case cancelled
+    /// The provider's signature does not verify over the SDK's message.
+    case signatureRejected = "signature_rejected"
 }
 
 /// Why an internal error occurred. None of these is a protocol result.
@@ -53,7 +74,10 @@ extension RatifyError {
         case let .Protocol(cls, message):
             self = .protocol(ErrorClass(spelling: cls), message: message)
         case let .Signing(cls, kind, message):
-            self = .signing(ErrorClass(spelling: cls), kind: kind, message: message)
+            guard let k = SigningErrorKind(rawValue: kind) else {
+                preconditionFailure("FFI layer returned an unknown signing error kind \(kind)")
+            }
+            self = .signing(ErrorClass(spelling: cls), kind: k, message: message)
         case let .Internal(kind, message):
             // The FFI layer emits only these kinds; the list is pinned by a test.
             guard let k = InternalErrorKind(rawValue: kind) else {

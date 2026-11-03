@@ -74,8 +74,8 @@ if [ -z "$features" ]; then
   for t in "${built[@]}"; do
     l="$(lib "$t")"
     # A byte search, not nm: Xcode's nm cannot read Rust's LTO bitcode.
-    if [ -f "$l" ] && LC_ALL=C grep -a -q ratify_ffi_test_arm_panic "$l"; then
-      echo "release build contains the test-only panic hook: $l" >&2; exit 1
+    if [ -f "$l" ] && LC_ALL=C grep -a -q ratify_ffi_test_ "$l"; then
+      echo "release build contains a test-only hook: $l" >&2; exit 1
     fi
   done
 fi

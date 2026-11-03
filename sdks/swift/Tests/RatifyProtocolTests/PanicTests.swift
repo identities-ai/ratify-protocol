@@ -33,6 +33,20 @@ final class PanicTests: XCTestCase {
         XCTAssertEqual(try ffi { try other.handle.keyId() }, other.keyId)
     }
 
+    /// Through the public API only: a panic while a software key signs
+    /// poisons that key, and every later signing call with it fails.
+    func testPanicWhileSigningPoisonsTheKeyThroughThePublicAPI() throws {
+        let objects = Corpus.load("objects.json")
+        let cert = try Ratify.decodeDelegationCert(objectByKind(objects, "delegation_certificate").b64("wire_b64"))
+        let key = Fixture.shared.privateKey("root")
+        let spare = try SoftwarePrivateKey(ed25519Seed: Fixture.shared.seeds["root"]!.0, mlDsa65Seed: Fixture.shared.seeds["root"]!.1)
+        XCTAssertNoThrow(try Ratify.signDelegationCert(cert, key: spare))
+        armPanic()
+        XCTAssertEqual(internalKind { _ = try Ratify.signDelegationCert(cert, key: spare) }, .panic)
+        XCTAssertEqual(internalKind { _ = try Ratify.signDelegationCert(cert, key: spare) }, .poisoned)
+        XCTAssertNoThrow(try Ratify.signDelegationCert(cert, key: key), "another key is unaffected")
+    }
+
     func testInternalKindsPinned() {
         XCTAssertEqual(Set(InternalErrorKind.allCases.map(\.rawValue)), ["panic", "poisoned", "random_source"])
     }

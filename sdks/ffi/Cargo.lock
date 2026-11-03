@@ -674,6 +674,8 @@ name = "ratify-protocol-ffi"
 version = "2.0.0-beta.1"
 dependencies = [
  "base64",
+ "ed25519-dalek",
+ "fips204",
  "getrandom 0.2.17",
  "hex",
  "quote",

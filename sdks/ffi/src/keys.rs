@@ -40,12 +40,11 @@ impl From<FfiPublicKey> for HybridPublicKey {
 /// exchanges the whole documented storage record as one buffer.
 #[derive(uniffi::Object)]
 pub struct FfiSoftwareKey {
-    poison: Poison,
+    pub(crate) poison: Poison,
     #[allow(dead_code)] // read by the storage record (next milestone)
     ed_seed: Zeroizing<[u8; 32]>,
     #[allow(dead_code)] // read by the storage record (next milestone)
     ml_seed: Zeroizing<[u8; 32]>,
-    #[allow(dead_code)] // used by typed signing (next milestone)
     pub(crate) private: HybridPrivateKey,
     pub(crate) public: HybridPublicKey,
     key_id: String,

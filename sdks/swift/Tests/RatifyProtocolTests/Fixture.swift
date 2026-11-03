@@ -8,6 +8,7 @@ final class Fixture: @unchecked Sendable {
     private(set) var publicKeys: [String: HybridPublicKey] = [:]
     private(set) var keyIds: [String: String] = [:]
     private(set) var privateKeys: [String: SoftwarePrivateKey] = [:]
+    private(set) var seeds: [String: (Data, Data)] = [:]
 
     private init() {
         for k in Corpus.load("keys.json").arr("keys") {
@@ -15,6 +16,7 @@ final class Fixture: @unchecked Sendable {
             publicKeys[k.s("name")] = key.publicKey
             keyIds[k.s("name")] = key.keyId
             privateKeys[k.s("name")] = key
+            seeds[k.s("name")] = (k.hex("ed25519_seed_hex"), k.hex("ml_dsa_65_seed_hex"))
         }
     }
 

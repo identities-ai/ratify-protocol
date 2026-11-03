@@ -44,7 +44,7 @@ if echo "$code" | grep -nE '(^|[^A-Za-z0-9_."`])public ' \
   echo "generated Kotlin still has a public or unqualified top-level declaration" >&2; exit 1
 fi
 # A byte search, not nm, so the check never depends on the host toolchain.
-if [ -z "$features" ] && find "$out" -name '*.so' -exec env LC_ALL=C grep -a -l ratify_ffi_test_arm_panic {} + | grep -q .; then
-  echo "release build contains the test-only panic hook" >&2; exit 1
+if [ -z "$features" ] && find "$out" -name '*.so' -exec env LC_ALL=C grep -a -l ratify_ffi_test_ {} + | grep -q .; then
+  echo "release build contains a test-only hook" >&2; exit 1
 fi
 echo "built jniLibs ($abis${features:+, features $features}) and bindings"

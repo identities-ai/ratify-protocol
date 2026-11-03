@@ -1,0 +1,43 @@
+[package]
+name = "ratify-protocol-ffi"
+version = "2.0.0-beta.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Internal FFI layer for the Ratify Protocol Swift and Kotlin SDKs. Not a public API."
+repository = "https://github.com/identities-ai/ratify-protocol"
+publish = false
+
+[lib]
+name = "ratify_protocol_ffi"
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+# Exact pin: this crate wraps one core version; release-sync checks it.
+ratify-protocol = { path = "../rust", version = "=2.0.0-beta.1" }
+uniffi = "=0.32.2"
+thiserror = "2"
+getrandom = "0.2"
+zeroize = "1.8"
+
+[dev-dependencies]
+serde_json = "1"
+hex = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+# Unwind, not abort: UniFFI catches a panic at the boundary and reports it to
+# the Swift or Kotlin caller as an internal error. With abort the host dies.
+panic = "unwind"
+strip = "symbols"

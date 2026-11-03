@@ -2,15 +2,23 @@ import Foundation
 import XCTest
 import RatifyProtocol
 
-/// Reads the shared corpus in place (testvectors/v2), never a copy.
+/// Reads the shared corpus in place (testvectors/v2). On a device, where the
+/// repository is not readable, the host-app test bundle carries the same
+/// files in their repository layout under `corpusroot`.
 enum Corpus {
-    static let dir: URL = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()   // RatifyProtocolTests
-        .deletingLastPathComponent()   // Tests
-        .deletingLastPathComponent()   // swift
-        .deletingLastPathComponent()   // sdks
-        .deletingLastPathComponent()   // repo root
-        .appendingPathComponent("testvectors/v2")
+    private final class Token {}
+
+    static let repoRoot: URL = {
+        if let bundled = Bundle(for: Token.self).url(forResource: "corpusroot", withExtension: nil) { return bundled }
+        return URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // RatifyProtocolTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // swift
+            .deletingLastPathComponent()   // sdks
+            .deletingLastPathComponent()   // repo root
+    }()
+
+    static let dir: URL = repoRoot.appendingPathComponent("testvectors/v2")
 
     static func load(_ name: String) -> [String: Any] {
         let data = try! Data(contentsOf: dir.appendingPathComponent(name))

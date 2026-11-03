@@ -55,7 +55,9 @@ final class CorpusTests: XCTestCase {
         }
     }
 
-    /// No runner may skip: a skipped case is a silent pass.
+    #if os(macOS)
+    /// No runner may skip: a skipped case is a silent pass. A static lint of
+    /// the test sources, so it runs where the sources are (macOS).
     func testNoRunnerSkips() throws {
         let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let banned = ["XCT" + "Skip", "XCTExpect" + "Failure"]
@@ -64,4 +66,5 @@ final class CorpusTests: XCTestCase {
             for b in banned { XCTAssertFalse(src.contains(b), "\(f) uses \(b)") }
         }
     }
+    #endif
 }

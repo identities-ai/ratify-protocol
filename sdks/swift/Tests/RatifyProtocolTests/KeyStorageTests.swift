@@ -34,10 +34,8 @@ final class KeyStorageTests: XCTestCase {
         XCTAssertEqual(load { $0.replaceSubrange(8..<72, with: Data(other.keyId.utf8)) }, "key_id_mismatch", "swapped key ID")
     }
 
-    #if os(macOS)
-    /// An iOS package test bundle has no host app and so no Keychain
-    /// entitlement (errSecMissingEntitlement); iOS Keychain runs in the
-    /// host-app suite (build plan M5) and the device evidence run.
+    /// On iOS this needs a host app (Keychain entitlement): run the iOS suite
+    /// through sdks/swift/HostApp, on a simulator or a device.
     func testKeychainStoresLoadsAndDeletes() throws {
         let store = KeychainKeyStore()
         let key = try SoftwarePrivateKey.generate()
@@ -51,7 +49,6 @@ final class KeyStorageTests: XCTestCase {
         try store.delete(keyId: key.keyId)
         XCTAssertNil(try store.load(keyId: key.keyId))
     }
-    #endif
 }
 
 /// The published KEY_STORAGE.md vector is exactly what the SDK writes.

@@ -46,15 +46,11 @@ final class SecureEnclaveTests: XCTestCase {
         XCTAssertEqual(reloaded.keyId, key.keyId)
         let again = try await Ratify.signDelegationCert(try Self.cert(issuedBy: reloaded.publicKey, keyId: reloaded.keyId), with: .platform(PlatformKey(reloaded)))
         XCTAssertNoThrow(try Ratify.verifyDelegationCertSignature(again))
-        #if os(macOS)
-        // Through the Keychain store. An iOS package test bundle has no host
-        // app and so no Keychain entitlement; iOS Keychain runs in the host-app
-        // suite (build plan M5) and the device evidence run.
+        // Through the Keychain store (on iOS, run through sdks/swift/HostApp).
         let store = KeychainKeyStore()
         defer { try? store.delete(keyId: key.keyId) }
         try store.save(key)
         XCTAssertEqual(try store.loadSecureEnclaveKey(keyId: key.keyId)?.keyId, key.keyId)
-        #endif
         // A record whose stored ML-DSA public key differs is refused.
         var record = try key.storageRecord()
         record[8 + 64 + 1 + 3 + 32 + 3] ^= 1

@@ -36,11 +36,20 @@ final class KeysTests: XCTestCase {
                 && v1 != String(id.prefix(32))
             t.check("keys", name, ok, "seeds, key ID, or v1 ID differ")
         }
+        let objects = Corpus.load("objects.json")
+        let bundle = objectByKind(objects, "proof_bundle").b64("wire_b64")
+        let witness = objectByKind(objects, "witness_entry").b64("wire_b64")
         let bad = f.arr("invalid_v2_key_ids")
         for b in bad {
-            t.check("invalid_v2_key_ids format", b.s("name"), !Ratify.validId(b.s("value")), "accepted")
+            let value = b.s("value")
+            let want = b.s("expected_error_class")
+            let asVerifier = classOf { _ = try Ratify.decodeProofBundle(setTopLevelString(bundle, "verifier_id", value)) }
+            let asWitness = classOf { _ = try Ratify.decodeWitnessEntry(setTopLevelString(witness, "witness_id", value)) }
+            t.check("invalid_v2_key_ids", b.s("name"), asVerifier == want && asWitness == want,
+                    "classes \(asVerifier)/\(asWitness), want \(want)")
+            t.check("invalid_v2_key_ids format", b.s("name"), !Ratify.validId(value), "accepted")
         }
-        t.finish([("keys", keys.count), ("invalid_v2_key_ids format", bad.count)])
+        t.finish([("keys", keys.count), ("invalid_v2_key_ids", bad.count), ("invalid_v2_key_ids format", bad.count)])
     }
 
     func testGenerateIsFreshAndConsistent() throws {

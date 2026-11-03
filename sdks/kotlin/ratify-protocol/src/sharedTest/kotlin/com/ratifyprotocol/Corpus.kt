@@ -61,3 +61,15 @@ fun classOf(body: () -> Unit): String =
     } catch (e: RatifyException) {
         e.errorClass?.spelling ?: "internal"
     }
+
+/** The objects.json entry of one kind. */
+fun objectByKind(objects: JSONObject, kind: String): JSONObject = objects.arr("objects").first { it.getString("kind") == kind }
+
+/** [wire] with one top-level string field replaced, re-canonicalized. */
+fun setTopLevelString(wire: ByteArray, field: String, value: String): ByteArray {
+    val obj = JSONObject(String(wire, Charsets.UTF_8))
+    obj.put(field, value)
+    return canonicalJson(obj.toString().toByteArray(Charsets.UTF_8))
+}
+
+fun JSONObject.optB64(k: String): ByteArray = if (has(k)) b64(k) else ByteArray(0)

@@ -11,9 +11,11 @@ uniffi::setup_scaffolding!("ratify_ffi");
 mod context;
 mod error;
 mod keys;
+mod objects;
 mod scope;
 
 pub use context::*;
 pub use error::*;
 pub use keys::*;
+pub use objects::*;
 pub use scope::*;

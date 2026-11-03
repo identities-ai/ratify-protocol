@@ -82,3 +82,15 @@ func classOf(_ body: () throws -> Void) -> String {
     }
 }
 
+
+/// The objects.json entry of one kind.
+func objectByKind(_ objects: [String: Any], _ kind: String) -> [String: Any] {
+    objects.arr("objects").first { $0.s("kind") == kind }!
+}
+
+/// `wire` with one top-level string field replaced, re-canonicalized.
+func setTopLevelString(_ wire: Data, _ field: String, _ value: String) -> Data {
+    var obj = try! JSONSerialization.jsonObject(with: wire) as! [String: Any]
+    obj[field] = value
+    return try! Ratify.canonicalJSON(try! JSONSerialization.data(withJSONObject: obj))
+}

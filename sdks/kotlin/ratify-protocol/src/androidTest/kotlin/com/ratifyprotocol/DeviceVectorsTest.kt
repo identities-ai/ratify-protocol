@@ -10,10 +10,13 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DeviceVectorsTest {
     companion object {
+        private lateinit var annex: String
+
         @BeforeClass @JvmStatic
         fun corpus() {
             val assets = InstrumentationRegistry.getInstrumentation().context.assets
             Corpus.read = { name -> assets.open(name).use { it.readBytes() } }
+            annex = String(Corpus.read("spec/SPEC-v2-ANNEX-A.md"), Charsets.UTF_8)
         }
     }
 
@@ -21,4 +24,8 @@ class DeviceVectorsTest {
     @Test fun generate() = KeysVectors.generate()
     @Test fun badSeed() = KeysVectors.badSeed()
     @Test fun errorClassesPinned() = KeysVectors.errorClassesPinned()
+    @Test fun annexA() = AnnexAVectors.corpus(annex)
+    @Test fun limits() = LimitsVectors.corpus()
+    @Test fun operationSessionContext() = OperationContextVectors.corpus()
+    @Test fun contextFieldValidation() = OperationContextVectors.fieldValidation()
 }

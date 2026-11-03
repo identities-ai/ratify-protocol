@@ -691,6 +691,26 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_key_rotation_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_proof_bundle(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_revocation_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_revocation_push(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_status_evidence_batch(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_transaction_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_verification_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_verification_receipt_body(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes(
@@ -795,6 +815,26 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_valid_id(`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_delegation_cert(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_key_rotation_statement(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_proof_bundle(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_revocation_list(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_revocation_push(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_status_evidence_batch(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_transaction_receipt(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_verification_receipt(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_verification_receipt_body(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_witness_entry(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_canonical_json(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_expand_scopes(`scopes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -947,6 +987,36 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() and 0xFFFF) != 14778) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() and 0xFFFF) != 57238) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_key_rotation_statement() and 0xFFFF) != 52930) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_proof_bundle() and 0xFFFF) != 19360) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_revocation_list() and 0xFFFF) != 19666) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_revocation_push() and 0xFFFF) != 31914) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_status_evidence_batch() and 0xFFFF) != 20696) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_transaction_receipt() and 0xFFFF) != 6548) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_verification_receipt() and 0xFFFF) != 29992) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_verification_receipt_body() and 0xFFFF) != 55625) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry() and 0xFFFF) != 43520) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json() and 0xFFFF) != 20450) {
@@ -1161,6 +1231,56 @@ private class JavaLangRefCleanable(
     val cleanable: java.lang.ref.Cleaner.Cleanable
 ) : UniffiCleaner.Cleanable {
     override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterUShort: FfiConverter<UShort, Short> {
+    override fun lift(value: Short): UShort {
+        return value.toUShort()
+    }
+
+    fun lift(value: Int): UShort {
+        return value.toUShort()
+    }
+
+    override fun read(buf: ByteBuffer): UShort {
+        return lift(buf.getShort())
+    }
+
+    override fun lower(value: UShort): Short {
+        return value.toShort()
+    }
+
+    override fun allocationSize(value: UShort) = 2UL
+
+    override fun write(value: UShort, buf: ByteBuffer) {
+        buf.putShort(value.toShort())
+    }
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
+    }
 }
 
 /**
@@ -1948,6 +2068,308 @@ internal object FfiConverterTypeFfiSoftwareKey: FfiConverter<FfiSoftwareKey, Lon
 
 
 
+internal data class FfiConstraint (
+    var `kind`: kotlin.String
+    , 
+    var `start`: kotlin.String
+    , 
+    var `end`: kotlin.String
+    , 
+    var `tz`: kotlin.String
+    , 
+    var `currency`: kotlin.String
+    , 
+    var `maxAmountMicros`: kotlin.Long
+    , 
+    var `count`: kotlin.Long
+    , 
+    var `windowS`: kotlin.Long
+    , 
+    var `resourceId`: kotlin.String
+    , 
+    var `pathPrefix`: kotlin.String
+    , 
+    var `params`: Map<kotlin.String, FfiParamsValue>?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiConstraint: FfiConverterRustBuffer<FfiConstraint> {
+    override fun read(buf: ByteBuffer): FfiConstraint {
+        return FfiConstraint(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalMapStringTypeFfiParamsValue.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiConstraint) = (
+            FfiConverterString.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`start`) +
+            FfiConverterString.allocationSize(value.`end`) +
+            FfiConverterString.allocationSize(value.`tz`) +
+            FfiConverterString.allocationSize(value.`currency`) +
+            FfiConverterLong.allocationSize(value.`maxAmountMicros`) +
+            FfiConverterLong.allocationSize(value.`count`) +
+            FfiConverterLong.allocationSize(value.`windowS`) +
+            FfiConverterString.allocationSize(value.`resourceId`) +
+            FfiConverterString.allocationSize(value.`pathPrefix`) +
+            FfiConverterOptionalMapStringTypeFfiParamsValue.allocationSize(value.`params`)
+    )
+
+    override fun write(value: FfiConstraint, buf: ByteBuffer) {
+            FfiConverterString.write(value.`kind`, buf)
+            FfiConverterString.write(value.`start`, buf)
+            FfiConverterString.write(value.`end`, buf)
+            FfiConverterString.write(value.`tz`, buf)
+            FfiConverterString.write(value.`currency`, buf)
+            FfiConverterLong.write(value.`maxAmountMicros`, buf)
+            FfiConverterLong.write(value.`count`, buf)
+            FfiConverterLong.write(value.`windowS`, buf)
+            FfiConverterString.write(value.`resourceId`, buf)
+            FfiConverterString.write(value.`pathPrefix`, buf)
+            FfiConverterOptionalMapStringTypeFfiParamsValue.write(value.`params`, buf)
+    }
+}
+
+
+
+internal data class FfiConstraintEvaluatorRef (
+    var `kind`: kotlin.String
+    , 
+    var `profileDigest`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiConstraintEvaluatorRef: FfiConverterRustBuffer<FfiConstraintEvaluatorRef> {
+    override fun read(buf: ByteBuffer): FfiConstraintEvaluatorRef {
+        return FfiConstraintEvaluatorRef(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiConstraintEvaluatorRef) = (
+            FfiConverterString.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`profileDigest`)
+    )
+
+    override fun write(value: FfiConstraintEvaluatorRef, buf: ByteBuffer) {
+            FfiConverterString.write(value.`kind`, buf)
+            FfiConverterString.write(value.`profileDigest`, buf)
+    }
+}
+
+
+
+internal data class FfiDelegationCert (
+    var `version`: kotlin.Long
+    , 
+    var `certId`: kotlin.String
+    , 
+    var `issuerId`: kotlin.String
+    , 
+    var `issuerPubKey`: FfiPublicKey
+    , 
+    var `subjectId`: kotlin.String
+    , 
+    var `subjectPubKey`: FfiPublicKey
+    , 
+    var `scope`: List<kotlin.String>
+    , 
+    var `constraints`: List<FfiConstraint>
+    , 
+    var `issuedAt`: kotlin.Long
+    , 
+    var `expiresAt`: kotlin.Long
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiDelegationCert: FfiConverterRustBuffer<FfiDelegationCert> {
+    override fun read(buf: ByteBuffer): FfiDelegationCert {
+        return FfiDelegationCert(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceTypeFfiConstraint.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiDelegationCert) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`certId`) +
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`issuerPubKey`) +
+            FfiConverterString.allocationSize(value.`subjectId`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`subjectPubKey`) +
+            FfiConverterSequenceString.allocationSize(value.`scope`) +
+            FfiConverterSequenceTypeFfiConstraint.allocationSize(value.`constraints`) +
+            FfiConverterLong.allocationSize(value.`issuedAt`) +
+            FfiConverterLong.allocationSize(value.`expiresAt`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiDelegationCert, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`certId`, buf)
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`issuerPubKey`, buf)
+            FfiConverterString.write(value.`subjectId`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`subjectPubKey`, buf)
+            FfiConverterSequenceString.write(value.`scope`, buf)
+            FfiConverterSequenceTypeFfiConstraint.write(value.`constraints`, buf)
+            FfiConverterLong.write(value.`issuedAt`, buf)
+            FfiConverterLong.write(value.`expiresAt`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
+    }
+}
+
+
+
+internal data class FfiKeyRotationStatement (
+    var `version`: kotlin.Long
+    , 
+    var `authorityId`: kotlin.String
+    , 
+    var `recoveryEpoch`: kotlin.Long
+    , 
+    var `role`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `previousStatementHash`: kotlin.ByteArray
+    , 
+    var `oldKey`: FfiPublicKey
+    , 
+    var `newKey`: FfiPublicKey
+    , 
+    var `oldKeyId`: kotlin.String
+    , 
+    var `newKeyId`: kotlin.String
+    , 
+    var `issuedAt`: kotlin.Long
+    , 
+    var `notBefore`: kotlin.Long
+    , 
+    var `oldSignature`: FfiSignature
+    , 
+    var `newSignature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiKeyRotationStatement: FfiConverterRustBuffer<FfiKeyRotationStatement> {
+    override fun read(buf: ByteBuffer): FfiKeyRotationStatement {
+        return FfiKeyRotationStatement(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiKeyRotationStatement) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`authorityId`) +
+            FfiConverterLong.allocationSize(value.`recoveryEpoch`) +
+            FfiConverterString.allocationSize(value.`role`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`previousStatementHash`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`oldKey`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`newKey`) +
+            FfiConverterString.allocationSize(value.`oldKeyId`) +
+            FfiConverterString.allocationSize(value.`newKeyId`) +
+            FfiConverterLong.allocationSize(value.`issuedAt`) +
+            FfiConverterLong.allocationSize(value.`notBefore`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`oldSignature`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`newSignature`)
+    )
+
+    override fun write(value: FfiKeyRotationStatement, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`authorityId`, buf)
+            FfiConverterLong.write(value.`recoveryEpoch`, buf)
+            FfiConverterString.write(value.`role`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`previousStatementHash`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`oldKey`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`newKey`, buf)
+            FfiConverterString.write(value.`oldKeyId`, buf)
+            FfiConverterString.write(value.`newKeyId`, buf)
+            FfiConverterLong.write(value.`issuedAt`, buf)
+            FfiConverterLong.write(value.`notBefore`, buf)
+            FfiConverterTypeFfiSignature.write(value.`oldSignature`, buf)
+            FfiConverterTypeFfiSignature.write(value.`newSignature`, buf)
+    }
+}
+
+
+
 internal data class FfiOperationContext (
     var `requiredScope`: kotlin.String
     , 
@@ -2001,6 +2423,94 @@ internal object FfiConverterTypeFfiOperationContext: FfiConverterRustBuffer<FfiO
 
 
 
+internal data class FfiProofBundle (
+    var `version`: kotlin.Long
+    , 
+    var `verifierId`: kotlin.String
+    , 
+    var `agentId`: kotlin.String
+    , 
+    var `agentPubKey`: FfiPublicKey
+    , 
+    var `delegations`: List<FfiDelegationCert>
+    , 
+    var `delegationDigest`: kotlin.ByteArray
+    , 
+    var `challenge`: kotlin.ByteArray
+    , 
+    var `challengeAt`: kotlin.Long
+    , 
+    var `challengeSig`: FfiSignature
+    , 
+    var `sessionContext`: kotlin.ByteArray?
+    , 
+    var `streamId`: kotlin.ByteArray?
+    , 
+    var `streamSeq`: kotlin.Long?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiProofBundle: FfiConverterRustBuffer<FfiProofBundle> {
+    override fun read(buf: ByteBuffer): FfiProofBundle {
+        return FfiProofBundle(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterSequenceTypeFfiDelegationCert.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiProofBundle) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`verifierId`) +
+            FfiConverterString.allocationSize(value.`agentId`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`agentPubKey`) +
+            FfiConverterSequenceTypeFfiDelegationCert.allocationSize(value.`delegations`) +
+            FfiConverterByteArray.allocationSize(value.`delegationDigest`) +
+            FfiConverterByteArray.allocationSize(value.`challenge`) +
+            FfiConverterLong.allocationSize(value.`challengeAt`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`challengeSig`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`sessionContext`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`streamId`) +
+            FfiConverterOptionalLong.allocationSize(value.`streamSeq`)
+    )
+
+    override fun write(value: FfiProofBundle, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`verifierId`, buf)
+            FfiConverterString.write(value.`agentId`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`agentPubKey`, buf)
+            FfiConverterSequenceTypeFfiDelegationCert.write(value.`delegations`, buf)
+            FfiConverterByteArray.write(value.`delegationDigest`, buf)
+            FfiConverterByteArray.write(value.`challenge`, buf)
+            FfiConverterLong.write(value.`challengeAt`, buf)
+            FfiConverterTypeFfiSignature.write(value.`challengeSig`, buf)
+            FfiConverterOptionalByteArray.write(value.`sessionContext`, buf)
+            FfiConverterOptionalByteArray.write(value.`streamId`, buf)
+            FfiConverterOptionalLong.write(value.`streamSeq`, buf)
+    }
+}
+
+
+
 /**
  * A complete hybrid public key: Ed25519 (32 bytes) and ML-DSA-65 (1952).
  */
@@ -2037,6 +2547,130 @@ internal object FfiConverterTypeFfiPublicKey: FfiConverterRustBuffer<FfiPublicKe
     override fun write(value: FfiPublicKey, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`ed25519`, buf)
             FfiConverterByteArray.write(value.`mlDsa65`, buf)
+    }
+}
+
+
+
+internal data class FfiRevocationList (
+    var `version`: kotlin.Long
+    , 
+    var `issuerId`: kotlin.String
+    , 
+    var `updatedAt`: kotlin.Long
+    , 
+    var `nextUpdate`: kotlin.Long
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    /**
+     * The revoked certificate IDs (`RevokedCertV2.cert_id`), in wire order.
+     */
+    var `revoked`: List<kotlin.String>
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRevocationList: FfiConverterRustBuffer<FfiRevocationList> {
+    override fun read(buf: ByteBuffer): FfiRevocationList {
+        return FfiRevocationList(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRevocationList) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterLong.allocationSize(value.`updatedAt`) +
+            FfiConverterLong.allocationSize(value.`nextUpdate`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterSequenceString.allocationSize(value.`revoked`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiRevocationList, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterLong.write(value.`updatedAt`, buf)
+            FfiConverterLong.write(value.`nextUpdate`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterSequenceString.write(value.`revoked`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
+    }
+}
+
+
+
+internal data class FfiRevocationPush (
+    var `version`: kotlin.Long
+    , 
+    var `issuerId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `pushedAt`: kotlin.Long
+    , 
+    var `revoked`: List<kotlin.String>
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRevocationPush: FfiConverterRustBuffer<FfiRevocationPush> {
+    override fun read(buf: ByteBuffer): FfiRevocationPush {
+        return FfiRevocationPush(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRevocationPush) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterLong.allocationSize(value.`pushedAt`) +
+            FfiConverterSequenceString.allocationSize(value.`revoked`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiRevocationPush, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterLong.write(value.`pushedAt`, buf)
+            FfiConverterSequenceString.write(value.`revoked`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
     }
 }
 
@@ -2095,6 +2729,536 @@ internal object FfiConverterTypeFfiSessionContextInputs: FfiConverterRustBuffer<
             FfiConverterString.write(value.`sessionId`, buf)
             FfiConverterString.write(value.`invocationId`, buf)
             FfiConverterByteArray.write(value.`requestHash`, buf)
+    }
+}
+
+
+
+/**
+ * A hybrid signature: Ed25519 (64 bytes) and ML-DSA-65 (3309 bytes).
+ */
+internal data class FfiSignature (
+    var `ed25519`: kotlin.ByteArray
+    , 
+    var `mlDsa65`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiSignature: FfiConverterRustBuffer<FfiSignature> {
+    override fun read(buf: ByteBuffer): FfiSignature {
+        return FfiSignature(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiSignature) = (
+            FfiConverterByteArray.allocationSize(value.`ed25519`) +
+            FfiConverterByteArray.allocationSize(value.`mlDsa65`)
+    )
+
+    override fun write(value: FfiSignature, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`ed25519`, buf)
+            FfiConverterByteArray.write(value.`mlDsa65`, buf)
+    }
+}
+
+
+
+internal data class FfiStatusEvidenceEntry (
+    var `issuerId`: kotlin.String
+    , 
+    var `statusKeyId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `objectType`: kotlin.UShort
+    , 
+    var `digest`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusEvidenceEntry: FfiConverterRustBuffer<FfiStatusEvidenceEntry> {
+    override fun read(buf: ByteBuffer): FfiStatusEvidenceEntry {
+        return FfiStatusEvidenceEntry(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusEvidenceEntry) = (
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterString.allocationSize(value.`statusKeyId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterUShort.allocationSize(value.`objectType`) +
+            FfiConverterString.allocationSize(value.`digest`)
+    )
+
+    override fun write(value: FfiStatusEvidenceEntry, buf: ByteBuffer) {
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterString.write(value.`statusKeyId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterUShort.write(value.`objectType`, buf)
+            FfiConverterString.write(value.`digest`, buf)
+    }
+}
+
+
+
+/**
+ * One status object in a status evidence batch: its object type and wire.
+ */
+internal data class FfiStatusEvidenceObject (
+    var `objectType`: kotlin.UShort
+    , 
+    var `wire`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusEvidenceObject: FfiConverterRustBuffer<FfiStatusEvidenceObject> {
+    override fun read(buf: ByteBuffer): FfiStatusEvidenceObject {
+        return FfiStatusEvidenceObject(
+            FfiConverterUShort.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusEvidenceObject) = (
+            FfiConverterUShort.allocationSize(value.`objectType`) +
+            FfiConverterByteArray.allocationSize(value.`wire`)
+    )
+
+    override fun write(value: FfiStatusEvidenceObject, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`objectType`, buf)
+            FfiConverterByteArray.write(value.`wire`, buf)
+    }
+}
+
+
+
+internal data class FfiTransactionReceipt (
+    var `version`: kotlin.Long
+    , 
+    var `transactionId`: kotlin.String
+    , 
+    var `createdAt`: kotlin.Long
+    , 
+    var `termsSchemaUri`: kotlin.String
+    , 
+    var `termsCanonicalJson`: kotlin.ByteArray
+    , 
+    var `parties`: List<FfiTransactionReceiptParty>
+    , 
+    var `partySignatures`: List<FfiTransactionReceiptSignature>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiTransactionReceipt: FfiConverterRustBuffer<FfiTransactionReceipt> {
+    override fun read(buf: ByteBuffer): FfiTransactionReceipt {
+        return FfiTransactionReceipt(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterSequenceTypeFfiTransactionReceiptParty.read(buf),
+            FfiConverterSequenceTypeFfiTransactionReceiptSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiTransactionReceipt) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`transactionId`) +
+            FfiConverterLong.allocationSize(value.`createdAt`) +
+            FfiConverterString.allocationSize(value.`termsSchemaUri`) +
+            FfiConverterByteArray.allocationSize(value.`termsCanonicalJson`) +
+            FfiConverterSequenceTypeFfiTransactionReceiptParty.allocationSize(value.`parties`) +
+            FfiConverterSequenceTypeFfiTransactionReceiptSignature.allocationSize(value.`partySignatures`)
+    )
+
+    override fun write(value: FfiTransactionReceipt, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`transactionId`, buf)
+            FfiConverterLong.write(value.`createdAt`, buf)
+            FfiConverterString.write(value.`termsSchemaUri`, buf)
+            FfiConverterByteArray.write(value.`termsCanonicalJson`, buf)
+            FfiConverterSequenceTypeFfiTransactionReceiptParty.write(value.`parties`, buf)
+            FfiConverterSequenceTypeFfiTransactionReceiptSignature.write(value.`partySignatures`, buf)
+    }
+}
+
+
+
+internal data class FfiTransactionReceiptParty (
+    var `partyId`: kotlin.String
+    , 
+    var `role`: kotlin.String
+    , 
+    var `agentId`: kotlin.String
+    , 
+    var `agentPubKey`: FfiPublicKey
+    , 
+    var `verifierId`: kotlin.String
+    , 
+    var `workspaceId`: kotlin.String
+    , 
+    var `sessionId`: kotlin.String
+    , 
+    var `invocationId`: kotlin.String
+    , 
+    var `requiredScope`: kotlin.String
+    , 
+    var `proofBundleHash`: kotlin.String
+    , 
+    var `proofBundle`: FfiProofBundle?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiTransactionReceiptParty: FfiConverterRustBuffer<FfiTransactionReceiptParty> {
+    override fun read(buf: ByteBuffer): FfiTransactionReceiptParty {
+        return FfiTransactionReceiptParty(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalTypeFfiProofBundle.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiTransactionReceiptParty) = (
+            FfiConverterString.allocationSize(value.`partyId`) +
+            FfiConverterString.allocationSize(value.`role`) +
+            FfiConverterString.allocationSize(value.`agentId`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`agentPubKey`) +
+            FfiConverterString.allocationSize(value.`verifierId`) +
+            FfiConverterString.allocationSize(value.`workspaceId`) +
+            FfiConverterString.allocationSize(value.`sessionId`) +
+            FfiConverterString.allocationSize(value.`invocationId`) +
+            FfiConverterString.allocationSize(value.`requiredScope`) +
+            FfiConverterString.allocationSize(value.`proofBundleHash`) +
+            FfiConverterOptionalTypeFfiProofBundle.allocationSize(value.`proofBundle`)
+    )
+
+    override fun write(value: FfiTransactionReceiptParty, buf: ByteBuffer) {
+            FfiConverterString.write(value.`partyId`, buf)
+            FfiConverterString.write(value.`role`, buf)
+            FfiConverterString.write(value.`agentId`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`agentPubKey`, buf)
+            FfiConverterString.write(value.`verifierId`, buf)
+            FfiConverterString.write(value.`workspaceId`, buf)
+            FfiConverterString.write(value.`sessionId`, buf)
+            FfiConverterString.write(value.`invocationId`, buf)
+            FfiConverterString.write(value.`requiredScope`, buf)
+            FfiConverterString.write(value.`proofBundleHash`, buf)
+            FfiConverterOptionalTypeFfiProofBundle.write(value.`proofBundle`, buf)
+    }
+}
+
+
+
+internal data class FfiTransactionReceiptSignature (
+    var `partyId`: kotlin.String
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiTransactionReceiptSignature: FfiConverterRustBuffer<FfiTransactionReceiptSignature> {
+    override fun read(buf: ByteBuffer): FfiTransactionReceiptSignature {
+        return FfiTransactionReceiptSignature(
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiTransactionReceiptSignature) = (
+            FfiConverterString.allocationSize(value.`partyId`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiTransactionReceiptSignature, buf: ByteBuffer) {
+            FfiConverterString.write(value.`partyId`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
+    }
+}
+
+
+
+internal data class FfiVerificationReceipt (
+    var `version`: kotlin.Long
+    , 
+    var `logId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `verifierId`: kotlin.String
+    , 
+    var `agentId`: kotlin.String
+    , 
+    var `humanId`: kotlin.String
+    , 
+    var `bundleHash`: kotlin.String
+    , 
+    var `issuerIds`: List<kotlin.String>
+    , 
+    var `decision`: kotlin.String
+    , 
+    var `decisionReason`: kotlin.String
+    , 
+    var `identityStatus`: kotlin.String
+    , 
+    var `trustAssessment`: kotlin.String
+    , 
+    var `statusAssessment`: kotlin.String
+    , 
+    var `challengeAssessment`: kotlin.String
+    , 
+    var `constraintEvaluators`: List<FfiConstraintEvaluatorRef>
+    , 
+    var `contextAssessment`: kotlin.String
+    , 
+    var `contextPolicyDigest`: kotlin.String?
+    , 
+    var `verifiedAt`: kotlin.Long
+    , 
+    var `requiredScope`: kotlin.String
+    , 
+    var `grantedScope`: List<kotlin.String>
+    , 
+    var `statusEvidence`: List<FfiStatusEvidenceEntry>
+    , 
+    var `previousReceiptHash`: kotlin.ByteArray
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiVerificationReceipt: FfiConverterRustBuffer<FfiVerificationReceipt> {
+    override fun read(buf: ByteBuffer): FfiVerificationReceipt {
+        return FfiVerificationReceipt(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeFfiConstraintEvaluatorRef.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiVerificationReceipt) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`logId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterString.allocationSize(value.`verifierId`) +
+            FfiConverterString.allocationSize(value.`agentId`) +
+            FfiConverterString.allocationSize(value.`humanId`) +
+            FfiConverterString.allocationSize(value.`bundleHash`) +
+            FfiConverterSequenceString.allocationSize(value.`issuerIds`) +
+            FfiConverterString.allocationSize(value.`decision`) +
+            FfiConverterString.allocationSize(value.`decisionReason`) +
+            FfiConverterString.allocationSize(value.`identityStatus`) +
+            FfiConverterString.allocationSize(value.`trustAssessment`) +
+            FfiConverterString.allocationSize(value.`statusAssessment`) +
+            FfiConverterString.allocationSize(value.`challengeAssessment`) +
+            FfiConverterSequenceTypeFfiConstraintEvaluatorRef.allocationSize(value.`constraintEvaluators`) +
+            FfiConverterString.allocationSize(value.`contextAssessment`) +
+            FfiConverterOptionalString.allocationSize(value.`contextPolicyDigest`) +
+            FfiConverterLong.allocationSize(value.`verifiedAt`) +
+            FfiConverterString.allocationSize(value.`requiredScope`) +
+            FfiConverterSequenceString.allocationSize(value.`grantedScope`) +
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.allocationSize(value.`statusEvidence`) +
+            FfiConverterByteArray.allocationSize(value.`previousReceiptHash`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiVerificationReceipt, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`logId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterString.write(value.`verifierId`, buf)
+            FfiConverterString.write(value.`agentId`, buf)
+            FfiConverterString.write(value.`humanId`, buf)
+            FfiConverterString.write(value.`bundleHash`, buf)
+            FfiConverterSequenceString.write(value.`issuerIds`, buf)
+            FfiConverterString.write(value.`decision`, buf)
+            FfiConverterString.write(value.`decisionReason`, buf)
+            FfiConverterString.write(value.`identityStatus`, buf)
+            FfiConverterString.write(value.`trustAssessment`, buf)
+            FfiConverterString.write(value.`statusAssessment`, buf)
+            FfiConverterString.write(value.`challengeAssessment`, buf)
+            FfiConverterSequenceTypeFfiConstraintEvaluatorRef.write(value.`constraintEvaluators`, buf)
+            FfiConverterString.write(value.`contextAssessment`, buf)
+            FfiConverterOptionalString.write(value.`contextPolicyDigest`, buf)
+            FfiConverterLong.write(value.`verifiedAt`, buf)
+            FfiConverterString.write(value.`requiredScope`, buf)
+            FfiConverterSequenceString.write(value.`grantedScope`, buf)
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.`statusEvidence`, buf)
+            FfiConverterByteArray.write(value.`previousReceiptHash`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
+    }
+}
+
+
+
+internal data class FfiWitnessEntry (
+    var `version`: kotlin.Long
+    , 
+    var `logId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `prevHash`: kotlin.ByteArray
+    , 
+    var `entryData`: kotlin.ByteArray
+    , 
+    var `timestamp`: kotlin.Long
+    , 
+    var `witnessId`: kotlin.String
+    , 
+    var `signature`: FfiSignature
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiWitnessEntry: FfiConverterRustBuffer<FfiWitnessEntry> {
+    override fun read(buf: ByteBuffer): FfiWitnessEntry {
+        return FfiWitnessEntry(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiSignature.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiWitnessEntry) = (
+            FfiConverterLong.allocationSize(value.`version`) +
+            FfiConverterString.allocationSize(value.`logId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`prevHash`) +
+            FfiConverterByteArray.allocationSize(value.`entryData`) +
+            FfiConverterLong.allocationSize(value.`timestamp`) +
+            FfiConverterString.allocationSize(value.`witnessId`) +
+            FfiConverterTypeFfiSignature.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: FfiWitnessEntry, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`version`, buf)
+            FfiConverterString.write(value.`logId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`prevHash`, buf)
+            FfiConverterByteArray.write(value.`entryData`, buf)
+            FfiConverterLong.write(value.`timestamp`, buf)
+            FfiConverterString.write(value.`witnessId`, buf)
+            FfiConverterTypeFfiSignature.write(value.`signature`, buf)
     }
 }
 
@@ -2237,6 +3401,210 @@ internal object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> 
 
 
 
+/**
+ * A constraint `params` value (JSON without floats).
+ */
+internal sealed class FfiParamsValue {
+    
+    object Null : FfiParamsValue()
+    
+    
+    data class Bool(
+        val `value`: kotlin.Boolean) : FfiParamsValue()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Int(
+        val `value`: kotlin.Long) : FfiParamsValue()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Str(
+        val `value`: kotlin.String) : FfiParamsValue()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Array(
+        val `items`: List<com.ratifyprotocol.internal.ffi.FfiParamsValue>) : FfiParamsValue()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Object(
+        val `entries`: Map<kotlin.String, com.ratifyprotocol.internal.ffi.FfiParamsValue>) : FfiParamsValue()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiParamsValue : FfiConverterRustBuffer<FfiParamsValue>{
+    override fun read(buf: ByteBuffer): FfiParamsValue {
+        return when(buf.getInt()) {
+            1 -> FfiParamsValue.Null
+            2 -> FfiParamsValue.Bool(
+                FfiConverterBoolean.read(buf),
+                )
+            3 -> FfiParamsValue.Int(
+                FfiConverterLong.read(buf),
+                )
+            4 -> FfiParamsValue.Str(
+                FfiConverterString.read(buf),
+                )
+            5 -> FfiParamsValue.Array(
+                FfiConverterSequenceTypeFfiParamsValue.read(buf),
+                )
+            6 -> FfiParamsValue.Object(
+                FfiConverterMapStringTypeFfiParamsValue.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FfiParamsValue): ULong = when(value) {
+        is FfiParamsValue.Null -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is FfiParamsValue.Bool -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`value`)
+            )
+        }
+        is FfiParamsValue.Int -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterLong.allocationSize(value.`value`)
+            )
+        }
+        is FfiParamsValue.Str -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`value`)
+            )
+        }
+        is FfiParamsValue.Array -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeFfiParamsValue.allocationSize(value.`items`)
+            )
+        }
+        is FfiParamsValue.Object -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterMapStringTypeFfiParamsValue.allocationSize(value.`entries`)
+            )
+        }
+    }
+
+    override fun write(value: FfiParamsValue, buf: ByteBuffer) {
+        when(value) {
+            is FfiParamsValue.Null -> {
+                buf.putInt(1)
+                Unit
+            }
+            is FfiParamsValue.Bool -> {
+                buf.putInt(2)
+                FfiConverterBoolean.write(value.`value`, buf)
+                Unit
+            }
+            is FfiParamsValue.Int -> {
+                buf.putInt(3)
+                FfiConverterLong.write(value.`value`, buf)
+                Unit
+            }
+            is FfiParamsValue.Str -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`value`, buf)
+                Unit
+            }
+            is FfiParamsValue.Array -> {
+                buf.putInt(5)
+                FfiConverterSequenceTypeFfiParamsValue.write(value.`items`, buf)
+                Unit
+            }
+            is FfiParamsValue.Object -> {
+                buf.putInt(6)
+                FfiConverterMapStringTypeFfiParamsValue.write(value.`entries`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterOptionalLong: FfiConverterRustBuffer<kotlin.Long?> {
+    override fun read(buf: ByteBuffer): kotlin.Long? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterLong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Long?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterLong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Long?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterLong.write(value, buf)
+        }
+    }
+}
+
+
+
 
 /**
  * @suppress
@@ -2305,6 +3673,70 @@ internal object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.Byt
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiProofBundle: FfiConverterRustBuffer<FfiProofBundle?> {
+    override fun read(buf: ByteBuffer): FfiProofBundle? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiProofBundle.read(buf)
+    }
+
+    override fun allocationSize(value: FfiProofBundle?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiProofBundle.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiProofBundle?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiProofBundle.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterOptionalMapStringTypeFfiParamsValue: FfiConverterRustBuffer<Map<kotlin.String, FfiParamsValue>?> {
+    override fun read(buf: ByteBuffer): Map<kotlin.String, FfiParamsValue>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterMapStringTypeFfiParamsValue.read(buf)
+    }
+
+    override fun allocationSize(value: Map<kotlin.String, FfiParamsValue>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterMapStringTypeFfiParamsValue.allocationSize(value)
+        }
+    }
+
+    override fun write(value: Map<kotlin.String, FfiParamsValue>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterMapStringTypeFfiParamsValue.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
     override fun read(buf: ByteBuffer): List<kotlin.String> {
         val len = buf.getInt()
@@ -2333,6 +3765,230 @@ internal object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.S
 /**
  * @suppress
  */
+internal object FfiConverterSequenceTypeFfiConstraint: FfiConverterRustBuffer<List<FfiConstraint>> {
+    override fun read(buf: ByteBuffer): List<FfiConstraint> {
+        val len = buf.getInt()
+        return List<FfiConstraint>(len) {
+            FfiConverterTypeFfiConstraint.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiConstraint>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiConstraint.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiConstraint>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiConstraint.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiConstraintEvaluatorRef: FfiConverterRustBuffer<List<FfiConstraintEvaluatorRef>> {
+    override fun read(buf: ByteBuffer): List<FfiConstraintEvaluatorRef> {
+        val len = buf.getInt()
+        return List<FfiConstraintEvaluatorRef>(len) {
+            FfiConverterTypeFfiConstraintEvaluatorRef.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiConstraintEvaluatorRef>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiConstraintEvaluatorRef.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiConstraintEvaluatorRef>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiConstraintEvaluatorRef.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiDelegationCert: FfiConverterRustBuffer<List<FfiDelegationCert>> {
+    override fun read(buf: ByteBuffer): List<FfiDelegationCert> {
+        val len = buf.getInt()
+        return List<FfiDelegationCert>(len) {
+            FfiConverterTypeFfiDelegationCert.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiDelegationCert>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiDelegationCert.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiDelegationCert>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiDelegationCert.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiStatusEvidenceEntry: FfiConverterRustBuffer<List<FfiStatusEvidenceEntry>> {
+    override fun read(buf: ByteBuffer): List<FfiStatusEvidenceEntry> {
+        val len = buf.getInt()
+        return List<FfiStatusEvidenceEntry>(len) {
+            FfiConverterTypeFfiStatusEvidenceEntry.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiStatusEvidenceEntry>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiStatusEvidenceEntry.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiStatusEvidenceEntry>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiStatusEvidenceEntry.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiStatusEvidenceObject: FfiConverterRustBuffer<List<FfiStatusEvidenceObject>> {
+    override fun read(buf: ByteBuffer): List<FfiStatusEvidenceObject> {
+        val len = buf.getInt()
+        return List<FfiStatusEvidenceObject>(len) {
+            FfiConverterTypeFfiStatusEvidenceObject.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiStatusEvidenceObject>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiStatusEvidenceObject.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiStatusEvidenceObject>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiStatusEvidenceObject.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiTransactionReceiptParty: FfiConverterRustBuffer<List<FfiTransactionReceiptParty>> {
+    override fun read(buf: ByteBuffer): List<FfiTransactionReceiptParty> {
+        val len = buf.getInt()
+        return List<FfiTransactionReceiptParty>(len) {
+            FfiConverterTypeFfiTransactionReceiptParty.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiTransactionReceiptParty>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiTransactionReceiptParty.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiTransactionReceiptParty>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiTransactionReceiptParty.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiTransactionReceiptSignature: FfiConverterRustBuffer<List<FfiTransactionReceiptSignature>> {
+    override fun read(buf: ByteBuffer): List<FfiTransactionReceiptSignature> {
+        val len = buf.getInt()
+        return List<FfiTransactionReceiptSignature>(len) {
+            FfiConverterTypeFfiTransactionReceiptSignature.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiTransactionReceiptSignature>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiTransactionReceiptSignature.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiTransactionReceiptSignature>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiTransactionReceiptSignature.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiParamsValue: FfiConverterRustBuffer<List<FfiParamsValue>> {
+    override fun read(buf: ByteBuffer): List<FfiParamsValue> {
+        val len = buf.getInt()
+        return List<FfiParamsValue>(len) {
+            FfiConverterTypeFfiParamsValue.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiParamsValue>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiParamsValue.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiParamsValue>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiParamsValue.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<List<kotlin.String>>> {
     override fun read(buf: ByteBuffer): List<List<kotlin.String>> {
         val len = buf.getInt()
@@ -2351,6 +4007,45 @@ internal object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterSequenceString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterMapStringTypeFfiParamsValue: FfiConverterRustBuffer<Map<kotlin.String, FfiParamsValue>> {
+    override fun read(buf: ByteBuffer): Map<kotlin.String, FfiParamsValue> {
+        val len = buf.getInt()
+        return buildMap<kotlin.String, FfiParamsValue>(len) {
+            repeat(len) {
+                val k = FfiConverterString.read(buf)
+                val v = FfiConverterTypeFfiParamsValue.read(buf)
+                this[k] = v
+            }
+        }
+    }
+
+    override fun allocationSize(value: Map<kotlin.String, FfiParamsValue>): ULong {
+        val spaceForMapSize = 4UL
+        val spaceForChildren = value.map { (k, v) ->
+            FfiConverterString.allocationSize(k) +
+            FfiConverterTypeFfiParamsValue.allocationSize(v)
+        }.sum()
+        return spaceForMapSize + spaceForChildren
+    }
+
+    override fun write(value: Map<kotlin.String, FfiParamsValue>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        // The parens on `(k, v)` here ensure we're calling the right method,
+        // which is important for compatibility with older android devices.
+        // Ref https://blog.danlew.net/2017/03/16/kotlin-puzzler-whose-line-is-it-anyways/
+        value.forEach { (k, v) ->
+            FfiConverterString.write(k, buf)
+            FfiConverterTypeFfiParamsValue.write(v, buf)
         }
     }
 }
@@ -2482,6 +4177,126 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     
         
         FfiConverterString.lower(`id`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeDelegationCert`(`data`: kotlin.ByteArray): FfiDelegationCert {
+            return FfiConverterTypeFfiDelegationCert.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_delegation_cert(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeKeyRotationStatement`(`data`: kotlin.ByteArray): FfiKeyRotationStatement {
+            return FfiConverterTypeFfiKeyRotationStatement.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_key_rotation_statement(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeProofBundle`(`data`: kotlin.ByteArray): FfiProofBundle {
+            return FfiConverterTypeFfiProofBundle.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_proof_bundle(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeRevocationList`(`data`: kotlin.ByteArray): FfiRevocationList {
+            return FfiConverterTypeFfiRevocationList.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_revocation_list(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeRevocationPush`(`data`: kotlin.ByteArray): FfiRevocationPush {
+            return FfiConverterTypeFfiRevocationPush.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_revocation_push(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeStatusEvidenceBatch`(`data`: kotlin.ByteArray): List<FfiStatusEvidenceObject> {
+            return FfiConverterSequenceTypeFfiStatusEvidenceObject.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_status_evidence_batch(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeTransactionReceipt`(`data`: kotlin.ByteArray): FfiTransactionReceipt {
+            return FfiConverterTypeFfiTransactionReceipt.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_transaction_receipt(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeVerificationReceipt`(`data`: kotlin.ByteArray): FfiVerificationReceipt {
+            return FfiConverterTypeFfiVerificationReceipt.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_verification_receipt(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeVerificationReceiptBody`(`data`: kotlin.ByteArray): FfiVerificationReceipt {
+            return FfiConverterTypeFfiVerificationReceipt.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_verification_receipt_body(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiDecodeWitnessEntry`(`data`: kotlin.ByteArray): FfiWitnessEntry {
+            return FfiConverterTypeFfiWitnessEntry.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_witness_entry(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
 }
     )
     }

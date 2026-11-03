@@ -31,11 +31,23 @@ object KeysVectors {
                 v1 != id.substring(0, 32)
             t.check("keys", k.getString("name"), ok) { "seeds, key ID, or v1 ID differ" }
         }
+        val objects = Corpus.load("objects.json")
+        val bundle = objectByKind(objects, "proof_bundle").b64("wire_b64")
+        val witness = objectByKind(objects, "witness_entry").b64("wire_b64")
         val bad = f.arr("invalid_v2_key_ids")
         for (b in bad) {
-            t.check("invalid_v2_key_ids format", b.getString("name"), !validId(b.getString("value"))) { "accepted" }
+            val value = b.getString("value")
+            val want = b.getString("expected_error_class")
+            val asVerifier = classOf { decodeProofBundle(setTopLevelString(bundle, "verifier_id", value)) }
+            val asWitness = classOf { decodeWitnessEntry(setTopLevelString(witness, "witness_id", value)) }
+            t.check("invalid_v2_key_ids", b.getString("name"), asVerifier == want && asWitness == want) {
+                "classes $asVerifier/$asWitness, want $want"
+            }
+            t.check("invalid_v2_key_ids format", b.getString("name"), !validId(value)) { "accepted" }
         }
-        t.finish(listOf("keys" to keys.size, "invalid_v2_key_ids format" to bad.size))
+        t.finish(
+            listOf("keys" to keys.size, "invalid_v2_key_ids" to bad.size, "invalid_v2_key_ids format" to bad.size),
+        )
     }
 
     fun generate() {

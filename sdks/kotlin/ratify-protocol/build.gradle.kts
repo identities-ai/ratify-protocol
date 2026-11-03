@@ -22,6 +22,7 @@ android {
         getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("rust/jniLibs"))
         // The shared corpus is read in place, never copied into the tree.
         getByName("androidTest").assets.srcDir(repoRoot.resolve("testvectors"))
+        getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("specAssets"))
         // One set of vector runners, driven by both the host and the device suites.
         getByName("test").kotlin.srcDir("src/sharedTest/kotlin")
         getByName("androidTest").kotlin.srcDir("src/sharedTest/kotlin")
@@ -37,9 +38,17 @@ android {
             // Host unit tests load the host build of the Rust library.
             it.systemProperty("jna.library.path", repoRoot.resolve("sdks/ffi/target/release").absolutePath)
             it.systemProperty("ratify.corpus", repoRoot.resolve("testvectors").absolutePath)
+            it.systemProperty("ratify.annex", repoRoot.resolve("SPEC-v2-ANNEX-A.md").absolutePath)
         }
     }
 }
+
+// The Annex A runner checks clause digests against the spec text itself.
+val specAssets by tasks.registering(Copy::class) {
+    from(repoRoot.resolve("SPEC-v2-ANNEX-A.md"))
+    into(layout.buildDirectory.dir("specAssets/spec"))
+}
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAssets") }.configureEach { dependsOn(specAssets) }
 
 kotlin {
     jvmToolchain(17)

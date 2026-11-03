@@ -32,6 +32,7 @@ object CorpusRunners {
         "rotation-sequences.json" to LogsVectors::rotationSequences,
         "status-sequences.json" to StatusVectors::statusSequences,
         "challenge-claim.json" to StatusVectors::challengeClaim,
+        "provider-evidence" to ProviderEvidenceVectors::run,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */

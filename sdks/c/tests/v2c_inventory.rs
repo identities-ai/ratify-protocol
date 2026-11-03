@@ -103,6 +103,11 @@ const CONSUMED: &[(&str, &str, &str)] = &[
         "\"operation-session-context.json\"",
     ),
     (
+        "provider-evidence",
+        "v2c_provider_evidence.rs",
+        "\"provider-evidence\"",
+    ),
+    (
         "rotation-sequences.json",
         "v2c_logs.rs",
         "\"rotation-sequences.json\"",

@@ -34,6 +34,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("object-negatives.json", "v2_objects.rs", "object-negatives.json"),
     ("objects.json", "v2_objects.rs", "objects.json"),
     ("operation-session-context.json", "operation_context_v2.rs", "operation-session-context.json"),
+    ("provider-evidence", "v2_provider_evidence.rs", "\"provider-evidence\""),
     ("rotation-sequences.json", "v2_logs.rs", "rotation-sequences.json"),
     ("security-journal.json", "v2_security_journal.rs", "security-journal.json"),
     ("status-publisher.json", "v2_status_publisher.rs", "status-publisher.json"),

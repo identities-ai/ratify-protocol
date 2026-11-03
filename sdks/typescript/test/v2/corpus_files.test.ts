@@ -42,6 +42,7 @@ const RUNNERS: Record<string, string> = {
   "external-signer.json": "external_signer.test.ts",
   "digest-functions.json": "digest_functions.test.ts",
   "cross-sdk": "cross_sdk_v2.test.ts",
+  "provider-evidence": "provider_evidence.test.ts",
 };
 
 test("v2 corpus: every entry in testvectors/v2 is consumed by a runner", () => {

@@ -275,6 +275,45 @@ objects.json fixture session context, and the Verify session-context policy:
 `go run ./cmd/ratify-v2-cross-sdk` replays its own scenarios before writing,
 and `TestV2CrossSDKFixtures` replays every file's scenarios.
 
+
+## provider-evidence/
+
+Evidence that a hardware-backed key signs correctly on a real device. Each
+file, `provider-evidence/<platform>-<provider>.json`, is written by a device
+evidence run of an SDK that has a platform signer (today the Swift SDK's
+Secure Enclave key on iOS and macOS). It holds public keys only: the device's
+model and OS build, the custody of each key component, the hybrid public key
+and its `key_id_v2`, and three objects that key signed through that SDK's
+public API on the device:
+
+- a `delegation_certificate` it issues (`role: issuer`),
+- a `key_rotation_statement` that rotates a fresh software key into it, so
+  it signs the proof of possession (`role: new_key`), and
+- a `revocation_list` it signs as the issuer's status key (`role: status_key`).
+
+Every SDK's conformance suite verifies every file present: the key ID, each
+object's strict decoding and canonical re-encoding, every signature under
+the recorded key (for the rotation, both the old key's authorization and the
+new key's proof of possession), and that a corrupted signature is refused.
+Files are not reproducible: each run generates a new hardware key.
+
+```
+{
+  "version": 1,
+  "description": string,
+  "platform": "ios" | "macos" | "android",
+  "provider": string,             // e.g. "secure-enclave"; with platform, the file name
+  "sdk": string,                  // the SDK whose public API signed the objects
+  "device_model": string,         // e.g. "iPhone15,2"
+  "os_version": string,
+  "os_build": string,
+  "custody": { "ed25519": string, "ml_dsa_65": string },
+  "public_key": { "ed25519": base64, "ml_dsa_65": base64 },
+  "key_id_v2": string,
+  "objects": [ { "kind": string, "role": string, "wire_b64": base64 } ]
+}
+```
+
 ## Required for 2.0.0-beta.1
 
 [SPEC-v2 §8](../../SPEC-v2.md#8-conformance-and-release-gates) requires every

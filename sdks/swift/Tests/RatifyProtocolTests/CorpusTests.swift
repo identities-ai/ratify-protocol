@@ -26,6 +26,7 @@ final class CorpusTests: XCTestCase {
         "rotation-sequences.json": LogsRunner.rotationSequences,
         "status-sequences.json": StatusRunner.statusSequences,
         "challenge-claim.json": StatusRunner.challengeClaim,
+        "provider-evidence": ProviderEvidenceRunner.run,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).

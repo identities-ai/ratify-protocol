@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from corpus import CONSUMERS, CROSS_SDK_DIR, TESTS_DIR, V2_DIR
+from corpus import CONSUMERS, CROSS_SDK_DIR, PROVIDER_EVIDENCE_DIR, TESTS_DIR, V2_DIR
 
 from ratify_protocol.v2.errors_v2 import ALL_ERROR_CLASSES
 
@@ -15,7 +15,7 @@ def test_every_corpus_file_has_a_consumer():
     assert not unknown, f"corpus files with no Python runner: {sorted(unknown)}"
     assert not missing, f"runner expects files that are absent: {sorted(missing)}"
     subdirs = {p.name for p in V2_DIR.iterdir() if p.is_dir()}
-    assert subdirs <= {"cross-sdk"}, f"unexpected corpus directories: {sorted(subdirs)}"
+    assert subdirs <= {"cross-sdk", "provider-evidence"}, f"unexpected corpus directories: {sorted(subdirs)}"
 
 
 def test_every_consumer_module_reads_its_file():
@@ -32,6 +32,13 @@ def test_cross_sdk_directory_is_consumed():
         return
     module = TESTS_DIR / "test_cross_sdk_v2.py"
     assert module.is_file(), "cross-sdk fixtures exist but test_cross_sdk_v2.py does not"
+
+
+def test_provider_evidence_directory_is_consumed():
+    if not PROVIDER_EVIDENCE_DIR.exists():
+        return
+    module = TESTS_DIR / "test_provider_evidence_v2.py"
+    assert module.is_file(), "provider-evidence records exist but test_provider_evidence_v2.py does not"
 
 
 # Vector members whose string value is an expected SPEC-v2 §2.7 error class;

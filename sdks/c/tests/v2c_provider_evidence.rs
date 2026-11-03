@@ -46,7 +46,12 @@ fn v2c_provider_evidence_records() {
             "records",
             &format!("{file} name"),
             *file == expected_name && r["version"] == json!(1),
-            || format!("expected {expected_name} at version 1, got version {}", r["version"]),
+            || {
+                format!(
+                    "expected {expected_name} at version 1, got version {}",
+                    r["version"]
+                )
+            },
         );
         let key = key_struct(&r["public_key"]);
         let id = s(&r["key_id_v2"]);
@@ -57,6 +62,23 @@ fn v2c_provider_evidence_records() {
             derived.as_ref().ok() == Some(&id),
             || format!("derived {:?}, record states {id}", derived.as_ref().ok()),
         );
+        // Exactly one object of each kind, with its role.
+        let mut pairs: Vec<(String, String)> = arr(&r["objects"])
+            .iter()
+            .map(|o| (s(&o["kind"]), s(&o["role"])))
+            .collect();
+        pairs.sort();
+        let want: Vec<(String, String)> = [
+            ("delegation_certificate", "issuer"),
+            ("key_rotation_statement", "new_key"),
+            ("revocation_list", "status_key"),
+        ]
+        .iter()
+        .map(|(k, r)| (k.to_string(), r.to_string()))
+        .collect();
+        t.check("records", &format!("{file} objects"), pairs == want, || {
+            format!("{pairs:?}")
+        });
         for o in arr(&r["objects"]) {
             let kind = s(&o["kind"]);
             let wire = b64(&o["wire_b64"]);
@@ -69,8 +91,8 @@ fn v2c_provider_evidence_records() {
                 "delegation_certificate" => {
                     let v = class_of(&verify(code, &wire, None));
                     let issuer_key = key_struct(&obj["issuer_pub_key"]);
-                    let key_ok = issuer_key.ed25519 == key.ed25519
-                        && issuer_key.ml_dsa_65 == key.ml_dsa_65;
+                    let key_ok =
+                        issuer_key.ed25519 == key.ed25519 && issuer_key.ml_dsa_65 == key.ml_dsa_65;
                     let ok = v == "ok" && key_ok && s(&obj["issuer_id"]) == id && same;
                     t.check("objects", &name, ok, || {
                         format!(
@@ -91,7 +113,8 @@ fn v2c_provider_evidence_records() {
                     let sb = signable(4, &wire).unwrap_or_else(|f| panic!("{name}: {}", f.message));
                     let sig = |f: &str| (b64(&obj[f]["ed25519"]), b64(&obj[f]["ml_dsa_65"]));
                     let ((oe, om), (ne, nm)) = (sig("old_signature"), sig("new_signature"));
-                    let (old_key, new_key) = (key_struct(&obj["old_key"]), key_struct(&obj["new_key"]));
+                    let (old_key, new_key) =
+                        (key_struct(&obj["old_key"]), key_struct(&obj["new_key"]));
                     let old = class_of(&verify_statement(4, &sb, &oe, &om, &old_key));
                     let new = class_of(&verify_statement(9, &sb, &ne, &nm, &new_key));
                     let key_ok =
@@ -114,5 +137,5 @@ fn v2c_provider_evidence_records() {
     }
     let n = files.len();
     assert!(t.total("objects") > 0, "no provider evidence checks ran");
-    t.finish(&[("records", 2 * n), ("objects", 3 * n), ("negatives", n)]);
+    t.finish(&[("records", 3 * n), ("objects", 3 * n), ("negatives", n)]);
 }

@@ -17,6 +17,10 @@ enum ProviderEvidenceRunner {
             let id = r.s("key_id_v2")
             let derived = try Ratify.keyId(key)
             t.check("records", "\(file) key ID", derived == id)
+            // Exactly one object of each kind, with its role.
+            let pairs = r.arr("objects").map { "\($0.s("kind"))/\($0.s("role"))" }.sorted()
+            t.check("records", "\(file) objects",
+                    pairs == ["delegation_certificate/issuer", "key_rotation_statement/new_key", "revocation_list/status_key"], "\(pairs)")
             for o in r.arr("objects") {
                 let wire = o.b64("wire_b64")
                 let name = "\(file) \(o.s("kind"))"
@@ -46,6 +50,6 @@ enum ProviderEvidenceRunner {
                 }
             }
         }
-        t.finish([("records", 2 * files.count), ("objects", 3 * files.count), ("negatives", files.count)])
+        t.finish([("records", 3 * files.count), ("objects", 3 * files.count), ("negatives", files.count)])
     }
 }

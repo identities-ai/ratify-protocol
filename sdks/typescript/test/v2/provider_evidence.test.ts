@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { verifyV2Statement } from "../../src/crypto_v2.js";
 import {
   V2_OBJECT_TYPE,
   decodeDelegationCertV2,
@@ -18,7 +17,7 @@ import {
   encodeKeyRotationStatementV2,
   encodeRevocationListV2,
   keyIDV2,
-  keyRotationStatementV2SignBytes,
+  verifyArchivalKeyRotationStatementV2,
   verifyDelegationCertV2Signature,
   verifyRevocationListV2Signature,
 } from "../../src/v2.js";
@@ -66,11 +65,12 @@ for (const name of files) {
           const s = decodeKeyRotationStatementV2(wire);
           check(eqBytes(encodeKeyRotationStatementV2(s), wire), "rotation re-encodes to its wire");
           check(keyEq(s.new_key), "rotation new key is the evidence key");
-          const signable = keyRotationStatementV2SignBytes(s);
-          assert.equal(V2_OBJECT_TYPE.keyRotationAuthorization, 0x0004);
-          assert.equal(V2_OBJECT_TYPE.keyRotationProofOfPossession, 0x0009);
-          check(await classOfAsync(() => verifyV2Statement(V2_OBJECT_TYPE.keyRotationAuthorization, signable, s.old_signature, s.old_key)) === "", "rotation old signature");
-          check(await classOfAsync(() => verifyV2Statement(V2_OBJECT_TYPE.keyRotationProofOfPossession, signable, s.new_signature, s.new_key)) === "", "rotation new signature");
+          // The published archival verifier checks both signatures (0x0004
+          // with the old key, 0x0009 with the new key) and names their signers.
+          const r = await verifyArchivalKeyRotationStatementV2(wire);
+          check(r.object_type_code === V2_OBJECT_TYPE.keyRotationAuthorization, "rotation verified as a key rotation");
+          check(r.signer_key_ids.length === 2 && r.signer_key_ids[0] === keyIDV2(s.old_key) && r.signer_key_ids[1] === id,
+            "rotation old and new signatures under the old key and the evidence key");
           break;
         }
         case "revocation_list": {

@@ -14,9 +14,11 @@ mod guard;
 mod keys;
 mod objects;
 mod scope;
+mod verify;
 
 pub use context::*;
 pub use error::*;
 pub use keys::*;
 pub use objects::*;
 pub use scope::*;
+pub use verify::*;

@@ -12,6 +12,9 @@ final class CorpusTests: XCTestCase {
         "keys.json": KeysRunner.run,
         "limits.json": LimitsRunner.run,
         "operation-session-context.json": OperationContextRunner.run,
+        "objects.json": ObjectsRunner.objects,
+        "object-negatives.json": ObjectsRunner.negatives,
+        "hedged-signatures.json": ObjectsRunner.hedged,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
@@ -28,13 +31,10 @@ final class CorpusTests: XCTestCase {
         "digest-functions.json": "M2",
         "evaluator-profiles.json": "M3",
         "external-signer.json": "M2",
-        "hedged-signatures.json": "M2",
         "issuer-duties.json": "M2",
         "key-rotation-signature.json": "M2",
         "lifecycle-scenarios.json": "M3",
         "log-sequences.json": "M2",
-        "object-negatives.json": "M2",
-        "objects.json": "M2",
         "rotation-sequences.json": "M2",
         "security-journal.json": "M2",
         "status-publisher.json": "M2",

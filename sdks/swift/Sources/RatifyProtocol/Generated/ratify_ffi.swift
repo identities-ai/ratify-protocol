@@ -1654,6 +1654,79 @@ func FfiConverterTypeFfiPublicKey_lower(_ value: FfiPublicKey) -> RustBuffer {
 }
 
 
+/**
+ * Caller-authenticated receipt-log state before a receipt.
+ */
+struct FfiReceiptHead: Equatable, Hashable {
+    var logId: String
+    var verifierId: String
+    var sequence: Int64
+    var headHash: Data
+    var acceptedDigests: [Int64: Data]
+    var frozen: Bool
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(logId: String, verifierId: String, sequence: Int64, headHash: Data, acceptedDigests: [Int64: Data], frozen: Bool) {
+        self.logId = logId
+        self.verifierId = verifierId
+        self.sequence = sequence
+        self.headHash = headHash
+        self.acceptedDigests = acceptedDigests
+        self.frozen = frozen
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiReceiptHead: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiReceiptHead: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiReceiptHead {
+        return
+            try FfiReceiptHead(
+                logId: FfiConverterString.read(from: &buf), 
+                verifierId: FfiConverterString.read(from: &buf), 
+                sequence: FfiConverterInt64.read(from: &buf), 
+                headHash: FfiConverterData.read(from: &buf), 
+                acceptedDigests: FfiConverterDictionaryInt64Data.read(from: &buf), 
+                frozen: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiReceiptHead, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.logId, into: &buf)
+        FfiConverterString.write(value.verifierId, into: &buf)
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterData.write(value.headHash, into: &buf)
+        FfiConverterDictionaryInt64Data.write(value.acceptedDigests, into: &buf)
+        FfiConverterBool.write(value.frozen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReceiptHead_lift(_ buf: RustBuffer) throws -> FfiReceiptHead {
+    return try FfiConverterTypeFfiReceiptHead.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReceiptHead_lower(_ value: FfiReceiptHead) -> RustBuffer {
+    return FfiConverterTypeFfiReceiptHead.lower(value)
+}
+
+
 struct FfiRevocationList: Equatable, Hashable {
     var version: Int64
     var issuerId: String
@@ -1801,6 +1874,83 @@ func FfiConverterTypeFfiRevocationPush_lift(_ buf: RustBuffer) throws -> FfiRevo
 #endif
 func FfiConverterTypeFfiRevocationPush_lower(_ value: FfiRevocationPush) -> RustBuffer {
     return FfiConverterTypeFfiRevocationPush.lower(value)
+}
+
+
+/**
+ * Caller-authenticated rotation state for one authority and role.
+ */
+struct FfiRotationState: Equatable, Hashable {
+    var authorityId: String
+    var recoveryEpoch: Int64
+    var role: String
+    var sequence: Int64
+    var headHash: Data
+    var currentKey: FfiPublicKey
+    var usedKeyIds: [String]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(authorityId: String, recoveryEpoch: Int64, role: String, sequence: Int64, headHash: Data, currentKey: FfiPublicKey, usedKeyIds: [String]) {
+        self.authorityId = authorityId
+        self.recoveryEpoch = recoveryEpoch
+        self.role = role
+        self.sequence = sequence
+        self.headHash = headHash
+        self.currentKey = currentKey
+        self.usedKeyIds = usedKeyIds
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiRotationState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiRotationState: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiRotationState {
+        return
+            try FfiRotationState(
+                authorityId: FfiConverterString.read(from: &buf), 
+                recoveryEpoch: FfiConverterInt64.read(from: &buf), 
+                role: FfiConverterString.read(from: &buf), 
+                sequence: FfiConverterInt64.read(from: &buf), 
+                headHash: FfiConverterData.read(from: &buf), 
+                currentKey: FfiConverterTypeFfiPublicKey.read(from: &buf), 
+                usedKeyIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiRotationState, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.authorityId, into: &buf)
+        FfiConverterInt64.write(value.recoveryEpoch, into: &buf)
+        FfiConverterString.write(value.role, into: &buf)
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterData.write(value.headHash, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.currentKey, into: &buf)
+        FfiConverterSequenceString.write(value.usedKeyIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationState_lift(_ buf: RustBuffer) throws -> FfiRotationState {
+    return try FfiConverterTypeFfiRotationState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiRotationState_lower(_ value: FfiRotationState) -> RustBuffer {
+    return FfiConverterTypeFfiRotationState.lower(value)
 }
 
 
@@ -2489,6 +2639,81 @@ func FfiConverterTypeFfiWitnessEntry_lower(_ value: FfiWitnessEntry) -> RustBuff
 
 
 /**
+ * Caller-authenticated witness-log state before an entry.
+ */
+struct FfiWitnessHead: Equatable, Hashable {
+    var logId: String
+    var sequence: Int64
+    var headHash: Data
+    /**
+     * Every accepted sequence's body digest, for replay and fork checks.
+     */
+    var acceptedDigests: [Int64: Data]
+    var frozen: Bool
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(logId: String, sequence: Int64, headHash: Data, 
+        /**
+         * Every accepted sequence's body digest, for replay and fork checks.
+         */acceptedDigests: [Int64: Data], frozen: Bool) {
+        self.logId = logId
+        self.sequence = sequence
+        self.headHash = headHash
+        self.acceptedDigests = acceptedDigests
+        self.frozen = frozen
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiWitnessHead: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiWitnessHead: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiWitnessHead {
+        return
+            try FfiWitnessHead(
+                logId: FfiConverterString.read(from: &buf), 
+                sequence: FfiConverterInt64.read(from: &buf), 
+                headHash: FfiConverterData.read(from: &buf), 
+                acceptedDigests: FfiConverterDictionaryInt64Data.read(from: &buf), 
+                frozen: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiWitnessHead, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.logId, into: &buf)
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterData.write(value.headHash, into: &buf)
+        FfiConverterDictionaryInt64Data.write(value.acceptedDigests, into: &buf)
+        FfiConverterBool.write(value.frozen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiWitnessHead_lift(_ buf: RustBuffer) throws -> FfiWitnessHead {
+    return try FfiConverterTypeFfiWitnessHead.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiWitnessHead_lower(_ value: FfiWitnessHead) -> RustBuffer {
+    return FfiConverterTypeFfiWitnessHead.lower(value)
+}
+
+
+/**
  * Every failure crossing the FFI boundary. `class` is the SPEC-v2 §2.7
  * spelling; the hand-written layers map it to their `ErrorClass`.
  */
@@ -2604,6 +2829,81 @@ func FfiConverterTypeFfiError_lift(_ buf: RustBuffer) throws -> FfiError {
 func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
     return FfiConverterTypeFfiError.lower(value)
 }
+
+
+/**
+ * What a valid log entry does to its log.
+ */
+
+enum FfiLogResult: Equatable, Hashable {
+    
+    /**
+     * The next valid entry; the caller must atomically persist the new head.
+     */
+    case appended
+    /**
+     * An exact accepted body at an accepted sequence; state is unchanged.
+     */
+    case replay
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiLogResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiLogResult: FfiConverterRustBuffer {
+    typealias SwiftType = FfiLogResult
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiLogResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .appended
+        
+        case 2: return .replay
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiLogResult, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .appended:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .replay:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLogResult_lift(_ buf: RustBuffer) throws -> FfiLogResult {
+    return try FfiConverterTypeFfiLogResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLogResult_lower(_ value: FfiLogResult) -> RustBuffer {
+    return FfiConverterTypeFfiLogResult.lower(value)
+}
+
 
 
 /**
@@ -3114,6 +3414,32 @@ fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDictionaryInt64Data: FfiConverterRustBuffer {
+    static func write(_ value: [Int64: Data], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterInt64.write(key, into: &buf)
+            FfiConverterData.write(value, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Int64: Data] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [Int64: Data]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterInt64.read(from: &buf)
+            let value = try FfiConverterData.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringTypeFfiParamsValue: FfiConverterRustBuffer {
     static func write(_ value: [String: FfiParamsValue], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -3366,6 +3692,351 @@ func ffiValidateScopes(scopes: [String])throws   {try rustCallWithError(FfiConve
     )
 }
 }
+func ffiBundleHash(bundle: FfiProofBundle)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+})
+}
+func ffiChallengeClaimDigest(challenge: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_challenge_claim_digest(
+        FfiConverterData.lower(challenge),uniffiCallStatus
+    )
+})
+}
+func ffiCheckVerificationReceiptBundleBinding(receipt: FfiVerificationReceipt, bundle: FfiProofBundle)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_check_verification_receipt_bundle_binding(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+}
+}
+func ffiDelegationCertSignableBytes(cert: FfiDelegationCert)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_delegation_cert_signable_bytes(
+        FfiConverterTypeFfiDelegationCert_lower(cert),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeDelegationCert(cert: FfiDelegationCert)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_delegation_cert(
+        FfiConverterTypeFfiDelegationCert_lower(cert),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeKeyRotationStatement(statement: FfiKeyRotationStatement)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_key_rotation_statement(
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeProofBundle(bundle: FfiProofBundle)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_proof_bundle(
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeRevocationList(list: FfiRevocationList)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_list(
+        FfiConverterTypeFfiRevocationList_lower(list),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeRevocationPush(push: FfiRevocationPush)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_push(
+        FfiConverterTypeFfiRevocationPush_lower(push),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeTransactionReceipt(receipt: FfiTransactionReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_transaction_receipt(
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeVerificationReceipt(receipt: FfiVerificationReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_verification_receipt(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeWitnessEntry(entry: FfiWitnessEntry)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_witness_entry(
+        FfiConverterTypeFfiWitnessEntry_lower(entry),uniffiCallStatus
+    )
+})
+}
+/**
+ * The FIPS 204 external `mu` for an ML-DSA-65 key, context and message.
+ */
+func ffiExternalMu(mlDsaPublicKey: Data, mlDsaContext: Data, message: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_external_mu(
+        FfiConverterData.lower(mlDsaPublicKey),
+        FfiConverterData.lower(mlDsaContext),
+        FfiConverterData.lower(message),uniffiCallStatus
+    )
+})
+}
+func ffiKeyRotationStatementDigest(statement: FfiKeyRotationStatement)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_digest(
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),uniffiCallStatus
+    )
+})
+}
+func ffiKeyRotationStatementSignableBytes(statement: FfiKeyRotationStatement)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_signable_bytes(
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),uniffiCallStatus
+    )
+})
+}
+/**
+ * The 22-byte ML-DSA-65 context string for an object type code.
+ */
+func ffiMldsaContext(objectTypeCode: UInt16)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_mldsa_context(
+        FfiConverterUInt16.lower(objectTypeCode),uniffiCallStatus
+    )
+})
+}
+func ffiPresentationSignableBytes(bundle: FfiProofBundle)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_presentation_signable_bytes(
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+})
+}
+func ffiProtocolClaimId(namespace: String, replayEpoch: Int64, challenge: Data)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id(
+        FfiConverterString.lower(namespace),
+        FfiConverterInt64.lower(replayEpoch),
+        FfiConverterData.lower(challenge),uniffiCallStatus
+    )
+})
+}
+func ffiRevocationListSignableBytes(list: FfiRevocationList)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_list_signable_bytes(
+        FfiConverterTypeFfiRevocationList_lower(list),uniffiCallStatus
+    )
+})
+}
+func ffiRevocationPushSignableBytes(push: FfiRevocationPush)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_push_signable_bytes(
+        FfiConverterTypeFfiRevocationPush_lower(push),uniffiCallStatus
+    )
+})
+}
+/**
+ * The 77-byte signing message `M` for an object type code and signable bytes.
+ */
+func ffiSigningMessage(objectTypeCode: UInt16, signable: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_signing_message(
+        FfiConverterUInt16.lower(objectTypeCode),
+        FfiConverterData.lower(signable),uniffiCallStatus
+    )
+})
+}
+func ffiStatusEvidenceDigestList(list: FfiRevocationList)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_list(
+        FfiConverterTypeFfiRevocationList_lower(list),uniffiCallStatus
+    )
+})
+}
+func ffiStatusEvidenceDigestPush(push: FfiRevocationPush)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_push(
+        FfiConverterTypeFfiRevocationPush_lower(push),uniffiCallStatus
+    )
+})
+}
+func ffiTransactionContextHash(receipt: FfiTransactionReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_context_hash(
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiTransactionPartyRequestHash(transactionHash: Data, requiredScope: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_party_request_hash(
+        FfiConverterData.lower(transactionHash),
+        FfiConverterString.lower(requiredScope),uniffiCallStatus
+    )
+})
+}
+func ffiTransactionReceiptSignBytes(receipt: FfiTransactionReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_receipt_sign_bytes(
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiVerificationReceiptBody(receipt: FfiVerificationReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_body(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiVerificationReceiptDigest(receipt: FfiVerificationReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_digest(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiVerificationReceiptSignableBytes(receipt: FfiVerificationReceipt)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_signable_bytes(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyDelegationCertSignature(cert: FfiDelegationCert)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_delegation_cert_signature(
+        FfiConverterTypeFfiDelegationCert_lower(cert),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyKeyRotationStatement(statement: FfiKeyRotationStatement, state: FfiRotationState, now: Int64, futureSkew: Int64)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_key_rotation_statement(
+        FfiConverterTypeFfiKeyRotationStatement_lower(statement),
+        FfiConverterTypeFfiRotationState_lower(state),
+        FfiConverterInt64.lower(now),
+        FfiConverterInt64.lower(futureSkew),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyProofBundleSignatures(bundle: FfiProofBundle)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_proof_bundle_signatures(
+        FfiConverterTypeFfiProofBundle_lower(bundle),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyRevocationListSignature(list: FfiRevocationList, trustedIssuerId: String, statusKey: FfiPublicKey)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_list_signature(
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(trustedIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyRevocationPushSignature(push: FfiRevocationPush, trustedIssuerId: String, statusKey: FfiPublicKey)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_push_signature(
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(trustedIssuerId),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),uniffiCallStatus
+    )
+}
+}
+/**
+ * Verify both components of a hybrid signature over an object's signable bytes.
+ */
+func ffiVerifyStatement(objectTypeCode: UInt16, signable: Data, signature: FfiSignature, publicKey: FfiPublicKey)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_statement(
+        FfiConverterUInt16.lower(objectTypeCode),
+        FfiConverterData.lower(signable),
+        FfiConverterTypeFfiSignature_lower(signature),
+        FfiConverterTypeFfiPublicKey_lower(publicKey),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyTransactionReceiptSignatures(receipt: FfiTransactionReceipt)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_transaction_receipt_signatures(
+        FfiConverterTypeFfiTransactionReceipt_lower(receipt),uniffiCallStatus
+    )
+}
+}
+func ffiVerifyVerificationReceipt(receipt: FfiVerificationReceipt, verifierKey: FfiPublicKey, head: FfiReceiptHead)throws  -> FfiLogResult  {
+    return try  FfiConverterTypeFfiLogResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_verification_receipt(
+        FfiConverterTypeFfiVerificationReceipt_lower(receipt),
+        FfiConverterTypeFfiPublicKey_lower(verifierKey),
+        FfiConverterTypeFfiReceiptHead_lower(head),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyWitnessEntry(entry: FfiWitnessEntry, head: FfiWitnessHead, witnessKey: FfiPublicKey)throws  -> FfiLogResult  {
+    return try  FfiConverterTypeFfiLogResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_witness_entry(
+        FfiConverterTypeFfiWitnessEntry_lower(entry),
+        FfiConverterTypeFfiWitnessHead_lower(head),
+        FfiConverterTypeFfiPublicKey_lower(witnessKey),uniffiCallStatus
+    )
+})
+}
+func ffiWitnessEntryDigest(entry: FfiWitnessEntry)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_digest(
+        FfiConverterTypeFfiWitnessEntry_lower(entry),uniffiCallStatus
+    )
+})
+}
+func ffiWitnessEntrySignableBytes(entry: FfiWitnessEntry)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_signable_bytes(
+        FfiConverterTypeFfiWitnessEntry_lower(entry),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -3452,6 +4123,126 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() != 44631) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_challenge_claim_digest() != 4155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_check_verification_receipt_bundle_binding() != 37393) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_delegation_cert_signable_bytes() != 29841) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_delegation_cert() != 10330) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_key_rotation_statement() != 23623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_proof_bundle() != 40488) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_list() != 13270) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_push() != 53356) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_transaction_receipt() != 33727) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_verification_receipt() != 19584) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_witness_entry() != 31977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_external_mu() != 24901) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_digest() != 40031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_signable_bytes() != 20856) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_mldsa_context() != 10595) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_presentation_signable_bytes() != 25000) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id() != 49564) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes() != 57243) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_push_signable_bytes() != 43933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_signing_message() != 46036) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_list() != 14560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_push() != 49865) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_context_hash() != 17513) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_party_request_hash() != 18213) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_receipt_sign_bytes() != 53657) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_body() != 29493) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_digest() != 36969) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_signable_bytes() != 55468) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_delegation_cert_signature() != 10661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_key_rotation_statement() != 30449) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_proof_bundle_signatures() != 52847) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_list_signature() != 50440) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_push_signature() != 27223) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_statement() != 62393) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_transaction_receipt_signatures() != 52757) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_verification_receipt() != 17211) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_witness_entry() != 2635) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_digest() != 63380) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_signable_bytes() != 15522) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() != 13944) {

@@ -54,6 +54,7 @@ cp "$out/gen/ratify_ffiFFI.modulemap" "$out/headers/module.modulemap"
   sed -E -e 's/(^|[^A-Za-z0-9_.])open class /\1class /g' \
          -e 's/(^|[^A-Za-z0-9_.])open func /\1func /g' \
          -e 's/(^|[^A-Za-z0-9_.])public +/\1/g' \
+         -e 's/^import ratify_ffiFFI$/internal import ratify_ffiFFI/' \
          "$out/gen/ratify_ffi.swift"
 } > "$gen/ratify_ffi.swift"
 

@@ -28,7 +28,7 @@ public class HybridPublicKey(ed25519: ByteArray, mlDsa65: ByteArray) {
  * 32-byte seeds (an Ed25519 seed and a FIPS 204 ML-DSA-65 seed), the
  * documented storage form.
  */
-public class SoftwarePrivateKey private constructor(internal val handle: FfiSoftwareKey) {
+public class SoftwarePrivateKey internal constructor(internal val handle: FfiSoftwareKey) {
     /** The public half. */
     public val publicKey: HybridPublicKey = HybridPublicKey(handle.publicKey())
 

@@ -10,7 +10,7 @@ import Foundation
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
 #if canImport(ratify_ffiFFI)
-import ratify_ffiFFI
+internal import ratify_ffiFFI
 #endif
 
 fileprivate extension RustBuffer {

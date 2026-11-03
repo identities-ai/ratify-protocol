@@ -43,8 +43,8 @@ object CorpusRunners {
         "device-state.json" to "M3",
         "evaluator-profiles.json" to "M3",
         "lifecycle-scenarios.json" to "M3",
-        "security-journal.json" to "M2",
-        "status-publisher.json" to "M2",
+        "security-journal.json" to "M3",
+        "status-publisher.json" to "M3",
         "transaction-verification.json" to "M3",
         "verifier-ordering.json" to "M3",
     )

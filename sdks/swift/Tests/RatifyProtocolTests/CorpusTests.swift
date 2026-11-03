@@ -37,8 +37,8 @@ final class CorpusTests: XCTestCase {
         "device-state.json": "M3",
         "evaluator-profiles.json": "M3",
         "lifecycle-scenarios.json": "M3",
-        "security-journal.json": "M2",
-        "status-publisher.json": "M2",
+        "security-journal.json": "M3",
+        "status-publisher.json": "M3",
         "transaction-verification.json": "M3",
         "verifier-ordering.json": "M3",
     ]

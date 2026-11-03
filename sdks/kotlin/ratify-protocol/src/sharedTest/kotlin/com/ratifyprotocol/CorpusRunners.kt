@@ -26,18 +26,18 @@ object CorpusRunners {
         "key-rotation-signature.json" to SigningVectors::keyRotationSignature,
         "issuer-duties.json" to { SigningVectors.issuerDuties() },
         "external-signer.json" to { SigningVectors.externalSigner() },
+        "archival.json" to ArchivalVectors::archival,
+        "digest-functions.json" to ArchivalVectors::digestFunctions,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
     val pending: Map<String, String> = mapOf(
         "README.md" to "M3",
-        "archival.json" to "M2",
         "challenge-claim.json" to "M2",
         "challenge-issuance.json" to "M3",
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
         "device-state.json" to "M3",
-        "digest-functions.json" to "M2",
         "evaluator-profiles.json" to "M3",
         "lifecycle-scenarios.json" to "M3",
         "log-sequences.json" to "M2",

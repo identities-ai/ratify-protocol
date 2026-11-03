@@ -177,6 +177,7 @@ EXTRA_MEMBERS = {
     "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
     "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",
     "ParamsValue.Object.entries": "the variant's value",
+    "StatusObject.List.list": "the variant's value", "StatusObject.Push.push": "the variant's value",
     "InternalErrorKind.panic": "kind case", "InternalErrorKind.poisoned": "kind case",
     "InternalErrorKind.randomSource": "kind case", "InternalErrorKind.PANIC": "kind case",
     "InternalErrorKind.POISONED": "kind case", "InternalErrorKind.RANDOM_SOURCE": "kind case",

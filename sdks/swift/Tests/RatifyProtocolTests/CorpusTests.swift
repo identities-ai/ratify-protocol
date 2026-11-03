@@ -20,18 +20,18 @@ final class CorpusTests: XCTestCase {
         "key-rotation-signature.json": SigningRunner.keyRotationSignature,
         "issuer-duties.json": SigningRunner.issuerDuties,
         "external-signer.json": SigningRunner.externalSigner,
+        "archival.json": ArchivalRunner.archival,
+        "digest-functions.json": ArchivalRunner.digestFunctions,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
         "README.md": "M3",
-        "archival.json": "M2",
         "challenge-claim.json": "M2",
         "challenge-issuance.json": "M3",
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
         "device-state.json": "M3",
-        "digest-functions.json": "M2",
         "evaluator-profiles.json": "M3",
         "lifecycle-scenarios.json": "M3",
         "log-sequences.json": "M2",

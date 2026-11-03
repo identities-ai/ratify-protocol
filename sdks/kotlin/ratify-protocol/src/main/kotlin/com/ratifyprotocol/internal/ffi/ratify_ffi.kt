@@ -711,6 +711,28 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_archival_proof_bundle_result_json(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_statement_body_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_delegation_cert(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_key_rotation_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_proof_bundle(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_push(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_transaction_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_verification_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_witness_entry(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_build_session_context(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_payload_digest(
@@ -1004,6 +1026,28 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisigner_sign(`ptr`: Long,`request`: RustBuffer.ByValue,`context`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_archival_proof_bundle_result_json(`result`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_statement_body_digest(`objectTypeCode`: Short,`signableBody`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest(`objectTypeCode`: Short,`object`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_delegation_cert(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_key_rotation_statement(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_proof_bundle(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_list(`data`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`statusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_push(`data`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`statusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_transaction_receipt(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_verification_receipt(`data`: RustBuffer.ByValue,`verifierKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_witness_entry(`data`: RustBuffer.ByValue,`witnessKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_build_session_context(`inputs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_payload_digest(`encoded`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1269,6 +1313,39 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_archival_proof_bundle_result_json() and 0xFFFF) != 35522) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_statement_body_digest() and 0xFFFF) != 35703) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest() and 0xFFFF) != 60887) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_delegation_cert() and 0xFFFF) != 36010) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_key_rotation_statement() and 0xFFFF) != 2341) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_proof_bundle() and 0xFFFF) != 24060) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_list() and 0xFFFF) != 51623) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_push() and 0xFFFF) != 27785) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_transaction_receipt() and 0xFFFF) != 12457) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_verification_receipt() and 0xFFFF) != 29536) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_witness_entry() and 0xFFFF) != 57666) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_build_session_context() and 0xFFFF) != 32407) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3701,6 +3778,136 @@ internal object FfiConverterTypeFfiSoftwareKey: FfiConverter<FfiSoftwareKey, Lon
 
 
 
+/**
+ * The §6.10 archival proof-bundle result. It has no decision and is never
+ * actionable; `error_class` is None when every check passed.
+ */
+internal data class FfiArchivalProofBundleResult (
+    var `assessment`: kotlin.String
+    , 
+    var `actionable`: kotlin.Boolean
+    , 
+    var `bundleHash`: kotlin.String
+    , 
+    var `agentId`: kotlin.String
+    , 
+    var `issuerIds`: List<kotlin.String>
+    , 
+    var `errorClass`: kotlin.String?
+    , 
+    var `errorMessage`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiArchivalProofBundleResult: FfiConverterRustBuffer<FfiArchivalProofBundleResult> {
+    override fun read(buf: ByteBuffer): FfiArchivalProofBundleResult {
+        return FfiArchivalProofBundleResult(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiArchivalProofBundleResult) = (
+            FfiConverterString.allocationSize(value.`assessment`) +
+            FfiConverterBoolean.allocationSize(value.`actionable`) +
+            FfiConverterString.allocationSize(value.`bundleHash`) +
+            FfiConverterString.allocationSize(value.`agentId`) +
+            FfiConverterSequenceString.allocationSize(value.`issuerIds`) +
+            FfiConverterOptionalString.allocationSize(value.`errorClass`) +
+            FfiConverterString.allocationSize(value.`errorMessage`)
+    )
+
+    override fun write(value: FfiArchivalProofBundleResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`assessment`, buf)
+            FfiConverterBoolean.write(value.`actionable`, buf)
+            FfiConverterString.write(value.`bundleHash`, buf)
+            FfiConverterString.write(value.`agentId`, buf)
+            FfiConverterSequenceString.write(value.`issuerIds`, buf)
+            FfiConverterOptionalString.write(value.`errorClass`, buf)
+            FfiConverterString.write(value.`errorMessage`, buf)
+    }
+}
+
+
+
+/**
+ * One stored object decoded strictly with its signatures verified.
+ * `actionable` is always false; `freshness` is always "unverified".
+ */
+internal data class FfiArchivalVerification (
+    var `objectType`: kotlin.UShort
+    , 
+    var `freshness`: kotlin.String
+    , 
+    var `actionable`: kotlin.Boolean
+    , 
+    /**
+     * `sha384:` + 96 hex of the registered digest; empty when the object has none.
+     */
+    var `digest`: kotlin.String
+    , 
+    /**
+     * The v2 key IDs whose signatures were verified, in object order.
+     */
+    var `signerKeyIds`: List<kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiArchivalVerification: FfiConverterRustBuffer<FfiArchivalVerification> {
+    override fun read(buf: ByteBuffer): FfiArchivalVerification {
+        return FfiArchivalVerification(
+            FfiConverterUShort.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiArchivalVerification) = (
+            FfiConverterUShort.allocationSize(value.`objectType`) +
+            FfiConverterString.allocationSize(value.`freshness`) +
+            FfiConverterBoolean.allocationSize(value.`actionable`) +
+            FfiConverterString.allocationSize(value.`digest`) +
+            FfiConverterSequenceString.allocationSize(value.`signerKeyIds`)
+    )
+
+    override fun write(value: FfiArchivalVerification, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`objectType`, buf)
+            FfiConverterString.write(value.`freshness`, buf)
+            FfiConverterBoolean.write(value.`actionable`, buf)
+            FfiConverterString.write(value.`digest`, buf)
+            FfiConverterSequenceString.write(value.`signerKeyIds`, buf)
+    }
+}
+
+
+
 internal data class FfiConstraint (
     var `kind`: kotlin.String
     , 
@@ -5636,6 +5843,92 @@ internal object FfiConverterTypeFfiSignerMode: FfiConverterRustBuffer<FfiSignerM
 
 
 
+/**
+ * A status object: a full revocation list or an incremental push.
+ */
+internal sealed class FfiStatusObject {
+    
+    data class List(
+        val `list`: com.ratifyprotocol.internal.ffi.FfiRevocationList) : FfiStatusObject()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Push(
+        val `push`: com.ratifyprotocol.internal.ffi.FfiRevocationPush) : FfiStatusObject()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusObject : FfiConverterRustBuffer<FfiStatusObject>{
+    override fun read(buf: ByteBuffer): FfiStatusObject {
+        return when(buf.getInt()) {
+            1 -> FfiStatusObject.List(
+                FfiConverterTypeFfiRevocationList.read(buf),
+                )
+            2 -> FfiStatusObject.Push(
+                FfiConverterTypeFfiRevocationPush.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FfiStatusObject): ULong = when(value) {
+        is FfiStatusObject.List -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeFfiRevocationList.allocationSize(value.`list`)
+            )
+        }
+        is FfiStatusObject.Push -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeFfiRevocationPush.allocationSize(value.`push`)
+            )
+        }
+    }
+
+    override fun write(value: FfiStatusObject, buf: ByteBuffer) {
+        when(value) {
+            is FfiStatusObject.List -> {
+                buf.putInt(1)
+                FfiConverterTypeFfiRevocationList.write(value.`list`, buf)
+                Unit
+            }
+            is FfiStatusObject.Push -> {
+                buf.putInt(2)
+                FfiConverterTypeFfiRevocationPush.write(value.`push`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 /**
  * @suppress
@@ -6222,6 +6515,156 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         }
     }
 }
+        /**
+         * The language-neutral JSON of an archival proof-bundle result.
+         */
+    @Throws(FfiException::class) internal fun `ffiArchivalProofBundleResultJson`(`result`: FfiArchivalProofBundleResult): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_archival_proof_bundle_result_json(
+    
+        
+        FfiConverterTypeFfiArchivalProofBundleResult.lower(`result`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * `StatementBodyDigestV2` under an explicit object type code (SPEC-v2 §4).
+         */
+    @Throws(FfiException::class) internal fun `ffiStatementBodyDigest`(`objectTypeCode`: kotlin.UShort, `signableBody`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_statement_body_digest(
+    
+        
+        FfiConverterUShort.lower(`objectTypeCode`),
+        FfiConverterByteArray.lower(`signableBody`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * `StatusEvidenceDigest` under an explicit object type code: 0x0003
+         * requires a list and 0x0005 a push.
+         */
+    @Throws(FfiException::class) internal fun `ffiStatusEvidenceDigest`(`objectTypeCode`: kotlin.UShort, `object`: FfiStatusObject): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest(
+    
+        
+        FfiConverterUShort.lower(`objectTypeCode`),
+        FfiConverterTypeFfiStatusObject.lower(`object`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalDelegationCert`(`data`: kotlin.ByteArray): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_delegation_cert(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalKeyRotationStatement`(`data`: kotlin.ByteArray): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_key_rotation_statement(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalProofBundle`(`data`: kotlin.ByteArray): FfiArchivalProofBundleResult {
+            return FfiConverterTypeFfiArchivalProofBundleResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_proof_bundle(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalRevocationList`(`data`: kotlin.ByteArray, `issuerId`: kotlin.String, `statusKey`: FfiPublicKey): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_list(
+    
+        
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalRevocationPush`(`data`: kotlin.ByteArray, `issuerId`: kotlin.String, `statusKey`: FfiPublicKey): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_push(
+    
+        
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalTransactionReceipt`(`data`: kotlin.ByteArray): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_transaction_receipt(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalVerificationReceipt`(`data`: kotlin.ByteArray, `verifierKey`: FfiPublicKey): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_verification_receipt(
+    
+        
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterTypeFfiPublicKey.lower(`verifierKey`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyArchivalWitnessEntry`(`data`: kotlin.ByteArray, `witnessKey`: FfiPublicKey): FfiArchivalVerification {
+            return FfiConverterTypeFfiArchivalVerification.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_witness_entry(
+    
+        
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterTypeFfiPublicKey.lower(`witnessKey`),_status)
+}
+    )
+    }
+    
+
     @Throws(FfiException::class) internal fun `ffiBuildSessionContext`(`inputs`: FfiSessionContextInputs): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
     uniffiRustCallWithError(FfiException) { _status ->

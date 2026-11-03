@@ -1638,6 +1638,166 @@ func FfiConverterTypeFfiSoftwareKey_lower(_ value: FfiSoftwareKey) -> UInt64 {
 
 
 
+/**
+ * The §6.10 archival proof-bundle result. It has no decision and is never
+ * actionable; `error_class` is None when every check passed.
+ */
+struct FfiArchivalProofBundleResult: Equatable, Hashable {
+    var assessment: String
+    var actionable: Bool
+    var bundleHash: String
+    var agentId: String
+    var issuerIds: [String]
+    var errorClass: String?
+    var errorMessage: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(assessment: String, actionable: Bool, bundleHash: String, agentId: String, issuerIds: [String], errorClass: String?, errorMessage: String) {
+        self.assessment = assessment
+        self.actionable = actionable
+        self.bundleHash = bundleHash
+        self.agentId = agentId
+        self.issuerIds = issuerIds
+        self.errorClass = errorClass
+        self.errorMessage = errorMessage
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiArchivalProofBundleResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiArchivalProofBundleResult: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiArchivalProofBundleResult {
+        return
+            try FfiArchivalProofBundleResult(
+                assessment: FfiConverterString.read(from: &buf), 
+                actionable: FfiConverterBool.read(from: &buf), 
+                bundleHash: FfiConverterString.read(from: &buf), 
+                agentId: FfiConverterString.read(from: &buf), 
+                issuerIds: FfiConverterSequenceString.read(from: &buf), 
+                errorClass: FfiConverterOptionString.read(from: &buf), 
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiArchivalProofBundleResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.assessment, into: &buf)
+        FfiConverterBool.write(value.actionable, into: &buf)
+        FfiConverterString.write(value.bundleHash, into: &buf)
+        FfiConverterString.write(value.agentId, into: &buf)
+        FfiConverterSequenceString.write(value.issuerIds, into: &buf)
+        FfiConverterOptionString.write(value.errorClass, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiArchivalProofBundleResult_lift(_ buf: RustBuffer) throws -> FfiArchivalProofBundleResult {
+    return try FfiConverterTypeFfiArchivalProofBundleResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiArchivalProofBundleResult_lower(_ value: FfiArchivalProofBundleResult) -> RustBuffer {
+    return FfiConverterTypeFfiArchivalProofBundleResult.lower(value)
+}
+
+
+/**
+ * One stored object decoded strictly with its signatures verified.
+ * `actionable` is always false; `freshness` is always "unverified".
+ */
+struct FfiArchivalVerification: Equatable, Hashable {
+    var objectType: UInt16
+    var freshness: String
+    var actionable: Bool
+    /**
+     * `sha384:` + 96 hex of the registered digest; empty when the object has none.
+     */
+    var digest: String
+    /**
+     * The v2 key IDs whose signatures were verified, in object order.
+     */
+    var signerKeyIds: [String]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(objectType: UInt16, freshness: String, actionable: Bool, 
+        /**
+         * `sha384:` + 96 hex of the registered digest; empty when the object has none.
+         */digest: String, 
+        /**
+         * The v2 key IDs whose signatures were verified, in object order.
+         */signerKeyIds: [String]) {
+        self.objectType = objectType
+        self.freshness = freshness
+        self.actionable = actionable
+        self.digest = digest
+        self.signerKeyIds = signerKeyIds
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiArchivalVerification: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiArchivalVerification: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiArchivalVerification {
+        return
+            try FfiArchivalVerification(
+                objectType: FfiConverterUInt16.read(from: &buf), 
+                freshness: FfiConverterString.read(from: &buf), 
+                actionable: FfiConverterBool.read(from: &buf), 
+                digest: FfiConverterString.read(from: &buf), 
+                signerKeyIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiArchivalVerification, into buf: inout [UInt8]) {
+        FfiConverterUInt16.write(value.objectType, into: &buf)
+        FfiConverterString.write(value.freshness, into: &buf)
+        FfiConverterBool.write(value.actionable, into: &buf)
+        FfiConverterString.write(value.digest, into: &buf)
+        FfiConverterSequenceString.write(value.signerKeyIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiArchivalVerification_lift(_ buf: RustBuffer) throws -> FfiArchivalVerification {
+    return try FfiConverterTypeFfiArchivalVerification.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiArchivalVerification_lower(_ value: FfiArchivalVerification) -> RustBuffer {
+    return FfiConverterTypeFfiArchivalVerification.lower(value)
+}
+
+
 struct FfiConstraint: Equatable, Hashable {
     var kind: String
     var start: String
@@ -3810,6 +3970,81 @@ func FfiConverterTypeFfiSignerMode_lower(_ value: FfiSignerMode) -> RustBuffer {
 }
 
 
+
+/**
+ * A status object: a full revocation list or an incremental push.
+ */
+
+enum FfiStatusObject: Equatable, Hashable {
+    
+    case list(list: FfiRevocationList
+    )
+    case push(push: FfiRevocationPush
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiStatusObject: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusObject: FfiConverterRustBuffer {
+    typealias SwiftType = FfiStatusObject
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusObject {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .list(list: try FfiConverterTypeFfiRevocationList.read(from: &buf)
+        )
+        
+        case 2: return .push(push: try FfiConverterTypeFfiRevocationPush.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiStatusObject, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .list(list):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeFfiRevocationList.write(list, into: &buf)
+            
+        
+        case let .push(push):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFfiRevocationPush.write(push, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusObject_lift(_ buf: RustBuffer) throws -> FfiStatusObject {
+    return try FfiConverterTypeFfiStatusObject.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusObject_lower(_ value: FfiStatusObject) -> RustBuffer {
+    return FfiConverterTypeFfiStatusObject.lower(value)
+}
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4280,6 +4515,112 @@ fileprivate struct FfiConverterDictionaryStringSequenceString: FfiConverterRustB
         }
         return dict
     }
+}
+/**
+ * The language-neutral JSON of an archival proof-bundle result.
+ */
+func ffiArchivalProofBundleResultJson(result: FfiArchivalProofBundleResult)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_archival_proof_bundle_result_json(
+        FfiConverterTypeFfiArchivalProofBundleResult_lower(result),uniffiCallStatus
+    )
+})
+}
+/**
+ * `StatementBodyDigestV2` under an explicit object type code (SPEC-v2 §4).
+ */
+func ffiStatementBodyDigest(objectTypeCode: UInt16, signableBody: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_statement_body_digest(
+        FfiConverterUInt16.lower(objectTypeCode),
+        FfiConverterData.lower(signableBody),uniffiCallStatus
+    )
+})
+}
+/**
+ * `StatusEvidenceDigest` under an explicit object type code: 0x0003
+ * requires a list and 0x0005 a push.
+ */
+func ffiStatusEvidenceDigest(objectTypeCode: UInt16, object: FfiStatusObject)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest(
+        FfiConverterUInt16.lower(objectTypeCode),
+        FfiConverterTypeFfiStatusObject_lower(object),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalDelegationCert(data: Data)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_delegation_cert(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalKeyRotationStatement(data: Data)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_key_rotation_statement(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalProofBundle(data: Data)throws  -> FfiArchivalProofBundleResult  {
+    return try  FfiConverterTypeFfiArchivalProofBundleResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_proof_bundle(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalRevocationList(data: Data, issuerId: String, statusKey: FfiPublicKey)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_list(
+        FfiConverterData.lower(data),
+        FfiConverterString.lower(issuerId),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalRevocationPush(data: Data, issuerId: String, statusKey: FfiPublicKey)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_revocation_push(
+        FfiConverterData.lower(data),
+        FfiConverterString.lower(issuerId),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalTransactionReceipt(data: Data)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_transaction_receipt(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalVerificationReceipt(data: Data, verifierKey: FfiPublicKey)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_verification_receipt(
+        FfiConverterData.lower(data),
+        FfiConverterTypeFfiPublicKey_lower(verifierKey),uniffiCallStatus
+    )
+})
+}
+func ffiVerifyArchivalWitnessEntry(data: Data, witnessKey: FfiPublicKey)throws  -> FfiArchivalVerification  {
+    return try  FfiConverterTypeFfiArchivalVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_archival_witness_entry(
+        FfiConverterData.lower(data),
+        FfiConverterTypeFfiPublicKey_lower(witnessKey),uniffiCallStatus
+    )
+})
 }
 func ffiBuildSessionContext(inputs: FfiSessionContextInputs)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
@@ -4942,6 +5283,39 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_ratify_protocol_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_archival_proof_bundle_result_json() != 35522) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_statement_body_digest() != 35703) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest() != 60887) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_delegation_cert() != 36010) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_key_rotation_statement() != 2341) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_proof_bundle() != 24060) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_list() != 51623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_revocation_push() != 27785) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_transaction_receipt() != 12457) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_verification_receipt() != 29536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_archival_witness_entry() != 57666) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_build_session_context() != 32407) {
         return InitializationResult.apiChecksumMismatch

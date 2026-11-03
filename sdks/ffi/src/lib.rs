@@ -8,6 +8,7 @@
 
 uniffi::setup_scaffolding!("ratify_ffi");
 
+mod archival;
 mod context;
 mod error;
 mod guard;
@@ -17,6 +18,7 @@ mod scope;
 mod sign;
 mod verify;
 
+pub use archival::*;
 pub use context::*;
 pub use error::*;
 pub use keys::*;

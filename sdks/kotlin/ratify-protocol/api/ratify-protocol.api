@@ -1,3 +1,35 @@
+public final class com/ratifyprotocol/ArchivalKt {
+	public static final fun statementBodyDigest-vckuEUM (S[B)[B
+	public static final fun statusEvidenceDigest-vckuEUM (SLcom/ratifyprotocol/StatusObject;)[B
+	public static final fun verifyArchivalDelegationCert ([B)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalKeyRotationStatement ([B)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalProofBundle ([B)Lcom/ratifyprotocol/ArchivalProofBundleResult;
+	public static final fun verifyArchivalRevocationList ([BLjava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalRevocationPush ([BLjava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalTransactionReceipt ([B)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalVerificationReceipt ([BLcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/ArchivalVerification;
+	public static final fun verifyArchivalWitnessEntry ([BLcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/ArchivalVerification;
+}
+
+public final class com/ratifyprotocol/ArchivalProofBundleResult {
+	public final fun getActionable ()Z
+	public final fun getAgentId ()Ljava/lang/String;
+	public final fun getAssessment ()Ljava/lang/String;
+	public final fun getBundleHash ()Ljava/lang/String;
+	public final fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+	public final fun getErrorMessage ()Ljava/lang/String;
+	public final fun getIssuerIds ()Ljava/util/List;
+	public final fun json ()[B
+}
+
+public final class com/ratifyprotocol/ArchivalVerification {
+	public final fun getActionable ()Z
+	public final fun getDigest ()Ljava/lang/String;
+	public final fun getFreshness ()Ljava/lang/String;
+	public final fun getObjectType-Mh2AYeg ()S
+	public final fun getSignerKeyIds ()Ljava/util/List;
+}
+
 public final class com/ratifyprotocol/Constraint {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJJLjava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -475,6 +507,19 @@ public final class com/ratifyprotocol/StatusEvidenceObject {
 	public final fun getObjectType-Mh2AYeg ()S
 	public final fun getWire ()[B
 	public fun hashCode ()I
+}
+
+public abstract class com/ratifyprotocol/StatusObject {
+}
+
+public final class com/ratifyprotocol/StatusObject$List : com/ratifyprotocol/StatusObject {
+	public fun <init> (Lcom/ratifyprotocol/RevocationList;)V
+	public final fun getList ()Lcom/ratifyprotocol/RevocationList;
+}
+
+public final class com/ratifyprotocol/StatusObject$Push : com/ratifyprotocol/StatusObject {
+	public fun <init> (Lcom/ratifyprotocol/RevocationPush;)V
+	public final fun getPush ()Lcom/ratifyprotocol/RevocationPush;
 }
 
 public final class com/ratifyprotocol/TransactionReceipt {

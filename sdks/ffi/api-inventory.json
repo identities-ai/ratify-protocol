@@ -181,28 +181,33 @@
  },
  "ArchivalProofBundleResultV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult"
  },
  "ArchivalProofBundleResultV2::actionable": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.actionable",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.actionable"
  },
  "ArchivalProofBundleResultV2::agent_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.agentId",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.agentId"
  },
  "ArchivalProofBundleResultV2::assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.assessment",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.assessment"
  },
  "ArchivalProofBundleResultV2::bundle_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.bundleHash",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.bundleHash"
  },
  "ArchivalProofBundleResultV2::clone": {
   "kind": "fn",
@@ -216,13 +221,15 @@
  },
  "ArchivalProofBundleResultV2::error_class": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.errorClass",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.errorClass"
  },
  "ArchivalProofBundleResultV2::error_message": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.errorMessage",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.errorMessage"
  },
  "ArchivalProofBundleResultV2::fmt": {
   "kind": "fn",
@@ -231,23 +238,27 @@
  },
  "ArchivalProofBundleResultV2::issuer_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.issuerIds",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.issuerIds"
  },
  "ArchivalProofBundleResultV2::to_json": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalProofBundleResult.json",
+  "status": "mapped",
+  "swift": "ArchivalProofBundleResult.json"
  },
  "ArchivalVerificationV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification",
+  "status": "mapped",
+  "swift": "ArchivalVerification"
  },
  "ArchivalVerificationV2::actionable": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification.actionable",
+  "status": "mapped",
+  "swift": "ArchivalVerification.actionable"
  },
  "ArchivalVerificationV2::clone": {
   "kind": "fn",
@@ -256,8 +267,9 @@
  },
  "ArchivalVerificationV2::digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification.digest",
+  "status": "mapped",
+  "swift": "ArchivalVerification.digest"
  },
  "ArchivalVerificationV2::eq": {
   "kind": "fn",
@@ -271,18 +283,21 @@
  },
  "ArchivalVerificationV2::freshness": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification.freshness",
+  "status": "mapped",
+  "swift": "ArchivalVerification.freshness"
  },
  "ArchivalVerificationV2::object_type": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification.objectType",
+  "status": "mapped",
+  "swift": "ArchivalVerification.objectType"
  },
  "ArchivalVerificationV2::signer_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ArchivalVerification.signerKeyIds",
+  "status": "mapped",
+  "swift": "ArchivalVerification.signerKeyIds"
  },
  "CONSTRAINT_ALLOWED_VALUES_V2": {
   "kind": "const",
@@ -4398,18 +4413,21 @@
  },
  "StatusEvidenceObjectV2": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusObject",
+  "status": "mapped",
+  "swift": "StatusObject"
  },
  "StatusEvidenceObjectV2::List": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusObject.List",
+  "status": "mapped",
+  "swift": "StatusObject.list"
  },
  "StatusEvidenceObjectV2::Push": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusObject.Push",
+  "status": "mapped",
+  "swift": "StatusObject.push"
  },
  "StatusEvidenceObjectV2::clone": {
   "kind": "fn",
@@ -8973,8 +8991,9 @@
  },
  "statement_body_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "statementBodyDigest",
+  "status": "mapped",
+  "swift": "Ratify.statementBodyDigest"
  },
  "status_evidence_digest_list_v2": {
   "kind": "fn",
@@ -8990,8 +9009,9 @@
  },
  "status_evidence_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "statusEvidenceDigest",
+  "status": "mapped",
+  "swift": "Ratify.statusEvidenceDigest"
  },
  "transaction_context_hash_v2": {
   "kind": "fn",
@@ -9125,43 +9145,51 @@
  },
  "verify_archival_delegation_cert_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalDelegationCert",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalDelegationCert"
  },
  "verify_archival_key_rotation_statement_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalKeyRotationStatement"
  },
  "verify_archival_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalProofBundle"
  },
  "verify_archival_revocation_list_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalRevocationList",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalRevocationList"
  },
  "verify_archival_revocation_push_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalRevocationPush",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalRevocationPush"
  },
  "verify_archival_transaction_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalTransactionReceipt",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalTransactionReceipt"
  },
  "verify_archival_verification_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalVerificationReceipt"
  },
  "verify_archival_witness_entry_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyArchivalWitnessEntry",
+  "status": "mapped",
+  "swift": "Ratify.verifyArchivalWitnessEntry"
  },
  "verify_cross_sdk_fixture_v2": {
   "kind": "fn",

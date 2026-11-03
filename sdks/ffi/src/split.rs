@@ -274,7 +274,7 @@ fn slot(
             Ok(Arc::new(SoftwareHalf(k)))
         }
         (None, Some(s), None, None) => Ok(s),
-        (None, None, Some(k), Some(ed)) => Composite::new(&k, ed),
+        (None, None, Some(k), Some(ed)) => Composite::signer(&k, ed),
         _ => Err(protocol(
             V2ErrorClass::ConfigurationInvalid,
             format!("the {name} rotation key must be exactly one of a software key, a signer, or a split-custody key"),
@@ -327,7 +327,7 @@ pub fn ffi_sign_delegation_cert_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiDelegationCert> {
-    call(|| typed::sign_delegation_cert(&cancel, cert, Composite::new(&key, ed25519)?))
+    call(|| typed::sign_delegation_cert(&cancel, cert, Composite::signer(&key, ed25519)?))
 }
 #[uniffi::export]
 pub fn ffi_sign_proof_bundle_with_split_key(
@@ -336,7 +336,7 @@ pub fn ffi_sign_proof_bundle_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiProofBundle> {
-    call(|| typed::sign_proof_bundle(&cancel, bundle, Composite::new(&key, ed25519)?))
+    call(|| typed::sign_proof_bundle(&cancel, bundle, Composite::signer(&key, ed25519)?))
 }
 #[uniffi::export]
 pub fn ffi_sign_revocation_list_with_split_key(
@@ -353,7 +353,7 @@ pub fn ffi_sign_revocation_list_with_split_key(
             list,
             bound_issuer_id,
             bound_status_key,
-            Composite::new(&key, ed25519)?,
+            Composite::signer(&key, ed25519)?,
         )
     })
 }
@@ -372,7 +372,7 @@ pub fn ffi_sign_revocation_push_with_split_key(
             push,
             bound_issuer_id,
             bound_status_key,
-            Composite::new(&key, ed25519)?,
+            Composite::signer(&key, ed25519)?,
         )
     })
 }
@@ -383,7 +383,7 @@ pub fn ffi_sign_witness_entry_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiWitnessEntry> {
-    call(|| typed::sign_witness_entry(&cancel, entry, Composite::new(&key, ed25519)?))
+    call(|| typed::sign_witness_entry(&cancel, entry, Composite::signer(&key, ed25519)?))
 }
 #[uniffi::export]
 pub fn ffi_sign_verification_receipt_with_split_key(
@@ -392,7 +392,7 @@ pub fn ffi_sign_verification_receipt_with_split_key(
     key: Arc<FfiSplitKey>,
     ed25519: Arc<dyn FfiEd25519Signer>,
 ) -> FfiResult<FfiVerificationReceipt> {
-    call(|| typed::sign_verification_receipt(&cancel, receipt, Composite::new(&key, ed25519)?))
+    call(|| typed::sign_verification_receipt(&cancel, receipt, Composite::signer(&key, ed25519)?))
 }
 #[uniffi::export]
 pub fn ffi_sign_prepared_verification_receipt_with_split_key(
@@ -407,7 +407,7 @@ pub fn ffi_sign_prepared_verification_receipt_with_split_key(
             &cancel,
             data,
             head,
-            Composite::new(&key, ed25519)?,
+            Composite::signer(&key, ed25519)?,
         )
     })
 }
@@ -424,7 +424,7 @@ pub fn ffi_sign_transaction_receipt_party_with_split_key(
             &cancel,
             receipt,
             party_id,
-            Composite::new(&key, ed25519)?,
+            Composite::signer(&key, ed25519)?,
         )
     })
 }

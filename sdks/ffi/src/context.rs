@@ -115,3 +115,62 @@ impl FfiContextPolicy {
         self.inner.expected_session_context()
     }
 }
+
+/// One public call's cancellation: a child of the background context that
+/// the Swift task or Kotlin coroutine cancels. Cancellation is cooperative
+/// (SPEC-v2 §1.3): the core and callbacks observe it; nothing is interrupted.
+#[derive(uniffi::Object)]
+pub struct FfiCancelToken {
+    ctx: ratify_protocol::v2::V2Context,
+    handle: ratify_protocol::v2::V2CancelHandle,
+}
+
+#[uniffi::export]
+impl FfiCancelToken {
+    /// A token with no deadline (`timeout_ms` = None) or one that cancels
+    /// itself after `timeout_ms` milliseconds.
+    #[uniffi::constructor]
+    pub fn new(timeout_ms: Option<u64>) -> Arc<Self> {
+        let root = ratify_protocol::v2::V2Context::background();
+        let (ctx, handle) = match timeout_ms {
+            Some(ms) => root.with_timeout(std::time::Duration::from_millis(ms)),
+            None => root.with_cancel(),
+        };
+        Arc::new(FfiCancelToken { ctx, handle })
+    }
+
+    pub fn cancel(&self) {
+        self.handle.cancel();
+    }
+
+    /// Whether the token was cancelled or its deadline passed.
+    pub fn is_cancelled(&self) -> bool {
+        self.ctx.is_done()
+    }
+}
+
+impl FfiCancelToken {
+    /// The context passed to core calls made under this token.
+    #[allow(dead_code)] // used by the callback-invoking operations (next milestone)
+    pub(crate) fn context(&self) -> &ratify_protocol::v2::V2Context {
+        &self.ctx
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_and_deadline_reach_the_core_context() {
+        let t = FfiCancelToken::new(None);
+        assert!(!t.is_cancelled() && !t.context().is_done());
+        t.cancel();
+        assert!(t.is_cancelled() && t.context().is_done());
+
+        let d = FfiCancelToken::new(Some(20));
+        assert!(!d.is_cancelled());
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        assert!(d.is_cancelled());
+    }
+}

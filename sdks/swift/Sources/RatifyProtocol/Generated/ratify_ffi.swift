@@ -483,6 +483,22 @@ fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -583,6 +599,162 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
         writeBytes(&buf, value)
     }
 }
+
+
+
+
+/**
+ * One call's cancellation: a child of the background context that
+ * the Swift task or Kotlin coroutine cancels. Cancellation is cooperative
+ * (SPEC-v2 §1.3): the core and callbacks observe it; nothing is interrupted.
+ */
+protocol FfiCancelTokenProtocol: AnyObject, Sendable {
+    
+    func cancel() 
+    
+    /**
+     * Whether the token was cancelled or its deadline passed.
+     */
+    func isCancelled()  -> Bool
+    
+}
+/**
+ * One call's cancellation: a child of the background context that
+ * the Swift task or Kotlin coroutine cancels. Cancellation is cooperative
+ * (SPEC-v2 §1.3): the core and callbacks observe it; nothing is interrupted.
+ */
+class FfiCancelToken: FfiCancelTokenProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_fficanceltoken(self.handle, $0) }
+    }
+    /**
+     * A token with no deadline (`timeout_ms` = None) or one that cancels
+     * itself after `timeout_ms` milliseconds.
+     */
+convenience init(timeoutMs: UInt64?) {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_fficanceltoken_new(
+        FfiConverterOptionUInt64.lower(timeoutMs),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_fficanceltoken(handle, $0) }
+    }
+
+    
+
+    
+func cancel()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_cancel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Whether the token was cancelled or its deadline passed.
+     */
+func isCancelled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_is_cancelled(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiCancelToken: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiCancelToken
+
+    static func lift(_ handle: UInt64) throws -> FfiCancelToken {
+        return FfiCancelToken(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiCancelToken) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCancelToken {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiCancelToken, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiCancelToken_lift(_ handle: UInt64) throws -> FfiCancelToken {
+    return try FfiConverterTypeFfiCancelToken.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiCancelToken_lower(_ value: FfiCancelToken) -> UInt64 {
+    return FfiConverterTypeFfiCancelToken.lower(value)
+}
+
+
 
 
 
@@ -2576,6 +2748,30 @@ func FfiConverterTypeFfiParamsValue_lower(_ value: FfiParamsValue) -> RustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = UInt64?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
     typealias SwiftType = Int64?
 
@@ -3286,6 +3482,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() != 44631) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() != 48916) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled() != 29738) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_digest() != 64157) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3311,6 +3513,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() != 34321) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 61640) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficontextpolicy_new() != 11610) {

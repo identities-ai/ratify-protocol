@@ -48,7 +48,7 @@ for s in $slices; do
 done
 
 # Bindings come from the host build's metadata (identical for every slice).
-(cd "$ffi" && cargo build --lib --profile "$profile" && \
+(cd "$ffi" && cargo build --lib --profile "$profile" ${features:+--features "$features"} && \
   cargo run -q --features bindgen --bin uniffi-bindgen -- generate \
     --library "target/$profile/libratify_protocol_ffi.dylib" --language swift --out-dir "$out/gen")
 cp "$out/gen/ratify_ffiFFI.h" "$out/headers/"

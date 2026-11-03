@@ -4,8 +4,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use ratify_protocol::v2::{
-    self as core, KeyRotationV2State, ReceiptV2Head, V2ErrorClass, V2ObjectType, WitnessEntryV2Result,
-    WitnessV2Head,
+    self as core, KeyRotationV2State, ReceiptV2Head, V2ErrorClass, V2ObjectType,
+    WitnessEntryV2Result, WitnessV2Head,
 };
 
 use crate::error::{protocol, FfiResult};
@@ -15,8 +15,12 @@ use crate::objects::*;
 
 /// The SPEC-v2 object type for a signature code (0x0001..=0x0009).
 fn object_type(code: u16) -> FfiResult<V2ObjectType> {
-    V2ObjectType::from_code(code)
-        .ok_or_else(|| protocol(V2ErrorClass::UnsupportedObjectType, format!("unknown v2 object type code {code}")))
+    V2ObjectType::from_code(code).ok_or_else(|| {
+        protocol(
+            V2ErrorClass::UnsupportedObjectType,
+            format!("unknown v2 object type code {code}"),
+        )
+    })
 }
 
 // ---- encoders ----------------------------------------------------------
@@ -163,7 +167,13 @@ pub fn ffi_verify_revocation_list_signature(
     trusted_issuer_id: String,
     status_key: FfiPublicKey,
 ) -> FfiResult<()> {
-    call(|| Ok(core::verify_revocation_list_v2_signature(&list.into(), &trusted_issuer_id, &status_key.into())?))
+    call(|| {
+        Ok(core::verify_revocation_list_v2_signature(
+            &list.into(),
+            &trusted_issuer_id,
+            &status_key.into(),
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_revocation_push_signature(
@@ -171,7 +181,13 @@ pub fn ffi_verify_revocation_push_signature(
     trusted_issuer_id: String,
     status_key: FfiPublicKey,
 ) -> FfiResult<()> {
-    call(|| Ok(core::verify_revocation_push_v2_signature(&push.into(), &trusted_issuer_id, &status_key.into())?))
+    call(|| {
+        Ok(core::verify_revocation_push_v2_signature(
+            &push.into(),
+            &trusted_issuer_id,
+            &status_key.into(),
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_key_rotation_statement(
@@ -180,7 +196,14 @@ pub fn ffi_verify_key_rotation_statement(
     now: i64,
     future_skew: i64,
 ) -> FfiResult<()> {
-    call(|| Ok(core::verify_key_rotation_statement_v2(&statement.into(), &state.into(), now, future_skew)?))
+    call(|| {
+        Ok(core::verify_key_rotation_statement_v2(
+            &statement.into(),
+            &state.into(),
+            now,
+            future_skew,
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_witness_entry(
@@ -188,11 +211,17 @@ pub fn ffi_verify_witness_entry(
     head: FfiWitnessHead,
     witness_key: FfiPublicKey,
 ) -> FfiResult<FfiLogResult> {
-    call(|| Ok(core::verify_witness_entry_v2(&entry.into(), &head.into(), &witness_key.into())?.into()))
+    call(|| {
+        Ok(core::verify_witness_entry_v2(&entry.into(), &head.into(), &witness_key.into())?.into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_transaction_receipt_signatures(receipt: FfiTransactionReceipt) -> FfiResult<()> {
-    call(|| Ok(core::verify_transaction_receipt_v2_signatures(&receipt.into())?))
+    call(|| {
+        Ok(core::verify_transaction_receipt_v2_signatures(
+            &receipt.into(),
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_verify_verification_receipt(
@@ -200,14 +229,26 @@ pub fn ffi_verify_verification_receipt(
     verifier_key: FfiPublicKey,
     head: FfiReceiptHead,
 ) -> FfiResult<FfiLogResult> {
-    call(|| Ok(core::verify_verification_receipt_v2(&receipt.into(), &verifier_key.into(), &head.into())?.into()))
+    call(|| {
+        Ok(core::verify_verification_receipt_v2(
+            &receipt.into(),
+            &verifier_key.into(),
+            &head.into(),
+        )?
+        .into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_check_verification_receipt_bundle_binding(
     receipt: FfiVerificationReceipt,
     bundle: FfiProofBundle,
 ) -> FfiResult<()> {
-    call(|| Ok(core::check_verification_receipt_v2_bundle_binding(&receipt.into(), &bundle.into())?))
+    call(|| {
+        Ok(core::check_verification_receipt_v2_bundle_binding(
+            &receipt.into(),
+            &bundle.into(),
+        )?)
+    })
 }
 
 // ---- signing transcript (SPEC-v2 §3) -----------------------------------
@@ -215,7 +256,12 @@ pub fn ffi_check_verification_receipt_bundle_binding(
 /// The 77-byte signing message `M` for an object type code and signable bytes.
 #[uniffi::export]
 pub fn ffi_signing_message(object_type_code: u16, signable: Vec<u8>) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::v2_signing_message(object_type(object_type_code)?, &signable)))
+    call(|| {
+        Ok(core::v2_signing_message(
+            object_type(object_type_code)?,
+            &signable,
+        ))
+    })
 }
 /// The 22-byte ML-DSA-65 context string for an object type code.
 #[uniffi::export]
@@ -241,8 +287,18 @@ pub fn ffi_verify_statement(
 }
 /// The FIPS 204 external `mu` for an ML-DSA-65 public key, context and message.
 #[uniffi::export]
-pub fn ffi_external_mu(ml_dsa_public_key: Vec<u8>, ml_dsa_context: Vec<u8>, message: Vec<u8>) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::external_mu_v2(&ml_dsa_public_key, &ml_dsa_context, &message)))
+pub fn ffi_external_mu(
+    ml_dsa_public_key: Vec<u8>,
+    ml_dsa_context: Vec<u8>,
+    message: Vec<u8>,
+) -> FfiResult<Vec<u8>> {
+    call(|| {
+        Ok(core::external_mu_v2(
+            &ml_dsa_public_key,
+            &ml_dsa_context,
+            &message,
+        ))
+    })
 }
 
 // ---- digests -----------------------------------------------------------
@@ -256,8 +312,18 @@ pub fn ffi_challenge_claim_digest(challenge: Vec<u8>) -> FfiResult<Vec<u8>> {
     call(|| Ok(core::challenge_claim_digest_v2(&challenge)?))
 }
 #[uniffi::export]
-pub fn ffi_protocol_claim_id(namespace: String, replay_epoch: i64, challenge: Vec<u8>) -> FfiResult<String> {
-    call(|| Ok(core::protocol_claim_id_v2(&namespace, replay_epoch, &challenge)?))
+pub fn ffi_protocol_claim_id(
+    namespace: String,
+    replay_epoch: i64,
+    challenge: Vec<u8>,
+) -> FfiResult<String> {
+    call(|| {
+        Ok(core::protocol_claim_id_v2(
+            &namespace,
+            replay_epoch,
+            &challenge,
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_verification_receipt_body(receipt: FfiVerificationReceipt) -> FfiResult<Vec<u8>> {
@@ -288,8 +354,16 @@ pub fn ffi_transaction_context_hash(receipt: FfiTransactionReceipt) -> FfiResult
     call(|| Ok(core::transaction_context_hash_v2(&receipt.into())))
 }
 #[uniffi::export]
-pub fn ffi_transaction_party_request_hash(transaction_hash: Vec<u8>, required_scope: String) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::transaction_party_request_hash_v2(&transaction_hash, &required_scope)))
+pub fn ffi_transaction_party_request_hash(
+    transaction_hash: Vec<u8>,
+    required_scope: String,
+) -> FfiResult<Vec<u8>> {
+    call(|| {
+        Ok(core::transaction_party_request_hash_v2(
+            &transaction_hash,
+            &required_scope,
+        ))
+    })
 }
 
 // ---- signable projections (SPEC-v2 §5) ----------------------------------
@@ -311,16 +385,28 @@ pub fn ffi_revocation_push_signable_bytes(push: FfiRevocationPush) -> FfiResult<
     call(|| Ok(core::revocation_push_v2_signable_bytes(&push.into())?))
 }
 #[uniffi::export]
-pub fn ffi_key_rotation_statement_signable_bytes(statement: FfiKeyRotationStatement) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::key_rotation_statement_v2_signable_bytes(&statement.into())?))
+pub fn ffi_key_rotation_statement_signable_bytes(
+    statement: FfiKeyRotationStatement,
+) -> FfiResult<Vec<u8>> {
+    call(|| {
+        Ok(core::key_rotation_statement_v2_signable_bytes(
+            &statement.into(),
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_witness_entry_signable_bytes(entry: FfiWitnessEntry) -> FfiResult<Vec<u8>> {
     call(|| Ok(core::witness_entry_v2_signable_bytes(&entry.into())?))
 }
 #[uniffi::export]
-pub fn ffi_verification_receipt_signable_bytes(receipt: FfiVerificationReceipt) -> FfiResult<Vec<u8>> {
-    call(|| Ok(core::verification_receipt_v2_signable_bytes(&receipt.into())?))
+pub fn ffi_verification_receipt_signable_bytes(
+    receipt: FfiVerificationReceipt,
+) -> FfiResult<Vec<u8>> {
+    call(|| {
+        Ok(core::verification_receipt_v2_signable_bytes(
+            &receipt.into(),
+        )?)
+    })
 }
 #[uniffi::export]
 pub fn ffi_transaction_receipt_sign_bytes(receipt: FfiTransactionReceipt) -> FfiResult<Vec<u8>> {

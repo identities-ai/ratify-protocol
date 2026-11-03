@@ -15,6 +15,12 @@ object Fixture {
     fun key(name: String): HybridPublicKey = keys.getValue(name).publicKey
     fun keyId(name: String): String = keys.getValue(name).keyId
     fun privateKey(name: String): SoftwarePrivateKey = keys.getValue(name)
+
+    val seeds: Map<String, Pair<ByteArray, ByteArray>> by lazy {
+        Corpus.load("keys.json").arr("keys").associate {
+            it.getString("name") to (it.hex("ed25519_seed_hex") to it.hex("ml_dsa_65_seed_hex"))
+        }
+    }
 }
 
 fun publicKeyOf(v: JSONObject): HybridPublicKey = HybridPublicKey(v.b64("ed25519"), v.b64("ml_dsa_65"))

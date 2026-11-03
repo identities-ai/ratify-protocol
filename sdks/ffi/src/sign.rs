@@ -29,7 +29,11 @@ impl From<V2SignError> for FfiError {
             V2SignError::Cancelled => "cancelled",
             V2SignError::SignatureRejected(_) => "signature_rejected",
         };
-        FfiError::Signing { class: e.class().as_str().to_string(), kind: kind.to_string(), detail: e.to_string() }
+        FfiError::Signing {
+            class: e.class().as_str().to_string(),
+            kind: kind.to_string(),
+            detail: e.to_string(),
+        }
     }
 }
 
@@ -99,7 +103,9 @@ pub enum FfiSignerError {
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for FfiSignerError {
     fn from(e: uniffi::UnexpectedUniFFICallbackError) -> Self {
-        FfiSignerError::Provider { detail: format!("external signer failed: {}", e.reason) }
+        FfiSignerError::Provider {
+            detail: format!("external signer failed: {}", e.reason),
+        }
     }
 }
 
@@ -126,7 +132,11 @@ impl FfiSignContext {
 pub trait FfiSigner: Send + Sync {
     fn public_key(&self) -> FfiPublicKey;
     fn mode(&self) -> FfiSignerMode;
-    fn sign(&self, request: FfiSignRequest, context: Arc<FfiSignContext>) -> Result<FfiSignature, FfiSignerError>;
+    fn sign(
+        &self,
+        request: FfiSignRequest,
+        context: Arc<FfiSignContext>,
+    ) -> Result<FfiSignature, FfiSignerError>;
 }
 
 /// Adapts a foreign signer to the core's `SignerV2`. One foreign call per
@@ -140,8 +150,15 @@ impl SignerV2 for Foreign {
     fn mode_v2(&self) -> SignerModeV2 {
         self.0.mode().into()
     }
-    fn sign_v2(&self, ctx: &V2Context, request: &SignRequestV2) -> Result<HybridSignature, V2SignError> {
-        let context = Arc::new(FfiSignContext { poison: Poison::default(), ctx: ctx.clone() });
+    fn sign_v2(
+        &self,
+        ctx: &V2Context,
+        request: &SignRequestV2,
+    ) -> Result<HybridSignature, V2SignError> {
+        let context = Arc::new(FfiSignContext {
+            poison: Poison::default(),
+            ctx: ctx.clone(),
+        });
         match self.0.sign(request.into(), context) {
             Ok(sig) => Ok(sig.into()),
             Err(FfiSignerError::Cancelled) => Err(V2SignError::Cancelled),
@@ -155,10 +172,14 @@ impl SignerV2 for Foreign {
 #[uniffi::export]
 impl FfiSoftwareKey {
     pub fn sign_delegation_cert(&self, cert: FfiDelegationCert) -> FfiResult<FfiDelegationCert> {
-        call_on(&self.poison, || Ok((&core::sign_delegation_cert_v2(&cert.into(), &self.private)?).into()))
+        call_on(&self.poison, || {
+            Ok((&core::sign_delegation_cert_v2(&cert.into(), &self.private)?).into())
+        })
     }
     pub fn sign_proof_bundle(&self, bundle: FfiProofBundle) -> FfiResult<FfiProofBundle> {
-        call_on(&self.poison, || Ok((&core::sign_proof_bundle_v2(&bundle.into(), &self.private)?).into()))
+        call_on(&self.poison, || {
+            Ok((&core::sign_proof_bundle_v2(&bundle.into(), &self.private)?).into())
+        })
     }
     pub fn sign_revocation_list(
         &self,
@@ -167,7 +188,13 @@ impl FfiSoftwareKey {
         bound_status_key: FfiPublicKey,
     ) -> FfiResult<FfiRevocationList> {
         call_on(&self.poison, || {
-            Ok((&core::sign_revocation_list_v2(&list.into(), &bound_issuer_id, &bound_status_key.into(), &self.private)?).into())
+            Ok((&core::sign_revocation_list_v2(
+                &list.into(),
+                &bound_issuer_id,
+                &bound_status_key.into(),
+                &self.private,
+            )?)
+                .into())
         })
     }
     pub fn sign_revocation_push(
@@ -177,7 +204,13 @@ impl FfiSoftwareKey {
         bound_status_key: FfiPublicKey,
     ) -> FfiResult<FfiRevocationPush> {
         call_on(&self.poison, || {
-            Ok((&core::sign_revocation_push_v2(&push.into(), &bound_issuer_id, &bound_status_key.into(), &self.private)?).into())
+            Ok((&core::sign_revocation_push_v2(
+                &push.into(),
+                &bound_issuer_id,
+                &bound_status_key.into(),
+                &self.private,
+            )?)
+                .into())
         })
     }
     /// Sign as the old key; `new_key` signs the proof of possession.
@@ -187,14 +220,26 @@ impl FfiSoftwareKey {
         new_key: Arc<FfiSoftwareKey>,
     ) -> FfiResult<FfiKeyRotationStatement> {
         call_on(&self.poison, || {
-            Ok((&core::sign_key_rotation_statement_v2(&statement.into(), &self.private, &new_key.private)?).into())
+            Ok((&core::sign_key_rotation_statement_v2(
+                &statement.into(),
+                &self.private,
+                &new_key.private,
+            )?)
+                .into())
         })
     }
     pub fn sign_witness_entry(&self, entry: FfiWitnessEntry) -> FfiResult<FfiWitnessEntry> {
-        call_on(&self.poison, || Ok((&core::sign_witness_entry_v2(&entry.into(), &self.private)?).into()))
+        call_on(&self.poison, || {
+            Ok((&core::sign_witness_entry_v2(&entry.into(), &self.private)?).into())
+        })
     }
-    pub fn sign_verification_receipt(&self, receipt: FfiVerificationReceipt) -> FfiResult<FfiVerificationReceipt> {
-        call_on(&self.poison, || Ok((&core::sign_verification_receipt_v2(&receipt.into(), &self.private)?).into()))
+    pub fn sign_verification_receipt(
+        &self,
+        receipt: FfiVerificationReceipt,
+    ) -> FfiResult<FfiVerificationReceipt> {
+        call_on(&self.poison, || {
+            Ok((&core::sign_verification_receipt_v2(&receipt.into(), &self.private)?).into())
+        })
     }
     pub fn sign_prepared_verification_receipt(
         &self,
@@ -202,7 +247,10 @@ impl FfiSoftwareKey {
         head: FfiReceiptHead,
     ) -> FfiResult<FfiVerificationReceipt> {
         call_on(&self.poison, || {
-            Ok((&core::sign_prepared_verification_receipt_v2(&data, &head.into(), &self.private)?).into())
+            Ok(
+                (&core::sign_prepared_verification_receipt_v2(&data, &head.into(), &self.private)?)
+                    .into(),
+            )
         })
     }
     pub fn sign_transaction_receipt_party(
@@ -211,8 +259,12 @@ impl FfiSoftwareKey {
         party_id: String,
     ) -> FfiResult<FfiTransactionReceiptSignature> {
         call_on(&self.poison, || {
-            let s = core::sign_transaction_receipt_party_v2(&receipt.into(), &party_id, &self.private)?;
-            Ok(FfiTransactionReceiptSignature { party_id: s.party_id, signature: (&s.signature).into() })
+            let s =
+                core::sign_transaction_receipt_party_v2(&receipt.into(), &party_id, &self.private)?;
+            Ok(FfiTransactionReceiptSignature {
+                party_id: s.party_id,
+                signature: (&s.signature).into(),
+            })
         })
     }
 }
@@ -225,7 +277,14 @@ pub fn ffi_sign_delegation_cert_with_signer(
     cert: FfiDelegationCert,
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiDelegationCert> {
-    call(|| Ok((&core::sign_delegation_cert_v2_with_signer(cancel.context(), &cert.into(), &Foreign(signer))?).into()))
+    call(|| {
+        Ok((&core::sign_delegation_cert_v2_with_signer(
+            cancel.context(),
+            &cert.into(),
+            &Foreign(signer),
+        )?)
+            .into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_proof_bundle_with_signer(
@@ -233,7 +292,14 @@ pub fn ffi_sign_proof_bundle_with_signer(
     bundle: FfiProofBundle,
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiProofBundle> {
-    call(|| Ok((&core::sign_proof_bundle_v2_with_signer(cancel.context(), &bundle.into(), &Foreign(signer))?).into()))
+    call(|| {
+        Ok((&core::sign_proof_bundle_v2_with_signer(
+            cancel.context(),
+            &bundle.into(),
+            &Foreign(signer),
+        )?)
+            .into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_revocation_list_with_signer(
@@ -296,7 +362,14 @@ pub fn ffi_sign_witness_entry_with_signer(
     entry: FfiWitnessEntry,
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiWitnessEntry> {
-    call(|| Ok((&core::sign_witness_entry_v2_with_signer(cancel.context(), &entry.into(), &Foreign(signer))?).into()))
+    call(|| {
+        Ok((&core::sign_witness_entry_v2_with_signer(
+            cancel.context(),
+            &entry.into(),
+            &Foreign(signer),
+        )?)
+            .into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_sign_verification_receipt_with_signer(
@@ -305,7 +378,12 @@ pub fn ffi_sign_verification_receipt_with_signer(
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiVerificationReceipt> {
     call(|| {
-        Ok((&core::sign_verification_receipt_v2_with_signer(cancel.context(), &receipt.into(), &Foreign(signer))?).into())
+        Ok((&core::sign_verification_receipt_v2_with_signer(
+            cancel.context(),
+            &receipt.into(),
+            &Foreign(signer),
+        )?)
+            .into())
     })
 }
 #[uniffi::export]
@@ -316,7 +394,12 @@ pub fn ffi_sign_prepared_verification_receipt_with_signer(
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiVerificationReceipt> {
     call(|| {
-        Ok((&core::sign_prepared_verification_receipt_v2_with_signer(cancel.context(), &data, &head.into(), &Foreign(signer))?)
+        Ok((&core::sign_prepared_verification_receipt_v2_with_signer(
+            cancel.context(),
+            &data,
+            &head.into(),
+            &Foreign(signer),
+        )?)
             .into())
     })
 }
@@ -328,7 +411,15 @@ pub fn ffi_sign_transaction_receipt_party_with_signer(
     signer: Arc<dyn FfiSigner>,
 ) -> FfiResult<FfiTransactionReceiptSignature> {
     call(|| {
-        let s = core::sign_transaction_receipt_party_v2_with_signer(cancel.context(), &receipt.into(), &party_id, &Foreign(signer))?;
-        Ok(FfiTransactionReceiptSignature { party_id: s.party_id, signature: (&s.signature).into() })
+        let s = core::sign_transaction_receipt_party_v2_with_signer(
+            cancel.context(),
+            &receipt.into(),
+            &party_id,
+            &Foreign(signer),
+        )?;
+        Ok(FfiTransactionReceiptSignature {
+            party_id: s.party_id,
+            signature: (&s.signature).into(),
+        })
     })
 }

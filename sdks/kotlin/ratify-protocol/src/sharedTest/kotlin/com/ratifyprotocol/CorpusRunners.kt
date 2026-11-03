@@ -21,6 +21,11 @@ object CorpusRunners {
         "objects.json" to ObjectsVectors::objects,
         "object-negatives.json" to ObjectsVectors::negatives,
         "hedged-signatures.json" to ObjectsVectors::hedged,
+        "delegation-signature.json" to SigningVectors::delegationSignature,
+        "derive-external-mu.py" to SigningVectors::deriveExternalMu,
+        "key-rotation-signature.json" to SigningVectors::keyRotationSignature,
+        "issuer-duties.json" to { SigningVectors.issuerDuties() },
+        "external-signer.json" to { SigningVectors.externalSigner() },
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -31,14 +36,9 @@ object CorpusRunners {
         "challenge-issuance.json" to "M3",
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
-        "delegation-signature.json" to "M2",
-        "derive-external-mu.py" to "M2",
         "device-state.json" to "M3",
         "digest-functions.json" to "M2",
         "evaluator-profiles.json" to "M3",
-        "external-signer.json" to "M2",
-        "issuer-duties.json" to "M2",
-        "key-rotation-signature.json" to "M2",
         "lifecycle-scenarios.json" to "M3",
         "log-sequences.json" to "M2",
         "rotation-sequences.json" to "M2",

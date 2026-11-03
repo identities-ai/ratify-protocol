@@ -111,14 +111,23 @@ pub mod test_hooks {
             let m = std::slice::from_raw_parts(msg, msg_len);
             let c = std::slice::from_raw_parts(ctx, ctx_len);
             let (_, private) = ratify_protocol::hybrid_keypair_from_seeds(&ed, &ml);
-            let es = ed25519_dalek::SigningKey::from_bytes(&ed).sign(m).to_bytes();
+            let es = ed25519_dalek::SigningKey::from_bytes(&ed)
+                .sign(m)
+                .to_bytes();
             let sk: [u8; fips204::ml_dsa_65::SK_LEN] = private.ml_dsa_65().try_into().ok()?;
-            let ms = fips204::ml_dsa_65::PrivateKey::try_from_bytes(sk).ok()?.try_sign(m, c).ok()?;
+            let ms = fips204::ml_dsa_65::PrivateKey::try_from_bytes(sk)
+                .ok()?
+                .try_sign(m, c)
+                .ok()?;
             std::ptr::copy_nonoverlapping(es.as_ptr(), out_ed, 64);
             std::ptr::copy_nonoverlapping(ms.as_ptr(), out_ml, ms.len());
             Some(())
         });
-        if matches!(r, Ok(Some(()))) { 0 } else { -1 }
+        if matches!(r, Ok(Some(()))) {
+            0
+        } else {
+            -1
+        }
     }
 
     pub(super) fn fire() {

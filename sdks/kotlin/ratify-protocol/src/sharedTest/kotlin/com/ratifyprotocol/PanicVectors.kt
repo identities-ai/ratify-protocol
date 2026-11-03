@@ -47,6 +47,18 @@ object PanicVectors {
         assertEquals(other.keyId, ffi { other.handle.keyId() })
     }
 
+    /** Through the public API only: a panic while a software key signs poisons that key. */
+    fun signingPoisonsTheKey() {
+        val cert = decodeDelegationCert(objectByKind(Corpus.load("objects.json"), "delegation_certificate").b64("wire_b64"))
+        val (ed, ml) = Fixture.seeds.getValue("root")
+        val spare = SoftwarePrivateKey.fromSeeds(ed, ml)
+        signDelegationCert(cert, spare)
+        hooks.ratify_ffi_test_arm_panic()
+        assertEquals(InternalErrorKind.PANIC, kind { signDelegationCert(cert, spare) })
+        assertEquals(InternalErrorKind.POISONED, kind { signDelegationCert(cert, spare) })
+        signDelegationCert(cert, Fixture.privateKey("root")) // another key is unaffected
+    }
+
     fun kindsPinned() {
         assertEquals(setOf("panic", "poisoned", "random_source"), InternalErrorKind.entries.map { it.spelling }.toSet())
     }

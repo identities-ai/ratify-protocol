@@ -16,9 +16,9 @@ public sealed class RatifyException(message: String) : Exception(message) {
 
     public class Signing(
         override val errorClass: ErrorClass,
-        public val kind: String,
+        public val kind: SigningErrorKind,
         public val detail: String,
-    ) : RatifyException("$detail (${errorClass.spelling}, $kind)")
+    ) : RatifyException("$detail (${errorClass.spelling}, ${kind.spelling})")
 
     public class Internal(public val kind: InternalErrorKind, public val detail: String) :
         RatifyException("internal ${kind.spelling}: $detail") {
@@ -54,7 +54,12 @@ internal inline fun <T> ffi(body: () -> T): T =
     } catch (e: FfiException) {
         throw when (e) {
             is FfiException.Protocol -> RatifyException.Protocol(cls(e.`class`), e.detail)
-            is FfiException.Signing -> RatifyException.Signing(cls(e.`class`), e.kind, e.detail)
+            is FfiException.Signing -> RatifyException.Signing(
+                cls(e.`class`),
+                SigningErrorKind.entries.firstOrNull { it.spelling == e.kind }
+                    ?: error("FFI layer returned an unknown signing error kind ${e.kind}"),
+                e.detail,
+            )
             is FfiException.Internal -> RatifyException.Internal(internalKind(e.kind), e.detail)
         }
     } catch (e: RatifyException) {

@@ -4218,8 +4218,9 @@
  },
  "SignRequestV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest",
+  "status": "mapped",
+  "swift": "SignRequest"
  },
  "SignRequestV2::clone": {
   "kind": "fn",
@@ -4238,48 +4239,57 @@
  },
  "SignRequestV2::key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.keyId",
+  "status": "mapped",
+  "swift": "SignRequest.keyId"
  },
  "SignRequestV2::message": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.message",
+  "status": "mapped",
+  "swift": "SignRequest.message"
  },
  "SignRequestV2::ml_dsa_context": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.mlDsaContext",
+  "status": "mapped",
+  "swift": "SignRequest.mlDsaContext"
  },
  "SignRequestV2::ml_dsa_mu": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.mlDsaMu",
+  "status": "mapped",
+  "swift": "SignRequest.mlDsaMu"
  },
  "SignRequestV2::mode": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.mode",
+  "status": "mapped",
+  "swift": "SignRequest.mode"
  },
  "SignRequestV2::public_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignRequest.publicKey",
+  "status": "mapped",
+  "swift": "SignRequest.publicKey"
  },
  "SignerModeV2": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignerMode",
+  "status": "mapped",
+  "swift": "SignerMode"
  },
  "SignerModeV2::Direct": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignerMode.DIRECT",
+  "status": "mapped",
+  "swift": "SignerMode.direct"
  },
  "SignerModeV2::ExternalMu": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SignerMode.EXTERNAL_MU",
+  "status": "mapped",
+  "swift": "SignerMode.externalMu"
  },
  "SignerModeV2::clone": {
   "kind": "fn",
@@ -4298,23 +4308,27 @@
  },
  "SignerV2": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ExternalSigner",
+  "status": "mapped",
+  "swift": "ExternalSigner"
  },
  "SignerV2::mode_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ExternalSigner.mode",
+  "status": "mapped",
+  "swift": "ExternalSigner.mode"
  },
  "SignerV2::public_key_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ExternalSigner.publicKey",
+  "status": "mapped",
+  "swift": "ExternalSigner.publicKey"
  },
  "SignerV2::sign_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ExternalSigner.sign",
+  "status": "mapped",
+  "swift": "ExternalSigner.sign"
  },
  "StatusEvidenceEntryV2": {
   "kind": "struct",
@@ -7072,53 +7086,63 @@
  },
  "V2SignError": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RatifyException.Signing",
+  "status": "mapped",
+  "swift": "RatifyError.signing"
  },
  "V2SignError::Cancelled": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.CANCELLED",
+  "status": "mapped",
+  "swift": "SigningErrorKind.cancelled"
  },
  "V2SignError::InvalidObject": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.INVALID_OBJECT",
+  "status": "mapped",
+  "swift": "SigningErrorKind.invalidObject"
  },
  "V2SignError::InvalidSignerKey": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.INVALID_SIGNER_KEY",
+  "status": "mapped",
+  "swift": "SigningErrorKind.invalidSignerKey"
  },
  "V2SignError::IssuerDuty": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.ISSUER_DUTY",
+  "status": "mapped",
+  "swift": "SigningErrorKind.issuerDuty"
  },
  "V2SignError::KeyBinding": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.KEY_BINDING",
+  "status": "mapped",
+  "swift": "SigningErrorKind.keyBinding"
  },
  "V2SignError::Provider": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.PROVIDER",
+  "status": "mapped",
+  "swift": "SigningErrorKind.provider"
  },
  "V2SignError::SignatureRejected": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.SIGNATURE_REJECTED",
+  "status": "mapped",
+  "swift": "SigningErrorKind.signatureRejected"
  },
  "V2SignError::UnsupportedMode": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SigningErrorKind.UNSUPPORTED_MODE",
+  "status": "mapped",
+  "swift": "SigningErrorKind.unsupportedMode"
  },
  "V2SignError::class": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RatifyException.errorClass",
+  "status": "mapped",
+  "swift": "RatifyError.errorClass"
  },
  "V2SignError::clone": {
   "kind": "fn",
@@ -7137,13 +7161,13 @@
  },
  "V2SignError::from": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "From<V2Error> impl; Swift and Kotlin receive signing errors already classified",
+  "status": "rust-idiom"
  },
  "V2SignResult": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Result alias; Swift typed throws, Kotlin exceptions",
+  "status": "rust-idiom"
  },
  "V2StatusAssessment": {
   "kind": "struct",
@@ -8831,93 +8855,111 @@
  },
  "sign_delegation_cert_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signDelegationCert",
+  "status": "mapped",
+  "swift": "Ratify.signDelegationCert"
  },
  "sign_delegation_cert_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signDelegationCert",
+  "status": "mapped",
+  "swift": "Ratify.signDelegationCert"
  },
  "sign_key_rotation_statement_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.signKeyRotationStatement"
  },
  "sign_key_rotation_statement_v2_with_signers": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.signKeyRotationStatement"
  },
  "sign_prepared_verification_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signPreparedVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.signPreparedVerificationReceipt"
  },
  "sign_prepared_verification_receipt_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signPreparedVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.signPreparedVerificationReceipt"
  },
  "sign_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.signProofBundle"
  },
  "sign_proof_bundle_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.signProofBundle"
  },
  "sign_revocation_list_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signRevocationList",
+  "status": "mapped",
+  "swift": "Ratify.signRevocationList"
  },
  "sign_revocation_list_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signRevocationList",
+  "status": "mapped",
+  "swift": "Ratify.signRevocationList"
  },
  "sign_revocation_push_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signRevocationPush",
+  "status": "mapped",
+  "swift": "Ratify.signRevocationPush"
  },
  "sign_revocation_push_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signRevocationPush",
+  "status": "mapped",
+  "swift": "Ratify.signRevocationPush"
  },
  "sign_transaction_receipt_party_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signTransactionReceiptParty",
+  "status": "mapped",
+  "swift": "Ratify.signTransactionReceiptParty"
  },
  "sign_transaction_receipt_party_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signTransactionReceiptParty",
+  "status": "mapped",
+  "swift": "Ratify.signTransactionReceiptParty"
  },
  "sign_verification_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.signVerificationReceipt"
  },
  "sign_verification_receipt_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.signVerificationReceipt"
  },
  "sign_witness_entry_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signWitnessEntry",
+  "status": "mapped",
+  "swift": "Ratify.signWitnessEntry"
  },
  "sign_witness_entry_v2_with_signer": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signWitnessEntry",
+  "status": "mapped",
+  "swift": "Ratify.signWitnessEntry"
  },
  "standard_allowed_values_evaluator_v2": {
   "kind": "fn",

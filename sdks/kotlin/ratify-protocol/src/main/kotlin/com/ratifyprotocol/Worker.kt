@@ -37,7 +37,10 @@ internal suspend fun <T> onWorker(timeout: Duration? = null, body: (FfiCancelTok
         return done.await().getOrThrow()
     } catch (e: CancellationException) {
         runCatching { token.cancel() }
-        withContext(NonCancellable) { done.await() }
+        val outcome = withContext(NonCancellable) { done.await() }
+        // Kotlin reports a cancelled call as CancellationException; the core's
+        // own outcome (normally evaluation_cancelled) is kept as its cause.
+        outcome.exceptionOrNull()?.let { if (e.cause == null) e.initCause(it) }
         throw e
     }
 }

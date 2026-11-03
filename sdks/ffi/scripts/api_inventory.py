@@ -172,6 +172,7 @@ EXTRA_MEMBERS = {
     "RatifyException.Internal.detail": "diagnostic message (plan §2.2)",
     "RatifyException.Protocol.errorClass": "the §2.7 class (plan §2.2)",
     "InternalErrorKind.spelling": "the FFI spelling of the kind",
+    "SigningErrorKind.spelling": "the FFI spelling of the kind",
     "SoftwarePrivateKey.keyId": "convenience: key_id_v2 of publicKey, computed once at load",
     "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
     "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",

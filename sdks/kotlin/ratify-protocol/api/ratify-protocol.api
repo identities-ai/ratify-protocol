@@ -393,6 +393,21 @@ public final class com/ratifyprotocol/RevocationList {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/RevocationObservation {
+	public final fun getAccepted ()Z
+	public final fun getBodyDigest ()[B
+	public final fun getEvidenceDigest ()[B
+	public final fun getFork ()Z
+	public final fun getFutureDated ()Z
+	public final fun getGap ()Z
+	public final fun getObjectType-Mh2AYeg ()S
+	public final fun getRevokedCertIds ()Ljava/util/List;
+	public final fun getRevokedSetDigest ()[B
+	public final fun getSequence ()J
+	public final fun getStatusKeyEpoch-s-VKNKU ()J
+	public final fun getStatusKeyId ()Ljava/lang/String;
+}
+
 public final class com/ratifyprotocol/RevocationPush {
 	public fun <init> (JLjava/lang/String;JJLjava/util/List;Lcom/ratifyprotocol/HybridSignature;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -403,6 +418,40 @@ public final class com/ratifyprotocol/RevocationPush {
 	public final fun getSignature ()Lcom/ratifyprotocol/HybridSignature;
 	public final fun getVersion ()J
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/RevocationStatusPolicy {
+	public fun <init> (JJJ)V
+	public final fun getClockSkewSeconds ()J
+	public final fun getMaxListLifetimeSeconds ()J
+	public final fun getMaxStatusAgeSeconds ()J
+}
+
+public final class com/ratifyprotocol/RevocationStatusResult {
+	public final fun getEvidence ()Ljava/util/List;
+	public final fun getFreshUntil ()J
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getStatus ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/RevocationStatusState {
+	public final fun getAcceptedCertIds ()Ljava/util/List;
+	public final fun getAcceptedSnapshot ()Lcom/ratifyprotocol/RevocationList;
+	public final fun getDenyUnionCertIds ()Ljava/util/List;
+	public final fun getFloor ()J
+	public final fun getForkSequence ()J
+	public final fun getFutureDatedObjectObserved ()Z
+	public final fun getHasFloor ()Z
+	public final fun getHasPrecedingCheckpoint ()Z
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getMaxObservedSequence ()J
+	public final fun getObservations ()Ljava/util/List;
+	public final fun getPrecedingAcceptedCertIds ()Ljava/util/List;
+	public final fun getPrecedingFloor ()J
+	public final fun getReconciliationRequired ()Z
+	public final fun getRetiredStatusKeyIds ()Ljava/util/List;
+	public final fun getStatusKeyEpoch-s-VKNKU ()J
+	public final fun getStatusKeyId ()Ljava/lang/String;
 }
 
 public final class com/ratifyprotocol/RotationAcceptance {
@@ -533,6 +582,15 @@ public final class com/ratifyprotocol/StatusEvidenceObject {
 	public final fun getObjectType-Mh2AYeg ()S
 	public final fun getWire ()[B
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/StatusKt {
+	public static final fun applyRevocationList-GPQ0J6g (Lcom/ratifyprotocol/RevocationStatusState;Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)Lcom/ratifyprotocol/RevocationStatusState;
+	public static final fun applyRevocationPush-GPQ0J6g (Lcom/ratifyprotocol/RevocationStatusState;Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)Lcom/ratifyprotocol/RevocationStatusState;
+	public static final fun emptyRevocationStatusState ()Lcom/ratifyprotocol/RevocationStatusState;
+	public static final fun protocolClaimIdFromDigest (Ljava/lang/String;J[B)Ljava/lang/String;
+	public static final fun revocationStatusForCert-GPQ0J6g (Lcom/ratifyprotocol/RevocationStatusState;Ljava/lang/String;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)Lcom/ratifyprotocol/RevocationStatusResult;
+	public static final fun transitionRevocationStatusEpoch-HFZJxNs (Lcom/ratifyprotocol/RevocationStatusState;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/RevocationStatusState;
 }
 
 public abstract class com/ratifyprotocol/StatusObject {

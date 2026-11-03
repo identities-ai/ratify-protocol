@@ -30,12 +30,13 @@ object CorpusRunners {
         "digest-functions.json" to ArchivalVectors::digestFunctions,
         "log-sequences.json" to LogsVectors::logSequences,
         "rotation-sequences.json" to LogsVectors::rotationSequences,
+        "status-sequences.json" to StatusVectors::statusSequences,
+        "challenge-claim.json" to StatusVectors::challengeClaim,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
     val pending: Map<String, String> = mapOf(
         "README.md" to "M3",
-        "challenge-claim.json" to "M2",
         "challenge-issuance.json" to "M3",
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
@@ -44,7 +45,6 @@ object CorpusRunners {
         "lifecycle-scenarios.json" to "M3",
         "security-journal.json" to "M2",
         "status-publisher.json" to "M2",
-        "status-sequences.json" to "M2",
         "transaction-verification.json" to "M3",
         "verifier-ordering.json" to "M3",
     )

@@ -805,6 +805,16 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_signer(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_empty_status_state(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_status_for_cert(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_challenge_claim_digest(
@@ -840,6 +850,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_presentation_signable_bytes(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id_from_digest(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes(
     ): Int
@@ -1126,6 +1138,16 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_sign_witness_entry_with_signer(`cancel`: Long,`entry`: RustBuffer.ByValue,`signer`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list(`state`: RustBuffer.ByValue,`list`: RustBuffer.ByValue,`boundIssuerId`: RustBuffer.ByValue,`statusKeyEpoch`: Long,`statusKey`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_push(`state`: RustBuffer.ByValue,`push`: RustBuffer.ByValue,`boundIssuerId`: RustBuffer.ByValue,`statusKeyEpoch`: Long,`statusKey`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_empty_status_state(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_status_for_cert(`state`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`certId`: RustBuffer.ByValue,`statusKeyEpoch`: Long,`statusKey`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_transition_revocation_status_epoch(`state`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`nextEpoch`: Long,`nextStatusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_challenge_claim_digest(`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1161,6 +1183,8 @@ internal object UniffiLib {
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_presentation_signable_bytes(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id(`namespace`: RustBuffer.ByValue,`replayEpoch`: Long,`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id_from_digest(`namespace`: RustBuffer.ByValue,`replayEpoch`: Long,`digest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_list_signable_bytes(`list`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1466,6 +1490,21 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_signer() and 0xFFFF) != 53719) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list() and 0xFFFF) != 33860) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push() and 0xFFFF) != 9136) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_empty_status_state() and 0xFFFF) != 4586) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_status_for_cert() and 0xFFFF) != 55388) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch() and 0xFFFF) != 56233) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() and 0xFFFF) != 51989) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1518,6 +1557,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id() and 0xFFFF) != 49564) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id_from_digest() and 0xFFFF) != 24862) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes() and 0xFFFF) != 57243) {
@@ -5107,6 +5149,316 @@ internal object FfiConverterTypeFfiStatusEvidenceObject: FfiConverterRustBuffer<
 
 
 
+/**
+ * One status object the reducer observed.
+ */
+internal data class FfiStatusObservation (
+    var `objectType`: kotlin.UShort
+    , 
+    var `statusKeyEpoch`: kotlin.ULong
+    , 
+    var `statusKeyId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `evidenceDigest`: kotlin.ByteArray
+    , 
+    var `bodyDigest`: kotlin.ByteArray
+    , 
+    var `revokedSetDigest`: kotlin.ByteArray
+    , 
+    var `revokedCertIds`: List<kotlin.String>
+    , 
+    var `futureDated`: kotlin.Boolean
+    , 
+    var `fork`: kotlin.Boolean
+    , 
+    var `gap`: kotlin.Boolean
+    , 
+    var `accepted`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusObservation: FfiConverterRustBuffer<FfiStatusObservation> {
+    override fun read(buf: ByteBuffer): FfiStatusObservation {
+        return FfiStatusObservation(
+            FfiConverterUShort.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusObservation) = (
+            FfiConverterUShort.allocationSize(value.`objectType`) +
+            FfiConverterULong.allocationSize(value.`statusKeyEpoch`) +
+            FfiConverterString.allocationSize(value.`statusKeyId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`evidenceDigest`) +
+            FfiConverterByteArray.allocationSize(value.`bodyDigest`) +
+            FfiConverterByteArray.allocationSize(value.`revokedSetDigest`) +
+            FfiConverterSequenceString.allocationSize(value.`revokedCertIds`) +
+            FfiConverterBoolean.allocationSize(value.`futureDated`) +
+            FfiConverterBoolean.allocationSize(value.`fork`) +
+            FfiConverterBoolean.allocationSize(value.`gap`) +
+            FfiConverterBoolean.allocationSize(value.`accepted`)
+    )
+
+    override fun write(value: FfiStatusObservation, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`objectType`, buf)
+            FfiConverterULong.write(value.`statusKeyEpoch`, buf)
+            FfiConverterString.write(value.`statusKeyId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`evidenceDigest`, buf)
+            FfiConverterByteArray.write(value.`bodyDigest`, buf)
+            FfiConverterByteArray.write(value.`revokedSetDigest`, buf)
+            FfiConverterSequenceString.write(value.`revokedCertIds`, buf)
+            FfiConverterBoolean.write(value.`futureDated`, buf)
+            FfiConverterBoolean.write(value.`fork`, buf)
+            FfiConverterBoolean.write(value.`gap`, buf)
+            FfiConverterBoolean.write(value.`accepted`, buf)
+    }
+}
+
+
+
+/**
+ * The relying party's freshness policy for status evidence.
+ */
+internal data class FfiStatusPolicy (
+    var `maxListLifetimeSeconds`: kotlin.Long
+    , 
+    var `maxStatusAgeSeconds`: kotlin.Long
+    , 
+    var `clockSkewSeconds`: kotlin.Long
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusPolicy: FfiConverterRustBuffer<FfiStatusPolicy> {
+    override fun read(buf: ByteBuffer): FfiStatusPolicy {
+        return FfiStatusPolicy(
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusPolicy) = (
+            FfiConverterLong.allocationSize(value.`maxListLifetimeSeconds`) +
+            FfiConverterLong.allocationSize(value.`maxStatusAgeSeconds`) +
+            FfiConverterLong.allocationSize(value.`clockSkewSeconds`)
+    )
+
+    override fun write(value: FfiStatusPolicy, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`maxListLifetimeSeconds`, buf)
+            FfiConverterLong.write(value.`maxStatusAgeSeconds`, buf)
+            FfiConverterLong.write(value.`clockSkewSeconds`, buf)
+    }
+}
+
+
+
+/**
+ * A certificate's revocation status from the reducer state.
+ */
+internal data class FfiStatusResult (
+    /**
+     * "not_revoked", "revoked", or "indeterminate".
+     */
+    var `status`: kotlin.String
+    , 
+    /**
+     * "" or, for indeterminate, "unavailable" / "stale".
+     */
+    var `reason`: kotlin.String
+    , 
+    var `evidence`: List<FfiStatusEvidenceEntry>
+    , 
+    var `freshUntil`: kotlin.Long
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusResult: FfiConverterRustBuffer<FfiStatusResult> {
+    override fun read(buf: ByteBuffer): FfiStatusResult {
+        return FfiStatusResult(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusResult) = (
+            FfiConverterString.allocationSize(value.`status`) +
+            FfiConverterString.allocationSize(value.`reason`) +
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.allocationSize(value.`evidence`) +
+            FfiConverterLong.allocationSize(value.`freshUntil`)
+    )
+
+    override fun write(value: FfiStatusResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`status`, buf)
+            FfiConverterString.write(value.`reason`, buf)
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.`evidence`, buf)
+            FfiConverterLong.write(value.`freshUntil`, buf)
+    }
+}
+
+
+
+/**
+ * Caller-persisted revocation status state for one issuer.
+ */
+internal data class FfiStatusState (
+    var `issuerId`: kotlin.String
+    , 
+    var `statusKeyEpoch`: kotlin.ULong
+    , 
+    var `statusKeyId`: kotlin.String
+    , 
+    var `retiredStatusKeyIds`: List<kotlin.String>
+    , 
+    var `hasFloor`: kotlin.Boolean
+    , 
+    var `floor`: kotlin.Long
+    , 
+    var `acceptedSnapshot`: FfiRevocationList?
+    , 
+    var `acceptedCertIds`: List<kotlin.String>
+    , 
+    var `hasPrecedingCheckpoint`: kotlin.Boolean
+    , 
+    var `precedingFloor`: kotlin.Long
+    , 
+    var `precedingAcceptedCertIds`: List<kotlin.String>
+    , 
+    var `denyUnionCertIds`: List<kotlin.String>
+    , 
+    var `observations`: List<FfiStatusObservation>
+    , 
+    var `maxObservedSequence`: kotlin.Long
+    , 
+    var `forkSequence`: kotlin.Long
+    , 
+    var `reconciliationRequired`: kotlin.Boolean
+    , 
+    var `futureDatedObjectObserved`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStatusState: FfiConverterRustBuffer<FfiStatusState> {
+    override fun read(buf: ByteBuffer): FfiStatusState {
+        return FfiStatusState(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterOptionalTypeFfiRevocationList.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceTypeFfiStatusObservation.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStatusState) = (
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterULong.allocationSize(value.`statusKeyEpoch`) +
+            FfiConverterString.allocationSize(value.`statusKeyId`) +
+            FfiConverterSequenceString.allocationSize(value.`retiredStatusKeyIds`) +
+            FfiConverterBoolean.allocationSize(value.`hasFloor`) +
+            FfiConverterLong.allocationSize(value.`floor`) +
+            FfiConverterOptionalTypeFfiRevocationList.allocationSize(value.`acceptedSnapshot`) +
+            FfiConverterSequenceString.allocationSize(value.`acceptedCertIds`) +
+            FfiConverterBoolean.allocationSize(value.`hasPrecedingCheckpoint`) +
+            FfiConverterLong.allocationSize(value.`precedingFloor`) +
+            FfiConverterSequenceString.allocationSize(value.`precedingAcceptedCertIds`) +
+            FfiConverterSequenceString.allocationSize(value.`denyUnionCertIds`) +
+            FfiConverterSequenceTypeFfiStatusObservation.allocationSize(value.`observations`) +
+            FfiConverterLong.allocationSize(value.`maxObservedSequence`) +
+            FfiConverterLong.allocationSize(value.`forkSequence`) +
+            FfiConverterBoolean.allocationSize(value.`reconciliationRequired`) +
+            FfiConverterBoolean.allocationSize(value.`futureDatedObjectObserved`)
+    )
+
+    override fun write(value: FfiStatusState, buf: ByteBuffer) {
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterULong.write(value.`statusKeyEpoch`, buf)
+            FfiConverterString.write(value.`statusKeyId`, buf)
+            FfiConverterSequenceString.write(value.`retiredStatusKeyIds`, buf)
+            FfiConverterBoolean.write(value.`hasFloor`, buf)
+            FfiConverterLong.write(value.`floor`, buf)
+            FfiConverterOptionalTypeFfiRevocationList.write(value.`acceptedSnapshot`, buf)
+            FfiConverterSequenceString.write(value.`acceptedCertIds`, buf)
+            FfiConverterBoolean.write(value.`hasPrecedingCheckpoint`, buf)
+            FfiConverterLong.write(value.`precedingFloor`, buf)
+            FfiConverterSequenceString.write(value.`precedingAcceptedCertIds`, buf)
+            FfiConverterSequenceString.write(value.`denyUnionCertIds`, buf)
+            FfiConverterSequenceTypeFfiStatusObservation.write(value.`observations`, buf)
+            FfiConverterLong.write(value.`maxObservedSequence`, buf)
+            FfiConverterLong.write(value.`forkSequence`, buf)
+            FfiConverterBoolean.write(value.`reconciliationRequired`, buf)
+            FfiConverterBoolean.write(value.`futureDatedObjectObserved`, buf)
+    }
+}
+
+
+
 internal data class FfiTransactionReceipt (
     var `version`: kotlin.Long
     , 
@@ -6294,6 +6646,38 @@ internal object FfiConverterOptionalTypeFfiProofBundle: FfiConverterRustBuffer<F
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiRevocationList: FfiConverterRustBuffer<FfiRevocationList?> {
+    override fun read(buf: ByteBuffer): FfiRevocationList? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiRevocationList.read(buf)
+    }
+
+    override fun allocationSize(value: FfiRevocationList?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiRevocationList.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiRevocationList?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiRevocationList.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalTypeFfiRotationRefusal: FfiConverterRustBuffer<FfiRotationRefusal?> {
     override fun read(buf: ByteBuffer): FfiRotationRefusal? {
         if (buf.get().toInt() == 0) {
@@ -6576,6 +6960,34 @@ internal object FfiConverterSequenceTypeFfiStatusEvidenceObject: FfiConverterRus
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFfiStatusEvidenceObject.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiStatusObservation: FfiConverterRustBuffer<List<FfiStatusObservation>> {
+    override fun read(buf: ByteBuffer): List<FfiStatusObservation> {
+        val len = buf.getInt()
+        return List<FfiStatusObservation>(len) {
+            FfiConverterTypeFfiStatusObservation.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiStatusObservation>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiStatusObservation.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiStatusObservation>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiStatusObservation.write(it, buf)
         }
     }
 }
@@ -7435,6 +7847,89 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     }
     
 
+    @Throws(FfiException::class) internal fun `ffiApplyRevocationList`(`state`: FfiStatusState, `list`: FfiRevocationList, `boundIssuerId`: kotlin.String, `statusKeyEpoch`: kotlin.ULong, `statusKey`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long): FfiStatusState {
+            return FfiConverterTypeFfiStatusState.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list(
+    
+        
+        FfiConverterTypeFfiStatusState.lower(`state`),
+        FfiConverterTypeFfiRevocationList.lower(`list`),
+        FfiConverterString.lower(`boundIssuerId`),
+        FfiConverterULong.lower(`statusKeyEpoch`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),
+        FfiConverterTypeFfiStatusPolicy.lower(`policy`),
+        FfiConverterLong.lower(`now`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiApplyRevocationPush`(`state`: FfiStatusState, `push`: FfiRevocationPush, `boundIssuerId`: kotlin.String, `statusKeyEpoch`: kotlin.ULong, `statusKey`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long): FfiStatusState {
+            return FfiConverterTypeFfiStatusState.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_push(
+    
+        
+        FfiConverterTypeFfiStatusState.lower(`state`),
+        FfiConverterTypeFfiRevocationPush.lower(`push`),
+        FfiConverterString.lower(`boundIssuerId`),
+        FfiConverterULong.lower(`statusKeyEpoch`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),
+        FfiConverterTypeFfiStatusPolicy.lower(`policy`),
+        FfiConverterLong.lower(`now`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The empty initial state.
+         */
+    @Throws(FfiException::class) internal fun `ffiEmptyStatusState`(): FfiStatusState {
+            return FfiConverterTypeFfiStatusState.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_empty_status_state(
+    
+        _status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiRevocationStatusForCert`(`state`: FfiStatusState, `issuerId`: kotlin.String, `certId`: kotlin.String, `statusKeyEpoch`: kotlin.ULong, `statusKey`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long): FfiStatusResult {
+            return FfiConverterTypeFfiStatusResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_status_for_cert(
+    
+        
+        FfiConverterTypeFfiStatusState.lower(`state`),
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterString.lower(`certId`),
+        FfiConverterULong.lower(`statusKeyEpoch`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),
+        FfiConverterTypeFfiStatusPolicy.lower(`policy`),
+        FfiConverterLong.lower(`now`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiTransitionRevocationStatusEpoch`(`state`: FfiStatusState, `issuerId`: kotlin.String, `nextEpoch`: kotlin.ULong, `nextStatusKey`: FfiPublicKey): FfiStatusState {
+            return FfiConverterTypeFfiStatusState.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_transition_revocation_status_epoch(
+    
+        
+        FfiConverterTypeFfiStatusState.lower(`state`),
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterULong.lower(`nextEpoch`),
+        FfiConverterTypeFfiPublicKey.lower(`nextStatusKey`),_status)
+}
+    )
+    }
+    
+
     @Throws(FfiException::class) internal fun `ffiBundleHash`(`bundle`: FfiProofBundle): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(FfiException) { _status ->
@@ -7656,6 +8151,23 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         FfiConverterString.lower(`namespace`),
         FfiConverterLong.lower(`replayEpoch`),
         FfiConverterByteArray.lower(`challenge`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The claim ID from a precomputed challenge claim digest.
+         */
+    @Throws(FfiException::class) internal fun `ffiProtocolClaimIdFromDigest`(`namespace`: kotlin.String, `replayEpoch`: kotlin.Long, `digest`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id_from_digest(
+    
+        
+        FfiConverterString.lower(`namespace`),
+        FfiConverterLong.lower(`replayEpoch`),
+        FfiConverterByteArray.lower(`digest`),_status)
 }
     )
     }

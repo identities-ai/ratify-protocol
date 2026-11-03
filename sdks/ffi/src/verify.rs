@@ -412,3 +412,19 @@ pub fn ffi_verification_receipt_signable_bytes(
 pub fn ffi_transaction_receipt_sign_bytes(receipt: FfiTransactionReceipt) -> FfiResult<Vec<u8>> {
     call(|| Ok(core::transaction_receipt_v2_sign_bytes(&receipt.into())?))
 }
+
+/// The claim ID from a precomputed challenge claim digest.
+#[uniffi::export]
+pub fn ffi_protocol_claim_id_from_digest(
+    namespace: String,
+    replay_epoch: i64,
+    digest: Vec<u8>,
+) -> FfiResult<String> {
+    call(|| {
+        Ok(core::protocol_claim_id_from_digest_v2(
+            &namespace,
+            replay_epoch,
+            &digest,
+        )?)
+    })
+}

@@ -3677,18 +3677,21 @@
  },
  "RevocationObservationV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation",
+  "status": "mapped",
+  "swift": "RevocationObservation"
  },
  "RevocationObservationV2::accepted": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.accepted",
+  "status": "mapped",
+  "swift": "RevocationObservation.accepted"
  },
  "RevocationObservationV2::body_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.bodyDigest",
+  "status": "mapped",
+  "swift": "RevocationObservation.bodyDigest"
  },
  "RevocationObservationV2::clone": {
   "kind": "fn",
@@ -3707,8 +3710,9 @@
  },
  "RevocationObservationV2::evidence_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.evidenceDigest",
+  "status": "mapped",
+  "swift": "RevocationObservation.evidenceDigest"
  },
  "RevocationObservationV2::fmt": {
   "kind": "fn",
@@ -3717,48 +3721,57 @@
  },
  "RevocationObservationV2::fork": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.fork",
+  "status": "mapped",
+  "swift": "RevocationObservation.fork"
  },
  "RevocationObservationV2::future_dated": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.futureDated",
+  "status": "mapped",
+  "swift": "RevocationObservation.futureDated"
  },
  "RevocationObservationV2::gap": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.gap",
+  "status": "mapped",
+  "swift": "RevocationObservation.gap"
  },
  "RevocationObservationV2::object_type": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.objectType",
+  "status": "mapped",
+  "swift": "RevocationObservation.objectType"
  },
  "RevocationObservationV2::revoked_cert_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.revokedCertIds",
+  "status": "mapped",
+  "swift": "RevocationObservation.revokedCertIds"
  },
  "RevocationObservationV2::revoked_set_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.revokedSetDigest",
+  "status": "mapped",
+  "swift": "RevocationObservation.revokedSetDigest"
  },
  "RevocationObservationV2::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.sequence",
+  "status": "mapped",
+  "swift": "RevocationObservation.sequence"
  },
  "RevocationObservationV2::status_key_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.statusKeyEpoch",
+  "status": "mapped",
+  "swift": "RevocationObservation.statusKeyEpoch"
  },
  "RevocationObservationV2::status_key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationObservation.statusKeyId",
+  "status": "mapped",
+  "swift": "RevocationObservation.statusKeyId"
  },
  "RevocationPushV2": {
   "kind": "struct",
@@ -3814,13 +3827,15 @@
  },
  "RevocationStatusPolicyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusPolicy",
+  "status": "mapped",
+  "swift": "RevocationStatusPolicy"
  },
  "RevocationStatusPolicyV2::clock_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusPolicy.clockSkewSeconds",
+  "status": "mapped",
+  "swift": "RevocationStatusPolicy.clockSkewSeconds"
  },
  "RevocationStatusPolicyV2::clone": {
   "kind": "fn",
@@ -3839,18 +3854,21 @@
  },
  "RevocationStatusPolicyV2::max_list_lifetime_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusPolicy.maxListLifetimeSeconds",
+  "status": "mapped",
+  "swift": "RevocationStatusPolicy.maxListLifetimeSeconds"
  },
  "RevocationStatusPolicyV2::max_status_age_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusPolicy.maxStatusAgeSeconds",
+  "status": "mapped",
+  "swift": "RevocationStatusPolicy.maxStatusAgeSeconds"
  },
  "RevocationStatusResultV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusResult",
+  "status": "mapped",
+  "swift": "RevocationStatusResult"
  },
  "RevocationStatusResultV2::clone": {
   "kind": "fn",
@@ -3869,8 +3887,9 @@
  },
  "RevocationStatusResultV2::evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusResult.evidence",
+  "status": "mapped",
+  "swift": "RevocationStatusResult.evidence"
  },
  "RevocationStatusResultV2::fmt": {
   "kind": "fn",
@@ -3879,18 +3898,21 @@
  },
  "RevocationStatusResultV2::fresh_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusResult.freshUntil",
+  "status": "mapped",
+  "swift": "RevocationStatusResult.freshUntil"
  },
  "RevocationStatusResultV2::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusResult.reason",
+  "status": "mapped",
+  "swift": "RevocationStatusResult.reason"
  },
  "RevocationStatusResultV2::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusResult.status",
+  "status": "mapped",
+  "swift": "RevocationStatusResult.status"
  },
  "RevocationStatusResultV2::unavailable": {
   "kind": "fn",
@@ -3899,18 +3921,21 @@
  },
  "RevocationStatusStateV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState",
+  "status": "mapped",
+  "swift": "RevocationStatusState"
  },
  "RevocationStatusStateV2::accepted_cert_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.acceptedCertIds",
+  "status": "mapped",
+  "swift": "RevocationStatusState.acceptedCertIds"
  },
  "RevocationStatusStateV2::accepted_snapshot": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.acceptedSnapshot",
+  "status": "mapped",
+  "swift": "RevocationStatusState.acceptedSnapshot"
  },
  "RevocationStatusStateV2::clone": {
   "kind": "fn",
@@ -3919,18 +3944,21 @@
  },
  "RevocationStatusStateV2::default": {
   "kind": "fn",
-  "reason": "Default impl; Swift and Kotlin initializers take every field",
-  "status": "rust-idiom"
+  "kotlin": "emptyRevocationStatusState",
+  "status": "mapped",
+  "swift": "Ratify.emptyRevocationStatusState"
  },
  "RevocationStatusStateV2::deny_union_cert_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.denyUnionCertIds",
+  "status": "mapped",
+  "swift": "RevocationStatusState.denyUnionCertIds"
  },
  "RevocationStatusStateV2::floor": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.floor",
+  "status": "mapped",
+  "swift": "RevocationStatusState.floor"
  },
  "RevocationStatusStateV2::fmt": {
   "kind": "fn",
@@ -3939,68 +3967,81 @@
  },
  "RevocationStatusStateV2::fork_sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.forkSequence",
+  "status": "mapped",
+  "swift": "RevocationStatusState.forkSequence"
  },
  "RevocationStatusStateV2::future_dated_object_observed": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.futureDatedObjectObserved",
+  "status": "mapped",
+  "swift": "RevocationStatusState.futureDatedObjectObserved"
  },
  "RevocationStatusStateV2::has_floor": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.hasFloor",
+  "status": "mapped",
+  "swift": "RevocationStatusState.hasFloor"
  },
  "RevocationStatusStateV2::has_preceding_checkpoint": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.hasPrecedingCheckpoint",
+  "status": "mapped",
+  "swift": "RevocationStatusState.hasPrecedingCheckpoint"
  },
  "RevocationStatusStateV2::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.issuerId",
+  "status": "mapped",
+  "swift": "RevocationStatusState.issuerId"
  },
  "RevocationStatusStateV2::max_observed_sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.maxObservedSequence",
+  "status": "mapped",
+  "swift": "RevocationStatusState.maxObservedSequence"
  },
  "RevocationStatusStateV2::observations": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.observations",
+  "status": "mapped",
+  "swift": "RevocationStatusState.observations"
  },
  "RevocationStatusStateV2::preceding_accepted_cert_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.precedingAcceptedCertIds",
+  "status": "mapped",
+  "swift": "RevocationStatusState.precedingAcceptedCertIds"
  },
  "RevocationStatusStateV2::preceding_floor": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.precedingFloor",
+  "status": "mapped",
+  "swift": "RevocationStatusState.precedingFloor"
  },
  "RevocationStatusStateV2::reconciliation_required": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.reconciliationRequired",
+  "status": "mapped",
+  "swift": "RevocationStatusState.reconciliationRequired"
  },
  "RevocationStatusStateV2::retired_status_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.retiredStatusKeyIds",
+  "status": "mapped",
+  "swift": "RevocationStatusState.retiredStatusKeyIds"
  },
  "RevocationStatusStateV2::status_key_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.statusKeyEpoch",
+  "status": "mapped",
+  "swift": "RevocationStatusState.statusKeyEpoch"
  },
  "RevocationStatusStateV2::status_key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RevocationStatusState.statusKeyId",
+  "status": "mapped",
+  "swift": "RevocationStatusState.statusKeyId"
  },
  "RevokedCertV2": {
   "kind": "struct",
@@ -8380,8 +8421,9 @@
  },
  "apply_revocation_list_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "applyRevocationList",
+  "status": "mapped",
+  "swift": "Ratify.applyRevocationList"
  },
  "apply_revocation_push_to_journal_v2": {
   "kind": "fn",
@@ -8390,8 +8432,9 @@
  },
  "apply_revocation_push_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "applyRevocationPush",
+  "status": "mapped",
+  "swift": "Ratify.applyRevocationPush"
  },
  "bind_verification_receipt_body_v2": {
   "kind": "fn",
@@ -8777,8 +8820,9 @@
  },
  "protocol_claim_id_from_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "protocolClaimIdFromDigest",
+  "status": "mapped",
+  "swift": "Ratify.protocolClaimId"
  },
  "protocol_claim_id_v2": {
   "kind": "fn",
@@ -8857,8 +8901,9 @@
  },
  "revocation_status_for_cert_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "revocationStatusForCert",
+  "status": "mapped",
+  "swift": "Ratify.revocationStatusForCert"
  },
  "revocation_status_from_journal_v2": {
   "kind": "fn",
@@ -9044,8 +9089,9 @@
  },
  "transition_revocation_status_epoch_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "transitionRevocationStatusEpoch",
+  "status": "mapped",
+  "swift": "Ratify.transitionRevocationStatusEpoch"
  },
  "v2_error_class_of": {
   "kind": "fn",

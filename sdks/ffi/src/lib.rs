@@ -17,6 +17,7 @@ mod objects;
 mod rotation;
 mod scope;
 mod sign;
+mod status;
 mod verify;
 
 pub use archival::*;
@@ -27,4 +28,5 @@ pub use objects::*;
 pub use rotation::*;
 pub use scope::*;
 pub use sign::*;
+pub use status::*;
 pub use verify::*;

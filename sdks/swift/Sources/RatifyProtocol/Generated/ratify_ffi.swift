@@ -3233,6 +3233,358 @@ func FfiConverterTypeFfiStatusEvidenceObject_lower(_ value: FfiStatusEvidenceObj
 }
 
 
+/**
+ * One status object the reducer observed.
+ */
+struct FfiStatusObservation: Equatable, Hashable {
+    var objectType: UInt16
+    var statusKeyEpoch: UInt64
+    var statusKeyId: String
+    var sequence: Int64
+    var evidenceDigest: Data
+    var bodyDigest: Data
+    var revokedSetDigest: Data
+    var revokedCertIds: [String]
+    var futureDated: Bool
+    var fork: Bool
+    var gap: Bool
+    var accepted: Bool
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(objectType: UInt16, statusKeyEpoch: UInt64, statusKeyId: String, sequence: Int64, evidenceDigest: Data, bodyDigest: Data, revokedSetDigest: Data, revokedCertIds: [String], futureDated: Bool, fork: Bool, gap: Bool, accepted: Bool) {
+        self.objectType = objectType
+        self.statusKeyEpoch = statusKeyEpoch
+        self.statusKeyId = statusKeyId
+        self.sequence = sequence
+        self.evidenceDigest = evidenceDigest
+        self.bodyDigest = bodyDigest
+        self.revokedSetDigest = revokedSetDigest
+        self.revokedCertIds = revokedCertIds
+        self.futureDated = futureDated
+        self.fork = fork
+        self.gap = gap
+        self.accepted = accepted
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusObservation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusObservation: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusObservation {
+        return
+            try FfiStatusObservation(
+                objectType: FfiConverterUInt16.read(from: &buf), 
+                statusKeyEpoch: FfiConverterUInt64.read(from: &buf), 
+                statusKeyId: FfiConverterString.read(from: &buf), 
+                sequence: FfiConverterInt64.read(from: &buf), 
+                evidenceDigest: FfiConverterData.read(from: &buf), 
+                bodyDigest: FfiConverterData.read(from: &buf), 
+                revokedSetDigest: FfiConverterData.read(from: &buf), 
+                revokedCertIds: FfiConverterSequenceString.read(from: &buf), 
+                futureDated: FfiConverterBool.read(from: &buf), 
+                fork: FfiConverterBool.read(from: &buf), 
+                gap: FfiConverterBool.read(from: &buf), 
+                accepted: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusObservation, into buf: inout [UInt8]) {
+        FfiConverterUInt16.write(value.objectType, into: &buf)
+        FfiConverterUInt64.write(value.statusKeyEpoch, into: &buf)
+        FfiConverterString.write(value.statusKeyId, into: &buf)
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterData.write(value.evidenceDigest, into: &buf)
+        FfiConverterData.write(value.bodyDigest, into: &buf)
+        FfiConverterData.write(value.revokedSetDigest, into: &buf)
+        FfiConverterSequenceString.write(value.revokedCertIds, into: &buf)
+        FfiConverterBool.write(value.futureDated, into: &buf)
+        FfiConverterBool.write(value.fork, into: &buf)
+        FfiConverterBool.write(value.gap, into: &buf)
+        FfiConverterBool.write(value.accepted, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusObservation_lift(_ buf: RustBuffer) throws -> FfiStatusObservation {
+    return try FfiConverterTypeFfiStatusObservation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusObservation_lower(_ value: FfiStatusObservation) -> RustBuffer {
+    return FfiConverterTypeFfiStatusObservation.lower(value)
+}
+
+
+/**
+ * The relying party's freshness policy for status evidence.
+ */
+struct FfiStatusPolicy: Equatable, Hashable {
+    var maxListLifetimeSeconds: Int64
+    var maxStatusAgeSeconds: Int64
+    var clockSkewSeconds: Int64
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(maxListLifetimeSeconds: Int64, maxStatusAgeSeconds: Int64, clockSkewSeconds: Int64) {
+        self.maxListLifetimeSeconds = maxListLifetimeSeconds
+        self.maxStatusAgeSeconds = maxStatusAgeSeconds
+        self.clockSkewSeconds = clockSkewSeconds
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusPolicy: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusPolicy: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusPolicy {
+        return
+            try FfiStatusPolicy(
+                maxListLifetimeSeconds: FfiConverterInt64.read(from: &buf), 
+                maxStatusAgeSeconds: FfiConverterInt64.read(from: &buf), 
+                clockSkewSeconds: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusPolicy, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.maxListLifetimeSeconds, into: &buf)
+        FfiConverterInt64.write(value.maxStatusAgeSeconds, into: &buf)
+        FfiConverterInt64.write(value.clockSkewSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPolicy_lift(_ buf: RustBuffer) throws -> FfiStatusPolicy {
+    return try FfiConverterTypeFfiStatusPolicy.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPolicy_lower(_ value: FfiStatusPolicy) -> RustBuffer {
+    return FfiConverterTypeFfiStatusPolicy.lower(value)
+}
+
+
+/**
+ * A certificate's revocation status from the reducer state.
+ */
+struct FfiStatusResult: Equatable, Hashable {
+    /**
+     * "not_revoked", "revoked", or "indeterminate".
+     */
+    var status: String
+    /**
+     * "" or, for indeterminate, "unavailable" / "stale".
+     */
+    var reason: String
+    var evidence: [FfiStatusEvidenceEntry]
+    var freshUntil: Int64
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(
+        /**
+         * "not_revoked", "revoked", or "indeterminate".
+         */status: String, 
+        /**
+         * "" or, for indeterminate, "unavailable" / "stale".
+         */reason: String, evidence: [FfiStatusEvidenceEntry], freshUntil: Int64) {
+        self.status = status
+        self.reason = reason
+        self.evidence = evidence
+        self.freshUntil = freshUntil
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusResult: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusResult {
+        return
+            try FfiStatusResult(
+                status: FfiConverterString.read(from: &buf), 
+                reason: FfiConverterString.read(from: &buf), 
+                evidence: FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(from: &buf), 
+                freshUntil: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterString.write(value.reason, into: &buf)
+        FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.evidence, into: &buf)
+        FfiConverterInt64.write(value.freshUntil, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusResult_lift(_ buf: RustBuffer) throws -> FfiStatusResult {
+    return try FfiConverterTypeFfiStatusResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusResult_lower(_ value: FfiStatusResult) -> RustBuffer {
+    return FfiConverterTypeFfiStatusResult.lower(value)
+}
+
+
+/**
+ * Caller-persisted revocation status state for one issuer.
+ */
+struct FfiStatusState: Equatable, Hashable {
+    var issuerId: String
+    var statusKeyEpoch: UInt64
+    var statusKeyId: String
+    var retiredStatusKeyIds: [String]
+    var hasFloor: Bool
+    var floor: Int64
+    var acceptedSnapshot: FfiRevocationList?
+    var acceptedCertIds: [String]
+    var hasPrecedingCheckpoint: Bool
+    var precedingFloor: Int64
+    var precedingAcceptedCertIds: [String]
+    var denyUnionCertIds: [String]
+    var observations: [FfiStatusObservation]
+    var maxObservedSequence: Int64
+    var forkSequence: Int64
+    var reconciliationRequired: Bool
+    var futureDatedObjectObserved: Bool
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(issuerId: String, statusKeyEpoch: UInt64, statusKeyId: String, retiredStatusKeyIds: [String], hasFloor: Bool, floor: Int64, acceptedSnapshot: FfiRevocationList?, acceptedCertIds: [String], hasPrecedingCheckpoint: Bool, precedingFloor: Int64, precedingAcceptedCertIds: [String], denyUnionCertIds: [String], observations: [FfiStatusObservation], maxObservedSequence: Int64, forkSequence: Int64, reconciliationRequired: Bool, futureDatedObjectObserved: Bool) {
+        self.issuerId = issuerId
+        self.statusKeyEpoch = statusKeyEpoch
+        self.statusKeyId = statusKeyId
+        self.retiredStatusKeyIds = retiredStatusKeyIds
+        self.hasFloor = hasFloor
+        self.floor = floor
+        self.acceptedSnapshot = acceptedSnapshot
+        self.acceptedCertIds = acceptedCertIds
+        self.hasPrecedingCheckpoint = hasPrecedingCheckpoint
+        self.precedingFloor = precedingFloor
+        self.precedingAcceptedCertIds = precedingAcceptedCertIds
+        self.denyUnionCertIds = denyUnionCertIds
+        self.observations = observations
+        self.maxObservedSequence = maxObservedSequence
+        self.forkSequence = forkSequence
+        self.reconciliationRequired = reconciliationRequired
+        self.futureDatedObjectObserved = futureDatedObjectObserved
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusState: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusState {
+        return
+            try FfiStatusState(
+                issuerId: FfiConverterString.read(from: &buf), 
+                statusKeyEpoch: FfiConverterUInt64.read(from: &buf), 
+                statusKeyId: FfiConverterString.read(from: &buf), 
+                retiredStatusKeyIds: FfiConverterSequenceString.read(from: &buf), 
+                hasFloor: FfiConverterBool.read(from: &buf), 
+                floor: FfiConverterInt64.read(from: &buf), 
+                acceptedSnapshot: FfiConverterOptionTypeFfiRevocationList.read(from: &buf), 
+                acceptedCertIds: FfiConverterSequenceString.read(from: &buf), 
+                hasPrecedingCheckpoint: FfiConverterBool.read(from: &buf), 
+                precedingFloor: FfiConverterInt64.read(from: &buf), 
+                precedingAcceptedCertIds: FfiConverterSequenceString.read(from: &buf), 
+                denyUnionCertIds: FfiConverterSequenceString.read(from: &buf), 
+                observations: FfiConverterSequenceTypeFfiStatusObservation.read(from: &buf), 
+                maxObservedSequence: FfiConverterInt64.read(from: &buf), 
+                forkSequence: FfiConverterInt64.read(from: &buf), 
+                reconciliationRequired: FfiConverterBool.read(from: &buf), 
+                futureDatedObjectObserved: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusState, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.issuerId, into: &buf)
+        FfiConverterUInt64.write(value.statusKeyEpoch, into: &buf)
+        FfiConverterString.write(value.statusKeyId, into: &buf)
+        FfiConverterSequenceString.write(value.retiredStatusKeyIds, into: &buf)
+        FfiConverterBool.write(value.hasFloor, into: &buf)
+        FfiConverterInt64.write(value.floor, into: &buf)
+        FfiConverterOptionTypeFfiRevocationList.write(value.acceptedSnapshot, into: &buf)
+        FfiConverterSequenceString.write(value.acceptedCertIds, into: &buf)
+        FfiConverterBool.write(value.hasPrecedingCheckpoint, into: &buf)
+        FfiConverterInt64.write(value.precedingFloor, into: &buf)
+        FfiConverterSequenceString.write(value.precedingAcceptedCertIds, into: &buf)
+        FfiConverterSequenceString.write(value.denyUnionCertIds, into: &buf)
+        FfiConverterSequenceTypeFfiStatusObservation.write(value.observations, into: &buf)
+        FfiConverterInt64.write(value.maxObservedSequence, into: &buf)
+        FfiConverterInt64.write(value.forkSequence, into: &buf)
+        FfiConverterBool.write(value.reconciliationRequired, into: &buf)
+        FfiConverterBool.write(value.futureDatedObjectObserved, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusState_lift(_ buf: RustBuffer) throws -> FfiStatusState {
+    return try FfiConverterTypeFfiStatusState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusState_lower(_ value: FfiStatusState) -> RustBuffer {
+    return FfiConverterTypeFfiStatusState.lower(value)
+}
+
+
 struct FfiTransactionReceipt: Equatable, Hashable {
     var version: Int64
     var transactionId: String
@@ -4409,6 +4761,30 @@ fileprivate struct FfiConverterOptionTypeFfiProofBundle: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiRevocationList: FfiConverterRustBuffer {
+    typealias SwiftType = FfiRevocationList?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiRevocationList.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiRevocationList.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiRotationRefusal: FfiConverterRustBuffer {
     typealias SwiftType = FfiRotationRefusal?
 
@@ -4648,6 +5024,31 @@ fileprivate struct FfiConverterSequenceTypeFfiStatusEvidenceObject: FfiConverter
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFfiStatusEvidenceObject.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFfiStatusObservation: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiStatusObservation]
+
+    static func write(_ value: [FfiStatusObservation], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiStatusObservation.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiStatusObservation] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiStatusObservation]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiStatusObservation.read(from: &buf))
         }
         return seq
     }
@@ -5269,6 +5670,69 @@ func ffiSignWitnessEntryWithSigner(cancel: FfiCancelToken, entry: FfiWitnessEntr
     )
 })
 }
+func ffiApplyRevocationList(state: FfiStatusState, list: FfiRevocationList, boundIssuerId: String, statusKeyEpoch: UInt64, statusKey: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusState  {
+    return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list(
+        FfiConverterTypeFfiStatusState_lower(state),
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterUInt64.lower(statusKeyEpoch),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+func ffiApplyRevocationPush(state: FfiStatusState, push: FfiRevocationPush, boundIssuerId: String, statusKeyEpoch: UInt64, statusKey: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusState  {
+    return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_push(
+        FfiConverterTypeFfiStatusState_lower(state),
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(boundIssuerId),
+        FfiConverterUInt64.lower(statusKeyEpoch),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+/**
+ * The empty initial state.
+ */
+func ffiEmptyStatusState()throws  -> FfiStatusState  {
+    return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_empty_status_state(uniffiCallStatus
+    )
+})
+}
+func ffiRevocationStatusForCert(state: FfiStatusState, issuerId: String, certId: String, statusKeyEpoch: UInt64, statusKey: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusResult  {
+    return try  FfiConverterTypeFfiStatusResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_status_for_cert(
+        FfiConverterTypeFfiStatusState_lower(state),
+        FfiConverterString.lower(issuerId),
+        FfiConverterString.lower(certId),
+        FfiConverterUInt64.lower(statusKeyEpoch),
+        FfiConverterTypeFfiPublicKey_lower(statusKey),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+func ffiTransitionRevocationStatusEpoch(state: FfiStatusState, issuerId: String, nextEpoch: UInt64, nextStatusKey: FfiPublicKey)throws  -> FfiStatusState  {
+    return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_transition_revocation_status_epoch(
+        FfiConverterTypeFfiStatusState_lower(state),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(nextEpoch),
+        FfiConverterTypeFfiPublicKey_lower(nextStatusKey),uniffiCallStatus
+    )
+})
+}
 func ffiBundleHash(bundle: FfiProofBundle)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -5420,6 +5884,19 @@ func ffiProtocolClaimId(namespace: String, replayEpoch: Int64, challenge: Data)t
         FfiConverterString.lower(namespace),
         FfiConverterInt64.lower(replayEpoch),
         FfiConverterData.lower(challenge),uniffiCallStatus
+    )
+})
+}
+/**
+ * The claim ID from a precomputed challenge claim digest.
+ */
+func ffiProtocolClaimIdFromDigest(namespace: String, replayEpoch: Int64, digest: Data)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id_from_digest(
+        FfiConverterString.lower(namespace),
+        FfiConverterInt64.lower(replayEpoch),
+        FfiConverterData.lower(digest),uniffiCallStatus
     )
 })
 }
@@ -5771,6 +6248,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_signer() != 53719) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list() != 33860) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push() != 9136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_empty_status_state() != 4586) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_status_for_cert() != 55388) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch() != 56233) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5823,6 +6315,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id() != 49564) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id_from_digest() != 24862) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes() != 57243) {

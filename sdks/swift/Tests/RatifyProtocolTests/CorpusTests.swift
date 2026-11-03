@@ -24,12 +24,13 @@ final class CorpusTests: XCTestCase {
         "digest-functions.json": ArchivalRunner.digestFunctions,
         "log-sequences.json": LogsRunner.logSequences,
         "rotation-sequences.json": LogsRunner.rotationSequences,
+        "status-sequences.json": StatusRunner.statusSequences,
+        "challenge-claim.json": StatusRunner.challengeClaim,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
         "README.md": "M3",
-        "challenge-claim.json": "M2",
         "challenge-issuance.json": "M3",
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
@@ -38,7 +39,6 @@ final class CorpusTests: XCTestCase {
         "lifecycle-scenarios.json": "M3",
         "security-journal.json": "M2",
         "status-publisher.json": "M2",
-        "status-sequences.json": "M2",
         "transaction-verification.json": "M3",
         "verifier-ordering.json": "M3",
     ]

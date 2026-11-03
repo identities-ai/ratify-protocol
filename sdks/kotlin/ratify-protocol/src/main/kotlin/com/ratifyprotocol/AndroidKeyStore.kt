@@ -178,8 +178,7 @@ public class AndroidKeyStore(
     public fun delete(keyId: String) {
         val ed25519Alias = runCatching { loadRecord(keyId) }.getOrNull()?.let { record ->
             try {
-                ffi { com.ratifyprotocol.internal.ffi.ffiParseStorageRecord(record) }.fields.firstOrNull { it.tag.toInt() == 0x06 }
-                    ?.let { String(it.value, Charsets.US_ASCII) }
+                ffi { com.ratifyprotocol.internal.ffi.ffiStorageRecordKeystoreAlias(record) }
             } finally {
                 record.fill(0)
             }

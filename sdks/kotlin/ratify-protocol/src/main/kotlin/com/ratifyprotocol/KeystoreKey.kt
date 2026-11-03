@@ -121,7 +121,8 @@ public class KeystoreKey private constructor(internal val split: FfiSplitKey, pr
         /** Load a key from its type 0x03 record; its Keystore half must still exist. */
         public fun fromStorageRecord(record: ByteArray): KeystoreKey {
             val split = ffi { FfiSplitKey.fromStorageRecord(record) }
-            val alias = String(ffi { com.ratifyprotocol.internal.ffi.ffiParseStorageRecord(record) }.fields.first { it.tag.toInt() == 0x06 }.value)
+            val alias = ffi { com.ratifyprotocol.internal.ffi.ffiStorageRecordKeystoreAlias(record) }
+                ?: throw RatifyException.Protocol(ErrorClass.MALFORMED, "record is not a Keystore key")
             return KeystoreKey(split, alias).also { it.privateKey() }
         }
 

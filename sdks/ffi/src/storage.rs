@@ -265,6 +265,45 @@ pub fn ffi_parse_storage_record(data: Vec<u8>) -> FfiResult<FfiStorageRecord> {
     })
 }
 
+/// A record's header facts, without its fields (no key material crosses).
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct FfiStorageHeader {
+    pub record_type: u8,
+    pub key_id: String,
+    /// The cleartext header bytes (the Android AES-GCM associated data).
+    pub header: Vec<u8>,
+}
+
+/// Parse and validate a record, returning only its header facts.
+#[uniffi::export]
+pub fn ffi_parse_storage_header(data: Vec<u8>) -> FfiResult<FfiStorageHeader> {
+    call(|| {
+        let data = Zeroizing::new(data);
+        let r = parse_secret(&data)?;
+        Ok(FfiStorageHeader {
+            record_type: r.record_type,
+            key_id: r.key_id.clone(),
+            header: r.header.clone(),
+        })
+    })
+}
+
+/// The Keystore alias a type 0x03 record names, or None for other types.
+#[uniffi::export]
+pub fn ffi_storage_record_keystore_alias(data: Vec<u8>) -> FfiResult<Option<String>> {
+    call(|| {
+        let data = Zeroizing::new(data);
+        let r = parse_secret(&data)?;
+        if r.record_type != TYPE_ANDROID_SPLIT {
+            return Ok(None);
+        }
+        let alias = std::str::from_utf8(r.field(TAG_KEYSTORE_ALIAS))
+            .map_err(|_| malformed("keystore alias is not ASCII"))?
+            .to_string();
+        Ok(Some(alias))
+    })
+}
+
 /// Encode a record of any type, validating it against its schema.
 #[uniffi::export]
 pub fn ffi_encode_storage_record(
@@ -272,8 +311,13 @@ pub fn ffi_encode_storage_record(
     key_id: String,
     fields: Vec<FfiStorageField>,
 ) -> FfiResult<Vec<u8>> {
-    call(|| {
-        let refs: Vec<(u8, &[u8])> = fields.iter().map(|f| (f.tag, f.value.as_slice())).collect();
+    call(move || {
+        // The field values (seeds) are wiped when this call ends, on every path.
+        let fields: Vec<(u8, Zeroizing<Vec<u8>>)> = fields
+            .into_iter()
+            .map(|f| (f.tag, Zeroizing::new(f.value)))
+            .collect();
+        let refs: Vec<(u8, &[u8])> = fields.iter().map(|(t, v)| (*t, v.as_slice())).collect();
         Ok(encode(record_type, &key_id, &refs)?.to_vec())
     })
 }

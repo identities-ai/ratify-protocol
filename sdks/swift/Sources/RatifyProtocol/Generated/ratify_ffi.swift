@@ -4077,6 +4077,73 @@ func FfiConverterTypeFfiStorageField_lower(_ value: FfiStorageField) -> RustBuff
 
 
 /**
+ * A record's header facts, without its fields (no key material crosses).
+ */
+struct FfiStorageHeader: Equatable, Hashable {
+    var recordType: UInt8
+    var keyId: String
+    /**
+     * The cleartext header bytes (the Android AES-GCM associated data).
+     */
+    var header: Data
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(recordType: UInt8, keyId: String, 
+        /**
+         * The cleartext header bytes (the Android AES-GCM associated data).
+         */header: Data) {
+        self.recordType = recordType
+        self.keyId = keyId
+        self.header = header
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStorageHeader: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStorageHeader: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStorageHeader {
+        return
+            try FfiStorageHeader(
+                recordType: FfiConverterUInt8.read(from: &buf), 
+                keyId: FfiConverterString.read(from: &buf), 
+                header: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStorageHeader, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.recordType, into: &buf)
+        FfiConverterString.write(value.keyId, into: &buf)
+        FfiConverterData.write(value.header, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageHeader_lift(_ buf: RustBuffer) throws -> FfiStorageHeader {
+    return try FfiConverterTypeFfiStorageHeader.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStorageHeader_lower(_ value: FfiStorageHeader) -> RustBuffer {
+    return FfiConverterTypeFfiStorageHeader.lower(value)
+}
+
+
+/**
  * A parsed, validated storage record.
  */
 struct FfiStorageRecord: Equatable, Hashable {
@@ -6552,12 +6619,34 @@ func ffiEncodeStorageRecord(recordType: UInt8, keyId: String, fields: [FfiStorag
 })
 }
 /**
+ * Parse and validate a record, returning only its header facts.
+ */
+func ffiParseStorageHeader(data: Data)throws  -> FfiStorageHeader  {
+    return try  FfiConverterTypeFfiStorageHeader_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_header(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
  * Parse and validate any record type.
  */
 func ffiParseStorageRecord(data: Data)throws  -> FfiStorageRecord  {
     return try  FfiConverterTypeFfiStorageRecord_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
+ * The Keystore alias a type 0x03 record names, or None for other types.
+ */
+func ffiStorageRecordKeystoreAlias(data: Data)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_storage_record_keystore_alias(
         FfiConverterData.lower(data),uniffiCallStatus
     )
 })
@@ -7122,7 +7211,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record() != 54282) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_header() != 22888) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record() != 64984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_storage_record_keystore_alias() != 5441) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {

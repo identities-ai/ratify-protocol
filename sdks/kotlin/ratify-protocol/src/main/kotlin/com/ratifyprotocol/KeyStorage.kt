@@ -1,7 +1,7 @@
 package com.ratifyprotocol
 
 import com.ratifyprotocol.internal.ffi.FfiSoftwareKey
-import com.ratifyprotocol.internal.ffi.ffiParseStorageRecord
+import com.ratifyprotocol.internal.ffi.ffiParseStorageHeader
 
 /**
  * A parsed key storage record (sdks/kotlin/KEY_STORAGE.md): the documented,
@@ -24,16 +24,12 @@ public class KeyStorageRecord(data: ByteArray) {
     private val h: ByteArray
 
     init {
-        // Keep only the header facts; the parsed fields (key material) are wiped at once.
-        val r = ffi { ffiParseStorageRecord(data) }
-        try {
-            recordType = RecordType.entries.firstOrNull { it.code == r.recordType }
-                ?: throw RatifyException.Protocol(ErrorClass.MALFORMED, "unknown record type")
-            keyId = r.keyId
-            h = r.header.copyOf()
-        } finally {
-            r.fields.forEach { it.value.fill(0) }
-        }
+        // Only the header facts cross: no key material leaves the FFI here.
+        val r = ffi { ffiParseStorageHeader(data) }
+        recordType = RecordType.entries.firstOrNull { it.code == r.recordType }
+            ?: throw RatifyException.Protocol(ErrorClass.MALFORMED, "unknown record type")
+        keyId = r.keyId
+        h = r.header
     }
 
     /** The cleartext header bytes (bound as associated data where encrypted). */

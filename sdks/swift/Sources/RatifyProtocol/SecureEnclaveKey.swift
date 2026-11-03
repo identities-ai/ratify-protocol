@@ -65,7 +65,8 @@ public final class SecureEnclaveKey: Sendable {
     /// re-derived and must match both the recorded ML-DSA public key and the
     /// recorded key ID.
     public convenience init(storageRecord: Data, authenticationContext: LAContext? = nil) throws(RatifyError) {
-        let r = try KeyStorageRecord.parse(storageRecord)
+        var r = try KeyStorageRecord.parse(storageRecord)
+        defer { for k in r.fields.keys { r.fields[k]!.resetBytes(in: 0..<r.fields[k]!.count) } }
         guard r.type == .secureEnclaveHybrid else {
             throw .protocol(.malformed, message: "record is not a Secure Enclave key")
         }
@@ -73,9 +74,7 @@ public final class SecureEnclaveKey: Sendable {
         do { mldsa = try SecureEnclave.MLDSA65.PrivateKey(dataRepresentation: r.fields[0x04]!, authenticationContext: authenticationContext) } catch {
             throw .protocol(.configurationInvalid, message: "the Secure Enclave refused the key (another device, or deleted): \(error)")
         }
-        var edSeed = r.fields[0x01]!
-        defer { edSeed.resetBytes(in: 0..<edSeed.count) }
-        try self.init(mldsa: mldsa, edSeed: Data(edSeed))
+        try self.init(mldsa: mldsa, edSeed: Data(r.fields[0x01]!))
         guard publicKey.mlDsa65 == r.fields[0x03]!, keyId == r.keyId else {
             throw .protocol(.keyIdMismatch, message: "the stored key derives a key other than the recorded one")
         }

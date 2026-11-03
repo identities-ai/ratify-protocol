@@ -857,7 +857,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_header(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_storage_record_keystore_alias(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash(
     ): Int
@@ -1255,7 +1259,11 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_storage_record(`recordType`: Byte,`keyId`: RustBuffer.ByValue,`fields`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_header(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_storage_record_keystore_alias(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1644,7 +1652,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record() and 0xFFFF) != 54282) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_header() and 0xFFFF) != 22888) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_parse_storage_record() and 0xFFFF) != 64984) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_storage_record_keystore_alias() and 0xFFFF) != 5441) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() and 0xFFFF) != 51989) {
@@ -6389,6 +6403,55 @@ internal object FfiConverterTypeFfiStorageField: FfiConverterRustBuffer<FfiStora
 
 
 /**
+ * A record's header facts, without its fields (no key material crosses).
+ */
+internal data class FfiStorageHeader (
+    var `recordType`: kotlin.UByte
+    , 
+    var `keyId`: kotlin.String
+    , 
+    /**
+     * The cleartext header bytes (the Android AES-GCM associated data).
+     */
+    var `header`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStorageHeader: FfiConverterRustBuffer<FfiStorageHeader> {
+    override fun read(buf: ByteBuffer): FfiStorageHeader {
+        return FfiStorageHeader(
+            FfiConverterUByte.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStorageHeader) = (
+            FfiConverterUByte.allocationSize(value.`recordType`) +
+            FfiConverterString.allocationSize(value.`keyId`) +
+            FfiConverterByteArray.allocationSize(value.`header`)
+    )
+
+    override fun write(value: FfiStorageHeader, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`recordType`, buf)
+            FfiConverterString.write(value.`keyId`, buf)
+            FfiConverterByteArray.write(value.`header`, buf)
+    }
+}
+
+
+
+/**
  * A parsed, validated storage record.
  */
 internal data class FfiStorageRecord (
@@ -9242,12 +9305,42 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     
 
         /**
+         * Parse and validate a record, returning only its header facts.
+         */
+    @Throws(FfiException::class) internal fun `ffiParseStorageHeader`(`data`: kotlin.ByteArray): FfiStorageHeader {
+            return FfiConverterTypeFfiStorageHeader.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_header(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+        /**
          * Parse and validate any record type.
          */
     @Throws(FfiException::class) internal fun `ffiParseStorageRecord`(`data`: kotlin.ByteArray): FfiStorageRecord {
             return FfiConverterTypeFfiStorageRecord.lift(
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_parse_storage_record(
+    
+        
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The Keystore alias a type 0x03 record names, or None for other types.
+         */
+    @Throws(FfiException::class) internal fun `ffiStorageRecordKeystoreAlias`(`data`: kotlin.ByteArray): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_storage_record_keystore_alias(
     
         
         FfiConverterByteArray.lower(`data`),_status)

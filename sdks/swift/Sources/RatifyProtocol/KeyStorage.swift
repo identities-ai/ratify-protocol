@@ -21,14 +21,16 @@ public struct KeyStorageRecord: Sendable {
     /// Parse and validate a record. Throws `malformed` for any deviation
     /// from the documented format. Only the header facts are kept.
     public init(_ data: Data) throws(RatifyError) {
-        let r = try Self.parse(data)
-        recordType = r.type
+        // Only the header facts cross: no key material leaves the FFI here.
+        let r = try ffi { try ffiParseStorageHeader(data: data) }
+        guard let t = RecordType(rawValue: r.recordType) else { throw .protocol(.malformed, message: "unknown record type") }
+        recordType = t
         keyId = r.keyId
         header = r.header
     }
 
-    /// The full parse, fields included, for the SDK's own loaders. The
-    /// caller keeps the fields only as long as it needs them.
+    /// The full parse, fields included, for the Secure Enclave loader only,
+    /// which wipes its copies (best effort: Swift `Data` may have copied).
     static func parse(_ data: Data) throws(RatifyError) -> (type: RecordType, keyId: String, header: Data, fields: [UInt8: Data]) {
         let r = try ffi { try ffiParseStorageRecord(data: data) }
         guard let t = RecordType(rawValue: r.recordType) else { throw .protocol(.malformed, message: "unknown record type") }

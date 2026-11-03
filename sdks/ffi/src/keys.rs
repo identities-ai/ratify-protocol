@@ -84,8 +84,9 @@ impl FfiSoftwareKey {
     /// FIPS 204 seed, the derivation every SDK and `keys.json` use.
     #[uniffi::constructor]
     pub fn from_seeds(ed25519_seed: Vec<u8>, ml_dsa_65_seed: Vec<u8>) -> FfiResult<Arc<Self>> {
-        let (ed_in, ml_in) = (Zeroizing::new(ed25519_seed), Zeroizing::new(ml_dsa_65_seed));
-        call(|| {
+        call(move || {
+            // Wiped on drop, also when unwinding from a panic.
+            let (ed_in, ml_in) = (Zeroizing::new(ed25519_seed), Zeroizing::new(ml_dsa_65_seed));
             let ed = seed32(&ed_in, "ed25519 seed")?;
             let ml = seed32(&ml_in, "ml-dsa-65 seed")?;
             Self::build(ed, ml)

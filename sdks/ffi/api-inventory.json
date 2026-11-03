@@ -6570,8 +6570,8 @@
  },
  "V2ObjectType": {
   "kind": "enum",
-  "status": "pending",
-  "milestone": "M2"
+  "milestone": "M2",
+  "status": "pending"
  },
  "V2ObjectType::ChallengePresentation": {
   "kind": "member",
@@ -8683,8 +8683,9 @@
  },
  "public_key_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SoftwarePrivateKey.publicKey",
+  "status": "mapped",
+  "swift": "SoftwarePrivateKey.publicKey"
  },
  "receipt_outbox_digest_v2": {
   "kind": "fn",

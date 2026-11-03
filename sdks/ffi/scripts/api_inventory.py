@@ -154,6 +154,35 @@ EXTRA_KOTLIN = {
 }
 
 
+# Members every language synthesizes for value types, enums and errors.
+SYNTH_SWIFT = {"init", "hash", "hashValue", "__derived_struct_equals", "__derived_enum_equals", "==",
+               "description", "RawValue", "AllCases", "allCases", "rawValue", "errorDescription",
+               "localizedDescription"}
+SYNTH_KOTLIN = {"init", "equals", "hashCode", "toString", "copy", "values", "valueOf", "entries",
+                "Companion", "INSTANCE", "message", "cause", "name", "ordinal", "getEntries", "copy$default"}
+# Public members that no inventory item maps, each with its reason.
+EXTRA_MEMBERS = {
+    "RatifyException.errorClass": "the §2.7 class of any RatifyException",
+    "RatifyException.Signing.errorClass": "the §2.7 class (plan §2.2)",
+    "RatifyException.Signing.kind": "the V2SignError kind (plan §2.2); mapped in M2",
+    "RatifyException.Signing.detail": "diagnostic message (plan §2.2)",
+    "RatifyException.Internal.errorClass": "always null for internal errors",
+    "RatifyException.Internal.kind": "the internal error kind (plan §2.2)",
+    "RatifyException.Internal.detail": "diagnostic message (plan §2.2)",
+    "RatifyException.Protocol.errorClass": "the §2.7 class (plan §2.2)",
+    "InternalErrorKind.spelling": "the FFI spelling of the kind",
+    "SoftwarePrivateKey.keyId": "convenience: key_id_v2 of publicKey, computed once at load",
+    "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
+    "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",
+    "ParamsValue.Object.entries": "the variant's value",
+    "InternalErrorKind.panic": "kind case", "InternalErrorKind.poisoned": "kind case",
+    "InternalErrorKind.randomSource": "kind case", "InternalErrorKind.PANIC": "kind case",
+    "InternalErrorKind.POISONED": "kind case", "InternalErrorKind.RANDOM_SOURCE": "kind case",
+    "RatifyError.signing": "signing errors (plan §2.2); V2SignError is mapped in M2",
+    "RatifyError.internal": "internal errors (plan §2.2)",
+}
+
+
 def swift_model(dump):
     """{type path: set of member names} for every public type, plus the
     members of the `Ratify` namespace; imports excluded."""
@@ -255,6 +284,16 @@ def cmd_names(swift_dump, kotlin_api):
     for m in swift.get("Ratify", set()):
         if f"Ratify.{m}" not in used["swift"]:
             errors.append(f"swift public function Ratify.{m} is not named by the inventory")
+    members_used = {lang: {n for n in used[lang] if "." in n} for lang in used}
+    for model, lang, synth in ((swift, "swift", SYNTH_SWIFT), (kotlin, "kotlin", SYNTH_KOTLIN)):
+        for t, members in model.items():
+            if not t or t == "Ratify":
+                continue
+            for m in members:
+                if m in synth or re.fullmatch(r"component\d+", m):
+                    continue
+                if f"{t}.{m}" not in members_used[lang] and f"{t}.{m}" not in EXTRA_MEMBERS:
+                    errors.append(f"{lang} public member {t}.{m} is not named by the inventory")
     for t in kotlin:
         if t and t not in used["kotlin"]:
             errors.append(f"kotlin public type {t} is not named by the inventory")

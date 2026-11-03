@@ -35,6 +35,9 @@ serde_json = "1"
 hex = "0.4"
 base64 = "0.22"
 sha2 = "0.10"
+# Parses this crate's sources in tests/guarded.rs.
+syn = { version = "2", features = ["full"] }
+quote = "1"
 
 [profile.release]
 opt-level = "z"

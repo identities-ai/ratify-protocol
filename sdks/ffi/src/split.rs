@@ -193,7 +193,7 @@ impl FfiSigner for Composite {
 }
 
 impl Composite {
-    fn new(
+    fn signer(
         key: &Arc<FfiSplitKey>,
         ed25519: Arc<dyn FfiEd25519Signer>,
     ) -> FfiResult<Arc<dyn FfiSigner>> {

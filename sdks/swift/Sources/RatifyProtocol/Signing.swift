@@ -24,6 +24,20 @@ public struct SignRequest: Sendable, Hashable {
     public let publicKey: HybridPublicKey
     public let keyId: String
 
+    /// The same request addressed to another key (tests only).
+    func retargeted(to key: HybridPublicKey, keyId: String) -> SignRequest {
+        SignRequest(mode: mode, message: message, mlDsaContext: mlDsaContext, mlDsaMu: mlDsaMu, publicKey: key, keyId: keyId)
+    }
+
+    private init(mode: SignerMode, message: Data, mlDsaContext: Data?, mlDsaMu: Data?, publicKey: HybridPublicKey, keyId: String) {
+        self.mode = mode
+        self.message = message
+        self.mlDsaContext = mlDsaContext
+        self.mlDsaMu = mlDsaMu
+        self.publicKey = publicKey
+        self.keyId = keyId
+    }
+
     init(_ f: FfiSignRequest) {
         mode = SignerMode(f.mode)
         message = f.message

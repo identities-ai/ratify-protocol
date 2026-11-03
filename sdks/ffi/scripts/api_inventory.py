@@ -145,6 +145,10 @@ EXTRA_SWIFT = {
     "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
     "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
     "KeychainKeyStore": "Keychain storage of software keys (plan §4.3); SDK-only",
+    "SecureEnclaveKey": "Secure Enclave platform signer (plan §4.2); SDK-only",
+    "SecureEnclaveKey.Custody": "per-component custody report (plan §4.2)",
+    "SigningKey": "the key a typed signing function uses (plan §4.1)",
+    "PlatformKey": "a boxed platform key for SigningKey.platform (plan §4.1)",
     "InternalErrorKind": "kind of RatifyError.internal (plan §2.2)",
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
@@ -194,6 +198,12 @@ EXTRA_MEMBERS = {
     "KeychainKeyStore.save": "store", "KeychainKeyStore.load": "store", "KeychainKeyStore.delete": "store",
     "AndroidKeyStore.save": "store", "AndroidKeyStore.load": "store", "AndroidKeyStore.delete": "store",
     "SoftwarePrivateKey.storageRecord": "the key's storage record (plan §4.3)",
+    "SecureEnclaveKey.publicKey": "platform key", "SecureEnclaveKey.keyId": "platform key",
+    "SecureEnclaveKey.custody": "custody report", "SecureEnclaveKey.generate": "platform key",
+    "SecureEnclaveKey.defaultAccessControl": "platform key", "SecureEnclaveKey.storageRecord": "platform key",
+    "SecureEnclaveKey.Custody.secureEnclave": "custody", "SecureEnclaveKey.Custody.software": "custody",
+    "SigningKey.software": "signing key kind", "SigningKey.external": "signing key kind", "SigningKey.platform": "signing key kind",
+    "PlatformKey.keyId": "platform key", "KeychainKeyStore.loadSecureEnclaveKey": "store",
     "SoftwarePrivateKey.keyId": "convenience: key_id_v2 of publicKey, computed once at load",
     "ParamsValue.Bool.value": "the variant's value", "ParamsValue.Int.value": "the variant's value",
     "ParamsValue.Str.value": "the variant's value", "ParamsValue.Array.items": "the variant's value",
@@ -204,6 +214,7 @@ EXTRA_MEMBERS = {
     "InternalErrorKind.POISONED": "kind case", "InternalErrorKind.RANDOM_SOURCE": "kind case",
     "RatifyError.signing": "signing errors (plan §2.2); V2SignError is mapped in M2",
     "RatifyError.internal": "internal errors (plan §2.2)",
+    "RatifyError.errorDescription": "LocalizedError conformance (the diagnostic message)",
 }
 
 

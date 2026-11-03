@@ -3,7 +3,7 @@ import Foundation
 /// Every error the SDK throws. Protocol and signing errors carry a SPEC-v2
 /// §2.7 class; `internal` is reserved for a panic inside the core or a handle
 /// a previous panic left unusable, and is never a protocol result.
-public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible {
+public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible, LocalizedError {
     case `protocol`(ErrorClass, message: String)
     case signing(ErrorClass, kind: SigningErrorKind, message: String)
     case `internal`(InternalErrorKind, message: String)
@@ -15,6 +15,8 @@ public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible {
         case .internal: return nil
         }
     }
+
+    public var errorDescription: String? { description }
 
     public var description: String {
         switch self {

@@ -70,9 +70,29 @@ public struct KeychainKeyStore: Sendable {
 
     /// Store a key. Fails with `configurationInvalid` if one with this ID exists.
     public func save(_ key: SoftwarePrivateKey) throws(RatifyError) {
-        var record = try key.storageRecord()
+        try saveRecord(try key.storageRecord(), keyId: key.keyId)
+    }
+
+    /// Store a Secure Enclave key's (device-bound) record.
+    @available(iOS 26.0, macOS 26.0, *)
+    public func save(_ key: SecureEnclaveKey) throws(RatifyError) {
+        try saveRecord(try key.storageRecord(), keyId: key.keyId)
+    }
+
+    /// Load the Secure Enclave key with this ID, or nil if none is stored.
+    @available(iOS 26.0, macOS 26.0, *)
+    public func loadSecureEnclaveKey(keyId: String) throws(RatifyError) -> SecureEnclaveKey? {
+        guard var record = try loadRecord(keyId) else { return nil }
         defer { record.resetBytes(in: 0..<record.count) }
-        var q = query(key.keyId)
+        let key = try SecureEnclaveKey(storageRecord: record)
+        guard key.keyId == keyId else { throw .protocol(.keyIdMismatch, message: "stored record names another key") }
+        return key
+    }
+
+    private func saveRecord(_ data: Data, keyId: String) throws(RatifyError) {
+        var record = data
+        defer { record.resetBytes(in: 0..<record.count) }
+        var q = query(keyId)
         q[kSecValueData as String] = record
         q[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let status = SecItemAdd(q as CFDictionary, nil)
@@ -81,17 +101,22 @@ public struct KeychainKeyStore: Sendable {
         }
     }
 
-    /// Load the key with this ID, or nil if none is stored.
-    public func load(keyId: String) throws(RatifyError) -> SoftwarePrivateKey? {
+    private func loadRecord(_ keyId: String) throws(RatifyError) -> Data? {
         var q = query(keyId)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, var record = out as? Data else {
+        guard status == errSecSuccess, let record = out as? Data else {
             throw .protocol(.configurationInvalid, message: "keychain refused to load the key (OSStatus \(status))")
         }
+        return record
+    }
+
+    /// Load the software key with this ID, or nil if none is stored.
+    public func load(keyId: String) throws(RatifyError) -> SoftwarePrivateKey? {
+        guard var record = try loadRecord(keyId) else { return nil }
         defer { record.resetBytes(in: 0..<record.count) }
         let key = try SoftwarePrivateKey(storageRecord: record)
         guard key.keyId == keyId else {

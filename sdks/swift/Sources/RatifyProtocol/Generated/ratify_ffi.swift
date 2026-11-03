@@ -1132,17 +1132,17 @@ enum FfiError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     /**
      * A core `V2Error`: decode, check, digest, journal, configuration.
      */
-    case Protocol(`class`: String, message: String
+    case Protocol(`class`: String, detail: String
     )
     /**
      * A `V2SignError`: signing refused or the signer failed.
      */
-    case Signing(`class`: String, kind: String, message: String
+    case Signing(`class`: String, kind: String, detail: String
     )
     /**
      * An internal failure (`panic` or `poisoned`); never a protocol result.
      */
-    case Internal(kind: String, message: String
+    case Internal(kind: String, detail: String
     )
 
     
@@ -1175,16 +1175,16 @@ struct FfiConverterTypeFfiError: FfiConverterRustBuffer {
         
         case 1: return .Protocol(
             `class`: try FfiConverterString.read(from: &buf), 
-            message: try FfiConverterString.read(from: &buf)
+            detail: try FfiConverterString.read(from: &buf)
             )
         case 2: return .Signing(
             `class`: try FfiConverterString.read(from: &buf), 
             kind: try FfiConverterString.read(from: &buf), 
-            message: try FfiConverterString.read(from: &buf)
+            detail: try FfiConverterString.read(from: &buf)
             )
         case 3: return .Internal(
             kind: try FfiConverterString.read(from: &buf), 
-            message: try FfiConverterString.read(from: &buf)
+            detail: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -1198,23 +1198,23 @@ struct FfiConverterTypeFfiError: FfiConverterRustBuffer {
 
         
         
-        case let .Protocol(`class`,message):
+        case let .Protocol(`class`,detail):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(`class`, into: &buf)
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(detail, into: &buf)
             
         
-        case let .Signing(`class`,kind,message):
+        case let .Signing(`class`,kind,detail):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(`class`, into: &buf)
             FfiConverterString.write(kind, into: &buf)
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(detail, into: &buf)
             
         
-        case let .Internal(kind,message):
+        case let .Internal(kind,detail):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(kind, into: &buf)
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(detail, into: &buf)
             
         }
     }

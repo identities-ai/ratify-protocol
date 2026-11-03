@@ -7,25 +7,25 @@ use ratify_protocol::v2::{V2Error, V2ErrorClass};
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
     /// A core `V2Error`: decode, check, digest, journal, configuration.
-    #[error("{message} ({class})")]
-    Protocol { class: String, message: String },
+    #[error("{detail} ({class})")]
+    Protocol { class: String, detail: String },
     /// A `V2SignError`: signing refused or the signer failed.
-    #[error("{message} ({class}, {kind})")]
+    #[error("{detail} ({class}, {kind})")]
     Signing {
         class: String,
         kind: String,
-        message: String,
+        detail: String,
     },
     /// An internal failure (`panic` or `poisoned`); never a protocol result.
-    #[error("internal {kind}: {message}")]
-    Internal { kind: String, message: String },
+    #[error("internal {kind}: {detail}")]
+    Internal { kind: String, detail: String },
 }
 
 impl From<V2Error> for FfiError {
     fn from(e: V2Error) -> Self {
         FfiError::Protocol {
             class: e.class.as_str().to_string(),
-            message: e.message,
+            detail: e.message,
         }
     }
 }
@@ -33,7 +33,7 @@ impl From<V2Error> for FfiError {
 pub(crate) fn protocol(class: V2ErrorClass, message: impl Into<String>) -> FfiError {
     FfiError::Protocol {
         class: class.as_str().to_string(),
-        message: message.into(),
+        detail: message.into(),
     }
 }
 

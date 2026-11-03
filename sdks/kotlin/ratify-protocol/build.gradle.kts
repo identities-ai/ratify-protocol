@@ -1,0 +1,56 @@
+// Ratify Protocol v2 SDK for Kotlin (Android). The public API is the
+// hand-written com.ratifyprotocol package; com.ratifyprotocol.internal.ffi is
+// generated from sdks/ffi and is never public API.
+plugins {
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
+}
+
+val repoRoot = rootProject.projectDir.resolve("../..")
+
+android {
+    namespace = "com.ratifyprotocol"
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 28
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("consumer-rules.pro")
+    }
+
+    sourceSets {
+        getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("rust/jniLibs"))
+        // The shared corpus is read in place, never copied into the tree.
+        getByName("androidTest").assets.srcDir(repoRoot.resolve("testvectors"))
+        // One set of vector runners, driven by both the host and the device suites.
+        getByName("test").kotlin.srcDir("src/sharedTest/kotlin")
+        getByName("androidTest").kotlin.srcDir("src/sharedTest/kotlin")
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.all {
+            // Host unit tests load the host build of the Rust library.
+            it.systemProperty("jna.library.path", repoRoot.resolve("sdks/ffi/target/release").absolutePath)
+            it.systemProperty("ratify.corpus", repoRoot.resolve("testvectors").absolutePath)
+        }
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+    explicitApi()
+}
+
+dependencies {
+    implementation("net.java.dev.jna:jna:5.15.0@aar")
+    testImplementation("net.java.dev.jna:jna:5.15.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+}

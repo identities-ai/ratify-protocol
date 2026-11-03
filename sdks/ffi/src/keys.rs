@@ -91,7 +91,7 @@ impl FfiSoftwareKey {
             .and_then(|_| getrandom::getrandom(ml.as_mut()))
             .map_err(|e| crate::error::FfiError::Internal {
                 kind: "random".into(),
-                message: format!("random source failed: {e}"),
+                detail: format!("random source failed: {e}"),
             })?;
         Self::build(ed, ml)
     }

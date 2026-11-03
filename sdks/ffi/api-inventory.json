@@ -3010,13 +3010,15 @@
  },
  "KeyRotationV2State": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState",
+  "status": "mapped",
+  "swift": "RotationState"
  },
  "KeyRotationV2State::authority_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.authorityId",
+  "status": "mapped",
+  "swift": "RotationState.authorityId"
  },
  "KeyRotationV2State::clone": {
   "kind": "fn",
@@ -3025,8 +3027,9 @@
  },
  "KeyRotationV2State::current_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.currentKey",
+  "status": "mapped",
+  "swift": "RotationState.currentKey"
  },
  "KeyRotationV2State::fmt": {
   "kind": "fn",
@@ -3035,28 +3038,33 @@
  },
  "KeyRotationV2State::head_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.headHash",
+  "status": "mapped",
+  "swift": "RotationState.headHash"
  },
  "KeyRotationV2State::recovery_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.recoveryEpoch",
+  "status": "mapped",
+  "swift": "RotationState.recoveryEpoch"
  },
  "KeyRotationV2State::role": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.role",
+  "status": "mapped",
+  "swift": "RotationState.role"
  },
  "KeyRotationV2State::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.sequence",
+  "status": "mapped",
+  "swift": "RotationState.sequence"
  },
  "KeyRotationV2State::used_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RotationState.usedKeyIds",
+  "status": "mapped",
+  "swift": "RotationState.usedKeyIds"
  },
  "MAX_ALLOWED_VALUES_V2": {
   "kind": "const",
@@ -3531,13 +3539,15 @@
  },
  "ReceiptV2Head": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead",
+  "status": "mapped",
+  "swift": "ReceiptHead"
  },
  "ReceiptV2Head::accepted_digests": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.acceptedDigests",
+  "status": "mapped",
+  "swift": "ReceiptHead.acceptedDigests"
  },
  "ReceiptV2Head::clone": {
   "kind": "fn",
@@ -3556,28 +3566,33 @@
  },
  "ReceiptV2Head::frozen": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.frozen",
+  "status": "mapped",
+  "swift": "ReceiptHead.frozen"
  },
  "ReceiptV2Head::head_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.headHash",
+  "status": "mapped",
+  "swift": "ReceiptHead.headHash"
  },
  "ReceiptV2Head::log_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.logId",
+  "status": "mapped",
+  "swift": "ReceiptHead.logId"
  },
  "ReceiptV2Head::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.sequence",
+  "status": "mapped",
+  "swift": "ReceiptHead.sequence"
  },
  "ReceiptV2Head::verifier_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiptHead.verifierId",
+  "status": "mapped",
+  "swift": "ReceiptHead.verifierId"
  },
  "RevocationListV2": {
   "kind": "struct",
@@ -6570,53 +6585,63 @@
  },
  "V2ObjectType": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType",
+  "status": "mapped",
+  "swift": "ObjectType"
  },
  "V2ObjectType::ChallengePresentation": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.CHALLENGE_PRESENTATION",
+  "status": "mapped",
+  "swift": "ObjectType.challengePresentation"
  },
  "V2ObjectType::DelegationCertificate": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.DELEGATION_CERTIFICATE",
+  "status": "mapped",
+  "swift": "ObjectType.delegationCertificate"
  },
  "V2ObjectType::KeyRotationAuthorization": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.KEY_ROTATION_AUTHORIZATION",
+  "status": "mapped",
+  "swift": "ObjectType.keyRotationAuthorization"
  },
  "V2ObjectType::KeyRotationProofOfPossession": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.KEY_ROTATION_PROOF_OF_POSSESSION",
+  "status": "mapped",
+  "swift": "ObjectType.keyRotationProofOfPossession"
  },
  "V2ObjectType::RevocationList": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.REVOCATION_LIST",
+  "status": "mapped",
+  "swift": "ObjectType.revocationList"
  },
  "V2ObjectType::RevocationPush": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.REVOCATION_PUSH",
+  "status": "mapped",
+  "swift": "ObjectType.revocationPush"
  },
  "V2ObjectType::TransactionPartyStatement": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.TRANSACTION_PARTY_STATEMENT",
+  "status": "mapped",
+  "swift": "ObjectType.transactionPartyStatement"
  },
  "V2ObjectType::VerificationReceipt": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.VERIFICATION_RECEIPT",
+  "status": "mapped",
+  "swift": "ObjectType.verificationReceipt"
  },
  "V2ObjectType::WitnessEntry": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.WITNESS_ENTRY",
+  "status": "mapped",
+  "swift": "ObjectType.witnessEntry"
  },
  "V2ObjectType::clone": {
   "kind": "fn",
@@ -6625,8 +6650,9 @@
  },
  "V2ObjectType::code": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.code",
+  "status": "mapped",
+  "swift": "ObjectType.rawValue"
  },
  "V2ObjectType::eq": {
   "kind": "fn",
@@ -6640,8 +6666,9 @@
  },
  "V2ObjectType::from_code": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ObjectType.fromCode",
+  "status": "mapped",
+  "swift": "ObjectType.init(rawValue:)"
  },
  "V2ObjectType::hash": {
   "kind": "fn",
@@ -8208,18 +8235,21 @@
  },
  "WitnessEntryV2Result": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "LogResult",
+  "status": "mapped",
+  "swift": "LogResult"
  },
  "WitnessEntryV2Result::Appended": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "LogResult.APPENDED",
+  "status": "mapped",
+  "swift": "LogResult.appended"
  },
  "WitnessEntryV2Result::Replay": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "LogResult.REPLAY",
+  "status": "mapped",
+  "swift": "LogResult.replay"
  },
  "WitnessEntryV2Result::clone": {
   "kind": "fn",
@@ -8238,13 +8268,15 @@
  },
  "WitnessV2Head": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead",
+  "status": "mapped",
+  "swift": "WitnessHead"
  },
  "WitnessV2Head::accepted_digests": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead.acceptedDigests",
+  "status": "mapped",
+  "swift": "WitnessHead.acceptedDigests"
  },
  "WitnessV2Head::clone": {
   "kind": "fn",
@@ -8263,23 +8295,27 @@
  },
  "WitnessV2Head::frozen": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead.frozen",
+  "status": "mapped",
+  "swift": "WitnessHead.frozen"
  },
  "WitnessV2Head::head_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead.headHash",
+  "status": "mapped",
+  "swift": "WitnessHead.headHash"
  },
  "WitnessV2Head::log_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead.logId",
+  "status": "mapped",
+  "swift": "WitnessHead.logId"
  },
  "WitnessV2Head::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "WitnessHead.sequence",
+  "status": "mapped",
+  "swift": "WitnessHead.sequence"
  },
  "accept_key_rotation_statement_v2": {
   "kind": "fn",
@@ -8324,8 +8360,9 @@
  },
  "bundle_hash_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "bundleHash",
+  "status": "mapped",
+  "swift": "Ratify.bundleHash"
  },
  "canonical_json_v2": {
   "kind": "fn",
@@ -8335,8 +8372,9 @@
  },
  "challenge_claim_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "challengeClaimDigest",
+  "status": "mapped",
+  "swift": "Ratify.challengeClaimDigest"
  },
  "challenge_claim_time_current_v2": {
   "kind": "fn",
@@ -8350,8 +8388,9 @@
  },
  "check_verification_receipt_v2_bundle_binding": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "checkVerificationReceiptBundleBinding",
+  "status": "mapped",
+  "swift": "Ratify.checkVerificationReceiptBundleBinding"
  },
  "claim_proof_bundle_v2": {
   "kind": "fn",
@@ -8446,8 +8485,9 @@
  },
  "delegation_cert_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "delegationCertSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.delegationCertSignableBytes"
  },
  "delegation_digest_v2": {
   "kind": "fn",
@@ -8461,28 +8501,33 @@
  },
  "encode_delegation_cert_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeDelegationCert",
+  "status": "mapped",
+  "swift": "Ratify.encodeDelegationCert"
  },
  "encode_key_rotation_statement_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.encodeKeyRotationStatement"
  },
  "encode_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.encodeProofBundle"
  },
  "encode_revocation_list_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeRevocationList",
+  "status": "mapped",
+  "swift": "Ratify.encodeRevocationList"
  },
  "encode_revocation_push_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeRevocationPush",
+  "status": "mapped",
+  "swift": "Ratify.encodeRevocationPush"
  },
  "encode_security_journal_json_v2": {
   "kind": "fn",
@@ -8491,8 +8536,9 @@
  },
  "encode_transaction_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeTransactionReceipt",
+  "status": "mapped",
+  "swift": "Ratify.encodeTransactionReceipt"
  },
  "encode_v2_checkpoint_acknowledgement": {
   "kind": "fn",
@@ -8506,13 +8552,15 @@
  },
  "encode_verification_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.encodeVerificationReceipt"
  },
  "encode_witness_entry_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeWitnessEntry",
+  "status": "mapped",
+  "swift": "Ratify.encodeWitnessEntry"
  },
  "evaluate_allowed_values_v2": {
   "kind": "fn",
@@ -8552,8 +8600,9 @@
  },
  "external_mu_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "externalMu",
+  "status": "mapped",
+  "swift": "Ratify.externalMu"
  },
  "finalize_claim_proof_bundle_v2": {
   "kind": "fn",
@@ -8617,13 +8666,15 @@
  },
  "key_rotation_statement_v2_digest": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "keyRotationStatementDigest",
+  "status": "mapped",
+  "swift": "Ratify.keyRotationStatementDigest"
  },
  "key_rotation_statement_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "keyRotationStatementSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.keyRotationStatementSignableBytes"
  },
  "load_expected_challenge_v2": {
   "kind": "fn",
@@ -8668,8 +8719,9 @@
  },
  "presentation_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "presentationSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.presentationSignableBytes"
  },
  "protocol_claim_id_from_digest_v2": {
   "kind": "fn",
@@ -8678,8 +8730,9 @@
  },
  "protocol_claim_id_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "protocolClaimId",
+  "status": "mapped",
+  "swift": "Ratify.protocolClaimId"
  },
  "public_key_v2": {
   "kind": "fn",
@@ -8739,13 +8792,15 @@
  },
  "revocation_list_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "revocationListSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.revocationListSignableBytes"
  },
  "revocation_push_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "revocationPushSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.revocationPushSignableBytes"
  },
  "revocation_status_for_cert_v2": {
   "kind": "fn",
@@ -8881,13 +8936,15 @@
  },
  "status_evidence_digest_list_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "statusEvidenceDigest",
+  "status": "mapped",
+  "swift": "Ratify.statusEvidenceDigest"
  },
  "status_evidence_digest_push_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "statusEvidenceDigest",
+  "status": "mapped",
+  "swift": "Ratify.statusEvidenceDigest"
  },
  "status_evidence_digest_v2": {
   "kind": "fn",
@@ -8896,18 +8953,21 @@
  },
  "transaction_context_hash_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "transactionContextHash",
+  "status": "mapped",
+  "swift": "Ratify.transactionContextHash"
  },
  "transaction_party_request_hash_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "transactionPartyRequestHash",
+  "status": "mapped",
+  "swift": "Ratify.transactionPartyRequestHash"
  },
  "transaction_receipt_v2_sign_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "transactionReceiptSignBytes",
+  "status": "mapped",
+  "swift": "Ratify.transactionReceiptSignBytes"
  },
  "transition_revocation_status_epoch_v2": {
   "kind": "fn",
@@ -8926,13 +8986,15 @@
  },
  "v2_mldsa_context": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "mldsaContext",
+  "status": "mapped",
+  "swift": "Ratify.mldsaContext"
  },
  "v2_signing_message": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "signingMessage",
+  "status": "mapped",
+  "swift": "Ratify.signingMessage"
  },
  "valid_extension_type_v2": {
   "kind": "fn",
@@ -9003,18 +9065,21 @@
  },
  "verification_receipt_v2_body": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verificationReceiptBody",
+  "status": "mapped",
+  "swift": "Ratify.verificationReceiptBody"
  },
  "verification_receipt_v2_digest": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verificationReceiptDigest",
+  "status": "mapped",
+  "swift": "Ratify.verificationReceiptDigest"
  },
  "verification_receipt_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verificationReceiptSignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.verificationReceiptSignableBytes"
  },
  "verify_archival_delegation_cert_v2": {
   "kind": "fn",
@@ -9063,8 +9128,9 @@
  },
  "verify_delegation_cert_v2_signature": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyDelegationCertSignature",
+  "status": "mapped",
+  "swift": "Ratify.verifyDelegationCertSignature"
  },
  "verify_device_acknowledgement_test_only": {
   "kind": "fn",
@@ -9073,8 +9139,9 @@
  },
  "verify_key_rotation_statement_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyKeyRotationStatement",
+  "status": "mapped",
+  "swift": "Ratify.verifyKeyRotationStatement"
  },
  "verify_proof_bundle_v2": {
   "kind": "fn",
@@ -9083,18 +9150,21 @@
  },
  "verify_proof_bundle_v2_signatures": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyProofBundleSignatures",
+  "status": "mapped",
+  "swift": "Ratify.verifyProofBundleSignatures"
  },
  "verify_revocation_list_v2_signature": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyRevocationListSignature",
+  "status": "mapped",
+  "swift": "Ratify.verifyRevocationListSignature"
  },
  "verify_revocation_push_v2_signature": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyRevocationPushSignature",
+  "status": "mapped",
+  "swift": "Ratify.verifyRevocationPushSignature"
  },
  "verify_transaction_receipt_v2": {
   "kind": "fn",
@@ -9103,8 +9173,9 @@
  },
  "verify_transaction_receipt_v2_signatures": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyTransactionReceiptSignatures",
+  "status": "mapped",
+  "swift": "Ratify.verifyTransactionReceiptSignatures"
  },
  "verify_v2_message": {
   "kind": "fn",
@@ -9113,8 +9184,9 @@
  },
  "verify_v2_statement": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyStatement",
+  "status": "mapped",
+  "swift": "Ratify.verifyStatement"
  },
  "verify_v2_statement_code": {
   "kind": "fn",
@@ -9123,13 +9195,15 @@
  },
  "verify_verification_receipt_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyVerificationReceipt",
+  "status": "mapped",
+  "swift": "Ratify.verifyVerificationReceipt"
  },
  "verify_witness_entry_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyWitnessEntry",
+  "status": "mapped",
+  "swift": "Ratify.verifyWitnessEntry"
  },
  "vocabulary": {
   "kind": "fn",
@@ -9139,12 +9213,14 @@
  },
  "witness_entry_v2_digest": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "witnessEntryDigest",
+  "status": "mapped",
+  "swift": "Ratify.witnessEntryDigest"
  },
  "witness_entry_v2_signable_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "witnessEntrySignableBytes",
+  "status": "mapped",
+  "swift": "Ratify.witnessEntrySignableBytes"
  }
 }

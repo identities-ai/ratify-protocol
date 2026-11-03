@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test APK only: the corpus runners load the whole shared corpus, and
+     object-negatives.json alone exceeds the default app heap on small devices. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:largeHeap="true" />
+</manifest>

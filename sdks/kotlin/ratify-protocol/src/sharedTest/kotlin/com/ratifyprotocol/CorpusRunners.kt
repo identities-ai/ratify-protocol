@@ -18,6 +18,9 @@ object CorpusRunners {
         "keys.json" to KeysVectors::corpus,
         "limits.json" to LimitsVectors::corpus,
         "operation-session-context.json" to OperationContextVectors::corpus,
+        "objects.json" to ObjectsVectors::objects,
+        "object-negatives.json" to ObjectsVectors::negatives,
+        "hedged-signatures.json" to ObjectsVectors::hedged,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -34,13 +37,10 @@ object CorpusRunners {
         "digest-functions.json" to "M2",
         "evaluator-profiles.json" to "M3",
         "external-signer.json" to "M2",
-        "hedged-signatures.json" to "M2",
         "issuer-duties.json" to "M2",
         "key-rotation-signature.json" to "M2",
         "lifecycle-scenarios.json" to "M3",
         "log-sequences.json" to "M2",
-        "object-negatives.json" to "M2",
-        "objects.json" to "M2",
         "rotation-sequences.json" to "M2",
         "security-journal.json" to "M2",
         "status-publisher.json" to "M2",

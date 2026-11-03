@@ -725,6 +725,86 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_challenge_claim_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_check_verification_receipt_bundle_binding(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_delegation_cert_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_delegation_cert(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_key_rotation_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_proof_bundle(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_push(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_transaction_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_verification_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_witness_entry(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_external_mu(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_mldsa_context(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_presentation_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_push_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_signing_message(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_push(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_context_hash(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_party_request_hash(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_receipt_sign_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_body(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_signable_bytes(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_delegation_cert_signature(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_key_rotation_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_proof_bundle_signatures(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_list_signature(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_push_signature(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_statement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_transaction_receipt_signatures(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_verification_receipt(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_witness_entry(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_signable_bytes(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled(
@@ -857,6 +937,86 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_validate_scopes(`scopes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_challenge_claim_digest(`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_check_verification_receipt_bundle_binding(`receipt`: RustBuffer.ByValue,`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_delegation_cert_signable_bytes(`cert`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_delegation_cert(`cert`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_key_rotation_statement(`statement`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_proof_bundle(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_list(`list`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_push(`push`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_transaction_receipt(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_verification_receipt(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_witness_entry(`entry`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_external_mu(`mlDsaPublicKey`: RustBuffer.ByValue,`mlDsaContext`: RustBuffer.ByValue,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_digest(`statement`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_signable_bytes(`statement`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_mldsa_context(`objectTypeCode`: Short,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_presentation_signable_bytes(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id(`namespace`: RustBuffer.ByValue,`replayEpoch`: Long,`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_list_signable_bytes(`list`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_push_signable_bytes(`push`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_signing_message(`objectTypeCode`: Short,`signable`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_list(`list`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_push(`push`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_context_hash(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_party_request_hash(`transactionHash`: RustBuffer.ByValue,`requiredScope`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_receipt_sign_bytes(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_body(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_digest(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_signable_bytes(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_delegation_cert_signature(`cert`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_key_rotation_statement(`statement`: RustBuffer.ByValue,`state`: RustBuffer.ByValue,`now`: Long,`futureSkew`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_proof_bundle_signatures(`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_list_signature(`list`: RustBuffer.ByValue,`trustedIssuerId`: RustBuffer.ByValue,`statusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_push_signature(`push`: RustBuffer.ByValue,`trustedIssuerId`: RustBuffer.ByValue,`statusKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_statement(`objectTypeCode`: Short,`signable`: RustBuffer.ByValue,`signature`: RustBuffer.ByValue,`publicKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_transaction_receipt_signatures(`receipt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_verification_receipt(`receipt`: RustBuffer.ByValue,`verifierKey`: RustBuffer.ByValue,`head`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_verify_witness_entry(`entry`: RustBuffer.ByValue,`head`: RustBuffer.ByValue,`witnessKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_digest(`entry`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_signable_bytes(`entry`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_ratify_protocol_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_ratify_protocol_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1046,6 +1206,126 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() and 0xFFFF) != 44631) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() and 0xFFFF) != 51989) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_challenge_claim_digest() and 0xFFFF) != 4155) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_check_verification_receipt_bundle_binding() and 0xFFFF) != 37393) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_delegation_cert_signable_bytes() and 0xFFFF) != 29841) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_delegation_cert() and 0xFFFF) != 10330) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_key_rotation_statement() and 0xFFFF) != 23623) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_proof_bundle() and 0xFFFF) != 40488) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_list() and 0xFFFF) != 13270) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_revocation_push() and 0xFFFF) != 53356) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_transaction_receipt() and 0xFFFF) != 33727) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_verification_receipt() and 0xFFFF) != 19584) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_witness_entry() and 0xFFFF) != 31977) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_external_mu() and 0xFFFF) != 24901) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_digest() and 0xFFFF) != 40031) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_key_rotation_statement_signable_bytes() and 0xFFFF) != 20856) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_mldsa_context() and 0xFFFF) != 10595) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_presentation_signable_bytes() and 0xFFFF) != 25000) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_protocol_claim_id() and 0xFFFF) != 49564) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_list_signable_bytes() and 0xFFFF) != 57243) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_push_signable_bytes() and 0xFFFF) != 43933) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_signing_message() and 0xFFFF) != 46036) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_list() and 0xFFFF) != 14560) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_status_evidence_digest_push() and 0xFFFF) != 49865) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_context_hash() and 0xFFFF) != 17513) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_party_request_hash() and 0xFFFF) != 18213) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_transaction_receipt_sign_bytes() and 0xFFFF) != 53657) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_body() and 0xFFFF) != 29493) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_digest() and 0xFFFF) != 36969) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verification_receipt_signable_bytes() and 0xFFFF) != 55468) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_delegation_cert_signature() and 0xFFFF) != 10661) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_key_rotation_statement() and 0xFFFF) != 30449) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_proof_bundle_signatures() and 0xFFFF) != 52847) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_list_signature() and 0xFFFF) != 50440) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_revocation_push_signature() and 0xFFFF) != 27223) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_statement() and 0xFFFF) != 62393) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_transaction_receipt_signatures() and 0xFFFF) != 52757) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_verification_receipt() and 0xFFFF) != 17211) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_witness_entry() and 0xFFFF) != 2635) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_digest() and 0xFFFF) != 63380) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_signable_bytes() and 0xFFFF) != 15522) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() and 0xFFFF) != 13944) {
@@ -2855,6 +3135,67 @@ internal object FfiConverterTypeFfiPublicKey: FfiConverterRustBuffer<FfiPublicKe
 
 
 
+/**
+ * Caller-authenticated receipt-log state before a receipt.
+ */
+internal data class FfiReceiptHead (
+    var `logId`: kotlin.String
+    , 
+    var `verifierId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `headHash`: kotlin.ByteArray
+    , 
+    var `acceptedDigests`: Map<kotlin.Long, kotlin.ByteArray>
+    , 
+    var `frozen`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiReceiptHead: FfiConverterRustBuffer<FfiReceiptHead> {
+    override fun read(buf: ByteBuffer): FfiReceiptHead {
+        return FfiReceiptHead(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterMapLongByteArray.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiReceiptHead) = (
+            FfiConverterString.allocationSize(value.`logId`) +
+            FfiConverterString.allocationSize(value.`verifierId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`headHash`) +
+            FfiConverterMapLongByteArray.allocationSize(value.`acceptedDigests`) +
+            FfiConverterBoolean.allocationSize(value.`frozen`)
+    )
+
+    override fun write(value: FfiReceiptHead, buf: ByteBuffer) {
+            FfiConverterString.write(value.`logId`, buf)
+            FfiConverterString.write(value.`verifierId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`headHash`, buf)
+            FfiConverterMapLongByteArray.write(value.`acceptedDigests`, buf)
+            FfiConverterBoolean.write(value.`frozen`, buf)
+    }
+}
+
+
+
 internal data class FfiRevocationList (
     var `version`: kotlin.Long
     , 
@@ -2974,6 +3315,72 @@ internal object FfiConverterTypeFfiRevocationPush: FfiConverterRustBuffer<FfiRev
             FfiConverterLong.write(value.`pushedAt`, buf)
             FfiConverterSequenceString.write(value.`revoked`, buf)
             FfiConverterTypeFfiSignature.write(value.`signature`, buf)
+    }
+}
+
+
+
+/**
+ * Caller-authenticated rotation state for one authority and role.
+ */
+internal data class FfiRotationState (
+    var `authorityId`: kotlin.String
+    , 
+    var `recoveryEpoch`: kotlin.Long
+    , 
+    var `role`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `headHash`: kotlin.ByteArray
+    , 
+    var `currentKey`: FfiPublicKey
+    , 
+    var `usedKeyIds`: List<kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiRotationState: FfiConverterRustBuffer<FfiRotationState> {
+    override fun read(buf: ByteBuffer): FfiRotationState {
+        return FfiRotationState(
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiRotationState) = (
+            FfiConverterString.allocationSize(value.`authorityId`) +
+            FfiConverterLong.allocationSize(value.`recoveryEpoch`) +
+            FfiConverterString.allocationSize(value.`role`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`headHash`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`currentKey`) +
+            FfiConverterSequenceString.allocationSize(value.`usedKeyIds`)
+    )
+
+    override fun write(value: FfiRotationState, buf: ByteBuffer) {
+            FfiConverterString.write(value.`authorityId`, buf)
+            FfiConverterLong.write(value.`recoveryEpoch`, buf)
+            FfiConverterString.write(value.`role`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`headHash`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`currentKey`, buf)
+            FfiConverterSequenceString.write(value.`usedKeyIds`, buf)
     }
 }
 
@@ -3567,6 +3974,65 @@ internal object FfiConverterTypeFfiWitnessEntry: FfiConverterRustBuffer<FfiWitne
 
 
 
+/**
+ * Caller-authenticated witness-log state before an entry.
+ */
+internal data class FfiWitnessHead (
+    var `logId`: kotlin.String
+    , 
+    var `sequence`: kotlin.Long
+    , 
+    var `headHash`: kotlin.ByteArray
+    , 
+    /**
+     * Every accepted sequence's body digest, for replay and fork checks.
+     */
+    var `acceptedDigests`: Map<kotlin.Long, kotlin.ByteArray>
+    , 
+    var `frozen`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiWitnessHead: FfiConverterRustBuffer<FfiWitnessHead> {
+    override fun read(buf: ByteBuffer): FfiWitnessHead {
+        return FfiWitnessHead(
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterMapLongByteArray.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiWitnessHead) = (
+            FfiConverterString.allocationSize(value.`logId`) +
+            FfiConverterLong.allocationSize(value.`sequence`) +
+            FfiConverterByteArray.allocationSize(value.`headHash`) +
+            FfiConverterMapLongByteArray.allocationSize(value.`acceptedDigests`) +
+            FfiConverterBoolean.allocationSize(value.`frozen`)
+    )
+
+    override fun write(value: FfiWitnessHead, buf: ByteBuffer) {
+            FfiConverterString.write(value.`logId`, buf)
+            FfiConverterLong.write(value.`sequence`, buf)
+            FfiConverterByteArray.write(value.`headHash`, buf)
+            FfiConverterMapLongByteArray.write(value.`acceptedDigests`, buf)
+            FfiConverterBoolean.write(value.`frozen`, buf)
+    }
+}
+
+
+
 
 
 /**
@@ -3703,6 +4169,49 @@ internal object FfiConverterTypeFfiError : FfiConverterRustBuffer<FfiException> 
     }
 
 }
+
+
+
+/**
+ * What a valid log entry does to its log.
+ */
+
+internal enum class FfiLogResult {
+    
+    /**
+     * The next valid entry; the caller must atomically persist the new head.
+     */
+    APPENDED,
+    /**
+     * An exact accepted body at an accepted sequence; state is unchanged.
+     */
+    REPLAY;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiLogResult: FfiConverterRustBuffer<FfiLogResult> {
+    override fun read(buf: ByteBuffer) = try {
+        FfiLogResult.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FfiLogResult) = 4UL
+
+    override fun write(value: FfiLogResult, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -4354,6 +4863,45 @@ internal object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<
 /**
  * @suppress
  */
+internal object FfiConverterMapLongByteArray: FfiConverterRustBuffer<Map<kotlin.Long, kotlin.ByteArray>> {
+    override fun read(buf: ByteBuffer): Map<kotlin.Long, kotlin.ByteArray> {
+        val len = buf.getInt()
+        return buildMap<kotlin.Long, kotlin.ByteArray>(len) {
+            repeat(len) {
+                val k = FfiConverterLong.read(buf)
+                val v = FfiConverterByteArray.read(buf)
+                this[k] = v
+            }
+        }
+    }
+
+    override fun allocationSize(value: Map<kotlin.Long, kotlin.ByteArray>): ULong {
+        val spaceForMapSize = 4UL
+        val spaceForChildren = value.map { (k, v) ->
+            FfiConverterLong.allocationSize(k) +
+            FfiConverterByteArray.allocationSize(v)
+        }.sum()
+        return spaceForMapSize + spaceForChildren
+    }
+
+    override fun write(value: Map<kotlin.Long, kotlin.ByteArray>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        // The parens on `(k, v)` here ensure we're calling the right method,
+        // which is important for compatibility with older android devices.
+        // Ref https://blog.danlew.net/2017/03/16/kotlin-puzzler-whose-line-is-it-anyways/
+        value.forEach { (k, v) ->
+            FfiConverterLong.write(k, buf)
+            FfiConverterByteArray.write(v, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterMapStringTypeFfiParamsValue: FfiConverterRustBuffer<Map<kotlin.String, FfiParamsValue>> {
     override fun read(buf: ByteBuffer): Map<kotlin.String, FfiParamsValue> {
         val len = buf.getInt()
@@ -4723,6 +5271,511 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         FfiConverterSequenceString.lower(`scopes`),_status)
 }
     
+    
+
+    @Throws(FfiException::class) internal fun `ffiBundleHash`(`bundle`: FfiProofBundle): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_bundle_hash(
+    
+        
+        FfiConverterTypeFfiProofBundle.lower(`bundle`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiChallengeClaimDigest`(`challenge`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_challenge_claim_digest(
+    
+        
+        FfiConverterByteArray.lower(`challenge`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiCheckVerificationReceiptBundleBinding`(`receipt`: FfiVerificationReceipt, `bundle`: FfiProofBundle)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_check_verification_receipt_bundle_binding(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),
+        FfiConverterTypeFfiProofBundle.lower(`bundle`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiDelegationCertSignableBytes`(`cert`: FfiDelegationCert): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_delegation_cert_signable_bytes(
+    
+        
+        FfiConverterTypeFfiDelegationCert.lower(`cert`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeDelegationCert`(`cert`: FfiDelegationCert): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_delegation_cert(
+    
+        
+        FfiConverterTypeFfiDelegationCert.lower(`cert`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeKeyRotationStatement`(`statement`: FfiKeyRotationStatement): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_key_rotation_statement(
+    
+        
+        FfiConverterTypeFfiKeyRotationStatement.lower(`statement`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeProofBundle`(`bundle`: FfiProofBundle): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_proof_bundle(
+    
+        
+        FfiConverterTypeFfiProofBundle.lower(`bundle`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeRevocationList`(`list`: FfiRevocationList): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_list(
+    
+        
+        FfiConverterTypeFfiRevocationList.lower(`list`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeRevocationPush`(`push`: FfiRevocationPush): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_revocation_push(
+    
+        
+        FfiConverterTypeFfiRevocationPush.lower(`push`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeTransactionReceipt`(`receipt`: FfiTransactionReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_transaction_receipt(
+    
+        
+        FfiConverterTypeFfiTransactionReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeVerificationReceipt`(`receipt`: FfiVerificationReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_verification_receipt(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEncodeWitnessEntry`(`entry`: FfiWitnessEntry): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_witness_entry(
+    
+        
+        FfiConverterTypeFfiWitnessEntry.lower(`entry`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The FIPS 204 external `mu` for an ML-DSA-65 public key, context and message.
+         */
+    @Throws(FfiException::class) internal fun `ffiExternalMu`(`mlDsaPublicKey`: kotlin.ByteArray, `mlDsaContext`: kotlin.ByteArray, `message`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_external_mu(
+    
+        
+        FfiConverterByteArray.lower(`mlDsaPublicKey`),
+        FfiConverterByteArray.lower(`mlDsaContext`),
+        FfiConverterByteArray.lower(`message`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiKeyRotationStatementDigest`(`statement`: FfiKeyRotationStatement): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_digest(
+    
+        
+        FfiConverterTypeFfiKeyRotationStatement.lower(`statement`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiKeyRotationStatementSignableBytes`(`statement`: FfiKeyRotationStatement): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_key_rotation_statement_signable_bytes(
+    
+        
+        FfiConverterTypeFfiKeyRotationStatement.lower(`statement`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The 22-byte ML-DSA-65 context string for an object type code.
+         */
+    @Throws(FfiException::class) internal fun `ffiMldsaContext`(`objectTypeCode`: kotlin.UShort): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_mldsa_context(
+    
+        
+        FfiConverterUShort.lower(`objectTypeCode`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiPresentationSignableBytes`(`bundle`: FfiProofBundle): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_presentation_signable_bytes(
+    
+        
+        FfiConverterTypeFfiProofBundle.lower(`bundle`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiProtocolClaimId`(`namespace`: kotlin.String, `replayEpoch`: kotlin.Long, `challenge`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_protocol_claim_id(
+    
+        
+        FfiConverterString.lower(`namespace`),
+        FfiConverterLong.lower(`replayEpoch`),
+        FfiConverterByteArray.lower(`challenge`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiRevocationListSignableBytes`(`list`: FfiRevocationList): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_list_signable_bytes(
+    
+        
+        FfiConverterTypeFfiRevocationList.lower(`list`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiRevocationPushSignableBytes`(`push`: FfiRevocationPush): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_push_signable_bytes(
+    
+        
+        FfiConverterTypeFfiRevocationPush.lower(`push`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The 77-byte signing message `M` for an object type code and signable bytes.
+         */
+    @Throws(FfiException::class) internal fun `ffiSigningMessage`(`objectTypeCode`: kotlin.UShort, `signable`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_signing_message(
+    
+        
+        FfiConverterUShort.lower(`objectTypeCode`),
+        FfiConverterByteArray.lower(`signable`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiStatusEvidenceDigestList`(`list`: FfiRevocationList): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_list(
+    
+        
+        FfiConverterTypeFfiRevocationList.lower(`list`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiStatusEvidenceDigestPush`(`push`: FfiRevocationPush): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_status_evidence_digest_push(
+    
+        
+        FfiConverterTypeFfiRevocationPush.lower(`push`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiTransactionContextHash`(`receipt`: FfiTransactionReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_context_hash(
+    
+        
+        FfiConverterTypeFfiTransactionReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiTransactionPartyRequestHash`(`transactionHash`: kotlin.ByteArray, `requiredScope`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_party_request_hash(
+    
+        
+        FfiConverterByteArray.lower(`transactionHash`),
+        FfiConverterString.lower(`requiredScope`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiTransactionReceiptSignBytes`(`receipt`: FfiTransactionReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_transaction_receipt_sign_bytes(
+    
+        
+        FfiConverterTypeFfiTransactionReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerificationReceiptBody`(`receipt`: FfiVerificationReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_body(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerificationReceiptDigest`(`receipt`: FfiVerificationReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_digest(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerificationReceiptSignableBytes`(`receipt`: FfiVerificationReceipt): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verification_receipt_signable_bytes(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyDelegationCertSignature`(`cert`: FfiDelegationCert)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_delegation_cert_signature(
+    
+        
+        FfiConverterTypeFfiDelegationCert.lower(`cert`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyKeyRotationStatement`(`statement`: FfiKeyRotationStatement, `state`: FfiRotationState, `now`: kotlin.Long, `futureSkew`: kotlin.Long)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_key_rotation_statement(
+    
+        
+        FfiConverterTypeFfiKeyRotationStatement.lower(`statement`),
+        FfiConverterTypeFfiRotationState.lower(`state`),
+        FfiConverterLong.lower(`now`),
+        FfiConverterLong.lower(`futureSkew`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyProofBundleSignatures`(`bundle`: FfiProofBundle)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_proof_bundle_signatures(
+    
+        
+        FfiConverterTypeFfiProofBundle.lower(`bundle`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyRevocationListSignature`(`list`: FfiRevocationList, `trustedIssuerId`: kotlin.String, `statusKey`: FfiPublicKey)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_list_signature(
+    
+        
+        FfiConverterTypeFfiRevocationList.lower(`list`),
+        FfiConverterString.lower(`trustedIssuerId`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyRevocationPushSignature`(`push`: FfiRevocationPush, `trustedIssuerId`: kotlin.String, `statusKey`: FfiPublicKey)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_revocation_push_signature(
+    
+        
+        FfiConverterTypeFfiRevocationPush.lower(`push`),
+        FfiConverterString.lower(`trustedIssuerId`),
+        FfiConverterTypeFfiPublicKey.lower(`statusKey`),_status)
+}
+    
+    
+
+        /**
+         * Verify both components of a hybrid signature over an object's signable bytes.
+         */
+    @Throws(FfiException::class) internal fun `ffiVerifyStatement`(`objectTypeCode`: kotlin.UShort, `signable`: kotlin.ByteArray, `signature`: FfiSignature, `publicKey`: FfiPublicKey)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_statement(
+    
+        
+        FfiConverterUShort.lower(`objectTypeCode`),
+        FfiConverterByteArray.lower(`signable`),
+        FfiConverterTypeFfiSignature.lower(`signature`),
+        FfiConverterTypeFfiPublicKey.lower(`publicKey`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyTransactionReceiptSignatures`(`receipt`: FfiTransactionReceipt)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_transaction_receipt_signatures(
+    
+        
+        FfiConverterTypeFfiTransactionReceipt.lower(`receipt`),_status)
+}
+    
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyVerificationReceipt`(`receipt`: FfiVerificationReceipt, `verifierKey`: FfiPublicKey, `head`: FfiReceiptHead): FfiLogResult {
+            return FfiConverterTypeFfiLogResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_verification_receipt(
+    
+        
+        FfiConverterTypeFfiVerificationReceipt.lower(`receipt`),
+        FfiConverterTypeFfiPublicKey.lower(`verifierKey`),
+        FfiConverterTypeFfiReceiptHead.lower(`head`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiVerifyWitnessEntry`(`entry`: FfiWitnessEntry, `head`: FfiWitnessHead, `witnessKey`: FfiPublicKey): FfiLogResult {
+            return FfiConverterTypeFfiLogResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_verify_witness_entry(
+    
+        
+        FfiConverterTypeFfiWitnessEntry.lower(`entry`),
+        FfiConverterTypeFfiWitnessHead.lower(`head`),
+        FfiConverterTypeFfiPublicKey.lower(`witnessKey`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiWitnessEntryDigest`(`entry`: FfiWitnessEntry): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_digest(
+    
+        
+        FfiConverterTypeFfiWitnessEntry.lower(`entry`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiWitnessEntrySignableBytes`(`entry`: FfiWitnessEntry): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_witness_entry_signable_bytes(
+    
+        
+        FfiConverterTypeFfiWitnessEntry.lower(`entry`),_status)
+}
+    )
+    }
     
 
 

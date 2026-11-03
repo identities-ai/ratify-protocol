@@ -20,7 +20,12 @@ pub fn ffi_validate_scopes(scopes: Vec<String>) -> FfiResult<()> {
 
 #[uniffi::export]
 pub fn ffi_scope_vocabulary() -> FfiResult<Vec<String>> {
-    call(|| Ok(ratify_protocol::vocabulary().into_iter().map(String::from).collect()))
+    call(|| {
+        Ok(ratify_protocol::vocabulary()
+            .into_iter()
+            .map(String::from)
+            .collect())
+    })
 }
 
 #[uniffi::export]

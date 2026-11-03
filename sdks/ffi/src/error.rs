@@ -45,5 +45,10 @@ pub(crate) type FfiResult<T> = Result<T, FfiError>;
 /// `ErrorClass` enums are pinned to this list by a test.
 #[uniffi::export]
 pub fn ffi_error_class_spellings() -> FfiResult<Vec<String>> {
-    crate::guard::call(|| Ok(V2ErrorClass::ALL.iter().map(|c| c.as_str().to_string()).collect()))
+    crate::guard::call(|| {
+        Ok(V2ErrorClass::ALL
+            .iter()
+            .map(|c| c.as_str().to_string())
+            .collect())
+    })
 }

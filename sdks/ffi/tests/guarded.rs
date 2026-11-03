@@ -21,28 +21,46 @@ fn is_export(attrs: &[Attribute]) -> bool {
 fn returns_ffi_result(out: &ReturnType) -> bool {
     match out {
         ReturnType::Type(_, t) => match &**t {
-            Type::Path(p) => p.path.segments.last().is_some_and(|s| s.ident == "FfiResult"),
+            Type::Path(p) => p
+                .path
+                .segments
+                .last()
+                .is_some_and(|s| s.ident == "FfiResult"),
             _ => false,
         },
         ReturnType::Default => false,
     }
 }
 
-/// The body is a single expression: a call to `call` or `call_on`.
-fn guarded(body: &Block) -> bool {
+/// The body is a single expression: a call to `want` (`call`, or `call_on`
+/// for a method with a receiver, so a panic poisons that handle).
+fn guarded(body: &Block, want: &str) -> bool {
     let [Stmt::Expr(Expr::Call(c), None)] = body.stmts.as_slice() else {
         return false;
     };
-    let Expr::Path(p) = &*c.func else { return false };
-    p.path.segments.last().is_some_and(|s| s.ident == "call" || s.ident == "call_on")
+    let Expr::Path(p) = &*c.func else {
+        return false;
+    };
+    p.path.segments.last().is_some_and(|s| s.ident == want)
 }
 
-fn check(name: String, sig: &syn::Signature, body: &Block, found: &mut BTreeSet<String>, errors: &mut Vec<String>) {
+fn check(
+    name: String,
+    sig: &syn::Signature,
+    body: &Block,
+    found: &mut BTreeSet<String>,
+    errors: &mut Vec<String>,
+) {
     if !returns_ffi_result(&sig.output) {
         errors.push(format!("{name}: must return FfiResult"));
     }
-    if !guarded(body) {
-        errors.push(format!("{name}: body must be one guard::call or guard::call_on"));
+    let want = if sig.receiver().is_some() {
+        "call_on"
+    } else {
+        "call"
+    };
+    if !guarded(body, want) {
+        errors.push(format!("{name}: body must be exactly one guard::{want}"));
     }
     found.insert(name);
 }
@@ -56,9 +74,13 @@ fn every_export_is_fallible_and_guarded() {
         let file = syn::parse_file(&fs::read_to_string(&path).unwrap()).unwrap();
         for item in file.items {
             match item {
-                Item::Fn(f) if is_export(&f.attrs) => {
-                    check(format!("func_{}", f.sig.ident), &f.sig, &f.block, &mut found, &mut errors)
-                }
+                Item::Fn(f) if is_export(&f.attrs) => check(
+                    format!("func_{}", f.sig.ident),
+                    &f.sig,
+                    &f.block,
+                    &mut found,
+                    &mut errors,
+                ),
                 Item::Impl(imp) if is_export(&imp.attrs) => {
                     let ty = imp.self_ty.to_token_stream().to_string().to_lowercase();
                     for it in imp.items {
@@ -66,9 +88,20 @@ fn every_export_is_fallible_and_guarded() {
                             if !matches!(m.vis, syn::Visibility::Public(_)) {
                                 continue;
                             }
-                            let ctor = m.attrs.iter().any(|a| a.path().segments.last().is_some_and(|s| s.ident == "constructor"));
+                            let ctor = m.attrs.iter().any(|a| {
+                                a.path()
+                                    .segments
+                                    .last()
+                                    .is_some_and(|s| s.ident == "constructor")
+                            });
                             let kind = if ctor { "constructor" } else { "method" };
-                            check(format!("{kind}_{ty}_{}", m.sig.ident), &m.sig, &m.block, &mut found, &mut errors);
+                            check(
+                                format!("{kind}_{ty}_{}", m.sig.ident),
+                                &m.sig,
+                                &m.block,
+                                &mut found,
+                                &mut errors,
+                            );
                         }
                     }
                 }
@@ -84,8 +117,15 @@ fn every_export_is_fallible_and_guarded() {
     let generated: BTreeSet<String> = bindings
         .split("uniffi_ratify_protocol_ffi_checksum_")
         .skip(1)
-        .map(|s| s.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect())
+        .map(|s| {
+            s.chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect()
+        })
         .collect();
     assert!(errors.is_empty(), "{}", errors.join("\n"));
-    assert_eq!(found, generated, "exports found in the sources differ from the exports UniFFI generated");
+    assert_eq!(
+        found, generated,
+        "exports found in the sources differ from the exports UniFFI generated"
+    );
 }

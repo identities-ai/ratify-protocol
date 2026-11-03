@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, HashMap};
 
 use ratify_protocol::v2::status_provenance::V2StatusEvidenceBatch;
 use ratify_protocol::v2::{
-    ConstraintEvaluatorRefV2, ConstraintV2, DelegationCertV2, KeyRotationStatementV2, ProofBundleV2,
-    RevocationListV2, RevocationPushV2, RevokedCertV2, StatusEvidenceEntryV2, TransactionReceiptPartyV2,
-    TransactionReceiptSignatureV2, TransactionReceiptV2, VerificationReceiptV2, WitnessEntryV2,
+    ConstraintEvaluatorRefV2, ConstraintV2, DelegationCertV2, KeyRotationStatementV2,
+    ProofBundleV2, RevocationListV2, RevocationPushV2, RevokedCertV2, StatusEvidenceEntryV2,
+    TransactionReceiptPartyV2, TransactionReceiptSignatureV2, TransactionReceiptV2,
+    VerificationReceiptV2, WitnessEntryV2,
 };
 use ratify_protocol::{HybridPublicKey, HybridSignature, ParamsValue};
 
@@ -27,12 +28,18 @@ pub struct FfiSignature {
 
 impl From<&HybridSignature> for FfiSignature {
     fn from(s: &HybridSignature) -> Self {
-        FfiSignature { ed25519: s.ed25519.clone(), ml_dsa_65: s.ml_dsa_65.clone() }
+        FfiSignature {
+            ed25519: s.ed25519.clone(),
+            ml_dsa_65: s.ml_dsa_65.clone(),
+        }
     }
 }
 impl From<FfiSignature> for HybridSignature {
     fn from(s: FfiSignature) -> Self {
-        HybridSignature { ed25519: s.ed25519, ml_dsa_65: s.ml_dsa_65 }
+        HybridSignature {
+            ed25519: s.ed25519,
+            ml_dsa_65: s.ml_dsa_65,
+        }
     }
 }
 
@@ -40,11 +47,21 @@ impl From<FfiSignature> for HybridSignature {
 #[derive(uniffi::Enum, Clone, Debug, PartialEq, Eq)]
 pub enum FfiParamsValue {
     Null,
-    Bool { value: bool },
-    Int { value: i64 },
-    Str { value: String },
-    Array { items: Vec<FfiParamsValue> },
-    Object { entries: HashMap<String, FfiParamsValue> },
+    Bool {
+        value: bool,
+    },
+    Int {
+        value: i64,
+    },
+    Str {
+        value: String,
+    },
+    Array {
+        items: Vec<FfiParamsValue>,
+    },
+    Object {
+        entries: HashMap<String, FfiParamsValue>,
+    },
 }
 
 impl From<&ParamsValue> for FfiParamsValue {
@@ -54,8 +71,12 @@ impl From<&ParamsValue> for FfiParamsValue {
             ParamsValue::Bool(b) => FfiParamsValue::Bool { value: *b },
             ParamsValue::Int(i) => FfiParamsValue::Int { value: *i },
             ParamsValue::Str(s) => FfiParamsValue::Str { value: s.clone() },
-            ParamsValue::Array(a) => FfiParamsValue::Array { items: a.iter().map(Into::into).collect() },
-            ParamsValue::Object(o) => FfiParamsValue::Object { entries: params_out(o) },
+            ParamsValue::Array(a) => FfiParamsValue::Array {
+                items: a.iter().map(Into::into).collect(),
+            },
+            ParamsValue::Object(o) => FfiParamsValue::Object {
+                entries: params_out(o),
+            },
         }
     }
 }
@@ -66,7 +87,9 @@ impl From<FfiParamsValue> for ParamsValue {
             FfiParamsValue::Bool { value } => ParamsValue::Bool(value),
             FfiParamsValue::Int { value } => ParamsValue::Int(value),
             FfiParamsValue::Str { value } => ParamsValue::Str(value),
-            FfiParamsValue::Array { items } => ParamsValue::Array(items.into_iter().map(Into::into).collect()),
+            FfiParamsValue::Array { items } => {
+                ParamsValue::Array(items.into_iter().map(Into::into).collect())
+            }
             FfiParamsValue::Object { entries } => ParamsValue::Object(params_in(entries)),
         }
     }
@@ -235,7 +258,9 @@ fn revoked_out(r: &[RevokedCertV2]) -> Vec<String> {
     r.iter().map(|c| c.cert_id.clone()).collect()
 }
 fn revoked_in(r: Vec<String>) -> Vec<RevokedCertV2> {
-    r.into_iter().map(|cert_id| RevokedCertV2 { cert_id }).collect()
+    r.into_iter()
+        .map(|cert_id| RevokedCertV2 { cert_id })
+        .collect()
 }
 
 #[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
@@ -474,7 +499,10 @@ impl From<&VerificationReceiptV2> for FfiVerificationReceipt {
             constraint_evaluators: r
                 .constraint_evaluators
                 .iter()
-                .map(|e| FfiConstraintEvaluatorRef { kind: e.kind.clone(), profile_digest: e.profile_digest.clone() })
+                .map(|e| FfiConstraintEvaluatorRef {
+                    kind: e.kind.clone(),
+                    profile_digest: e.profile_digest.clone(),
+                })
                 .collect(),
             context_assessment: r.context_assessment.clone(),
             context_policy_digest: r.context_policy_digest.clone(),
@@ -517,7 +545,10 @@ impl From<FfiVerificationReceipt> for VerificationReceiptV2 {
             constraint_evaluators: r
                 .constraint_evaluators
                 .into_iter()
-                .map(|e| ConstraintEvaluatorRefV2 { kind: e.kind, profile_digest: e.profile_digest })
+                .map(|e| ConstraintEvaluatorRefV2 {
+                    kind: e.kind,
+                    profile_digest: e.profile_digest,
+                })
                 .collect(),
             context_assessment: r.context_assessment,
             context_policy_digest: r.context_policy_digest,
@@ -601,7 +632,10 @@ impl From<&TransactionReceiptV2> for FfiTransactionReceipt {
             party_signatures: t
                 .party_signatures
                 .iter()
-                .map(|s| FfiTransactionReceiptSignature { party_id: s.party_id.clone(), signature: (&s.signature).into() })
+                .map(|s| FfiTransactionReceiptSignature {
+                    party_id: s.party_id.clone(),
+                    signature: (&s.signature).into(),
+                })
                 .collect(),
         }
     }
@@ -634,7 +668,10 @@ impl From<FfiTransactionReceipt> for TransactionReceiptV2 {
             party_signatures: t
                 .party_signatures
                 .into_iter()
-                .map(|s| TransactionReceiptSignatureV2 { party_id: s.party_id, signature: s.signature.into() })
+                .map(|s| TransactionReceiptSignatureV2 {
+                    party_id: s.party_id,
+                    signature: s.signature.into(),
+                })
                 .collect(),
         }
     }
@@ -648,7 +685,13 @@ pub struct FfiStatusEvidenceObject {
 }
 
 pub(crate) fn batch_out(b: &V2StatusEvidenceBatch) -> Vec<FfiStatusEvidenceObject> {
-    b.objects.iter().map(|o| FfiStatusEvidenceObject { object_type: o.object_type, wire: o.wire.clone() }).collect()
+    b.objects
+        .iter()
+        .map(|o| FfiStatusEvidenceObject {
+            object_type: o.object_type,
+            wire: o.wire.clone(),
+        })
+        .collect()
 }
 
 // Strict decoders: one per object kind, each a single core call.
@@ -671,7 +714,9 @@ pub fn ffi_decode_revocation_push(data: Vec<u8>) -> FfiResult<FfiRevocationPush>
 }
 #[uniffi::export]
 pub fn ffi_decode_key_rotation_statement(data: Vec<u8>) -> FfiResult<FfiKeyRotationStatement> {
-    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_key_rotation_statement_v2(&data)?).into()))
+    crate::guard::call(|| {
+        Ok((&ratify_protocol::v2::decode_key_rotation_statement_v2(&data)?).into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_decode_witness_entry(data: Vec<u8>) -> FfiResult<FfiWitnessEntry> {
@@ -683,7 +728,9 @@ pub fn ffi_decode_verification_receipt(data: Vec<u8>) -> FfiResult<FfiVerificati
 }
 #[uniffi::export]
 pub fn ffi_decode_verification_receipt_body(data: Vec<u8>) -> FfiResult<FfiVerificationReceipt> {
-    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_verification_receipt_body_v2(&data)?).into()))
+    crate::guard::call(|| {
+        Ok((&ratify_protocol::v2::decode_verification_receipt_body_v2(&data)?).into())
+    })
 }
 #[uniffi::export]
 pub fn ffi_decode_transaction_receipt(data: Vec<u8>) -> FfiResult<FfiTransactionReceipt> {
@@ -691,5 +738,9 @@ pub fn ffi_decode_transaction_receipt(data: Vec<u8>) -> FfiResult<FfiTransaction
 }
 #[uniffi::export]
 pub fn ffi_decode_status_evidence_batch(data: Vec<u8>) -> FfiResult<Vec<FfiStatusEvidenceObject>> {
-    crate::guard::call(|| Ok(batch_out(&ratify_protocol::v2::decode_v2_status_evidence_batch(&data)?)))
+    crate::guard::call(|| {
+        Ok(batch_out(
+            &ratify_protocol::v2::decode_v2_status_evidence_batch(&data)?,
+        ))
+    })
 }

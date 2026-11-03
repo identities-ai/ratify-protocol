@@ -47,7 +47,10 @@ fn contained<T>(body: impl FnOnce() -> FfiResult<T>) -> Result<FfiResult<T>, ()>
 }
 
 fn panicked() -> FfiError {
-    FfiError::Internal { kind: "panic".into(), detail: PANIC_MESSAGE.into() }
+    FfiError::Internal {
+        kind: "panic".into(),
+        detail: PANIC_MESSAGE.into(),
+    }
 }
 
 /// Guard a free function.

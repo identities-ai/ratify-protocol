@@ -154,12 +154,13 @@ EXTRA_KOTLIN = {
 }
 
 
-# Members every language synthesizes for value types, enums and errors.
-SYNTH_SWIFT = {"init", "hash", "hashValue", "__derived_struct_equals", "__derived_enum_equals", "==",
-               "description", "RawValue", "AllCases", "allCases", "rawValue", "errorDescription",
-               "localizedDescription"}
-SYNTH_KOTLIN = {"init", "equals", "hashCode", "toString", "copy", "values", "valueOf", "entries",
-                "Companion", "INSTANCE", "message", "cause", "name", "ordinal", "getEntries", "copy$default"}
+# Swift: only members the compiler synthesized (`implicit` in the digester
+# dump) are exempt, plus initializers of a public type.
+# Kotlin has no such flag, so each exemption is scoped to what synthesizes it.
+KOTLIN_ANY = {"init", "equals", "hashCode", "toString", "Companion"}
+KOTLIN_ENUM = {"values", "valueOf", "entries", "getEntries", "name", "ordinal"}
+KOTLIN_THROWABLE = {"message", "cause"}
+KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
     "RatifyException.errorClass": "the §2.7 class of any RatifyException",
@@ -183,6 +184,10 @@ EXTRA_MEMBERS = {
 }
 
 
+synthesized = {}  # swift type path -> compiler-synthesized member names
+kotlin_kinds = {}  # kotlin class path -> {"enum", "throwable", "object", "data"}
+
+
 def swift_model(dump):
     """{type path: set of member names} for every public type, plus the
     members of the `Ratify` namespace; imports excluded."""
@@ -195,7 +200,10 @@ def swift_model(dump):
                 members = types.setdefault(path, set())
                 for m in c.get("children", []):
                     if m.get("declKind") in ("Var", "Func", "EnumElement", "Constructor", "TypeAlias"):
-                        members.add("init" if m.get("declKind") == "Constructor" else m["name"])
+                        n = "init" if m.get("declKind") == "Constructor" else m["name"]
+                        members.add(n)
+                        if m.get("implicit") or n == "init":
+                            synthesized.setdefault(path, set()).add(n)
                 walk(c, path + ".")
 
     walk(json.loads(dump)["ABIRoot"], "")
@@ -216,12 +224,19 @@ def kotlin_model(api):
             else:
                 cur = name.replace("$Companion", "").replace("$", ".")
             types.setdefault(cur, set())
+            kinds = kotlin_kinds.setdefault(cur, set())
+            if "java/lang/Enum" in line:
+                kinds.add("enum")
+            if re.search(r"java/lang/(Exception|RuntimeException|Throwable)|com/ratifyprotocol/RatifyException\b", line):
+                kinds.add("throwable")
             continue
         if line.startswith("}"):
             cur = None
             continue
         if cur is None:
             continue
+        if re.search(r"\bstatic final field INSTANCE\b", line):
+            kotlin_kinds.setdefault(cur, set()).add("object")
         f = re.search(r"\bfun (\S+) \(", line) or re.search(r"\bfield (\S+) ", line)
         if not f:
             continue
@@ -285,12 +300,29 @@ def cmd_names(swift_dump, kotlin_api):
         if f"Ratify.{m}" not in used["swift"]:
             errors.append(f"swift public function Ratify.{m} is not named by the inventory")
     members_used = {lang: {n for n in used[lang] if "." in n} for lang in used}
-    for model, lang, synth in ((swift, "swift", SYNTH_SWIFT), (kotlin, "kotlin", SYNTH_KOTLIN)):
+    # Kotlin data classes, from the sources (BCV does not mark them).
+    src = ROOT / "sdks/kotlin/ratify-protocol/src/main/kotlin/com/ratifyprotocol"
+    for f in src.glob("*.kt"):
+        text = f.read_text()
+        for m in re.finditer(r"\bdata class (\w+)", text):
+            for t in kotlin:
+                if t.split(".")[-1] == m.group(1):
+                    kotlin_kinds.setdefault(t, set()).add("data")
+
+    def exempt(lang, t, m):
+        if lang == "swift":
+            return m in synthesized.get(t, set())
+        k = kotlin_kinds.get(t, set())
+        return (m in KOTLIN_ANY or ("enum" in k and m in KOTLIN_ENUM) or ("throwable" in k and m in KOTLIN_THROWABLE)
+                or ("object" in k and m == "INSTANCE")
+                or ("data" in k and (m in KOTLIN_DATA or re.fullmatch(r"component\d+", m))))
+
+    for model, lang in ((swift, "swift"), (kotlin, "kotlin")):
         for t, members in model.items():
             if not t or t == "Ratify":
                 continue
             for m in members:
-                if m in synth or re.fullmatch(r"component\d+", m):
+                if exempt(lang, t, m):
                     continue
                 if f"{t}.{m}" not in members_used[lang] and f"{t}.{m}" not in EXTRA_MEMBERS:
                     errors.append(f"{lang} public member {t}.{m} is not named by the inventory")

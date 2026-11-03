@@ -93,9 +93,16 @@ impl FfiContextPolicy {
         expected_session_context: Vec<u8>,
     ) -> FfiResult<Arc<Self>> {
         call(|| {
-            let inner =
-                V2ContextPolicy::new(&profile, require_bound, &required_fields, &expected_session_context)?;
-            Ok(Arc::new(FfiContextPolicy { poison: Poison::default(), inner }))
+            let inner = V2ContextPolicy::new(
+                &profile,
+                require_bound,
+                &required_fields,
+                &expected_session_context,
+            )?;
+            Ok(Arc::new(FfiContextPolicy {
+                poison: Poison::default(),
+                inner,
+            }))
         })
     }
 
@@ -138,7 +145,11 @@ impl FfiCancelToken {
                 Some(ms) => root.with_timeout(std::time::Duration::from_millis(ms)),
                 None => root.with_cancel(),
             };
-            Ok(Arc::new(FfiCancelToken { poison: Poison::default(), ctx, handle }))
+            Ok(Arc::new(FfiCancelToken {
+                poison: Poison::default(),
+                ctx,
+                handle,
+            }))
         })
     }
 

@@ -3,6 +3,8 @@ public final class com/ratifyprotocol/AndroidKeyStore {
 	public synthetic fun <init> (Landroid/content/Context;ZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun delete (Ljava/lang/String;)V
 	public final fun load (Ljava/lang/String;)Lcom/ratifyprotocol/SoftwarePrivateKey;
+	public final fun loadKeystoreKey (Ljava/lang/String;)Lcom/ratifyprotocol/KeystoreKey;
+	public final fun save (Lcom/ratifyprotocol/KeystoreKey;)V
 	public final fun save (Lcom/ratifyprotocol/SoftwarePrivateKey;)V
 }
 
@@ -259,6 +261,31 @@ public final class com/ratifyprotocol/KeyStorageRecord$RecordType : java/lang/En
 public final class com/ratifyprotocol/KeysKt {
 	public static final fun keyId (Lcom/ratifyprotocol/HybridPublicKey;)Ljava/lang/String;
 	public static final fun validId (Ljava/lang/String;)Z
+}
+
+public final class com/ratifyprotocol/KeystoreKey {
+	public static final field Companion Lcom/ratifyprotocol/KeystoreKey$Companion;
+	public synthetic fun <init> (Lcom/ratifyprotocol/internal/ffi/FfiSplitKey;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCustody ()Lkotlin/Pair;
+	public final fun getKeyId ()Ljava/lang/String;
+	public final fun getPublicKey ()Lcom/ratifyprotocol/HybridPublicKey;
+	public final fun storageRecord ()[B
+}
+
+public final class com/ratifyprotocol/KeystoreKey$Companion {
+	public final fun fromStorageRecord ([B)Lcom/ratifyprotocol/KeystoreKey;
+	public final fun generate (ZZ)Lcom/ratifyprotocol/KeystoreKey;
+	public static synthetic fun generate$default (Lcom/ratifyprotocol/KeystoreKey$Companion;ZZILjava/lang/Object;)Lcom/ratifyprotocol/KeystoreKey;
+}
+
+public final class com/ratifyprotocol/KeystoreKey$Custody : java/lang/Enum {
+	public static final field SOFTWARE Lcom/ratifyprotocol/KeystoreKey$Custody;
+	public static final field STRONGBOX Lcom/ratifyprotocol/KeystoreKey$Custody;
+	public static final field TEE Lcom/ratifyprotocol/KeystoreKey$Custody;
+	public static final field UNKNOWN Lcom/ratifyprotocol/KeystoreKey$Custody;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/KeystoreKey$Custody;
+	public static fun values ()[Lcom/ratifyprotocol/KeystoreKey$Custody;
 }
 
 public final class com/ratifyprotocol/LogResult : java/lang/Enum {
@@ -563,24 +590,49 @@ public final class com/ratifyprotocol/SigningErrorKind : java/lang/Enum {
 	public static fun values ()[Lcom/ratifyprotocol/SigningErrorKind;
 }
 
+public abstract class com/ratifyprotocol/SigningKey {
+}
+
+public final class com/ratifyprotocol/SigningKey$External : com/ratifyprotocol/SigningKey {
+	public fun <init> (Lcom/ratifyprotocol/ExternalSigner;)V
+	public final fun getSigner ()Lcom/ratifyprotocol/ExternalSigner;
+}
+
+public final class com/ratifyprotocol/SigningKey$Platform : com/ratifyprotocol/SigningKey {
+	public fun <init> (Lcom/ratifyprotocol/KeystoreKey;)V
+}
+
+public final class com/ratifyprotocol/SigningKey$Software : com/ratifyprotocol/SigningKey {
+	public fun <init> (Lcom/ratifyprotocol/SoftwarePrivateKey;)V
+	public final fun getKey ()Lcom/ratifyprotocol/SoftwarePrivateKey;
+}
+
 public final class com/ratifyprotocol/SigningKt {
 	public static final fun signDelegationCert (Lcom/ratifyprotocol/DelegationCert;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signDelegationCert (Lcom/ratifyprotocol/DelegationCert;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signDelegationCert (Lcom/ratifyprotocol/DelegationCert;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/DelegationCert;
 	public static final fun signKeyRotationStatement (Lcom/ratifyprotocol/KeyRotationStatement;Lcom/ratifyprotocol/ExternalSigner;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signKeyRotationStatement (Lcom/ratifyprotocol/KeyRotationStatement;Lcom/ratifyprotocol/SigningKey;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signKeyRotationStatement (Lcom/ratifyprotocol/KeyRotationStatement;Lcom/ratifyprotocol/SoftwarePrivateKey;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/KeyRotationStatement;
 	public static final fun signPreparedVerificationReceipt ([BLcom/ratifyprotocol/ReceiptHead;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signPreparedVerificationReceipt ([BLcom/ratifyprotocol/ReceiptHead;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/VerificationReceipt;
 	public static final fun signProofBundle (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signProofBundle (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signProofBundle (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/ProofBundle;
 	public static final fun signRevocationList (Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signRevocationList (Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signRevocationList (Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/RevocationList;
 	public static final fun signRevocationPush (Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signRevocationPush (Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signRevocationPush (Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/RevocationPush;
 	public static final fun signTransactionReceiptParty (Lcom/ratifyprotocol/TransactionReceipt;Ljava/lang/String;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signTransactionReceiptParty (Lcom/ratifyprotocol/TransactionReceipt;Ljava/lang/String;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signTransactionReceiptParty (Lcom/ratifyprotocol/TransactionReceipt;Ljava/lang/String;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/TransactionReceiptSignature;
 	public static final fun signVerificationReceipt (Lcom/ratifyprotocol/VerificationReceipt;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signVerificationReceipt (Lcom/ratifyprotocol/VerificationReceipt;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signVerificationReceipt (Lcom/ratifyprotocol/VerificationReceipt;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/VerificationReceipt;
 	public static final fun signWitnessEntry (Lcom/ratifyprotocol/WitnessEntry;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun signWitnessEntry (Lcom/ratifyprotocol/WitnessEntry;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun signWitnessEntry (Lcom/ratifyprotocol/WitnessEntry;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/WitnessEntry;
 }
 

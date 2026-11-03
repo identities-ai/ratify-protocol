@@ -57,6 +57,7 @@ kotlin {
 
 dependencies {
     implementation("net.java.dev.jna:jna:5.15.0@aar")
+    implementation("androidx.annotation:annotation:1.9.1")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation("net.java.dev.jna:jna:5.15.0")
     testImplementation("junit:junit:4.13.2")

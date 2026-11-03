@@ -156,6 +156,10 @@ EXTRA_KOTLIN = {
     "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
     "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
     "AndroidKeyStore": "Keystore-wrapped storage of software keys (plan §4.3); SDK-only",
+    "KeystoreKey": "Keystore split-custody platform signer (plan §4.2); SDK-only",
+    "KeystoreKey.Custody": "per-component custody report (plan §4.2)",
+    "SigningKey": "the key a typed signing function uses (plan §4.1)",
+    "SigningKey.Software": "signing key kind", "SigningKey.External": "signing key kind", "SigningKey.Platform": "signing key kind",
     "KeyStorageKt": "file facade",
     "RotationAcceptance": "the (journal, result) tuple of accept_key_rotation_statement_v2",
     "InternalErrorKind": "kind of RatifyException.Internal (plan §2.2)",
@@ -197,6 +201,11 @@ EXTRA_MEMBERS = {
     "KeychainKeyStore.service": "Keychain service name", "KeychainKeyStore.accessGroup": "Keychain access group",
     "KeychainKeyStore.save": "store", "KeychainKeyStore.load": "store", "KeychainKeyStore.delete": "store",
     "AndroidKeyStore.save": "store", "AndroidKeyStore.load": "store", "AndroidKeyStore.delete": "store",
+    "AndroidKeyStore.loadKeystoreKey": "store",
+    "KeystoreKey.publicKey": "platform key", "KeystoreKey.keyId": "platform key", "KeystoreKey.custody": "custody report",
+    "KeystoreKey.storageRecord": "platform key", "KeystoreKey.generate": "platform key", "KeystoreKey.fromStorageRecord": "platform key",
+    "KeystoreKey.Custody.STRONGBOX": "custody", "KeystoreKey.Custody.TEE": "custody", "KeystoreKey.Custody.SOFTWARE": "custody",
+    "KeystoreKey.Custody.UNKNOWN": "custody", "SigningKey.Software.key": "signing key", "SigningKey.External.signer": "signing key",
     "SoftwarePrivateKey.storageRecord": "the key's storage record (plan §4.3)",
     "SecureEnclaveKey.publicKey": "platform key", "SecureEnclaveKey.keyId": "platform key",
     "SecureEnclaveKey.custody": "custody report", "SecureEnclaveKey.generate": "platform key",
@@ -275,6 +284,7 @@ def kotlin_model(api):
         if not f:
             continue
         n = f.group(1).split("-")[0]  # inline-class mangling: getObjectType-Mh2AYeg
+        n = n.removesuffix("$default")  # default-argument bridge of the function it names
         if n == "<init>":
             n = "init"
         elif re.match(r"^(get|is)[A-Z]", n) and "fun" in line and re.search(r"\(\)", line):

@@ -213,3 +213,66 @@ public suspend fun signTransactionReceiptParty(receipt: TransactionReceipt, part
     val s = SignerBridge(signer)
     return TransactionReceiptSignature(onWorker { t -> ffi { ffiSignTransactionReceiptPartyWithSigner(t, r, partyId, s) } })
 }
+
+// Typed signing with any SigningKey (suspending: a platform key may need the user).
+public suspend fun signDelegationCert(cert: DelegationCert, with: SigningKey): DelegationCert {
+    if (with is SigningKey.Software) return signDelegationCert(cert, with.key)
+    val c = cert.toFfi()
+    val s = with.ffiSigner()!!
+    return DelegationCert(onWorker { t -> ffi { ffiSignDelegationCertWithSigner(t, c, s) } })
+}
+public suspend fun signProofBundle(bundle: ProofBundle, with: SigningKey): ProofBundle {
+    if (with is SigningKey.Software) return signProofBundle(bundle, with.key)
+    val b = bundle.toFfi()
+    val s = with.ffiSigner()!!
+    return ProofBundle(onWorker { t -> ffi { ffiSignProofBundleWithSigner(t, b, s) } })
+}
+public suspend fun signRevocationList(list: RevocationList, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationList {
+    if (with is SigningKey.Software) return signRevocationList(list, boundIssuerId, boundStatusKey, with.key)
+    val l = list.toFfi()
+    val k = boundStatusKey.toFfi()
+    val s = with.ffiSigner()!!
+    return RevocationList(onWorker { t -> ffi { ffiSignRevocationListWithSigner(t, l, boundIssuerId, k, s) } })
+}
+public suspend fun signRevocationPush(push: RevocationPush, boundIssuerId: String, boundStatusKey: HybridPublicKey, with: SigningKey): RevocationPush {
+    if (with is SigningKey.Software) return signRevocationPush(push, boundIssuerId, boundStatusKey, with.key)
+    val p = push.toFfi()
+    val k = boundStatusKey.toFfi()
+    val s = with.ffiSigner()!!
+    return RevocationPush(onWorker { t -> ffi { ffiSignRevocationPushWithSigner(t, p, boundIssuerId, k, s) } })
+}
+
+/**
+ * Both keys must be the same kind: two software keys, or two signers
+ * (external or platform). A software/signer mix is `configuration_invalid`,
+ * as in every SDK: the core exports no software signer to pair with one.
+ */
+public suspend fun signKeyRotationStatement(statement: KeyRotationStatement, oldKey: SigningKey, newKey: SigningKey): KeyRotationStatement {
+    if (oldKey is SigningKey.Software && newKey is SigningKey.Software) return signKeyRotationStatement(statement, oldKey.key, newKey.key)
+    val o = oldKey.ffiSigner()
+    val n = newKey.ffiSigner()
+    if (o == null || n == null) {
+        throw RatifyException.Signing(ErrorClass.CONFIGURATION_INVALID, SigningErrorKind.INVALID_SIGNER_KEY,
+            "a rotation's old and new keys must both be software keys or both be signers")
+    }
+    val st = statement.toFfi()
+    return KeyRotationStatement(onWorker { t -> ffi { ffiSignKeyRotationStatementWithSigners(t, st, o, n) } })
+}
+public suspend fun signWitnessEntry(entry: WitnessEntry, with: SigningKey): WitnessEntry {
+    if (with is SigningKey.Software) return signWitnessEntry(entry, with.key)
+    val e = entry.toFfi()
+    val s = with.ffiSigner()!!
+    return WitnessEntry(onWorker { t -> ffi { ffiSignWitnessEntryWithSigner(t, e, s) } })
+}
+public suspend fun signVerificationReceipt(receipt: VerificationReceipt, with: SigningKey): VerificationReceipt {
+    if (with is SigningKey.Software) return signVerificationReceipt(receipt, with.key)
+    val r = receipt.toFfi()
+    val s = with.ffiSigner()!!
+    return VerificationReceipt(onWorker { t -> ffi { ffiSignVerificationReceiptWithSigner(t, r, s) } })
+}
+public suspend fun signTransactionReceiptParty(receipt: TransactionReceipt, partyId: String, with: SigningKey): TransactionReceiptSignature {
+    if (with is SigningKey.Software) return signTransactionReceiptParty(receipt, partyId, with.key)
+    val r = receipt.toFfi()
+    val s = with.ffiSigner()!!
+    return TransactionReceiptSignature(onWorker { t -> ffi { ffiSignTransactionReceiptPartyWithSigner(t, r, partyId, s) } })
+}

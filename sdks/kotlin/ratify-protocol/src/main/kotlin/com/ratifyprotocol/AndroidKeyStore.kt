@@ -70,18 +70,22 @@ public class AndroidKeyStore(
     }
 
     /** Store a key. Fails with `configuration_invalid` if one with this ID exists. */
-    public fun save(key: SoftwarePrivateKey) {
-        val f = file(key.keyId)
+    public fun save(key: SoftwarePrivateKey): Unit = saveRecord(key.keyId, key.storageRecord())
+
+    /** Store a Keystore key's ML-DSA-65 half (its type 0x03 record). */
+    public fun save(key: KeystoreKey): Unit = saveRecord(key.keyId, key.storageRecord())
+
+    internal fun saveRecord(keyId: String, record: ByteArray) {
+        val f = file(keyId)
         if (f.exists()) throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "a key with this ID is already stored")
-        val record = key.storageRecord()
         try {
             val header = KeyStorageRecord(record).header
-            val wrap = createWrapKey(key.keyId)
+            val wrap = createWrapKey(keyId)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrap) }
             cipher.updateAAD(header)
             val sealed = cipher.doFinal(record, header.size, record.size - header.size)
             dir.mkdirs()
-            val tmp = File(dir, "${key.keyId}.tmp")
+            val tmp = File(dir, "$keyId.tmp")
             tmp.writeBytes(header + cipher.iv + sealed)
             if (!tmp.renameTo(f)) throw RatifyException.Protocol(ErrorClass.CONFIGURATION_INVALID, "could not store the key file")
         } finally {
@@ -89,8 +93,27 @@ public class AndroidKeyStore(
         }
     }
 
-    /** Load the key with this ID, or null if none is stored. */
+    /** Load the software key with this ID, or null if none is stored. */
     public fun load(keyId: String): SoftwarePrivateKey? {
+        val record = loadRecord(keyId) ?: return null
+        try {
+            return softwarePrivateKeyFromStorageRecord(record)
+        } finally {
+            record.fill(0)
+        }
+    }
+
+    /** Load the Keystore key with this ID, or null if none is stored. */
+    public fun loadKeystoreKey(keyId: String): KeystoreKey? {
+        val record = loadRecord(keyId) ?: return null
+        try {
+            return KeystoreKey.fromStorageRecord(record)
+        } finally {
+            record.fill(0)
+        }
+    }
+
+    internal fun loadRecord(keyId: String): ByteArray? {
         val f = file(keyId)
         if (!f.exists()) return null
         val bytes = f.readBytes()
@@ -111,18 +134,29 @@ public class AndroidKeyStore(
         } catch (e: javax.crypto.AEADBadTagException) {
             throw bad("authentication failed (corrupted, or its header was changed)")
         }
-        val record = header + fields
         try {
-            return softwarePrivateKeyFromStorageRecord(record)
+            return header + fields
         } finally {
-            record.fill(0)
             fields.fill(0)
         }
     }
 
-    /** Delete the key with this ID and its wrap key; deleting an absent key succeeds. */
+    /**
+     * Delete the key with this ID, its wrap key and, for a [KeystoreKey], its
+     * Keystore Ed25519 key (named in its record); deleting an absent key succeeds.
+     */
     public fun delete(keyId: String) {
+        val ed25519Alias = runCatching { loadRecord(keyId) }.getOrNull()?.let { record ->
+            try {
+                ffi { com.ratifyprotocol.internal.ffi.ffiParseStorageRecord(record) }.fields.firstOrNull { it.tag.toInt() == 0x06 }
+                    ?.let { String(it.value, Charsets.US_ASCII) }
+            } finally {
+                record.fill(0)
+            }
+        }
         file(keyId).delete()
-        keystore().let { if (it.containsAlias(alias(keyId))) it.deleteEntry(alias(keyId)) }
+        keystore().let { ks ->
+            for (a in listOfNotNull(alias(keyId), ed25519Alias)) if (ks.containsAlias(a)) ks.deleteEntry(a)
+        }
     }
 }

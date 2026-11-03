@@ -27,7 +27,7 @@ ratify-protocol/
     ├── python/          ← ratify-protocol
     ├── rust/            ← ratify-protocol
     └── c/               ← libratify_c (static + shared, cbindgen header)
-    (future: swift, java)
+    (planned: swift and kotlin, v2 SDKs built over the Rust SDK)
 ```
 
 **Why monorepo, not per-SDK repos:** a spec change (or even a clarification that affects canonical bytes) must land in every SDK atomically. Monorepo makes that a single PR that touches every language. Multi-repo makes it N PRs coordinated across N release cycles. That is how drift happens.

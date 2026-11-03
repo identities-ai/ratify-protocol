@@ -23,8 +23,8 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **Python** | `ratify-protocol` (PyPI; v2 at `ratify_protocol.v2` through the `protocol-v2` extra) | `sdks/python/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
-| Swift | n/a | planned (mobile wallet) | n/a |
-| Java / Kotlin | n/a | planned (Android / JVM) | n/a |
+| Swift (iOS, macOS) | n/a | planned: full v2 SDK built over the Rust SDK | n/a |
+| Kotlin (Android) | n/a | planned: full v2 SDK built over the Rust SDK | n/a |
 
 This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
@@ -62,21 +62,29 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration: Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
-## 3. Priority order for future language ports
+## 3. Planned mobile SDKs
 
-Five SDKs are now shipped. The next ports expand platform coverage.
+Five SDKs are shipped. Swift (iOS, macOS) and Kotlin (Android) are planned
+as SDKs six and seven, Protocol v2 only, with full parity: each will expose
+every v2 operation, including the stateful verifier and the Part B
+interfaces, and meet every SDK gate in SPEC-v2 §8.
 
-### Next up: Swift
+**Built over the Rust SDK, like C.** The protocol logic (canonical
+encoding, typed signing, checks, the verifier) stays in one implementation,
+so both SDKs produce the Rust SDK's bytes and every fix lands once.
+Agreement between these SDKs and Rust is therefore not independent
+evidence, as SPEC-v2 §1.3 already states for C. Each SDK has its own
+hand-written Swift or Kotlin API. Key generation and signing with the iOS
+Secure Enclave and Keychain or the Android Keystore run through the
+platform's own APIs as external signers (SPEC-v2 §3.2), and the SDK checks
+every signature they return before using it.
 
-**Why:** iOS Secure Enclave is the best available civilian hardware for private-key custody. A mobile wallet and native iOS integrations need a Swift SDK that integrates with iOS Keychain for secure key storage.
+**Planned targets:** SwiftPM (XCFramework) for iOS 17+ and macOS; an AAR on
+Maven Central for Android 9 (API 28)+. Which key components are
+hardware-backed depends on the OS version, and each SDK reports it per
+component. A JVM server SDK is not part of this plan.
 
-**Target:** SwiftPM. Crypto via Apple's CryptoKit (Ed25519) + an external ML-DSA-65 implementation (probably a Swift wrapper around liboqs or a Swift port). Must pass all 79 fixtures. Note: Swift can already link the C SDK via bridging header as an interim path.
-
-### After Swift: Java / Kotlin
-
-**Why:** Android, JVM agent services, and enterprise middleware. A Kotlin-first SDK covers Android wallet work and Java backends without forcing those deployments through FFI.
-
-**Target:** Maven Central + Kotlin Multiplatform for mobile. Crypto via Bouncy Castle (Ed25519, plus ML-DSA support as of BC 1.78+) or a direct Java port. Must pass all 79 fixtures. Rationale is enterprise pull: Android wallet depends on Kotlin, and large JVM shops (Salesforce, Oracle, SAP, many banks) want a JVM SDK if they embed Ratify server-side.
+SPEC-v2 §1.3 and §8 will list Swift and Kotlin when these SDKs land.
 
 ## 4. The conformance contract
 
@@ -239,8 +247,7 @@ lower-level primitive the contract is built on:
 | TypeScript | `@noble/ed25519` | `@noble/post-quantum` (ml-dsa-65) |
 | Python | `cryptography` (shipped SDK) | `pqcrypto` (shipped SDK) |
 | Rust | `ed25519-dalek` (shipped SDK) | `fips204` (shipped SDK) |
-| Swift | Apple `CryptoKit` | liboqs-swift wrapper (or port) |
-| Java / Kotlin | Bouncy Castle | Bouncy Castle (ML-DSA support is current as of BC 1.78+) |
+| Swift, Kotlin (planned) | `ed25519-dalek` via the Rust SDK; hardware keys through the platform signer | `fips204` via the Rust SDK; hardware keys through the platform signer |
 | C | `ed25519-dalek` via the Rust SDK | `fips204` via the Rust SDK |
 
 SDK authors MUST use audited, mainstream implementations. Rolling your own Ed25519 or ML-DSA-65 is not acceptable for a Ratify SDK.

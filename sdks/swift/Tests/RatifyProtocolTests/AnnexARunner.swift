@@ -1,19 +1,18 @@
 import CryptoKit
 import Foundation
-import XCTest
 import RatifyProtocol
 
 /// annex-a.json through the public API: pinned clauses, canonical JSON,
 /// strict-decode rejections, and the scope vocabulary, expansion and
 /// intersection rules.
-final class AnnexATests: XCTestCase {
-    func isCanonicalObject(_ d: Data) -> Bool {
+enum AnnexARunner {
+    static func isCanonicalObject(_ d: Data) -> Bool {
         d.first == UInt8(ascii: "{") && (try? Ratify.canonicalJSON(d)) == d
     }
 
-    func testAnnexACorpus() throws {
+    static func run() throws {
         let f = Corpus.load("annex-a.json")
-        let t = Tally()
+        let t = Tally("annex-a.json")
 
         let annex = try String(contentsOf: Corpus.url("../../SPEC-v2-ANNEX-A.md"), encoding: .utf8)
         let lines = annex.components(separatedBy: "\n")
@@ -46,30 +45,32 @@ final class AnnexATests: XCTestCase {
 
         let vocab = f.obj("vocabulary")
         let canonical = vocab.strings("canonical")
-        t.check("vocabulary", "canonical", Ratify.scopeVocabulary == canonical, "\(Ratify.scopeVocabulary)")
-        let sensitive = canonical.filter(Ratify.isSensitiveScope)
+        let ours = try Ratify.scopeVocabulary()
+        t.check("vocabulary", "canonical", ours == canonical, "\(ours)")
+        let sensitive = try canonical.filter { s throws(RatifyError) in try Ratify.isSensitiveScope(s) }
         t.check("vocabulary", "sensitive", sensitive == vocab.strings("sensitive"), "\(sensitive)")
         for c in canonical {
             t.check("vocabulary", c, (try? Ratify.validateScopes([c])) != nil, "rejected")
         }
         let wildcards = vocab.obj("wildcards")
-        t.check("vocabulary", "wildcard count", wildcards.count == Ratify.scopeWildcards.count, "count")
+        t.check("vocabulary", "wildcard count", wildcards.count == (try Ratify.scopeWildcards()).count, "count")
         for (w, want) in wildcards {
-            let got = Ratify.expandScopes([w])
+            let got = try Ratify.expandScopes([w])
             let want = want as! [String]
-            t.check("wildcards", w, got == want && want.allSatisfy { !Ratify.isSensitiveScope($0) }, "\(got)")
+            let noneSensitive = try want.allSatisfy { s throws(RatifyError) in try !Ratify.isSensitiveScope(s) }
+            t.check("wildcards", w, got == want && noneSensitive, "\(got)")
         }
         for v in f.arr("scope_validation") {
             let valid = (try? Ratify.validateScopes(v.strings("scopes"))) != nil
             t.check("scope_validation", v.s("name"), valid == v.bool("valid"), "valid=\(valid)")
         }
         for v in f.arr("scope_expansion") {
-            let got = Ratify.expandScopes(v.strings("scopes"))
+            let got = try Ratify.expandScopes(v.strings("scopes"))
             t.check("scope_expansion", v.s("name"), got == v.strings("expanded"), "\(got)")
         }
         for v in f.arr("scope_intersection") {
             let lists = v["lists"] as! [[String]]
-            let got = Ratify.intersectScopes(lists)
+            let got = try Ratify.intersectScopes(lists)
             t.check("scope_intersection", v.s("name"), got == v.strings("effective"), "\(got)")
         }
         t.finish([

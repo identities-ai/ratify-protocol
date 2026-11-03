@@ -139,52 +139,137 @@ def cmd_check():
     print(f"inventory ok: {len(listed)} items {counts}")
 
 
-def swift_decl_names(dump):
-    """Every declaration name in an API digester dump, imports excluded."""
-    names = []
+# Public declarations that no inventory item maps, each with its reason.
+# Everything else public must be named by a mapped inventory entry.
+EXTRA_SWIFT = {
+    "InternalErrorKind": "kind of RatifyError.internal (plan §2.2)",
+    "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
+}
+EXTRA_KOTLIN = {
+    "InternalErrorKind": "kind of RatifyException.Internal (plan §2.2)",
+    "RatifyException": "the sealed error family (plan §2.2)",
+    "RatifyException.Signing": "signing errors (plan §2.2); V2SignError is mapped in M2",
+    "RatifyException.Internal": "internal errors (plan §2.2)",
+    "errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
+}
 
-    def walk(n):
-        if isinstance(n, dict):
-            if n.get("declKind") != "Import" and "printedName" in n:
-                names.append(n["printedName"])
-            for c in n.get("children", []):
-                walk(c)
-        elif isinstance(n, list):
-            for c in n:
-                walk(c)
 
-    walk(json.loads(dump)["ABIRoot"])
-    return "\n".join(names)
+def swift_model(dump):
+    """{type path: set of member names} for every public type, plus the
+    members of the `Ratify` namespace; imports excluded."""
+    types = {}
+
+    def walk(node, prefix):
+        for c in node.get("children", []):
+            if c.get("declKind") in ("Struct", "Class", "Enum", "Protocol"):
+                path = f"{prefix}{c['name']}"
+                members = types.setdefault(path, set())
+                for m in c.get("children", []):
+                    if m.get("declKind") in ("Var", "Func", "EnumElement", "Constructor", "TypeAlias"):
+                        members.add("init" if m.get("declKind") == "Constructor" else m["name"])
+                walk(c, path + ".")
+
+    walk(json.loads(dump)["ABIRoot"], "")
+    return types
+
+
+def kotlin_model(api):
+    """{class path: set of member names} from a BCV .api dump. Getters are
+    recorded as properties, constructors as `init`, companion members on the
+    owner, and file-facade (`*Kt`) functions under the empty owner."""
+    types, cur = {}, None
+    for line in api.splitlines():
+        m = re.match(r"^public .*?(?:class|interface) com/ratifyprotocol/([A-Za-z0-9_$]+)\b", line)
+        if m:
+            name = m.group(1)
+            if name.endswith("Kt") and "$" not in name:
+                cur = ""
+            else:
+                cur = name.replace("$Companion", "").replace("$", ".")
+            types.setdefault(cur, set())
+            continue
+        if line.startswith("}"):
+            cur = None
+            continue
+        if cur is None:
+            continue
+        f = re.search(r"\bfun (\S+) \(", line) or re.search(r"\bfield (\S+) ", line)
+        if not f:
+            continue
+        n = f.group(1).split("-")[0]  # inline-class mangling: getObjectType-Mh2AYeg
+        if n == "<init>":
+            n = "init"
+        elif re.match(r"^(get|is)[A-Z]", n) and "fun" in line and re.search(r"\(\)", line):
+            n = n[3:] if n.startswith("get") else n[2:]
+            n = n[:1].lower() + n[1:]
+        types[cur].add(n)
+    return types
+
+
+def resolve(model, name, lang):
+    """Whether a mapped public name exists in its owning declaration."""
+    name = name.split("(")[0]
+    if name.startswith("[") or name.startswith("List<"):
+        name = name.strip("[]")[5:-1] if name.startswith("List<") else name.strip("[]")
+    parts = name.split(".")
+    if lang == "kotlin" and len(parts) == 1 and parts[0][:1].islower():
+        return parts[0] in model.get("", set())
+    for cut in range(len(parts), 0, -1):  # longest type path first
+        owner = ".".join(parts[:cut])
+        if owner in model:
+            rest = parts[cut:]
+            if not rest:
+                return True
+            if len(rest) == 1 and rest[0] in model[owner]:
+                return True
+            if lang == "swift" and rest == ["allCases"] and "AllCases" in model[owner]:
+                return True
+            if lang == "swift" and rest == ["rawValue"] and "RawValue" in model[owner]:
+                return True
+            return False
+    return False
 
 
 def cmd_names(swift_dump, kotlin_api):
     inv = load_inventory()
-    swift = swift_decl_names(pathlib.Path(swift_dump).read_text())
-    kotlin = pathlib.Path(kotlin_api).read_text()
+    swift = swift_model(pathlib.Path(swift_dump).read_text())
+    kotlin = kotlin_model(pathlib.Path(kotlin_api).read_text())
     errors = []
+    used = {"swift": set(EXTRA_SWIFT), "kotlin": set(EXTRA_KOTLIN)}
     for key, e in sorted(inv.items()):
         if e.get("status") != "mapped":
             continue
-        for lang, text, name in (("swift", swift, e["swift"]), ("kotlin", kotlin, e["kotlin"])):
-            leaf = name.split("(")[0].split(".")[-1].strip("[]")
-            if leaf.startswith("List<"):
-                leaf = leaf[5:-1]
-            if leaf == "init" or leaf == "":
-                leaf = name.split(".")[0]
-            forms = [leaf]
-            if lang == "kotlin":
-                forms += ["get" + leaf[:1].upper() + leaf[1:], "is" + leaf[:1].upper() + leaf[1:]]
-            if not any(re.search(r"\b" + re.escape(f) + r"\b", text) for f in forms):
-                errors.append(f"{key}: {lang} name {name} not in the public API")
-    for pat in (r"\bFfi[A-Z]\w*", r"\bffi[A-Z]\w*", r"internal/ffi", r"internal\.ffi", r"\bUniffi\w*", r"RustBuffer"):
-        for text, lang in ((swift, "swift"), (kotlin, "kotlin")):
-            m = re.search(pat, text)
-            if m:
-                errors.append(f"{lang} public API exposes a generated declaration: {m.group(0)}")
+        for lang, model in (("swift", swift), ("kotlin", kotlin)):
+            name = e[lang]
+            if not resolve(model, name, lang):
+                errors.append(f"{key}: {lang} name {name} is not in the public API")
+            base = name.split("(")[0].strip("[]")
+            if base.startswith("List<"):
+                base = base[5:-1]
+            parts = base.split(".")
+            used[lang].update(".".join(parts[:i]) for i in range(1, len(parts) + 1))
+    # Nothing public that the inventory or the allowlist does not name.
+    for t, members in swift.items():
+        if t not in used["swift"]:
+            errors.append(f"swift public type {t} is not named by the inventory")
+    for m in swift.get("Ratify", set()):
+        if f"Ratify.{m}" not in used["swift"]:
+            errors.append(f"swift public function Ratify.{m} is not named by the inventory")
+    for t in kotlin:
+        if t and t not in used["kotlin"]:
+            errors.append(f"kotlin public type {t} is not named by the inventory")
+    for f in kotlin.get("", set()):
+        if f not in used["kotlin"]:
+            errors.append(f"kotlin public function {f} is not named by the inventory")
+    for model, lang in ((swift, "swift"), (kotlin, "kotlin")):
+        for t, members in model.items():
+            for n in [t, *members]:
+                if re.search(r"(^|\.)(Ffi|ffi[A-Z]|Uniffi|RustBuffer)", n):
+                    errors.append(f"{lang} public API exposes a generated declaration: {t}.{n}")
     if errors:
         print("\n".join(sorted(set(errors))))
         sys.exit(f"{len(set(errors))} public-name errors")
-    print("public names ok")
+    print(f"public names ok ({len(swift)} swift types, {len(kotlin)} kotlin types)")
 
 
 def cmd_init():

@@ -10,6 +10,7 @@ uniffi::setup_scaffolding!("ratify_ffi");
 
 mod context;
 mod error;
+mod guard;
 mod keys;
 mod objects;
 mod scope;

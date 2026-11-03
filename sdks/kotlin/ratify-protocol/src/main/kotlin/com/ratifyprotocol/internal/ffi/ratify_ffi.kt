@@ -739,11 +739,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields(
     ): Int
-    external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ed25519_seed(
-    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id(
-    ): Int
-    external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ml_dsa_65_seed(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key(
     ): Int
@@ -809,11 +805,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_constructor_ffisoftwarekey_generate(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ed25519_seed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_key_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ml_dsa_65_seed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_public_key(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -996,13 +988,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_session_context_bytes() and 0xFFFF) != 38536) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() and 0xFFFF) != 32333) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() and 0xFFFF) != 14258) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_key_id() and 0xFFFF) != 65279) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() and 0xFFFF) != 14778) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() and 0xFFFF) != 18371) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() and 0xFFFF) != 57238) {
@@ -1038,58 +1030,52 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json() and 0xFFFF) != 20450) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes() and 0xFFFF) != 35677) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes() and 0xFFFF) != 12854) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_intersect_scopes() and 0xFFFF) != 23812) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_intersect_scopes() and 0xFFFF) != 40796) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_is_sensitive_scope() and 0xFFFF) != 20701) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_is_sensitive_scope() and 0xFFFF) != 48117) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_vocabulary() and 0xFFFF) != 43327) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_vocabulary() and 0xFFFF) != 3349) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_wildcards() and 0xFFFF) != 50440) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_wildcards() and 0xFFFF) != 28440) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() and 0xFFFF) != 44631) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() and 0xFFFF) != 48916) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() and 0xFFFF) != 13944) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled() and 0xFFFF) != 29738) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled() and 0xFFFF) != 22709) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_digest() and 0xFFFF) != 64157) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_digest() and 0xFFFF) != 29208) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_expected_session_context() and 0xFFFF) != 64325) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_expected_session_context() and 0xFFFF) != 64332) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_profile() and 0xFFFF) != 42665) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_profile() and 0xFFFF) != 10848) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_require_bound() and 0xFFFF) != 34664) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_require_bound() and 0xFFFF) != 24903) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() and 0xFFFF) != 48734) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() and 0xFFFF) != 36080) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ed25519_seed() and 0xFFFF) != 4488) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id() and 0xFFFF) != 64233) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id() and 0xFFFF) != 35653) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() and 0xFFFF) != 50866) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ml_dsa_65_seed() and 0xFFFF) != 51110) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() and 0xFFFF) != 34321) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() and 0xFFFF) != 61640) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() and 0xFFFF) != 4070) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_constructor_fficontextpolicy_new() and 0xFFFF) != 11610) {
@@ -1578,7 +1564,7 @@ internal open class FfiCancelToken: Disposable, AutoCloseable, FfiCancelTokenInt
      */
     constructor(`timeoutMs`: kotlin.ULong?) :
         this(UniffiWithHandle, 
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_constructor_fficanceltoken_new(
     
         
@@ -1662,10 +1648,11 @@ internal open class FfiCancelToken: Disposable, AutoCloseable, FfiCancelTokenInt
         }
     }
 
-    override fun `cancel`()
+    
+    @Throws(FfiException::class)override fun `cancel`()
         = 
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_cancel(
         it,
         _status)
@@ -1677,10 +1664,11 @@ internal open class FfiCancelToken: Disposable, AutoCloseable, FfiCancelTokenInt
     
     /**
      * Whether the token was cancelled or its deadline passed.
-     */override fun `isCancelled`(): kotlin.Boolean {
+     */
+    @Throws(FfiException::class)override fun `isCancelled`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_is_cancelled(
         it,
         _status)
@@ -1958,10 +1946,11 @@ internal open class FfiContextPolicy: Disposable, AutoCloseable, FfiContextPolic
         }
     }
 
-    override fun `digest`(): kotlin.String {
+    
+    @Throws(FfiException::class)override fun `digest`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_digest(
         it,
         _status)
@@ -1971,10 +1960,11 @@ internal open class FfiContextPolicy: Disposable, AutoCloseable, FfiContextPolic
     }
     
 
-    override fun `expectedSessionContext`(): kotlin.ByteArray {
+    
+    @Throws(FfiException::class)override fun `expectedSessionContext`(): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_expected_session_context(
         it,
         _status)
@@ -1984,10 +1974,11 @@ internal open class FfiContextPolicy: Disposable, AutoCloseable, FfiContextPolic
     }
     
 
-    override fun `profile`(): kotlin.String {
+    
+    @Throws(FfiException::class)override fun `profile`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_profile(
         it,
         _status)
@@ -1997,10 +1988,11 @@ internal open class FfiContextPolicy: Disposable, AutoCloseable, FfiContextPolic
     }
     
 
-    override fun `requireBound`(): kotlin.Boolean {
+    
+    @Throws(FfiException::class)override fun `requireBound`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_require_bound(
         it,
         _status)
@@ -2010,10 +2002,11 @@ internal open class FfiContextPolicy: Disposable, AutoCloseable, FfiContextPolic
     }
     
 
-    override fun `requiredFields`(): List<kotlin.String> {
+    
+    @Throws(FfiException::class)override fun `requiredFields`(): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_required_fields(
         it,
         _status)
@@ -2159,21 +2152,13 @@ internal object FfiConverterTypeFfiContextPolicy: FfiConverter<FfiContextPolicy,
 
 /**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
- * documented storage form) plus the derived key pair. Seeds are wiped on drop.
+ * documented storage form) plus the derived key pair. Seeds are wiped on drop
+ * and never cross the FFI boundary on their own: storage (next milestone)
+ * exchanges the whole documented storage record as one buffer.
  */
 internal interface FfiSoftwareKeyInterface {
     
-    /**
-     * The Ed25519 seed, for the documented storage record only.
-     */
-    fun `ed25519Seed`(): kotlin.ByteArray
-    
     fun `keyId`(): kotlin.String
-    
-    /**
-     * The ML-DSA-65 seed, for the documented storage record only.
-     */
-    fun `mlDsa65Seed`(): kotlin.ByteArray
     
     fun `publicKey`(): FfiPublicKey
     
@@ -2182,7 +2167,9 @@ internal interface FfiSoftwareKeyInterface {
 
 /**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
- * documented storage form) plus the derived key pair. Seeds are wiped on drop.
+ * documented storage form) plus the derived key pair. Seeds are wiped on drop
+ * and never cross the FFI boundary on their own: storage (next milestone)
+ * exchanges the whole documented storage record as one buffer.
  */
 internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInterface
 {
@@ -2286,25 +2273,10 @@ internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInt
     }
 
     
-    /**
-     * The Ed25519 seed, for the documented storage record only.
-     */override fun `ed25519Seed`(): kotlin.ByteArray {
-            return FfiConverterByteArray.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ed25519_seed(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `keyId`(): kotlin.String {
+    @Throws(FfiException::class)override fun `keyId`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_key_id(
         it,
         _status)
@@ -2315,25 +2287,10 @@ internal open class FfiSoftwareKey: Disposable, AutoCloseable, FfiSoftwareKeyInt
     
 
     
-    /**
-     * The ML-DSA-65 seed, for the documented storage record only.
-     */override fun `mlDsa65Seed`(): kotlin.ByteArray {
-            return FfiConverterByteArray.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ml_dsa_65_seed(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `publicKey`(): FfiPublicKey {
+    @Throws(FfiException::class)override fun `publicKey`(): FfiPublicKey {
             return FfiConverterTypeFfiPublicKey.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_public_key(
         it,
         _status)
@@ -3647,7 +3604,9 @@ internal sealed class FfiException: kotlin.Exception() {
     }
     
     /**
-     * An internal failure (`panic` or `poisoned`); never a protocol result.
+     * An internal failure, never a protocol result: `panic` (a caught Rust
+     * panic), `poisoned` (a handle a panic left unusable), or
+     * `random_source` (the operating-system random source failed).
      */
     class Internal(
         
@@ -4520,9 +4479,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         /**
          * Every §2.7 class spelling in table order. The Swift and Kotlin
          * `ErrorClass` enums are pinned to this list by a test.
-         */ internal fun `ffiErrorClassSpellings`(): List<kotlin.String> {
+         */
+    @Throws(FfiException::class) internal fun `ffiErrorClassSpellings`(): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_error_class_spellings(
     
         _status)
@@ -4548,9 +4508,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
 
         /**
          * Whether `id` is a well-formed v2 key ID (64 lowercase hex characters).
-         */ internal fun `ffiValidId`(`id`: kotlin.String): kotlin.Boolean {
+         */
+    @Throws(FfiException::class) internal fun `ffiValidId`(`id`: kotlin.String): kotlin.Boolean {
             return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_valid_id(
     
         
@@ -4694,9 +4655,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
- internal fun `ffiExpandScopes`(`scopes`: List<kotlin.String>): List<kotlin.String> {
+
+    @Throws(FfiException::class) internal fun `ffiExpandScopes`(`scopes`: List<kotlin.String>): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_expand_scopes(
     
         
@@ -4705,9 +4667,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
- internal fun `ffiIntersectScopes`(`lists`: List<List<kotlin.String>>): List<kotlin.String> {
+
+    @Throws(FfiException::class) internal fun `ffiIntersectScopes`(`lists`: List<List<kotlin.String>>): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_intersect_scopes(
     
         
@@ -4716,9 +4679,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
- internal fun `ffiIsSensitiveScope`(`scope`: kotlin.String): kotlin.Boolean {
+
+    @Throws(FfiException::class) internal fun `ffiIsSensitiveScope`(`scope`: kotlin.String): kotlin.Boolean {
             return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_is_sensitive_scope(
     
         
@@ -4727,9 +4691,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
- internal fun `ffiScopeVocabulary`(): List<kotlin.String> {
+
+    @Throws(FfiException::class) internal fun `ffiScopeVocabulary`(): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_scope_vocabulary(
     
         _status)
@@ -4737,9 +4702,10 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
- internal fun `ffiScopeWildcards`(): Map<kotlin.String, List<kotlin.String>> {
+
+    @Throws(FfiException::class) internal fun `ffiScopeWildcards`(): Map<kotlin.String, List<kotlin.String>> {
             return FfiConverterMapStringSequenceString.lift(
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_scope_wildcards(
     
         _status)

@@ -5,8 +5,8 @@ import RatifyProtocol
 
 /// limits.json through the public decoders: every size and count limit is
 /// accepted at the limit and rejected one past it, before parsing.
-final class LimitsTests: XCTestCase {
-    func build(_ c: [String: Any]) -> Data {
+enum LimitsRunner {
+    static func build(_ c: [String: Any]) -> Data {
         func opt(_ k: String) -> Data { c[k] == nil ? Data() : c.b64(k) }
         switch c.s("method") {
         case "inline":
@@ -50,7 +50,7 @@ final class LimitsTests: XCTestCase {
         }
     }
 
-    func decode(_ kind: String, _ data: Data) throws {
+    static func decode(_ kind: String, _ data: Data) throws {
         switch kind {
         case "delegation_certificate": _ = try Ratify.decodeDelegationCert(data)
         case "proof_bundle": _ = try Ratify.decodeProofBundle(data)
@@ -66,10 +66,10 @@ final class LimitsTests: XCTestCase {
         }
     }
 
-    func testLimitsCorpus() {
+    static func run() throws {
         let f = Corpus.load("limits.json")
         let table = f.obj("limits")
-        let t = Tally()
+        let t = Tally("limits.json")
         let vectors = f.arr("vectors")
         for v in vectors {
             let name = v.s("name")

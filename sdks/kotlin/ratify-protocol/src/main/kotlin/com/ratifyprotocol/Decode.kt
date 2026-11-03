@@ -18,8 +18,21 @@ public sealed class ParamsValue {
     public data class Bool(val value: Boolean) : ParamsValue()
     public data class Int(val value: Long) : ParamsValue()
     public data class Str(val value: String) : ParamsValue()
-    public data class Array(val items: List<ParamsValue>) : ParamsValue()
-    public data class Object(val entries: Map<String, ParamsValue>) : ParamsValue()
+    /** [items] is an unmodifiable copy of the caller's list. */
+    public class Array(items: List<ParamsValue>) : ParamsValue() {
+        public val items: List<ParamsValue> = java.util.Collections.unmodifiableList(ArrayList(items))
+        override fun equals(other: Any?): Boolean = other is Array && items == other.items
+        override fun hashCode(): kotlin.Int = items.hashCode()
+        override fun toString(): String = "Array($items)"
+    }
+
+    /** [entries] is an unmodifiable copy of the caller's map. */
+    public class Object(entries: Map<String, ParamsValue>) : ParamsValue() {
+        public val entries: Map<String, ParamsValue> = java.util.Collections.unmodifiableMap(LinkedHashMap(entries))
+        override fun equals(other: Any?): Boolean = other is Object && entries == other.entries
+        override fun hashCode(): kotlin.Int = entries.hashCode()
+        override fun toString(): String = "Object($entries)"
+    }
 
     internal fun toFfi(): FfiParamsValue = when (this) {
         Null -> FfiParamsValue.Null

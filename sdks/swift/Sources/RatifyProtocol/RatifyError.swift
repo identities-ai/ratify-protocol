@@ -25,9 +25,14 @@ public enum RatifyError: Error, Sendable, Equatable, CustomStringConvertible {
     }
 }
 
-public enum InternalErrorKind: String, Sendable {
+/// Why an internal error occurred. None of these is a protocol result.
+public enum InternalErrorKind: String, Sendable, CaseIterable {
+    /// A panic inside the core was caught at the boundary.
     case panic
+    /// A handle a previous panic left unusable.
     case poisoned
+    /// The operating-system random source failed.
+    case randomSource = "random_source"
 }
 
 /// Run one generated-layer call and translate its failure into `RatifyError`.
@@ -37,7 +42,7 @@ func ffi<T>(_ body: () throws -> T) throws(RatifyError) -> T {
     } catch let e as FfiError {
         throw RatifyError(e)
     } catch {
-        // The generated layer's only other failure is a caught Rust panic.
+        // Every export catches its own panics; this is UniFFI's backstop.
         throw .internal(.panic, message: "\(error)")
     }
 }
@@ -50,7 +55,11 @@ extension RatifyError {
         case let .Signing(cls, kind, message):
             self = .signing(ErrorClass(spelling: cls), kind: kind, message: message)
         case let .Internal(kind, message):
-            self = .internal(InternalErrorKind(rawValue: kind) ?? .panic, message: message)
+            // The FFI layer emits only these kinds; the list is pinned by a test.
+            guard let k = InternalErrorKind(rawValue: kind) else {
+                preconditionFailure("FFI layer returned an unknown internal error kind \(kind)")
+            }
+            self = .internal(k, message: message)
         }
     }
 }

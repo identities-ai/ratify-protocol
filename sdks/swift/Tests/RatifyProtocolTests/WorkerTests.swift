@@ -18,8 +18,8 @@ final class WorkerTests: XCTestCase {
             try await onWorker { token -> Bool in
                 started.fulfill()
                 let deadline = Date().addingTimeInterval(10)
-                while !token.isCancelled() && Date() < deadline { usleep(1_000) }
-                let saw = token.isCancelled()
+                while !((try? token.isCancelled()) ?? false) && Date() < deadline { usleep(1_000) }
+                let saw = ((try? token.isCancelled()) ?? false)
                 usleep(50_000) // the body keeps running after cancellation
                 bodyDone.set()
                 return saw
@@ -35,8 +35,8 @@ final class WorkerTests: XCTestCase {
     func testDeadlineReachesTheToken() async throws {
         let sawDeadline = try await onWorker(timeout: .milliseconds(30)) { token -> Bool in
             let deadline = Date().addingTimeInterval(10)
-            while !token.isCancelled() && Date() < deadline { usleep(1_000) }
-            return token.isCancelled()
+            while !((try? token.isCancelled()) ?? false) && Date() < deadline { usleep(1_000) }
+            return ((try? token.isCancelled()) ?? false)
         }
         XCTAssertTrue(sawDeadline)
     }

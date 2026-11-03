@@ -9,6 +9,7 @@ use ratify_protocol::{
 };
 
 use crate::error::FfiResult;
+use crate::guard::{call, call_on, Poison};
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct FfiOperationContext {
@@ -56,28 +57,29 @@ impl From<FfiSessionContextInputs> for SessionContextV2Inputs {
 
 #[uniffi::export]
 pub fn ffi_operation_context_hash(context: FfiOperationContext) -> FfiResult<Vec<u8>> {
-    Ok(operation_context_v2_hash(&context.into())?)
+    call(|| Ok(operation_context_v2_hash(&context.into())?))
 }
 
 #[uniffi::export]
 pub fn ffi_session_context_bytes(inputs: FfiSessionContextInputs) -> FfiResult<Vec<u8>> {
-    Ok(session_context_v2_bytes(&inputs.into())?)
+    call(|| Ok(session_context_v2_bytes(&inputs.into())?))
 }
 
 #[uniffi::export]
 pub fn ffi_build_session_context(inputs: FfiSessionContextInputs) -> FfiResult<Vec<u8>> {
-    Ok(build_session_context_v2(&inputs.into())?)
+    call(|| Ok(build_session_context_v2(&inputs.into())?))
 }
 
 /// Decode `sha256:<64 hex>` into 32 raw bytes; `None` in, `None` out.
 #[uniffi::export]
 pub fn ffi_decode_payload_digest(encoded: Option<String>) -> FfiResult<Option<Vec<u8>>> {
-    Ok(decode_payload_digest_v2(encoded.as_deref())?)
+    call(|| Ok(decode_payload_digest_v2(encoded.as_deref())?))
 }
 
 /// A validated, fingerprinted context policy (SPEC-v2 context policy).
 #[derive(uniffi::Object)]
 pub struct FfiContextPolicy {
+    poison: Poison,
     pub(crate) inner: V2ContextPolicy,
 }
 
@@ -90,29 +92,27 @@ impl FfiContextPolicy {
         required_fields: Vec<String>,
         expected_session_context: Vec<u8>,
     ) -> FfiResult<Arc<Self>> {
-        let inner = V2ContextPolicy::new(
-            &profile,
-            require_bound,
-            &required_fields,
-            &expected_session_context,
-        )?;
-        Ok(Arc::new(FfiContextPolicy { inner }))
+        call(|| {
+            let inner =
+                V2ContextPolicy::new(&profile, require_bound, &required_fields, &expected_session_context)?;
+            Ok(Arc::new(FfiContextPolicy { poison: Poison::default(), inner }))
+        })
     }
 
-    pub fn digest(&self) -> String {
-        self.inner.digest().to_string()
+    pub fn digest(&self) -> FfiResult<String> {
+        call_on(&self.poison, || Ok(self.inner.digest().to_string()))
     }
-    pub fn require_bound(&self) -> bool {
-        self.inner.require_bound()
+    pub fn require_bound(&self) -> FfiResult<bool> {
+        call_on(&self.poison, || Ok(self.inner.require_bound()))
     }
-    pub fn profile(&self) -> String {
-        self.inner.profile().to_string()
+    pub fn profile(&self) -> FfiResult<String> {
+        call_on(&self.poison, || Ok(self.inner.profile().to_string()))
     }
-    pub fn required_fields(&self) -> Vec<String> {
-        self.inner.required_fields()
+    pub fn required_fields(&self) -> FfiResult<Vec<String>> {
+        call_on(&self.poison, || Ok(self.inner.required_fields()))
     }
-    pub fn expected_session_context(&self) -> Vec<u8> {
-        self.inner.expected_session_context()
+    pub fn expected_session_context(&self) -> FfiResult<Vec<u8>> {
+        call_on(&self.poison, || Ok(self.inner.expected_session_context()))
     }
 }
 
@@ -121,6 +121,7 @@ impl FfiContextPolicy {
 /// (SPEC-v2 §1.3): the core and callbacks observe it; nothing is interrupted.
 #[derive(uniffi::Object)]
 pub struct FfiCancelToken {
+    poison: Poison,
     ctx: ratify_protocol::v2::V2Context,
     handle: ratify_protocol::v2::V2CancelHandle,
 }
@@ -130,22 +131,27 @@ impl FfiCancelToken {
     /// A token with no deadline (`timeout_ms` = None) or one that cancels
     /// itself after `timeout_ms` milliseconds.
     #[uniffi::constructor]
-    pub fn new(timeout_ms: Option<u64>) -> Arc<Self> {
-        let root = ratify_protocol::v2::V2Context::background();
-        let (ctx, handle) = match timeout_ms {
-            Some(ms) => root.with_timeout(std::time::Duration::from_millis(ms)),
-            None => root.with_cancel(),
-        };
-        Arc::new(FfiCancelToken { ctx, handle })
+    pub fn new(timeout_ms: Option<u64>) -> FfiResult<Arc<Self>> {
+        call(|| {
+            let root = ratify_protocol::v2::V2Context::background();
+            let (ctx, handle) = match timeout_ms {
+                Some(ms) => root.with_timeout(std::time::Duration::from_millis(ms)),
+                None => root.with_cancel(),
+            };
+            Ok(Arc::new(FfiCancelToken { poison: Poison::default(), ctx, handle }))
+        })
     }
 
-    pub fn cancel(&self) {
-        self.handle.cancel();
+    pub fn cancel(&self) -> FfiResult<()> {
+        call_on(&self.poison, || {
+            self.handle.cancel();
+            Ok(())
+        })
     }
 
     /// Whether the token was cancelled or its deadline passed.
-    pub fn is_cancelled(&self) -> bool {
-        self.ctx.is_done()
+    pub fn is_cancelled(&self) -> FfiResult<bool> {
+        call_on(&self.poison, || Ok(self.ctx.is_done()))
     }
 }
 
@@ -163,14 +169,14 @@ mod tests {
 
     #[test]
     fn cancel_and_deadline_reach_the_core_context() {
-        let t = FfiCancelToken::new(None);
-        assert!(!t.is_cancelled() && !t.context().is_done());
-        t.cancel();
-        assert!(t.is_cancelled() && t.context().is_done());
+        let t = FfiCancelToken::new(None).unwrap();
+        assert!(!t.is_cancelled().unwrap() && !t.context().is_done());
+        t.cancel().unwrap();
+        assert!(t.is_cancelled().unwrap() && t.context().is_done());
 
-        let d = FfiCancelToken::new(Some(20));
-        assert!(!d.is_cancelled());
+        let d = FfiCancelToken::new(Some(20)).unwrap();
+        assert!(!d.is_cancelled().unwrap());
         std::thread::sleep(std::time::Duration::from_millis(60));
-        assert!(d.is_cancelled());
+        assert!(d.is_cancelled().unwrap());
     }
 }

@@ -30,17 +30,21 @@ public class HybridPublicKey(ed25519: ByteArray, mlDsa65: ByteArray) {
  */
 public class SoftwarePrivateKey internal constructor(internal val handle: FfiSoftwareKey) {
     /** The public half. */
-    public val publicKey: HybridPublicKey = HybridPublicKey(handle.publicKey())
+    public val publicKey: HybridPublicKey = HybridPublicKey(ffi { handle.publicKey() })
 
     /** `key_id_v2` of the public key (64 lowercase hex characters). */
-    public val keyId: String = handle.keyId()
+    public val keyId: String = ffi { handle.keyId() }
 
     public companion object {
         /** Derive the key from its two 32-byte seeds. */
         public fun fromSeeds(ed25519Seed: ByteArray, mlDsa65Seed: ByteArray): SoftwarePrivateKey =
             SoftwarePrivateKey(ffi { FfiSoftwareKey.fromSeeds(ed25519Seed, mlDsa65Seed) })
 
-        /** Generate a fresh key from the operating-system random source. */
+        /**
+         * Generate a fresh key from the operating-system random source. Throws
+         * [RatifyException.Internal] with [InternalErrorKind.RANDOM_SOURCE] if
+         * that source fails.
+         */
         public fun generate(): SoftwarePrivateKey = SoftwarePrivateKey(ffi { FfiSoftwareKey.generate() })
     }
 }
@@ -49,4 +53,4 @@ public class SoftwarePrivateKey internal constructor(internal val handle: FfiSof
 public fun keyId(key: HybridPublicKey): String = ffi { ffiKeyId(key.toFfi()) }
 
 /** Whether [id] is a well-formed v2 key ID: 64 lowercase hex characters. */
-public fun validId(id: String): Boolean = ffiValidId(id)
+public fun validId(id: String): Boolean = ffi { ffiValidId(id) }

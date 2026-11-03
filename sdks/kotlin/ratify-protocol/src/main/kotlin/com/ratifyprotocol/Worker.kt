@@ -28,7 +28,7 @@ internal object Workers {
  * cooperative, so this returns only after the Rust call itself returns.
  */
 internal suspend fun <T> onWorker(timeout: Duration? = null, body: (FfiCancelToken) -> T): T {
-    val token = FfiCancelToken(timeout?.inWholeMilliseconds?.toULong())
+    val token = ffi { FfiCancelToken(timeout?.inWholeMilliseconds?.toULong()) }
     // Awaiting a CompletableDeferred and being cancelled does not cancel the
     // deferred, so the body's completion can still be awaited afterwards.
     val done = CompletableDeferred<Result<T>>()
@@ -36,7 +36,7 @@ internal suspend fun <T> onWorker(timeout: Duration? = null, body: (FfiCancelTok
     try {
         return done.await().getOrThrow()
     } catch (e: CancellationException) {
-        token.cancel()
+        runCatching { token.cancel() }
         withContext(NonCancellable) { done.await() }
         throw e
     }

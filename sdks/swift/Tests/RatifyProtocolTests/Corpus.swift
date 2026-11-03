@@ -49,8 +49,13 @@ extension Data {
 /// Counts executed checks per group. `finish` fails unless every group ran
 /// exactly the number of cases computed from the file: no case is skipped.
 final class Tally {
+    private let file: String
     private var counts: [String: Int] = [:]
     private var failures: [String] = []
+
+    /// `file` is the corpus entry this tally runs; `finish` reports its
+    /// executed case count to `Manifest`.
+    init(_ file: String) { self.file = file }
 
     func check(_ group: String, _ name: String, _ ok: Bool, _ detail: @autoclosure () -> String = "",
                file: StaticString = #filePath, line: UInt = #line) {
@@ -67,7 +72,17 @@ final class Tally {
             XCTAssertGreaterThan(n, 0, "group \(g) must have cases", file: file, line: line)
         }
         XCTAssertEqual(Set(counts.keys), Set(expected.map(\.0)), "groups executed", file: file, line: line)
+        Manifest.record(self.file, counts.values.reduce(0, +))
     }
+}
+
+/// Executed case counts per corpus entry, filled by `Tally.finish`.
+enum Manifest {
+    nonisolated(unsafe) private static var counts: [String: Int] = [:]
+    private static let lock = NSLock()
+    static func record(_ file: String, _ n: Int) { lock.lock(); counts[file, default: 0] += n; lock.unlock() }
+    static func count(_ file: String) -> Int { lock.lock(); defer { lock.unlock() }; return counts[file] ?? 0 }
+    static func reset() { lock.lock(); counts = [:]; lock.unlock() }
 }
 
 /// The §2.7 class a call fails with, "ok" on success, "internal" otherwise.

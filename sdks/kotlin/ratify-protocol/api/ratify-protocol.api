@@ -150,7 +150,9 @@ public final class com/ratifyprotocol/HybridSignature {
 public final class com/ratifyprotocol/InternalErrorKind : java/lang/Enum {
 	public static final field PANIC Lcom/ratifyprotocol/InternalErrorKind;
 	public static final field POISONED Lcom/ratifyprotocol/InternalErrorKind;
+	public static final field RANDOM_SOURCE Lcom/ratifyprotocol/InternalErrorKind;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSpelling ()Ljava/lang/String;
 	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/InternalErrorKind;
 	public static fun values ()[Lcom/ratifyprotocol/InternalErrorKind;
 }
@@ -206,9 +208,6 @@ public abstract class com/ratifyprotocol/ParamsValue {
 
 public final class com/ratifyprotocol/ParamsValue$Array : com/ratifyprotocol/ParamsValue {
 	public fun <init> (Ljava/util/List;)V
-	public final fun component1 ()Ljava/util/List;
-	public final fun copy (Ljava/util/List;)Lcom/ratifyprotocol/ParamsValue$Array;
-	public static synthetic fun copy$default (Lcom/ratifyprotocol/ParamsValue$Array;Ljava/util/List;ILjava/lang/Object;)Lcom/ratifyprotocol/ParamsValue$Array;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getItems ()Ljava/util/List;
 	public fun hashCode ()I
@@ -243,9 +242,6 @@ public final class com/ratifyprotocol/ParamsValue$Null : com/ratifyprotocol/Para
 
 public final class com/ratifyprotocol/ParamsValue$Object : com/ratifyprotocol/ParamsValue {
 	public fun <init> (Ljava/util/Map;)V
-	public final fun component1 ()Ljava/util/Map;
-	public final fun copy (Ljava/util/Map;)Lcom/ratifyprotocol/ParamsValue$Object;
-	public static synthetic fun copy$default (Lcom/ratifyprotocol/ParamsValue$Object;Ljava/util/Map;ILjava/lang/Object;)Lcom/ratifyprotocol/ParamsValue$Object;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getEntries ()Ljava/util/Map;
 	public fun hashCode ()I

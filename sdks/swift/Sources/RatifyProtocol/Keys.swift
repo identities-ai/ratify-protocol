@@ -30,21 +30,22 @@ public final class SoftwarePrivateKey: Sendable {
     /// `key_id_v2` of the public key (64 lowercase hex characters).
     public let keyId: String
 
-    private init(_ handle: FfiSoftwareKey) {
+    private init(_ handle: FfiSoftwareKey) throws(RatifyError) {
         self.handle = handle
-        self.publicKey = HybridPublicKey(handle.publicKey())
-        self.keyId = handle.keyId()
+        self.publicKey = HybridPublicKey(try ffi { try handle.publicKey() })
+        self.keyId = try ffi { try handle.keyId() }
     }
 
     /// Derive the key from its two 32-byte seeds.
     public convenience init(ed25519Seed: Data, mlDsa65Seed: Data) throws(RatifyError) {
         let h = try ffi { try FfiSoftwareKey.fromSeeds(ed25519Seed: ed25519Seed, mlDsa65Seed: mlDsa65Seed) }
-        self.init(h)
+        try self.init(h)
     }
 
-    /// Generate a fresh key from the operating-system random source.
+    /// Generate a fresh key from the operating-system random source. Throws
+    /// `internal(.randomSource)` if that source fails.
     public static func generate() throws(RatifyError) -> SoftwarePrivateKey {
-        SoftwarePrivateKey(try ffi { try FfiSoftwareKey.generate() })
+        try SoftwarePrivateKey(try ffi { try FfiSoftwareKey.generate() })
     }
 }
 
@@ -55,7 +56,7 @@ extension Ratify {
     }
 
     /// Whether `id` is a well-formed v2 key ID: 64 lowercase hex characters.
-    public static func validId(_ id: String) -> Bool {
-        ffiValidId(id: id)
+    public static func validId(_ id: String) throws(RatifyError) -> Bool {
+        try ffi { try ffiValidId(id: id) }
     }
 }

@@ -14,7 +14,7 @@ object KeysVectors {
     fun corpus() {
         val f = Corpus.load("keys.json")
         assertEquals("ratify-key-id-v2 || 0x00 || ed25519(32) || ml_dsa_65(1952)", f.getString("key_id_preimage"))
-        val t = Tally()
+        val t = Tally("keys.json")
         val keys = f.arr("keys")
         for (k in keys) {
             val pk = k.getJSONObject("public_key")

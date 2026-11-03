@@ -63,12 +63,13 @@ public class ContextPolicy(
     expectedSessionContext: ByteArray = ByteArray(0),
 ) {
     private val handle: FfiContextPolicy =
-        ffi { FfiContextPolicy(profile, requireBound, requiredFields, expectedSessionContext) }
+        ffi { FfiContextPolicy(profile, requireBound, requiredFields.toList(), expectedSessionContext.copyOf()) }
 
     /** `sha384:` + 96 lowercase hex characters. */
-    public val digest: String get() = handle.digest()
-    public val profile: String get() = handle.profile()
-    public val requireBound: Boolean get() = handle.requireBound()
-    public val requiredFields: List<String> get() = handle.requiredFields()
-    public val expectedSessionContext: ByteArray get() = handle.expectedSessionContext()
+    public val digest: String = ffi { handle.digest() }
+    public val profile: String = ffi { handle.profile() }
+    public val requireBound: Boolean = ffi { handle.requireBound() }
+    public val requiredFields: List<String> = java.util.Collections.unmodifiableList(ffi { handle.requiredFields() })
+    private val context: ByteArray = ffi { handle.expectedSessionContext() }
+    public val expectedSessionContext: ByteArray get() = context.copyOf()
 }

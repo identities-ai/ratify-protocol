@@ -610,12 +610,12 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
  */
 protocol FfiCancelTokenProtocol: AnyObject, Sendable {
     
-    func cancel() 
+    func cancel() throws 
     
     /**
      * Whether the token was cancelled or its deadline passed.
      */
-    func isCancelled()  -> Bool
+    func isCancelled() throws  -> Bool
     
 }
 /**
@@ -666,9 +666,9 @@ class FfiCancelToken: FfiCancelTokenProtocol, @unchecked Sendable {
      * A token with no deadline (`timeout_ms` = None) or one that cancels
      * itself after `timeout_ms` milliseconds.
      */
-convenience init(timeoutMs: UInt64?) {
+convenience init(timeoutMs: UInt64?)throws  {
     let handle =
-        try! rustCall() {
+        try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_constructor_fficanceltoken_new(
         FfiConverterOptionUInt64.lower(timeoutMs),uniffiCallStatus
@@ -689,7 +689,7 @@ convenience init(timeoutMs: UInt64?) {
     
 
     
-func cancel()  {try! rustCall() {
+func cancel()throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_cancel(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -700,8 +700,8 @@ func cancel()  {try! rustCall() {
     /**
      * Whether the token was cancelled or its deadline passed.
      */
-func isCancelled() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
+func isCancelled()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficanceltoken_is_cancelled(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -764,15 +764,15 @@ func FfiConverterTypeFfiCancelToken_lower(_ value: FfiCancelToken) -> UInt64 {
  */
 protocol FfiContextPolicyProtocol: AnyObject, Sendable {
     
-    func digest()  -> String
+    func digest() throws  -> String
     
-    func expectedSessionContext()  -> Data
+    func expectedSessionContext() throws  -> Data
     
-    func profile()  -> String
+    func profile() throws  -> String
     
-    func requireBound()  -> Bool
+    func requireBound() throws  -> Bool
     
-    func requiredFields()  -> [String]
+    func requiredFields() throws  -> [String]
     
 }
 /**
@@ -843,8 +843,8 @@ convenience init(profile: String, requireBound: Bool, requiredFields: [String], 
     
 
     
-func digest() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+func digest()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_digest(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -852,8 +852,8 @@ func digest() -> String  {
 })
 }
     
-func expectedSessionContext() -> Data  {
-    return try!  FfiConverterData.lift(try! rustCall() {
+func expectedSessionContext()throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_expected_session_context(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -861,8 +861,8 @@ func expectedSessionContext() -> Data  {
 })
 }
     
-func profile() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+func profile()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_profile(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -870,8 +870,8 @@ func profile() -> String  {
 })
 }
     
-func requireBound() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
+func requireBound()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_require_bound(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -879,8 +879,8 @@ func requireBound() -> Bool  {
 })
 }
     
-func requiredFields() -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+func requiredFields()throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_fficontextpolicy_required_fields(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -940,28 +940,22 @@ func FfiConverterTypeFfiContextPolicy_lower(_ value: FfiContextPolicy) -> UInt64
 
 /**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
- * documented storage form) plus the derived key pair. Seeds are wiped on drop.
+ * documented storage form) plus the derived key pair. Seeds are wiped on drop
+ * and never cross the FFI boundary on their own: storage (next milestone)
+ * exchanges the whole documented storage record as one buffer.
  */
 protocol FfiSoftwareKeyProtocol: AnyObject, Sendable {
     
-    /**
-     * The Ed25519 seed, for the documented storage record only.
-     */
-    func ed25519Seed()  -> Data
+    func keyId() throws  -> String
     
-    func keyId()  -> String
-    
-    /**
-     * The ML-DSA-65 seed, for the documented storage record only.
-     */
-    func mlDsa65Seed()  -> Data
-    
-    func publicKey()  -> FfiPublicKey
+    func publicKey() throws  -> FfiPublicKey
     
 }
 /**
  * A software-held hybrid private key, kept as its two 32-byte seeds (the
- * documented storage form) plus the derived key pair. Seeds are wiped on drop.
+ * documented storage form) plus the derived key pair. Seeds are wiped on drop
+ * and never cross the FFI boundary on their own: storage (next milestone)
+ * exchanges the whole documented storage record as one buffer.
  */
 class FfiSoftwareKey: FfiSoftwareKeyProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1041,20 +1035,8 @@ static func generate()throws  -> FfiSoftwareKey  {
     
 
     
-    /**
-     * The Ed25519 seed, for the documented storage record only.
-     */
-func ed25519Seed() -> Data  {
-    return try!  FfiConverterData.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ed25519_seed(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-    
-func keyId() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+func keyId()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_key_id(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -1062,20 +1044,8 @@ func keyId() -> String  {
 })
 }
     
-    /**
-     * The ML-DSA-65 seed, for the documented storage record only.
-     */
-func mlDsa65Seed() -> Data  {
-    return try!  FfiConverterData.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_ml_dsa_65_seed(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-    
-func publicKey() -> FfiPublicKey  {
-    return try!  FfiConverterTypeFfiPublicKey_lift(try! rustCall() {
+func publicKey()throws  -> FfiPublicKey  {
+    return try  FfiConverterTypeFfiPublicKey_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_ffisoftwarekey_public_key(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -2538,7 +2508,9 @@ enum FfiError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case Signing(`class`: String, kind: String, detail: String
     )
     /**
-     * An internal failure (`panic` or `poisoned`); never a protocol result.
+     * An internal failure, never a protocol result: `panic` (a caught Rust
+     * panic), `poisoned` (a handle a panic left unusable), or
+     * `random_source` (the operating-system random source failed).
      */
     case Internal(kind: String, detail: String
     )
@@ -3229,8 +3201,8 @@ func ffiSessionContextBytes(inputs: FfiSessionContextInputs)throws  -> Data  {
  * Every §2.7 class spelling in table order. The Swift and Kotlin
  * `ErrorClass` enums are pinned to this list by a test.
  */
-func ffiErrorClassSpellings() -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+func ffiErrorClassSpellings()throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_error_class_spellings(uniffiCallStatus
     )
@@ -3250,8 +3222,8 @@ func ffiKeyId(key: FfiPublicKey)throws  -> String  {
 /**
  * Whether `id` is a well-formed v2 key ID (64 lowercase hex characters).
  */
-func ffiValidId(id: String) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
+func ffiValidId(id: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_valid_id(
         FfiConverterString.lower(id),uniffiCallStatus
@@ -3349,39 +3321,39 @@ func ffiCanonicalJson(data: Data)throws  -> Data  {
     )
 })
 }
-func ffiExpandScopes(scopes: [String]) -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+func ffiExpandScopes(scopes: [String])throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_expand_scopes(
         FfiConverterSequenceString.lower(scopes),uniffiCallStatus
     )
 })
 }
-func ffiIntersectScopes(lists: [[String]]) -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+func ffiIntersectScopes(lists: [[String]])throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_intersect_scopes(
         FfiConverterSequenceSequenceString.lower(lists),uniffiCallStatus
     )
 })
 }
-func ffiIsSensitiveScope(scope: String) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
+func ffiIsSensitiveScope(scope: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_is_sensitive_scope(
         FfiConverterString.lower(scope),uniffiCallStatus
     )
 })
 }
-func ffiScopeVocabulary() -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+func ffiScopeVocabulary()throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_scope_vocabulary(uniffiCallStatus
     )
 })
 }
-func ffiScopeWildcards() -> [String: [String]]  {
-    return try!  FfiConverterDictionaryStringSequenceString.lift(try! rustCall() {
+func ffiScopeWildcards()throws  -> [String: [String]]  {
+    return try  FfiConverterDictionaryStringSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_scope_wildcards(uniffiCallStatus
     )
@@ -3422,13 +3394,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_session_context_bytes() != 38536) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() != 32333) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() != 14258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_key_id() != 65279) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() != 14778) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() != 18371) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() != 57238) {
@@ -3464,58 +3436,52 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_canonical_json() != 20450) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes() != 35677) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_expand_scopes() != 12854) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_intersect_scopes() != 23812) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_intersect_scopes() != 40796) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_is_sensitive_scope() != 20701) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_is_sensitive_scope() != 48117) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_vocabulary() != 43327) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_vocabulary() != 3349) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_wildcards() != 50440) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_scope_wildcards() != 28440) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_scopes() != 44631) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() != 48916) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_cancel() != 13944) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled() != 29738) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficanceltoken_is_cancelled() != 22709) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_digest() != 64157) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_digest() != 29208) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_expected_session_context() != 64325) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_expected_session_context() != 64332) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_profile() != 42665) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_profile() != 10848) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_require_bound() != 34664) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_require_bound() != 24903) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() != 48734) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() != 36080) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ed25519_seed() != 4488) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id() != 64233) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id() != 35653) {
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() != 50866) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_ml_dsa_65_seed() != 51110) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_public_key() != 34321) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 61640) {
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 4070) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficontextpolicy_new() != 11610) {

@@ -16,7 +16,9 @@ pub enum FfiError {
         kind: String,
         detail: String,
     },
-    /// An internal failure (`panic` or `poisoned`); never a protocol result.
+    /// An internal failure, never a protocol result: `panic` (a caught Rust
+    /// panic), `poisoned` (a handle a panic left unusable), or
+    /// `random_source` (the operating-system random source failed).
     #[error("internal {kind}: {detail}")]
     Internal { kind: String, detail: String },
 }
@@ -42,9 +44,6 @@ pub(crate) type FfiResult<T> = Result<T, FfiError>;
 /// Every §2.7 class spelling in table order. The Swift and Kotlin
 /// `ErrorClass` enums are pinned to this list by a test.
 #[uniffi::export]
-pub fn ffi_error_class_spellings() -> Vec<String> {
-    V2ErrorClass::ALL
-        .iter()
-        .map(|c| c.as_str().to_string())
-        .collect()
+pub fn ffi_error_class_spellings() -> FfiResult<Vec<String>> {
+    crate::guard::call(|| Ok(V2ErrorClass::ALL.iter().map(|c| c.as_str().to_string()).collect()))
 }

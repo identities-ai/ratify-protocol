@@ -11,6 +11,8 @@ import java.util.Base64
 /** Reads the shared corpus in place: a host directory or the test APK's assets. */
 object Corpus {
     lateinit var read: (String) -> ByteArray
+    /** The entries of a corpus directory (e.g. "v2"). */
+    lateinit var list: (String) -> List<String>
 
     fun bytes(name: String): ByteArray = read("v2/$name")
     fun load(name: String): JSONObject = JSONObject(String(bytes(name), Charsets.UTF_8))
@@ -34,7 +36,7 @@ fun sha256(b: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").diges
  * Counts executed checks per group. [finish] fails unless every group ran
  * exactly the number of cases computed from the file: no case is skipped.
  */
-class Tally {
+class Tally(private val file: String) {
     private val counts = linkedMapOf<String, Int>()
     private val failures = mutableListOf<String>()
 
@@ -50,7 +52,16 @@ class Tally {
             assertEquals("group $g executed count", n, counts[g] ?: 0)
         }
         assertEquals("groups executed", expected.map { it.first }.toSet(), counts.keys)
+        Manifest.record(file, counts.values.sum())
     }
+}
+
+/** Executed case counts per corpus entry, filled by [Tally.finish]. */
+object Manifest {
+    private val counts = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    fun record(file: String, n: Int) { counts.merge(file, n, Int::plus) }
+    fun count(file: String): Int = counts[file] ?: 0
+    fun reset() = counts.clear()
 }
 
 /** The §2.7 class a call fails with, "ok" on success. */

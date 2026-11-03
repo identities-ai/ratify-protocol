@@ -73,18 +73,24 @@ extension Ratify {
 public final class ContextPolicy: Sendable {
     let handle: FfiContextPolicy
 
+    /// `sha384:` + 96 lowercase hex characters.
+    public let digest: String
+    public let profile: String
+    public let requireBound: Bool
+    public let requiredFields: [String]
+    public let expectedSessionContext: Data
+
     public init(profile: String, requireBound: Bool, requiredFields: [String],
                 expectedSessionContext: Data = Data()) throws(RatifyError) {
-        handle = try ffi {
+        let h = try ffi {
             try FfiContextPolicy(profile: profile, requireBound: requireBound,
                                  requiredFields: requiredFields, expectedSessionContext: expectedSessionContext)
         }
+        handle = h
+        digest = try ffi { try h.digest() }
+        self.profile = try ffi { try h.profile() }
+        self.requireBound = try ffi { try h.requireBound() }
+        self.requiredFields = try ffi { try h.requiredFields() }
+        self.expectedSessionContext = try ffi { try h.expectedSessionContext() }
     }
-
-    /// `sha384:` + 96 lowercase hex characters.
-    public var digest: String { handle.digest() }
-    public var profile: String { handle.profile() }
-    public var requireBound: Bool { handle.requireBound() }
-    public var requiredFields: [String] { handle.requiredFields() }
-    public var expectedSessionContext: Data { handle.expectedSessionContext() }
 }

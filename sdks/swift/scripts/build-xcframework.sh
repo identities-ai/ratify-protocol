@@ -12,11 +12,18 @@ out="$here/build"
 gen="$here/Sources/RatifyProtocol/Generated"
 slices="${SLICES:-macos ios ios-sim}"
 profile="${PROFILE:-release}"
+# FEATURES=test-hooks builds the test-only panic hook in (local and CI test
+# runs); release artifacts are built without it, and the check below holds.
+features="${FEATURES:-}"
 
 export IPHONEOS_DEPLOYMENT_TARGET=17.0
 export MACOSX_DEPLOYMENT_TARGET=14.0
 
-build() { (cd "$ffi" && cargo build --lib --profile "$profile" --target "$1"); }
+built=()
+build() {
+  (cd "$ffi" && cargo build --lib --profile "$profile" --target "$1" ${features:+--features "$features"})
+  built+=("$1")
+}
 lib() { echo "$ffi/target/$1/$profile/libratify_protocol_ffi.a"; }
 
 rm -rf "$out" && mkdir -p "$out/headers"
@@ -58,5 +65,19 @@ cp "$out/gen/ratify_ffiFFI.modulemap" "$out/headers/module.modulemap"
          "$out/gen/ratify_ffi.swift"
 } > "$gen/ratify_ffi.swift"
 
+# Fail if a future UniFFI release emits a declaration form the rewrite misses.
+if grep -vE '^[[:space:]]*(//|\*|/\*)' "$gen/ratify_ffi.swift" | grep -nE '(^|[^A-Za-z0-9_."`])(public|open|package) '; then
+  echo "generated Swift still has a public, open or package declaration" >&2; exit 1
+fi
+
+if [ -z "$features" ]; then
+  for t in "${built[@]}"; do
+    l="$(lib "$t")"
+    # A byte search, not nm: Xcode's nm cannot read Rust's LTO bitcode.
+    if [ -f "$l" ] && LC_ALL=C grep -a -q ratify_ffi_test_arm_panic "$l"; then
+      echo "release build contains the test-only panic hook: $l" >&2; exit 1
+    fi
+  done
+fi
 xcodebuild -create-xcframework "${args[@]}" -output "$out/RatifyProtocolFFI.xcframework" >/dev/null
 echo "built $out/RatifyProtocolFFI.xcframework ($slices)"

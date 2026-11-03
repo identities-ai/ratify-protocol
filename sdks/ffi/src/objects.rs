@@ -655,41 +655,41 @@ pub(crate) fn batch_out(b: &V2StatusEvidenceBatch) -> Vec<FfiStatusEvidenceObjec
 
 #[uniffi::export]
 pub fn ffi_decode_delegation_cert(data: Vec<u8>) -> FfiResult<FfiDelegationCert> {
-    Ok((&ratify_protocol::v2::decode_delegation_cert_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_delegation_cert_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_proof_bundle(data: Vec<u8>) -> FfiResult<FfiProofBundle> {
-    Ok((&ratify_protocol::v2::decode_proof_bundle_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_proof_bundle_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_revocation_list(data: Vec<u8>) -> FfiResult<FfiRevocationList> {
-    Ok((&ratify_protocol::v2::decode_revocation_list_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_revocation_list_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_revocation_push(data: Vec<u8>) -> FfiResult<FfiRevocationPush> {
-    Ok((&ratify_protocol::v2::decode_revocation_push_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_revocation_push_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_key_rotation_statement(data: Vec<u8>) -> FfiResult<FfiKeyRotationStatement> {
-    Ok((&ratify_protocol::v2::decode_key_rotation_statement_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_key_rotation_statement_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_witness_entry(data: Vec<u8>) -> FfiResult<FfiWitnessEntry> {
-    Ok((&ratify_protocol::v2::decode_witness_entry_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_witness_entry_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_verification_receipt(data: Vec<u8>) -> FfiResult<FfiVerificationReceipt> {
-    Ok((&ratify_protocol::v2::decode_verification_receipt_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_verification_receipt_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_verification_receipt_body(data: Vec<u8>) -> FfiResult<FfiVerificationReceipt> {
-    Ok((&ratify_protocol::v2::decode_verification_receipt_body_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_verification_receipt_body_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_transaction_receipt(data: Vec<u8>) -> FfiResult<FfiTransactionReceipt> {
-    Ok((&ratify_protocol::v2::decode_transaction_receipt_v2(&data)?).into())
+    crate::guard::call(|| Ok((&ratify_protocol::v2::decode_transaction_receipt_v2(&data)?).into()))
 }
 #[uniffi::export]
 pub fn ffi_decode_status_evidence_batch(data: Vec<u8>) -> FfiResult<Vec<FfiStatusEvidenceObject>> {
-    Ok(batch_out(&ratify_protocol::v2::decode_v2_status_evidence_batch(&data)?))
+    crate::guard::call(|| Ok(batch_out(&ratify_protocol::v2::decode_v2_status_evidence_batch(&data)?)))
 }

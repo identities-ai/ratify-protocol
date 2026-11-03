@@ -69,7 +69,7 @@ object LimitsVectors {
     fun corpus() {
         val f = Corpus.load("limits.json")
         val table = f.getJSONObject("limits")
-        val t = Tally()
+        val t = Tally("limits.json")
         val vectors = f.arr("vectors")
         for (v in vectors) {
             val name = v.getString("name")

@@ -6,26 +6,26 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The shared vector runners on a device or emulator, against the Android build. */
+/** The shared runners on a device or emulator, against the Android build. */
 @RunWith(AndroidJUnit4::class)
 class DeviceVectorsTest {
     companion object {
-        private lateinit var annex: String
-
         @BeforeClass @JvmStatic
-        fun corpus() {
+        fun setUpCorpus() {
             val assets = InstrumentationRegistry.getInstrumentation().context.assets
             Corpus.read = { name -> assets.open(name).use { it.readBytes() } }
-            annex = String(Corpus.read("spec/SPEC-v2-ANNEX-A.md"), Charsets.UTF_8)
+            Corpus.list = { dir -> assets.list(dir)!!.toList() }
         }
     }
 
-    @Test fun keys() = KeysVectors.corpus()
+    @Test fun corpus() = CorpusRunners.runAll()
     @Test fun generate() = KeysVectors.generate()
     @Test fun badSeed() = KeysVectors.badSeed()
     @Test fun errorClassesPinned() = KeysVectors.errorClassesPinned()
-    @Test fun annexA() = AnnexAVectors.corpus(annex)
-    @Test fun limits() = LimitsVectors.corpus()
-    @Test fun operationSessionContext() = OperationContextVectors.corpus()
     @Test fun contextFieldValidation() = OperationContextVectors.fieldValidation()
+    @Test fun panicInQuery() = PanicVectors.query()
+    @Test fun panicInDecoder() = PanicVectors.decoder()
+    @Test fun panicPoisonsOnlyThatHandle() = PanicVectors.poisonsOnlyThatHandle()
+    @Test fun internalKindsPinned() = PanicVectors.kindsPinned()
+    @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
 }

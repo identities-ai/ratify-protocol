@@ -15,6 +15,7 @@ import com.ratifyprotocol.internal.ffi.FfiTransactionReceiptParty
 import com.ratifyprotocol.internal.ffi.FfiTransactionReceiptSignature
 import com.ratifyprotocol.internal.ffi.FfiVerificationReceipt
 import com.ratifyprotocol.internal.ffi.FfiWitnessEntry
+import java.util.Collections
 
 // Public value types for every v2 signed object. Each mirrors the core type
 // field for field; byte arrays are copied in and out, so a value never shares
@@ -54,8 +55,10 @@ public class Constraint(
     public val windowS: Long,
     public val resourceId: String,
     public val pathPrefix: String,
-    public val params: Map<String, ParamsValue>?,
+    params: Map<String, ParamsValue>?,
 ) {
+    /** An unmodifiable copy of the caller's map. */
+    public val params: Map<String, ParamsValue>? = params?.let { Collections.unmodifiableMap(LinkedHashMap(it)) }
 
     internal constructor(f: FfiConstraint) : this(f.kind, f.start, f.end, f.tz, f.currency, f.maxAmountMicros, f.count, f.windowS, f.resourceId, f.pathPrefix, f.params?.mapValues { ParamsValue.fromFfi(it.value) })
 
@@ -86,12 +89,16 @@ public class DelegationCert(
     public val issuerPubKey: HybridPublicKey,
     public val subjectId: String,
     public val subjectPubKey: HybridPublicKey,
-    public val scope: List<String>,
-    public val constraints: List<Constraint>,
+    scope: List<String>,
+    constraints: List<Constraint>,
     public val issuedAt: Long,
     public val expiresAt: Long,
     public val signature: HybridSignature,
 ) {
+    /** An unmodifiable copy of the caller's list. */
+    public val scope: List<String> = Collections.unmodifiableList(ArrayList(scope))
+    /** An unmodifiable copy of the caller's list. */
+    public val constraints: List<Constraint> = Collections.unmodifiableList(ArrayList(constraints))
 
     internal constructor(f: FfiDelegationCert) : this(f.version, f.certId, f.issuerId, HybridPublicKey(f.issuerPubKey), f.subjectId, HybridPublicKey(f.subjectPubKey), f.scope, f.constraints.map { Constraint(it) }, f.issuedAt, f.expiresAt, HybridSignature(f.signature))
 
@@ -120,7 +127,7 @@ public class ProofBundle(
     public val verifierId: String,
     public val agentId: String,
     public val agentPubKey: HybridPublicKey,
-    public val delegations: List<DelegationCert>,
+    delegations: List<DelegationCert>,
     delegationDigest: ByteArray,
     challenge: ByteArray,
     public val challengeAt: Long,
@@ -129,6 +136,8 @@ public class ProofBundle(
     streamId: ByteArray?,
     public val streamSeq: Long?,
 ) {
+    /** An unmodifiable copy of the caller's list. */
+    public val delegations: List<DelegationCert> = Collections.unmodifiableList(ArrayList(delegations))
     private val _delegationDigest: ByteArray = delegationDigest.copyOf()
     public val delegationDigest: ByteArray get() = _delegationDigest.copyOf()
     private val _challenge: ByteArray = challenge.copyOf()
@@ -167,9 +176,11 @@ public class RevocationList(
     public val updatedAt: Long,
     public val nextUpdate: Long,
     public val sequence: Long,
-    public val revoked: List<String>,
+    revoked: List<String>,
     public val signature: HybridSignature,
 ) {
+    /** An unmodifiable copy of the caller's list. */
+    public val revoked: List<String> = Collections.unmodifiableList(ArrayList(revoked))
 
     internal constructor(f: FfiRevocationList) : this(f.version, f.issuerId, f.updatedAt, f.nextUpdate, f.sequence, f.revoked, HybridSignature(f.signature))
 
@@ -194,9 +205,11 @@ public class RevocationPush(
     public val issuerId: String,
     public val sequence: Long,
     public val pushedAt: Long,
-    public val revoked: List<String>,
+    revoked: List<String>,
     public val signature: HybridSignature,
 ) {
+    /** An unmodifiable copy of the caller's list. */
+    public val revoked: List<String> = Collections.unmodifiableList(ArrayList(revoked))
 
     internal constructor(f: FfiRevocationPush) : this(f.version, f.issuerId, f.sequence, f.pushedAt, f.revoked, HybridSignature(f.signature))
 
@@ -343,23 +356,31 @@ public class VerificationReceipt(
     public val agentId: String,
     public val humanId: String,
     public val bundleHash: String,
-    public val issuerIds: List<String>,
+    issuerIds: List<String>,
     public val decision: String,
     public val decisionReason: String,
     public val identityStatus: String,
     public val trustAssessment: String,
     public val statusAssessment: String,
     public val challengeAssessment: String,
-    public val constraintEvaluators: List<ConstraintEvaluatorRef>,
+    constraintEvaluators: List<ConstraintEvaluatorRef>,
     public val contextAssessment: String,
     public val contextPolicyDigest: String?,
     public val verifiedAt: Long,
     public val requiredScope: String,
-    public val grantedScope: List<String>,
-    public val statusEvidence: List<StatusEvidenceEntry>,
+    grantedScope: List<String>,
+    statusEvidence: List<StatusEvidenceEntry>,
     previousReceiptHash: ByteArray,
     public val signature: HybridSignature,
 ) {
+    /** An unmodifiable copy of the caller's list. */
+    public val issuerIds: List<String> = Collections.unmodifiableList(ArrayList(issuerIds))
+    /** An unmodifiable copy of the caller's list. */
+    public val constraintEvaluators: List<ConstraintEvaluatorRef> = Collections.unmodifiableList(ArrayList(constraintEvaluators))
+    /** An unmodifiable copy of the caller's list. */
+    public val grantedScope: List<String> = Collections.unmodifiableList(ArrayList(grantedScope))
+    /** An unmodifiable copy of the caller's list. */
+    public val statusEvidence: List<StatusEvidenceEntry> = Collections.unmodifiableList(ArrayList(statusEvidence))
     private val _previousReceiptHash: ByteArray = previousReceiptHash.copyOf()
     public val previousReceiptHash: ByteArray get() = _previousReceiptHash.copyOf()
 
@@ -457,11 +478,15 @@ public class TransactionReceipt(
     public val createdAt: Long,
     public val termsSchemaUri: String,
     termsCanonicalJson: ByteArray,
-    public val parties: List<TransactionReceiptParty>,
-    public val partySignatures: List<TransactionReceiptSignature>,
+    parties: List<TransactionReceiptParty>,
+    partySignatures: List<TransactionReceiptSignature>,
 ) {
     private val _termsCanonicalJson: ByteArray = termsCanonicalJson.copyOf()
     public val termsCanonicalJson: ByteArray get() = _termsCanonicalJson.copyOf()
+    /** An unmodifiable copy of the caller's list. */
+    public val parties: List<TransactionReceiptParty> = Collections.unmodifiableList(ArrayList(parties))
+    /** An unmodifiable copy of the caller's list. */
+    public val partySignatures: List<TransactionReceiptSignature> = Collections.unmodifiableList(ArrayList(partySignatures))
 
     internal constructor(f: FfiTransactionReceipt) : this(f.version, f.transactionId, f.createdAt, f.termsSchemaUri, f.termsCanonicalJson, f.parties.map { TransactionReceiptParty(it) }, f.partySignatures.map { TransactionReceiptSignature(it) })
 

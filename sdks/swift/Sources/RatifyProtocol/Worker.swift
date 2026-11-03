@@ -11,7 +11,7 @@ func onWorker<T: Sendable>(
     timeout: Duration? = nil,
     _ body: @escaping @Sendable (FfiCancelToken) throws(RatifyError) -> T
 ) async throws(RatifyError) -> T {
-    let token = FfiCancelToken(timeoutMs: timeout.map(milliseconds))
+    let token = try ffi { try FfiCancelToken(timeoutMs: timeout.map(milliseconds)) }
     let result: Result<T, RatifyError> = await withTaskCancellationHandler {
         await withCheckedContinuation { (cont: CheckedContinuation<Result<T, RatifyError>, Never>) in
             let thread = Thread {
@@ -21,7 +21,7 @@ func onWorker<T: Sendable>(
             thread.start()
         }
     } onCancel: {
-        token.cancel()
+        _ = try? token.cancel()
     }
     return try result.get()
 }

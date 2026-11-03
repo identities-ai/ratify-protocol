@@ -15,14 +15,15 @@ object OperationContextVectors {
     )
 
     private fun session(v: JSONObject, requestHash: ByteArray, verifierId: String = v.getString("verifier_id"),
-                        workspaceId: String = v.getString("workspace_id")) = SessionContextInputs(
-        verifierId, workspaceId, v.getString("agent_id"), v.getString("session_id"),
+                        workspaceId: String = v.getString("workspace_id"),
+                        agentId: String = v.getString("agent_id")) = SessionContextInputs(
+        verifierId, workspaceId, agentId, v.getString("session_id"),
         v.getString("invocation_id"), requestHash,
     )
 
     fun corpus() {
         val f = Corpus.load("operation-session-context.json")
-        val t = Tally()
+        val t = Tally("operation-session-context.json")
 
         val policy = f.getJSONObject("context_policy")
         val p = ContextPolicy(
@@ -92,5 +93,15 @@ object OperationContextVectors {
         assertEquals("configuration_invalid", classOf { sessionContextBytes(session(input, ByteArray(31))) })
         assertEquals("configuration_invalid",
             classOf { sessionContextBytes(session(input, ByteArray(32), workspaceId = "00000000-0000-4000-8000-00000000000A")) })
+        assertEquals("configuration_invalid",
+            classOf { sessionContextBytes(session(input, ByteArray(32), verifierId = input.getString("verifier_id").substring(0, 32))) })
+        assertEquals("configuration_invalid", classOf { sessionContextBytes(session(input, ByteArray(32), agentId = "not-a-key-id")) })
+        assertEquals("configuration_invalid",
+            classOf { sessionContextBytes(session(input, ByteArray(32), agentId = input.getString("agent_id").substring(0, 32))) })
+
+        // Length prefixes keep field boundaries from colliding.
+        val left = OperationContext("data:read", "records.get", "r1", "/records/1")
+        val right = OperationContext("data:read", "records.get", "r1/records", "/1")
+        assertNotEquals(operationContextHash(left).hex(), operationContextHash(right).hex())
     }
 }

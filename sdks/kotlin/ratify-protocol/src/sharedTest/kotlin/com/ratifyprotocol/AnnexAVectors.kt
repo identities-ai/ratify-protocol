@@ -11,7 +11,7 @@ object AnnexAVectors {
 
     fun corpus(annex: String) {
         val f = Corpus.load("annex-a.json")
-        val t = Tally()
+        val t = Tally("annex-a.json")
 
         val lines = annex.split("\n")
         for (c in f.arr("clauses")) {

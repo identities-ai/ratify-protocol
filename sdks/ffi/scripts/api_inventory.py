@@ -294,6 +294,45 @@ def kotlin_model(api):
     return types
 
 
+def swift_baseline(dump):
+    """Every public Swift declaration with its full signature, one per line,
+    sorted: the Swift counterpart of the Kotlin BCV .api dump."""
+    out = []
+
+    def walk(node, prefix):
+        for c in node.get("children", []):
+            kind = c.get("declKind")
+            if kind in (None, "Import") or c.get("kind") == "TypeNominal":
+                continue
+            name = c.get("printedName", c.get("name", ""))
+            sig = ""
+            kids = [k for k in c.get("children", []) if k.get("kind") == "TypeNominal" or k.get("kind") == "TypeFunc"]
+            if kind in ("Func", "Constructor", "Var", "EnumElement") and kids:
+                sig = " -> " + ", ".join(k.get("printedName", "") for k in kids)
+            avail = c.get("intro_iOS") or c.get("intro_Macosx")
+            out.append(f"{prefix}{name} [{kind}]{sig}{' @' + avail if avail else ''}")
+            if kind in ("Struct", "Class", "Enum", "Protocol"):
+                walk(c, f"{prefix}{c.get('name')}.")
+
+    walk(json.loads(dump)["ABIRoot"], "")
+    return "\n".join(sorted(set(out))) + "\n"
+
+
+def cmd_swift_baseline(dump, path, update):
+    text = swift_baseline(pathlib.Path(dump).read_text())
+    p = pathlib.Path(path)
+    if update:
+        p.write_text(text)
+        print(f"wrote {p} ({text.count(chr(10))} declarations)")
+        return
+    old = p.read_text() if p.exists() else ""
+    if old != text:
+        import difflib
+        print("".join(difflib.unified_diff(old.splitlines(True), text.splitlines(True), "checked-in", "compiled")))
+        sys.exit("the public Swift API changed; review it and run the gate with UPDATE_API=1")
+    print("swift API baseline ok")
+
+
 def resolve(model, name, lang):
     """Whether a mapped public name exists in its owning declaration."""
     name = name.split("(")[0]
@@ -401,4 +440,7 @@ def cmd_init():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
-    {"listing": cmd_listing, "check": cmd_check, "init": cmd_init}.get(cmd, lambda: cmd_names(*sys.argv[2:4]))()
+    if cmd == "swift-baseline":
+        cmd_swift_baseline(sys.argv[2], sys.argv[3], len(sys.argv) > 4 and sys.argv[4] == "update")
+    else:
+        {"listing": cmd_listing, "check": cmd_check, "init": cmd_init}.get(cmd, lambda: cmd_names(*sys.argv[2:4]))()

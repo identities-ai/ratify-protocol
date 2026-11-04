@@ -142,6 +142,7 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "ReferenceStoreBridge": "internal SPI carrier for the separate TestSupport reference store",
     "DeviceStateProjectionBridge": "internal SPI carrier for the separate TestSupport product; the reference primary remains pending",
     "Ratify.deviceStateProjectionTestOnly": "internal SPI entry point for the device-state vector corpus",
     "Ratify.verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
@@ -160,6 +161,7 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "ReferenceStoreBridge": "internal-use carrier for the separate testing artifact",
     "DeviceStateProjectionBridge": "internal-use carrier for the separate testing artifact; the reference primary remains pending",
     "verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
     "publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
@@ -196,6 +198,14 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ReferenceStoreBridge.cloneStore": "test-only reference store clone",
+    "ReferenceStoreBridge.setTime": "test-only reference clock control",
+    "ReferenceStoreBridge.now": "test-only reference clock reading",
+    "ReferenceStoreBridge.setSignerFailure": "test-only signer fault control",
+    "ReferenceStoreBridge.setAcknowledgementWithheld": "test-only checkpoint control",
+    "ReferenceStoreBridge.logLength": "test-only receipt log count",
+    "ReferenceStoreBridge.plantReleaseTestOnly": "test-only forged release setup",
+    "ReferenceStoreBridge.abandonPendingReceipts": "test-only receipt abandonment",
     "DeviceStateProjectionBridge.claims": "test-only projection member",
     "DeviceStateProjectionBridge.streams": "test-only projection member",
     "DeviceStateProjectionBridge.rateCounters": "test-only projection member",

@@ -766,6 +766,18 @@ public abstract interface class com/ratifyprotocol/ReceiverBindingHook {
 	public abstract fun validate (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/ExpectedChallenge;)V
 }
 
+public final class com/ratifyprotocol/ReferenceStoreBridge {
+	public fun <init> (JJLjava/lang/String;Lcom/ratifyprotocol/SoftwarePrivateKey;)V
+	public final fun abandonPendingReceipts ()Ljava/util/List;
+	public final fun cloneStore ()Lcom/ratifyprotocol/ReferenceStoreBridge;
+	public final fun logLength-s-VKNKU ()J
+	public final fun now ()J
+	public final fun plantReleaseTestOnly (Ljava/lang/String;J)V
+	public final fun setAcknowledgementWithheld (Z)V
+	public final fun setSignerFailure (Z)V
+	public final fun setTime (J)V
+}
+
 public abstract interface class com/ratifyprotocol/ReleaseClaimStore : com/ratifyprotocol/AuthoritativeClock {
 	public abstract fun loadTerminal (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun recordRelease (Lcom/ratifyprotocol/ReleaseRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

@@ -4424,6 +4424,213 @@ func FfiConverterTypeFfiReceiverBindingHook_lower(_ value: FfiReceiverBindingHoo
 
 
 
+protocol FfiReferenceStoreProtocol: AnyObject, Sendable {
+
+    func abandonPendingReceipts() throws  -> [String]
+
+    func cloneStore() throws  -> FfiReferenceStore
+
+    func logLength() throws  -> UInt64
+
+    func now() throws  -> Int64
+
+    func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64) throws
+
+    func setAcknowledgementWithheld(withheld: Bool) throws
+
+    func setSignerFailure(failing: Bool) throws
+
+    func setTime(now: Int64) throws
+
+}
+class FfiReferenceStore: FfiReferenceStoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffireferencestore(self.handle, $0) }
+    }
+convenience init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: FfiSoftwareKey)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_ffireferencestore_new(
+        FfiConverterInt64.lower(now),
+        FfiConverterInt64.lower(leaseSeconds),
+        FfiConverterString.lower(logId),
+        FfiConverterTypeFfiSoftwareKey_lower(verifierKey),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffireferencestore(handle, $0) }
+    }
+
+
+
+
+func abandonPendingReceipts()throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_abandon_pending_receipts(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func cloneStore()throws  -> FfiReferenceStore  {
+    return try  FfiConverterTypeFfiReferenceStore_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_clone_store(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func logLength()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_log_length(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func now()throws  -> Int64  {
+    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_now(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_plant_release_test_only(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(claimId),
+        FfiConverterInt64.lower(ackTimestamp),uniffiCallStatus
+    )
+}
+}
+
+func setAcknowledgementWithheld(withheld: Bool)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_set_acknowledgement_withheld(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(withheld),uniffiCallStatus
+    )
+}
+}
+
+func setSignerFailure(failing: Bool)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_set_signer_failure(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(failing),uniffiCallStatus
+    )
+}
+}
+
+func setTime(now: Int64)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_set_time(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiReferenceStore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiReferenceStore
+
+    static func lift(_ handle: UInt64) throws -> FfiReferenceStore {
+        return FfiReferenceStore(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiReferenceStore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiReferenceStore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiReferenceStore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReferenceStore_lift(_ handle: UInt64) throws -> FfiReferenceStore {
+    return try FfiConverterTypeFfiReferenceStore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReferenceStore_lower(_ value: FfiReferenceStore) -> UInt64 {
+    return FfiConverterTypeFfiReferenceStore.lower(value)
+}
+
+
+
+
+
+
 protocol FfiReleaseClaimStore: AnyObject, Sendable {
 
     func authoritativeTime(context: FfiStoreContext) throws  -> Int64
@@ -15659,6 +15866,30 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffitrustprovider_resolve() != 48324) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_abandon_pending_receipts() != 63650) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_clone_store() != 22065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_log_length() != 4826) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_now() != 11342) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_plant_release_test_only() != 43747) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_set_acknowledgement_withheld() != 14896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_set_signer_failure() != 35382) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_set_time() != 19259) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireceiptcheckpoint_acknowledge() != 33789) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15771,6 +16002,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_storage_record() != 64922) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_ffireferencestore_new() != 6616) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisplitkey_from_storage_record() != 46621) {

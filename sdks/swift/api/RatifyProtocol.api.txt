@@ -608,6 +608,16 @@ ReceiptPublisher [Protocol]
 ReceiptPublisher.publish(claimId:receiptBody:) [Func] -> Foundation.Data, Swift.String, Foundation.Data
 ReceiverBindingHook [Protocol]
 ReceiverBindingHook.validate(bundle:expected:) [Func] -> (), RatifyProtocol.ProofBundle, RatifyProtocol.ExpectedChallenge
+ReferenceStoreBridge [Class]
+ReferenceStoreBridge.abandonPendingReceipts() [Func] -> [Swift.String]
+ReferenceStoreBridge.cloneStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+ReferenceStoreBridge.init(now:leaseSeconds:logId:verifierKey:) [Constructor] -> RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Swift.Int64, Swift.String, RatifyProtocol.SoftwarePrivateKey
+ReferenceStoreBridge.logLength() [Func] -> Swift.UInt64
+ReferenceStoreBridge.now() [Func] -> Swift.Int64
+ReferenceStoreBridge.plantReleaseTestOnly(claimId:ackTimestamp:) [Func] -> (), Swift.String, Swift.Int64
+ReferenceStoreBridge.setAcknowledgementWithheld(_:) [Func] -> (), Swift.Bool
+ReferenceStoreBridge.setSignerFailure(_:) [Func] -> (), Swift.Bool
+ReferenceStoreBridge.setTime(_:) [Func] -> (), Swift.Int64
 ReleaseClaimStore [Protocol]
 ReleaseClaimStore.loadTerminal(claimId:) [Func] -> RatifyProtocol.TerminalClaimRecord, Swift.String
 ReleaseClaimStore.recordRelease(_:) [Func] -> (), RatifyProtocol.ReleaseRecord

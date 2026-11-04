@@ -31,4 +31,5 @@ class DeviceVectorsTest {
     @Test fun storageRecordRoundTrip() = KeyStorageVectors.roundTripAndLayout()
     @Test fun storageRecordRefusals() = KeyStorageVectors.refusals()
     @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
+    @Test fun referenceStoreClockAndClone() = ReferenceStoreVectors.clockAndClone()
 }

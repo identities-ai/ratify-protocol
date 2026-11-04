@@ -11,6 +11,9 @@ import org.junit.Test
 import java.io.File
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
+import org.json.JSONObject
+import kotlinx.coroutines.delay
 
 class ClaimTest {
     private class UnavailableClaimStore : ClaimStore {
@@ -29,7 +32,7 @@ class ClaimTest {
             receiptBody: ByteArray): Boolean = error("claim failed")
     }
 
-    private fun request(name: String): VerifyRequest {
+    private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null): VerifyRequest {
         val root = File(System.getProperty("ratify.corpus")!!)
         Corpus.read = { File(root, it).readBytes() }
         val corpus = Corpus.load("verifier-ordering.json")
@@ -50,13 +53,19 @@ class ClaimTest {
             val config = statusKeysObject.getJSONObject(issuer)
             StatusKeyConfig(config.getLong("epoch").toULong(), publicKeyOf(config.getJSONObject("public_key")))
         }
+        val requestContext = vector.optJSONObject("request_context") ?: JSONObject()
+        val countsObject = requestContext.optJSONObject("extension_counts") ?: JSONObject()
+        val valuesObject = requestContext.optJSONObject("extension_values") ?: JSONObject()
+        val counts = countsObject.keys().asSequence().associateWith { countsObject.getLong(it) }
+        val values = valuesObject.keys().asSequence().associateWith { valuesObject.getString(it) }
         return VerifyRequest(Base64.getDecoder().decode(corpus.getJSONObject("bundles_b64").getString(vector.getString("bundle"))),
             challenge, contextPolicy, vector.getString("required_scope"), vector.getString("configured_namespace"),
             vector.getLong("configured_replay_epoch"), vector.getString("configured_verifier_id"),
             vector.getLong("now"), vector.getLong("max_challenge_age_seconds"),
-            vector.getLong("future_skew_seconds"), ConstraintContext(), vector.getString("tzdb_version"),
+            vector.getLong("future_skew_seconds"), ConstraintContext(extensionCounts = counts, extensionValues = values),
+            vector.getString("tzdb_version"),
             statusKeys, RevocationStatusPolicy(policyBounds.getLong("max_list_lifetime_seconds"),
-                policyBounds.getLong("max_status_age_seconds"), policyBounds.getLong("clock_skew_seconds")))
+                policyBounds.getLong("max_status_age_seconds"), policyBounds.getLong("clock_skew_seconds")), evaluators)
     }
 
     @Test fun liveVerifierReachesClaimStoreAfterPreflight() = runBlocking {
@@ -100,6 +109,83 @@ class ClaimTest {
             org.junit.Assert.assertTrue(chain.isNotEmpty())
             calls++
             return TrustResolution(TrustOutcome.UNAVAILABLE, HybridPublicKey(ByteArray(0), ByteArray(0)))
+        }
+    }
+
+    private class VectorJournal(initial: SecurityJournalSnapshot) : SecurityJournalStore {
+        private var current = initial
+        override suspend fun load(): SecurityJournalSnapshot = synchronized(this) { current }
+        override suspend fun compareAndSwap(expected: SecurityJournalHead, next: SecurityJournalSnapshot) {
+            synchronized(this) {
+                if (current.head != expected) throw SecurityJournalStoreError.Conflict()
+                current = next
+            }
+        }
+    }
+
+    private class VectorEvaluator(private val mode: String) : ConstraintEvaluator {
+        val calls = AtomicInteger()
+        @Volatile var observedType: String? = null
+        @Volatile var observedParams: ByteArray? = null
+        override suspend fun evaluate(input: ConstraintEvaluationInput): ConstraintEvaluationResult {
+            calls.incrementAndGet()
+            observedType = input.type
+            observedParams = input.paramsJson
+            if (mode == "error") error("scripted evaluator failure")
+            if (mode == "timeout") delay(100)
+            return ConstraintEvaluationResult(if (mode == "denied") ConstraintOutcome.DENIED else ConstraintOutcome.PASS)
+        }
+    }
+
+    @Test fun extensionEvaluatorsRunThroughLiveVerifier() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        val corpus = JSONObject(File(root, "v2/verifier-ordering.json").readText())
+        val cases = listOf(
+            Triple("extension_max_count_pass", "pass", "authorized"),
+            Triple("extension_max_count_exceeded", "denied", "constraint_denied"),
+            Triple("extension_evaluator_error", "error", "constraint_unverifiable"),
+            Triple("extension_evaluator_timeout", "timeout", "constraint_unverifiable"),
+        )
+        for ((name, mode, reason) in cases) {
+            val vectors = corpus.getJSONArray("vectors")
+            val vector = (0 until vectors.length()).asSequence().map(vectors::getJSONObject)
+                .first { it.getString("name") == name }
+            val registration = vector.getJSONArray("constraint_evaluators").getJSONObject(0)
+            val evaluator = VectorEvaluator(mode)
+            val registry = ConstraintEvaluatorRegistry(if (mode == "timeout") 10u else 1000u,
+                listOf(ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
+                    registration.getString("profile"), registration.getString("type")), evaluator)))
+            val req = request(name, registry)
+            val trustKey = publicKeyOf(vector.getJSONObject("trust").getJSONObject("root_public_key"))
+            val trust = object : TrustProvider {
+                override suspend fun resolve(chain: List<DelegationCert>) = TrustResolution(TrustOutcome.TRUSTED, trustKey)
+            }
+            val evidenceObject = vector.getJSONObject("status_evidence")
+            val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
+                val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
+                (0 until objects.length()).map { index ->
+                    val item = objects.getJSONObject(index)
+                    StatusEvidenceObject(item.getInt("object_type_code").toUShort(), item.b64("wire_b64"))
+                }
+            }
+            val status = object : StatusEvidenceProvider {
+                override suspend fun provide(request: StatusEvidenceRequest) = evidence[request.issuerId] ?: emptyList()
+            }
+            val audience = object : AudienceProvider {
+                override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String) = emptyList<AudienceMembership>()
+            }
+            val journal = VectorJournal(emptySecurityJournalSnapshot())
+            for (issuer in req.statusKeys.keys.sorted()) {
+                val key = req.statusKeys.getValue(issuer)
+                configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
+            }
+            val outcome = verifyProofBundle(req, CreatedClaimStore(), trust = trust, audience = audience,
+                statusEvidence = status, statusJournal = journal)
+            assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
+            assertEquals(name, reason, JSONObject(String(outcome.committed!!.receiptBody)).getString("decision_reason"))
+            assertEquals(name, 1, evaluator.calls.get())
+            assertEquals(name, registration.getString("type"), evaluator.observedType)
+            org.junit.Assert.assertNotNull(name, evaluator.observedParams)
         }
     }
 

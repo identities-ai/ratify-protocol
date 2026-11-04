@@ -20,7 +20,7 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    private func request(_ name: String) throws -> VerifyRequest {
+    private func request(_ name: String, evaluators: ConstraintEvaluatorRegistry? = nil) throws -> VerifyRequest {
         let corpus = Corpus.load("verifier-ordering.json")
         let vector = corpus.arr("vectors").first { $0.s("name") == name }!
         let expected = vector.obj("expected_challenge")
@@ -41,16 +41,21 @@ final class ClaimTests: XCTestCase {
             return StatusKeyConfig(epoch: UInt64(item.int("epoch")),
                 key: HybridPublicKey(ed25519: key.b64("ed25519"), mlDsa65: key.b64("ml_dsa_65")))
         }
+        let requestContext = vector["request_context"] as? [String: Any] ?? [:]
+        let counts = (requestContext["extension_counts"] as? [String: NSNumber] ?? [:]).mapValues(\.int64Value)
+        let values = requestContext["extension_values"] as? [String: String] ?? [:]
         return VerifyRequest(bundle: Data(base64Encoded: corpus.obj("bundles_b64").s(vector.s("bundle")))!,
             expected: challenge, contextPolicy: contextPolicy, requiredScope: vector.s("required_scope"),
             verifierNamespace: vector.s("configured_namespace"), replayEpoch: Int64(vector.int("configured_replay_epoch")),
             verifierId: vector.s("configured_verifier_id"), now: Int64(vector.int("now")),
             maxChallengeAgeSeconds: Int64(vector.int("max_challenge_age_seconds")),
-            futureSkewSeconds: Int64(vector.int("future_skew_seconds")), context: ConstraintContext(),
+            futureSkewSeconds: Int64(vector.int("future_skew_seconds")),
+            context: ConstraintContext(extensionCounts: counts, extensionValues: values),
             tzdbVersion: vector.s("tzdb_version"), statusKeys: statusKeys,
             statusPolicy: RevocationStatusPolicy(maxListLifetimeSeconds: Int64(statusPolicy.int("max_list_lifetime_seconds")),
                 maxStatusAgeSeconds: Int64(statusPolicy.int("max_status_age_seconds")),
-                clockSkewSeconds: Int64(statusPolicy.int("clock_skew_seconds"))))
+                clockSkewSeconds: Int64(statusPolicy.int("clock_skew_seconds"))),
+            constraintEvaluators: evaluators)
     }
 
     func testLiveVerifierReachesClaimStoreAfterPreflight() async throws {
@@ -100,6 +105,86 @@ final class ClaimTests: XCTestCase {
             calls += 1
             return TrustResolution(outcome: .unavailable,
                 rootKey: HybridPublicKey(ed25519: Data(), mlDsa65: Data()))
+        }
+    }
+
+    actor VectorJournal: SecurityJournalStore {
+        private var current: SecurityJournalSnapshot
+        init(_ initial: SecurityJournalSnapshot) { current = initial }
+        func load() -> SecurityJournalSnapshot { current }
+        func compareAndSwap(expected: SecurityJournalHead, next: SecurityJournalSnapshot) throws {
+            guard current.head == expected else { throw SecurityJournalStoreError.conflict }
+            current = next
+        }
+    }
+
+    struct VectorTrust: TrustProvider {
+        let key: HybridPublicKey
+        func resolve(chain: [DelegationCert]) -> TrustResolution {
+            TrustResolution(outcome: .trusted, rootKey: key)
+        }
+    }
+
+    struct VectorStatus: StatusEvidenceProvider {
+        let byIssuer: [String: [StatusEvidenceObject]]
+        func provide(_ request: StatusEvidenceRequest) -> [StatusEvidenceObject] {
+            byIssuer[request.issuerId] ?? []
+        }
+    }
+
+    struct EmptyAudience: AudienceProvider {
+        func memberships(for deferred: [DeferredConstraint], receiverId: String) -> [AudienceMembership] { [] }
+    }
+
+    actor VectorEvaluator: ConstraintEvaluator {
+        enum Mode { case pass, denied, error, timeout }
+        let mode: Mode
+        private(set) var calls = 0
+        init(_ mode: Mode) { self.mode = mode }
+        func evaluate(_ input: ConstraintEvaluationInput) async throws -> ConstraintEvaluationResult {
+            calls += 1
+            XCTAssertEqual(input.type, mode == .error || mode == .timeout ? "com.example.fault" : "com.ratifyprotocol.max_count")
+            XCTAssertNotNil(input.paramsJSON)
+            if mode == .error { throw StoreError.unavailable("scripted evaluator failure") }
+            if mode == .timeout { try await Task.sleep(for: .milliseconds(100)) }
+            return ConstraintEvaluationResult(outcome: mode == .denied ? .denied : .pass)
+        }
+    }
+
+    func testExtensionEvaluatorsRunThroughLiveVerifier() async throws {
+        let corpus = Corpus.load("verifier-ordering.json")
+        let cases: [(String, VectorEvaluator.Mode, String)] = [
+            ("extension_max_count_pass", .pass, "authorized"),
+            ("extension_max_count_exceeded", .denied, "constraint_denied"),
+            ("extension_evaluator_error", .error, "constraint_unverifiable"),
+            ("extension_evaluator_timeout", .timeout, "constraint_unverifiable"),
+        ]
+        for (name, mode, reason) in cases {
+            let vector = corpus.arr("vectors").first { $0.s("name") == name }!
+            let registration = vector.arr("constraint_evaluators")[0]
+            let evaluator = VectorEvaluator(mode)
+            let registry = try ConstraintEvaluatorRegistry(timeoutMilliseconds: mode == .timeout ? 10 : 1000,
+                registrations: [ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
+                    profile: registration.s("profile"), type: registration.s("type")), evaluator: evaluator)])
+            let req = try request(name, evaluators: registry)
+            let root = vector.obj("trust").obj("root_public_key")
+            let trust = VectorTrust(key: HybridPublicKey(ed25519: root.b64("ed25519"), mlDsa65: root.b64("ml_dsa_65")))
+            let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
+                let script = value as! [String: Any]
+                return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
+            }
+            let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
+            for issuer in req.statusKeys.keys.sorted() {
+                let key = req.statusKeys[issuer]!
+                _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
+            }
+            let outcome = try await Ratify.verifyProofBundle(req, claimStore: CreatedClaimStore(), trust: trust,
+                audience: EmptyAudience(), statusEvidence: VectorStatus(byIssuer: evidence), statusJournal: journal)
+            XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
+            let body = try JSONSerialization.jsonObject(with: outcome.committed!.receiptBody) as! [String: Any]
+            XCTAssertEqual(body["decision_reason"] as? String, reason, name)
+            let calls = await evaluator.calls
+            XCTAssertEqual(calls, 1, name)
         }
     }
 

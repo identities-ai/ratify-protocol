@@ -16,10 +16,13 @@ final class ClaimTests: XCTestCase {
     }
     actor UnavailableClaimStore: ClaimStore {
         private(set) var calls = 0
+        let conflict: Bool
+        init(conflict: Bool = false) { self.conflict = conflict }
         func authoritativeTime() -> Int64 { XCTFail("preflight must not read store time"); return 0 }
         func claim(_ claim: ChallengeClaim) throws -> ClaimResult {
             XCTAssertFalse(claim.claimId.isEmpty)
             calls += 1
+            if conflict { throw StoreError.claimProofConflict }
             throw StoreError.unavailable("claim store offline")
         }
         func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
@@ -34,18 +37,22 @@ final class ClaimTests: XCTestCase {
     private func request(_ name: String, evaluators: ConstraintEvaluatorRegistry? = nil) throws -> VerifyRequest {
         let corpus = Corpus.load("verifier-ordering.json")
         let vector = corpus.arr("vectors").first { $0.s("name") == name }!
-        let expected = vector.obj("expected_challenge")
-        let key = expected.obj("expected_agent_public_key")
-        let policy = vector.obj("context_policy")
-        let contextPolicy = try ContextPolicy(profile: policy.s("profile"), requireBound: policy.bool("require_bound"),
-            requiredFields: policy.strings("required_fields"), expectedSessionContext: policy.b64("expected_session_context_b64"))
-        let challenge = ExpectedChallenge(value: expected.b64("value_b64"), issuedAt: Int64(expected.int("issued_at")),
-            expiresAt: Int64(expected.int("expires_at")), verifierNamespace: expected.s("verifier_namespace"),
-            replayEpoch: Int64(expected.int("replay_epoch")), verifierId: expected.s("verifier_id"),
-            expectedAgentId: expected.s("expected_agent_id"),
-            expectedAgentPublicKey: HybridPublicKey(ed25519: key.b64("ed25519"), mlDsa65: key.b64("ml_dsa_65")),
-            expectedReceiverId: expected["expected_receiver_id"] as? String ?? "",
-            expectedSessionContext: expected.b64("expected_session_context_b64"))
+        let policy = vector["context_policy"] as? [String: Any]
+        let contextPolicy = try policy.map { policy in
+            try ContextPolicy(profile: policy.s("profile"), requireBound: policy.bool("require_bound"),
+                requiredFields: policy.strings("required_fields"),
+                expectedSessionContext: (policy["expected_session_context_b64"] as? String).map { Data(base64Encoded: $0)! } ?? Data())
+        }
+        let challenge = (vector["expected_challenge"] as? [String: Any]).map { expected in
+            let key = expected["expected_agent_public_key"] as? [String: Any]
+            return ExpectedChallenge(value: expected.b64("value_b64"), issuedAt: Int64(expected.int("issued_at")),
+                expiresAt: Int64(expected.int("expires_at")), verifierNamespace: expected.s("verifier_namespace"),
+                replayEpoch: Int64(expected.int("replay_epoch")), verifierId: expected.s("verifier_id"),
+                expectedAgentId: expected["expected_agent_id"] as? String ?? "",
+                expectedAgentPublicKey: key.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) },
+                expectedReceiverId: expected["expected_receiver_id"] as? String ?? "",
+                expectedSessionContext: (expected["expected_session_context_b64"] as? String).map { Data(base64Encoded: $0)! })
+        }
         let statusPolicy = vector.obj("status_policy")
         let statusKeys = vector.obj("status_keys").mapValues { value -> StatusKeyConfig in
             let item = value as! [String: Any]
@@ -86,21 +93,15 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    func testVerifierCorpusPreflightRefusesBeforeClaim() async throws {
+    func testVerifierCorpusPreflightOrdering() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             $0.obj("expected").s("stage") == "preflight" &&
-            $0["expected_challenge"] is [String: Any] &&
-            $0["context_policy"] is [String: Any] &&
-            ($0.obj("expected_challenge")["expected_agent_public_key"] is [String: Any]) &&
-            ($0.obj("expected_challenge")["expected_agent_id"] is String) &&
-            ($0.obj("expected_challenge")["expected_session_context_b64"] is String) &&
-            ($0.obj("context_policy")["expected_session_context_b64"] is String) &&
-            $0.s("claim_store") == "create"
+            $0.s("claim_store") != "absent"
         }
-        XCTAssertEqual(vectors.count, 129)
+        XCTAssertEqual(vectors.count, 145)
         for vector in vectors {
             let name = vector.s("name")
-            let store = UnavailableClaimStore()
+            let store = UnavailableClaimStore(conflict: vector.s("claim_store") == "proof_conflict")
             let registrations = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
                 ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
                     profile: $0.s("profile"), type: $0.s("type")), evaluator: VectorEvaluator(.pass))
@@ -116,7 +117,7 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(outcome.errorClass?.rawValue, vector.obj("expected").s("error_class"), name)
             XCTAssertEqual(probe?.calls ?? 0, vector.obj("expected").obj("callback_counts").int("receiver_binding"), name)
             let calls = await store.calls
-            XCTAssertEqual(calls, 0, name)
+            XCTAssertEqual(calls, vector.obj("expected").obj("callback_counts").int("claim"), name)
         }
     }
 

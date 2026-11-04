@@ -23,12 +23,13 @@ class ClaimTest {
             if (reject) throw StoreError.Unavailable("scripted receiver rejection")
         }
     }
-    private class UnavailableClaimStore : ClaimStore {
+    private class UnavailableClaimStore(private val conflict: Boolean = false) : ClaimStore {
         var calls = 0
         override suspend fun authoritativeTime(): Long = error("preflight must not read store time")
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             org.junit.Assert.assertTrue(claim.claimId.isNotEmpty())
             calls++
+            if (conflict) throw StoreError.ClaimProofConflict()
             throw StoreError.Unavailable("claim store offline")
         }
         override suspend fun finalize(claimId: String, ownerToken: ByteArray, terminalResult: ByteArray,
@@ -44,17 +45,22 @@ class ClaimTest {
         Corpus.read = { File(root, it).readBytes() }
         val corpus = Corpus.load("verifier-ordering.json")
         val vector = corpus.arr("vectors").first { it.getString("name") == name }
-        val expected = vector.getJSONObject("expected_challenge")
-        val key = expected.getJSONObject("expected_agent_public_key")
-        val policy = vector.getJSONObject("context_policy")
-        val contextPolicy = ContextPolicy(policy.getString("profile"), policy.getBoolean("require_bound"),
-            policy.strings("required_fields"), policy.b64("expected_session_context_b64"))
-        val challenge = ExpectedChallenge(expected.b64("value_b64"), expected.getLong("issued_at"),
-            expected.getLong("expires_at"), expected.getString("verifier_namespace"),
-            expected.getLong("replay_epoch"), expected.getString("verifier_id"),
-            expected.getString("expected_agent_id"), publicKeyOf(key),
-            expectedReceiverId = expected.opt("expected_receiver_id") as? String ?: "",
-            expectedSessionContext = expected.b64("expected_session_context_b64"))
+        val policy = vector.optJSONObject("context_policy")
+        val contextPolicy = policy?.let {
+            ContextPolicy(it.getString("profile"), it.getBoolean("require_bound"),
+                it.strings("required_fields"), (it.opt("expected_session_context_b64") as? String)
+                    ?.let(Base64.getDecoder()::decode) ?: ByteArray(0))
+        }
+        val challenge = vector.optJSONObject("expected_challenge")?.let { expected ->
+            ExpectedChallenge(expected.b64("value_b64"), expected.getLong("issued_at"),
+                expected.getLong("expires_at"), expected.getString("verifier_namespace"),
+                expected.getLong("replay_epoch"), expected.getString("verifier_id"),
+                expectedAgentId = expected.opt("expected_agent_id") as? String ?: "",
+                expectedAgentPublicKey = expected.optJSONObject("expected_agent_public_key")?.let(::publicKeyOf),
+                expectedReceiverId = expected.opt("expected_receiver_id") as? String ?: "",
+                expectedSessionContext = (expected.opt("expected_session_context_b64") as? String)
+                    ?.let(Base64.getDecoder()::decode))
+        }
         val policyBounds = vector.getJSONObject("status_policy")
         val statusKeysObject = vector.getJSONObject("status_keys")
         val statusKeys = statusKeysObject.keys().asSequence().associateWith { issuer ->
@@ -92,21 +98,17 @@ class ClaimTest {
         assertEquals(1, store.calls)
     }
 
-    @Test fun verifierCorpusPreflightRefusesBeforeClaim() = runBlocking {
+    @Test fun verifierCorpusPreflightOrdering() = runBlocking {
         val root = File(System.getProperty("ratify.corpus")!!)
         Corpus.read = { File(root, it).readBytes() }
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
             vector.getJSONObject("expected").getString("stage") == "preflight" &&
-            vector.optJSONObject("expected_challenge")?.optJSONObject("expected_agent_public_key") != null &&
-            vector.getJSONObject("expected_challenge").opt("expected_agent_id") is String &&
-            vector.getJSONObject("expected_challenge").opt("expected_session_context_b64") is String &&
-            vector.optJSONObject("context_policy")?.opt("expected_session_context_b64") is String &&
-            vector.getString("claim_store") == "create"
+            vector.getString("claim_store") != "absent"
         }
-        assertEquals(129, vectors.size)
+        assertEquals(145, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
-            val store = UnavailableClaimStore()
+            val store = UnavailableClaimStore(vector.getString("claim_store") == "proof_conflict")
             val expectedClass = vector.getJSONObject("expected").getString("error_class")
             val registrations = vector.optJSONArray("constraint_evaluators")?.let { array ->
                 (0 until array.length()).map { index ->
@@ -124,7 +126,7 @@ class ClaimTest {
             assertEquals(name, expectedClass, outcome.errorClass?.spelling)
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("receiver_binding"),
                 hook?.calls?.get() ?: 0)
-            assertEquals(name, 0, store.calls)
+            assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("claim"), store.calls)
         }
     }
 

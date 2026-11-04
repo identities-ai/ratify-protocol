@@ -43,7 +43,8 @@ final class ClaimTests: XCTestCase {
     }
 
     private func request(_ name: String, corpusName: String = "verifier-ordering.json",
-                         evaluators: ConstraintEvaluatorRegistry? = nil, atTime: Int64? = nil) throws -> VerifyRequest {
+                         evaluators: ConstraintEvaluatorRegistry? = nil, atTime: Int64? = nil,
+                         replayEpochOverride: Int64? = nil) throws -> VerifyRequest {
         let corpus = Corpus.load(corpusName)
         let vector = corpusName == "lifecycle-scenarios.json" ? corpus.obj("requests").obj(name)
             : corpus.arr("vectors").first { $0.s("name") == name }!
@@ -75,7 +76,8 @@ final class ClaimTests: XCTestCase {
         let values = requestContext["extension_values"] as? [String: String] ?? [:]
         return VerifyRequest(bundle: Data(base64Encoded: corpus.obj("bundles_b64").s(vector.s("bundle")))!,
             expected: challenge, contextPolicy: contextPolicy, requiredScope: vector.s("required_scope"),
-            verifierNamespace: vector.s("configured_namespace"), replayEpoch: Int64(vector.int("configured_replay_epoch")),
+            verifierNamespace: vector.s("configured_namespace"),
+            replayEpoch: replayEpochOverride ?? Int64(vector.int("configured_replay_epoch")),
             verifierId: vector.s("configured_verifier_id"), now: atTime ?? Int64(vector.int("now")),
             maxChallengeAgeSeconds: Int64(vector.int("max_challenge_age_seconds")),
             futureSkewSeconds: Int64(vector.int("future_skew_seconds")),
@@ -972,7 +974,8 @@ final class ClaimTests: XCTestCase {
             "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
             "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
-            "resume_accepts_honest_record"]
+            "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
+            "release_of_claim_the_store_does_not_hold"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1022,7 +1025,8 @@ final class ClaimTests: XCTestCase {
             "resume_accepts_allow_horizon_at_timestamp_domain_end": 1, "resume_forged_record_longer_allow_horizon": 6,
             "resume_forged_record_later_challenge_expiry": 6, "resume_forged_record_allow_for_unheld_claim": 3,
             "resume_forged_record_allow_over_evaluating_claim": 4, "resume_forged_record_allow_over_interrupted_claim": 8,
-            "resume_accepts_honest_record": 5]
+            "resume_accepts_honest_record": 5, "restore_exact_state": 5,
+            "restore_lost_state_with_epoch_bump": 6, "release_of_claim_the_store_does_not_hold": 4]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1030,13 +1034,16 @@ final class ClaimTests: XCTestCase {
             "resume": ["op", "request", "expect"], "abandon": ["op", "expect"],
             "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"],
             "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
-            "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"]]
+            "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
+            "restore": ["op", "mode", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
             XCTAssertEqual(scenario.arr("steps").count, counts[name], name)
-            let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
+            var store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
                 logId: corpus.s("log_id"), verifierKey: key)
+            var logId = corpus.s("log_id")
+            var replayEpochOverride: Int64?
             var committed: [String: CommittedOutcome] = [:]
             var claimed: [String: ChallengeClaim] = [:]
             var owners: [String: Data] = [:]
@@ -1050,6 +1057,9 @@ final class ClaimTests: XCTestCase {
                 var expectedStepKeys = stepKeys[op] ?? []
                 if op == "release" && step["receipt_of"] != nil { expectedStepKeys.insert("receipt_of") }
                 if op == "release" && step["mode"] != nil { expectedStepKeys.insert("mode") }
+                if op == "restore" && step.s("mode") == "lost_state_epoch_bump" {
+                    expectedStepKeys.formUnion(["log_id", "replay_epoch"])
+                }
                 if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
                 if op == "finalize" && step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
                 if op == "resume" && step["claim_record_b64"] != nil {
@@ -1065,6 +1075,16 @@ final class ClaimTests: XCTestCase {
                 case "set_ack_withheld":
                     try store.setAcknowledgementWithheld(step.bool("withheld"))
                     XCTAssertTrue(want.isEmpty, at)
+                case "restore":
+                    XCTAssertTrue(want.isEmpty, at)
+                    if step.s("mode") == "exact" { store = try store.cloneStore() }
+                    else {
+                        XCTAssertEqual(step.s("mode"), "lost_state_epoch_bump", at)
+                        logId = step.s("log_id")
+                        replayEpochOverride = Int64(step.int("replay_epoch"))
+                        store = try Store(now: store.now(), leaseSeconds: Int64(corpus.int("lease_seconds")),
+                            logId: logId, verifierKey: key)
+                    }
                 case "claim_only":
                     XCTAssertEqual(Set(want.keys), ["disposition"], at)
                     let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
@@ -1126,8 +1146,9 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_290, at)
                     } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
-                    let req = fixtureRequest.now == currentTime ? fixtureRequest
-                        : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime)
+                    let req = fixtureRequest.now == currentTime && replayEpochOverride == nil ? fixtureRequest
+                        : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime,
+                            replayEpochOverride: replayEpochOverride)
                     let mode = step["mode"] as? String
                     if mode != nil {
                         XCTAssertTrue(["expire_lease_during_status", "regress_clock_during_status"].contains(mode!), at)
@@ -1136,7 +1157,10 @@ final class ClaimTests: XCTestCase {
                     if mode == "expire_lease_during_status" { XCTAssertGreaterThan(callbackTime!, currentTime, at) }
                     if mode == "regress_clock_during_status" { XCTAssertLessThan(callbackTime!, currentTime, at) }
                     let onFirstStatus: (@Sendable () throws -> Void)?
-                    if let callbackTime { onFirstStatus = { try store.setTime(callbackTime) } }
+                    if let callbackTime {
+                        let statusStore = store
+                        onFirstStatus = { try statusStore.setTime(callbackTime) }
+                    }
                     else { onFirstStatus = nil }
                     let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName),
                         request: req, onFirstStatus: onFirstStatus)
@@ -1284,7 +1308,7 @@ final class ClaimTests: XCTestCase {
                         _ = try XCTUnwrap(receipts[receiptName], at)
                     }
                     let result = try await Ratify.releaseDecision(value, signedReceipt: receipts[receiptName],
-                        verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: checkpoint)
+                        verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: checkpoint)
                     XCTAssertEqual(result.status.rawValue, want.s("release_status"), at)
                     if want.keys.contains("release_reason") {
                         XCTAssertEqual(result.reason, want.s("release_reason"), at)

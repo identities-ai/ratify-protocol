@@ -54,7 +54,8 @@ class ClaimTest {
     }
 
     private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null,
-        corpusName: String = "verifier-ordering.json", atTime: Long? = null): VerifyRequest {
+        corpusName: String = "verifier-ordering.json", atTime: Long? = null,
+        replayEpochOverride: Long? = null): VerifyRequest {
         val corpus = Corpus.load(corpusName)
         val vector = if (corpusName == "lifecycle-scenarios.json") corpus.getJSONObject("requests").getJSONObject(name)
             else corpus.arr("vectors").first { it.getString("name") == name }
@@ -87,7 +88,7 @@ class ClaimTest {
         val values = valuesObject.keys().asSequence().associateWith { valuesObject.getString(it) }
         return VerifyRequest(Base64.getDecoder().decode(corpus.getJSONObject("bundles_b64").getString(vector.getString("bundle"))),
             challenge, contextPolicy, vector.getString("required_scope"), vector.getString("configured_namespace"),
-            vector.getLong("configured_replay_epoch"), vector.getString("configured_verifier_id"),
+            replayEpochOverride ?: vector.getLong("configured_replay_epoch"), vector.getString("configured_verifier_id"),
             atTime ?: vector.getLong("now"), vector.getLong("max_challenge_age_seconds"),
             vector.getLong("future_skew_seconds"), ConstraintContext(
                 requestedAmountMicros = requestContext.optLong("requested_amount_micros"),
@@ -906,7 +907,8 @@ class ClaimTest {
             "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
             "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
-            "resume_accepts_honest_record")
+            "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
+            "release_of_claim_the_store_does_not_hold")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -955,7 +957,8 @@ class ClaimTest {
             "resume_accepts_allow_horizon_at_timestamp_domain_end" to 1, "resume_forged_record_longer_allow_horizon" to 6,
             "resume_forged_record_later_challenge_expiry" to 6, "resume_forged_record_allow_for_unheld_claim" to 3,
             "resume_forged_record_allow_over_evaluating_claim" to 4, "resume_forged_record_allow_over_interrupted_claim" to 8,
-            "resume_accepts_honest_record" to 5)
+            "resume_accepts_honest_record" to 5, "restore_exact_state" to 5,
+            "restore_lost_state_with_epoch_bump" to 6, "release_of_claim_the_store_does_not_hold" to 4)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -965,7 +968,8 @@ class ClaimTest {
             "abandon" to setOf("op", "expect"), "claim_only" to setOf("op", "request", "expect"),
             "recover" to setOf("op", "request", "expect"),
             "finalize" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
-            "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"))
+            "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
+            "restore" to setOf("op", "mode", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -974,7 +978,9 @@ class ClaimTest {
         for (scenario in scenarios) {
             val name = scenario.getString("name")
             assertEquals(name, counts[name], scenario.arr("steps").size)
-            val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
+            var store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
+            var scenarioLogId = logId
+            var replayEpochOverride: Long? = null
             val committed = mutableMapOf<String, CommittedOutcome>()
             val claimed = mutableMapOf<String, ChallengeClaim>()
             val owners = mutableMapOf<String, ByteArray>()
@@ -988,6 +994,8 @@ class ClaimTest {
                 val expectedStepKeys = stepKeys[op].orEmpty() +
                     (if (op == "release" && step.has("receipt_of")) setOf("receipt_of") else emptySet()) +
                     (if (op == "release" && step.has("mode")) setOf("mode") else emptySet()) +
+                    (if (op == "restore" && step.getString("mode") == "lost_state_epoch_bump")
+                        setOf("log_id", "replay_epoch") else emptySet()) +
                     (if (op == "verify" && step.has("mode")) setOf("mode", "time") else emptySet()) +
                     (if (op == "finalize" && step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet()) +
                     (if (op == "resume" && step.has("claim_record_b64"))
@@ -1004,6 +1012,16 @@ class ClaimTest {
                     "set_ack_withheld" -> {
                         store.setAcknowledgementWithheld(step.getBoolean("withheld"))
                         assertEquals(at, 0, want.length())
+                    }
+                    "restore" -> {
+                        assertEquals(at, 0, want.length())
+                        if (step.getString("mode") == "exact") store = store.cloneStore()
+                        else {
+                            assertEquals(at, "lost_state_epoch_bump", step.getString("mode"))
+                            scenarioLogId = step.getString("log_id")
+                            replayEpochOverride = step.getLong("replay_epoch")
+                            store = ReferenceStore(store.now(), corpus.getLong("lease_seconds"), scenarioLogId, key)
+                        }
                     }
                     "claim_only" -> {
                         assertEquals(at, setOf("disposition"), want.keys().asSequence().toSet())
@@ -1060,8 +1078,9 @@ class ClaimTest {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_290L, currentTime)
                         } else assertEquals(at, fixtureRequest.now, currentTime)
-                        val req = if (fixtureRequest.now == currentTime) fixtureRequest
-                            else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime)
+                        val req = if (fixtureRequest.now == currentTime && replayEpochOverride == null) fixtureRequest
+                            else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime,
+                                replayEpochOverride = replayEpochOverride)
                         val mode = step.optString("mode")
                         if (mode.isNotEmpty()) org.junit.Assert.assertTrue(at,
                             mode in setOf("expire_lease_during_status", "regress_clock_during_status"))
@@ -1207,7 +1226,7 @@ class ClaimTest {
                             org.junit.Assert.assertNotEquals(at, requestName, receiptName)
                             checkNotNull(receipts[receiptName]) { at }
                         }
-                        val result = releaseDecision(value, receipts[receiptName], key.publicKey, logId, store, checkpoint)
+                        val result = releaseDecision(value, receipts[receiptName], key.publicKey, scenarioLogId, store, checkpoint)
                         assertEquals(at, want.getString("release_status"), result.status.spelling)
                         if (want.has("release_reason")) assertEquals(at, want.getString("release_reason"), result.reason)
                         else assertEquals(at, "", result.reason)

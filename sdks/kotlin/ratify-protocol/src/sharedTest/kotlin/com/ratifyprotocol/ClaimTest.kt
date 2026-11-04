@@ -840,7 +840,10 @@ class ClaimTest {
             "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
             "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
             "clock_beyond_timestamp_domain_at_resume_and_recovery",
-            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation")
+            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation",
+            "clock_regression_at_release_is_withheld", "withheld_after_recorded_release_records_nothing",
+            "receipt_abandoned", "clock_regression_at_claim", "different_proof_for_claimed_challenge_is_replay",
+            "stream_sequence_rules", "outbox_retained_past_challenge_expiry")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -855,7 +858,11 @@ class ClaimTest {
             "resume_refuses_claims_without_a_committed_record" to 7,
             "clock_regression_at_resume_and_recovery" to 7,
             "clock_beyond_timestamp_domain_at_resume_and_recovery" to 7,
-            "lease_expires_during_status_then_recovery" to 5, "clock_regression_during_evaluation" to 3)
+            "lease_expires_during_status_then_recovery" to 5, "clock_regression_during_evaluation" to 3,
+            "clock_regression_at_release_is_withheld" to 7, "withheld_after_recorded_release_records_nothing" to 8,
+            "receipt_abandoned" to 8, "clock_regression_at_claim" to 5,
+            "different_proof_for_claimed_challenge_is_replay" to 3, "stream_sequence_rules" to 7,
+            "outbox_retained_past_challenge_expiry" to 6)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -922,6 +929,12 @@ class ClaimTest {
                             name == "lease_expires_during_status_then_recovery" && index == 1) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_030L, currentTime)
+                        } else if (name == "clock_regression_at_claim" && index == 2) {
+                            assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
+                            assertEquals(at, 1_799_999_999L, currentTime)
+                        } else if (name == "outbox_retained_past_challenge_expiry" && index == 5) {
+                            assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
+                            assertEquals(at, 1_800_000_290L, currentTime)
                         } else assertEquals(at, fixtureRequest.now, currentTime)
                         val req = if (fixtureRequest.now == currentTime) fixtureRequest
                             else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime)
@@ -939,9 +952,13 @@ class ClaimTest {
                         if (want.has("error_class")) {
                             assertEquals(at, setOf("stage", "error_class"), want.keys().asSequence().toSet())
                             assertEquals(at, want.getString("error_class"), result.errorClass?.spelling)
-                            assertEquals(at, VerifyStage.EVALUATING, result.stage)
-                            assertEquals(at, ClaimDisposition.CREATED, result.disposition)
-                            claimed[requestName] = result.claim
+                            if (result.stage == VerifyStage.EVALUATING) {
+                                assertEquals(at, ClaimDisposition.CREATED, result.disposition)
+                                claimed[requestName] = result.claim
+                            } else {
+                                assertEquals(at, VerifyStage.PREFLIGHT, result.stage)
+                                assertEquals(at, null, result.disposition)
+                            }
                             assertEquals(at, null, result.committed)
                         } else if (want.has("disposition")) assertEquals(at, want.getString("disposition"), result.disposition?.spelling)
                         else assertEquals(at, ClaimDisposition.CREATED, result.disposition)

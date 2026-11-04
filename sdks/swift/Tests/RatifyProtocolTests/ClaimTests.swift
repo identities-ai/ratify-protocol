@@ -894,7 +894,10 @@ final class ClaimTests: XCTestCase {
             "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
             "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
             "clock_beyond_timestamp_domain_at_resume_and_recovery",
-            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation"]
+            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation",
+            "clock_regression_at_release_is_withheld", "withheld_after_recorded_release_records_nothing",
+            "receipt_abandoned", "clock_regression_at_claim", "different_proof_for_claimed_challenge_is_replay",
+            "stream_sequence_rules", "outbox_retained_past_challenge_expiry"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -909,7 +912,11 @@ final class ClaimTests: XCTestCase {
             "resume_refuses_claims_without_a_committed_record": 7,
             "clock_regression_at_resume_and_recovery": 7,
             "clock_beyond_timestamp_domain_at_resume_and_recovery": 7,
-            "lease_expires_during_status_then_recovery": 5, "clock_regression_during_evaluation": 3]
+            "lease_expires_during_status_then_recovery": 5, "clock_regression_during_evaluation": 3,
+            "clock_regression_at_release_is_withheld": 7, "withheld_after_recorded_release_records_nothing": 8,
+            "receipt_abandoned": 8, "clock_regression_at_claim": 5,
+            "different_proof_for_claimed_challenge_is_replay": 3, "stream_sequence_rules": 7,
+            "outbox_retained_past_challenge_expiry": 6]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -971,6 +978,12 @@ final class ClaimTests: XCTestCase {
                        name == "lease_expires_during_status_then_recovery" && index == 1 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_030, at)
+                    } else if name == "clock_regression_at_claim" && index == 2 {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, 1_799_999_999, at)
+                    } else if name == "outbox_retained_past_challenge_expiry" && index == 5 {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, 1_800_000_290, at)
                     } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
                     let req = fixtureRequest.now == currentTime ? fixtureRequest
                         : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime)
@@ -993,9 +1006,13 @@ final class ClaimTests: XCTestCase {
                     if want.keys.contains("error_class") {
                         XCTAssertEqual(Set(want.keys), ["stage", "error_class"], at)
                         XCTAssertEqual(result.errorClass?.rawValue, want.s("error_class"), at)
-                        XCTAssertEqual(result.stage, .evaluating, at)
-                        XCTAssertEqual(result.disposition, .created, at)
-                        claimed[requestName] = result.claim
+                        if result.stage == .evaluating {
+                            XCTAssertEqual(result.disposition, .created, at)
+                            claimed[requestName] = result.claim
+                        } else {
+                            XCTAssertEqual(result.stage, .preflight, at)
+                            XCTAssertNil(result.disposition, at)
+                        }
                         XCTAssertNil(result.committed, at)
                     } else if want.keys.contains("disposition") {
                         XCTAssertEqual(result.disposition?.rawValue, want.s("disposition"), at)

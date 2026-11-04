@@ -27,6 +27,9 @@ pub enum FfiStoreError {
     ChallengeIssuanceNotFound,
     #[error("callback cancelled")]
     Cancelled,
+    /// Only the SDK adapter emits this when a nested guarded call failed.
+    #[error("internal store callback failure")]
+    Internal { kind: String, detail: String },
 }
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for FfiStoreError {
@@ -53,6 +56,7 @@ impl From<FfiStoreError> for V2StoreError {
                 V2ErrorClass::EvaluationCancelled,
                 "store callback cancelled",
             )),
+            FfiStoreError::Internal { .. } => panic!("an internal store callback failure crossed the guarded FFI boundary"),
         }
     }
 }
@@ -91,5 +95,19 @@ impl V2AuthoritativeClock for ForeignClock {
         self.0
             .authoritative_time(FfiStoreContext::new(ctx))
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_internal_store_failure_stays_internal() {
+        let outcome: FfiResult<()> = crate::guard::call(|| {
+            let _: V2StoreError = FfiStoreError::Internal { kind: "poisoned".into(), detail: "nested handle".into() }.into();
+            Ok(())
+        });
+        assert!(matches!(outcome, Err(crate::error::FfiError::Internal { kind, .. }) if kind == "panic"));
     }
 }

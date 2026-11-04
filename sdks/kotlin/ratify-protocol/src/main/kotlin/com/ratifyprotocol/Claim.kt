@@ -152,6 +152,7 @@ public interface RateReservationStore {
 
 internal fun claimStoreError(error: Throwable, context: FfiStoreContext): FfiStoreException = when {
     error is CancellationException && runCatching { context.isCancelled() }.getOrDefault(false) -> FfiStoreException.Cancelled()
+    error is RatifyException.Internal -> FfiStoreException.Internal(error.kind.spelling, error.detail)
     error is StoreError -> error.toFfi()
     else -> FfiStoreException.Unavailable(error.toString())
 }

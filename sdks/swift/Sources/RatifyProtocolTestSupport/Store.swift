@@ -2,7 +2,7 @@ import Foundation
 @_spi(TestSupport) import RatifyProtocol
 
 /// Rust Part B reference store for conformance tests.
-public final class Store: Sendable {
+public final class Store: ClaimStore {
     private let bridge: ReferenceStoreBridge
 
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
@@ -21,4 +21,19 @@ public final class Store: Sendable {
         try bridge.plantReleaseTestOnly(claimId: claimId, ackTimestamp: ackTimestamp)
     }
     public func abandonPendingReceipts() throws(RatifyError) -> [String] { try bridge.abandonPendingReceipts() }
+
+    public func authoritativeTime() async throws -> Int64 { try bridge.authoritativeTime() }
+    public func claim(_ claim: ChallengeClaim) async throws -> ClaimResult { try bridge.claim(claim) }
+    public func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
+                         allowValidUntil: Int64) async throws -> Bool {
+        try bridge.finalize(claimId: claimId, ownerToken: ownerToken, terminalResult: terminalResult,
+            receiptBody: receiptBody, allowValidUntil: allowValidUntil)
+    }
+    public func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) async throws {
+        try bridge.recordProgress(claimId: claimId, ownerToken: ownerToken, progress: progress)
+    }
+    public func loadInterrupted(claimId: String) async throws -> InterruptedClaim { try bridge.loadInterrupted(claimId: claimId) }
+    public func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) async throws -> Bool {
+        try bridge.recoverInterrupted(claimId: claimId, terminalResult: terminalResult, receiptBody: receiptBody)
+    }
 }

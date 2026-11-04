@@ -769,10 +769,16 @@ public abstract interface class com/ratifyprotocol/ReceiverBindingHook {
 public final class com/ratifyprotocol/ReferenceStoreBridge {
 	public fun <init> (JJLjava/lang/String;Lcom/ratifyprotocol/SoftwarePrivateKey;)V
 	public final fun abandonPendingReceipts ()Ljava/util/List;
+	public final fun authoritativeTime ()J
+	public final fun claim (Lcom/ratifyprotocol/ChallengeClaim;)Lcom/ratifyprotocol/ClaimResult;
 	public final fun cloneStore ()Lcom/ratifyprotocol/ReferenceStoreBridge;
+	public final fun finalize (Ljava/lang/String;[B[B[BJ)Z
+	public final fun loadInterrupted (Ljava/lang/String;)Lcom/ratifyprotocol/InterruptedClaim;
 	public final fun logLength-s-VKNKU ()J
 	public final fun now ()J
 	public final fun plantReleaseTestOnly (Ljava/lang/String;J)V
+	public final fun recordProgress (Ljava/lang/String;[BLcom/ratifyprotocol/EvaluationProgress;)V
+	public final fun recoverInterrupted (Ljava/lang/String;[B[B)Z
 	public final fun setAcknowledgementWithheld (Z)V
 	public final fun setSignerFailure (Z)V
 	public final fun setTime (J)V

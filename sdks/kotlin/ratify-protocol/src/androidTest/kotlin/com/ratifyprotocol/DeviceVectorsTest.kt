@@ -32,4 +32,6 @@ class DeviceVectorsTest {
     @Test fun storageRecordRefusals() = KeyStorageVectors.refusals()
     @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
     @Test fun referenceStoreClockAndClone() = ReferenceStoreVectors.clockAndClone()
+    @Test fun referenceStoreClaimError() = ReferenceStoreVectors.invalidClaimId()
+    @Test fun referenceStoreClaimReplayAndLease() = ReferenceStoreVectors.claimReplayAndLease()
 }

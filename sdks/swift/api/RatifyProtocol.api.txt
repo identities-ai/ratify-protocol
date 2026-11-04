@@ -610,11 +610,17 @@ ReceiverBindingHook [Protocol]
 ReceiverBindingHook.validate(bundle:expected:) [Func] -> (), RatifyProtocol.ProofBundle, RatifyProtocol.ExpectedChallenge
 ReferenceStoreBridge [Class]
 ReferenceStoreBridge.abandonPendingReceipts() [Func] -> [Swift.String]
+ReferenceStoreBridge.authoritativeTime() [Func] -> Swift.Int64
+ReferenceStoreBridge.claim(_:) [Func] -> RatifyProtocol.ClaimResult, RatifyProtocol.ChallengeClaim
 ReferenceStoreBridge.cloneStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+ReferenceStoreBridge.finalize(claimId:ownerToken:terminalResult:receiptBody:allowValidUntil:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data, Foundation.Data, Swift.Int64
 ReferenceStoreBridge.init(now:leaseSeconds:logId:verifierKey:) [Constructor] -> RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Swift.Int64, Swift.String, RatifyProtocol.SoftwarePrivateKey
+ReferenceStoreBridge.loadInterrupted(claimId:) [Func] -> RatifyProtocol.InterruptedClaim, Swift.String
 ReferenceStoreBridge.logLength() [Func] -> Swift.UInt64
 ReferenceStoreBridge.now() [Func] -> Swift.Int64
 ReferenceStoreBridge.plantReleaseTestOnly(claimId:ackTimestamp:) [Func] -> (), Swift.String, Swift.Int64
+ReferenceStoreBridge.recordProgress(claimId:ownerToken:progress:) [Func] -> (), Swift.String, Foundation.Data, RatifyProtocol.EvaluationProgress
+ReferenceStoreBridge.recoverInterrupted(claimId:terminalResult:receiptBody:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data
 ReferenceStoreBridge.setAcknowledgementWithheld(_:) [Func] -> (), Swift.Bool
 ReferenceStoreBridge.setSignerFailure(_:) [Func] -> (), Swift.Bool
 ReferenceStoreBridge.setTime(_:) [Func] -> (), Swift.Int64

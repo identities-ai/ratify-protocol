@@ -189,6 +189,9 @@ public protocol RateReservationStore: Sendable {
 
 func claimStoreError(_ error: Error, context: FfiStoreContext) -> FfiStoreError {
     if error is CancellationError, (try? context.isCancelled()) == true { return .Cancelled }
+    if let error = error as? RatifyError, case let .internal(kind, detail) = error {
+        return .Internal(kind: kind.rawValue, detail: detail)
+    }
     return (error as? StoreError)?.ffi ?? .Unavailable(detail: "\(error)")
 }
 

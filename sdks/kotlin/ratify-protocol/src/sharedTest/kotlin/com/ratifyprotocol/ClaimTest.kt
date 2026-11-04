@@ -849,6 +849,18 @@ class ClaimTest {
         }
     }
 
+    private class FailingReleaseStore(private val store: ReferenceStore,
+        private val stateMismatch: Boolean) : ReleaseClaimStore {
+        val recordAttempts = AtomicInteger()
+        override suspend fun authoritativeTime(): Long = store.authoritativeTime()
+        override suspend fun loadTerminal(claimId: String): TerminalClaimRecord = store.loadTerminal(claimId)
+        override suspend fun recordRelease(record: ReleaseRecord) {
+            recordAttempts.incrementAndGet()
+            if (stateMismatch) throw StoreError.ReleaseStateMismatch()
+            throw StoreError.Unavailable("claim store unavailable")
+        }
+    }
+
     private fun corruptReceiptSignature(wire: ByteArray): ByteArray {
         val receipt = decodeVerificationReceipt(wire)
         val ed25519 = receipt.signature.ed25519
@@ -908,7 +920,9 @@ class ClaimTest {
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
             "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
             "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
-            "release_of_claim_the_store_does_not_hold")
+            "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
+            "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
+            "withheld_record_conflict_is_rejected")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -958,7 +972,10 @@ class ClaimTest {
             "resume_forged_record_later_challenge_expiry" to 6, "resume_forged_record_allow_for_unheld_claim" to 3,
             "resume_forged_record_allow_over_evaluating_claim" to 4, "resume_forged_record_allow_over_interrupted_claim" to 8,
             "resume_accepts_honest_record" to 5, "restore_exact_state" to 5,
-            "restore_lost_state_with_epoch_bump" to 6, "release_of_claim_the_store_does_not_hold" to 4)
+            "restore_lost_state_with_epoch_bump" to 6, "release_of_claim_the_store_does_not_hold" to 4,
+            "planted_release_record_does_not_replace_acknowledgement" to 8,
+            "recorded_withheld_answers_before_receipt_checks" to 7, "withheld_when_recording_fails" to 7,
+            "withheld_record_conflict_is_rejected" to 7)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -969,7 +986,8 @@ class ClaimTest {
             "recover" to setOf("op", "request", "expect"),
             "finalize" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
             "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
-            "restore" to setOf("op", "mode", "expect"))
+            "restore" to setOf("op", "mode", "expect"),
+            "plant_release" to setOf("op", "request", "time", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -1022,6 +1040,11 @@ class ClaimTest {
                             replayEpochOverride = step.getLong("replay_epoch")
                             store = ReferenceStore(store.now(), corpus.getLong("lease_seconds"), scenarioLogId, key)
                         }
+                    }
+                    "plant_release" -> {
+                        assertEquals(at, 0, want.length())
+                        store.plantReleaseTestOnly(checkNotNull(committed[requestName]) { at }.claimId,
+                            step.getLong("time"))
                     }
                     "claim_only" -> {
                         assertEquals(at, setOf("disposition"), want.keys().asSequence().toSet())
@@ -1211,10 +1234,9 @@ class ClaimTest {
                     }
                     "release" -> {
                         val checkpointMode = step.getString("checkpoint")
-                        if (step.has("mode")) {
-                            assertEquals(at, "no_receipt", step.getString("mode"))
-                            assertEquals(at, null, receipts[requestName])
-                        }
+                        val releaseMode = step.optString("mode")
+                        org.junit.Assert.assertTrue(at, releaseMode in setOf("", "no_receipt",
+                            "record_release_unavailable", "record_release_state_mismatch"))
                         org.junit.Assert.assertTrue(at, checkpointMode == "reference" || checkpointMode == "wrong_entry")
                         assertEquals(at, if (want.has("decision"))
                             setOf("release_status", "decision", "release_time", "receipt_sequence")
@@ -1226,7 +1248,12 @@ class ClaimTest {
                             org.junit.Assert.assertNotEquals(at, requestName, receiptName)
                             checkNotNull(receipts[receiptName]) { at }
                         }
-                        val result = releaseDecision(value, receipts[receiptName], key.publicKey, scenarioLogId, store, checkpoint)
+                        val failingStore = if (releaseMode.startsWith("record_release_"))
+                            FailingReleaseStore(store, releaseMode == "record_release_state_mismatch") else null
+                        val releaseStore: ReleaseClaimStore = failingStore ?: store
+                        val result = releaseDecision(value, if (releaseMode == "no_receipt") null else receipts[receiptName],
+                            key.publicKey, scenarioLogId, releaseStore, checkpoint)
+                        if (failingStore != null) assertEquals(at, 1, failingStore.recordAttempts.get())
                         assertEquals(at, want.getString("release_status"), result.status.spelling)
                         if (want.has("release_reason")) assertEquals(at, want.getString("release_reason"), result.reason)
                         else assertEquals(at, "", result.reason)

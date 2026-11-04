@@ -928,6 +928,24 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    final class FailingReleaseStore: ReleaseClaimStore, @unchecked Sendable {
+        let store: Store
+        let stateMismatch: Bool
+        private let lock = NSLock()
+        private var attempts = 0
+        init(store: Store, stateMismatch: Bool) { self.store = store; self.stateMismatch = stateMismatch }
+        var recordAttempts: Int { lock.withLock { attempts } }
+        func authoritativeTime() async throws -> Int64 { try await store.authoritativeTime() }
+        func loadTerminal(claimId: String) async throws -> TerminalClaimRecord {
+            try await store.loadTerminal(claimId: claimId)
+        }
+        func recordRelease(_ record: ReleaseRecord) async throws {
+            lock.withLock { attempts += 1 }
+            if stateMismatch { throw StoreError.releaseStateMismatch }
+            throw StoreError.unavailable("claim store unavailable")
+        }
+    }
+
     func testLifecycleBasicReleaseScenarios() async throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
         let names: Set<String> = ["allow_published_acknowledged_released", "release_without_receipt_is_pending",
@@ -975,7 +993,9 @@ final class ClaimTests: XCTestCase {
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
             "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
             "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
-            "release_of_claim_the_store_does_not_hold"]
+            "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
+            "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
+            "withheld_record_conflict_is_rejected"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1026,7 +1046,10 @@ final class ClaimTests: XCTestCase {
             "resume_forged_record_later_challenge_expiry": 6, "resume_forged_record_allow_for_unheld_claim": 3,
             "resume_forged_record_allow_over_evaluating_claim": 4, "resume_forged_record_allow_over_interrupted_claim": 8,
             "resume_accepts_honest_record": 5, "restore_exact_state": 5,
-            "restore_lost_state_with_epoch_bump": 6, "release_of_claim_the_store_does_not_hold": 4]
+            "restore_lost_state_with_epoch_bump": 6, "release_of_claim_the_store_does_not_hold": 4,
+            "planted_release_record_does_not_replace_acknowledgement": 8,
+            "recorded_withheld_answers_before_receipt_checks": 7, "withheld_when_recording_fails": 7,
+            "withheld_record_conflict_is_rejected": 7]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1035,7 +1058,7 @@ final class ClaimTests: XCTestCase {
             "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"],
             "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
-            "restore": ["op", "mode", "expect"]]
+            "restore": ["op", "mode", "expect"], "plant_release": ["op", "request", "time", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1085,6 +1108,10 @@ final class ClaimTests: XCTestCase {
                         store = try Store(now: store.now(), leaseSeconds: Int64(corpus.int("lease_seconds")),
                             logId: logId, verifierKey: key)
                     }
+                case "plant_release":
+                    XCTAssertTrue(want.isEmpty, at)
+                    try store.plantReleaseTestOnly(claimId: try XCTUnwrap(committed[requestName], at).claimId,
+                        ackTimestamp: Int64(step.int("time")))
                 case "claim_only":
                     XCTAssertEqual(Set(want.keys), ["disposition"], at)
                     let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
@@ -1291,10 +1318,9 @@ final class ClaimTests: XCTestCase {
                     if mode == "signer_failure" { try store.setSignerFailure(false) }
                 case "release":
                     let checkpointMode = step.s("checkpoint")
-                    if let mode = step["mode"] as? String {
-                        XCTAssertEqual(mode, "no_receipt", at)
-                        XCTAssertNil(receipts[requestName], at)
-                    }
+                    let releaseMode = step["mode"] as? String ?? ""
+                    XCTAssertTrue(["", "no_receipt", "record_release_unavailable",
+                        "record_release_state_mismatch"].contains(releaseMode), at)
                     XCTAssertTrue(checkpointMode == "reference" || checkpointMode == "wrong_entry", at)
                     XCTAssertEqual(Set(want.keys), want["decision"] == nil
                         ? ["release_status", "release_reason"]
@@ -1307,8 +1333,14 @@ final class ClaimTests: XCTestCase {
                         XCTAssertNotEqual(receiptName, requestName, at)
                         _ = try XCTUnwrap(receipts[receiptName], at)
                     }
-                    let result = try await Ratify.releaseDecision(value, signedReceipt: receipts[receiptName],
-                        verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: checkpoint)
+                    let failingStore: FailingReleaseStore? = releaseMode.hasPrefix("record_release_")
+                        ? FailingReleaseStore(store: store, stateMismatch: releaseMode == "record_release_state_mismatch")
+                        : nil
+                    let releaseStore: any ReleaseClaimStore = failingStore ?? store
+                    let result = try await Ratify.releaseDecision(value,
+                        signedReceipt: releaseMode == "no_receipt" ? nil : receipts[receiptName],
+                        verifierPublicKey: key.publicKey, logId: logId, claimStore: releaseStore, checkpoint: checkpoint)
+                    if let failingStore { XCTAssertEqual(failingStore.recordAttempts, 1, at) }
                     XCTAssertEqual(result.status.rawValue, want.s("release_status"), at)
                     if want.keys.contains("release_reason") {
                         XCTAssertEqual(result.reason, want.s("release_reason"), at)

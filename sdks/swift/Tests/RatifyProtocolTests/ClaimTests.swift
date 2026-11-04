@@ -8,6 +8,8 @@ private func armCallbackPanic(_ kind: UInt32)
 private func callbackPanicRemaining() -> UInt32
 
 final class ClaimTests: XCTestCase {
+    @objc func corpusHarness() {}
+
     final class ReceiverProbe: ReceiverBindingHook, @unchecked Sendable {
         let reject: Bool
         private let lock = NSLock()
@@ -98,7 +100,7 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    func testVerifierCorpusPreflightOrdering() async throws {
+    func verifierCorpusPreflightOrdering() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             $0.obj("expected").s("stage") == "preflight"
         }
@@ -177,7 +179,7 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    func testVerifierCorpusReplay() async throws {
+    func verifierCorpusReplay() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             $0.obj("expected").s("stage") == "replay"
         }
@@ -211,7 +213,7 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    func testVerifierCorpusFinalizationRefusals() async throws {
+    func verifierCorpusFinalizationRefusals() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             $0.obj("expected").s("stage") == "evaluating"
         }
@@ -453,7 +455,7 @@ final class ClaimTests: XCTestCase {
         return (trust, VectorStatus(byIssuer: evidence, failures: statusFailures), journal)
     }
 
-    func testVerifierCorpusCommittedReceipts() async throws {
+    func verifierCorpusCommittedReceipts() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             $0.obj("expected").s("stage") == "committed"
         }

@@ -7,8 +7,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
+import org.junit.BeforeClass
 import org.junit.Test
-import java.io.File
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
@@ -18,6 +18,9 @@ import com.sun.jna.Library
 import com.sun.jna.Native
 
 class ClaimTest {
+    companion object {
+        @BeforeClass @JvmStatic fun setUpCorpus() = CorpusSetup.configure()
+    }
     private interface CallbackPanicHooks : Library {
         fun ratify_ffi_test_arm_callback_panic(kind: Int)
         fun ratify_ffi_test_callback_panic_remaining(): Int
@@ -50,8 +53,6 @@ class ClaimTest {
     }
 
     private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null): VerifyRequest {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        Corpus.read = { File(root, it).readBytes() }
         val corpus = Corpus.load("verifier-ordering.json")
         val vector = corpus.arr("vectors").first { it.getString("name") == name }
         val policy = vector.optJSONObject("context_policy")
@@ -107,9 +108,7 @@ class ClaimTest {
         assertEquals(1, store.calls)
     }
 
-    @Test fun verifierCorpusPreflightOrdering() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        Corpus.read = { File(root, it).readBytes() }
+    fun verifierCorpusPreflightOrdering() = runBlocking {
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
             vector.getJSONObject("expected").getString("stage") == "preflight"
         }
@@ -182,9 +181,7 @@ class ClaimTest {
             receiptBody: ByteArray): Boolean = error("no interruption")
     }
 
-    @Test fun verifierCorpusReplay() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        Corpus.read = { File(root, it).readBytes() }
+    fun verifierCorpusReplay() = runBlocking {
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             it.getJSONObject("expected").getString("stage") == "replay"
         }
@@ -214,9 +211,7 @@ class ClaimTest {
         }
     }
 
-    @Test fun verifierCorpusFinalizationRefusals() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        Corpus.read = { File(root, it).readBytes() }
+    fun verifierCorpusFinalizationRefusals() = runBlocking {
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
             it.getJSONObject("expected").getString("stage") == "evaluating"
         }
@@ -428,9 +423,7 @@ class ClaimTest {
         }
     }
 
-    @Test fun verifierCorpusCommittedReceipts() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        Corpus.read = { File(root, it).readBytes() }
+    fun verifierCorpusCommittedReceipts() = runBlocking {
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
             vector.getJSONObject("expected").getString("stage") == "committed"
         }
@@ -547,8 +540,7 @@ class ClaimTest {
     }
 
     @Test fun extensionEvaluatorsRunThroughLiveVerifier() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        val corpus = JSONObject(File(root, "v2/verifier-ordering.json").readText())
+        val corpus = Corpus.load("verifier-ordering.json")
         val cases = listOf(
             Triple("extension_max_count_pass", "pass", "authorized"),
             Triple("extension_max_count_exceeded", "denied", "constraint_denied"),
@@ -615,8 +607,7 @@ class ClaimTest {
     }
 
     @Test fun rateBarrierMapsCapacityRefusalAndRetriesDeny() = runBlocking {
-        val root = File(System.getProperty("ratify.corpus")!!)
-        val corpus = JSONObject(File(root, "v2/verifier-ordering.json").readText())
+        val corpus = Corpus.load("verifier-ordering.json")
         val vectors = corpus.getJSONArray("vectors")
         val vector = (0 until vectors.length()).asSequence().map(vectors::getJSONObject)
             .first { it.getString("name") == "rate_multi_batch" }
@@ -724,8 +715,7 @@ class ClaimTest {
     @Test fun committedHandoffCannotReleaseBeforeReceiptAppend() = runBlocking {
         val verified = verifyProofBundle(request("trust_unavailable"), CreatedClaimStore(), trust = UnavailableTrust())
         val committed = verified.committed!!
-        val root = File(System.getProperty("ratify.corpus")!!)
-        val keys = JSONObject(File(root, "v2/keys.json").readText()).getJSONArray("keys")
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == "verifier" }
         val store = PendingReleaseStore(committed)
@@ -756,8 +746,7 @@ class ClaimTest {
     @Test fun signedReceiptNeedsIndependentCheckpointToRelease() = runBlocking {
         val verified = verifyProofBundle(request("trust_unavailable"), CreatedClaimStore(), trust = UnavailableTrust())
         val committed = verified.committed!!
-        val root = File(System.getProperty("ratify.corpus")!!)
-        val keys = JSONObject(File(root, "v2/keys.json").readText()).getJSONArray("keys")
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == "verifier" }
         val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))

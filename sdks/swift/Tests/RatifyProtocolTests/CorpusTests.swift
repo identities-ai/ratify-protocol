@@ -34,6 +34,7 @@ final class CorpusTests: XCTestCase {
         "evaluator-profiles.json": EvaluatorRunner.run,
         "transaction-verification.json": TransactionVerifyRunner.run,
         "device-state.json": DeviceStateRunner.run,
+        "verifier-ordering.json": VerifierOrderingRunner.run,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
@@ -41,7 +42,6 @@ final class CorpusTests: XCTestCase {
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
         "lifecycle-scenarios.json": "M3",
-        "verifier-ordering.json": "M3",
     ]
 
     func testCorpus() async throws {

@@ -40,6 +40,7 @@ object CorpusRunners {
         "evaluator-profiles.json" to EvaluatorVectors::run,
         "transaction-verification.json" to TransactionVerifyVectors::run,
         "device-state.json" to DeviceStateVectors::run,
+        "verifier-ordering.json" to VerifierOrderingVectors::run,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -47,7 +48,6 @@ object CorpusRunners {
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
         "lifecycle-scenarios.json" to "M3",
-        "verifier-ordering.json" to "M3",
     )
 
     fun runAll() {
